@@ -13,3 +13,4 @@ pub mod test_runner;
 pub mod strategy;
 pub mod num;
 pub mod tuple;
+pub mod array;
