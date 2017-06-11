@@ -15,3 +15,5 @@ Hypothesis-like property-based testing and shrinking.
 
 [dependencies]
 rand = "0.3.15"
+# TODO Make optional
+regex_generate = "0.2.0"
