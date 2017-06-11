@@ -195,6 +195,13 @@ impl TestRunner {
         &mut self.rng
     }
 
+    /// Run test cases against `f`, choosing inputs via `strategy`.
+    ///
+    /// If any failure cases occur, try to find a minimal failure case and
+    /// report that. If invoking `f` panics, the panic is turned into a
+    /// `TestCaseError::Fail`.
+    ///
+    /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
                F : Fn (&<S::Value as ValueTree>::Value)
                        -> Result<(), TestCaseError>>
