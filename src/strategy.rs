@@ -19,7 +19,7 @@ pub trait Strategy {
     ///
     /// This may fail if there are constraints on the generated value and the
     /// generator is unable to produce anything that satisfies them. Any
-    /// failure is wrapped in `Status::Abort()`.
+    /// failure is wrapped in `TestError::Abort`.
     fn new_value
         (&self, runner: &mut TestRunner)
          -> Result<Self::Value, String>;

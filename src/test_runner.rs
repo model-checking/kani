@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 2017 Jason Lingle
+// Copyright 2017 Jason Lingle
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -54,18 +54,82 @@ impl Default for Config {
     }
 }
 
-/// Non-success stati produced by generating or running tests.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Status<T> {
-    /// Reject the generated test case in its entirety.
+/// Errors which can be returned from test cases to indicate non-successful
+/// completion.
+///
+/// Note that in spite of the name, `TestCaseError` is currently *not* an
+/// instance of `Error`, since otherwise `impl<E : Error> From<E>` could not be
+/// provided.
+///
+/// Any `Error` can be converted to a `TestCaseError`, which places
+/// `Error::display()` into the `Fail` case.
+#[derive(Debug, Clone)]
+pub enum TestCaseError {
+    /// The input was not valid for the test case. This does not count as a
+    /// test failure (nor a success); rather, it simply signals to generate
+    /// a new input and try again.
     ///
-    /// The string indicates the "location" of the code that caused this value
-    /// to be rejected.
-    RejectGlobal(String),
-    /// Fail the test case with the given message and example input.
-    Fail(String, T),
-    /// Fail the entire test with the given message.
+    /// The string gives the location and context of the rejection, and
+    /// should be suitable for formatting like `Foo did X at {whence}`.
+    Reject(String),
+    /// The code under test failed the test.
+    ///
+    /// The string should indicate the location of the failure, but may
+    /// generally be any string.
+    Fail(String),
+}
+
+/// Convenience for the type returned by test cases.
+pub type TestCaseResult = Result<(), TestCaseError>;
+
+impl fmt::Display for TestCaseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TestCaseError::Reject(ref whence) =>
+                write!(f, "Input rejected at {}", whence),
+            TestCaseError::Fail(ref why) =>
+                write!(f, "Case failed: {}", why),
+        }
+    }
+}
+
+impl<E : ::std::error::Error> From<E> for TestCaseError {
+    fn from(cause: E) -> Self {
+        TestCaseError::Fail(cause.to_string())
+    }
+}
+
+/// A failure state from running test cases for a single test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestError<T> {
+    /// The test was aborted for the given reason, for example, due to too many
+    /// inputs having been rejected.
     Abort(String),
+    /// A failing test case was found. The string indicates where and/or why
+    /// the test failed. The `T` is the minimal input found to reproduce the
+    /// failure.
+    Fail(String, T),
+}
+
+impl<T : fmt::Debug> fmt::Display for TestError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TestError::Abort(ref why) =>
+                write!(f, "Test aborted: {}", why),
+            TestError::Fail(ref why, ref what) =>
+                write!(f, "Test failed: {}; minimal failing input: {:?}",
+                       why, what),
+        }
+    }
+}
+
+impl<T : fmt::Debug> ::std::error::Error for TestError<T> {
+    fn description(&self) -> &str {
+        match *self {
+            TestError::Abort(..) => "Abort",
+            TestError::Fail(..) => "Fail",
+        }
+    }
 }
 
 /// State used when running a proptest test.
@@ -133,9 +197,9 @@ impl TestRunner {
 
     pub fn run<S : Strategy,
                F : Fn (&<S::Value as ValueTree>::Value)
-                       -> Result<(), Status<<S::Value as ValueTree>::Value>>>
+                       -> Result<(), TestCaseError>>
         (&mut self, strategy: &S, f: F)
-         -> Result<(), Status<<S::Value as ValueTree>::Value>>
+         -> Result<(), TestError<<S::Value as ValueTree>::Value>>
     {
         macro_rules! test {
             ($v:expr) => { {
@@ -148,7 +212,7 @@ impl TestRunner {
                             .or_else(|what| what.downcast::<String>().map(|b| *b))
                             .unwrap_or_else(
                                 |_| "<unknown panic value>".to_owned());
-                        Err(Status::Fail(msg, v))
+                        Err(TestCaseError::Fail(msg))
                     },
                 }
             } }
@@ -157,15 +221,15 @@ impl TestRunner {
         while self.successes < self.config.cases {
             let mut case = match strategy.new_value(self) {
                 Ok(v) => v,
-                Err(msg) => return Err(Status::Abort(msg)),
+                Err(msg) => return Err(TestError::Abort(msg)),
             };
 
             match test!(case.current()) {
                 Ok(_) => {
                     self.successes += 1;
                 }
-                Err(Status::Fail(why, input)) => {
-                    let mut last_failure = (why, input);
+                Err(TestCaseError::Fail(why)) => {
+                    let mut last_failure = (why, case.current());
                     if case.simplify() {
                         loop {
                             let passed = match test!(case.current()) {
@@ -173,13 +237,12 @@ impl TestRunner {
                                 // Rejections are effectively a pass here,
                                 // since they indicate that any behaviour of
                                 // the function under test is acceptable.
-                                Err(Status::RejectGlobal(_)) => true,
+                                Err(TestCaseError::Reject(..)) => true,
 
-                                Err(Status::Fail(why, input)) => {
-                                    last_failure = (why, input);
+                                Err(TestCaseError::Fail(why)) => {
+                                    last_failure = (why, case.current());
                                     false
                                 },
-                                Err(_) => false,
                             };
 
                             if passed {
@@ -194,12 +257,11 @@ impl TestRunner {
                         }
                     }
 
-                    return Err(Status::Fail(last_failure.0, last_failure.1));
+                    return Err(TestError::Fail(last_failure.0, last_failure.1));
                 },
-                Err(Status::RejectGlobal(whence)) => {
+                Err(TestCaseError::Reject(whence)) => {
                     self.reject_global(whence)?;
                 },
-                Err(e) => return Err(e),
             }
         }
 
@@ -208,9 +270,9 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    pub fn reject_local<T>(&mut self, whence: String) -> Result<(),Status<T>> {
+    pub fn reject_local(&mut self, whence: String) -> Result<(),String> {
         if self.local_rejects >= self.config.max_local_rejects {
-            Err(Status::Abort("Too many local rejects".to_owned()))
+            Err("Too many local rejects".to_owned())
         } else {
             self.local_rejects += 1;
             let need_insert = if let Some(count) =
@@ -231,9 +293,9 @@ impl TestRunner {
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    fn reject_global<T>(&mut self, whence: String) -> Result<(),Status<T>> {
+    fn reject_global<T>(&mut self, whence: String) -> Result<(),TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
-            Err(Status::Abort("Too many global rejects".to_owned()))
+            Err(TestError::Abort("Too many global rejects".to_owned()))
         } else {
             self.global_rejects += 1;
             let need_insert = if let Some(count) =
@@ -266,10 +328,10 @@ mod test {
         let runs = Cell::new(0);
         let result = runner.run(&(0u32..), |_| {
             runs.set(runs.get() + 1);
-            Err(Status::RejectGlobal("reject".to_owned()))
+            Err(TestCaseError::Reject("reject".to_owned()))
         });
         match result {
-            Err(Status::Abort(_)) => (),
+            Err(TestError::Abort(_)) => (),
             e => panic!("Unexpected result: {:?}", e),
         }
         assert_eq!(config.max_global_rejects + 1, runs.get());
@@ -288,11 +350,10 @@ mod test {
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
-            // TODO Returning the input here is kind of awkward
-            Err(Status::Fail("not less than 5".to_owned(), v))
+            Err(TestCaseError::Fail("not less than 5".to_owned()))
         });
 
-        assert_eq!(Err(Status::Fail("not less than 5".to_owned(), 5)),
+        assert_eq!(Err(TestError::Fail("not less than 5".to_owned(), 5)),
                    result);
     }
 
@@ -303,7 +364,7 @@ mod test {
             assert!(v < 5, "not less than 5");
             Ok(())
         });
-        assert_eq!(Err(Status::Fail("not less than 5".to_owned(), 5)),
+        assert_eq!(Err(TestError::Fail("not less than 5".to_owned(), 5)),
                    result);
     }
 }
