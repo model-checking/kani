@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+extern crate bit_set;
 extern crate rand;
 
 pub mod test_runner;
@@ -14,3 +15,4 @@ pub mod strategy;
 pub mod num;
 pub mod tuple;
 pub mod array;
+pub mod collection;

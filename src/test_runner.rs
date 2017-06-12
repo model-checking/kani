@@ -204,9 +204,30 @@ impl TestRunner {
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
                F : Fn (&<S::Value as ValueTree>::Value)
-                       -> Result<(), TestCaseError>>
+                       -> TestCaseResult>
         (&mut self, strategy: &S, f: F)
          -> Result<(), TestError<<S::Value as ValueTree>::Value>>
+    {
+        while self.successes < self.config.cases {
+            let case = match strategy.new_value(self) {
+                Ok(v) => v,
+                Err(msg) => return Err(TestError::Abort(msg)),
+            };
+            if self.run_one(case, &f)? {
+                self.successes += 1;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Run one specific test case against this runner.
+    ///
+    /// If the test fails, finds the minimal failing test case. If the test
+    /// does not fail, returns whether it succeeded or was filtered out.
+    pub fn run_one<V : ValueTree,
+                   F : Fn (&V::Value) -> TestCaseResult>
+        (&mut self, mut case: V, f: F) -> Result<bool, TestError<V::Value>>
     {
         macro_rules! test {
             ($v:expr) => { {
@@ -225,54 +246,44 @@ impl TestRunner {
             } }
         }
 
-        while self.successes < self.config.cases {
-            let mut case = match strategy.new_value(self) {
-                Ok(v) => v,
-                Err(msg) => return Err(TestError::Abort(msg)),
-            };
+        match test!(case.current()) {
+            Ok(_) => Ok(true),
+            Err(TestCaseError::Fail(why)) => {
+                let mut last_failure = (why, case.current());
+                if case.simplify() {
+                    loop {
+                        let passed = match test!(case.current()) {
+                            Ok(_) => true,
+                            // Rejections are effectively a pass here,
+                            // since they indicate that any behaviour of
+                            // the function under test is acceptable.
+                            Err(TestCaseError::Reject(..)) => true,
 
-            match test!(case.current()) {
-                Ok(_) => {
-                    self.successes += 1;
-                }
-                Err(TestCaseError::Fail(why)) => {
-                    let mut last_failure = (why, case.current());
-                    if case.simplify() {
-                        loop {
-                            let passed = match test!(case.current()) {
-                                Ok(_) => true,
-                                // Rejections are effectively a pass here,
-                                // since they indicate that any behaviour of
-                                // the function under test is acceptable.
-                                Err(TestCaseError::Reject(..)) => true,
+                            Err(TestCaseError::Fail(why)) => {
+                                last_failure = (why, case.current());
+                                false
+                            },
+                        };
 
-                                Err(TestCaseError::Fail(why)) => {
-                                    last_failure = (why, case.current());
-                                    false
-                                },
-                            };
-
-                            if passed {
-                                if !case.complicate() {
-                                    break;
-                                }
-                            } else {
-                                if !case.simplify() {
-                                    break;
-                                }
+                        if passed {
+                            if !case.complicate() {
+                                break;
+                            }
+                        } else {
+                            if !case.simplify() {
+                                break;
                             }
                         }
                     }
+                }
 
-                    return Err(TestError::Fail(last_failure.0, last_failure.1));
-                },
-                Err(TestCaseError::Reject(whence)) => {
-                    self.reject_global(whence)?;
-                },
-            }
+                Err(TestError::Fail(last_failure.0, last_failure.1))
+            },
+            Err(TestCaseError::Reject(whence)) => {
+                self.reject_global(whence)?;
+                Ok(false)
+            },
         }
-
-        Ok(())
     }
 
     /// Update the state to account for a local rejection from `whence`, and

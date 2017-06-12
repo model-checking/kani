@@ -106,7 +106,6 @@ mod test {
         for _ in 0..256 {
             // Find a failing test case
             let mut case = input.new_value(&mut runner).unwrap();
-            println!("{:?}", case);
             if pass(case.current()) { continue; }
 
             loop {
