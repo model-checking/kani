@@ -16,3 +16,4 @@ pub mod num;
 pub mod tuple;
 pub mod array;
 pub mod collection;
+pub mod char;

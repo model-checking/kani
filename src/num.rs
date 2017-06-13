@@ -14,10 +14,12 @@
 
 macro_rules! numeric_api {
     ($typ:ident) => {
+        /// Type of the `ANY` constant.
+        #[derive(Clone, Copy, Debug)]
+        pub struct Any(());
         /// Generates integers with completely arbitrary values, uniformly
         /// distributed over the whole range.
-        #[derive(Clone, Copy, Debug)]
-        pub struct Any;
+        pub const ANY: Any = Any(());
 
         impl Strategy for Any {
             type Value = BinarySearch;
@@ -72,7 +74,7 @@ macro_rules! numeric_api {
 
 macro_rules! signed_integer_bin_search {
     ($typ:ident) => {
-        mod $typ {
+        pub mod $typ {
             use std::ops::{Range, RangeFrom, RangeTo};
 
             use rand::{self, Rng};
@@ -174,7 +176,7 @@ macro_rules! signed_integer_bin_search {
 
 macro_rules! unsigned_integer_bin_search {
     ($typ:ident) => {
-        mod $typ {
+        pub mod $typ {
             use std::ops::{Range, RangeFrom, RangeTo};
 
             use rand::{self, Rng};
@@ -209,6 +211,12 @@ macro_rules! unsigned_integer_bin_search {
                         curr: start,
                         hi: start,
                     }
+                }
+
+                /// Creates a new binary searcher which will not search below
+                /// the given `lo` value.
+                pub fn new_above(lo: $typ, start: $typ) -> Self {
+                    BinarySearch::new_clamped(lo, start, start)
                 }
 
                 fn reposition(&mut self) -> bool {
