@@ -385,6 +385,31 @@ impl<T : ValueTree> ValueTree for UnionValueTree<T> {
     }
 }
 
+/// A `Strategy` which always produces the same value and never simplifies.
+#[derive(Clone, Copy, Debug)]
+pub struct Singleton<T : Clone + fmt::Debug>(
+    /// The value produced by this strategy.
+    pub T);
+
+impl<T : Clone + fmt::Debug> Strategy for Singleton<T> {
+    type Value = Self;
+
+    fn new_value(&self, _: &mut TestRunner) -> Result<Self::Value, String> {
+        Ok(self.clone())
+    }
+}
+
+impl<T : Clone + fmt::Debug> ValueTree for Singleton<T> {
+    type Value = T;
+
+    fn current(&self) -> T {
+        self.0.clone()
+    }
+
+    fn simplify(&mut self) -> bool { false }
+    fn complicate(&mut self) -> bool { false }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
