@@ -13,7 +13,7 @@
 //! All strategies in this module shrink by binary searching towards 0.
 
 macro_rules! numeric_api {
-    ($typ:ident) => {
+    ($typ:ident, $epsilon:expr) => {
         /// Type of the `ANY` constant.
         #[derive(Clone, Copy, Debug)]
         pub struct Any(());
@@ -38,7 +38,8 @@ macro_rules! numeric_api {
                 let range = rand::distributions::Range::new(
                     self.start, self.end);
                 Ok(BinarySearch::new_clamped(
-                    self.start, range.ind_sample(runner.rng()), self.end-1))
+                    self.start, range.ind_sample(runner.rng()),
+                    self.end-$epsilon))
             }
         }
 
@@ -170,7 +171,7 @@ macro_rules! signed_integer_bin_search {
                 }
             }
 
-            numeric_api!($typ);
+            numeric_api!($typ, 1);
         }
     }
 }
@@ -255,7 +256,7 @@ macro_rules! unsigned_integer_bin_search {
                 }
             }
 
-            numeric_api!($typ);
+            numeric_api!($typ, 1);
         }
     }
 }
@@ -270,6 +271,119 @@ unsigned_integer_bin_search!(u16);
 unsigned_integer_bin_search!(u32);
 unsigned_integer_bin_search!(u64);
 unsigned_integer_bin_search!(usize);
+
+macro_rules! float_bin_search {
+    ($typ:ident) => {
+        #[allow(missing_docs)]
+        pub mod $typ {
+            use std::ops::{Range, RangeFrom, RangeTo};
+
+            use rand::{self, Rng};
+            use rand::distributions::IndependentSample;
+
+            use strategy::*;
+            use test_runner::TestRunner;
+
+            /// Shrinks a float towards 0, using binary search to find boundary
+            /// points.
+            ///
+            /// Non-finite values immediately shrink to 0.
+            #[derive(Clone, Copy, Debug)]
+            pub struct BinarySearch {
+                lo: $typ,
+                curr: $typ,
+                hi: $typ,
+            }
+            impl BinarySearch {
+                /// Creates a new binary searcher starting at the given value.
+                pub fn new(start: $typ) -> Self {
+                    BinarySearch {
+                        lo: 0.0,
+                        curr: start,
+                        hi: start,
+                    }
+                }
+
+                /// Creates a new binary searcher which will not produce values
+                /// on the other side of `lo` or `hi` from `start`. `lo` is
+                /// inclusive, `hi` is exclusive.
+                fn new_clamped(lo: $typ, start: $typ, hi: $typ) -> Self {
+                    BinarySearch {
+                        lo: if start.is_sign_negative() {
+                            hi.min(0.0)
+                        } else {
+                            lo.max(0.0)
+                        },
+                        hi: start,
+                        curr: start,
+                    }
+                }
+
+                fn reposition(&mut self) -> bool {
+                    let interval = self.hi - self.lo;
+                    let interval = if interval.is_finite() {
+                        interval
+                    } else {
+                        0.0
+                    };
+                    let new_mid = self.lo + interval/2.0;
+
+                    let new_mid = if new_mid == self.curr || 0.0 == interval {
+                        new_mid
+                    } else {
+                        self.lo
+                    };
+
+                    if new_mid == self.curr {
+                        false
+                    } else {
+                        self.curr = new_mid;
+                        true
+                    }
+                }
+
+                fn done(lo: $typ, hi: $typ) -> bool {
+                    (lo.abs() > hi.abs() && !hi.is_nan()) || lo.is_nan()
+                }
+            }
+            impl ValueTree for BinarySearch {
+                type Value = $typ;
+
+                fn current(&self) -> $typ {
+                    self.curr
+                }
+
+                fn simplify(&mut self) -> bool {
+                    if BinarySearch::done(self.lo, self.hi) {
+                        return false;
+                    }
+
+                    self.hi = self.curr;
+                    self.reposition()
+                }
+
+                fn complicate(&mut self) -> bool {
+                    if BinarySearch::done(self.lo, self.hi) {
+                        return false;
+                    }
+
+                    if self.curr == self.lo {
+                        self.lo = self.hi;
+                    } else {
+                        self.lo = self.curr;
+                    }
+
+                    self.reposition()
+                }
+            }
+
+            numeric_api!($typ, 0.0);
+        }
+    }
+}
+
+float_bin_search!(f32);
+float_bin_search!(f64);
 
 #[cfg(test)]
 mod test {
@@ -405,5 +519,94 @@ mod test {
 
             assert_eq!(42, state.current());
         }
+    }
+
+    #[test]
+    fn positive_float_simplifies_to_zero() {
+        let mut runner = TestRunner::new(Config::default());
+        let mut value = (0.0f64..2.0).new_value(&mut runner).unwrap();
+
+        while value.simplify() { }
+
+        assert_eq!(0.0, value.current());
+    }
+
+    #[test]
+    fn positive_float_simplifies_to_base() {
+        let mut runner = TestRunner::new(Config::default());
+        let mut value = (1.0f64..2.0).new_value(&mut runner).unwrap();
+
+        while value.simplify() { }
+
+        assert_eq!(1.0, value.current());
+    }
+
+    #[test]
+    fn negative_float_simplifies_to_zero() {
+        let mut runner = TestRunner::new(Config::default());
+        let mut value = (-2.0f64..0.0).new_value(&mut runner).unwrap();
+
+        while value.simplify() { }
+
+        assert_eq!(0.0, value.current());
+    }
+
+    #[test]
+    fn positive_float_complicates_to_original() {
+        let mut runner = TestRunner::new(Config::default());
+        let mut value = (1.0f64..2.0).new_value(&mut runner).unwrap();
+        let orig = value.current();
+
+        assert!(value.simplify());
+        while value.complicate() { }
+
+        assert_eq!(orig, value.current());
+    }
+
+    #[test]
+    fn positive_infinity_simplifies_directly_to_zero() {
+        let mut value = f64::BinarySearch::new(::std::f64::INFINITY);
+
+        assert!(value.simplify());
+        assert_eq!(0.0, value.current());
+        assert!(value.complicate());
+        assert_eq!(::std::f64::INFINITY, value.current());
+        assert!(!value.clone().complicate());
+        assert!(!value.clone().simplify());
+    }
+
+    #[test]
+    fn negative_infinity_simplifies_directly_to_zero() {
+        let mut value = f64::BinarySearch::new(::std::f64::NEG_INFINITY);
+
+        assert!(value.simplify());
+        assert_eq!(0.0, value.current());
+        assert!(value.complicate());
+        assert_eq!(::std::f64::NEG_INFINITY, value.current());
+        assert!(!value.clone().complicate());
+        assert!(!value.clone().simplify());
+    }
+
+    #[test]
+    fn nan_simplifies_directly_to_zero() {
+        let mut value = f64::BinarySearch::new(::std::f64::NAN);
+
+        assert!(value.simplify());
+        assert_eq!(0.0, value.current());
+        assert!(value.complicate());
+        assert!(value.current().is_nan());
+        assert!(!value.clone().complicate());
+        assert!(!value.clone().simplify());
+    }
+
+    #[test]
+    fn float_simplifies_to_smallest_normal() {
+        let mut runner = TestRunner::new(Config::default());
+        let mut value = (::std::f64::MIN_POSITIVE..2.0)
+            .new_value(&mut runner).unwrap();
+
+        while value.simplify() { }
+
+        assert_eq!(::std::f64::MIN_POSITIVE, value.current());
     }
 }
