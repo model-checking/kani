@@ -7,6 +7,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! Strategies for generating `char` values.
+//!
+//! Unlike most strategies in Proptest, character generation is by default
+//! biased to particular values known to be difficult to handle in various
+//! circumstances.
+//!
+//! The main things of interest are `ANY` to generate truly arbitrary
+//! characters, and `range()` and `ranges()` to select characters from
+//! inclusive ranges.
+
 use std::borrow::Cow;
 
 use rand::Rng;

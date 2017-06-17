@@ -17,6 +17,7 @@
 use strategy::*;
 use test_runner::*;
 
+/// A `ValueTree` operating over a fixed-size array.
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayValueTree<T> {
     tree: T,

@@ -92,11 +92,62 @@ macro_rules! proptest {
         )*
     };
 
-    (@_WRAP ($item:tt)) => { $item };
+    (@_WRAP ($a:tt)) => { $a };
+    (@_WRAP ($a0:tt $a1:tt)) => { ($a0, $a1) };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt)) => { ($a0, $a1, $a2) };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt)) => { ($a0, $a1, $a2, $a3) };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt $a5:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt $a5:tt $a6:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt
+             $a4:tt $a5:tt $a6:tt $a7:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt
+             $a5:tt $a6:tt $a7:tt $a8:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt
+             $a5:tt $a6:tt $a7:tt $a8:tt $a9:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8, $a9)
+    };
     (@_WRAP ($a:tt $($rest:tt)*)) => {
         ($a, proptest!(@_WRAP ($($rest)*)))
     };
     (@_WRAPPAT ($item:pat)) => { $item };
+    (@_WRAPPAT ($a0:pat, $a1:pat)) => { ($a0, $a1) };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat)) => { ($a0, $a1, $a2) };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat)) => {
+        ($a0, $a1, $a2, $a3)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat, $a5:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
+                $a4:pat, $a5:pat, $a6:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
+                $a4:pat, $a5:pat, $a6:pat, $a7:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
+                $a5:pat, $a6:pat, $a7:pat, $a8:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
+                $a5:pat, $a6:pat, $a7:pat, $a8:pat, $a9:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8, $a9)
+    };
     (@_WRAPPAT ($a:pat, $($rest:pat),*)) => {
         ($a, proptest!(@_WRAPPAT ($($rest),*)))
     };

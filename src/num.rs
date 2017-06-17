@@ -74,6 +74,7 @@ macro_rules! numeric_api {
 
 macro_rules! signed_integer_bin_search {
     ($typ:ident) => {
+        #[allow(missing_docs)]
         pub mod $typ {
             use std::ops::{Range, RangeFrom, RangeTo};
 
@@ -176,6 +177,7 @@ macro_rules! signed_integer_bin_search {
 
 macro_rules! unsigned_integer_bin_search {
     ($typ:ident) => {
+        #[allow(missing_docs)]
         pub mod $typ {
             use std::ops::{Range, RangeFrom, RangeTo};
 

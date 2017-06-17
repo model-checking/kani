@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! Strategies for generating `std::collections` of values.
+
 use std::ops::Range;
 
 use bit_set::BitSet;
