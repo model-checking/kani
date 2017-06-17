@@ -94,13 +94,22 @@ pub trait Strategy {
     }
 }
 
-impl<S : Strategy + ?Sized> Strategy for Box<S> {
-    type Value = S::Value;
+macro_rules! proxy_strategy {
+    ($typ:ty $(, $lt:tt)*) => {
+        impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
+            type Value = S::Value;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String>
-    { (**self).new_value(runner) }
+            fn new_value(&self, runner: &mut TestRunner)
+                         -> Result<Self::Value, String>
+            { (**self).new_value(runner) }
+        }
+    };
 }
+proxy_strategy!(Box<S>);
+proxy_strategy!(&'a S, 'a);
+proxy_strategy!(&'a mut S, 'a);
+proxy_strategy!(::std::rc::Rc<S>);
+proxy_strategy!(::std::sync::Arc<S>);
 
 /// A generated value and its associated shrinker.
 ///

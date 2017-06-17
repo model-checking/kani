@@ -23,3 +23,5 @@ pub mod array;
 pub mod collection;
 pub mod char;
 pub mod string;
+
+#[macro_use] mod sugar;
