@@ -209,7 +209,9 @@ impl<'a> Strategy for CharStrategy<'a> {
 
         // Select a minimum point more convenient than 0
         let start = base + offset;
-        let bottom = if start >= 'a' as u32 && base < 'a' as u32 {
+        let bottom = if start >= '¡' as u32 && base < '¡' as u32 {
+            '¡' as u32
+        } else if start >= 'a' as u32 && base < 'a' as u32 {
             'a' as u32
         } else if start >= 'A' as u32 && base < 'A' as u32 {
             'A' as u32
