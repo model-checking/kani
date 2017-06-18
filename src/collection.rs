@@ -9,6 +9,9 @@
 
 //! Strategies for generating `std::collections` of values.
 
+use std::cmp::Ord;
+use std::collections::*;
+use std::hash::Hash;
 use std::ops::Range;
 
 use bit_set::BitSet;
@@ -35,6 +38,105 @@ pub fn vec<T : Strategy>(element: T, size: Range<usize>)
         element: element,
         size: size,
     }
+}
+
+/// Create a strategy to generate `VecDeque`s containing elements drawn from
+/// `element` and with a size range given by `size`.
+pub fn vec_deque<T : Strategy + 'static>
+    (element: T, size: Range<usize>)
+     -> BoxedStrategy<VecDeque<<T::Value as ValueTree>::Value>>
+{
+    vec(element, size).prop_map(|v| v.into()).boxed()
+}
+
+/// Create a strategy to generate `LinkedList`s containing elements drawn from
+/// `element` and with a size range given by `size`.
+pub fn linked_list<T : Strategy + 'static>
+    (element: T, size: Range<usize>)
+     -> BoxedStrategy<LinkedList<<T::Value as ValueTree>::Value>>
+{
+    vec(element, size).prop_map(|v| v.into_iter().collect()).boxed()
+}
+
+/// Create a strategy to generate `BinaryHeap`s containing elements drawn from
+/// `element` and with a size range given by `size`.
+pub fn binary_heap<T : Strategy + 'static>
+    (element: T, size: Range<usize>)
+    -> BoxedStrategy<BinaryHeap<<T::Value as ValueTree>::Value>>
+where <T::Value as ValueTree>::Value : Ord {
+    vec(element, size).prop_map(|v| v.into()).boxed()
+}
+
+/// Create a strategy to generate `HashSet`s containing elements drawn from
+/// `element` and with a size range given by `size`.
+///
+/// This strategy will implicitly do local rejects to ensure that the `HashSet`
+/// has at least the minimum number of elements, in case `element` should
+/// produce duplicate values.
+pub fn hash_set<T : Strategy + 'static>
+    (element: T, size: Range<usize>)
+    -> BoxedStrategy<HashSet<<T::Value as ValueTree>::Value>>
+where <T::Value as ValueTree>::Value : Hash + Eq {
+    vec(element, size.clone())
+        .prop_map(|v| v.into_iter().collect::<HashSet<_>>())
+        .prop_filter("HashSet minimum size".to_owned(),
+                     move |s| s.len() >= size.start)
+        .boxed()
+}
+
+/// Create a strategy to generate `BTreeSet`s containing elements drawn from
+/// `element` and with a size range given by `size`.
+///
+/// This strategy will implicitly do local rejects to ensure that the
+/// `BTreeSet` has at least the minimum number of elements, in case `element`
+/// should produce duplicate values.
+pub fn btree_set<T : Strategy + 'static>
+    (element: T, size: Range<usize>)
+    -> BoxedStrategy<BTreeSet<<T::Value as ValueTree>::Value>>
+where <T::Value as ValueTree>::Value : Ord {
+    vec(element, size.clone())
+        .prop_map(|v| v.into_iter().collect::<BTreeSet<_>>())
+        .prop_filter("BTreeSet minimum size".to_owned(),
+                     move |s| s.len() >= size.start)
+        .boxed()
+}
+
+/// Create a strategy to generate `HashMap`s containing keys and values drawn
+/// from `key` and `value` respectively, and with a size within the given
+/// range.
+///
+/// This strategy will implicitly do local rejects to ensure that the `HashMap`
+/// has at least the minimum number of elements, in case `key` should produce
+/// duplicate values.
+pub fn hash_map<K : Strategy + 'static, V : Strategy + 'static>
+    (key: K, value: V, size: Range<usize>)
+    -> BoxedStrategy<HashMap<<K::Value as ValueTree>::Value,
+                             <V::Value as ValueTree>::Value>>
+where <K::Value as ValueTree>::Value : Hash + Eq {
+    vec((key, value), size.clone())
+        .prop_map(|v| v.into_iter().collect::<HashMap<_,_>>())
+        .prop_filter("HashMap minimum size".to_owned(),
+                     move |m| m.len() >= size.start)
+        .boxed()
+}
+
+/// Create a strategy to generate `BTreeMap`s containing keys and values drawn
+/// from `key` and `value` respectively, and with a size within the given
+/// range.
+///
+/// This strategy will implicitly do local rejects to ensure that the
+/// `BTreeMap` has at least the minimum number of elements, in case `key`
+/// should produce duplicate values.
+pub fn btree_map<K : Strategy + 'static, V : Strategy + 'static>
+    (key: K, value: V, size: Range<usize>)
+    -> BoxedStrategy<BTreeMap<<K::Value as ValueTree>::Value,
+                              <V::Value as ValueTree>::Value>>
+where <K::Value as ValueTree>::Value : Ord {
+    vec((key, value), size.clone())
+        .prop_map(|v| v.into_iter().collect::<BTreeMap<_,_>>())
+        .prop_filter("BTreeMap minimum size".to_owned(),
+                     move |m| m.len() >= size.start)
+        .boxed()
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -196,5 +298,29 @@ mod test {
         }
 
         assert!(num_successes < 256);
+    }
+
+    #[test]
+    fn test_map() {
+        // Only 8 possible keys
+        let input = hash_map("[ab]{3}", "a", 2..3);
+        let mut runner = TestRunner::new(Config::default());
+
+        for _ in 0..256 {
+            let v = input.new_value(&mut runner).unwrap().current();
+            assert_eq!(2, v.len());
+        }
+    }
+
+    #[test]
+    fn test_set() {
+        // Only 8 possible values
+        let input = hash_set("[ab]{3}", 2..3);
+        let mut runner = TestRunner::new(Config::default());
+
+        for _ in 0..256 {
+            let v = input.new_value(&mut runner).unwrap().current();
+            assert_eq!(2, v.len());
+        }
     }
 }

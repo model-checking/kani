@@ -40,7 +40,7 @@ pub trait Strategy {
     /// There is no need (or possibility, for that matter) to define how the
     /// output is to be shrunken. Shrinking continues to take place in terms of
     /// the source value.
-    fn prop_map<O : Clone + fmt::Debug,
+    fn prop_map<O : fmt::Debug,
                 F : Fn (<Self::Value as ValueTree>::Value) -> O>
         (self, fun: F) -> Map<Self, F>
     where Self : Sized {
