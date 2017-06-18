@@ -326,6 +326,7 @@ pub mod test_runner;
 pub mod strategy;
 pub mod bool;
 pub mod num;
+pub mod bits;
 pub mod tuple;
 pub mod array;
 pub mod collection;

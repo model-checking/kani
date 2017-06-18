@@ -18,6 +18,7 @@ use regex_syntax as rs;
 use bool;
 use char;
 use collection;
+use bits;
 use num;
 use strategy::*;
 use test_runner::*;
@@ -86,9 +87,10 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                          .into_bytes()).boxed()),
         Literal { ref chars, casei: true } => {
             let chars = chars.to_owned();
-            Ok(collection::vec(bool::ANY, (chars.len()..chars.len()+1))
-               .prop_map(move |cases| cases.iter().zip(chars.iter())
-                         .map(|(&case, &ch)| flip_case_to_bytes(case, ch))
+            Ok(bits::bitset::between(0, chars.len())
+               .prop_map(move |cases|
+                         cases.into_bit_vec().iter().zip(chars.iter())
+                         .map(|(case, &ch)| flip_case_to_bytes(case, ch))
                          .fold(vec![], |mut accum, rhs| {
                              accum.extend(rhs);
                              accum
@@ -99,9 +101,10 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
             Ok(Singleton(bytes.to_owned()).boxed()),
         LiteralBytes { ref bytes, casei: true } => {
             let bytes = bytes.to_owned();
-            Ok(collection::vec(bool::ANY, (bytes.len()..bytes.len()+1))
-               .prop_map(move |cases| cases.iter().zip(bytes.iter())
-                         .map(|(&case, &byte)| flip_ascii_case(case, byte))
+            Ok(bits::bitset::between(0, bytes.len())
+               .prop_map(move |cases|
+                         cases.into_bit_vec().iter().zip(bytes.iter())
+                         .map(|(case, &byte)| flip_ascii_case(case, byte))
                          .collect::<Vec<_>>()).boxed())
         },
 
