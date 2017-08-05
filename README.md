@@ -12,9 +12,15 @@ documentation](https://docs.rs/proptest/).
 
 # Status
 
-Everything is believed to work, but the crate still has its rough edges.
+In my personal usage, everything works pretty well, though the crate itself has
+a few rough edges.
 
-There may be breaking changes when "impl Trait" becomes stable.
+There may be breaking changes when "impl Trait" becomes stable or when the
+possible restructuring of the `rand` crate occurs.
+
+# Changelog
+
+**0.1.1**: Add `strategy::NoShrink`, `Strategy::no_shrink()`.
 
 # Acknowledgements
 
