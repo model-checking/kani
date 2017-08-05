@@ -98,6 +98,19 @@ pub trait Strategy {
     where Self : Sized + 'static {
         Box::new(BoxedStrategyWrapper(self))
     }
+
+    /// Wraps this strategy to prevent values from being subject to shrinking.
+    ///
+    /// Suppressing shrinking is useful when testing things like linear
+    /// approximation functions. Ordinarily, proptest will tend to shrink the
+    /// input to the function until the result is just barely outside the
+    /// acceptable range whereas the original input may have produced a result
+    /// far outside of it. Since this makes it harder to see what the actual
+    /// problem is, making the input `NoShrink` allows learning about inputs
+    /// that produce more incorrect results.
+    fn no_shrink(self) -> NoShrink<Self> where Self : Sized {
+        NoShrink(self)
+    }
 }
 
 macro_rules! proxy_strategy {
@@ -422,6 +435,33 @@ impl<T : Clone + fmt::Debug> ValueTree for Singleton<T> {
 
     fn current(&self) -> T {
         self.0.clone()
+    }
+
+    fn simplify(&mut self) -> bool { false }
+    fn complicate(&mut self) -> bool { false }
+}
+
+/// Wraps a `Strategy` or `ValueTree` to suppress shrinking of generated
+/// values.
+///
+/// See `Strategy::no_shrink()` for more details.
+#[derive(Clone, Copy, Debug)]
+pub struct NoShrink<T>(T);
+
+impl<T : Strategy> Strategy for NoShrink<T> {
+    type Value = NoShrink<T::Value>;
+
+    fn new_value(&self, runner: &mut TestRunner)
+                 -> Result<Self::Value, String> {
+        self.0.new_value(runner).map(NoShrink)
+    }
+}
+
+impl<T : ValueTree> ValueTree for NoShrink<T> {
+    type Value = T::Value;
+
+    fn current(&self) -> T::Value {
+        self.0.current()
     }
 
     fn simplify(&mut self) -> bool { false }
