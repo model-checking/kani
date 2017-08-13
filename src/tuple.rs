@@ -22,6 +22,19 @@ pub struct TupleValueTree<T> {
     shrinker: u32,
 }
 
+impl<T> TupleValueTree<T> {
+    /// Create a new `TupleValueTree` wrapping `inner`.
+    ///
+    /// It only makes sense for `inner` to be a tuple of an arity for which the
+    /// type implements `ValueTree`.
+    pub fn new(inner: T) -> Self {
+        TupleValueTree {
+            tree: inner,
+            shrinker: 0,
+        }
+    }
+}
+
 macro_rules! tuple {
     ($($fld:tt : $typ:ident),*) => {
         impl<$($typ : Strategy),*> Strategy for ($($typ,)*) {

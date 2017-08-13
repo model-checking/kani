@@ -100,11 +100,85 @@ pub trait Strategy : fmt::Debug {
     /// #
     /// # fn main() { test_two(); }
     /// ```
+    ///
+    /// ## Choosing the right flat-map
+    ///
+    /// `Strategy` has three "flat-map" combinators. They look very similar at
+    /// first, and can be used to produce superficially identical test results.
+    /// For example, the following three expressions all produce inputs which
+    /// are 2-tuples `(a,b)` where the `b` component is less than `a`.
+    ///
+    /// ```no_run
+    /// # #![allow(unused_variables)]
+    /// use proptest::strategy::{Singleton, Strategy};
+    ///
+    /// let flat_map = (1..10).prop_flat_map(|a| (Singleton(a), 0..a));
+    /// let ind_flat_map = (1..10).prop_ind_flat_map(|a| (Singleton(a), 0..a));
+    /// let ind_flat_map2 = (1..10).prop_ind_flat_map2(|a| 0..a);
+    /// ```
+    ///
+    /// The three do differ however in terms of how they shrink.
+    ///
+    /// For `flat_map`, both `a` and `b` will shrink, and the invariant that
+    /// `b < a` is maintained. This is a "dependent" or "higher-order" strategy
+    /// in that it remembers that the strategy for choosing `b` is dependent on
+    /// the value chosen for `a`.
+    ///
+    /// For `ind_flat_map`, the invariant `b < a` is maintained, but only
+    /// because `a` does not shrink. This is due to the fact that the
+    /// dependency between the strategies is not tracked; `a` is simply seen as
+    /// a constant.
+    ///
+    /// Finally, for `ind_flat_map2`, the invariant `b < a` is _not_
+    /// maintained, because `a` can shrink independently of `b`, again because
+    /// the dependency between the two variables is not tracked, but in this
+    /// case the derivation of `a` is still exposed to the shrinking system.
+    ///
+    /// The use-cases for the independent flat-map variants is pretty narrow.
+    /// For the majority of cases where invariants need to be maintained and
+    /// you want all components to shrink, `prop_flat_map` is the way to go.
+    /// `prop_ind_flat_map` makes the most sense when the input to the map
+    /// function is not exposed in the output and shrinking across strategies
+    /// is not expected to be useful. `prop_ind_flat_map2` is useful for using
+    /// related values as starting points while not constraining them to that
+    /// relation.
     fn prop_flat_map<S : Strategy,
                      F : Fn (<Self::Value as ValueTree>::Value) -> S>
         (self, fun: F) -> Flatten<Map<Self, F>>
     where Self : Sized {
         Flatten::new(Map { source: self, fun: Arc::new(fun) })
+    }
+
+    /// Maps values produced by this strategy into new strategies and picks
+    /// values from those strategies while considering the new strategies to be
+    /// independent.
+    ///
+    /// This is very similar to `prop_flat_map()`, but shrinking will *not*
+    /// attempt to shrink the input that produces the derived strategies. This
+    /// is appropriate for when the derived strategies already fully shrink in
+    /// the desired way.
+    ///
+    /// In most cases, you want `prop_flat_map()`.
+    ///
+    /// See `prop_flat_map()` for a more detailed explanation on how the
+    /// three flat-map combinators differ.
+    fn prop_ind_flat_map<S : Strategy,
+                         F : Fn (<Self::Value as ValueTree>::Value) -> S>
+        (self, fun: F) -> IndFlatten<Map<Self, F>>
+    where Self : Sized {
+        IndFlatten(Map { source: self, fun: Arc::new(fun) })
+    }
+
+    /// Similar to `prop_ind_flat_map()`, but produces 2-tuples with the input
+    /// generated from `self` in slot 0 and the derived strategy in slot 1.
+    ///
+    /// See `prop_flat_map()` for a more detailed explanation on how the
+    /// three flat-map combinators differ differ.
+    fn prop_ind_flat_map2<S : Strategy,
+                          F : Fn (<Self::Value as ValueTree>::Value) -> S>
+        (self, fun: F) -> IndFlattenMap<Self, F>
+    where Self : Sized {
+        IndFlattenMap { source: self, fun: Arc::new(fun) }
     }
 
     /// Returns a strategy which only produces values accepted by `fun`.
@@ -453,6 +527,65 @@ where S::Value : Strategy {
         } else {
             false
         }
+    }
+}
+
+/// Similar to `Flatten`, but does not shrink the input strategy.
+///
+/// See `Strategy::prop_ind_flat_map()` fore more details.
+#[derive(Clone, Copy, Debug)]
+pub struct IndFlatten<S>(S);
+
+impl<S : Strategy> Strategy for IndFlatten<S>
+where <S::Value as ValueTree>::Value : Strategy {
+    type Value = <<S::Value as ValueTree>::Value as Strategy>::Value;
+
+    fn new_value(&self, runner: &mut TestRunner)
+                 -> Result<Self::Value, String> {
+        let inner = self.0.new_value(runner)?;
+        inner.current().new_value(runner)
+    }
+}
+
+/// Similar to `Map` plus `Flatten`, but does not shrink the input strategy and
+/// passes the original input through.
+///
+/// See `Strategy::prop_ind_flat_map2()` for more details.
+pub struct IndFlattenMap<S, F> {
+    source: S,
+    fun: Arc<F>,
+}
+
+impl<S : fmt::Debug, F> fmt::Debug for IndFlattenMap<S, F> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("IndFlattenMap")
+            .field("source", &self.source)
+            .field("fun", &"<function>")
+            .finish()
+    }
+}
+
+impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
+    fn clone(&self) -> Self {
+        IndFlattenMap {
+            source: self.source.clone(),
+            fun: self.fun.clone(),
+        }
+    }
+}
+
+impl<S : Strategy, R : Strategy,
+     F : Fn (<S::Value as ValueTree>::Value) -> R>
+Strategy for IndFlattenMap<S, F> {
+    type Value = ::tuple::TupleValueTree<(S::Value, R::Value)>;
+
+    fn new_value(&self, runner: &mut TestRunner)
+                 -> Result<Self::Value, String> {
+        let left = self.source.new_value(runner)?;
+        let right_source = (self.fun)(left.current());
+        let right = right_source.new_value(runner)?;
+
+        Ok(::tuple::TupleValueTree::new((left, right)))
     }
 }
 
