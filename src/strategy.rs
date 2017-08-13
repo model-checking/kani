@@ -60,6 +60,20 @@ pub trait Strategy : fmt::Debug {
     /// Shrinking proceeds by shrinking individual values as well as shrinking
     /// the input used to generate the internal strategies.
     ///
+    /// ## Shrinking
+    ///
+    /// In the case of test failure, shrinking will not only shrink the output
+    /// from the combinator itself, but also the input, i.e., the strategy used
+    /// to generate the output itself. Doing this requires searching the new
+    /// derived strategy for a new failing input. The combinator will generate
+    /// up to `Config::cases` values for this search.
+    ///
+    /// As a result, nested `prop_flat_map`/`Flatten` combinators risk
+    /// exponential run time on this search for new failing values. To ensure
+    /// that test failures occur within a reasonable amount of time, all of
+    /// these combinators share a single "flat map regen" counter, and will
+    /// stop generating new values if it exceeds `Config::max_flat_map_regens`.
+    ///
     /// ## Example
     ///
     /// Generate two integers, where the second is always less than the first,
@@ -362,7 +376,7 @@ impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
         Ok(FlattenValueTree {
             meta, current,
             final_complication: None,
-            runner: TestRunner::new(runner.config().clone()),
+            runner: runner.partial_clone(),
             complicate_regen_remaining: 0
         })
     }
@@ -403,10 +417,15 @@ where S::Value : Strategy {
 
     fn complicate(&mut self) -> bool {
         if self.complicate_regen_remaining > 0 {
-            self.complicate_regen_remaining -= 1;
-            if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
-                self.current = v;
-                return true;
+            if self.runner.flat_map_regen() {
+                self.complicate_regen_remaining -= 1;
+
+                if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+                    self.current = v;
+                    return true;
+                }
+            } else {
+                self.complicate_regen_remaining = 0;
             }
         }
 
@@ -718,6 +737,37 @@ mod test {
         }
 
         assert!(failures > 250);
+    }
+
+    #[test]
+    fn flat_map_respects_regen_limit() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let input = (0..65536)
+            .prop_flat_map(|_| 0..65536)
+            .prop_flat_map(|_| 0..65536)
+            .prop_flat_map(|_| 0..65536)
+            .prop_flat_map(|_| 0..65536)
+            .prop_flat_map(|_| 0..65536);
+
+        // Arteficially make the first case fail and all others pass, so that
+        // the regeneration logic futilely searches for another failing
+        // example and eventually gives up. Unfortunately, the test is sort of
+        // semi-decidable; if the limit *doesn't* work, the test just runs
+        // almost forever.
+        let pass = AtomicBool::new(false);
+        let mut runner = TestRunner::new(Config {
+            max_flat_map_regens: 1000,
+            .. Config::default()
+        });
+        let case = input.new_value(&mut runner).unwrap();
+        let _ = runner.run_one(case, |_| {
+            if pass.fetch_or(true, Ordering::SeqCst) {
+                Ok(())
+            } else {
+                Err(TestCaseError::Fail("fail".to_owned()))
+            }
+        });
     }
 
     #[test]

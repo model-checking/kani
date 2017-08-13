@@ -15,6 +15,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::panic::{self, AssertUnwindSafe};
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::SeqCst;
 
 use rand::{self, XorShiftRng};
 
@@ -38,6 +41,12 @@ pub struct Config {
     ///
     /// The default is 1024.
     pub max_global_rejects: u32,
+    /// The maximum number of times all `Flatten` combinators will attempt to
+    /// regenerate values. This puts a limit on the worst-case exponential
+    /// explosion that can happen with nested `Flatten`s.
+    ///
+    /// The default is 1000000.
+    pub max_flat_map_regens: u32,
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
     pub _non_exhaustive: (),
@@ -49,6 +58,7 @@ impl Default for Config {
             cases: 256,
             max_local_rejects: 65536,
             max_global_rejects: 1024,
+            max_flat_map_regens: 1000000,
             _non_exhaustive: (),
         }
     }
@@ -140,6 +150,7 @@ pub struct TestRunner {
     local_rejects: u32,
     global_rejects: u32,
     rng: XorShiftRng,
+    flat_map_regens: Arc<AtomicUsize>,
 
     local_reject_detail: BTreeMap<String, u32>,
     global_reject_detail: BTreeMap<String, u32>,
@@ -152,7 +163,8 @@ impl fmt::Debug for TestRunner {
             .field("successes", &self.successes)
             .field("local_rejects", &self.local_rejects)
             .field("global_rejects", &self.global_rejects)
-            .field("rng", &"<XorShiftRng>".to_owned())
+            .field("rng", &"<XorShiftRng>")
+            .field("flat_map_regens", &self.flat_map_regens)
             .field("local_reject_detail", &self.local_reject_detail)
             .field("global_reject_detail", &self.global_reject_detail)
             .finish()
@@ -185,6 +197,22 @@ impl TestRunner {
             local_rejects: 0,
             global_rejects: 0,
             rng: rand::weak_rng(),
+            flat_map_regens: Arc::new(AtomicUsize::new(0)),
+            local_reject_detail: BTreeMap::new(),
+            global_reject_detail: BTreeMap::new(),
+        }
+    }
+
+    /// Create a fresh `TestRunner` with the same config and global counters as
+    /// this one, but with local state reset and an independent `Rng`.
+    pub(crate) fn partial_clone(&self) -> Self {
+        TestRunner {
+            config: self.config.clone(),
+            successes: 0,
+            local_rejects: 0,
+            global_rejects: 0,
+            rng: rand::weak_rng(),
+            flat_map_regens: self.flat_map_regens.clone(),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
         }
@@ -335,6 +363,13 @@ impl TestRunner {
 
             Ok(())
         }
+    }
+
+    /// Increment the counter of flat map regenerations and return whether it
+    /// is still under the configured limit.
+    pub fn flat_map_regen(&self) -> bool {
+        self.flat_map_regens.fetch_add(1, SeqCst) <
+            self.config.max_flat_map_regens as usize
     }
 }
 
