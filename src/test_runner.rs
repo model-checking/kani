@@ -195,6 +195,11 @@ impl TestRunner {
         &mut self.rng
     }
 
+    /// Returns the configuration of this runner.
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     /// Run test cases against `f`, choosing inputs via `strategy`.
     ///
     /// If any failure cases occur, try to find a minimal failure case and

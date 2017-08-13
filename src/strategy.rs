@@ -298,9 +298,6 @@ ValueTree for Map<S, F> {
 /// Adaptor that flattens a `Strategy` which produces other `Strategy`s into a
 /// `Strategy` that picks one of those strategies and then picks values from
 /// it.
-///
-/// Shrinking will attempt to shrink to simpler input strategies, but since the
-/// resulting values are not correlated, this will often be unsuccessful.
 #[derive(Debug, Clone, Copy)]
 pub struct Flatten<S> {
     source: S,
@@ -331,6 +328,18 @@ pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
     // The final value to produce after successive calls to complicate() on the
     // underlying objects return false.
     final_complication: Option<<S::Value as Strategy>::Value>,
+    // When `simplify()` or `complicate()` causes a new `Strategy` to be
+    // chosen, we need to find a new failing input for that case. To do this,
+    // we implement `complicate()` by regenerating values up to a number of
+    // times corresponding to the maximum number of test cases. A `simplify()`
+    // which does not cause a new strategy to be chosen always resets
+    // `complicate_regen_remaining` to 0.
+    //
+    // This does unfortunately depart from the direct interpretation of
+    // simplify/complicate as binary search, but is still easier to think about
+    // than other implementations of higher-order strategies.
+    runner: TestRunner,
+    complicate_regen_remaining: u32,
 }
 
 impl<S : ValueTree> fmt::Debug for FlattenValueTree<S>
@@ -341,6 +350,8 @@ where S::Value : Strategy,
             .field("meta", &self.meta)
             .field("current", &self.current)
             .field("final_complication", &self.final_complication)
+            .field("complicate_regen_remaining",
+                   &self.complicate_regen_remaining)
             .finish()
     }
 }
@@ -348,7 +359,12 @@ where S::Value : Strategy,
 impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
     fn new(runner: &mut TestRunner, meta: S) -> Result<Self, String> {
         let current = meta.current().new_value(runner)?;
-        Ok(FlattenValueTree { meta, current, final_complication: None })
+        Ok(FlattenValueTree {
+            meta, current,
+            final_complication: None,
+            runner: TestRunner::new(runner.config().clone()),
+            complicate_regen_remaining: 0
+        })
     }
 }
 
@@ -361,19 +377,23 @@ where S::Value : Strategy {
     }
 
     fn simplify(&mut self) -> bool {
+        self.complicate_regen_remaining = 0;
+
         if self.current.simplify() {
             true
         } else if !self.meta.simplify() {
             false
         } else {
-            // We don't want this to be linked to the original `TestRunner`
-            // since we simply give up on rejections.
-            let mut runner = TestRunner::new(Config::default());
-            match self.meta.current().new_value(&mut runner) {
+            match self.meta.current().new_value(&mut self.runner) {
                 Ok(v) => {
+                    // Shift current into final_complication and `v` into
+                    // `current`.
                     self.final_complication = Some(v);
                     mem::swap(self.final_complication.as_mut().unwrap(),
                               &mut self.current);
+                    // Initially complicate by regenerating the chosen value.
+                    self.complicate_regen_remaining =
+                        self.runner.config().cases;
                     true
                 },
                 Err(_) => false,
@@ -382,12 +402,24 @@ where S::Value : Strategy {
     }
 
     fn complicate(&mut self) -> bool {
+        if self.complicate_regen_remaining > 0 {
+            self.complicate_regen_remaining -= 1;
+            if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+                self.current = v;
+                return true;
+            }
+        }
+
         let res = if self.current.complicate() {
             true
         } else if self.meta.complicate() {
-            let mut runner = TestRunner::new(Config::default());
-            match self.meta.current().new_value(&mut runner) {
-                Ok(v) => { self.current = v; true },
+            match self.meta.current().new_value(&mut self.runner) {
+                Ok(v) => {
+                    self.complicate_regen_remaining =
+                        self.runner.config().cases;
+                    self.current = v;
+                    true
+                },
                 Err(_) => false,
             }
         } else {
@@ -653,6 +685,39 @@ mod test {
                 assert!(0 == v % 2);
                 Ok(())
             }).unwrap();
+    }
+
+    #[test]
+    fn test_flat_map() {
+        // Pick random integer A, then random integer B which is ±5 of A and
+        // assert that B <= A if A > 10000. Shrinking should always converge to
+        // A=10001, B=10002.
+        let input = (0..65536).prop_flat_map(
+            |a| (Singleton(a), (a-5..a+5)));
+
+        let mut failures = 0;
+        for _ in 0..1000 {
+            let mut runner = TestRunner::new(Config::default());
+            let case = input.new_value(&mut runner).unwrap();
+            let result = runner.run_one(case, |&(a, b)| {
+                if a <= 10000 || b <= a {
+                    Ok(())
+                } else {
+                    Err(TestCaseError::Fail("fail".to_owned()))
+                }
+            });
+
+            match result {
+                Ok(_) => { },
+                Err(TestError::Fail(_, v)) => {
+                    failures += 1;
+                    assert_eq!((10001, 10002), v);
+                },
+                result => panic!("Unexpected result: {:?}", result),
+            }
+        }
+
+        assert!(failures > 250);
     }
 
     #[test]
