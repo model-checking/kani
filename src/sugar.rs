@@ -227,8 +227,184 @@ macro_rules! prop_oneof {
     }
 }
 
+/// Convenience to define functions which produce new strategies.
+///
+/// The macro has two general forms. In the first, you define a function with
+/// two argument lists. The first argument list uses the usual syntax and
+/// becomes exactly the argument list of the defined function. The second
+/// argument list uses the `in strategy` syntax as with `proptest!`, and is
+/// used to generate the other inputs for the function. The second argument
+/// list has access to all arguments in the first. The return type indicates
+/// the type of value being generated; the final return type of the function is
+/// `BoxedStrategy<$type>`.
+///
+/// ```rust,norun
+/// # #![allow(dead_code)]
+/// #[macro_use] extern crate proptest;
+///
+/// #[derive(Clone, Debug)]
+/// struct MyStruct {
+///   integer: u32,
+///   string: String,
+/// }
+///
+/// prop_compose! {
+///   fn my_struct_strategy(max_integer: u32)
+///                        (integer in 0..max_integer, string in ".*")
+///                        -> MyStruct {
+///     MyStruct { integer, string }
+///   }
+/// }
+/// #
+/// # fn main() { }
+/// ```
+///
+/// This form is simply sugar around making a tuple and then calling `prop_map`
+/// on it.
+///
+/// The second form is mostly the same, except that it takes _three_ argument
+/// lists. The third argument list can see all values in both prior, which
+/// permits producing strategies based on other strategies.
+///
+/// ```rust,norun
+/// # #![allow(dead_code)]
+/// #[macro_use] extern crate proptest;
+///
+/// prop_compose! {
+///   fn nearby_numbers()(centre in -1000..1000)
+///                    (a in centre-10..centre+10,
+///                     b in centre-10..centre+10)
+///                    -> (i32, i32) {
+///     (a, b)
+///   }
+/// }
+/// #
+/// # fn main() { }
+/// ```
+///
+/// However, the body of the function does _not_ have access to the second
+/// argument list. If the body needs access to those values, they must be
+/// passed through explicitly.
+///
+/// ```rust,norun
+/// # #![allow(dead_code)]
+/// #[macro_use] extern crate proptest;
+/// use proptest::strategy::Singleton;
+///
+/// prop_compose! {
+///   fn vec_and_index
+///     (max_length: usize)
+///     (vec in proptest::collection::vec(1..10, 1..max_length))
+///     (index in 0..vec.len(), vec in Singleton(vec))
+///     -> (Vec<i32>, usize)
+///   {
+///     (vec, index)
+///   }
+/// }
+/// # fn main() { }
+/// ```
+///
+/// The second form is sugar around making a strategy tuple, calling
+/// `prop_flat_map()`, then `prop_map()`.
+///
+/// To give the function a visibility or unsafe modifier, put it in brackets
+/// before the `fn` token.
+///
+/// ```rust,norun
+/// # #![allow(dead_code)]
+/// #[macro_use] extern crate proptest;
+///
+/// prop_compose! {
+///   [pub(crate) unsafe] fn pointer()(v in proptest::num::usize::ANY)
+///                                 -> *const () {
+///     v as *const ()
+///   }
+/// }
+/// # fn main() { }
+/// ```
+///
+/// ## Comparison with Hypothesis' `@composite`
+///
+/// `prop_compose!` makes it easy to do a lot of things you can do with
+/// [Hypothesis' `@composite`](https://hypothesis.readthedocs.io/en/latest/data.html#composite-strategies),
+/// but not everything.
+///
+/// - You can't filter via this macro. For filtering, you need to make the
+/// strategy the "normal" way and use `prop_filter()`.
+///
+/// - More than two layers of strategies or arbitrary logic between the two
+/// layers. If you need either of these, you can achieve them by calling
+/// `prop_flat_map()` by hand.
+#[macro_export]
+macro_rules! prop_compose {
+    ($(#[$meta:meta])*
+     $([$($vis:tt)*])* fn $name:ident $params:tt
+     ($($var:pat in $strategy:expr),+ $(,)*)
+       -> $return_type:ty $body:block) =>
+    {
+        $(#[$meta])*
+        $($($vis)*)* fn $name $params
+                 -> $crate::strategy::BoxedStrategy<$return_type> {
+            let strat = proptest!(@_WRAP ($($strategy)*));
+            let strat = $crate::strategy::Strategy::prop_map(
+                strat,
+                |proptest!(@_WRAPPAT ($($var),*))| $body);
+            $crate::strategy::Strategy::boxed(strat)
+        }
+    };
+
+    ($(#[$meta:meta])*
+     $([$($vis:tt)*])* fn $name:ident $params:tt
+     ($($var:pat in $strategy:expr),+ $(,)*)
+     ($($var2:pat in $strategy2:expr),+ $(,)*)
+       -> $return_type:ty $body:block) =>
+    {
+        $(#[$meta])*
+        $($($vis)*)* fn $name $params
+                 -> $crate::strategy::BoxedStrategy<$return_type> {
+            let strat = proptest!(@_WRAP ($($strategy)*));
+            let strat = $crate::strategy::Strategy::prop_flat_map(
+                strat,
+                |proptest!(@_WRAPPAT ($($var),*))|
+                proptest!(@_WRAP ($($strategy2)*)));
+            let strat = $crate::strategy::Strategy::prop_map(
+                strat,
+                |proptest!(@_WRAPPAT ($($var2),*))| $body);
+            $crate::strategy::Strategy::boxed(strat)
+        }
+    };
+}
+
 #[cfg(test)]
 mod test {
+    use ::strategy::Singleton;
+
+    prop_compose! {
+        /// These are docs!
+        #[allow(dead_code)]
+        fn two_ints(relative: i32)(a in 0..relative, b in relative..)
+                   -> (i32, i32) {
+            (a, b)
+        }
+    }
+
+    prop_compose! {
+        /// These are docs!
+        #[allow(dead_code)]
+        [pub] fn two_ints_pub(relative: i32)(a in 0..relative, b in relative..)
+                             -> (i32, i32) {
+            (a, b)
+        }
+    }
+
+    prop_compose! {
+        #[allow(dead_code)]
+        fn a_less_than_b()(b in 0..1000)(a in 0..b, b in Singleton(b))
+                        -> (i32, i32) {
+            (a, b)
+        }
+    }
+
     proptest! {
         #[test]
         fn test_something(a in 0u32..42u32, b in 1u32..10u32) {
