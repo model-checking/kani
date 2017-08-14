@@ -226,6 +226,82 @@ pub trait Strategy : fmt::Debug {
         Union::new(vec![self, other])
     }
 
+    /// Generate a recursive structure with `self` items as leaves.
+    ///
+    /// `recurse` is applied to various strategies that produce the same type
+    /// as `self` with nesting depth _n_ to create a strategy that produces the
+    /// same type with nesting depth _n+1_. Generated structures will have a
+    /// depth between 0 and `depth` and will usually have up to `desired_size`
+    /// total elements, though they may have more. `expected_branch_size` gives
+    /// the expected maximum size for any collection which may contain
+    /// recursive elements and is used to control branch probability to achieve
+    /// the desired size.
+    ///
+    /// Note that `depth` only counts branches; i.e., `depth = 0` is a single
+    /// leaf, and `depth = 1` is a leaf or a branch containing only leaves.
+    ///
+    /// In practise, generated values usually have a lower depth than `depth`
+    /// (but `depth` is a hard limit) and almost always under
+    /// `expected_branch_size` (though it is not a hard limit) since the
+    /// underlying code underestimates probabilities.
+    ///
+    /// ## Example
+    ///
+    /// ```rust,norun
+    /// # #![allow(unused_variables)]
+    /// use std::collections::HashMap;
+    ///
+    /// use proptest;
+    /// use proptest::strategy::{Singleton, Strategy};
+    ///
+    /// /// Define our own JSON AST type
+    /// #[derive(Debug, Clone)]
+    /// enum JsonNode {
+    ///   Null,
+    ///   Bool(bool),
+    ///   Number(f64),
+    ///   String(String),
+    ///   Array(Vec<JsonNode>),
+    ///   Map(HashMap<String, JsonNode>),
+    /// }
+    ///
+    /// // Define a strategy for generating leaf nodes of the AST
+    /// let json_leaf = Singleton(JsonNode::Null).boxed()
+    ///   .prop_union(proptest::bool::ANY.prop_map(JsonNode::Bool).boxed())
+    ///   .or(proptest::num::f64::ANY.prop_map(JsonNode::Number).boxed())
+    ///   .or(".*".prop_map(JsonNode::String).boxed());
+    ///
+    /// // Now define a strategy for a whole tree
+    /// let json_tree = json_leaf.prop_recursive(
+    ///   4, // No more than 4 branch levels deep
+    ///   64, // Target around 64 total elements
+    ///   16, // Each collection is up to 16 elements long
+    ///   |element| {
+    ///     // NB `element` is an `Arc` and we'll need to reference it twice,
+    ///     // so we clone it the first time.
+    ///     let array = proptest::collection::vec(element.clone(), 0..16)
+    ///       .prop_map(JsonNode::Array)
+    ///       .boxed();
+    ///     let map = proptest::collection::hash_map(".*", element, 0..16)
+    ///       .prop_map(JsonNode::Map)
+    ///       .boxed();
+    ///
+    ///     array.prop_union(map).boxed()
+    ///   });
+    /// ```
+    fn prop_recursive<
+            F : Fn (Arc<BoxedStrategy<<Self::Value as ValueTree>::Value>>)
+                    -> BoxedStrategy<<Self::Value as ValueTree>::Value>>
+        (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
+        -> Recursive<BoxedStrategy<<Self::Value as ValueTree>::Value>, F>
+    where Self : Sized + 'static {
+        Recursive {
+            base: Arc::new(self.boxed()),
+            recurse: Arc::new(recurse),
+            depth, desired_size, expected_branch_size,
+        }
+    }
+
     /// Erases the type of this `Strategy` so it can be passed around as a
     /// simple trait object.
     fn boxed(self) -> BoxedStrategy<<Self::Value as ValueTree>::Value>
@@ -774,6 +850,99 @@ impl<T : ValueTree> ValueTree for UnionValueTree<T> {
     }
 }
 
+/// Return type from `Strategy::prop_recursive()`.
+pub struct Recursive<B, F> {
+    base: Arc<B>,
+    recurse: Arc<F>,
+    depth: u32,
+    desired_size: u32,
+    expected_branch_size: u32,
+}
+
+impl<B : fmt::Debug, F> fmt::Debug for Recursive<B, F> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Recursive")
+            .field("base", &self.base)
+            .field("recurse", &"<function>")
+            .field("depth", &self.depth)
+            .field("desired_size", &self.desired_size)
+            .field("expected_branch_size", &self.expected_branch_size)
+            .finish()
+    }
+}
+
+impl<B, F> Clone for Recursive<B, F> {
+    fn clone(&self) -> Self {
+        Recursive {
+            base: self.base.clone(),
+            recurse: self.recurse.clone(),
+            depth: self.depth,
+            desired_size: self.desired_size,
+            expected_branch_size: self.expected_branch_size,
+        }
+    }
+}
+
+impl<T : fmt::Debug + 'static,
+     F : Fn (Arc<BoxedStrategy<T>>) -> BoxedStrategy<T>>
+Strategy for Recursive<BoxedStrategy<T>, F> {
+    type Value = Box<ValueTree<Value = T>>;
+
+    fn new_value(&self, runner: &mut TestRunner)
+                 -> Result<Self::Value, String> {
+        // Since the generator is stateless, we can't implement any "absolutely
+        // X many items" rule. We _can_, however, with extremely high
+        // probability, obtain a value near what we want by using decaying
+        // probabilities of branching as we go down the tree.
+        //
+        // We are given a target size S and a branch size K (branch size =
+        // expected number of items immediately below each branch). We select
+        // some probability P for each level.
+        //
+        // A single level l is thus expected to hold PlK branches. Each of
+        // those will have P(l+1)K child branches of their own, so there are
+        // PlP(l+1)K² second-level branches. The total branches in the tree is
+        // thus (Σ PlK^l) for l from 0 to infinity. Each level is expected to
+        // hold K items, so the total number of items is simply K times the
+        // number of branches, or (K Σ PlK^l). So we want to find a P sequence
+        // such that (lim (K Σ PlK^l) = S), or more simply,
+        // (lim Σ PlK^l = S/K).
+        //
+        // Let Q be a second probability sequence such that Pl = Ql/K^l. This
+        // changes the formulation to (lim Σ Ql = S/K). The series Σ0.5^(l+1)
+        // converges on 1.0, so we can let Ql = S/K * 0.5^(l+1), and so
+        // Pl = S/K^(l+1) * 0.5^(l+1) = S / (2K) ^ (l+1)
+        //
+        // We don't actually have infinite levels here since we _can_ easily
+        // cap to a fixed max depth, so this will be a minor underestimate. We
+        // also clamp all probabilities to 0.9 to ensure that we can't end up
+        // with levels which are always pure branches, which further
+        // underestimates size.
+
+        let mut branch_probabilities = Vec::new();
+        let mut k2 = self.expected_branch_size as u64 * 2;
+        for _ in 0..self.depth {
+            branch_probabilities.push(self.desired_size as f64 / k2 as f64);
+            k2 = k2.saturating_mul(self.expected_branch_size as u64 * 2);
+        }
+
+        let mut strat = self.base.clone();
+        while let Some(branch_probability) = branch_probabilities.pop() {
+            let recursive_choice = Arc::new((self.recurse)(strat.clone()));
+            let non_recursive_choice = strat;
+            strat = Arc::new(
+                ::bool::weighted(branch_probability.min(0.9))
+                    .prop_ind_flat_map(move |branch| if branch {
+                        recursive_choice.clone()
+                    } else {
+                        non_recursive_choice.clone()
+                    }).boxed());
+        }
+
+        strat.new_value(runner)
+    }
+}
+
 /// A `Strategy` which always produces the same value and never simplifies.
 #[derive(Clone, Copy, Debug)]
 pub struct Singleton<T : Clone + fmt::Debug>(
@@ -828,6 +997,8 @@ impl<T : ValueTree> ValueTree for NoShrink<T> {
 
 #[cfg(test)]
 mod test {
+    use std::cmp::max;
+
     use super::*;
 
     #[test]
@@ -953,5 +1124,55 @@ mod test {
                 "Bad converged_low count: {}", converged_low);
         assert!(converged_high >= 32 && converged_high <= 160,
                 "Bad converged_high count: {}", converged_high);
+    }
+
+    #[test]
+    fn test_recursive() {
+        #[derive(Clone, Debug)]
+        enum Tree {
+            Leaf,
+            Branch(Vec<Tree>),
+        }
+
+        impl Tree {
+            fn stats(&self) -> (u32, u32) {
+                match *self {
+                    Tree::Leaf => (0, 1),
+                    Tree::Branch(ref children) => {
+                        let mut depth = 0;
+                        let mut count = 0;
+                        for child in children {
+                            let (d, c) = child.stats();
+                            depth = max(d, depth);
+                            count += c;
+                        }
+
+                        (depth + 1, count + 1)
+                    }
+                }
+            }
+        }
+
+        let mut max_depth = 0;
+        let mut max_count = 0;
+
+        let strat = Singleton(Tree::Leaf).prop_recursive(
+            4, 64, 16,
+            |element| ::collection::vec(element, 8..16)
+                .prop_map(Tree::Branch).boxed());
+
+
+        let mut runner = TestRunner::new(Config::default());
+        for _ in 0..65536 {
+            let tree = strat.new_value(&mut runner).unwrap().current();
+            let (depth, count) = tree.stats();
+            assert!(depth <= 4, "Got depth {}", depth);
+            assert!(count <= 128, "Got count {}", count);
+            max_depth = max(depth, max_depth);
+            max_count = max(count, max_count);
+        }
+
+        assert!(max_depth >= 3, "Only got max depth {}", max_depth);
+        assert!(max_count > 48, "Only got max count {}", max_count);
     }
 }
