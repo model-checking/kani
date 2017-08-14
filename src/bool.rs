@@ -20,7 +20,7 @@ pub struct Any(());
 
 /// Generates boolean values by picking `true` or `false` uniformly.
 ///
-///Shrinks `true` to `false`.
+/// Shrinks `true` to `false`.
 pub const ANY: Any = Any(());
 
 impl Strategy for Any {
@@ -29,6 +29,27 @@ impl Strategy for Any {
     fn new_value(&self, runner: &mut TestRunner)
                  -> Result<BoolValueTree, String> {
         Ok(BoolValueTree(runner.rng().gen()))
+    }
+}
+
+/// Generates boolean values by picking `true` with the given `probability`
+/// (1.0 = always true, 0.0 = always false).
+///
+/// Shrinks `true` to `false`.
+pub fn weighted(probability: f64) -> Weighted {
+    Weighted(probability)
+}
+
+/// The return type from `weighted()`.
+#[derive(Clone, Copy, Debug)]
+pub struct Weighted(f64);
+
+impl Strategy for Weighted {
+    type Value = BoolValueTree;
+
+    fn new_value(&self, runner: &mut TestRunner)
+                 -> Result<BoolValueTree, String> {
+        Ok(BoolValueTree(runner.rng().next_f64() < self.0))
     }
 }
 
