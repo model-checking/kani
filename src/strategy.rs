@@ -251,7 +251,7 @@ pub trait Strategy : fmt::Debug {
     /// # #![allow(unused_variables)]
     /// use std::collections::HashMap;
     ///
-    /// use proptest;
+    /// #[macro_use] extern crate proptest;
     /// use proptest::strategy::{Singleton, Strategy};
     ///
     /// /// Define our own JSON AST type
@@ -265,29 +265,30 @@ pub trait Strategy : fmt::Debug {
     ///   Map(HashMap<String, JsonNode>),
     /// }
     ///
+    /// # fn main() {
+    /// #
     /// // Define a strategy for generating leaf nodes of the AST
-    /// let json_leaf = Singleton(JsonNode::Null).boxed()
-    ///   .prop_union(proptest::bool::ANY.prop_map(JsonNode::Bool).boxed())
-    ///   .or(proptest::num::f64::ANY.prop_map(JsonNode::Number).boxed())
-    ///   .or(".*".prop_map(JsonNode::String).boxed());
+    /// let json_leaf = prop_oneof![
+    ///   Singleton(JsonNode::Null),
+    ///   proptest::bool::ANY.prop_map(JsonNode::Bool),
+    ///   proptest::num::f64::ANY.prop_map(JsonNode::Number),
+    ///   ".*".prop_map(JsonNode::String),
+    /// ];
     ///
     /// // Now define a strategy for a whole tree
     /// let json_tree = json_leaf.prop_recursive(
     ///   4, // No more than 4 branch levels deep
     ///   64, // Target around 64 total elements
     ///   16, // Each collection is up to 16 elements long
-    ///   |element| {
+    ///   |element| prop_oneof![
     ///     // NB `element` is an `Arc` and we'll need to reference it twice,
     ///     // so we clone it the first time.
-    ///     let array = proptest::collection::vec(element.clone(), 0..16)
-    ///       .prop_map(JsonNode::Array)
-    ///       .boxed();
-    ///     let map = proptest::collection::hash_map(".*", element, 0..16)
+    ///     proptest::collection::vec(element.clone(), 0..16)
+    ///       .prop_map(JsonNode::Array),
+    ///     proptest::collection::hash_map(".*", element, 0..16)
     ///       .prop_map(JsonNode::Map)
-    ///       .boxed();
-    ///
-    ///     array.prop_union(map).boxed()
-    ///   });
+    ///   ].boxed());
+    /// # }
     /// ```
     fn prop_recursive<
             F : Fn (Arc<BoxedStrategy<<Self::Value as ValueTree>::Value>>)

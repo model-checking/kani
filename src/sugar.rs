@@ -188,6 +188,45 @@ macro_rules! prop_assume {
     };
 }
 
+/// Produce a strategy which picks one of the listed choices.
+///
+/// This is equivalent to calling `prop_union` on the first two elements and
+/// then chaining `.or()` onto the rest after implicitly boxing all of them. As
+/// with `Union`, values shrink across elements on the assumption that earlier
+/// ones are "simpler", so they should be listed in order of ascending
+/// complexity when possible.
+///
+/// ## Example
+///
+/// ```rust,norun
+/// #[macro_use] extern crate proptest;
+/// use proptest::strategy::Strategy;
+///
+/// #[derive(Clone, Copy, Debug)]
+/// enum MyEnum {
+///   Big(u64),
+///   Medium(u32),
+///   Little(i16),
+/// }
+///
+/// # #[allow(unused_variables)]
+/// # fn main() {
+/// let my_enum_strategy = prop_oneof![
+///   proptest::num::i16::ANY.prop_map(MyEnum::Little),
+///   proptest::num::u32::ANY.prop_map(MyEnum::Medium),
+///   proptest::num::u64::ANY.prop_map(MyEnum::Big),
+/// ];
+/// # }
+/// ```
+#[macro_export]
+macro_rules! prop_oneof {
+    ($($item:expr),+ $(,)*) => {
+        $crate::strategy::Union::new(vec![
+            $($crate::strategy::Strategy::boxed($item)),*
+        ])
+    }
+}
+
 #[cfg(test)]
 mod test {
     proptest! {
