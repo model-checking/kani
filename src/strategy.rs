@@ -797,7 +797,7 @@ impl<T : Strategy> Strategy for Union<T> {
             .ind_sample(runner.rng());
 
         let mut options = Vec::with_capacity(pick);
-        for option in &self.options {
+        for option in &self.options[0..pick+1] {
             options.push(option.new_value(runner)?);
         }
 
