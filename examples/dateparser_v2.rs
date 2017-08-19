@@ -43,7 +43,7 @@ proptest! {
                                     m in 1u32..13, d in 1u32..32) {
         let (y2, m2, d2) = parse_date(
             &format!("{:04}-{:02}-{:02}", y, m, d)).unwrap();
-        assert_eq!((y, m, d), (y2, m2, d2));
+        prop_assert_eq!((y, m, d), (y2, m2, d2));
     }
 }
 

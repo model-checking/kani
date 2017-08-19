@@ -204,7 +204,10 @@
 //!                                     m in 1u32..13, d in 1u32..32) {
 //!         let (y2, m2, d2) = parse_date(
 //!             &format!("{:04}-{:02}-{:02}", y, m, d)).unwrap();
-//!         assert_eq!((y, m, d), (y2, m2, d2));
+//!         // prop_assert_eq! is basically the same as assert_eq!, but doesn't
+//!         // cause a bunch of panic messages to be printed on intermediate
+//!         // test failures. Which one to use is largely a matter of taste.
+//!         prop_assert_eq!((y, m, d), (y2, m2, d2));
 //!     }
 //! }
 //! ```
@@ -212,41 +215,68 @@
 //! Here, we see that besides regexes, we can use any expression which is a
 //! `proptest::Strategy`, in this case, integer ranges.
 //!
-//! The test fails when we run it, again with a bunch of output, though the
-//! full output is actually rather interesting this time:
+//! The test fails when we run it. Though there's not much output this time.
 //!
 //! ```text
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(1358, 11, 28)`, right: `(1358, 1, 28)`)', examples/dateparser_v2.rs:46
-//! note: Run with `RUST_BACKTRACE=1` for a backtrace.
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(679, 11, 28)`, right: `(679, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(339, 11, 28)`, right: `(339, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(169, 11, 28)`, right: `(169, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(84, 11, 28)`, right: `(84, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(42, 11, 28)`, right: `(42, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(21, 11, 28)`, right: `(21, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(10, 11, 28)`, right: `(10, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(5, 11, 28)`, right: `(5, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(2, 11, 28)`, right: `(2, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(1, 11, 28)`, right: `(1, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 11, 28)`, right: `(0, 1, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 10, 28)`, right: `(0, 0, 28)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 10, 14)`, right: `(0, 0, 14)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 10, 7)`, right: `(0, 0, 7)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 10, 4)`, right: `(0, 0, 4)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 10, 2)`, right: `(0, 0, 2)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'assertion failed: `(left == right)` (left: `(0, 10, 1)`, right: `(0, 0, 1)`)', examples/dateparser_v2.rs:46
-//! thread 'main' panicked at 'Test failed: assertion failed: `(left == right)` (left: `(0, 10, 1)`, right: `(0, 0, 1)`); minimal failing input: (0, 10, 1)
-//! 	successes: 0
+//! thread 'main' panicked at 'Test failed: assertion failed: `(left == right)` (left: `(0, 10, 1)`, right: `(0, 0, 1)`) at examples/dateparser_v2.rs:46; minimal failing input: (0, 10, 1)
+//! 	successes: 2
 //! 	local rejects: 0
 //! 	global rejects: 0
 //! ', examples/dateparser_v2.rs:33
+//! note: Run with `RUST_BACKTRACE=1` for a backtrace.
 //! ```
 //!
-//! Notice how we started with a completely random date — 1358-11-28 — but it
-//! was then quickly reduced to the minimal case, 0000-10-01, which gets parsed
-//! as if it were 0000-00-01.
+//! The failing input is `(y, m, d) = (0, 10, 1)`, which is a rather specific
+//! output. Before thinking about why this breaks the code, let's look at what
+//! proptest did to arrive at this value. At the start of our test function,
+//! insert
 //!
-//! Again, let's add this as its own unit test:
+//! ```rust,ignore
+//!     println!("y = {}, m = {}, d = {}", y, m, d);
+//! ```
+//!
+//! Running the test again, we get something like this:
+//!
+//! ```text
+//! y = 2497, m = 8, d = 27
+//! y = 9641, m = 8, d = 18
+//! y = 7360, m = 12, d = 20
+//! y = 3680, m = 12, d = 20
+//! y = 1840, m = 12, d = 20
+//! y = 920, m = 12, d = 20
+//! y = 460, m = 12, d = 20
+//! y = 230, m = 12, d = 20
+//! y = 115, m = 12, d = 20
+//! y = 57, m = 12, d = 20
+//! y = 28, m = 12, d = 20
+//! y = 14, m = 12, d = 20
+//! y = 7, m = 12, d = 20
+//! y = 3, m = 12, d = 20
+//! y = 1, m = 12, d = 20
+//! y = 0, m = 12, d = 20
+//! y = 0, m = 6, d = 20
+//! y = 0, m = 9, d = 20
+//! y = 0, m = 11, d = 20
+//! y = 0, m = 10, d = 20
+//! y = 0, m = 10, d = 10
+//! y = 0, m = 10, d = 5
+//! y = 0, m = 10, d = 3
+//! y = 0, m = 10, d = 2
+//! y = 0, m = 10, d = 1
+//! ```
+//!
+//! The test failure message said there were two successful cases; we see these
+//! at the very top, `2497-08-27` and `9641-08-18`. The next case,
+//! `7360-12-20`, failed. There's nothing immediately obviously special about
+//! this date. Fortunately, proptest reduced it to a much simpler case. First,
+//! it rapidly reduced the `y` input to `0` at the beginning, and similarly
+//! reduced the `d` input to the minimum allowable value of `1` at the end.
+//! Between those two, though, we see something different: it tried to shrink
+//! `12` to `6`, but then ended up raising it back up to `10`. This is because
+//! the `0000-06-20` and `0000-09-20` test cases _passed_.
+//!
+//! In the end, we get the date `0000-10-01`, which apparently gets parsed as
+//! `0000-00-01`. Again, let's add this as its own unit test:
 //!
 //! ```rust,ignore
 //! #[test]
@@ -255,7 +285,13 @@
 //! }
 //! ```
 //!
-//! What's special about this case? The tens digit of the month! In our code:
+//! Now to figure out what's broken in the code. Even without the intermediate
+//! input, we can say with reasonable confidence that the year and day parts
+//! don't come into the picture since both were reduced to the minimum
+//! allowable input. The month input was _not_, but was reduced to `10`. This
+//! means we can infer that there's something special about `10` that doesn't
+//! hold for `9`. In this case, that "special something" is being two digits
+//! wide. In our code:
 //!
 //! ```rust,ignore
 //!     let month = &s[6..7];

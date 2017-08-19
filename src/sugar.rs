@@ -29,7 +29,7 @@
 ///   #[test]
 ///   # */
 ///   fn test_addition(a in 0..10, b in 0..10) {
-///     assert!(a + b <= 18);
+///     prop_assert!(a + b <= 18);
 ///   }
 ///
 ///   // Note the `ref a` and `ref b` --- `String` is not `Copy`,
@@ -39,7 +39,7 @@
 ///   # */
 ///   fn test_string_concat(ref a in ".*", ref b in ".*") {
 ///     let cat = format!("{}{}", a, b);
-///     assert_eq!(a.len() + b.len(), cat.len());
+///     prop_assert_eq!(a.len() + b.len(), cat.len());
 ///   }
 /// }
 /// #
@@ -60,7 +60,7 @@
 ///   #[test]
 ///   # */
 ///   fn test_addition(a in 0..10, b in 0..10) {
-///     assert!(a + b <= 18);
+///     prop_assert!(a + b <= 18);
 ///   }
 /// }
 /// #
@@ -373,6 +373,156 @@ macro_rules! prop_compose {
             $crate::strategy::Strategy::boxed(strat)
         }
     };
+}
+
+/// Similar to `assert!` from std, but returns a test failure instead of
+/// panicking if the condition fails.
+///
+/// This can be used in any function that returns a `Result<_, TestCaseError>`,
+/// including the top-level function inside `proptest!`.
+///
+/// Both panicking via `assert!` and returning a test case failure have the
+/// same effect as far as proptest is concerned; however, the Rust runtime
+/// implicitly prints every panic to stderr by default (including a backtrace
+/// if enabled), which can make test failures unnecessarily noisy. By using
+/// `prop_assert!` instead, the only output on a failing test case is the final
+/// panic including the minimal test case.
+///
+/// ## Example
+///
+/// ```
+/// #[macro_use] extern crate proptest;
+/// use proptest::test_runner::TestCaseError;
+///
+/// proptest! {
+///   # /*
+///   #[test]
+///   # */
+///   fn triangle_inequality(a in 0.0f64..10.0, b in 0.0f64..10.0) {
+///     // Called with just a condition will print the condition on failure
+///     prop_assert!((a*a + b*b).sqrt() <= a + b);
+///     // You can also provide a custom failure message
+///     prop_assert!((a*a + b*b).sqrt() <= a + b,
+///                  "Triangle inequality didn't hold for ({}, {})", a, b);
+///     // If calling another function that can return failure, don't forget
+///     // the `?` to propagate the failure.
+///     assert_from_other_function(a, b)?;
+///   }
+/// }
+///
+/// // The macro can be used from another function provided it has a compatible
+/// // return type.
+/// fn assert_from_other_function(a: f64, b: f64) -> Result<(), TestCaseError> {
+///   prop_assert!((a*a + b*b).sqrt() <= a + b);
+///   Ok(())
+/// }
+/// #
+/// # fn main() { triangle_inequality(); }
+/// ```
+#[macro_export]
+macro_rules! prop_assert {
+    ($cond:expr) => {
+        prop_assert!($cond, concat!("assertion failed: ", stringify!($cond)))
+    };
+
+    ($cond:expr, $($fmt:tt)*) => {
+        if !$cond {
+            let message = format!($($fmt)*);
+            let message = format!("{} at {}:{}", message, file!(), line!());
+            return Err($crate::test_runner::TestCaseError::Fail(message));
+        }
+    };
+}
+
+/// Similar to `assert_eq!` from std, but returns a test failure instead of
+/// panicking if the condition fails.
+///
+/// See `prop_assert!` for a more in-depth discussion.
+///
+/// ## Example
+///
+/// ```
+/// #[macro_use] extern crate proptest;
+///
+/// proptest! {
+///   # /*
+///   #[test]
+///   # */
+///   fn concat_string_length(ref a in ".*", ref b in ".*") {
+///     let cat = format!("{}{}", a, b);
+///     // Use with default message
+///     prop_assert_eq!(a.len() + b.len(), cat.len());
+///     // Can also provide custom message (added after the normal
+///     // assertion message)
+///     prop_assert_eq!(a.len() + b.len(), cat.len(),
+///                     "a = {:?}, b = {:?}", a, b);
+///   }
+/// }
+/// #
+/// # fn main() { concat_string_length(); }
+/// ```
+#[macro_export]
+macro_rules! prop_assert_eq {
+    ($left:expr, $right:expr) => {{
+        let left = $left;
+        let right = $right;
+        prop_assert!(left == right, "assertion failed: `(left == right)` \
+                                     (left: `{:?}`, right: `{:?}`)",
+                     left, right);
+    }};
+
+    ($left:expr, $right:expr, $fmt:tt $($args:tt)*) => {{
+        let left = $left;
+        let right = $right;
+        prop_assert!(left == right, concat!(
+            "assertion failed: `(left == right)` \
+             (left: `{:?}`, right: `{:?}`): ", $fmt),
+                     left, right $($args)*);
+    }};
+}
+
+/// Similar to `assert_ne!` from std, but returns a test failure instead of
+/// panicking if the condition fails.
+///
+/// See `prop_assert!` for a more in-depth discussion.
+///
+/// ## Example
+///
+/// ```
+/// #[macro_use] extern crate proptest;
+///
+/// proptest! {
+///   # /*
+///   #[test]
+///   # */
+///   fn test_addition(a in 0i32..100i32, b in 1i32..100i32) {
+///     // Use with default message
+///     prop_assert_ne!(a, a + b);
+///     // Can also provide custom message added after the common message
+///     prop_assert_ne!(a, a + b, "a = {}, b = {}", a, b);
+///   }
+/// }
+/// #
+/// # fn main() { test_addition(); }
+/// ```
+#[macro_export]
+macro_rules! prop_assert_ne {
+    ($left:expr, $right:expr) => {{
+        let left = $left;
+        let right = $right;
+        prop_assert!(left != right, "assertion failed: `(left != right)` \
+                                     (left: `{:?}`, right: `{:?}`)",
+                     left, right);
+    }};
+
+    ($left:expr, $right:expr, $fmt:tt $($args:tt)*) => {{
+        let left = $left;
+        let right = $right;
+        prop_assert!(left != right, concat!(
+            "assertion failed: `(left != right)` \
+             (left: `{:?}`, right: `{:?}`): ", $fmt),
+                     left, right $($args)*);
+    }};
 }
 
 #[cfg(test)]

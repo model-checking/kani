@@ -94,7 +94,7 @@ pub trait Strategy : fmt::Debug {
     ///     // some value less than it.
     ///     (a, b) in (1..65536).prop_flat_map(|a| (Just(a), 0..a))
     ///   ) {
-    ///     assert!(b < a);
+    ///     prop_assert!(b < a);
     ///   }
     /// }
     /// #
