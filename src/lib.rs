@@ -9,7 +9,25 @@
 
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for
-//! Python.
+//! Python. It allows to test that certain properties of your code hold for
+//! arbitrary inputs, and if a failure is found, automatically finds the
+//! minimal test case to reproduce the problem. Unlike QuickCheck, generation
+//! and shrinking is defined on a per-value basis instead of per-type, which
+//! makes it much more flexible and simplifies composition.
+//!
+//! <!-- NOREADME
+//! ## Status of this crate
+//!
+//! The majority of the functionality offered by proptest is in active use and
+//! is known to work well.
+//!
+//! The API is unlikely to see drastic breaking changes, but there may still be
+//! minor breaking changes here and there, particularly when "impl Trait"
+//! becomes stable and after the upcoming redesign of the `rand` crate.
+//!
+//! See the [changelog](https://github.com/AltSysrq/proptest/blob/master/CHANGELOG.md)
+//! for a full list of substantial historical changes, breaking and otherwise.
+//! NOREADME -->
 //!
 //! ## Introduction
 //!
@@ -30,7 +48,7 @@
 //! `YYYY-MM-DD`. We're not going to worry about _validating_ the date, any
 //! triple of integers is fine. So let's bang something out real quick.
 //!
-//! ```no_run
+//! ```rust,no_run
 //! fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
 //!     if 10 != s.len() { return None; }
 //!     if "-" != &s[4..5] || "-" != &s[7..8] { return None; }
@@ -48,7 +66,7 @@
 //!
 //! It compiles, that means it works, right? Maybe not, let's add some tests.
 //!
-//! ```ignore
+//! ```rust,ignore
 //! #[test]
 //! fn test_parse_date() {
 //!     assert_eq!(None, parse_date("2017-06-1"));
@@ -72,7 +90,7 @@
 //!
 //! and at the top of `main.rs` or `lib.rs`:
 //!
-//! ```ignore
+//! ```rust,ignore
 //! #[macro_use] extern crate proptest;
 //! ```
 //!
@@ -83,7 +101,7 @@
 //! simpler property to test: _The function should not crash._ Let's start
 //! there.
 //!
-//! ```ignore
+//! ```rust,ignore
 //! proptest! {
 //!     #[test]
 //!     fn doesnt_crash(ref s in "\\PC*") {
@@ -111,7 +129,7 @@
 //! The first thing we should do is copy the failing case to a traditional unit
 //! test since it has exposed a bug.
 //!
-//! ```ignore
+//! ```rust,ignore
 //! #[test]
 //! fn test_unicode_gibberish() {
 //!     assert_eq!(None, parse_date("aAௗ0㌀0"));
@@ -125,7 +143,7 @@
 //! In the interest of making the code changes as small as possible, we'll just
 //! check that the string is ASCII and reject anything that isn't.
 //!
-//! ```no_run
+//! ```rust,no_run
 //! use std::ascii::AsciiExt;
 //!
 //! fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
@@ -153,7 +171,7 @@
 //! Another property we want from our code is that it parses every valid date.
 //! We can add another test to the `proptest!` section:
 //!
-//! ```ignore
+//! ```rust,ignore
 //! proptest! {
 //!     // snip...
 //!
@@ -177,7 +195,7 @@
 //! reimplementing the date parser in the test! Instead, we start from the
 //! expected output, generate the string, and check that it gets parsed back.
 //!
-//! ```ignore
+//! ```rust,ignore
 //! proptest! {
 //!     // snip...
 //!
@@ -230,7 +248,7 @@
 //!
 //! Again, let's add this as its own unit test:
 //!
-//! ```ignore
+//! ```rust,ignore
 //! #[test]
 //! fn test_october_first() {
 //!   assert_eq!(Some(0, 10, 1), parse_date("0000-10-01"));
@@ -239,7 +257,7 @@
 //!
 //! What's special about this case? The tens digit of the month! In our code:
 //!
-//! ```ignore
+//! ```rust,ignore
 //!     let month = &s[6..7];
 //! ```
 //!
@@ -290,7 +308,7 @@
 //! property testing is extremely unlikely to find single-value edge cases in a
 //! large space. For example, the following test will virtually always pass:
 //!
-//! ```
+//! ```rust
 //! #[macro_use] extern crate proptest;
 //!
 //! proptest! {
