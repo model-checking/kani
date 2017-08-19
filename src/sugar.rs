@@ -198,7 +198,7 @@ macro_rules! prop_assume {
 ///
 /// ## Example
 ///
-/// ```rust,norun
+/// ```rust,no_run
 /// #[macro_use] extern crate proptest;
 /// use proptest::strategy::Strategy;
 ///
@@ -238,7 +238,7 @@ macro_rules! prop_oneof {
 /// the type of value being generated; the final return type of the function is
 /// `BoxedStrategy<$type>`.
 ///
-/// ```rust,norun
+/// ```rust,no_run
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
 ///
@@ -266,7 +266,7 @@ macro_rules! prop_oneof {
 /// lists. The third argument list can see all values in both prior, which
 /// permits producing strategies based on other strategies.
 ///
-/// ```rust,norun
+/// ```rust,no_run
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
 ///
@@ -286,7 +286,7 @@ macro_rules! prop_oneof {
 /// argument list. If the body needs access to those values, they must be
 /// passed through explicitly.
 ///
-/// ```rust,norun
+/// ```rust,no_run
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
 /// use proptest::strategy::Just;
@@ -310,7 +310,7 @@ macro_rules! prop_oneof {
 /// To give the function a visibility or unsafe modifier, put it in brackets
 /// before the `fn` token.
 ///
-/// ```rust,norun
+/// ```rust,no_run
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
 ///
