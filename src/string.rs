@@ -81,9 +81,9 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
     use self::rs::Expr::*;
 
     match *expr {
-        Empty => Ok(Singleton(vec![]).boxed()),
+        Empty => Ok(Just(vec![]).boxed()),
         Literal { ref chars, casei: false } =>
-            Ok(Singleton(chars.iter().map(|&c| c).collect::<String>()
+            Ok(Just(chars.iter().map(|&c| c).collect::<String>()
                          .into_bytes()).boxed()),
         Literal { ref chars, casei: true } => {
             let chars = chars.to_owned();
@@ -98,7 +98,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                .boxed())
         },
         LiteralBytes { ref bytes, casei: false } =>
-            Ok(Singleton(bytes.to_owned()).boxed()),
+            Ok(Just(bytes.to_owned()).boxed()),
         LiteralBytes { ref bytes, casei: true } => {
             let bytes = bytes.to_owned();
             Ok(bits::bitset::between(0, bytes.len())
@@ -189,7 +189,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                            lhs
                        }).boxed()),
                }).unwrap_or_else(
-                   || Singleton(vec![]).boxed()))
+                   || Just(vec![]).boxed()))
         },
 
         Alternate(ref subs) => {

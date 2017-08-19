@@ -289,13 +289,13 @@ macro_rules! prop_oneof {
 /// ```rust,norun
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
-/// use proptest::strategy::Singleton;
+/// use proptest::strategy::Just;
 ///
 /// prop_compose! {
 ///   fn vec_and_index
 ///     (max_length: usize)
 ///     (vec in proptest::collection::vec(1..10, 1..max_length))
-///     (index in 0..vec.len(), vec in Singleton(vec))
+///     (index in 0..vec.len(), vec in Just(vec))
 ///     -> (Vec<i32>, usize)
 ///   {
 ///     (vec, index)
@@ -377,7 +377,7 @@ macro_rules! prop_compose {
 
 #[cfg(test)]
 mod test {
-    use ::strategy::Singleton;
+    use ::strategy::Just;
 
     prop_compose! {
         /// These are docs!
@@ -399,7 +399,7 @@ mod test {
 
     prop_compose! {
         #[allow(dead_code)]
-        fn a_less_than_b()(b in 0..1000)(a in 0..b, b in Singleton(b))
+        fn a_less_than_b()(b in 0..1000)(a in 0..b, b in Just(b))
                         -> (i32, i32) {
             (a, b)
         }

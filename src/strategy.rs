@@ -82,7 +82,7 @@ pub trait Strategy : fmt::Debug {
     /// ```
     /// #[macro_use] extern crate proptest;
     ///
-    /// use proptest::strategy::{Singleton, Strategy};
+    /// use proptest::strategy::{Just, Strategy};
     ///
     /// proptest! {
     ///   # /*
@@ -92,7 +92,7 @@ pub trait Strategy : fmt::Debug {
     ///     // Pick integers in the 1..65536 range, and derive a strategy
     ///     // which emits a tuple of that integer and another one which is
     ///     // some value less than it.
-    ///     (a, b) in (1..65536).prop_flat_map(|a| (Singleton(a), 0..a))
+    ///     (a, b) in (1..65536).prop_flat_map(|a| (Just(a), 0..a))
     ///   ) {
     ///     assert!(b < a);
     ///   }
@@ -110,10 +110,10 @@ pub trait Strategy : fmt::Debug {
     ///
     /// ```no_run
     /// # #![allow(unused_variables)]
-    /// use proptest::strategy::{Singleton, Strategy};
+    /// use proptest::strategy::{Just, Strategy};
     ///
-    /// let flat_map = (1..10).prop_flat_map(|a| (Singleton(a), 0..a));
-    /// let ind_flat_map = (1..10).prop_ind_flat_map(|a| (Singleton(a), 0..a));
+    /// let flat_map = (1..10).prop_flat_map(|a| (Just(a), 0..a));
+    /// let ind_flat_map = (1..10).prop_ind_flat_map(|a| (Just(a), 0..a));
     /// let ind_flat_map2 = (1..10).prop_ind_flat_map2(|a| 0..a);
     /// ```
     ///
@@ -252,7 +252,7 @@ pub trait Strategy : fmt::Debug {
     /// use std::collections::HashMap;
     ///
     /// #[macro_use] extern crate proptest;
-    /// use proptest::strategy::{Singleton, Strategy};
+    /// use proptest::strategy::{Just, Strategy};
     ///
     /// /// Define our own JSON AST type
     /// #[derive(Debug, Clone)]
@@ -269,7 +269,7 @@ pub trait Strategy : fmt::Debug {
     /// #
     /// // Define a strategy for generating leaf nodes of the AST
     /// let json_leaf = prop_oneof![
-    ///   Singleton(JsonNode::Null),
+    ///   Just(JsonNode::Null),
     ///   proptest::bool::ANY.prop_map(JsonNode::Bool),
     ///   proptest::num::f64::ANY.prop_map(JsonNode::Number),
     ///   ".*".prop_map(JsonNode::String),
@@ -944,13 +944,18 @@ Strategy for Recursive<BoxedStrategy<T>, F> {
     }
 }
 
-/// A `Strategy` which always produces the same value and never simplifies.
+/// A `Strategy` which always produces a single value value and never
+/// simplifies.
 #[derive(Clone, Copy, Debug)]
-pub struct Singleton<T : Clone + fmt::Debug>(
+pub struct Just<T : Clone + fmt::Debug>(
     /// The value produced by this strategy.
     pub T);
 
-impl<T : Clone + fmt::Debug> Strategy for Singleton<T> {
+/// Deprecated alias for `Just`.
+#[deprecated]
+pub use self::Just as Singleton;
+
+impl<T : Clone + fmt::Debug> Strategy for Just<T> {
     type Value = Self;
 
     fn new_value(&self, _: &mut TestRunner) -> Result<Self::Value, String> {
@@ -958,7 +963,7 @@ impl<T : Clone + fmt::Debug> Strategy for Singleton<T> {
     }
 }
 
-impl<T : Clone + fmt::Debug> ValueTree for Singleton<T> {
+impl<T : Clone + fmt::Debug> ValueTree for Just<T> {
     type Value = T;
 
     fn current(&self) -> T {
@@ -1017,7 +1022,7 @@ mod test {
         // assert that B <= A if A > 10000. Shrinking should always converge to
         // A=10001, B=10002.
         let input = (0..65536).prop_flat_map(
-            |a| (Singleton(a), (a-5..a+5)));
+            |a| (Just(a), (a-5..a+5)));
 
         let mut failures = 0;
         for _ in 0..1000 {
@@ -1157,7 +1162,7 @@ mod test {
         let mut max_depth = 0;
         let mut max_count = 0;
 
-        let strat = Singleton(Tree::Leaf).prop_recursive(
+        let strat = Just(Tree::Leaf).prop_recursive(
             4, 64, 16,
             |element| ::collection::vec(element, 8..16)
                 .prop_map(Tree::Branch).boxed());
