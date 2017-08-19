@@ -54,10 +54,12 @@ use std::fmt;
 ///
 /// ```
 /// #[macro_use] extern crate proptest;
-/// use proptest::test_runner::Config;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
-///   #![proptest_config(Config { cases: 99, .. Config::default() })]
+///   #![proptest_config(ProptestConfig {
+///     cases: 99, .. ProptestConfig::default()
+///   })]
 ///   # /*
 ///   #[test]
 ///   # */
@@ -147,7 +149,7 @@ macro_rules! prop_assume {
 ///
 /// ```rust,no_run
 /// #[macro_use] extern crate proptest;
-/// use proptest::strategy::Strategy;
+/// use proptest::prelude::*;
 ///
 /// #[derive(Clone, Copy, Debug)]
 /// enum MyEnum {
@@ -159,9 +161,9 @@ macro_rules! prop_assume {
 /// # #[allow(unused_variables)]
 /// # fn main() {
 /// let my_enum_strategy = prop_oneof![
-///   proptest::num::i16::ANY.prop_map(MyEnum::Little),
-///   proptest::num::u32::ANY.prop_map(MyEnum::Medium),
-///   proptest::num::u64::ANY.prop_map(MyEnum::Big),
+///   prop::num::i16::ANY.prop_map(MyEnum::Little),
+///   prop::num::u32::ANY.prop_map(MyEnum::Medium),
+///   prop::num::u64::ANY.prop_map(MyEnum::Big),
 /// ];
 /// # }
 /// ```
@@ -236,12 +238,12 @@ macro_rules! prop_oneof {
 /// ```rust,no_run
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
-/// use proptest::strategy::Just;
+/// use proptest::prelude::*;
 ///
 /// prop_compose! {
 ///   fn vec_and_index
 ///     (max_length: usize)
-///     (vec in proptest::collection::vec(1..10, 1..max_length))
+///     (vec in prop::collection::vec(1..10, 1..max_length))
 ///     (index in 0..vec.len(), vec in Just(vec))
 ///     -> (Vec<i32>, usize)
 ///   {
@@ -260,9 +262,10 @@ macro_rules! prop_oneof {
 /// ```rust,no_run
 /// # #![allow(dead_code)]
 /// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// prop_compose! {
-///   [pub(crate) unsafe] fn pointer()(v in proptest::num::usize::ANY)
+///   [pub(crate) unsafe] fn pointer()(v in prop::num::usize::ANY)
 ///                                 -> *const () {
 ///     v as *const ()
 ///   }
@@ -339,7 +342,7 @@ macro_rules! prop_compose {
 ///
 /// ```
 /// #[macro_use] extern crate proptest;
-/// use proptest::test_runner::TestCaseError;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
 ///   # /*

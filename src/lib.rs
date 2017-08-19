@@ -213,7 +213,7 @@
 //! ```
 //!
 //! Here, we see that besides regexes, we can use any expression which is a
-//! `proptest::Strategy`, in this case, integer ranges.
+//! `proptest::strategy::Strategy`, in this case, integer ranges.
 //!
 //! The test fails when we run it. Though there's not much output this time.
 //!
@@ -346,12 +346,13 @@
 //!
 //! ```rust
 //! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
 //!
 //! proptest! {
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn i64_abs_is_never_negative(a in proptest::num::i64::ANY) {
+//!     fn i64_abs_is_never_negative(a in prop::num::i64::ANY) {
 //!         assert!(a.abs() >= 0);
 //!     }
 //! }
@@ -389,3 +390,5 @@ pub mod string;
 
 #[doc(hidden)]
 #[macro_use] pub mod sugar;
+
+pub mod prelude;

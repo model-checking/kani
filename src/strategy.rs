@@ -82,7 +82,7 @@ pub trait Strategy : fmt::Debug {
     /// ```
     /// #[macro_use] extern crate proptest;
     ///
-    /// use proptest::strategy::{Just, Strategy};
+    /// use proptest::prelude::*;
     ///
     /// proptest! {
     ///   # /*
@@ -110,7 +110,7 @@ pub trait Strategy : fmt::Debug {
     ///
     /// ```no_run
     /// # #![allow(unused_variables)]
-    /// use proptest::strategy::{Just, Strategy};
+    /// use proptest::prelude::*;
     ///
     /// let flat_map = (1..10).prop_flat_map(|a| (Just(a), 0..a));
     /// let ind_flat_map = (1..10).prop_ind_flat_map(|a| (Just(a), 0..a));
@@ -252,7 +252,7 @@ pub trait Strategy : fmt::Debug {
     /// use std::collections::HashMap;
     ///
     /// #[macro_use] extern crate proptest;
-    /// use proptest::strategy::{Just, Strategy};
+    /// use proptest::prelude::*;
     ///
     /// /// Define our own JSON AST type
     /// #[derive(Debug, Clone)]
@@ -270,8 +270,8 @@ pub trait Strategy : fmt::Debug {
     /// // Define a strategy for generating leaf nodes of the AST
     /// let json_leaf = prop_oneof![
     ///   Just(JsonNode::Null),
-    ///   proptest::bool::ANY.prop_map(JsonNode::Bool),
-    ///   proptest::num::f64::ANY.prop_map(JsonNode::Number),
+    ///   prop::bool::ANY.prop_map(JsonNode::Bool),
+    ///   prop::num::f64::ANY.prop_map(JsonNode::Number),
     ///   ".*".prop_map(JsonNode::String),
     /// ];
     ///
@@ -283,9 +283,9 @@ pub trait Strategy : fmt::Debug {
     ///   |element| prop_oneof![
     ///     // NB `element` is an `Arc` and we'll need to reference it twice,
     ///     // so we clone it the first time.
-    ///     proptest::collection::vec(element.clone(), 0..16)
+    ///     prop::collection::vec(element.clone(), 0..16)
     ///       .prop_map(JsonNode::Array),
-    ///     proptest::collection::hash_map(".*", element, 0..16)
+    ///     prop::collection::hash_map(".*", element, 0..16)
     ///       .prop_map(JsonNode::Map)
     ///   ].boxed());
     /// # }
