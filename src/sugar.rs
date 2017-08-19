@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::fmt;
+
 /// Easily define `proptest` tests.
 ///
 /// Within `proptest!`, define one or more functions without return type
@@ -78,9 +80,14 @@ macro_rules! proptest {
             fn $test_name() {
                 let mut runner = $crate::test_runner::TestRunner::new(
                     $config.clone());
+                let names = proptest_helper!(@_WRAPSTR ($($parm),*));
                 match runner.run(
-                    &proptest!(@_WRAP ($($strategy)*)),
-                    |&proptest!(@_WRAPPAT ($($parm),*))| {
+                    &$crate::strategy::Strategy::prop_map(
+                        proptest_helper!(@_WRAP ($($strategy)*)),
+                        |values| $crate::sugar::NamedArguments(names, values)),
+                    |&$crate::sugar::NamedArguments(
+                        _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
+                    {
                         $body;
                         Ok(())
                     })
@@ -90,66 +97,6 @@ macro_rules! proptest {
                 }
             }
         )*
-    };
-
-    (@_WRAP ($a:tt)) => { $a };
-    (@_WRAP ($a0:tt $a1:tt)) => { ($a0, $a1) };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt)) => { ($a0, $a1, $a2) };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt)) => { ($a0, $a1, $a2, $a3) };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt)) => {
-        ($a0, $a1, $a2, $a3, $a4)
-    };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt $a5:tt)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5)
-    };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt $a5:tt $a6:tt)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6)
-    };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt
-             $a4:tt $a5:tt $a6:tt $a7:tt)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7)
-    };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt
-             $a5:tt $a6:tt $a7:tt $a8:tt)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8)
-    };
-    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt
-             $a5:tt $a6:tt $a7:tt $a8:tt $a9:tt)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8, $a9)
-    };
-    (@_WRAP ($a:tt $($rest:tt)*)) => {
-        ($a, proptest!(@_WRAP ($($rest)*)))
-    };
-    (@_WRAPPAT ($item:pat)) => { $item };
-    (@_WRAPPAT ($a0:pat, $a1:pat)) => { ($a0, $a1) };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat)) => { ($a0, $a1, $a2) };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat)) => {
-        ($a0, $a1, $a2, $a3)
-    };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat)) => {
-        ($a0, $a1, $a2, $a3, $a4)
-    };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat, $a5:pat)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5)
-    };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
-                $a4:pat, $a5:pat, $a6:pat)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6)
-    };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
-                $a4:pat, $a5:pat, $a6:pat, $a7:pat)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7)
-    };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
-                $a5:pat, $a6:pat, $a7:pat, $a8:pat)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8)
-    };
-    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
-                $a5:pat, $a6:pat, $a7:pat, $a8:pat, $a9:pat)) => {
-        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8, $a9)
-    };
-    (@_WRAPPAT ($a:pat, $($rest:pat),*)) => {
-        ($a, proptest!(@_WRAPPAT ($($rest),*)))
     };
 
     ($(
@@ -345,10 +292,10 @@ macro_rules! prop_compose {
         $(#[$meta])*
         $($($vis)*)* fn $name $params
                  -> $crate::strategy::BoxedStrategy<$return_type> {
-            let strat = proptest!(@_WRAP ($($strategy)*));
+            let strat = proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_map(
                 strat,
-                |proptest!(@_WRAPPAT ($($var),*))| $body);
+                |proptest_helper!(@_WRAPPAT ($($var),*))| $body);
             $crate::strategy::Strategy::boxed(strat)
         }
     };
@@ -362,14 +309,14 @@ macro_rules! prop_compose {
         $(#[$meta])*
         $($($vis)*)* fn $name $params
                  -> $crate::strategy::BoxedStrategy<$return_type> {
-            let strat = proptest!(@_WRAP ($($strategy)*));
+            let strat = proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
                 strat,
-                |proptest!(@_WRAPPAT ($($var),*))|
-                proptest!(@_WRAP ($($strategy2)*)));
+                |proptest_helper!(@_WRAPPAT ($($var),*))|
+                proptest_helper!(@_WRAP ($($strategy2)*)));
             let strat = $crate::strategy::Strategy::prop_map(
                 strat,
-                |proptest!(@_WRAPPAT ($($var2),*))| $body);
+                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body);
             $crate::strategy::Strategy::boxed(strat)
         }
     };
@@ -481,6 +428,182 @@ macro_rules! prop_assert_eq {
     }};
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! proptest_helper {
+    (@_WRAP ($a:tt)) => { $a };
+    (@_WRAP ($a0:tt $a1:tt)) => { ($a0, $a1) };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt)) => { ($a0, $a1, $a2) };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt)) => { ($a0, $a1, $a2, $a3) };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt $a5:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt $a5:tt $a6:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt
+             $a4:tt $a5:tt $a6:tt $a7:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt
+             $a5:tt $a6:tt $a7:tt $a8:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8)
+    };
+    (@_WRAP ($a0:tt $a1:tt $a2:tt $a3:tt $a4:tt
+             $a5:tt $a6:tt $a7:tt $a8:tt $a9:tt)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8, $a9)
+    };
+    (@_WRAP ($a:tt $($rest:tt)*)) => {
+        ($a, proptest_helper!(@_WRAP ($($rest)*)))
+    };
+    (@_WRAPPAT ($item:pat)) => { $item };
+    (@_WRAPPAT ($a0:pat, $a1:pat)) => { ($a0, $a1) };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat)) => { ($a0, $a1, $a2) };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat)) => {
+        ($a0, $a1, $a2, $a3)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat, $a5:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
+                $a4:pat, $a5:pat, $a6:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
+                $a4:pat, $a5:pat, $a6:pat, $a7:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
+                $a5:pat, $a6:pat, $a7:pat, $a8:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8)
+    };
+    (@_WRAPPAT ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
+                $a5:pat, $a6:pat, $a7:pat, $a8:pat, $a9:pat)) => {
+        ($a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $a8, $a9)
+    };
+    (@_WRAPPAT ($a:pat, $($rest:pat),*)) => {
+        ($a, proptest_helper!(@_WRAPPAT ($($rest),*)))
+    };
+    (@_WRAPSTR ($item:pat)) => { stringify!($item) };
+    (@_WRAPSTR ($a0:pat, $a1:pat)) => { (stringify!($a0), stringify!($a1)) };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2), stringify!($a3))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2),
+         stringify!($a3), stringify!($a4))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat, $a5:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2), stringify!($a3),
+         stringify!($a4), stringify!($a5))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
+                $a4:pat, $a5:pat, $a6:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2), stringify!($a3),
+         stringify!($a4), stringify!($a5), stringify!($a6))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat,
+                $a4:pat, $a5:pat, $a6:pat, $a7:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2), stringify!($a3),
+         stringify!($a4), stringify!($a5), stringify!($a6), stringify!($a7))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
+                $a5:pat, $a6:pat, $a7:pat, $a8:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2), stringify!($a3),
+         stringify!($a4), stringify!($a5), stringify!($a6), stringify!($a7),
+         stringify!($a8))
+    };
+    (@_WRAPSTR ($a0:pat, $a1:pat, $a2:pat, $a3:pat, $a4:pat,
+                $a5:pat, $a6:pat, $a7:pat, $a8:pat, $a9:pat)) => {
+        (stringify!($a0), stringify!($a1), stringify!($a2), stringify!($a3),
+         stringify!($a4), stringify!($a5), stringify!($a6), stringify!($a7),
+         stringify!($a8), stringify!($a9))
+    };
+    (@_WRAPSTR ($a:pat, $($rest:pat),*)) => {
+        (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
+    };
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy)]
+pub struct NamedArguments<N, V>(
+    #[doc(hidden)] pub N, #[doc(hidden)] pub V);
+
+impl<V : fmt::Debug> fmt::Debug for NamedArguments<&'static str, V> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} = ", self.0)?;
+        self.1.fmt(f)
+    }
+}
+
+macro_rules! named_arguments_tuple {
+    ($($ix:tt $argn:ident $argv:ident)*) => {
+        impl<'a, $($argn : Copy),*, $($argv),*> fmt::Debug
+        for NamedArguments<($($argn,)*),&'a ($($argv,)*)>
+        where $(NamedArguments<$argn, &'a $argv> : fmt::Debug),*,
+              $($argv : 'a),*
+        {
+            #[allow(unused_assignments)]
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let mut first = true;
+                $(
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    fmt::Debug::fmt(
+                        &NamedArguments((self.0).$ix, &(self.1).$ix), f)?;
+                )*
+                Ok(())
+            }
+        }
+
+        impl<$($argn : Copy),*, $($argv),*> fmt::Debug
+        for NamedArguments<($($argn,)*), ($($argv,)*)>
+        where $(for<'a> NamedArguments<$argn, &'a $argv> : fmt::Debug),*
+        {
+            #[allow(unused_assignments)]
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let mut first = true;
+                $(
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    fmt::Debug::fmt(
+                        &NamedArguments((self.0).$ix, &(self.1).$ix), f)?;
+                )*
+                Ok(())
+            }
+        }
+    }
+}
+
+named_arguments_tuple!(0 AN AV);
+named_arguments_tuple!(0 AN AV 1 BN BV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
+                       5 FN FV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
+                       5 FN FV 6 GN GV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
+                       5 FN FV 6 GN GV 7 HN HV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
+                       5 FN FV 6 GN GV 7 HN HV 8 IN IV);
+named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
+                       5 FN FV 6 GN GV 7 HN HV 8 IN IV 9 JN JV);
+
 /// Similar to `assert_ne!` from std, but returns a test failure instead of
 /// panicking if the condition fails.
 ///
@@ -561,5 +684,79 @@ mod test {
             prop_assume!(a != 41 || b != 9);
             assert!(a + b < 50);
         }
+    }
+
+    #[allow(unused_variables)]
+    mod test_arg_counts {
+        use strategy::Just;
+
+        proptest! {
+            #[test]
+            fn test_1_arg(a in Just(0)) { }
+            #[test]
+            fn test_2_arg(a in Just(0), b in Just(0)) { }
+            #[test]
+            fn test_3_arg(a in Just(0), b in Just(0), c in Just(0)) { }
+            #[test]
+            fn test_4_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0)) { }
+            #[test]
+            fn test_5_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0)) { }
+            #[test]
+            fn test_6_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0)) { }
+            #[test]
+            fn test_7_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0),
+                          g in Just(0)) { }
+            #[test]
+            fn test_8_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0),
+                          g in Just(0), h in Just(0)) { }
+            #[test]
+            fn test_9_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0),
+                          g in Just(0), h in Just(0), i in Just(0)) { }
+            #[test]
+            fn test_a_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0),
+                          g in Just(0), h in Just(0), i in Just(0),
+                          j in Just(0)) { }
+            #[test]
+            fn test_b_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0),
+                          g in Just(0), h in Just(0), i in Just(0),
+                          j in Just(0), k in Just(0)) { }
+            #[test]
+            fn test_c_arg(a in Just(0), b in Just(0), c in Just(0),
+                          d in Just(0), e in Just(0), f in Just(0),
+                          g in Just(0), h in Just(0), i in Just(0),
+                          j in Just(0), k in Just(0), l in Just(0)) { }
+        }
+    }
+
+    #[test]
+    fn named_arguments_is_debug_for_needed_cases() {
+        use super::NamedArguments;
+
+        println!("{:?}", NamedArguments("foo", &"bar"));
+        println!("{:?}", NamedArguments(("foo",), &(1,)));
+        println!("{:?}", NamedArguments(("foo","bar"), &(1,2)));
+        println!("{:?}", NamedArguments(("a","b","c"), &(1,2,3)));
+        println!("{:?}", NamedArguments(("a","b","c","d"), &(1,2,3,4)));
+        println!("{:?}", NamedArguments(("a","b","c","d","e"),
+                                        &(1,2,3,4,5)));
+        println!("{:?}", NamedArguments(("a","b","c","d","e","f"),
+                                        &(1,2,3,4,5,6)));
+        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g"),
+                                        &(1,2,3,4,5,6,7)));
+        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h"),
+                                        &(1,2,3,4,5,6,7,8)));
+        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h","i"),
+                                        &(1,2,3,4,5,6,7,8,9)));
+        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h","i","j"),
+                                        &(1,2,3,4,5,6,7,8,9,10)));
+        println!("{:?}", NamedArguments((("a","b"),"c","d"), &((1,2),3,4)));
     }
 }

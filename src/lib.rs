@@ -119,7 +119,7 @@
 //! with
 //!
 //! ```text
-//! thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: "aAௗ0㌀0"
+//! thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: ref s = "aAௗ0㌀0"
 //! 	successes: 102
 //! 	local rejects: 0
 //! 	global rejects: 0
@@ -218,7 +218,7 @@
 //! The test fails when we run it. Though there's not much output this time.
 //!
 //! ```text
-//! thread 'main' panicked at 'Test failed: assertion failed: `(left == right)` (left: `(0, 10, 1)`, right: `(0, 0, 1)`) at examples/dateparser_v2.rs:46; minimal failing input: (0, 10, 1)
+//! thread 'main' panicked at 'Test failed: assertion failed: `(left == right)` (left: `(0, 10, 1)`, right: `(0, 0, 1)`) at examples/dateparser_v2.rs:46; minimal failing input: y = 0, m = 10, d = 1
 //! 	successes: 2
 //! 	local rejects: 0
 //! 	global rejects: 0
@@ -387,4 +387,5 @@ pub mod collection;
 pub mod char;
 pub mod string;
 
-#[macro_use] mod sugar;
+#[doc(hidden)]
+#[macro_use] pub mod sugar;
