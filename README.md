@@ -348,8 +348,6 @@ proptest! {
         assert!(a.abs() >= 0);
     }
 }
-#
-# fn main() { i64_abs_is_never_negative(); }
 ```
 
 Because of this, traditional unit testing with intelligently selected cases
