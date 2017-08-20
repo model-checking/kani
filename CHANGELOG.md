@@ -1,3 +1,18 @@
+## 0.2.1
+
+### New Additions
+
+- Added `prop_assert!` macro family to assert without panicking, for quieter
+  test failure modes.
+
+- New `prelude` module for easier importing of important things.
+
+- Renamed `Singleton` to `Just`. (The old name is still available.)
+
+- Failure messages produced by `proptest!` are now much more readable.
+
+- Added in-depth tutorial.
+
 ## 0.2.0
 
 ### Breaking Changes
