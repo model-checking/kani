@@ -281,7 +281,7 @@
 //! ```rust,ignore
 //! #[test]
 //! fn test_october_first() {
-//!   assert_eq!(Some(0, 10, 1), parse_date("0000-10-01"));
+//!     assert_eq!(Some(0, 10, 1), parse_date("0000-10-01"));
 //! }
 //! ```
 //!
@@ -299,6 +299,11 @@
 //!
 //! We were off by one, and need to use the range `5..7`. After fixing this,
 //! the test passes.
+//!
+//! There is a more in-depth tutorial
+//! [further down](#in-depth-tutorial). <!-- NOREADME
+//! [in the crate documentation](https://docs.rs/proptest/#in-depth-tutorial).
+//! NOREADME -->
 //!
 //! ## Differences between QuickCheck and Proptest
 //!
@@ -367,6 +372,925 @@
 //! which actually produces useful inputs. A strategy of `.{1,4096}` may be
 //! great to fuzz a C parser, but is highly unlikely to produce anything that
 //! makes it to a code generator.
+//!
+//! <!-- ENDREADME -->
+//!
+//! ## In-Depth Tutorial
+//!
+//! This tutorial will introduce proptest from the bottom up, starting from the
+//! basic building blocks, in the hopes of making the model as a whole clear.
+//! In particular, we'll start off without using the macros so that the macros
+//! can later be understood in terms of what they expand into rather than
+//! magic. But as a result, the first part is _not_ representative of how
+//! proptest is normally used. If bottom-up isn't your style, you may wish to
+//! skim the first few sections.
+//!
+//! Also note that the examples here focus on the usage of proptest itself, and
+//! as such generally have trivial test bodies. In real code, you would
+//! obviously have assertions and so forth in the test bodies.
+//!
+//! ### Strategy Basics
+//!
+//! The [_Strategy_](strategy/trait.Strategy.html) is the most fundamental
+//! concept in proptest. A strategy defines two things:
+//!
+//! - How to generate random values of a particular type from a random number
+//! generator.
+//!
+//! - How to "shrink" such values into "simpler" forms.
+//!
+//! Proptest ships with a substantial library of strategies. Some of these are
+//! defined in terms of built-in types; for example, `0..100i32` is a strategy
+//! to generate `i32`s between 0, inclusive, and 100, exclusive. As we've
+//! already seen, strings are themselves strategies for generating strings
+//! which match the former as a regular expression.
+//!
+//! Generating a value is a two-step process. First, a `TestRunner` is passed
+//! to the `now_value()` method of the `Strategy`; this returns a `ValueTree`,
+//! which we'll look at in more detail momentarily. Calling the `current()`
+//! method on the `ValueTree` produces the actual value. Knowing that, we can
+//! put the pieces together and generate values. The below is the
+//! `tutoral-strategy-play.rs` example:
+//!
+//! ```rust
+//! extern crate proptest;
+//!
+//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::strategy::{Strategy, ValueTree};
+//!
+//! fn main() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     let int_val = (0..100i32).new_value(&mut runner).unwrap();
+//!     let str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
+//!         .new_value(&mut runner).unwrap();
+//!     println!("int_val = {}, str_val = {}",
+//!              int_val.current(), str_val.current());
+//! }
+//! ```
+//!
+//! If you run this a few times, you'll get output similar to the following:
+//!
+//! ```text
+//! $ target/debug/examples/tutorial-strategy-play
+//! int_val = 99, str_val = vѨͿἕΌ
+//! $ target/debug/examples/tutorial-strategy-play
+//! int_val = 25, str_val = cwᵸійΉ
+//! $ target/debug/examples/tutorial-strategy-play
+//! int_val = 5, str_val = oegiᴫᵸӈᵸὛΉ
+//! ```
+//!
+//! This knowledge is sufficient to build an extremely primitive fuzzing test.
+//!
+//! ```rust,no_run
+//! extern crate proptest;
+//!
+//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::strategy::{Strategy, ValueTree};
+//!
+//! fn some_function(v: i32) {
+//!     // Do a bunch of stuff, but crash if v > 500
+//!     assert!(v <= 500);
+//! }
+//!
+//! # /*
+//! #[test]
+//! # */
+//! fn some_function_doesnt_crash() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     for _ in 0..256 {
+//!         let val = (0..10000i32).new_value(&mut runner).unwrap();
+//!         some_function(val.current());
+//!     }
+//! }
+//! # fn main() { }
+//! ```
+//!
+//! This _works_, but when the test fails, we don't get much context, and even
+//! if we recover the input, we see some arbitrary-looking value like 1771
+//! rather than the boundary condition of 501. For a function taking just an
+//! integer, this is probably still good enough, but as inputs get more
+//! complex, interpreting completely random values becomes increasingly
+//! difficult.
+//!
+//! ### Shrinking Basics
+//!
+//! Finding the "simplest" input that causes a test failure is referred to as
+//! _shrinking_. This is where the intermediate `ValueTree` type comes in.
+//! Besides `current()`, it provides two methods — `simplify()` and
+//! `complicate()` — which together allow binary searching over the input
+//! space. The `tutorial-simplify-play.rs` example shows how repeated calls to
+//! `simplify()` produce incrementally "simpler" outputs, both in terms of size
+//! and in characters used.
+//!
+//! ```rust
+//! extern crate proptest;
+//!
+//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::strategy::{Strategy, ValueTree};
+//!
+//! fn main() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
+//!         .new_value(&mut runner).unwrap();
+//!     println!("str_val = {}", str_val.current());
+//!     while str_val.simplify() {
+//!         println!("        = {}", str_val.current());
+//!     }
+//! }
+//! ```
+//!
+//! A couple runs:
+//!
+//! ```text
+//! $ target/debug/examples/tutorial-simplify-play
+//! str_val = vy꙲ꙈᴫѱΆῨῨ
+//!         = y꙲ꙈᴫѱΆῨῨ
+//!         = y꙲ꙈᴫѱΆῨῨ
+//!         = m꙲ꙈᴫѱΆῨῨ
+//!         = g꙲ꙈᴫѱΆῨῨ
+//!         = d꙲ꙈᴫѱΆῨῨ
+//!         = b꙲ꙈᴫѱΆῨῨ
+//!         = a꙲ꙈᴫѱΆῨῨ
+//!         = aꙈᴫѱΆῨῨ
+//!         = aᴫѱΆῨῨ
+//!         = aѱΆῨῨ
+//!         = aѱΆῨῨ
+//!         = aѱΆῨῨ
+//!         = aиΆῨῨ
+//!         = aМΆῨῨ
+//!         = aЎΆῨῨ
+//!         = aЇΆῨῨ
+//!         = aЃΆῨῨ
+//!         = aЁΆῨῨ
+//!         = aЀΆῨῨ
+//!         = aЀῨῨ
+//!         = aЀῨ
+//!         = aЀῨ
+//!         = aЀῢ
+//!         = aЀ῟
+//!         = aЀ῞
+//!         = aЀ῝
+//! $ target/debug/examples/tutorial-simplify-play
+//! str_val = dyiꙭᾪῇΊ
+//!         = yiꙭᾪῇΊ
+//!         = iꙭᾪῇΊ
+//!         = iꙭᾪῇΊ
+//!         = iꙭᾪῇΊ
+//!         = eꙭᾪῇΊ
+//!         = cꙭᾪῇΊ
+//!         = bꙭᾪῇΊ
+//!         = aꙭᾪῇΊ
+//!         = aꙖᾪῇΊ
+//!         = aꙋᾪῇΊ
+//!         = aꙅᾪῇΊ
+//!         = aꙂᾪῇΊ
+//!         = aꙁᾪῇΊ
+//!         = aꙀᾪῇΊ
+//!         = aꙀῇΊ
+//!         = aꙀΊ
+//!         = aꙀΊ
+//!         = aꙀΊ
+//!         = aꙀΉ
+//!         = aꙀΈ
+//! ```
+//!
+//! Note that shrinking never shrinks a value to something outside the range
+//! the strategy describes. Notice the strings in the above example still match
+//! the regular expression even in the end. An integer drawn from
+//! `100..1000i32` will shrink towards zero, but will stop at 100 since that is
+//! the minimum value.
+//!
+//! `simplify()` and `complicate()` can be used to adapt our primitive fuzz
+//! test to actually find the boundary condition.
+//!
+//! ```rust
+//! extern crate proptest;
+//!
+//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::strategy::{Strategy, ValueTree};
+//!
+//! fn some_function(v: i32) -> bool {
+//!     // Do a bunch of stuff, but crash if v > 500
+//!     // assert!(v <= 500);
+//!     // But return a boolean instead of panicking for simplicity
+//!     v <= 500
+//! }
+//!
+//! // We know the function is broken, so use a purpose-built main function to
+//! // find the breaking point.
+//! fn main() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     for _ in 0..256 {
+//!         let mut val = (0..10000i32).new_value(&mut runner).unwrap();
+//!         if some_function(val.current()) {
+//!             // Test case passed
+//!             continue;
+//!         }
+//!
+//!         // We found our failing test case, simplify it as much as possible.
+//!         loop {
+//!             if !some_function(val.current()) {
+//!                 // Still failing, find a simpler case
+//!                 if !val.simplify() {
+//!                     // No more simplification possible; we're done
+//!                     break;
+//!                 }
+//!             } else {
+//!                 // Passed this input, back up a bit
+//!                 if !val.complicate() {
+//!                     break;
+//!                 }
+//!             }
+//!         }
+//!
+//!         println!("The minimal failing case is {}", val.current());
+//!         assert_eq!(501, val.current());
+//!         return;
+//!     }
+//!     panic!("Didn't find a failing test case");
+//! }
+//! ```
+//!
+//! This code reliably finds the boundary of the failure, 501.
+//!
+//! ### Using the Test Runner
+//!
+//! The above is quite a bit of code though, and it can't handle things like
+//! panics. Fortunately, proptest's
+//! [`TestRunner`](test_runner/struct.TestRunner.html) provides this
+//! functionality for us. The method we're interested in is `run`. We simply
+//! give it the strategy and a function to test inputs and it takes care of the
+//! rest.
+//!
+//! ```rust
+//! extern crate proptest;
+//!
+//! use proptest::test_runner::{Config, TestError, TestRunner};
+//!
+//! fn some_function(v: i32) {
+//!     // Do a bunch of stuff, but crash if v > 500.
+//!     // We return to normal `assert!` here since `TestRunner` catches
+//!     // panics.
+//!     assert!(v <= 500);
+//! }
+//!
+//! // We know the function is broken, so use a purpose-built main function to
+//! // find the breaking point.
+//! fn main() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     let result = runner.run(&(0..10000i32), |&v| {
+//!         some_function(v);
+//!         Ok(())
+//!     });
+//!     match result {
+//!         Err(TestError::Fail(_, value)) => {
+//!             println!("Found minimal failing case: {}", value);
+//!             assert_eq!(501, value);
+//!         },
+//!         result => panic!("Unexpected result: {:?}", result),
+//!     }
+//! }
+//! ```
+//!
+//! That's a lot better! Still a bit boilerplatey; the `proptest!` will help
+//! with that, but it does some other stuff we haven't covered yet, so for the
+//! moment we'll keep using `TestRunner` directly.
+//!
+//! ### Compound Strategies
+//!
+//! Testing functions that take single arguments of primitive types is nice and
+//! all, but is kind of underwhelming. Back when we were writing the whole
+//! stack by hand, extending the technique to, say, _two_ integers was clear,
+//! if verbose. But `TestRunner` only takes a single `Strategy`; how can we
+//! test a function that needs inputs from more than one?
+//!
+//! ```rust,ignore
+//! use proptest::test_runner::{Config, TestRunner};
+//!
+//! fn add(a: i32, b: i32) -> i32 {
+//!     a + b
+//! }
+//!
+//! # /*
+//! #[test]
+//! # */
+//! fn test_add() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     runner.run(/* uhhm... */).unwrap();
+//! }
+//! #
+//! # fn main() { test_add(); }
+//! ```
+//!
+//! The key is that strategies are _composable_. The simplest form of
+//! composition is "compound strategies", where we take multiple strategies and
+//! combine their values into one value that holds each input separately. There
+//! are several of these. The simplest is a tuple; a tuple of strategies is
+//! itself a strategy for tuples of the values those strategies produce. For
+//! example, `(0..10i32,100..1000i32)` is a strategy for pairs of integers
+//! where the first value is between 0 and 100 and the second is between 100
+//! and 1000.
+//!
+//! So for our two-argument function, our strategy is simply a tuple of ranges.
+//!
+//! ```rust
+//! use proptest::test_runner::{Config, TestRunner};
+//!
+//! fn add(a: i32, b: i32) -> i32 {
+//!     a + b
+//! }
+//!
+//! # /*
+//! #[test]
+//! # */
+//! fn test_add() {
+//!     let mut runner = TestRunner::new(Config::default());
+//!     // Combine our two inputs into a strategy for one tuple. Our test
+//!     // function then destructures the generated tuples back into separate
+//!     // `a` and `b` variables to be passed in to `add()`.
+//!     runner.run(&(0..1000i32, 0..1000i32), |&(a, b)| {
+//!         let sum = add(a, b);
+//!         assert!(sum >= a);
+//!         assert!(sum >= b);
+//!         Ok(())
+//!     }).unwrap();
+//! }
+//! #
+//! # fn main() { test_add(); }
+//! ```
+//!
+//! Other compound strategies include fixed-sizes arrays of strategies, as well
+//! as the various strategies provided in the [collection](collection/index.html)
+//! module.
+//!
+//! ### Syntax Sugar: `proptest!`
+//!
+//! Now that we know about compound strategies, we can understand how the
+//! [`proptest!`](macro.proptest.html) macro works. Our example from the prior
+//! section can be rewritten using that macro like so:
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//!
+//! fn add(a: i32, b: i32) -> i32 {
+//!     a + b
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_add(a in 0..1000i32, b in 0..1000i32) {
+//!         let sum = add(a, b);
+//!         assert!(sum >= a);
+//!         assert!(sum >= b);
+//!     }
+//! }
+//! #
+//! # fn main() { test_add(); }
+//! ```
+//!
+//! Conceptually, the desugaring process is fairly simple. At the start of the
+//! test function, a new `TestRunner` is constructed. The input strategies
+//! (after the `in` keyword) are grouped into a tuple. That tuple is passed in
+//! to the `TestRunner` as the input strategy. The test body has `Ok(())` added
+//! to the end, then is put into a lambda that destructures the generated input
+//! tuple back into the named parameters and then runs the body. The end result
+//! is extremely similar to what we wrote by hand in the prior section.
+//!
+//! `proptest!` actually does a few other things in order to make failure
+//! output easier to read and to overcome the 10-tuple limit.
+//!
+//! ### Transforming Strategies
+//!
+//! Suppose you have a function that takes a string which needs to be the
+//! `Display` format of an arbitrary `u32`. A first attempt to providing this
+//! argument might be to use a regular expression, like so:
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//!
+//! fn do_stuff(v: &str) {
+//!     let i: u32 = v.parse().unwrap();
+//!     let s = i.to_string();
+//!     assert_eq!(&s, v);
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(ref v in "[1-9][0-9]{0,8}") {
+//!         do_stuff(v);
+//!     }
+//! }
+//! # fn main() { test_do_stuff(); }
+//! ```
+//!
+//! This kind of works, but it has problems. For one, it does not explore the
+//! whole `u32` space. It is possible to write a regular expression that does,
+//! but such an expression is rather long, and also results in a pretty odd
+//! distribution of values. The input also doesn't shrink correctly, since
+//! proptest tries to shrink it in terms of a string rather than an integer.
+//!
+//! What you really want to do is generate a `u32` and then pass in its string
+//! representation. One way to do this is to just take `u32` as an input to the
+//! test and then transform it to a string within the test code. This approach
+//! works fine, but isn't reusable or composable. Ideally, we could get a
+//! _strategy_ that does this.
+//!
+//! The thing we're looking for is the first strategy _combinator_, `prop_map`.
+//! We need to ensure `Strategy` is in scope to use it.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! // Grab `Strategy` and a shorter namespace prefix
+//! use proptest::prelude::*;
+//!
+//! fn do_stuff(v: &str) {
+//!     let i: u32 = v.parse().unwrap();
+//!     let s = i.to_string();
+//!     assert_eq!(&s, v);
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(ref v in prop::num::u32::ANY.prop_map(
+//!                          |v| v.to_string())) {
+//!         do_stuff(v);
+//!     }
+//! }
+//! # fn main() { test_do_stuff(); }
+//! ```
+//!
+//! Calling `prop_map` on a `Strategy` creates a new strategy which transforms
+//! every generated value using the provided function. Proptest retains the
+//! relationship between the original `Strategy` and the transformed one; as a
+//! result, shrinking occurs in terms of `u32`, even though we're generating a
+//! `String`.
+//!
+//! `prop_map` is also the principal way to define strategies for new types,
+//! since most types are simply composed of other, simpler values.
+//!
+//! Let's update our code so it takes a more interesting structure.
+//!
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! #[derive(Clone, Debug)]
+//! struct Order {
+//!   id: String,
+//!   // Some other fields, though the test doesn't do anything with them
+//!   item: String,
+//!   quantity: u32,
+//! }
+//!
+//! fn do_stuff(order: &Order) {
+//!     let i: u32 = order.id.parse().unwrap();
+//!     let s = i.to_string();
+//!     assert_eq!(s, order.id);
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(
+//!         ref order in
+//!         (prop::num::u32::ANY.prop_map(|v| v.to_string()),
+//!          "[a-z]*", 1..1000u32).prop_map(
+//!              |(id, item, quantity)| Order { id, item, quantity })
+//!     ) {
+//!         do_stuff(order);
+//!     }
+//! }
+//! # fn main() { test_do_stuff(); }
+//! ```
+//!
+//! Notice how we were able to take the output from `prop_map` and put it in a
+//! tuple, then call `prop_map` on _that_ tuple to produce yet another value.
+//!
+//! But that's quite a mouthful in the argument list. Fortunately, strategies
+//! are normal values, so we can extract it to a function.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! // snip
+//! #
+//! # #[derive(Clone, Debug)]
+//! # struct Order {
+//! #   id: String,
+//! #   // Some other fields, though the test doesn't do anything with them
+//! #   item: String,
+//! #   quantity: u32,
+//! # }
+//! #
+//! # fn do_stuff(order: &Order) {
+//! #     let i: u32 = order.id.parse().unwrap();
+//! #     let s = i.to_string();
+//! #     assert_eq!(s, order.id);
+//! # }
+//!
+//! fn arb_order(max_quantity: u32) -> BoxedStrategy<Order> {
+//!     (prop::num::u32::ANY.prop_map(|v| v.to_string()),
+//!      "[a-z]*", 1..max_quantity)
+//!     .prop_map(|(id, item, quantity)| Order { id, item, quantity })
+//!     .boxed()
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(ref order in arb_order(1000)) {
+//!         do_stuff(order);
+//!     }
+//! }
+//! # fn main() { test_do_stuff(); }
+//! ```
+//!
+//! We `boxed()` the strategy in the function since otherwise the type would
+//! not be nameable, and even if it were, it would be very hard to read or
+//! write. Boxing a `Strategy` turns both it and its `ValueTree`s into trait
+//! objects, which both makes the types simpler and can be used to mix
+//! heterogeneous `Strategy` types as long as they produce the same value
+//! types.
+//!
+//! The `arb_order()` function is also _parameterised_, which is another
+//! advantage of extracting strategies to separate functions. In this case, if
+//! we have a test that needs an `Order` with no more than a dozen items, we
+//! can simply call `arb_order(12)` rather than needing to write out a whole
+//! new strategy.
+//!
+//! ### Syntax Sugar: `prop_compose!`
+//!
+//! Defining strategy-returning functions like this is extremely useful, but
+//! the code above is a bit verbose, as well as hard to read for similar
+//! reasons to writing test functions by hand.
+//!
+//! To simplify this task, proptest includes the
+//! [`prop_compose!`](macro.prop_compose.html) macro. Before going into
+//! details, here's our code from above rewritten to use it.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! // snip
+//! #
+//! # #[derive(Clone, Debug)]
+//! # struct Order {
+//! #   id: String,
+//! #   // Some other fields, though the test doesn't do anything with them
+//! #   item: String,
+//! #   quantity: u32,
+//! # }
+//! #
+//! # fn do_stuff(order: &Order) {
+//! #     let i: u32 = order.id.parse().unwrap();
+//! #     let s = i.to_string();
+//! #     assert_eq!(s, order.id);
+//! # }
+//!
+//! prop_compose! {
+//!     fn arb_order_id()(id in prop::num::u32::ANY) -> String {
+//!         id.to_string()
+//!     }
+//! }
+//! prop_compose! {
+//!     fn arb_order(max_quantity: u32)
+//!                 (id in arb_order_id(), item in "[a-z]*",
+//!                  quantity in 1..max_quantity)
+//!                 -> Order {
+//!         Order { id, item, quantity }
+//!     }
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(ref order in arb_order(1000)) {
+//!         do_stuff(order);
+//!     }
+//! }
+//! # fn main() { test_do_stuff(); }
+//! ```
+//!
+//! We had to extract `arb_order_id()` out into its own function, but otherwise
+//! this desugars to almost exactly what we wrote in the previous section. The
+//! generated function takes the first parameter list as arguments. These
+//! arguments are used to select the strategies in the second argument list.
+//! Values are then drawn from those strategies and transformed by the function
+//! body. The actual function as a return type of `BoxedStrategy<T>` where `T`
+//! is the declared return type.
+//!
+//! ### Filtering
+//!
+//! Sometimes, you have a case where your input values have some sort of
+//! "irregular" constraint on them. For example, an integer needing to be even,
+//! or two values needing to be non-equal.
+//!
+//! In general, the ideal solution is to find a way to take a seed value and
+//! then use `prop_map` to transform it into the desired, irregular domain. For
+//! example, to generate even integers, use something like
+//!
+//! ```rust,no_run
+//! # #[macro_use] extern crate proptest;
+//! prop_compose! {
+//!     // Generate arbitrary integers up to half the maximum desired value,
+//!     // then multiply them by 2, thus producing only even integers in the
+//!     // desired range.
+//!     fn even_integer(max: i32)(base in 0..max/2) -> i32 { base * 2 }
+//! }
+//! # fn main() { }
+//! ```
+//!
+//! For the cases where this is not viable, it is possible to filter
+//! strategies. Proptest actually divides filters into two categories:
+//!
+//! - "Local" filters apply to a single strategy. If a value is rejected,
+//!   a new value is drawn from that strategy only.
+//!
+//! - "Global" filters apply to the whole test case. If the test case is
+//!   rejected, the whole thing is regenerated.
+//!
+//! The distinction is somewhat arbitrary, since something like a "global
+//! filter" could be created by just putting a "local filter" around the whole
+//! input strategy. In practise, the distinction is as to what code performs
+//! the rejection.
+//!
+//! A local filter is created with the `prop_filter` combinator. Besides a
+//! function indicating whether to accept the value, it also takes an _owned_
+//! `String` which it uses to record where/why the rejection happened.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn some_test(
+//!       v in (0..1000u32)
+//!         .prop_filter("Values must not divisible by 7 xor 11".to_owned(),
+//!                      |v| !((0 == v % 7) ^ (0 == v % 11)))
+//!     ) {
+//!         assert_eq!(0 == v % 7, 0 == v % 11);
+//!     }
+//! }
+//! # fn main() { some_test(); }
+//! ```
+//!
+//! Global filtering results when a test itself returns
+//! `Err(TestCaseError::Reject)`. The [`prop_assume!`](macro.prop_assume.html)
+//! macro provides an easy way to do this.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//!
+//! fn frob(a: i32, b: i32) -> (i32, i32) {
+//!     let d = (a - b).abs();
+//!     (a / d, b / d)
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_frob(a in -1000..1000, b in -1000..1000) {
+//!         // Input illegal if a==b.
+//!         // Equivalent to
+//!         // if (a == b) { return Err(TestCaseError::Reject(...)); }
+//!         prop_assume!(a != b);
+//!
+//!         let (a2, b2) = frob(a, b);
+//!         assert!(a2.abs() <= a.abs());
+//!         assert!(b2.abs() <= b.abs());
+//!     }
+//! }
+//! # fn main() { test_frob(); }
+//! ```
+//!
+//! While useful, filtering has a lot of disadvantages:
+//!
+//! - Since it is simply rejection sampling, it will slow down generation of
+//! test cases since values need to be generated additional times to satisfy
+//! the filter. In the case where a filter always returns false, a test could
+//! theoretically never generate a result.
+//!
+//! - Proptest tracks how many local and global rejections have happened, and
+//! aborts if they exceed a certain number. This prevents a test taking an
+//! extremely long time due to rejections, but means not all filters are viable
+//! in the default configuration. The limits for local and global rejections
+//! are different; by default, proptest allows a large number of local
+//! rejections but a fairly small number of global rejections, on the premise
+//! that the former are cheap but potentially common (having been built into
+//! the strategy) but the latter are expensive but rare (being an edge case in
+//! the particular test).
+//!
+//! - Shrinking and filtering do not play well together. When shrinking, if a
+//! value winds up being rejected, there is no pass/fail information to
+//! continue shrinking properly. Instead, proptest treats such a rejection the
+//! same way it handles a shrink that results in a passing test: by backing
+//! away from simplification with a call to `complicate()`. Thus encountering a
+//! filter rejection during shrinking prevents shrinking from continuing to any
+//! simpler values, even if there are some that would be accepted by the
+//! filter.
+//!
+//! ### Generating Recursive Data
+//!
+//! Randomly generating recursive data structures is trickier than it sounds.
+//! For example, the below is a naïve attempt at generating a JSON AST by using
+//! recursion. This also uses the [`prop_oneof!`](macro.prop_oneof.html), which
+//! we haven't seen yet but should be self-explanatory.
+//!
+//! ```rust,no_run
+//! #[macro_use] extern crate proptest;
+//!
+//! use std::collections::HashMap;
+//! use proptest::prelude::*;
+//!
+//! #[derive(Clone, Debug)]
+//! enum Json {
+//!     Null,
+//!     Bool(bool),
+//!     Number(f64),
+//!     String(String),
+//!     Array(Vec<Json>),
+//!     Map(HashMap<String, Json>),
+//! }
+//!
+//! fn arb_json() -> BoxedStrategy<Json> {
+//!     prop_oneof![
+//!         Just(Json::Null),
+//!         prop::bool::ANY.prop_map(Json::Bool),
+//!         prop::num::f64::ANY.prop_map(Json::Number),
+//!         ".*".prop_map(Json::String),
+//!         prop::collection::vec(arb_json(), 0..10).prop_map(Json::Array),
+//!         prop::collection::hash_map(
+//!           ".*", arb_json(), 0..10).prop_map(Json::Map),
+//!     ].boxed()
+//! }
+//! # fn main() { }
+//! ```
+//!
+//! Upon closer consideration, this obviously can't work because `arb_json()`
+//! recurses unconditionally.
+//!
+//! A more sophisticated attempt is to define one strategy for each level of
+//! nesting up to some maximum. This doesn't overflow the stack, but as defined
+//! here, even four levels of nesting will produce trees with _thousands_ of
+//! nodes; by eight levels, we get to tens of _millions_.
+//!
+//! Proptest provides a more reliable solution in the form of the
+//! `prop_recursive` combinator. To use this, we create a strategy for the
+//! non-recursive case, then give the combinator that strategy, some size
+//! parameters, and a function to transform a nested strategy into a recursive
+//! strategy.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//!
+//! use std::collections::HashMap;
+//! use proptest::prelude::*;
+//!
+//! #[derive(Clone, Debug)]
+//! enum Json {
+//!     Null,
+//!     Bool(bool),
+//!     Number(f64),
+//!     String(String),
+//!     Array(Vec<Json>),
+//!     Map(HashMap<String, Json>),
+//! }
+//!
+//! fn arb_json() -> BoxedStrategy<Json> {
+//!     let leaf = prop_oneof![
+//!         Just(Json::Null),
+//!         prop::bool::ANY.prop_map(Json::Bool),
+//!         prop::num::f64::ANY.prop_map(Json::Number),
+//!         ".*".prop_map(Json::String),
+//!     ];
+//!     leaf.prop_recursive(
+//!       8, // 8 levels deep
+//!       256, // Shoot for maximum size of 256 nodes
+//!       10, // We put up to 10 items per collection
+//!       |inner| prop_oneof![
+//!           // Take the inner strategy and make the two recursive cases.
+//!           prop::collection::vec(inner.clone(), 0..10)
+//!               .prop_map(Json::Array),
+//!           prop::collection::hash_map(".*", inner, 0..10)
+//!               .prop_map(Json::Map),
+//!       ].boxed()).boxed()
+//! }
+//! # fn main() { }
+//! ```
+//!
+//! ### Higher-Order Strategies
+//!
+//! A _higher-order strategy_ is a strategy which is generated by another
+//! strategy. That sounds kind of scary, so let's consider an example first.
+//!
+//! Say you have a function you want to test that takes a slice and an index
+//! into that slice. If we use a fixed size for the slice, it's easy, but maybe
+//! we need to test with different slice sizes. We could try something with a
+//! filter:
+//!
+//! ```rust,ignore
+//! fn some_function(stuff: &[String], index: usize) { /* do stuff */ }
+//!
+//! proptest! {
+//!     #[test]
+//!     fn test_some_function(
+//!         ref stuff in prop::collection::vec(".*", 1..100),
+//!         index in 0..100usize
+//!     ) {
+//!         prop_assume!(index < stuff.len());
+//!         some_function(stuff, index);
+//!     }
+//! }
+//! ```
+//!
+//! This doesn't work very well. First off, you get a lot of global rejections
+//! since `index` will be outside of `stuff` 50% of the time. But secondly, it
+//! will be rare to actually get a small `stuff` vector, since it would have to
+//! randomly choose a small `index` at the same time.
+//!
+//! The solution is the `prop_flat_map` combinator. This is sort of like
+//! `prop_map`, except that the transform returns a _strategy_ instead of a
+//! value. This is more easily understood by implementing our example:
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! fn some_function(stuff: &[String], index: usize) {
+//!     let _ = &stuff[index];
+//!     // Do stuff
+//! }
+//!
+//! fn vec_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
+//!     prop::collection::vec(".*", 1..100)
+//!         .prop_flat_map(|vec| {
+//!             let len = vec.len();
+//!             (Just(vec), 0..len)
+//!         }).boxed()
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_some_function((ref vec, index) in vec_and_index()) {
+//!         some_function(vec, index);
+//!     }
+//! }
+//! # fn main() { test_some_function(); }
+//! ```
+//!
+//! In `vec_and_index()`, we make a strategy to produce an arbitrary vector.
+//! But then we derive a new strategy based on _values_ produced by the first
+//! one. The new strategy produces the generated vector unchanged, but also
+//! adds a valid index into that vector, which we can do by picking the
+//! strategy for that index based on the size of the vector.
+//!
+//! Even though the new strategy specifies the singleton `Just(vec)` strategy
+//! for the vector, proptest still understands the connection to the original
+//! strategy and will shrink `vec` as well. All the while, `index` continues to
+//! be a valid index into `vec`.
+//!
+//! `prop_compose!` actually allows making second-order strategies like this by
+//! simply providing three argument lists instead of two. The below desugars to
+//! something much like what we wrote by hand above, except that the index and
+//! vector's positions are internally reversed due to borrowing limitations.
+//!
+//! ```rust,no_run
+//! # #[macro_use] extern crate proptest;
+//! # use proptest::prelude::*;
+//! prop_compose! {
+//!     fn vec_and_index()(vec in prop::collection::vec(".*", 1..100))
+//!                     (index in 0..vec.len(), vec in Just(vec))
+//!                     -> (Vec<String>, usize) {
+//!        (vec, index)
+//!    }
+//! }
+//! # fn main() { }
+//! ```
+//!
+//! ### Conclusion
+//!
+//! That's it for the tutorial, at least for now. There are more details for
+//! the features discussed above on their individual documentation pages, and
+//! you can find out about all the strategies provided out-of-the-box by
+//! perusing the module tree below.
 
 #![deny(missing_docs)]
 

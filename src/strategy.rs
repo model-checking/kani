@@ -235,7 +235,8 @@ pub trait Strategy : fmt::Debug {
     /// total elements, though they may have more. `expected_branch_size` gives
     /// the expected maximum size for any collection which may contain
     /// recursive elements and is used to control branch probability to achieve
-    /// the desired size.
+    /// the desired size. Passing a too small value can result in trees vastly
+    /// larger than desired.
     ///
     /// Note that `depth` only counts branches; i.e., `depth = 0` is a single
     /// leaf, and `depth = 1` is a leaf or a branch containing only leaves.
