@@ -354,9 +354,9 @@
 //! use proptest::prelude::*;
 //!
 //! proptest! {
-//!     # /*
+//!     # /* NOREADME
 //!     #[test]
-//!     # */
+//!     # NOREADME */
 //!     fn i64_abs_is_never_negative(a in prop::num::i64::ANY) {
 //!         assert!(a.abs() >= 0);
 //!     }
