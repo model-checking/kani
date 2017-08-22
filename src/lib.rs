@@ -406,7 +406,7 @@
 //! which match the former as a regular expression.
 //!
 //! Generating a value is a two-step process. First, a `TestRunner` is passed
-//! to the `now_value()` method of the `Strategy`; this returns a `ValueTree`,
+//! to the `new_value()` method of the `Strategy`; this returns a `ValueTree`,
 //! which we'll look at in more detail momentarily. Calling the `current()`
 //! method on the `ValueTree` produces the actual value. Knowing that, we can
 //! put the pieces together and generate values. The below is the
