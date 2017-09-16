@@ -8,10 +8,14 @@
 - Added `TupleUnion`, which works like `Union` but permits doing static
   dispatch even with heterogeneous delegate strategies.
 
+- `prop_oneof!` is smarter about how it combines the input strategies.
+
 ### Potential Breaking Changes
 
 - `Union::new` now has a generic argument type which could impact type
   inference.
+
+- The concrete types produced by `prop_oneof!` have changed.
 
 ## 0.2.1
 

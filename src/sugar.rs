@@ -151,6 +151,11 @@ macro_rules! prop_assume {
 /// form of a `u32` before each strategy, separated from the strategy with
 /// `=>`.
 ///
+/// Note that the exact type returned by the macro varies depending on how many
+/// inputs there are. In particular, if given exactly one option, it will
+/// return it unmodified. It is not recommended to depend on the particular
+/// type produced by this macro.
+///
 /// ## Example
 ///
 /// ```rust,no_run
@@ -189,6 +194,119 @@ macro_rules! prop_oneof {
             $(1 => $item),*
         ]
     };
+
+    ($_weight0:expr => $item0:expr $(,)*) => { $item0 };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr,
+     $weight4:expr => $item4:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3),
+             ($weight4, $item4)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr,
+     $weight4:expr => $item4:expr,
+     $weight5:expr => $item5:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3),
+             ($weight4, $item4), ($weight5, $item5)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr,
+     $weight4:expr => $item4:expr,
+     $weight5:expr => $item5:expr,
+     $weight6:expr => $item6:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3),
+             ($weight4, $item4), ($weight5, $item5),
+             ($weight6, $item6)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr,
+     $weight4:expr => $item4:expr,
+     $weight5:expr => $item5:expr,
+     $weight6:expr => $item6:expr,
+     $weight7:expr => $item7:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3),
+             ($weight4, $item4), ($weight5, $item5),
+             ($weight6, $item6), ($weight7, $item7)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr,
+     $weight4:expr => $item4:expr,
+     $weight5:expr => $item5:expr,
+     $weight6:expr => $item6:expr,
+     $weight7:expr => $item7:expr,
+     $weight8:expr => $item8:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3),
+             ($weight4, $item4), ($weight5, $item5),
+             ($weight6, $item6), ($weight7, $item7),
+             ($weight8, $item8)))
+    };
+
+    ($weight0:expr => $item0:expr,
+     $weight1:expr => $item1:expr,
+     $weight2:expr => $item2:expr,
+     $weight3:expr => $item3:expr,
+     $weight4:expr => $item4:expr,
+     $weight5:expr => $item5:expr,
+     $weight6:expr => $item6:expr,
+     $weight7:expr => $item7:expr,
+     $weight8:expr => $item8:expr,
+     $weight9:expr => $item9:expr $(,)*) => {
+        $crate::strategy::TupleUnion::new(
+            (($weight0, $item0), ($weight1, $item1),
+             ($weight2, $item2), ($weight3, $item3),
+             ($weight4, $item4), ($weight5, $item5),
+             ($weight6, $item6), ($weight7, $item7),
+             ($weight8, $item8), ($weight9, $item9)))
+    };
+
     ($($weight:expr => $item:expr),+ $(,)*) => {
         $crate::strategy::Union::new_weighted(vec![
             $(($weight, $crate::strategy::Strategy::boxed($item))),*
@@ -781,5 +899,119 @@ mod test {
         println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h","i","j"),
                                         &(1,2,3,4,5,6,7,8,9,10)));
         println!("{:?}", NamedArguments((("a","b"),"c","d"), &((1,2),3,4)));
+    }
+
+    #[test]
+    fn oneof_all_counts() {
+        fn expect_count<S : ::strategy::Strategy>(n: usize, s: S)
+        where S::Value : ::strategy::ValueTree<Value = i32> {
+            use std::collections::HashSet;
+            use strategy::*;
+            use test_runner::*;
+
+            let mut runner = TestRunner::new(Config::default());
+            let mut seen = HashSet::new();
+            for _ in 0..1024 {
+                seen.insert(s.new_value(&mut runner).unwrap().current());
+            }
+
+            assert_eq!(n, seen.len());
+        }
+
+        fn assert_static<T>(v: ::strategy::TupleUnion<T>)
+                            -> ::strategy::TupleUnion<T>
+        { v }
+
+        fn assert_dynamic<T : ::strategy::Strategy>
+            (v: ::strategy::Union<T>) -> ::strategy::Union<T>
+        { v }
+
+        use strategy::Just as J;
+        expect_count(1, prop_oneof![J(0i32)]);
+        expect_count(2, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+        ]));
+        expect_count(3, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+        ]));
+        expect_count(4, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+        ]));
+        expect_count(5, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+        ]));
+        expect_count(6, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+            J(5i32),
+        ]));
+        expect_count(7, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+            J(5i32),
+            J(6i32),
+        ]));
+        expect_count(8, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+            J(5i32),
+            J(6i32),
+            J(7i32),
+        ]));
+        expect_count(9, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+            J(5i32),
+            J(6i32),
+            J(7i32),
+            J(8i32),
+        ]));
+        expect_count(10, assert_static(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+            J(5i32),
+            J(6i32),
+            J(7i32),
+            J(8i32),
+            J(9i32),
+        ]));
+        expect_count(11, assert_dynamic(prop_oneof![
+            J(0i32),
+            J(1i32),
+            J(2i32),
+            J(3i32),
+            J(4i32),
+            J(5i32),
+            J(6i32),
+            J(7i32),
+            J(8i32),
+            J(9i32),
+            J(10i32),
+        ]));
     }
 }
