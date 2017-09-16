@@ -10,6 +10,8 @@
 
 - `prop_oneof!` is smarter about how it combines the input strategies.
 
+- Added `option` module to generate weighted or unweighted `Option` types.
+
 ### Potential Breaking Changes
 
 - `Union::new` now has a generic argument type which could impact type

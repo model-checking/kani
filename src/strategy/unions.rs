@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::cmp::{max, min};
 use std::u32;
 
 use rand;
@@ -292,6 +293,33 @@ value_tree_tuple!(access_tuple7, B C D E F G);
 value_tree_tuple!(access_tuple8, B C D E F G H);
 value_tree_tuple!(access_tuple9, B C D E F G H I);
 value_tree_tuple!(access_tupleA, B C D E F G H I J);
+
+const WEIGHT_BASE: u32 = 0x80000000;
+
+/// Convert a floating-point weight in the range (0.0,1.0) to a pair of weights
+/// that can be used with `Union` and similar.
+///
+/// The first return value is the weight corresponding to `f`; the second
+/// return value is the weight corresponding to `1.0 - f`.
+///
+/// This call does not make any guarantees as to what range of weights it may
+/// produce, except that adding the two return values will never overflow a
+/// `u32`. As such, it is generally not meaningful to combine any other weights
+/// with the two returned.
+///
+/// ## Panics
+///
+/// Panics if `f` is negative, greater than 1.0, or NaN.
+pub fn float_to_weight(f: f64) -> (u32, u32) {
+    assert!(f > 0.0 && f < 1.0, "Invalid probability: {}", f);
+
+    // Clamp to 1..WEIGHT_BASE-1 so that we never produce a weight of 0.
+    let pos = max(1, min(WEIGHT_BASE - 1,
+                         (f * WEIGHT_BASE as f64).round() as u32));
+    let neg = WEIGHT_BASE - pos;
+
+    (pos, neg)
+}
 
 #[cfg(test)]
 mod test {
