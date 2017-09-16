@@ -2,7 +2,8 @@
 
 ### New Additions
 
-- `Union` now supports weighting via `Union::new_weighted`.
+- `Union` now supports weighting via `Union::new_weighted`. Corresponding
+  syntax to specify weights is also available in `prop_oneof!`.
 
 ### Potential Breaking Changes
 

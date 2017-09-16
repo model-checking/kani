@@ -139,11 +139,17 @@ macro_rules! prop_assume {
 
 /// Produce a strategy which picks one of the listed choices.
 ///
-/// This is equivalent to calling `prop_union` on the first two elements and
-/// then chaining `.or()` onto the rest after implicitly boxing all of them. As
-/// with `Union`, values shrink across elements on the assumption that earlier
-/// ones are "simpler", so they should be listed in order of ascending
-/// complexity when possible.
+/// This is conceptually equivalent to calling `prop_union` on the first two
+/// elements and then chaining `.or()` onto the rest after implicitly boxing
+/// all of them. As with `Union`, values shrink across elements on the
+/// assumption that earlier ones are "simpler", so they should be listed in
+/// order of ascending complexity when possible.
+///
+/// The macro invocation has two forms. The first is to simply list the
+/// strategies separated by commas; this will cause value generation to pick
+/// from the strategies uniformly. The other form is to provide a weight in the
+/// form of a `u32` before each strategy, separated from the strategy with
+/// `=>`.
 ///
 /// ## Example
 ///
@@ -165,15 +171,29 @@ macro_rules! prop_assume {
 ///   prop::num::u32::ANY.prop_map(MyEnum::Medium),
 ///   prop::num::u64::ANY.prop_map(MyEnum::Big),
 /// ];
+///
+/// let my_weighted_strategy = prop_oneof![
+///   1 => prop::num::i16::ANY.prop_map(MyEnum::Little),
+///   // Chose `Medium` twice as frequently as either `Little` or `Big`; i.e.,
+///   // around 50% of values will be `Medium`, and 25% for each of `Little`
+///   // and `Big`.
+///   2 => prop::num::u32::ANY.prop_map(MyEnum::Medium),
+///   1 => prop::num::u64::ANY.prop_map(MyEnum::Big),
+/// ];
 /// # }
 /// ```
 #[macro_export]
 macro_rules! prop_oneof {
     ($($item:expr),+ $(,)*) => {
-        $crate::strategy::Union::new(vec![
-            $($crate::strategy::Strategy::boxed($item)),*
+        prop_oneof![
+            $(1 => $item),*
+        ]
+    };
+    ($($weight:expr => $item:expr),+ $(,)*) => {
+        $crate::strategy::Union::new_weighted(vec![
+            $(($weight, $crate::strategy::Strategy::boxed($item))),*
         ])
-    }
+    };
 }
 
 /// Convenience to define functions which produce new strategies.
