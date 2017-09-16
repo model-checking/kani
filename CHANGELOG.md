@@ -1,3 +1,14 @@
+## Unreleased
+
+### New Additions
+
+- `Union` now supports weighting via `Union::new_weighted`.
+
+### Potential Breaking Changes
+
+- `Union::new` now has a generic argument type which could impact type
+  inference.
+
 ## 0.2.1
 
 ### New Additions
