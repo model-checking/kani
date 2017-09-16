@@ -22,3 +22,5 @@ pub use self::filter::*;
 pub use self::flatten::*;
 pub use self::unions::*;
 pub use self::recursive::*;
+
+pub mod statics;
