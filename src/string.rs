@@ -11,6 +11,7 @@
 //! expressions.
 
 use std::borrow::Cow;
+use std::fmt;
 use std::u32;
 
 use regex_syntax as rs;
@@ -43,8 +44,21 @@ quick_error! {
     }
 }
 
+opaque_strategy_wrapper! {
+    /// Strategy which generates values (i.e., `String` or `Vec<u8>`) matching
+    /// a regular expression.
+    ///
+    /// Created by various functions in this module.
+    #[derive(Debug)]
+    pub struct RegexGeneratorStrategy[<T>][where T : fmt::Debug]
+        (BoxedStrategy<T>) -> RegexGeneratorValueTree<T>;
+    /// `ValueTree` corresponding to `RegexGeneratorStrategy`.
+    pub struct RegexGeneratorValueTree[<T>][where T : fmt::Debug]
+        (Box<ValueTree<Value = T>>) -> T;
+}
+
 impl Strategy for str {
-    type Value = Box<ValueTree<Value = String>>;
+    type Value = RegexGeneratorValueTree<String>;
 
     fn new_value(&self, runner: &mut TestRunner)
                  -> Result<Self::Value, String> {
@@ -57,27 +71,29 @@ impl Strategy for str {
 ///
 /// If you don't need error handling and aren't limited by setup time, it is
 /// also possible to directly use a `&str` as a strategy with the same effect.
-pub fn string_regex(regex: &str) -> Result<BoxedStrategy<String>, Error> {
+pub fn string_regex(regex: &str)
+                    -> Result<RegexGeneratorStrategy<String>, Error> {
     string_regex_parsed(&rs::Expr::parse(regex)?)
 }
 
 /// Like `string_regex()`, but allows providing a pre-parsed expression.
 pub fn string_regex_parsed(expr: &rs::Expr)
-                           -> Result<BoxedStrategy<String>, Error> {
+                           -> Result<RegexGeneratorStrategy<String>, Error> {
     bytes_regex_parsed(expr).map(
         |v| v.prop_map(|bytes| String::from_utf8(bytes).expect(
-            "non-utf8 string")).boxed())
+            "non-utf8 string")).boxed()).map(RegexGeneratorStrategy)
 }
 
 /// Creates a strategy which generates byte strings matching the given regular
 /// expression.
-pub fn bytes_regex(regex: &str) -> Result<BoxedStrategy<Vec<u8>>, Error> {
+pub fn bytes_regex(regex: &str)
+                   -> Result<RegexGeneratorStrategy<Vec<u8>>, Error> {
     bytes_regex_parsed(&rs::Expr::parse(regex)?)
 }
 
 /// Like `bytes_regex()`, but allows providing a pre-parsed expression.
 pub fn bytes_regex_parsed(expr: &rs::Expr)
-                          -> Result<BoxedStrategy<Vec<u8>>, Error> {
+                          -> Result<RegexGeneratorStrategy<Vec<u8>>, Error> {
     use self::rs::Expr::*;
 
     match *expr {
@@ -147,7 +163,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                .prop_map(|b| vec![b]).boxed())
         },
 
-        Group { ref e, .. } => bytes_regex_parsed(e),
+        Group { ref e, .. } => bytes_regex_parsed(e).map(|v| v.0),
 
         Repeat { ref e, r, .. } => {
             let range = match r {
@@ -209,7 +225,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
         WordBoundaryAscii |
         NotWordBoundaryAscii => Err(Error::UnsupportedRegex(
             "word boundary tests not supported for string generation")),
-    }
+    }.map(RegexGeneratorStrategy)
 }
 
 fn flip_case_to_bytes(flip: bool, ch: char) -> Vec<u8> {

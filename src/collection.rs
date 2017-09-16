@@ -11,6 +11,7 @@
 
 use std::cmp::Ord;
 use std::collections::*;
+use std::fmt;
 use std::hash::Hash;
 use std::ops::Range;
 
@@ -19,6 +20,7 @@ use rand;
 use rand::distributions::IndependentSample;
 
 use strategy::*;
+use tuple::TupleValueTree;
 use test_runner::*;
 
 /// Strategy to create `Vec`s with a length in a certain range.
@@ -40,31 +42,127 @@ pub fn vec<T : Strategy>(element: T, size: Range<usize>)
     }
 }
 
+mapfn! {
+    [] fn VecToDeque[<T : fmt::Debug>](vec: Vec<T>) -> VecDeque<T> {
+        vec.into()
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `VecDeque`s with a length in a certain range.
+    ///
+    /// Created by the `vec_deque()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct VecDequeStrategy[<T>][where T : Strategy](
+        statics::Map<VecStrategy<T>, VecToDeque>)
+        -> VecDequeValueTree<T::Value>;
+    /// `ValueTree` corresponding to `VecDequeStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct VecDequeValueTree[<T>][where T : ValueTree](
+        statics::Map<VecValueTree<T>, VecToDeque>)
+        -> VecDeque<T::Value>;
+}
+
 /// Create a strategy to generate `VecDeque`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn vec_deque<T : Strategy + 'static>
+pub fn vec_deque<T : Strategy>
     (element: T, size: Range<usize>)
-     -> BoxedStrategy<VecDeque<<T::Value as ValueTree>::Value>>
+    -> VecDequeStrategy<T>
 {
-    vec(element, size).prop_map(|v| v.into()).boxed()
+    VecDequeStrategy(statics::Map::new(vec(element, size), VecToDeque))
+}
+
+mapfn! {
+    [] fn VecToLl[<T : fmt::Debug>](vec: Vec<T>) -> LinkedList<T> {
+        vec.into_iter().collect()
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `LinkedList`s with a length in a certain range.
+    ///
+    /// Created by the `linkedlist()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct LinkedListStrategy[<T>][where T : Strategy](
+        statics::Map<VecStrategy<T>, VecToLl>)
+        -> LinkedListValueTree<T::Value>;
+    /// `ValueTree` corresponding to `LinkedListStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct LinkedListValueTree[<T>][where T : ValueTree](
+        statics::Map<VecValueTree<T>, VecToLl>)
+        -> LinkedList<T::Value>;
 }
 
 /// Create a strategy to generate `LinkedList`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn linked_list<T : Strategy + 'static>
+pub fn linked_list<T : Strategy>
     (element: T, size: Range<usize>)
-     -> BoxedStrategy<LinkedList<<T::Value as ValueTree>::Value>>
+     -> LinkedListStrategy<T>
 {
-    vec(element, size).prop_map(|v| v.into_iter().collect()).boxed()
+    LinkedListStrategy(statics::Map::new(vec(element, size), VecToLl))
+}
+
+mapfn! {
+    [] fn VecToBinHeap[<T : fmt::Debug + Ord>](vec: Vec<T>) -> BinaryHeap<T> {
+        vec.into()
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `BinaryHeap`s with a length in a certain range.
+    ///
+    /// Created by the `binary_heap()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct BinaryHeapStrategy[<T>][where T : Strategy,
+                                       <T::Value as ValueTree>::Value : Ord](
+        statics::Map<VecStrategy<T>, VecToBinHeap>)
+        -> BinaryHeapValueTree<T::Value>;
+    /// `ValueTree` corresponding to `BinaryHeapStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct BinaryHeapValueTree[<T>][where T : ValueTree, T::Value : Ord](
+        statics::Map<VecValueTree<T>, VecToBinHeap>)
+        -> BinaryHeap<T::Value>;
 }
 
 /// Create a strategy to generate `BinaryHeap`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn binary_heap<T : Strategy + 'static>
+pub fn binary_heap<T : Strategy>
     (element: T, size: Range<usize>)
-    -> BoxedStrategy<BinaryHeap<<T::Value as ValueTree>::Value>>
+    -> BinaryHeapStrategy<T>
 where <T::Value as ValueTree>::Value : Ord {
-    vec(element, size).prop_map(|v| v.into()).boxed()
+    BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
+}
+
+mapfn! {
+    [] fn VecToHashSet[<T : fmt::Debug + Hash + Eq>](vec: Vec<T>)
+                                                     -> HashSet<T> {
+        vec.into_iter().collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MinSize(usize);
+
+impl<T : Eq + Hash> statics::FilterFn<HashSet<T>> for MinSize {
+    fn apply(&self, set: &HashSet<T>) -> bool {
+        set.len() >= self.0
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `HashSet`s with a length in a certain range.
+    ///
+    /// Created by the `hash_set()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct HashSetStrategy[<T>][where T : Strategy,
+                                    <T::Value as ValueTree>::Value : Hash + Eq](
+        statics::Filter<statics::Map<VecStrategy<T>, VecToHashSet>, MinSize>)
+        -> HashSetValueTree<T::Value>;
+    /// `ValueTree` corresponding to `HashSetStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct HashSetValueTree[<T>][where T : ValueTree, T::Value : Hash + Eq](
+        statics::Filter<statics::Map<VecValueTree<T>, VecToHashSet>, MinSize>)
+        -> HashSet<T::Value>;
 }
 
 /// Create a strategy to generate `HashSet`s containing elements drawn from
@@ -73,15 +171,44 @@ where <T::Value as ValueTree>::Value : Ord {
 /// This strategy will implicitly do local rejects to ensure that the `HashSet`
 /// has at least the minimum number of elements, in case `element` should
 /// produce duplicate values.
-pub fn hash_set<T : Strategy + 'static>
+pub fn hash_set<T : Strategy>
     (element: T, size: Range<usize>)
-    -> BoxedStrategy<HashSet<<T::Value as ValueTree>::Value>>
+    -> HashSetStrategy<T>
 where <T::Value as ValueTree>::Value : Hash + Eq {
-    vec(element, size.clone())
-        .prop_map(|v| v.into_iter().collect::<HashSet<_>>())
-        .prop_filter("HashSet minimum size".to_owned(),
-                     move |s| s.len() >= size.start)
-        .boxed()
+    let min_size = size.start;
+    HashSetStrategy(statics::Filter::new(
+        statics::Map::new(vec(element, size), VecToHashSet),
+        "HashSet minimum size".to_owned(),
+        MinSize(min_size)))
+}
+
+mapfn! {
+    [] fn VecToBTreeSet[<T : fmt::Debug + Ord>](vec: Vec<T>)
+                                                -> BTreeSet<T> {
+        vec.into_iter().collect()
+    }
+}
+
+impl<T : Ord> statics::FilterFn<BTreeSet<T>> for MinSize {
+    fn apply(&self, set: &BTreeSet<T>) -> bool {
+        set.len() >= self.0
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `BTreeSet`s with a length in a certain range.
+    ///
+    /// Created by the `btree_set()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct BTreeSetStrategy[<T>][where T : Strategy,
+                                     <T::Value as ValueTree>::Value : Ord](
+        statics::Filter<statics::Map<VecStrategy<T>, VecToBTreeSet>, MinSize>)
+        -> BTreeSetValueTree<T::Value>;
+    /// `ValueTree` corresponding to `BTreeSetStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct BTreeSetValueTree[<T>][where T : ValueTree, T::Value : Ord](
+        statics::Filter<statics::Map<VecValueTree<T>, VecToBTreeSet>, MinSize>)
+        -> BTreeSet<T::Value>;
 }
 
 /// Create a strategy to generate `BTreeSet`s containing elements drawn from
@@ -90,15 +217,50 @@ where <T::Value as ValueTree>::Value : Hash + Eq {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeSet` has at least the minimum number of elements, in case `element`
 /// should produce duplicate values.
-pub fn btree_set<T : Strategy + 'static>
+pub fn btree_set<T : Strategy>
     (element: T, size: Range<usize>)
-    -> BoxedStrategy<BTreeSet<<T::Value as ValueTree>::Value>>
+    -> BTreeSetStrategy<T>
 where <T::Value as ValueTree>::Value : Ord {
-    vec(element, size.clone())
-        .prop_map(|v| v.into_iter().collect::<BTreeSet<_>>())
-        .prop_filter("BTreeSet minimum size".to_owned(),
-                     move |s| s.len() >= size.start)
-        .boxed()
+    let min_size = size.start;
+
+    BTreeSetStrategy(statics::Filter::new(
+        statics::Map::new(vec(element, size), VecToBTreeSet),
+        "BTreeSet minimum size".to_owned(),
+        MinSize(min_size)))
+}
+
+mapfn! {
+    [] fn VecToHashMap[<K : fmt::Debug + Hash + Eq, V : fmt::Debug>]
+        (vec: Vec<(K, V)>) -> HashMap<K, V>
+    {
+        vec.into_iter().collect()
+    }
+}
+
+impl<K : Hash + Eq, V> statics::FilterFn<HashMap<K, V>> for MinSize {
+    fn apply(&self, map: &HashMap<K, V>) -> bool {
+        map.len() >= self.0
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `HashMap`s with a length in a certain range.
+    ///
+    /// Created by the `hash_map()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct HashMapStrategy[<K, V>]
+        [where K : Strategy, V : Strategy,
+         <K::Value as ValueTree>::Value : Hash + Eq](
+            statics::Filter<statics::Map<VecStrategy<(K,V)>,
+            VecToHashMap>, MinSize>)
+        -> HashMapValueTree<K::Value, V::Value>;
+    /// `ValueTree` corresponding to `HashMapStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct HashMapValueTree[<K, V>]
+        [where K : ValueTree, V : ValueTree, K::Value : Hash + Eq](
+            statics::Filter<statics::Map<VecValueTree<TupleValueTree<(K, V)>>,
+            VecToHashMap>, MinSize>)
+        -> HashMap<K::Value, V::Value>;
 }
 
 /// Create a strategy to generate `HashMap`s containing keys and values drawn
@@ -108,16 +270,49 @@ where <T::Value as ValueTree>::Value : Ord {
 /// This strategy will implicitly do local rejects to ensure that the `HashMap`
 /// has at least the minimum number of elements, in case `key` should produce
 /// duplicate values.
-pub fn hash_map<K : Strategy + 'static, V : Strategy + 'static>
+pub fn hash_map<K : Strategy, V : Strategy>
     (key: K, value: V, size: Range<usize>)
-    -> BoxedStrategy<HashMap<<K::Value as ValueTree>::Value,
-                             <V::Value as ValueTree>::Value>>
+    -> HashMapStrategy<K, V>
 where <K::Value as ValueTree>::Value : Hash + Eq {
-    vec((key, value), size.clone())
-        .prop_map(|v| v.into_iter().collect::<HashMap<_,_>>())
-        .prop_filter("HashMap minimum size".to_owned(),
-                     move |m| m.len() >= size.start)
-        .boxed()
+    let min_size = size.start;
+    HashMapStrategy(statics::Filter::new(
+        statics::Map::new(vec((key, value), size), VecToHashMap),
+        "HashMap minimum size".to_owned(),
+        MinSize(min_size)))
+}
+
+mapfn! {
+    [] fn VecToBTreeMap[<K : fmt::Debug + Ord, V : fmt::Debug>]
+        (vec: Vec<(K, V)>) -> BTreeMap<K, V>
+    {
+        vec.into_iter().collect()
+    }
+}
+
+impl<K : Ord, V> statics::FilterFn<BTreeMap<K, V>> for MinSize {
+    fn apply(&self, map: &BTreeMap<K, V>) -> bool {
+        map.len() >= self.0
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to create `BTreeMap`s with a length in a certain range.
+    ///
+    /// Created by the `btree_map()` function in the same module.
+    #[derive(Clone, Debug)]
+    pub struct BTreeMapStrategy[<K, V>]
+        [where K : Strategy, V : Strategy,
+         <K::Value as ValueTree>::Value : Ord](
+            statics::Filter<statics::Map<VecStrategy<(K,V)>,
+            VecToBTreeMap>, MinSize>)
+        -> BTreeMapValueTree<K::Value, V::Value>;
+    /// `ValueTree` corresponding to `BTreeMapStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct BTreeMapValueTree[<K, V>]
+        [where K : ValueTree, V : ValueTree, K::Value : Ord](
+            statics::Filter<statics::Map<VecValueTree<TupleValueTree<(K, V)>>,
+            VecToBTreeMap>, MinSize>)
+        -> BTreeMap<K::Value, V::Value>;
 }
 
 /// Create a strategy to generate `BTreeMap`s containing keys and values drawn
@@ -129,14 +324,13 @@ where <K::Value as ValueTree>::Value : Hash + Eq {
 /// should produce duplicate values.
 pub fn btree_map<K : Strategy + 'static, V : Strategy + 'static>
     (key: K, value: V, size: Range<usize>)
-    -> BoxedStrategy<BTreeMap<<K::Value as ValueTree>::Value,
-                              <V::Value as ValueTree>::Value>>
+    -> BTreeMapStrategy<K, V>
 where <K::Value as ValueTree>::Value : Ord {
-    vec((key, value), size.clone())
-        .prop_map(|v| v.into_iter().collect::<BTreeMap<_,_>>())
-        .prop_filter("BTreeMap minimum size".to_owned(),
-                     move |m| m.len() >= size.start)
-        .boxed()
+    let min_size = size.start;
+    BTreeMapStrategy(statics::Filter::new(
+        statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
+        "BTreeMap minimum size".to_owned(),
+        MinSize(min_size)))
 }
 
 #[derive(Clone, Copy, Debug)]

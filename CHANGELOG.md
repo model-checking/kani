@@ -17,6 +17,9 @@
 
 - The concrete types produced by `prop_oneof!` have changed.
 
+- API functions which used to return `BoxedStrategy` now return a specific
+  type.
+
 ## 0.2.1
 
 ### New Additions
