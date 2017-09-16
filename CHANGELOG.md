@@ -5,6 +5,9 @@
 - `Union` now supports weighting via `Union::new_weighted`. Corresponding
   syntax to specify weights is also available in `prop_oneof!`.
 
+- Added `TupleUnion`, which works like `Union` but permits doing static
+  dispatch even with heterogeneous delegate strategies.
+
 ### Potential Breaking Changes
 
 - `Union::new` now has a generic argument type which could impact type
