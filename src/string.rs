@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Facilities for generating strings and byte strings from regular
+//! Strategies for generating strings and byte strings from regular
 //! expressions.
 
 use std::borrow::Cow;

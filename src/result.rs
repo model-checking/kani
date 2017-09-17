@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Facilities for combining delegate strategies into `Result`s.
+//! Strategies for combining delegate strategies into `std::Result`s.
 //!
 //! That is, the strategies here are for producing `Ok` _and_ `Err` cases. To
 //! simply adapt a strategy producing `T` into `Result<T, something>` which is

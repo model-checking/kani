@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Provides strategies for generating `std::Option` values.
+//! Strategies for generating `std::Option` values.
 
 use std::fmt;
 use std::marker::PhantomData;
