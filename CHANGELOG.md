@@ -14,6 +14,9 @@
 
 - Added `result` module to generate weighted or unweighted `Result` types.
 
+- All `bits` submodules now have a `masked` function to create a strategy for
+  generating subsets of an arbitrary bitmask.
+
 ### Potential Breaking Changes
 
 - `Union::new` now has a generic argument type which could impact type
@@ -23,6 +26,11 @@
 
 - API functions which used to return `BoxedStrategy` now return a specific
   type.
+
+- `BitSetStrategy<T>` is no longer `Copy` for non-`Copy` types `T` nor `Debug`
+  for non-`Debug` types `T`.
+
+- `BitSetLike::max` has been renamed to `BitSetLike::len`.
 
 ## 0.2.1
 
