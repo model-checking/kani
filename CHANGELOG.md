@@ -12,6 +12,8 @@
 
 - Added `option` module to generate weighted or unweighted `Option` types.
 
+- Added `result` module to generate weighted or unweighted `Result` types.
+
 ### Potential Breaking Changes
 
 - `Union::new` now has a generic argument type which could impact type

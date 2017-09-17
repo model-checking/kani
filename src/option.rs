@@ -122,7 +122,7 @@ mod test {
     }
 
     #[test]
-    fn probability_handled_correctl() {
+    fn probability_handled_correctly() {
         let count = count_some_of_1000(weighted(0.9, Just(42i32)));
         assert!(count > 800 && count < 950);
 

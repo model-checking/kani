@@ -1376,6 +1376,7 @@ pub mod collection;
 pub mod char;
 pub mod string;
 pub mod option;
+pub mod result;
 
 #[doc(hidden)]
 #[macro_use] pub mod sugar;
