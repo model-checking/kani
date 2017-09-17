@@ -31,4 +31,6 @@ pub mod prop {
     pub use collection;
     pub use char;
     pub use string;
+    pub use option;
+    pub use result;
 }
