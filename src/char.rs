@@ -25,6 +25,10 @@ use num;
 use strategy::*;
 use test_runner::*;
 
+/// An inclusive char range from fst to snd.
+/// TODO: replace with `std::ops::RangeInclusive<char>` once stabilized.
+type CharRange = (char, char);
+
 /// A default set of characters to consider as "special" during character
 /// generation.
 ///
@@ -49,7 +53,7 @@ pub const DEFAULT_SPECIAL_CHARS: &[char] = &[
 
 /// A default sequence of ranges used preferentially when generating random
 /// characters.
-pub const DEFAULT_PREFERRED_RANGES: &[(char, char)] = &[
+pub const DEFAULT_PREFERRED_RANGES: &[CharRange] = &[
     // ASCII printable
     (' ', '~'), (' ', '~'), (' ', '~'), (' ', '~'), (' ', '~'),
     // Latin-1
@@ -83,18 +87,18 @@ pub const DEFAULT_PREFERRED_RANGES: &[(char, char)] = &[
 /// more interesting.
 pub fn select_char<R : Rng>(rnd: &mut R,
                             special: &[char],
-                            preferred: &[(char,char)],
-                            ranges: &[(char,char)]) -> char {
+                            preferred: &[CharRange],
+                            ranges: &[CharRange]) -> char {
     let (base, offset) = select_range_index(rnd, special, preferred, ranges);
     ::std::char::from_u32(base + offset).expect("bad character selected")
 }
 
 fn select_range_index<R : Rng>(rnd: &mut R,
                                special: &[char],
-                               preferred: &[(char,char)],
-                               ranges: &[(char,char)])
+                               preferred: &[CharRange],
+                               ranges: &[CharRange])
                                -> (u32, u32) {
-    fn in_range(ranges: &[(char,char)], ch: char) -> Option<(u32, u32)> {
+    fn in_range(ranges: &[CharRange], ch: char) -> Option<(u32, u32)> {
         ranges.iter().find(|&&(lo, hi)| ch >= lo && ch <= hi).map(
             |&(lo, _)| (lo as u32, ch as u32 - lo as u32))
     }
@@ -151,8 +155,8 @@ fn select_range_index<R : Rng>(rnd: &mut R,
 #[derive(Debug, Clone)]
 pub struct CharStrategy<'a> {
     special: Cow<'a, [char]>,
-    preferred: Cow<'a, [(char,char)]>,
-    ranges: Cow<'a, [(char,char)]>,
+    preferred: Cow<'a, [CharRange]>,
+    ranges: Cow<'a, [CharRange]>,
 }
 
 impl<'a> CharStrategy<'a> {
@@ -161,17 +165,28 @@ impl<'a> CharStrategy<'a> {
     ///
     /// All arguments as per `select_char()`.
     pub fn new(special: Cow<'a, [char]>,
-               preferred: Cow<'a, [(char,char)]>,
-               ranges: Cow<'a, [(char,char)]>) -> Self {
+               preferred: Cow<'a, [CharRange]>,
+               ranges: Cow<'a, [CharRange]>) -> Self {
         CharStrategy {
             special: special,
             preferred: preferred,
             ranges: ranges,
         }
     }
+
+    /// Same as `CharStrategy::new()` but using `Cow::Borrowed` for all parts.
+    pub fn new_borrowed(special: &'a [char],
+                        preferred: &'a [CharRange],
+                        ranges: &'a [CharRange]) -> Self {
+        CharStrategy::new(
+            Cow::Borrowed(special),
+            Cow::Borrowed(preferred),
+            Cow::Borrowed(ranges),
+        )
+    }
 }
 
-const WHOLE_RANGE: &[(char,char)] = &[
+const WHOLE_RANGE: &[CharRange] = &[
     ('\x00', ::std::char::MAX)
 ];
 
@@ -195,7 +210,7 @@ pub fn range(start: char, end: char) -> CharStrategy<'static> {
 
 /// Creates a `CharStrategy` which selects characters within the given ranges,
 /// all inclusive, using the default biases.
-pub fn ranges(ranges: Cow<[(char, char)]>) -> CharStrategy {
+pub fn ranges(ranges: Cow<[CharRange]>) -> CharStrategy {
     CharStrategy {
         special: Cow::Borrowed(DEFAULT_SPECIAL_CHARS),
         preferred: Cow::Borrowed(DEFAULT_PREFERRED_RANGES),
@@ -297,7 +312,7 @@ mod test {
                             |hi| (min(lo, hi), max(lo, hi))))
                         .ok_or_else(|| TestCaseError::Reject(
                             "non-char".to_owned())))
-                    .collect::<Result<Vec<(char,char)>,_>>()?));
+                    .collect::<Result<Vec<CharRange>,_>>()?));
 
                 let mut runner = TestRunner::new(Config::default());
                 for _ in 0..256 {
