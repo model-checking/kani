@@ -1,3 +1,9 @@
+## 0.3.1
+
+### New Additions
+
+- Added `CharStrategy::new_borrowed`.
+
 ## 0.3.0
 
 ### New Additions
