@@ -16,12 +16,16 @@ use rand::distributions::IndependentSample;
 use strategy::traits::*;
 use test_runner::*;
 
+/// A **relative** `weight` of a particular `Strategy` corresponding to `T`
+/// coupled with `T` itself. The weight is currently given in `u32`.
+pub type W<T> = (u32, T);
+
 /// A `Strategy` which picks from one of several delegate `Stragegy`s.
 ///
 /// See `Strategy::prop_union()`.
 #[derive(Clone, Debug)]
 pub struct Union<T : Strategy> {
-    options: Vec<(u32,T)>,
+    options: Vec<W<T>>,
 }
 
 impl<T : Strategy> Union<T> {
@@ -36,7 +40,7 @@ impl<T : Strategy> Union<T> {
     ///
     /// Panics if `options` is empty.
     pub fn new<I : IntoIterator<Item = T>>(options: I) -> Self {
-        let options: Vec<(u32,T)> = options.into_iter()
+        let options: Vec<W<T>> = options.into_iter()
             .map(|v| (1, v)).collect();
         assert!(options.len() > 0);
 
@@ -55,7 +59,7 @@ impl<T : Strategy> Union<T> {
     /// Panics if `options` is empty or any element has a weight of 0.
     ///
     /// Panics if the sum of the weights overflows a `u32`.
-    pub fn new_weighted(options: Vec<(u32,T)>) -> Self {
+    pub fn new_weighted(options: Vec<W<T>>) -> Self {
         assert!(options.len() > 0);
         assert!(!options.iter().any(|&(w, _)| 0 == w),
                 "Union option has a weight of 0");
@@ -87,7 +91,7 @@ impl<T : Strategy> Strategy for Union<T> {
 
     fn new_value(&self, runner: &mut TestRunner)
                  -> Result<Self::Value, String> {
-        fn extract_weight<V>(&(w, _): &(u32, V)) -> u32 { w }
+        fn extract_weight<V>(&(w, _): &W<V>) -> u32 { w }
 
         let pick = pick_weighted(
             runner,
@@ -216,6 +220,7 @@ impl<T> TupleUnion<T> {
     /// must be a 2- to 10-tuple of `(u32, impl Strategy)` pairs where all
     /// strategies ultimately produce the same value. Each `u32` indicates the
     /// relative weight of its corresponding strategy.
+    /// You may use `W<S>` as an alias for `(u32, S>`.
     ///
     /// Using this constructor directly is discouraged; prefer to use
     /// `prop_oneof!` since it is generally clearer.
@@ -227,7 +232,7 @@ impl<T> TupleUnion<T> {
 macro_rules! tuple_union {
     ($($gen:ident $ix:tt)*) => {
         impl<A : Strategy, $($gen: Strategy),*> Strategy
-        for TupleUnion<((u32, A), $((u32, $gen)),*)>
+        for TupleUnion<(W<A>, $(W<$gen>),*)>
         where $($gen::Value : ValueTree<Value = ValueFor<A>>),* {
             type Value = TupleUnionValueTree<
                 (A::Value, $(Option<$gen::Value>),*)>;
