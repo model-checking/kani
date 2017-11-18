@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg_attr(feature="cargo-clippy", allow(doc_markdown))]
+
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for
 //! Python. It allows to test that certain properties of your code hold for

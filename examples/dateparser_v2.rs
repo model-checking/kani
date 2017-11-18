@@ -39,7 +39,7 @@ proptest! {
         parse_date(s).unwrap();
     }
 
-    fn parses_date_back_to_original(y in 0u32..10000,
+    fn parses_date_back_to_original(y in 0u32..10_000,
                                     m in 1u32..13, d in 1u32..32) {
         let (y2, m2, d2) = parse_date(
             &format!("{:04}-{:02}-{:02}", y, m, d)).unwrap();
@@ -52,7 +52,7 @@ fn main() {
     assert_eq!(None, parse_date("2017-06-170"));
     assert_eq!(None, parse_date("2017006-17"));
     assert_eq!(None, parse_date("2017-06017"));
-    assert_eq!(Some((2017, 06, 17)), parse_date("2017-06-17"));
+    assert_eq!(Some((2017, 6, 17)), parse_date("2017-06-17"));
 
     doesnt_crash();
     parses_all_valid_dates();

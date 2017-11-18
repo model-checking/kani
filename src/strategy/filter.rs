@@ -37,7 +37,7 @@ impl<S : Clone, F> Clone for Filter<S, F> {
         Filter {
             source: self.source.clone(),
             whence: self.whence.clone(),
-            fun: self.fun.clone(),
+            fun: Arc::clone(&self.fun),
         }
     }
 }
@@ -57,7 +57,7 @@ Strategy for Filter<S, F> {
                 return Ok(Filter {
                     source: val,
                     whence: self.whence.clone(),
-                    fun: self.fun.clone(),
+                    fun: Arc::clone(&self.fun),
                 })
             }
         }

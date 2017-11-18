@@ -34,7 +34,7 @@ impl<S : Clone, F> Clone for Map<S, F> {
     fn clone(&self) -> Self {
         Map {
             source: self.source.clone(),
-            fun: self.fun.clone(),
+            fun: Arc::clone(&self.fun),
         }
     }
 }
@@ -47,7 +47,7 @@ Strategy for Map<S, F> {
     fn new_value(&self, runner: &mut TestRunner)
                  -> Result<Self::Value, String> {
         self.source.new_value(runner).map(
-            |v| Map { source: v, fun: self.fun.clone() })
+            |v| Map { source: v, fun: Arc::clone(&self.fun) })
     }
 }
 

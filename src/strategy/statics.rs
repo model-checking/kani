@@ -11,8 +11,8 @@
 //! traits instead of normal functions.
 //!
 //! This entire module is strictly a workaround until
-//! https://github.com/rust-lang/rfcs/pull/1522 and
-//! https://github.com/rust-lang/rfcs/pull/2071 are available in stable. It
+//! <https://github.com/rust-lang/rfcs/pull/1522> and
+//! <https://github.com/rust-lang/rfcs/pull/2071> are available in stable. It
 //! allows naming types built on the combinators without resorting to dynamic
 //! dispatch or causing `Arc` to allocate space for a function pointer.
 //!

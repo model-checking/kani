@@ -294,6 +294,7 @@ macro_rules! float_bin_search {
                 curr: $typ,
                 hi: $typ,
             }
+
             impl BinarySearch {
                 /// Creates a new binary searcher starting at the given value.
                 pub fn new(start: $typ) -> Self {
@@ -318,6 +319,7 @@ macro_rules! float_bin_search {
                         curr: start,
                     }
                 }
+
 
                 fn reposition(&mut self) -> bool {
                     let interval = self.hi - self.lo;

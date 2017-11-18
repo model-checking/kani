@@ -37,8 +37,8 @@ impl<B : fmt::Debug, F> fmt::Debug for Recursive<B, F> {
 impl<B, F> Clone for Recursive<B, F> {
     fn clone(&self) -> Self {
         Recursive {
-            base: self.base.clone(),
-            recurse: self.recurse.clone(),
+            base: Arc::clone(&self.base),
+            recurse: Arc::clone(&self.recurse),
             depth: self.depth,
             desired_size: self.desired_size,
             expected_branch_size: self.expected_branch_size,
@@ -83,22 +83,22 @@ Strategy for Recursive<BoxedStrategy<T>, F> {
         // underestimates size.
 
         let mut branch_probabilities = Vec::new();
-        let mut k2 = self.expected_branch_size as u64 * 2;
+        let mut k2 = u64::from(self.expected_branch_size) * 2;
         for _ in 0..self.depth {
-            branch_probabilities.push(self.desired_size as f64 / k2 as f64);
-            k2 = k2.saturating_mul(self.expected_branch_size as u64 * 2);
+            branch_probabilities.push(f64::from(self.desired_size) / k2 as f64);
+            k2 = k2.saturating_mul(u64::from(self.expected_branch_size) * 2);
         }
 
-        let mut strat = self.base.clone();
+        let mut strat = Arc::clone(&self.base);
         while let Some(branch_probability) = branch_probabilities.pop() {
-            let recursive_choice = Arc::new((self.recurse)(strat.clone()));
+            let recursive_choice = Arc::new((self.recurse)(Arc::clone(&strat)));
             let non_recursive_choice = strat;
             strat = Arc::new(
                 ::bool::weighted(branch_probability.min(0.9))
                     .prop_ind_flat_map(move |branch| if branch {
-                        recursive_choice.clone()
+                        Arc::clone(&recursive_choice)
                     } else {
-                        non_recursive_choice.clone()
+                        Arc::clone(&non_recursive_choice)
                     }).boxed());
         }
 

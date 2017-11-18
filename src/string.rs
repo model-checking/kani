@@ -99,7 +99,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
     match *expr {
         Empty => Ok(Just(vec![]).boxed()),
         Literal { ref chars, casei: false } =>
-            Ok(Just(chars.iter().map(|&c| c).collect::<String>()
+            Ok(Just(chars.iter().cloned().collect::<String>()
                          .into_bytes()).boxed()),
         Literal { ref chars, casei: true } => {
             let chars = chars.to_owned();
@@ -124,7 +124,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                          .collect::<Vec<_>>()).boxed())
         },
 
-        AnyChar => Ok(char::ANY.boxed().prop_map(|c| to_bytes(c)).boxed()),
+        AnyChar => Ok(char::ANY.boxed().prop_map(to_bytes).boxed()),
         AnyCharNoNL => {
             static NONL_RANGES: &[(char,char)] = &[
                 ('\x00', '\x09'),
@@ -138,7 +138,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                 ('\x0B', ::std::char::MAX),
             ];
             Ok(char::ranges(Cow::Borrowed(NONL_RANGES))
-               .prop_map(|c| to_bytes(c)).boxed())
+               .prop_map(to_bytes).boxed())
         },
         AnyByte => Ok(num::u8::ANY.prop_map(|b| vec![b]).boxed()),
         AnyByteNoNL => Ok((0xBu8..).boxed()
@@ -239,7 +239,7 @@ fn flip_case_to_bytes(flip: bool, ch: char) -> Vec<u8> {
 }
 
 fn to_bytes(ch: char) -> Vec<u8> {
-    [ch].iter().map(|&c|c).collect::<String>().into_bytes()
+    [ch].iter().cloned().collect::<String>().into_bytes()
 }
 
 fn flip_ascii_case(flip: bool, ch: u8) -> u8 {

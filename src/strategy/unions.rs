@@ -42,7 +42,7 @@ impl<T : Strategy> Union<T> {
     pub fn new<I : IntoIterator<Item = T>>(options: I) -> Self {
         let options: Vec<W<T>> = options.into_iter()
             .map(|v| (1, v)).collect();
-        assert!(options.len() > 0);
+        assert!(!options.is_empty());
 
         Union { options }
     }
@@ -60,11 +60,11 @@ impl<T : Strategy> Union<T> {
     ///
     /// Panics if the sum of the weights overflows a `u32`.
     pub fn new_weighted(options: Vec<W<T>>) -> Self {
-        assert!(options.len() > 0);
+        assert!(!options.is_empty());
         assert!(!options.iter().any(|&(w, _)| 0 == w),
                 "Union option has a weight of 0");
-        assert!(options.iter().map(|&(w, _)| w as u64).sum::<u64>() <=
-                u32::MAX as u64, "Union weights overflow u32");
+        assert!(options.iter().map(|&(w, _)| u64::from(w)).sum::<u64>() <=
+                u64::from(u32::MAX), "Union weights overflow u32");
         Union { options }
     }
 
@@ -298,7 +298,7 @@ value_tree_tuple!(access_tuple8, B C D E F G H);
 value_tree_tuple!(access_tuple9, B C D E F G H I);
 value_tree_tuple!(access_tupleA, B C D E F G H I J);
 
-const WEIGHT_BASE: u32 = 0x80000000;
+const WEIGHT_BASE: u32 = 0x8000_0000;
 
 /// Convert a floating-point weight in the range (0.0,1.0) to a pair of weights
 /// that can be used with `Union` and similar.
@@ -319,7 +319,7 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
 
     // Clamp to 1..WEIGHT_BASE-1 so that we never produce a weight of 0.
     let pos = max(1, min(WEIGHT_BASE - 1,
-                         (f * WEIGHT_BASE as f64).round() as u32));
+                         (f * f64::from(WEIGHT_BASE)).round() as u32));
     let neg = WEIGHT_BASE - pos;
 
     (pos, neg)

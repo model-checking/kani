@@ -56,9 +56,9 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             cases: 256,
-            max_local_rejects: 65536,
+            max_local_rejects: 65_536,
             max_global_rejects: 1024,
-            max_flat_map_regens: 1000000,
+            max_flat_map_regens: 1_000_000,
             _non_exhaustive: (),
         }
     }
@@ -212,7 +212,7 @@ impl TestRunner {
             local_rejects: 0,
             global_rejects: 0,
             rng: rand::weak_rng(),
-            flat_map_regens: self.flat_map_regens.clone(),
+            flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
         }
@@ -285,11 +285,10 @@ impl TestRunner {
                 if case.simplify() {
                     loop {
                         let passed = match test!(case.current()) {
-                            Ok(_) => true,
                             // Rejections are effectively a pass here,
                             // since they indicate that any behaviour of
                             // the function under test is acceptable.
-                            Err(TestCaseError::Reject(..)) => true,
+                            Ok(_) | Err(TestCaseError::Reject(..)) => true,
 
                             Err(TestCaseError::Fail(why)) => {
                                 last_failure = (why, case.current());
@@ -301,10 +300,8 @@ impl TestRunner {
                             if !case.complicate() {
                                 break;
                             }
-                        } else {
-                            if !case.simplify() {
-                                break;
-                            }
+                        } else if !case.simplify() {
+                            break;
                         }
                     }
                 }

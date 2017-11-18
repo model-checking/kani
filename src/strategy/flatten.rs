@@ -200,7 +200,7 @@ impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
     fn clone(&self) -> Self {
         IndFlattenMap {
             source: self.source.clone(),
-            fun: self.fun.clone(),
+            fun: Arc::clone(&self.fun),
         }
     }
 }
