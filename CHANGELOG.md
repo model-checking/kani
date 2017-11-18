@@ -1,3 +1,13 @@
+## 0.3.2
+
+### New Additions
+
+- Added a type alias `ValueFor<S>` where `S: Strategy`. This is a shorter way
+  to refer to: `<<S as Strategy>::Value as ValueTree>::Value`.
+
+- Added a type alias `type W<T> = (u32, T)` for a weighted strategy `T` in the
+  context of union strategies.
+
 ## 0.3.1
 
 ### New Additions
