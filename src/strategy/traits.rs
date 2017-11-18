@@ -13,6 +13,9 @@ use std::sync::Arc;
 use strategy::*;
 use test_runner::*;
 
+/// The value that functions under test use for a particular `Strategy`.
+type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
+
 /// A strategy for producing arbitrary values of a given type.
 ///
 /// `fmt::Debug` is a hard requirement for all strategies currently due to
