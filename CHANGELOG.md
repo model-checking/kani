@@ -8,6 +8,8 @@
 - Added a type alias `type W<T> = (u32, T)` for a weighted strategy `T` in the
   context of union strategies.
 
+- `TestRunner` now implements `Default`.
+
 ## 0.3.1
 
 ### New Additions

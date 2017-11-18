@@ -188,6 +188,12 @@ impl fmt::Display for TestRunner {
     }
 }
 
+impl Default for TestRunner {
+    fn default() -> Self {
+        Self::new(Config::default())
+    }
+}
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -393,14 +399,14 @@ mod test {
 
     #[test]
     fn test_pass() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(1u32..), |&v| { assert!(v > 0); Ok(()) });
         assert_eq!(Ok(()), result);
     }
 
     #[test]
     fn test_fail_via_result() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
@@ -413,7 +419,7 @@ mod test {
 
     #[test]
     fn test_fail_via_panic() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(0u32..10u32), |&v| {
             assert!(v < 5, "not less than 5");
             Ok(())
