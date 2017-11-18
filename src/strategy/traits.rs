@@ -14,7 +14,7 @@ use strategy::*;
 use test_runner::*;
 
 /// The value that functions under test use for a particular `Strategy`.
-type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
+pub type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
 
 /// A strategy for producing arbitrary values of a given type.
 ///
@@ -44,7 +44,7 @@ pub trait Strategy : fmt::Debug {
     /// output is to be shrunken. Shrinking continues to take place in terms of
     /// the source value.
     fn prop_map<O : fmt::Debug,
-                F : Fn (<Self::Value as ValueTree>::Value) -> O>
+                F : Fn (ValueFor<Self>) -> O>
         (self, fun: F) -> Map<Self, F>
     where Self : Sized {
         Map { source: self, fun: Arc::new(fun) }
@@ -141,7 +141,7 @@ pub trait Strategy : fmt::Debug {
     /// related values as starting points while not constraining them to that
     /// relation.
     fn prop_flat_map<S : Strategy,
-                     F : Fn (<Self::Value as ValueTree>::Value) -> S>
+                     F : Fn (ValueFor<Self>) -> S>
         (self, fun: F) -> Flatten<Map<Self, F>>
     where Self : Sized {
         Flatten::new(Map { source: self, fun: Arc::new(fun) })
@@ -161,7 +161,7 @@ pub trait Strategy : fmt::Debug {
     /// See `prop_flat_map()` for a more detailed explanation on how the
     /// three flat-map combinators differ.
     fn prop_ind_flat_map<S : Strategy,
-                         F : Fn (<Self::Value as ValueTree>::Value) -> S>
+                         F : Fn (ValueFor<Self>) -> S>
         (self, fun: F) -> IndFlatten<Map<Self, F>>
     where Self : Sized {
         IndFlatten(Map { source: self, fun: Arc::new(fun) })
@@ -173,7 +173,7 @@ pub trait Strategy : fmt::Debug {
     /// See `prop_flat_map()` for a more detailed explanation on how the
     /// three flat-map combinators differ differ.
     fn prop_ind_flat_map2<S : Strategy,
-                          F : Fn (<Self::Value as ValueTree>::Value) -> S>
+                          F : Fn (ValueFor<Self>) -> S>
         (self, fun: F) -> IndFlattenMap<Self, F>
     where Self : Sized {
         IndFlattenMap { source: self, fun: Arc::new(fun) }
@@ -199,7 +199,7 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter<F : Fn (&<Self::Value as ValueTree>::Value) -> bool>
+    fn prop_filter<F : Fn (&ValueFor<Self>) -> bool>
         (self, whence: String, fun: F) -> Filter<Self, F>
     where Self : Sized {
         Filter { source: self, whence: whence, fun: Arc::new(fun) }
@@ -290,10 +290,10 @@ pub trait Strategy : fmt::Debug {
     /// # }
     /// ```
     fn prop_recursive<
-            F : Fn (Arc<BoxedStrategy<<Self::Value as ValueTree>::Value>>)
-                    -> BoxedStrategy<<Self::Value as ValueTree>::Value>>
+            F : Fn (Arc<BoxedStrategy<ValueFor<Self>>>)
+                    -> BoxedStrategy<ValueFor<Self>>>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<BoxedStrategy<<Self::Value as ValueTree>::Value>, F>
+        -> Recursive<BoxedStrategy<ValueFor<Self>>, F>
     where Self : Sized + 'static {
         Recursive {
             base: Arc::new(self.boxed()),
@@ -304,7 +304,7 @@ pub trait Strategy : fmt::Debug {
 
     /// Erases the type of this `Strategy` so it can be passed around as a
     /// simple trait object.
-    fn boxed(self) -> BoxedStrategy<<Self::Value as ValueTree>::Value>
+    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
     where Self : Sized + 'static {
         Box::new(BoxedStrategyWrapper(self))
     }
@@ -395,7 +395,7 @@ pub type BoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>>>;
 struct BoxedStrategyWrapper<T>(T);
 impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
 where T::Value : 'static {
-    type Value = Box<ValueTree<Value = <T::Value as ValueTree>::Value>>;
+    type Value = Box<ValueTree<Value = ValueFor<T>>>;
 
     fn new_value(&self, runner: &mut TestRunner)
         -> Result<Self::Value, String>

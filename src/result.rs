@@ -72,10 +72,8 @@ opaque_strategy_wrapper! {
     /// Shrinks to `Err`.
     #[derive(Clone)]
     pub struct MaybeOk[<T, E>][where T : Strategy, E : Strategy]
-        (TupleUnion<((u32, statics::Map<E, WrapErr<<T::Value as ValueTree>::Value,
-                                                   <E::Value as ValueTree>::Value>>),
-                     (u32, statics::Map<T, WrapOk<<T::Value as ValueTree>::Value,
-                                                  <E::Value as ValueTree>::Value>>))>)
+        (TupleUnion<((u32, statics::Map<E, WrapErr<ValueFor<T>, ValueFor<E>>>),
+                     (u32, statics::Map<T, WrapOk<ValueFor<T>, ValueFor<E>>>))>)
         -> MaybeOkValueTree<T::Value, E::Value>;
     /// `ValueTree` type corresponding to `MaybeOk`.
     #[derive(Clone, Debug)]
@@ -92,10 +90,8 @@ opaque_strategy_wrapper! {
     /// Shrinks to `Ok`.
     #[derive(Clone)]
     pub struct MaybeErr[<T, E>][where T : Strategy, E : Strategy]
-        (TupleUnion<((u32, statics::Map<T, WrapOk<<T::Value as ValueTree>::Value,
-                                                  <E::Value as ValueTree>::Value>>),
-                     (u32, statics::Map<E, WrapErr<<T::Value as ValueTree>::Value,
-                                                   <E::Value as ValueTree>::Value>>))>)
+        (TupleUnion<((u32, statics::Map<T, WrapOk<ValueFor<T>, ValueFor<E>>>),
+                     (u32, statics::Map<E, WrapErr<ValueFor<T>, ValueFor<E>>>))>)
         -> MaybeErrValueTree<T::Value, E::Value>;
     /// `ValueTree` type corresponding to `MaybeErr`.
     #[derive(Clone, Debug)]

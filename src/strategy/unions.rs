@@ -228,8 +228,7 @@ macro_rules! tuple_union {
     ($($gen:ident $ix:tt)*) => {
         impl<A : Strategy, $($gen: Strategy),*> Strategy
         for TupleUnion<((u32, A), $((u32, $gen)),*)>
-        where $($gen::Value : ValueTree<Value =
-                <A::Value as ValueTree>::Value>),* {
+        where $($gen::Value : ValueTree<Value = ValueFor<A>>),* {
             type Value = TupleUnionValueTree<
                 (A::Value, $(Option<$gen::Value>),*)>;
 

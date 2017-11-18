@@ -40,7 +40,7 @@ impl<S : Clone, F> Clone for Map<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (<S::Value as ValueTree>::Value) -> O>
+     F : Fn (ValueFor<S>) -> O>
 Strategy for Map<S, F> {
     type Value = Map<S::Value, F>;
 

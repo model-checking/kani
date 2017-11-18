@@ -236,10 +236,9 @@ impl TestRunner {
     ///
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
-               F : Fn (&<S::Value as ValueTree>::Value)
-                       -> TestCaseResult>
+               F : Fn (&ValueFor<S>) -> TestCaseResult>
         (&mut self, strategy: &S, f: F)
-         -> Result<(), TestError<<S::Value as ValueTree>::Value>>
+         -> Result<(), TestError<ValueFor<S>>>
     {
         while self.successes < self.config.cases {
             let case = match strategy.new_value(self) {

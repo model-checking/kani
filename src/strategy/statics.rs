@@ -62,7 +62,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : FilterFn<<S::Value as ValueTree>::Value> + Clone>
+     F : FilterFn<ValueFor<S>> + Clone>
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
@@ -153,7 +153,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
 }
 
 impl<S : Strategy,
-     F : Clone + MapFn<<S::Value as ValueTree>::Value>>
+     F : Clone + MapFn<ValueFor<S>>>
 Strategy for Map<S, F> {
     type Value = Map<S::Value, F>;
 

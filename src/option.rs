@@ -53,7 +53,7 @@ opaque_strategy_wrapper! {
     /// Constructed by other functions in this module.
     #[derive(Clone)]
     pub struct OptionStrategy[<T>][where T : Strategy]
-        (TupleUnion<((u32,NoneStrategy<<T::Value as ValueTree>::Value>),
+        (TupleUnion<((u32,NoneStrategy<ValueFor<T>>),
                      (u32,statics::Map<T, WrapSome>))>)
         -> OptionValueTree<T::Value>;
     /// `ValueTree` type corresponding to `OptionStrategy`.

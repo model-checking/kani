@@ -43,7 +43,7 @@ impl<S : Clone, F> Clone for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : Fn (&<S::Value as ValueTree>::Value) -> bool>
+     F : Fn (&ValueFor<S>) -> bool>
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
