@@ -18,10 +18,29 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
+use std::env;
 
 use rand::{self, XorShiftRng};
 
 use strategy::*;
+
+/// The default amount of successful test cases executed for a test to pass.
+const FALLBACK_DEFAULT_CASES: u32 = 256;
+
+/// Compute the default number of test cases to use for `Config::default`.
+lazy_static! {
+    static ref CONFIG_DEFAULT_CASES: u32 = {
+        if let Ok(var) = env::var("PROPTEST_REQUIRED_CASES") {
+            if let Ok(res) = var.parse::<u32>() {
+                return res;
+            } else {
+                eprintln!(
+                    "The env-var PROPTEST_REQUIRED_CASES can't be parsed as u32.")
+            }
+        }
+        return FALLBACK_DEFAULT_CASES;
+    };
+}
 
 /// Configuration for how a proptest test should be run.
 #[derive(Clone, Debug)]
@@ -52,15 +71,23 @@ pub struct Config {
     pub _non_exhaustive: (),
 }
 
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            cases: 256,
+impl Config {
+    /// Constructs a `Config` only differing from the `default()` in the
+    /// number of test cases required to pass the test successfully.
+    pub fn with_cases(n: u32) -> Self {
+        Self {
+            cases: n,
             max_local_rejects: 65_536,
             max_global_rejects: 1024,
             max_flat_map_regens: 1_000_000,
             _non_exhaustive: (),
         }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::with_cases(*CONFIG_DEFAULT_CASES)
     }
 }
 
@@ -188,6 +215,7 @@ impl fmt::Display for TestRunner {
     }
 }
 
+/// Equivalent to: `TestRunner::new(Config::default())`.
 impl Default for TestRunner {
     fn default() -> Self {
         Self::new(Config::default())

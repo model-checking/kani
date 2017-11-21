@@ -16,8 +16,9 @@ Hypothesis-like property-based testing and shrinking.
 [dependencies]
 bit-set = "0.4.0"
 quick-error = "1.2.1"
-rand = "0.3.15"
+rand = "0.3.18"
 regex-syntax = "0.4.1"
+lazy_static = "0.2.8"
 
 [dev-dependencies]
 regex = "0.2.2"

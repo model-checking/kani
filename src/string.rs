@@ -266,7 +266,7 @@ mod test {
         let mut generated = HashSet::new();
 
         let strategy = string_regex(pattern).unwrap();
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..iterations {
             let mut value = strategy.new_value(&mut runner).unwrap();
 

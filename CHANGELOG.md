@@ -10,6 +10,16 @@
 
 - `TestRunner` now implements `Default`.
 
+- Added `Config::with_cases(number_of_cases: u32) -> Config` for simpler
+  construction of a `Config` that only differs by the number of test cases.
+
+- The default number of test cases to run is `256` (as before). This default
+  which is encoded by `Config::default()` is now configurable by setting the
+  env-var `PROPTEST_REQUIRED_CASES` to a value that can be parsed as a `u32`.
+  This variable is read at runtime.
+
+- bumped dependency `rand = "0.3.18"`.
+
 ## 0.3.1
 
 ### New Additions
