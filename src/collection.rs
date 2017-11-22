@@ -16,6 +16,7 @@ use std::collections::*;
 use std::fmt;
 use std::hash::Hash;
 use std::ops::Range;
+use std::slice;
 
 use bit_set::BitSet;
 use rand;
@@ -24,6 +25,143 @@ use rand::distributions::IndependentSample;
 use strategy::*;
 use tuple::TupleValueTree;
 use test_runner::*;
+
+// TODO: add more CollectionStrategy impls for different types such as
+// HashSet.
+
+// TODO: tests for CollectionStrategy impls.
+
+/// Returns a `Strategy` that generates subsequences of `source` where the
+/// where the subsequences have a size: `size.start <= seq.len() < size.end`.
+pub fn subsequence<T>(source: Vec<T>, size: Range<usize>) -> SubseqStrategy<T>
+where
+    T: Clone + fmt::Debug
+{
+    source.prop_sample(size)
+}
+
+/// A collection, such as `Vec<T>` is itself a strategy to create samples
+/// (or in the case of `Vec`: subsequences) with the elements of the collection.
+pub trait CollectionStrategy: Sized + fmt::Debug {
+    /// The `Strategy` generating the samples.
+    type Strategy: Strategy<Value = Self::ValueTree>;
+
+    /// Always the same as `Self::Strategy::Value`.
+    /// Unfortunately this can't be removed until `impl Trait` lands.
+    type ValueTree: ValueTree<Value = Self>;
+
+    /// Constructs a `Strategy` to generate samples of `self` given a range
+    /// (low..high) where the output sample has a number of elements: len.
+    /// The following always holds for the sample: `low <= len < high`.
+    ///
+    /// # Safety
+    ///
+    /// A panic must occur at least when:
+    ///
+    /// 1. `low > high`,
+    /// 2. `self.len() < low + 1`.
+    fn prop_sample(self, size: Range<usize>) -> Self::Strategy;
+}
+
+impl<T: Clone + fmt::Debug> CollectionStrategy for Vec<T> {
+    type Strategy = SubseqStrategy<T>;
+    type ValueTree = SubseqValueTree<T>;
+    fn prop_sample(self, size: Range<usize>) -> Self::Strategy {
+        SubseqStrategy::new(self, size)
+    }
+}
+
+/// A `Strategy` to generate subsequences, of a `Vec<T>`,
+/// where the subsequences have a size: `min <= seq.len() < max`.
+#[derive(Debug, Clone)]
+pub struct SubseqStrategy<T: Clone + fmt::Debug> {
+    full: Vec<T>,
+    size: Range<usize>,
+}
+
+impl<T: Clone + fmt::Debug> SubseqStrategy<T> {
+    /// Constructs a `SubseqStrategy` which will generate subsequences of
+    /// `source` where the subsequences have a size: `[size.start, size.end)`.
+    ///
+    /// # Safety
+    ///
+    /// A panic occurs when:
+    ///
+    /// 1. `size.start >= size.end`,
+    /// 2. `source.len() < size.start + 1`.
+    pub fn new(source: Vec<T>, size: Range<usize>) -> Self {
+        assert!(!(size.start >= size.end));
+        assert!(!(source.len() < size.start + 1));
+        Self {
+            full: source,
+            size: size,
+        }
+    }
+}
+
+impl<T: Clone + fmt::Debug> Strategy for SubseqStrategy<T> {
+    type Value = SubseqValueTree<T>;
+    
+    fn new_value(&self, runner: &mut TestRunner)
+        -> Result<Self::Value, String>
+    {
+        // Generate the amount of elements in result:
+        let rng = runner.rng();
+        let amount = rand::distributions::Range::new(
+            self.size.start, self.size.end).ind_sample(rng);
+
+        // Generate a subsequence of amount size.
+        let subvec = rand::sample(rng, self.full.iter().cloned(), amount);
+
+        // We're done, yield the value tree.
+        Ok(SubseqValueTree {
+            data: subvec,
+            len: amount,
+            min: self.size.start,
+        })
+    }
+}
+
+/// The `ValueTree` for `SubseqStrategy`.
+pub struct SubseqValueTree<T: Clone + fmt::Debug> {
+    data: Vec<T>,
+    len: usize,
+    min: usize
+}
+
+impl<T: Clone + fmt::Debug> ValueTree for SubseqValueTree<T> {
+    type Value = Vec<T>;
+
+    fn current(&self) -> Self::Value {
+        // We verify manually that self.len <= self.data.len(),
+        // therefore it is safe. The assertion should always hold.
+        assert!(self.len <= self.data.len());
+        unsafe {
+            slice::from_raw_parts(self.data.as_ptr(), self.len)
+        }.into()
+    }
+
+    fn simplify(&mut self) -> bool {
+        if self.len == self.min {
+            // We're not allowed to shrink further.
+            false
+        } else {
+            // Still possible to shrink. Do so by 1 element.
+            self.len -= 1;
+            true
+        }
+    }
+
+    fn complicate(&mut self) -> bool {
+        if self.len == self.data.len() {
+            // We've reached the full subsequence, can't complicate more.
+            false
+        } else {
+            self.len += 1;
+            true
+        }
+    }
+}
 
 /// Strategy to create `Vec`s with a length in a certain range.
 ///
