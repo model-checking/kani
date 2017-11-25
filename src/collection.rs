@@ -32,7 +32,7 @@ use test_runner::*;
 // TODO: tests for CollectionStrategy impls.
 
 /// Returns a `Strategy` that generates subsequences of `source` where the
-/// where the subsequences have a number of elements `len`. Given a range
+/// subsequences have a number of elements `len`. Given a range
 /// `size = min..max` then `min <= len < max`.
 ///
 /// # Safety
