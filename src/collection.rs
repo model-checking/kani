@@ -32,7 +32,18 @@ use test_runner::*;
 // TODO: tests for CollectionStrategy impls.
 
 /// Returns a `Strategy` that generates subsequences of `source` where the
-/// where the subsequences have a size: `size.start <= seq.len() < size.end`.
+/// where the subsequences have a number of elements `len`. Given a range
+/// `size = min..max` then `min <= len < max`.
+///
+/// # Safety
+///
+/// If any of the following hold, a panic will ensue:
+///
+/// + `min > len`, since there are fewer elements than the minimum.
+/// + `max <= len`, since the max size can never happen.
+/// + `min >= max`, since the interval is empty.
+///
+/// This is equivalent to a panic ensuing iff: `!(min <= len < max)`.
 pub fn subsequence<T>(source: Vec<T>, size: Range<usize>) -> SubseqStrategy<T>
 where
     T: Clone + fmt::Debug
@@ -51,15 +62,19 @@ pub trait CollectionStrategy: Sized + fmt::Debug {
     type ValueTree: ValueTree<Value = Self>;
 
     /// Constructs a `Strategy` to generate samples of `self` given a range
-    /// (low..high) where the output sample has a number of elements: len.
-    /// The following always holds for the sample: `low <= len < high`.
+    /// `size = min..max` where the output sample has a number of
+    /// elements `len`. The following always holds for the sample:
+    /// `min <= len < max`.
     ///
     /// # Safety
     ///
-    /// A panic must occur at least when:
+    /// At least, if any of the following hold, a panic will ensue:
     ///
-    /// 1. `low > high`,
-    /// 2. `self.len() < low + 1`.
+    /// + `min > self.len()`, since there are fewer elements than the minimum.
+    /// + `max <= self.len()`, since the max size can never happen.
+    /// + `min >= max`, since the interval is empty.
+    ///
+    /// This is equivalent to a panic ensuing iff: `!(min <= len < max)`.
     fn prop_sample(self, size: Range<usize>) -> Self::Strategy;
 }
 
@@ -71,7 +86,7 @@ impl<T: Clone + fmt::Debug> CollectionStrategy for Vec<T> {
     }
 }
 
-/// A `Strategy` to generate subsequences, of a `Vec<T>`,
+/// A `Strategy` to generate subsequences, of a `seq: Vec<T>`,
 /// where the subsequences have a size: `min <= seq.len() < max`.
 #[derive(Debug, Clone)]
 pub struct SubseqStrategy<T: Clone + fmt::Debug> {
@@ -81,17 +96,22 @@ pub struct SubseqStrategy<T: Clone + fmt::Debug> {
 
 impl<T: Clone + fmt::Debug> SubseqStrategy<T> {
     /// Constructs a `SubseqStrategy` which will generate subsequences of
-    /// `source` where the subsequences have a size: `[size.start, size.end)`.
+    /// `source` where the subsequences have a number of elements `len` for
+    /// which `min <= len < max` always holds where `size = `min..max`.
     ///
     /// # Safety
     ///
-    /// A panic occurs when:
+    /// If any of the following hold, a panic will ensue:
     ///
-    /// 1. `size.start >= size.end`,
-    /// 2. `source.len() < size.start + 1`.
+    /// + `min > self.len()`, since there are fewer elements than the minimum.
+    /// + `max <= self.len()`, since the max size can never happen.
+    /// + `min >= max`, since the interval is empty.
+    ///
+    /// This is equivalent to a panic ensuing iff: `!(min <= len < max)`.
     pub fn new(source: Vec<T>, size: Range<usize>) -> Self {
-        assert!(!(size.start >= size.end));
-        assert!(!(source.len() < size.start + 1));
+        let len = source.len();
+        assert!(size.start <= len);
+        assert!(len < size.end);
         Self {
             full: source,
             size: size,
