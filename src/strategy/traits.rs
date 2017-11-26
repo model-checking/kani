@@ -301,8 +301,21 @@ pub trait Strategy : fmt::Debug {
 
     /// Erases the type of this `Strategy` so it can be passed around as a
     /// simple trait object.
+    ///
+    /// See also `sboxed()` if this `Strategy` is `Send` and `Sync` and you
+    /// want to preserve that information.
     fn boxed(self) -> BoxedStrategy<<Self::Value as ValueTree>::Value>
     where Self : Sized + 'static {
+        Box::new(BoxedStrategyWrapper(self))
+    }
+
+    /// Erases the type of this `Strategy` so it can be passed around as a
+    /// simple trait object.
+    ///
+    /// Unlike `boxed()`, this conversion retains the `Send` and `Sync` traits
+    /// on the output.
+    fn sboxed(self) -> SBoxedStrategy<<Self::Value as ValueTree>::Value>
+    where Self : Sized + Send + Sync + 'static {
         Box::new(BoxedStrategyWrapper(self))
     }
 
@@ -387,6 +400,10 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 /// Shorthand for a boxed `Strategy` trait object as produced by
 /// `Strategy::boxed()`.
 pub type BoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>>>;
+/// Shorthand for a boxed `Strategy` trait object which is also `Sync` and
+/// `Send`, as produced by `Strategy::sboxed()`.
+pub type SBoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>> +
+                                 Sync + Send>;
 
 #[derive(Debug)]
 struct BoxedStrategyWrapper<T>(T);
