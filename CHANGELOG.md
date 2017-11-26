@@ -1,3 +1,10 @@
+## 0.3.2
+
+- Added `Strategy::sboxed()` and `SBoxedStrategy` to make `Send + Sync` boxed
+  strategies.
+
+- `RegexGeneratorStrategy` is now `Send` and `Sync`.
+
 ## 0.3.1
 
 ### New Additions

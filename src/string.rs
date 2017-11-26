@@ -51,7 +51,7 @@ opaque_strategy_wrapper! {
     /// Created by various functions in this module.
     #[derive(Debug)]
     pub struct RegexGeneratorStrategy[<T>][where T : fmt::Debug]
-        (BoxedStrategy<T>) -> RegexGeneratorValueTree<T>;
+        (SBoxedStrategy<T>) -> RegexGeneratorValueTree<T>;
     /// `ValueTree` corresponding to `RegexGeneratorStrategy`.
     pub struct RegexGeneratorValueTree[<T>][where T : fmt::Debug]
         (Box<ValueTree<Value = T>>) -> T;
@@ -81,7 +81,7 @@ pub fn string_regex_parsed(expr: &rs::Expr)
                            -> Result<RegexGeneratorStrategy<String>, Error> {
     bytes_regex_parsed(expr).map(
         |v| v.prop_map(|bytes| String::from_utf8(bytes).expect(
-            "non-utf8 string")).boxed()).map(RegexGeneratorStrategy)
+            "non-utf8 string")).sboxed()).map(RegexGeneratorStrategy)
 }
 
 /// Creates a strategy which generates byte strings matching the given regular
@@ -97,10 +97,10 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
     use self::rs::Expr::*;
 
     match *expr {
-        Empty => Ok(Just(vec![]).boxed()),
+        Empty => Ok(Just(vec![]).sboxed()),
         Literal { ref chars, casei: false } =>
             Ok(Just(chars.iter().map(|&c| c).collect::<String>()
-                         .into_bytes()).boxed()),
+                         .into_bytes()).sboxed()),
         Literal { ref chars, casei: true } => {
             let chars = chars.to_owned();
             Ok(bits::bitset::between(0, chars.len())
@@ -111,20 +111,20 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                              accum.extend(rhs);
                              accum
                          }))
-               .boxed())
+               .sboxed())
         },
         LiteralBytes { ref bytes, casei: false } =>
-            Ok(Just(bytes.to_owned()).boxed()),
+            Ok(Just(bytes.to_owned()).sboxed()),
         LiteralBytes { ref bytes, casei: true } => {
             let bytes = bytes.to_owned();
             Ok(bits::bitset::between(0, bytes.len())
                .prop_map(move |cases|
                          cases.into_bit_vec().iter().zip(bytes.iter())
                          .map(|(case, &byte)| flip_ascii_case(case, byte))
-                         .collect::<Vec<_>>()).boxed())
+                         .collect::<Vec<_>>()).sboxed())
         },
 
-        AnyChar => Ok(char::ANY.boxed().prop_map(|c| to_bytes(c)).boxed()),
+        AnyChar => Ok(char::ANY.sboxed().prop_map(|c| to_bytes(c)).sboxed()),
         AnyCharNoNL => {
             static NONL_RANGES: &[(char,char)] = &[
                 ('\x00', '\x09'),
@@ -138,29 +138,29 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                 ('\x0B', ::std::char::MAX),
             ];
             Ok(char::ranges(Cow::Borrowed(NONL_RANGES))
-               .prop_map(|c| to_bytes(c)).boxed())
+               .prop_map(|c| to_bytes(c)).sboxed())
         },
-        AnyByte => Ok(num::u8::ANY.prop_map(|b| vec![b]).boxed()),
-        AnyByteNoNL => Ok((0xBu8..).boxed()
-                          .prop_union((..0xAu8).boxed())
-                          .prop_map(|b| vec![b]).boxed()),
+        AnyByte => Ok(num::u8::ANY.prop_map(|b| vec![b]).sboxed()),
+        AnyByteNoNL => Ok((0xBu8..).sboxed()
+                          .prop_union((..0xAu8).sboxed())
+                          .prop_map(|b| vec![b]).sboxed()),
 
         Class(ref class) => {
             let ranges = (**class).iter().map(
                 |&rs::ClassRange { start, end }| (start, end)).collect();
             Ok(char::ranges(Cow::Owned(ranges))
-               .prop_map(to_bytes).boxed())
+               .prop_map(to_bytes).sboxed())
         }
 
         ClassBytes(ref class) => {
             let subs = (**class).iter().map(
                 |&rs::ByteRange { start, end }| if 255u8 == end {
-                    (start..).boxed()
+                    (start..).sboxed()
                 } else {
-                    (start..end).boxed()
+                    (start..end).sboxed()
                 }).collect::<Vec<_>>();
             Ok(Union::new(subs)
-               .prop_map(|b| vec![b]).boxed())
+               .prop_map(|b| vec![b]).sboxed())
         },
 
         Group { ref e, .. } => bytes_regex_parsed(e).map(|v| v.0),
@@ -190,7 +190,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
             Ok(collection::vec(bytes_regex_parsed(e)?, range)
                .prop_map(|parts| parts.into_iter().fold(
                    vec![], |mut accum, child| { accum.extend(child); accum }))
-               .boxed())
+               .sboxed())
         },
 
         Concat(ref subs) => {
@@ -198,20 +198,20 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(subs.into_iter()
                .fold(None, |accum, rhs| match accum {
-                   None => Some(rhs.boxed()),
+                   None => Some(rhs.sboxed()),
                    Some(accum) => Some(
                        (accum, rhs).prop_map(|(mut lhs, rhs)| {
                            lhs.extend(rhs);
                            lhs
-                       }).boxed()),
+                       }).sboxed()),
                }).unwrap_or_else(
-                   || Just(vec![]).boxed()))
+                   || Just(vec![]).sboxed()))
         },
 
         Alternate(ref subs) => {
             let subs = subs.iter().map(|e| bytes_regex_parsed(e))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Union::new(subs).boxed())
+            Ok(Union::new(subs).sboxed())
         },
 
         StartLine |
@@ -359,5 +359,12 @@ mod test {
     #[test]
     fn test_dot_s() {
         do_test("(?s).", 200, 65536, 256);
+    }
+
+    fn assert_send_and_sync<T : Send + Sync>(_: T) { }
+
+    #[test]
+    fn regex_strategy_is_send_and_sync() {
+        assert_send_and_sync(string_regex(".").unwrap());
     }
 }
