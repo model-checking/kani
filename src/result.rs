@@ -26,6 +26,9 @@
 //! "maybe err" since the success case results in an easier to understand code
 //! path.
 
+#![cfg_attr(feature="cargo-clippy",
+    allow(type_complexity, expl_impl_clone_on_copy))]
+
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -65,6 +68,10 @@ impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<E> for WrapErr<T, E> {
     }
 }
 
+type MapErr<T, E> = statics::Map<E, WrapErr<ValueFor<T>, ValueFor<E>>>;
+type MapOk <T, E> = statics::Map<T, WrapOk <ValueFor<T>, ValueFor<E>>>;
+
+#[cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
     /// delegate strategies.
@@ -72,10 +79,7 @@ opaque_strategy_wrapper! {
     /// Shrinks to `Err`.
     #[derive(Clone)]
     pub struct MaybeOk[<T, E>][where T : Strategy, E : Strategy]
-        (TupleUnion<((u32, statics::Map<E, WrapErr<<T::Value as ValueTree>::Value,
-                                                   <E::Value as ValueTree>::Value>>),
-                     (u32, statics::Map<T, WrapOk<<T::Value as ValueTree>::Value,
-                                                  <E::Value as ValueTree>::Value>>))>)
+        (TupleUnion<(W<MapErr<T, E>>, W<MapOk<T, E>>)>)
         -> MaybeOkValueTree<T::Value, E::Value>;
     /// `ValueTree` type corresponding to `MaybeOk`.
     #[derive(Clone, Debug)]
@@ -85,6 +89,7 @@ opaque_strategy_wrapper! {
         -> Result<T::Value, E::Value>;
 }
 
+#[cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
     /// delegate strategies.
@@ -92,10 +97,7 @@ opaque_strategy_wrapper! {
     /// Shrinks to `Ok`.
     #[derive(Clone)]
     pub struct MaybeErr[<T, E>][where T : Strategy, E : Strategy]
-        (TupleUnion<((u32, statics::Map<T, WrapOk<<T::Value as ValueTree>::Value,
-                                                  <E::Value as ValueTree>::Value>>),
-                     (u32, statics::Map<E, WrapErr<<T::Value as ValueTree>::Value,
-                                                   <E::Value as ValueTree>::Value>>))>)
+        (TupleUnion<(W<MapOk<T, E>>, W<MapErr<T, E>>)>)
         -> MaybeErrValueTree<T::Value, E::Value>;
     /// `ValueTree` type corresponding to `MaybeErr`.
     #[derive(Clone, Debug)]

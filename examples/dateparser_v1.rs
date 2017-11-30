@@ -36,7 +36,7 @@ fn main() {
     assert_eq!(None, parse_date("2017-06-170"));
     assert_eq!(None, parse_date("2017006-17"));
     assert_eq!(None, parse_date("2017-06017"));
-    assert_eq!(Some((2017, 06, 17)), parse_date("2017-06-17"));
+    assert_eq!(Some((2017, 6, 17)), parse_date("2017-06-17"));
 
     doesnt_crash();
 }

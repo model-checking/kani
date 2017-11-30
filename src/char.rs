@@ -117,7 +117,7 @@ fn select_range_index<R : Rng>(rnd: &mut R,
         }
     }
 
-    for _ in 0..65536 {
+    for _ in 0..65_536 {
         let (lo, hi) = ranges[rnd.gen_range(0, ranges.len())];
         if let Some(ch) = ::std::char::from_u32(
             rnd.gen_range(lo as u32, hi as u32 + 1))

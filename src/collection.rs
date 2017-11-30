@@ -9,11 +9,14 @@
 
 //! Strategies for generating `std::collections` of values.
 
+#![cfg_attr(feature="cargo-clippy", allow(type_complexity))]
+
 use std::cmp::Ord;
 use std::collections::*;
 use std::fmt;
 use std::hash::Hash;
 use std::ops::Range;
+use std::slice;
 
 use bit_set::BitSet;
 use rand;
@@ -22,6 +25,163 @@ use rand::distributions::IndependentSample;
 use strategy::*;
 use tuple::TupleValueTree;
 use test_runner::*;
+
+// TODO: add more CollectionStrategy impls for different types such as
+// HashSet.
+
+// TODO: tests for CollectionStrategy impls.
+
+/// Returns a `Strategy` that generates subsequences of `source` where the
+/// subsequences have a number of elements `len`. Given a range
+/// `size = min..max` then `min <= len < max`.
+///
+/// # Safety
+///
+/// If any of the following hold, a panic will ensue:
+///
+/// + `min > len`, since there are fewer elements than the minimum.
+/// + `max <= len`, since the max size can never happen.
+/// + `min >= max`, since the interval is empty.
+///
+/// This is equivalent to a panic ensuing iff: `!(min <= len < max)`.
+pub fn subsequence<T>(source: Vec<T>, size: Range<usize>) -> SubseqStrategy<T>
+where
+    T: Clone + fmt::Debug
+{
+    source.prop_sample(size)
+}
+
+/// A collection, such as `Vec<T>` is itself a strategy to create samples
+/// (or in the case of `Vec`: subsequences) with the elements of the collection.
+pub trait CollectionStrategy: Sized + fmt::Debug {
+    /// The `Strategy` generating the samples.
+    type Strategy: Strategy<Value = Self::ValueTree>;
+
+    /// Always the same as `Self::Strategy::Value`.
+    /// Unfortunately this can't be removed until `impl Trait` lands.
+    type ValueTree: ValueTree<Value = Self>;
+
+    /// Constructs a `Strategy` to generate samples of `self` given a range
+    /// `size = min..max` where the output sample has a number of
+    /// elements `len`. The following always holds for the sample:
+    /// `min <= len < max`.
+    ///
+    /// # Safety
+    ///
+    /// At least, if any of the following hold, a panic will ensue:
+    ///
+    /// + `min > self.len()`, since there are fewer elements than the minimum.
+    /// + `max <= self.len()`, since the max size can never happen.
+    /// + `min >= max`, since the interval is empty.
+    ///
+    /// This is equivalent to a panic ensuing iff: `!(min <= len < max)`.
+    fn prop_sample(self, size: Range<usize>) -> Self::Strategy;
+}
+
+impl<T: Clone + fmt::Debug> CollectionStrategy for Vec<T> {
+    type Strategy = SubseqStrategy<T>;
+    type ValueTree = SubseqValueTree<T>;
+    fn prop_sample(self, size: Range<usize>) -> Self::Strategy {
+        SubseqStrategy::new(self, size)
+    }
+}
+
+/// A `Strategy` to generate subsequences, of a `seq: Vec<T>`,
+/// where the subsequences have a size: `min <= seq.len() < max`.
+#[derive(Debug, Clone)]
+pub struct SubseqStrategy<T: Clone + fmt::Debug> {
+    full: Vec<T>,
+    size: Range<usize>,
+}
+
+impl<T: Clone + fmt::Debug> SubseqStrategy<T> {
+    /// Constructs a `SubseqStrategy` which will generate subsequences of
+    /// `source` where the subsequences have a number of elements `len` for
+    /// which `min <= len < max` always holds where `size = `min..max`.
+    ///
+    /// # Safety
+    ///
+    /// If any of the following hold, a panic will ensue:
+    ///
+    /// + `min > self.len()`, since there are fewer elements than the minimum.
+    /// + `max <= self.len()`, since the max size can never happen.
+    /// + `min >= max`, since the interval is empty.
+    ///
+    /// This is equivalent to a panic ensuing iff: `!(min <= len < max)`.
+    pub fn new(source: Vec<T>, size: Range<usize>) -> Self {
+        let len = source.len();
+        assert!(size.start <= len);
+        assert!(len < size.end);
+        Self {
+            full: source,
+            size: size,
+        }
+    }
+}
+
+impl<T: Clone + fmt::Debug> Strategy for SubseqStrategy<T> {
+    type Value = SubseqValueTree<T>;
+    
+    fn new_value(&self, runner: &mut TestRunner)
+        -> Result<Self::Value, String>
+    {
+        // Generate the amount of elements in result:
+        let rng = runner.rng();
+        let amount = rand::distributions::Range::new(
+            self.size.start, self.size.end).ind_sample(rng);
+
+        // Generate a subsequence of amount size.
+        let subvec = rand::sample(rng, self.full.iter().cloned(), amount);
+
+        // We're done, yield the value tree.
+        Ok(SubseqValueTree {
+            data: subvec,
+            len: amount,
+            min: self.size.start,
+        })
+    }
+}
+
+/// The `ValueTree` for `SubseqStrategy`.
+pub struct SubseqValueTree<T: Clone + fmt::Debug> {
+    data: Vec<T>,
+    len: usize,
+    min: usize
+}
+
+impl<T: Clone + fmt::Debug> ValueTree for SubseqValueTree<T> {
+    type Value = Vec<T>;
+
+    fn current(&self) -> Self::Value {
+        // We verify manually that self.len <= self.data.len(),
+        // therefore it is safe. The assertion should always hold.
+        assert!(self.len <= self.data.len());
+        unsafe {
+            slice::from_raw_parts(self.data.as_ptr(), self.len)
+        }.into()
+    }
+
+    fn simplify(&mut self) -> bool {
+        if self.len == self.min {
+            // We're not allowed to shrink further.
+            false
+        } else {
+            // Still possible to shrink. Do so by 1 element.
+            self.len -= 1;
+            true
+        }
+    }
+
+    fn complicate(&mut self) -> bool {
+        if self.len == self.data.len() {
+            // We've reached the full subsequence, can't complicate more.
+            false
+        } else {
+            self.len += 1;
+            true
+        }
+    }
+}
 
 /// Strategy to create `Vec`s with a length in a certain range.
 ///
@@ -113,8 +273,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `binary_heap()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct BinaryHeapStrategy[<T>][where T : Strategy,
-                                       <T::Value as ValueTree>::Value : Ord](
+    pub struct BinaryHeapStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
         statics::Map<VecStrategy<T>, VecToBinHeap>)
         -> BinaryHeapValueTree<T::Value>;
     /// `ValueTree` corresponding to `BinaryHeapStrategy`.
@@ -129,7 +288,7 @@ opaque_strategy_wrapper! {
 pub fn binary_heap<T : Strategy>
     (element: T, size: Range<usize>)
     -> BinaryHeapStrategy<T>
-where <T::Value as ValueTree>::Value : Ord {
+where ValueFor<T> : Ord {
     BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
 }
 
@@ -154,8 +313,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `hash_set()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct HashSetStrategy[<T>][where T : Strategy,
-                                    <T::Value as ValueTree>::Value : Hash + Eq](
+    pub struct HashSetStrategy[<T>][where T : Strategy, ValueFor<T> : Hash + Eq](
         statics::Filter<statics::Map<VecStrategy<T>, VecToHashSet>, MinSize>)
         -> HashSetValueTree<T::Value>;
     /// `ValueTree` corresponding to `HashSetStrategy`.
@@ -174,7 +332,7 @@ opaque_strategy_wrapper! {
 pub fn hash_set<T : Strategy>
     (element: T, size: Range<usize>)
     -> HashSetStrategy<T>
-where <T::Value as ValueTree>::Value : Hash + Eq {
+where ValueFor<T> : Hash + Eq {
     let min_size = size.start;
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToHashSet),
@@ -200,8 +358,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `btree_set()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct BTreeSetStrategy[<T>][where T : Strategy,
-                                     <T::Value as ValueTree>::Value : Ord](
+    pub struct BTreeSetStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
         statics::Filter<statics::Map<VecStrategy<T>, VecToBTreeSet>, MinSize>)
         -> BTreeSetValueTree<T::Value>;
     /// `ValueTree` corresponding to `BTreeSetStrategy`.
@@ -220,7 +377,7 @@ opaque_strategy_wrapper! {
 pub fn btree_set<T : Strategy>
     (element: T, size: Range<usize>)
     -> BTreeSetStrategy<T>
-where <T::Value as ValueTree>::Value : Ord {
+where ValueFor<T> : Ord {
     let min_size = size.start;
 
     BTreeSetStrategy(statics::Filter::new(
@@ -249,8 +406,7 @@ opaque_strategy_wrapper! {
     /// Created by the `hash_map()` function in the same module.
     #[derive(Clone, Debug)]
     pub struct HashMapStrategy[<K, V>]
-        [where K : Strategy, V : Strategy,
-         <K::Value as ValueTree>::Value : Hash + Eq](
+        [where K : Strategy, V : Strategy, ValueFor<K> : Hash + Eq](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToHashMap>, MinSize>)
         -> HashMapValueTree<K::Value, V::Value>;
@@ -273,7 +429,7 @@ opaque_strategy_wrapper! {
 pub fn hash_map<K : Strategy, V : Strategy>
     (key: K, value: V, size: Range<usize>)
     -> HashMapStrategy<K, V>
-where <K::Value as ValueTree>::Value : Hash + Eq {
+where ValueFor<K> : Hash + Eq {
     let min_size = size.start;
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size), VecToHashMap),
@@ -301,8 +457,7 @@ opaque_strategy_wrapper! {
     /// Created by the `btree_map()` function in the same module.
     #[derive(Clone, Debug)]
     pub struct BTreeMapStrategy[<K, V>]
-        [where K : Strategy, V : Strategy,
-         <K::Value as ValueTree>::Value : Ord](
+        [where K : Strategy, V : Strategy, ValueFor<K> : Ord](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToBTreeMap>, MinSize>)
         -> BTreeMapValueTree<K::Value, V::Value>;
@@ -325,7 +480,7 @@ opaque_strategy_wrapper! {
 pub fn btree_map<K : Strategy + 'static, V : Strategy + 'static>
     (key: K, value: V, size: Range<usize>)
     -> BTreeMapStrategy<K, V>
-where <K::Value as ValueTree>::Value : Ord {
+where ValueFor<K> : Ord {
     let min_size = size.start;
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),

@@ -11,8 +11,8 @@
 //! traits instead of normal functions.
 //!
 //! This entire module is strictly a workaround until
-//! https://github.com/rust-lang/rfcs/pull/1522 and
-//! https://github.com/rust-lang/rfcs/pull/2071 are available in stable. It
+//! <https://github.com/rust-lang/rfcs/pull/1522> and
+//! <https://github.com/rust-lang/rfcs/pull/2071> are available in stable. It
 //! allows naming types built on the combinators without resorting to dynamic
 //! dispatch or causing `Arc` to allocate space for a function pointer.
 //!
@@ -62,7 +62,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : FilterFn<<S::Value as ValueTree>::Value> + Clone>
+     F : FilterFn<ValueFor<S>> + Clone>
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
@@ -153,7 +153,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
 }
 
 impl<S : Strategy,
-     F : Clone + MapFn<<S::Value as ValueTree>::Value>>
+     F : Clone + MapFn<ValueFor<S>>>
 Strategy for Map<S, F> {
     type Value = Map<S::Value, F>;
 

@@ -18,10 +18,29 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
+use std::env;
 
 use rand::{self, XorShiftRng};
 
 use strategy::*;
+
+/// The default amount of successful test cases executed for a test to pass.
+const FALLBACK_DEFAULT_CASES: u32 = 256;
+
+/// Compute the default number of test cases to use for `Config::default`.
+lazy_static! {
+    static ref CONFIG_DEFAULT_CASES: u32 = {
+        if let Ok(var) = env::var("PROPTEST_REQUIRED_CASES") {
+            if let Ok(res) = var.parse::<u32>() {
+                return res;
+            } else {
+                eprintln!(
+                    "The env-var PROPTEST_REQUIRED_CASES can't be parsed as u32.")
+            }
+        }
+        return FALLBACK_DEFAULT_CASES;
+    };
+}
 
 /// Configuration for how a proptest test should be run.
 #[derive(Clone, Debug)]
@@ -52,15 +71,23 @@ pub struct Config {
     pub _non_exhaustive: (),
 }
 
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            cases: 256,
-            max_local_rejects: 65536,
+impl Config {
+    /// Constructs a `Config` only differing from the `default()` in the
+    /// number of test cases required to pass the test successfully.
+    pub fn with_cases(n: u32) -> Self {
+        Self {
+            cases: n,
+            max_local_rejects: 65_536,
             max_global_rejects: 1024,
-            max_flat_map_regens: 1000000,
+            max_flat_map_regens: 1_000_000,
             _non_exhaustive: (),
         }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::with_cases(*CONFIG_DEFAULT_CASES)
     }
 }
 
@@ -188,6 +215,13 @@ impl fmt::Display for TestRunner {
     }
 }
 
+/// Equivalent to: `TestRunner::new(Config::default())`.
+impl Default for TestRunner {
+    fn default() -> Self {
+        Self::new(Config::default())
+    }
+}
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -212,7 +246,7 @@ impl TestRunner {
             local_rejects: 0,
             global_rejects: 0,
             rng: rand::weak_rng(),
-            flat_map_regens: self.flat_map_regens.clone(),
+            flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
         }
@@ -236,10 +270,9 @@ impl TestRunner {
     ///
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
-               F : Fn (&<S::Value as ValueTree>::Value)
-                       -> TestCaseResult>
+               F : Fn (&ValueFor<S>) -> TestCaseResult>
         (&mut self, strategy: &S, f: F)
-         -> Result<(), TestError<<S::Value as ValueTree>::Value>>
+         -> Result<(), TestError<ValueFor<S>>>
     {
         while self.successes < self.config.cases {
             let case = match strategy.new_value(self) {
@@ -286,11 +319,10 @@ impl TestRunner {
                 if case.simplify() {
                     loop {
                         let passed = match test!(case.current()) {
-                            Ok(_) => true,
                             // Rejections are effectively a pass here,
                             // since they indicate that any behaviour of
                             // the function under test is acceptable.
-                            Err(TestCaseError::Reject(..)) => true,
+                            Ok(_) | Err(TestCaseError::Reject(..)) => true,
 
                             Err(TestCaseError::Fail(why)) => {
                                 last_failure = (why, case.current());
@@ -302,10 +334,8 @@ impl TestRunner {
                             if !case.complicate() {
                                 break;
                             }
-                        } else {
-                            if !case.simplify() {
-                                break;
-                            }
+                        } else if !case.simplify() {
+                            break;
                         }
                     }
                 }
@@ -397,14 +427,14 @@ mod test {
 
     #[test]
     fn test_pass() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(1u32..), |&v| { assert!(v > 0); Ok(()) });
         assert_eq!(Ok(()), result);
     }
 
     #[test]
     fn test_fail_via_result() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
@@ -417,7 +447,7 @@ mod test {
 
     #[test]
     fn test_fail_via_panic() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(0u32..10u32), |&v| {
             assert!(v < 5, "not less than 5");
             Ok(())

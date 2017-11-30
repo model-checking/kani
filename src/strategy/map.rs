@@ -34,20 +34,20 @@ impl<S : Clone, F> Clone for Map<S, F> {
     fn clone(&self) -> Self {
         Map {
             source: self.source.clone(),
-            fun: self.fun.clone(),
+            fun: Arc::clone(&self.fun),
         }
     }
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (<S::Value as ValueTree>::Value) -> O>
+     F : Fn (ValueFor<S>) -> O>
 Strategy for Map<S, F> {
     type Value = Map<S::Value, F>;
 
     fn new_value(&self, runner: &mut TestRunner)
                  -> Result<Self::Value, String> {
         self.source.new_value(runner).map(
-            |v| Map { source: v, fun: self.fun.clone() })
+            |v| Map { source: v, fun: Arc::clone(&self.fun) })
     }
 }
 

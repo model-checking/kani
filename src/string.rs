@@ -99,7 +99,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
     match *expr {
         Empty => Ok(Just(vec![]).sboxed()),
         Literal { ref chars, casei: false } =>
-            Ok(Just(chars.iter().map(|&c| c).collect::<String>()
+            Ok(Just(chars.iter().cloned().collect::<String>()
                          .into_bytes()).sboxed()),
         Literal { ref chars, casei: true } => {
             let chars = chars.to_owned();
@@ -124,7 +124,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                          .collect::<Vec<_>>()).sboxed())
         },
 
-        AnyChar => Ok(char::ANY.sboxed().prop_map(|c| to_bytes(c)).sboxed()),
+        AnyChar => Ok(char::ANY.prop_map(to_bytes).sboxed()),
         AnyCharNoNL => {
             static NONL_RANGES: &[(char,char)] = &[
                 ('\x00', '\x09'),
@@ -138,7 +138,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                 ('\x0B', ::std::char::MAX),
             ];
             Ok(char::ranges(Cow::Borrowed(NONL_RANGES))
-               .prop_map(|c| to_bytes(c)).sboxed())
+               .prop_map(to_bytes).sboxed())
         },
         AnyByte => Ok(num::u8::ANY.prop_map(|b| vec![b]).sboxed()),
         AnyByteNoNL => Ok((0xBu8..).sboxed()
@@ -239,7 +239,7 @@ fn flip_case_to_bytes(flip: bool, ch: char) -> Vec<u8> {
 }
 
 fn to_bytes(ch: char) -> Vec<u8> {
-    [ch].iter().map(|&c|c).collect::<String>().into_bytes()
+    [ch].iter().cloned().collect::<String>().into_bytes()
 }
 
 fn flip_ascii_case(flip: bool, ch: u8) -> u8 {
@@ -266,7 +266,7 @@ mod test {
         let mut generated = HashSet::new();
 
         let strategy = string_regex(pattern).unwrap();
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..iterations {
             let mut value = strategy.new_value(&mut runner).unwrap();
 

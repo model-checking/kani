@@ -37,13 +37,13 @@ impl<S : Clone, F> Clone for Filter<S, F> {
         Filter {
             source: self.source.clone(),
             whence: self.whence.clone(),
-            fun: self.fun.clone(),
+            fun: Arc::clone(&self.fun),
         }
     }
 }
 
 impl<S : Strategy,
-     F : Fn (&<S::Value as ValueTree>::Value) -> bool>
+     F : Fn (&ValueFor<S>) -> bool>
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
@@ -57,7 +57,7 @@ Strategy for Filter<S, F> {
                 return Ok(Filter {
                     source: val,
                     whence: self.whence.clone(),
-                    fun: self.fun.clone(),
+                    fun: Arc::clone(&self.fun),
                 })
             }
         }

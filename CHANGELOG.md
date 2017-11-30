@@ -1,9 +1,36 @@
 ## 0.3.2
 
+### New Additions
+
 - Added `Strategy::sboxed()` and `SBoxedStrategy` to make `Send + Sync` boxed
   strategies.
 
 - `RegexGeneratorStrategy` is now `Send` and `Sync`.
+
+- Added a type alias `ValueFor<S>` where `S: Strategy`. This is a shorter way
+  to refer to: `<<S as Strategy>::Value as ValueTree>::Value`.
+
+- Added a type alias `type W<T> = (u32, T)` for a weighted strategy `T` in the
+  context of union strategies.
+
+- `TestRunner` now implements `Default`.
+
+- Added `Config::with_cases(number_of_cases: u32) -> Config` for simpler
+  construction of a `Config` that only differs by the number of test cases.
+
+- The default number of test cases to run is `256` (as before). This default
+  which is encoded by `Config::default()` is now configurable by setting the
+  env-var `PROPTEST_REQUIRED_CASES` to a value that can be parsed as a `u32`.
+  This variable is read at runtime.
+
+- Bumped dependency `rand = "0.3.18"`.
+
+- Added `proptest::collection::subsequence<T: Clone>(Vec<T>, Range<usize>)`
+  which returns a strategy generating subsequences, of the source `Vec`,
+  with a size within the given `Range`.
+
+- Added the trait `CollectionStrategy` which provides `.prop_sample` directly
+  on collection types. The operation is the same as `subsequence` for `Vec`.
 
 ## 0.3.1
 
