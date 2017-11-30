@@ -16,7 +16,6 @@ use std::collections::*;
 use std::fmt;
 use std::hash::Hash;
 use std::ops::Range;
-use std::slice;
 
 use bit_set::BitSet;
 use rand;
@@ -121,7 +120,7 @@ impl<T: Clone + fmt::Debug> SubseqStrategy<T> {
 
 impl<T: Clone + fmt::Debug> Strategy for SubseqStrategy<T> {
     type Value = SubseqValueTree<T>;
-    
+
     fn new_value(&self, runner: &mut TestRunner)
         -> Result<Self::Value, String>
     {
@@ -153,12 +152,7 @@ impl<T: Clone + fmt::Debug> ValueTree for SubseqValueTree<T> {
     type Value = Vec<T>;
 
     fn current(&self) -> Self::Value {
-        // We verify manually that self.len <= self.data.len(),
-        // therefore it is safe. The assertion should always hold.
-        assert!(self.len <= self.data.len());
-        unsafe {
-            slice::from_raw_parts(self.data.as_ptr(), self.len)
-        }.into()
+        self.data[..self.len].into()
     }
 
     fn simplify(&mut self) -> bool {
