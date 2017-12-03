@@ -28,12 +28,8 @@
 
 - Bumped dependency `rand = "0.3.18"`.
 
-- Added `proptest::collection::subsequence<T: Clone>(Vec<T>, Range<usize>)`
-  which returns a strategy generating subsequences, of the source `Vec`,
-  with a size within the given `Range`.
-
-- Added the trait `CollectionStrategy` which provides `.prop_sample` directly
-  on collection types. The operation is the same as `subsequence` for `Vec`.
+- Added `proptest::sample::subsequence` which returns a strategy generating
+  subsequences, of the source `Vec`, with a size within the given `Range`.
 
 ## 0.3.1
 

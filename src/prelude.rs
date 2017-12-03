@@ -33,4 +33,5 @@ pub mod prop {
     pub use string;
     pub use option;
     pub use result;
+    pub use sample;
 }

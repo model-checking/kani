@@ -1300,7 +1300,7 @@
 //! Another way is to use `#![proptest_config(expr)]` inside `proptest!` where
 //! `expr : Config`. To only change the number of test cases, you can simply
 //! write:
-//! 
+//!
 //! ```rust
 //! #[macro_use] extern crate proptest;
 //! use proptest::test_runner::Config;
@@ -1322,7 +1322,7 @@
 //! #
 //! # fn main() { test_add(); }
 //! ```
-//! 
+//!
 //! Through the same `proptest_config` mechanism you may fine-tune your
 //! configuration through the `Config` type. See its documentation for more
 //! information.
@@ -1420,6 +1420,7 @@ pub mod char;
 pub mod string;
 pub mod option;
 pub mod result;
+pub mod sample;
 
 #[doc(hidden)]
 #[macro_use] pub mod sugar;
