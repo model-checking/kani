@@ -2,6 +2,9 @@
 
 ### New Additions
 
+- Added `SampledBitSetStrategy` to generate bit sets based on size
+  distribution.
+
 - Added `Strategy::sboxed()` and `SBoxedStrategy` to make `Send + Sync` boxed
   strategies.
 

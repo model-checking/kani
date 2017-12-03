@@ -17,10 +17,12 @@
 //! modules of the `num` module instead.
 
 use std::fmt;
+use std::marker::PhantomData;
 use std::mem;
+use std::ops::Range;
 
 use bit_set::BitSet;
-use rand::Rng;
+use rand::{self, Rng};
 
 use strategy::*;
 use test_runner::*;
@@ -39,6 +41,20 @@ pub trait BitSetLike : Clone + fmt::Debug {
     fn set(&mut self, ix: usize);
     /// Clear the given bit.
     fn clear(&mut self, ix: usize);
+    /// Return the number of bits set.
+    ///
+    /// This has a default for backwards compatibility, which simply does a
+    /// linear scan through the bits. Implementations are strongly encouraged
+    /// to override this.
+    fn count(&self) -> usize {
+        let mut n = 0;
+        for i in 0..self.len() {
+            if self.test(i) {
+                n += 1;
+            }
+        }
+        n
+    }
 }
 
 macro_rules! int_bitset {
@@ -54,6 +70,9 @@ macro_rules! int_bitset {
             }
             fn clear(&mut self, ix: usize) {
                 *self &= !((1 as $typ) << ix);
+            }
+            fn count(&self) -> usize {
+                self.count_ones() as usize
             }
         }
     }
@@ -88,6 +107,10 @@ impl BitSetLike for BitSet {
 
     fn clear(&mut self, bit: usize) {
         self.remove(bit);
+    }
+
+    fn count(&self) -> usize {
+        self.len()
     }
 }
 
@@ -139,16 +162,80 @@ impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
             }
         }
 
-        Ok(BitSetValueTree { inner, shrink: self.min, prev_shrink: None })
+        Ok(BitSetValueTree {
+            inner,
+            shrink: self.min,
+            prev_shrink: None,
+            min_count: 0
+        })
     }
 }
 
-/// Value tree produced by `BitSetStrategy`.
+/// Generates bit sets with a particular number of bits set.
+///
+/// Specifically, this strategy is given both a size range and a bit range. To
+/// produce a new value, it selects a size, then uniformly selects that many
+/// bits from within the bit range.
+///
+/// Shrinking happens as with [`BitSetStrategy`](struct.BitSetStrategy.html).
+#[derive(Clone, Debug)]
+pub struct SampledBitSetStrategy<T : BitSetLike> {
+    size: Range<usize>,
+    bits: Range<usize>,
+    _marker: PhantomData<T>,
+}
+
+impl<T : BitSetLike> SampledBitSetStrategy<T> {
+    /// Create a strategy which generates values where bits within the bounds
+    /// given by `bits` may be set. The number of bits that are set is chosen
+    /// to be in the range given by `size`.
+    ///
+    /// Due to the generics, the functions in the typed submodules are usually
+    /// preferable to calling this directly.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `size` includes a value that is greater than the number of
+    /// bits in `bits`.
+    pub fn new(size: Range<usize>, bits: Range<usize>) -> Self {
+        let available_bits = bits.end - bits.start;
+        assert!(size.end <= available_bits + 1,
+                "Illegal SampledBitSetStrategy: have {} bits available, \
+                 but requested size is {}..{}",
+                available_bits, size.start, size.end);
+        SampledBitSetStrategy {
+            size, bits, _marker: PhantomData
+        }
+    }
+}
+
+impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
+    type Value = BitSetValueTree<T>;
+
+    fn new_value(&self, runner: &mut TestRunner)
+                 -> Result<Self::Value, String> {
+        let mut bits = T::new_bitset(self.bits.end);
+        let count = runner.rng().gen_range(self.size.start, self.size.end);
+        for bit in rand::sample(runner.rng(), self.bits.clone(), count) {
+            bits.set(bit);
+        }
+
+        Ok(BitSetValueTree {
+            inner: bits,
+            shrink: self.bits.start,
+            prev_shrink: None,
+            min_count: self.size.start,
+        })
+    }
+}
+
+/// Value tree produced by `BitSetStrategy` and `SampledBitSetStrategy`.
 #[derive(Clone, Copy, Debug)]
 pub struct BitSetValueTree<T : BitSetLike> {
     inner: T,
     shrink: usize,
     prev_shrink: Option<usize>,
+    min_count: usize,
 }
 
 impl<T : BitSetLike> ValueTree for BitSetValueTree<T> {
@@ -159,6 +246,10 @@ impl<T : BitSetLike> ValueTree for BitSetValueTree<T> {
     }
 
     fn simplify(&mut self) -> bool {
+        if self.inner.count() <= self.min_count {
+            return false;
+        }
+
         while self.shrink < self.inner.len() &&
             !self.inner.test(self.shrink)
         { self.shrink += 1; }
@@ -208,6 +299,19 @@ macro_rules! int_api {
             pub fn masked(mask: $typ) -> BitSetStrategy<$typ> {
                 BitSetStrategy::masked(mask)
             }
+
+            /// Create a strategy which generates values where bits within the
+            /// bounds given by `bits` may be set. The number of bits that are
+            /// set is chosen to be in the range given by `size`.
+            ///
+            /// ## Panics
+            ///
+            /// Panics if `size` includes a value that is greater than the
+            /// number of bits in `bits`.
+            pub fn sampled(size: Range<usize>, bits: Range<usize>)
+                           -> SampledBitSetStrategy<$typ> {
+                SampledBitSetStrategy::new(size, bits)
+            }
         }
     }
 }
@@ -237,6 +341,19 @@ macro_rules! minimal_api {
             /// may be set.
             pub fn masked(mask: $typ) -> BitSetStrategy<$typ> {
                 BitSetStrategy::masked(mask)
+            }
+
+            /// Create a strategy which generates values where bits within the
+            /// bounds given by `bits` may be set. The number of bits that are
+            /// set is chosen to be in the range given by `size`.
+            ///
+            /// ## Panics
+            ///
+            /// Panics if `size` includes a value that is greater than the
+            /// number of bits in `bits`.
+            pub fn sampled(size: Range<usize>, bits: Range<usize>)
+                           -> SampledBitSetStrategy<$typ> {
+                SampledBitSetStrategy::new(size, bits)
             }
         }
     }
@@ -326,6 +443,51 @@ mod test {
                 assert!(value.complicate());
                 assert_eq!(orig, value.current());
             }
+        }
+    }
+
+    #[test]
+    fn sampled_selects_correct_sizes_and_bits() {
+        let input = u32::sampled(4..8, 10..20);
+        let mut seen_counts = [0; 32];
+        let mut seen_bits = [0; 32];
+
+        let mut runner = TestRunner::default();
+        for _ in 0..2048 {
+            let value = input.new_value(&mut runner).unwrap().current();
+            let count = value.count_ones() as usize;
+            assert!(count >= 4 && count < 8);
+            seen_counts[count] += 1;
+
+            for bit in 0..32 {
+                if 0 != value & (1 << bit) {
+                    assert!(bit >= 10 && bit < 20);
+                    seen_bits[bit] += value;
+                }
+            }
+        }
+
+        for i in 4..8 {
+            assert!(seen_counts[i] >= 256 && seen_counts[i] < 1024);
+        }
+
+        let least_seen_bit_count =
+            seen_bits[10..20].iter().cloned().min().unwrap();
+        let most_seen_bit_count =
+            seen_bits[10..20].iter().cloned().max().unwrap();
+        assert_eq!(1, most_seen_bit_count / least_seen_bit_count);
+    }
+
+    #[test]
+    fn sampled_doesnt_shrink_below_min_size() {
+        let input = u32::sampled(4..8, 10..20);
+
+        let mut runner = TestRunner::default();
+        for _ in 0..256 {
+            let mut value = input.new_value(&mut runner).unwrap();
+            while value.simplify() { }
+
+            assert_eq!(4, value.current().count_ones());
         }
     }
 }
