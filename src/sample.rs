@@ -21,6 +21,7 @@ use std::sync::Arc;
 use bit_set::BitSet;
 
 use bits::{self, BitSetValueTree, SampledBitSetStrategy};
+use num;
 use strategy::*;
 use test_runner::*;
 
@@ -102,6 +103,50 @@ impl<T : fmt::Debug + Clone + 'static> ValueTree for SubsequenceValueTree<T> {
     }
 }
 
+
+#[derive(Debug, Clone)]
+struct SelectMapFn<T : Clone + 'static>(Arc<Cow<'static, [T]>>);
+
+impl<T : fmt::Debug + Clone + 'static> statics::MapFn<usize>
+for SelectMapFn<T> {
+    type Output = T;
+
+    fn apply(&self, ix: usize) -> T {
+        self.0[ix].clone()
+    }
+}
+
+opaque_strategy_wrapper! {
+    /// Strategy to produce one value from a fixed collection of options.
+    ///
+    /// Created by the `select()` in the same module.
+    #[derive(Clone, Debug)]
+    pub struct SelectStrategy[<T>][where T : Clone + fmt::Debug + 'static](
+        statics::Map<Range<usize>, SelectMapFn<T>>)
+        -> SelectValueTree<T>;
+    /// `ValueTree` corresponding to `SelectStrategy`.
+    #[derive(Clone, Debug)]
+    pub struct SelectValueTree[<T>][where T : Clone + fmt::Debug + 'static](
+        statics::Map<num::usize::BinarySearch, SelectMapFn<T>>)
+        -> T;
+}
+
+/// Create a strategy which uniformly selects one value from `values`.
+///
+/// `values` should be a `&'static [T]` or a `Vec<T>`, or potentially another
+/// type that can be coerced to `Cow<'static,[T]>`.
+///
+/// This is largely equivalent to making a `Union` of a bunch of `Just`
+/// strategies, but is substantially more efficient and shrinks by binary
+/// search.
+pub fn select<T, A>(values: A) -> SelectStrategy<T>
+where A : 'static + Into<Cow<'static, [T]>>, T : Clone + fmt::Debug + 'static {
+    let cow = values.into();
+
+    SelectStrategy(statics::Map::new(
+        0..cow.len(), SelectMapFn(Arc::new(cow))))
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
@@ -156,5 +201,23 @@ mod test {
         let input = subsequence(values, 1..3);
 
         let _ = input.new_value(&mut runner).unwrap().current();
+    }
+
+    #[test]
+    fn test_select() {
+        let values = vec![0, 1, 2, 3, 4, 5, 6, 7];
+        let mut counts = [0; 8];
+
+        let mut runner = TestRunner::default();
+        let input = select(values);
+
+        for _ in 0..1024 {
+            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+        }
+
+        for (ix, &count) in counts.iter().enumerate() {
+            assert!(count >= 64 && count < 256,
+                    "Generated value {} {} times", ix, count);
+        }
     }
 }

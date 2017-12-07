@@ -29,6 +29,9 @@
 - Added `proptest::sample::subsequence` which returns a strategy generating
   subsequences, of the source `Vec`, with a size within the given `Range`.
 
+- Added `proptest::sample::select` which returns a strategy selecting exactly
+  one value from another collection.
+
 ## 0.3.1
 
 ### New Additions
