@@ -39,6 +39,8 @@
 
 - Added `prop_shuffle` strategy combinator.
 
+### Bug Fixes
+
 - Fix bug where `Vec` shrinking could corrupt the state of its values, for
   example leading to out-of-range integers.
 
