@@ -291,6 +291,11 @@ wide. In our code:
 We were off by one, and need to use the range `5..7`. After fixing this,
 the test passes.
 
+The `proptest!` macro has some additional syntax, including for setting
+configuration for things like the number of test cases to generate. See its
+[documentation](https://docs.rs/proptest/*/proptest/macro.proptest.html)
+for more details.
+
 There is a more in-depth tutorial
 [in the crate documentation](https://docs.rs/proptest/#in-depth-tutorial).
 
