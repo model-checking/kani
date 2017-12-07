@@ -10,6 +10,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use rand::XorShiftRng;
+
 use strategy::*;
 use test_runner::*;
 
@@ -48,6 +50,24 @@ pub trait Strategy : fmt::Debug {
         (self, fun: F) -> Map<Self, F>
     where Self : Sized {
         Map { source: self, fun: Arc::new(fun) }
+    }
+
+    /// Returns a strategy which produces values transformed by the function
+    /// `fun`, which is additionally given a random number generator.
+    ///
+    /// This is exactly like `prop_map()` except for the addition of the second
+    /// argument to the function. This allows introducing chaotic variations to
+    /// generated values that are not easily expressed otherwise while allowing
+    /// shrinking to proceed reasonably.
+    ///
+    /// During shrinking, `fun` is always called with an identical random
+    /// number generator, so if it is a pure function it will always perform
+    /// the same perturbation.
+    fn prop_perturb<O : fmt::Debug,
+                    F : Fn (ValueFor<Self>, XorShiftRng) -> O>
+        (self, fun: F) -> Perturb<Self, F>
+    where Self : Sized {
+        Perturb { source: self, fun: Arc::new(fun) }
     }
 
     /// Maps values produced by this strategy into new strategies and picks

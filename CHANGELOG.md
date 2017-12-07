@@ -32,6 +32,8 @@
 - Added `proptest::sample::select` which returns a strategy selecting exactly
   one value from another collection.
 
+- Added `prop_perturb` strategy combinator.
+
 ## 0.3.1
 
 ### New Additions
