@@ -24,70 +24,95 @@ use rand::{self, XorShiftRng};
 
 use strategy::*;
 
-/// The default amount of successful test cases executed for a test to pass.
-const FALLBACK_DEFAULT_CASES: u32 = 256;
-
-/// Compute the default number of test cases to use for `Config::default`.
+/// The default config, computed by combining environment variables and
+/// defaults.
 lazy_static! {
-    static ref CONFIG_DEFAULT_CASES: u32 = {
-        if let Ok(var) = env::var("PROPTEST_REQUIRED_CASES") {
-            if let Ok(res) = var.parse::<u32>() {
-                return res;
-            } else {
-                eprintln!(
-                    "The env-var PROPTEST_REQUIRED_CASES can't be parsed as u32.")
+    static ref DEFAULT_CONFIG: Config = {
+        fn from_env_or_default(var: &str, dflt: u32) -> u32 {
+            if let Ok(value) = env::var(var) {
+                if let Ok(res) = value.parse::<u32>() {
+                    return res;
+                } else {
+                    eprintln!(
+                        "The env-var {}={} can't be parsed as u32, using \
+                         default of {}.", var, value, dflt);
+                }
             }
+            dflt
         }
-        return FALLBACK_DEFAULT_CASES;
+
+        Config {
+            cases:
+                from_env_or_default("PROPTEST_CASES", 256),
+            max_local_rejects:
+                from_env_or_default("PROPTEST_MAX_LOCAL_REJECTS", 65536),
+            max_global_rejects:
+                from_env_or_default("PROPTEST_MAX_GLOBAL_REJECTS", 1024),
+            max_flat_map_regens:
+                from_env_or_default("PROPTEST_MAX_FLAT_MAP_REGENS", 1_000_000),
+            _non_exhaustive: (),
+        }
     };
 }
 
 /// Configuration for how a proptest test should be run.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     /// The number of successful test cases that must execute for the test as a
     /// whole to pass.
     ///
-    /// The default is 256.
+    /// The default is 256, which can be overridden by setting the
+    /// `PROPTEST_CASES` environment variable.
     pub cases: u32,
     /// The maximum number of individual inputs that may be rejected before the
     /// test as a whole aborts.
     ///
-    /// The default is 65536.
+    /// The default is 65536, which can be overridden by setting the
+    /// `PROPTEST_CASES` environment variable.
     pub max_local_rejects: u32,
     /// The maximum number of combined inputs that may be rejected before the
     /// test as a whole aborts.
     ///
-    /// The default is 1024.
+    /// The default is 1024, which can be overridden by setting the
+    /// `PROPTEST_MAX_GLOBAL_REJECTS` environment variable.
     pub max_global_rejects: u32,
     /// The maximum number of times all `Flatten` combinators will attempt to
     /// regenerate values. This puts a limit on the worst-case exponential
     /// explosion that can happen with nested `Flatten`s.
     ///
-    /// The default is 1000000.
+    /// The default is 1_000_000, which can be overridden by setting the
+    /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
     pub _non_exhaustive: (),
 }
-
 impl Config {
     /// Constructs a `Config` only differing from the `default()` in the
     /// number of test cases required to pass the test successfully.
+    ///
+    /// This is simply a more concise option to using field-record update
+    /// syntax:
+    ///
+    /// ```
+    /// # use proptest::test_runner::Config;
+    /// assert_eq!(
+    ///     Config::with_cases(42),
+    ///     Config { cases: 42, .. Config::default() }
+    /// );
+    /// ```
     pub fn with_cases(n: u32) -> Self {
         Self {
             cases: n,
-            max_local_rejects: 65_536,
-            max_global_rejects: 1024,
-            max_flat_map_regens: 1_000_000,
-            _non_exhaustive: (),
+            .. Config::default()
         }
     }
 }
 
+
 impl Default for Config {
     fn default() -> Self {
-        Self::with_cases(*CONFIG_DEFAULT_CASES)
+        DEFAULT_CONFIG.clone()
     }
 }
 
