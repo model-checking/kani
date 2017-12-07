@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::cmp;
 use std::fmt;
 use std::sync::Arc;
 
@@ -322,6 +323,48 @@ pub trait Strategy : fmt::Debug {
         }
     }
 
+    /// Shuffle the contents of the values produced by this strategy.
+    ///
+    /// That is, this modifies a strategy producing a `Vec`, slice, etc, to
+    /// shuffle the contents of that `Vec`/slice/etc.
+    ///
+    /// Initially, the value is fully shuffled. During shrinking, the input
+    /// value will initially be unchanged while the result will gradually be
+    /// restored to its original order. Once de-shuffling either completes or
+    /// is cancelled by calls to `complicate()` pinning it to a particular
+    /// permutation, the inner value will be simplified.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// #[macro_use] extern crate proptest;
+    /// use proptest::prelude::*;
+    ///
+    /// static VALUES: &'static [u32] = &[0, 1, 2, 3, 4];
+    ///
+    /// fn is_permutation(orig: &[u32], mut actual: Vec<u32>) -> bool {
+    ///   actual.sort();
+    ///   orig == &actual[..]
+    /// }
+    ///
+    /// proptest! {
+    ///   # /*
+    ///   #[test]
+    ///   # */
+    ///   fn test_is_permutation(
+    ///       ref perm in Just(VALUES.to_owned()).prop_shuffle()
+    ///   ) {
+    ///       assert!(is_permutation(VALUES, perm.clone()));
+    ///   }
+    /// }
+    /// #
+    /// # fn main() { test_is_permutation(); }
+    /// ```
+    fn prop_shuffle(self) -> Shuffle<Self>
+    where Self : Sized, ValueFor<Self> : Shuffleable {
+        Shuffle(self)
+    }
+
     /// Erases the type of this `Strategy` so it can be passed around as a
     /// simple trait object.
     ///
@@ -403,6 +446,9 @@ pub trait ValueTree {
     /// point" between high and low, rounding towards low.
     ///
     /// Returns whether any state changed as a result of this call.
+    ///
+    /// This call needs to correctly handle being called even immediately after
+    /// it had been called previously and returned `false`.
     fn simplify(&mut self) -> bool;
     /// Attempts to partially undo the last simplification. Notionally, this
     /// sets the "low" value to one plus the current value, and the current
@@ -410,6 +456,11 @@ pub trait ValueTree {
     /// towards low.
     ///
     /// Returns whether any state changed as a result of this call.
+    ///
+    /// This call does not need to gracefully handle being called before
+    /// `simplify()` was ever called, but does need to correctly handle being
+    /// called even immediately after it had been called previously and
+    /// returned `false`.
     fn complicate(&mut self) -> bool;
 }
 
@@ -496,4 +547,134 @@ impl<T : ValueTree> ValueTree for NoShrink<T> {
 
     fn simplify(&mut self) -> bool { false }
     fn complicate(&mut self) -> bool { false }
+}
+
+/// Run some tests on the given `Strategy` to ensure that it upholds the
+/// simplify/complicate contracts.
+///
+/// This is used to internally test proptest, but is made generally available
+/// for external implementations to use as well.
+///
+/// This only works for infallible strategies.
+pub fn check_strategy_sanity<S : Strategy>(strategy: S)
+where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
+    let mut runner = TestRunner::new(Config::default());
+
+    for _ in 0..1024 {
+        let mut state = strategy.new_value(&mut runner).unwrap();
+
+        let mut num_simplifies = 0;
+        let mut before_simplified;
+        loop {
+            before_simplified = state.clone();
+            if !state.simplify() {
+                break;
+            }
+
+            let mut complicated = state.clone();
+            let before_complicated = state.clone();
+            assert!(complicated.complicate(),
+                    "complicate() returned false immediately after simplify() \
+                     returned true. internal state after {} calls to simplify():\n\
+                     {:#?}\n\
+                     complicated to:\n\
+                     {:#?}", num_simplifies + 1, state, complicated);
+
+            let mut prev_complicated = complicated.clone();
+            let mut num_complications = 0;
+            loop {
+                if !complicated.complicate() {
+                    break;
+                }
+                prev_complicated = complicated.clone();
+                num_complications += 1;
+
+                if num_complications > 65536 {
+                    panic!("complicate() returned true over 65536 times in a \
+                            row; aborting due to possible infinite loop. \
+                            If this is not an infinite loop, it may be \
+                            necessary to reconsider how shrinking is \
+                            implemented or use a simpler test strategy. \
+                            Internal state:\n{:#?}", state);
+                }
+            }
+
+            assert_eq!(before_simplified.current(), complicated.current(),
+                       "Calling simplify(), then complicate() until it \
+                        returned false, did not return to the value before \
+                        simplify. Expected:\n\
+                        {:#?}\n\
+                        Actual:\n\
+                        {:#?}\n\
+                        Internal state after {} calls to simplify():\n\
+                        {:#?}\n\
+                        Internal state after another call to simplify():\n\
+                        {:#?}\n\
+                        Internal state after {} subsequent calls to \
+                        complicate():\n\
+                        {:#?}",
+                       before_simplified.current(), complicated.current(),
+                       num_simplifies, before_simplified, before_complicated,
+                       num_complications + 1, complicated);
+
+            for iter in 1..16 {
+                assert_eq!(prev_complicated.current(), complicated.current(),
+                           "complicate() returned false but changed the output \
+                            value anyway.\n\
+                            Old value:\n\
+                            {:#?}\n\
+                            New value:\n\
+                            {:#?}\n\
+                            Old internal state:\n\
+                            {:#?}\n\
+                            New internal state after {} calls to complicate()\
+                            including the :\n\
+                            {:#?}",
+                           prev_complicated.current(),
+                           complicated.current(),
+                           prev_complicated, iter, complicated);
+
+                assert!(!complicated.complicate(),
+                        "complicate() returned true after having returned \
+                         false;\n\
+                         Internal state before:\n{:#?}\n\
+                         Internal state after calling complicate() {} times:\n\
+                         {:#?}", prev_complicated, iter + 1, complicated);
+            }
+
+            num_simplifies += 1;
+            if num_simplifies > 65536 {
+                panic!("simplify() returned true over 65536 times in a row, \
+                        aborting due to possible infinite loop. If this is not \
+                        an infinite loop, it may be necessary to reconsider \
+                        how shrinking is implemented or use a simpler test \
+                        strategy. Internal state:\n{:#?}", state);
+            }
+        }
+
+        for iter in 0..16 {
+            assert_eq!(before_simplified.current(), state.current(),
+                       "simplify() returned false but changed the output \
+                        value anyway.\n\
+                        Old value:\n\
+                        {:#?}\n\
+                        New value:\n\
+                        {:#?}\n\
+                        Previous internal state:\n\
+                        {:#?}\n\
+                        New internal state after calling simplify() {} times:\n\
+                        {:#?}",
+                       before_simplified.current(),
+                       state.current(),
+                       before_simplified, iter, state);
+
+            if state.simplify() {
+                panic!("simplify() returned true after having returned false. \
+                        Previous internal state:\n\
+                        {:#?}\n\
+                        New internal state after calling simplify() {} times:\n\
+                        {:#?}", before_simplified, iter + 1, state);
+            }
+        }
+    }
 }

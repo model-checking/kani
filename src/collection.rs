@@ -409,6 +409,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
             if !self.included_elements.contains(ix) {
                 // No use shrinking something we're not including.
                 self.shrink = Shrink::ShrinkElement(ix + 1);
+                continue;
             }
 
             if !self.elements[ix].simplify() {
@@ -489,6 +490,11 @@ mod test {
         }
 
         assert!(num_successes < 256);
+    }
+
+    #[test]
+    fn test_vec_sanity() {
+        check_strategy_sanity(vec(0i32..1000, 5..10));
     }
 
     #[test]

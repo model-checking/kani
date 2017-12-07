@@ -34,6 +34,14 @@
 
 - Added `prop_perturb` strategy combinator.
 
+- Added `strategy::check_strategy_sanity()` function to do sanity checks on the
+  shrinking implementation of a strategy.
+
+- Added `prop_shuffle` strategy combinator.
+
+- Fix bug where `Vec` shrinking could corrupt the state of its values, for
+  example leading to out-of-range integers.
+
 ## 0.3.1
 
 ### New Additions

@@ -524,6 +524,16 @@ mod test {
     }
 
     #[test]
+    fn unsigned_integer_binsearch_simplify_complicate_contract_upheld() {
+        check_strategy_sanity(0u32..1000u32);
+    }
+
+    #[test]
+    fn signed_integer_binsearch_simplify_complicate_contract_upheld() {
+        check_strategy_sanity(0i32..1000i32);
+    }
+
+    #[test]
     fn positive_float_simplifies_to_zero() {
         let mut runner = TestRunner::new(Config::default());
         let mut value = (0.0f64..2.0).new_value(&mut runner).unwrap();

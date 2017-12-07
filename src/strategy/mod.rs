@@ -15,6 +15,7 @@ mod filter;
 mod flatten;
 mod unions;
 mod recursive;
+mod shuffle;
 
 pub use self::traits::*;
 pub use self::map::*;
@@ -22,5 +23,6 @@ pub use self::filter::*;
 pub use self::flatten::*;
 pub use self::unions::*;
 pub use self::recursive::*;
+pub use self::shuffle::*;
 
 pub mod statics;

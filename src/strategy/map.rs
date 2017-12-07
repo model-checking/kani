@@ -114,7 +114,7 @@ Strategy for Perturb<S, F> {
     }
 }
 
-/// `Strategy` perturbation adaptor.
+/// `ValueTree` perturbation adaptor.
 ///
 /// See `Strategy::prop_perturb()`.
 pub struct PerturbValueTree<S, F> {
