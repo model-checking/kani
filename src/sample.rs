@@ -42,7 +42,7 @@ use test_runner::*;
 /// `values`.
 ///
 /// Panics if `size` is a zero-length range.
-pub fn subsequence<T, A>(values: A, size: Range<usize>) -> SubsequenceStrategy<T>
+pub fn subsequence<T, A>(values: A, size: Range<usize>) -> Subsequence<T>
 where A : 'static + Into<Cow<'static, [T]>>, T : Clone + 'static {
     let values = values.into();
     let len = values.len();
@@ -51,7 +51,7 @@ where A : 'static + Into<Cow<'static, [T]>>, T : Clone + 'static {
     assert!(size.end <= len + 1,
             "Maximum size of subsequence {} exceeds length of input {}",
             size.end, len);
-    SubsequenceStrategy {
+    Subsequence {
         values: Arc::new(values),
         bit_strategy: bits::bitset::sampled(size, 0..len),
     }
@@ -62,12 +62,12 @@ where A : 'static + Into<Cow<'static, [T]>>, T : Clone + 'static {
 ///
 /// This is created by the `subsequence` function in the same module.
 #[derive(Debug, Clone)]
-pub struct SubsequenceStrategy<T : Clone + 'static> {
+pub struct Subsequence<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
     bit_strategy: SampledBitSetStrategy<BitSet>,
 }
 
-impl<T : fmt::Debug + Clone + 'static> Strategy for SubsequenceStrategy<T> {
+impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
     type Value = SubsequenceValueTree<T>;
 
     fn new_value(&self, runner: &mut TestRunner)
@@ -79,7 +79,7 @@ impl<T : fmt::Debug + Clone + 'static> Strategy for SubsequenceStrategy<T> {
     }
 }
 
-/// `ValueTree` type for `SubsequenceStrategy`.
+/// `ValueTree` type for `Subsequence`.
 #[derive(Debug, Clone)]
 pub struct SubsequenceValueTree<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
@@ -121,10 +121,10 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `select()` in the same module.
     #[derive(Clone, Debug)]
-    pub struct SelectStrategy[<T>][where T : Clone + fmt::Debug + 'static](
+    pub struct Select[<T>][where T : Clone + fmt::Debug + 'static](
         statics::Map<Range<usize>, SelectMapFn<T>>)
         -> SelectValueTree<T>;
-    /// `ValueTree` corresponding to `SelectStrategy`.
+    /// `ValueTree` corresponding to `Select`.
     #[derive(Clone, Debug)]
     pub struct SelectValueTree[<T>][where T : Clone + fmt::Debug + 'static](
         statics::Map<num::usize::BinarySearch, SelectMapFn<T>>)
@@ -139,11 +139,11 @@ opaque_strategy_wrapper! {
 /// This is largely equivalent to making a `Union` of a bunch of `Just`
 /// strategies, but is substantially more efficient and shrinks by binary
 /// search.
-pub fn select<T, A>(values: A) -> SelectStrategy<T>
+pub fn select<T, A>(values: A) -> Select<T>
 where A : 'static + Into<Cow<'static, [T]>>, T : Clone + fmt::Debug + 'static {
     let cow = values.into();
 
-    SelectStrategy(statics::Map::new(
+    Select(statics::Map::new(
         0..cow.len(), SelectMapFn(Arc::new(cow))))
 }
 
