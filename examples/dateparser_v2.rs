@@ -9,8 +9,6 @@
 
 #[macro_use] extern crate proptest;
 
-use std::ascii::AsciiExt;
-
 fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
     if 10 != s.len() { return None; }
 
