@@ -493,6 +493,6 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        check_strategy_sanity(u32::masked(0xdeadbeef));
+        check_strategy_sanity(u32::masked(0xdeadbeef), None);
     }
 }

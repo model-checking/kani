@@ -79,6 +79,6 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        check_strategy_sanity(ANY);
+        check_strategy_sanity(ANY, None);
     }
 }

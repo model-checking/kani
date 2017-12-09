@@ -525,12 +525,14 @@ mod test {
 
     #[test]
     fn unsigned_integer_binsearch_simplify_complicate_contract_upheld() {
-        check_strategy_sanity(0u32..1000u32);
+        check_strategy_sanity(0u32..1000u32, None);
+        check_strategy_sanity(0u32..1u32, None);
     }
 
     #[test]
     fn signed_integer_binsearch_simplify_complicate_contract_upheld() {
-        check_strategy_sanity(0i32..1000i32);
+        check_strategy_sanity(0i32..1000i32, None);
+        check_strategy_sanity(0i32..1i32, None);
     }
 
     #[test]

@@ -165,6 +165,6 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        check_strategy_sanity([(0i32..1000),(1i32..1000)]);
+        check_strategy_sanity([(0i32..1000),(1i32..1000)], None);
     }
 }

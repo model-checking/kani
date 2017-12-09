@@ -494,7 +494,7 @@ mod test {
 
     #[test]
     fn test_vec_sanity() {
-        check_strategy_sanity(vec(0i32..1000, 5..10));
+        check_strategy_sanity(vec(0i32..1000, 5..10), None);
     }
 
     #[test]

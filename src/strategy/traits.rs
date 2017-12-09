@@ -445,7 +445,10 @@ pub trait ValueTree {
     /// "high" value to the current value, and the current value to a "halfway
     /// point" between high and low, rounding towards low.
     ///
-    /// Returns whether any state changed as a result of this call.
+    /// Returns whether any state changed as a result of this call. This does
+    /// not necessarily imply that the value of `current()` has changed, since
+    /// in the most general case, it is not possible for an implementation to
+    /// determine this.
     ///
     /// This call needs to correctly handle being called even immediately after
     /// it had been called previously and returned `false`.
@@ -455,7 +458,18 @@ pub trait ValueTree {
     /// value to a "halfway point" between high and the new low, rounding
     /// towards low.
     ///
-    /// Returns whether any state changed as a result of this call.
+    /// Returns whether any state changed as a result of this call. This does
+    /// not necessarily imply that the value of `current()` has changed, since
+    /// in the most general case, it is not possible for an implementation to
+    /// determine this.
+    ///
+    /// It is usually expected that, immediately after a call to `simplify()`
+    /// which returns true, this call will itself return true. However, this is
+    /// not always the case; in some strategies, particularly those that use
+    /// some form of rejection sampling, the act of trying to simplify may
+    /// change the state such that `simplify()` returns true, yet ultimately
+    /// left the resulting value unchanged, in which case there is nothing left
+    /// to complicate.
     ///
     /// This call does not need to gracefully handle being called before
     /// `simplify()` was ever called, but does need to correctly handle being
@@ -549,15 +563,48 @@ impl<T : ValueTree> ValueTree for NoShrink<T> {
     fn complicate(&mut self) -> bool { false }
 }
 
+/// Options passed to `check_strategy_sanity()`.
+#[derive(Clone, Copy, Debug)]
+pub struct CheckStrategySanityOptions {
+    /// If true (the default), require that `complicate()` return `true` at
+    /// least once after any call to `simplify()` which itself returns once.
+    ///
+    /// This property is not required by contract, but many strategies are
+    /// designed in a way that this is expected to hold.
+    pub strict_complicate_after_simplify: bool,
+
+    // Needs to be public for FRU syntax.
+    #[allow(missing_docs)]
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
+}
+
+impl Default for CheckStrategySanityOptions {
+    fn default() -> Self {
+        CheckStrategySanityOptions {
+            strict_complicate_after_simplify: true,
+            _non_exhaustive: (),
+        }
+    }
+}
+
 /// Run some tests on the given `Strategy` to ensure that it upholds the
 /// simplify/complicate contracts.
 ///
 /// This is used to internally test proptest, but is made generally available
 /// for external implementations to use as well.
 ///
+/// `options` can be passed to configure the test; if `None`, the defaults are
+/// used. Note that the defaults check for certain properties which are **not**
+/// actually required by the `Strategy` and `ValueTree` contracts; if you think
+/// your code is right but it fails the test, consider whether a non-default
+/// configuration is necessary.
+///
 /// This only works for infallible strategies.
-pub fn check_strategy_sanity<S : Strategy>(strategy: S)
+pub fn check_strategy_sanity<S : Strategy>(
+    strategy: S, options: Option<CheckStrategySanityOptions>)
 where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
+    let options = options.unwrap_or_else(CheckStrategySanityOptions::default);
     let mut runner = TestRunner::new(Config::default());
 
     for _ in 0..1024 {
@@ -573,12 +620,18 @@ where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
 
             let mut complicated = state.clone();
             let before_complicated = state.clone();
-            assert!(complicated.complicate(),
-                    "complicate() returned false immediately after simplify() \
-                     returned true. internal state after {} calls to simplify():\n\
-                     {:#?}\n\
-                     complicated to:\n\
-                     {:#?}", num_simplifies + 1, state, complicated);
+            if options.strict_complicate_after_simplify {
+                assert!(complicated.complicate(),
+                        "complicate() returned false immediately after \
+                         simplify() returned true. internal state after \
+                         {} calls to simplify():\n\
+                         {:#?}\n\
+                         simplified to:\n\
+                         {:#?}\n\
+                         complicated to:\n\
+                         {:#?}", num_simplifies, before_simplified, state,
+                        complicated);
+            }
 
             let mut prev_complicated = complicated.clone();
             let mut num_complications = 0;
