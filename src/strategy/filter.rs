@@ -123,4 +123,16 @@ mod test {
             assert!(0 == case.current() % 3);
         }
     }
+
+    #[test]
+    fn test_filter_sanity() {
+        check_strategy_sanity(
+            (0..256).prop_filter("!%5".to_owned(), |&v| 0 != v % 5),
+            Some(CheckStrategySanityOptions {
+                // Due to internal rejection sampling, `simplify()` can
+                // converge back to what `complicate()` would do.
+                strict_complicate_after_simplify: false,
+                .. CheckStrategySanityOptions::default()
+            }));
+    }
 }

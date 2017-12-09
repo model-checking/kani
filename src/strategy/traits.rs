@@ -600,7 +600,8 @@ impl Default for CheckStrategySanityOptions {
 /// your code is right but it fails the test, consider whether a non-default
 /// configuration is necessary.
 ///
-/// This only works for infallible strategies.
+/// This can work with fallible strategies, but limits how many times it will
+/// retry failures.
 pub fn check_strategy_sanity<S : Strategy>(
     strategy: S, options: Option<CheckStrategySanityOptions>)
 where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
@@ -608,7 +609,21 @@ where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
     let mut runner = TestRunner::new(Config::default());
 
     for _ in 0..1024 {
-        let mut state = strategy.new_value(&mut runner).unwrap();
+        let mut gen_tries = 0;
+        let mut state;
+        loop {
+            let err = match strategy.new_value(&mut runner) {
+                Ok(s) => { state = s; break; },
+                Err(e) => e,
+            };
+
+            gen_tries += 1;
+            if gen_tries > 100 {
+                panic!("Strategy passed to check_strategy_sanity failed \
+                        to generate a value over 100 times in a row; \
+                        last failure reason: {}", err);
+            }
+        }
 
         let mut num_simplifies = 0;
         let mut before_simplified;
