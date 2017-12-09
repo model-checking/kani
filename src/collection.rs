@@ -9,6 +9,8 @@
 
 //! Strategies for generating `std::collections` of values.
 
+#![cfg_attr(feature="cargo-clippy", allow(type_complexity))]
+
 use std::cmp::Ord;
 use std::collections::*;
 use std::fmt;
@@ -113,8 +115,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `binary_heap()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct BinaryHeapStrategy[<T>][where T : Strategy,
-                                       <T::Value as ValueTree>::Value : Ord](
+    pub struct BinaryHeapStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
         statics::Map<VecStrategy<T>, VecToBinHeap>)
         -> BinaryHeapValueTree<T::Value>;
     /// `ValueTree` corresponding to `BinaryHeapStrategy`.
@@ -129,7 +130,7 @@ opaque_strategy_wrapper! {
 pub fn binary_heap<T : Strategy>
     (element: T, size: Range<usize>)
     -> BinaryHeapStrategy<T>
-where <T::Value as ValueTree>::Value : Ord {
+where ValueFor<T> : Ord {
     BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
 }
 
@@ -154,8 +155,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `hash_set()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct HashSetStrategy[<T>][where T : Strategy,
-                                    <T::Value as ValueTree>::Value : Hash + Eq](
+    pub struct HashSetStrategy[<T>][where T : Strategy, ValueFor<T> : Hash + Eq](
         statics::Filter<statics::Map<VecStrategy<T>, VecToHashSet>, MinSize>)
         -> HashSetValueTree<T::Value>;
     /// `ValueTree` corresponding to `HashSetStrategy`.
@@ -174,7 +174,7 @@ opaque_strategy_wrapper! {
 pub fn hash_set<T : Strategy>
     (element: T, size: Range<usize>)
     -> HashSetStrategy<T>
-where <T::Value as ValueTree>::Value : Hash + Eq {
+where ValueFor<T> : Hash + Eq {
     let min_size = size.start;
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToHashSet),
@@ -200,8 +200,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `btree_set()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct BTreeSetStrategy[<T>][where T : Strategy,
-                                     <T::Value as ValueTree>::Value : Ord](
+    pub struct BTreeSetStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
         statics::Filter<statics::Map<VecStrategy<T>, VecToBTreeSet>, MinSize>)
         -> BTreeSetValueTree<T::Value>;
     /// `ValueTree` corresponding to `BTreeSetStrategy`.
@@ -220,7 +219,7 @@ opaque_strategy_wrapper! {
 pub fn btree_set<T : Strategy>
     (element: T, size: Range<usize>)
     -> BTreeSetStrategy<T>
-where <T::Value as ValueTree>::Value : Ord {
+where ValueFor<T> : Ord {
     let min_size = size.start;
 
     BTreeSetStrategy(statics::Filter::new(
@@ -249,8 +248,7 @@ opaque_strategy_wrapper! {
     /// Created by the `hash_map()` function in the same module.
     #[derive(Clone, Debug)]
     pub struct HashMapStrategy[<K, V>]
-        [where K : Strategy, V : Strategy,
-         <K::Value as ValueTree>::Value : Hash + Eq](
+        [where K : Strategy, V : Strategy, ValueFor<K> : Hash + Eq](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToHashMap>, MinSize>)
         -> HashMapValueTree<K::Value, V::Value>;
@@ -273,7 +271,7 @@ opaque_strategy_wrapper! {
 pub fn hash_map<K : Strategy, V : Strategy>
     (key: K, value: V, size: Range<usize>)
     -> HashMapStrategy<K, V>
-where <K::Value as ValueTree>::Value : Hash + Eq {
+where ValueFor<K> : Hash + Eq {
     let min_size = size.start;
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size), VecToHashMap),
@@ -301,8 +299,7 @@ opaque_strategy_wrapper! {
     /// Created by the `btree_map()` function in the same module.
     #[derive(Clone, Debug)]
     pub struct BTreeMapStrategy[<K, V>]
-        [where K : Strategy, V : Strategy,
-         <K::Value as ValueTree>::Value : Ord](
+        [where K : Strategy, V : Strategy, ValueFor<K> : Ord](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToBTreeMap>, MinSize>)
         -> BTreeMapValueTree<K::Value, V::Value>;
@@ -325,7 +322,7 @@ opaque_strategy_wrapper! {
 pub fn btree_map<K : Strategy + 'static, V : Strategy + 'static>
     (key: K, value: V, size: Range<usize>)
     -> BTreeMapStrategy<K, V>
-where <K::Value as ValueTree>::Value : Ord {
+where ValueFor<K> : Ord {
     let min_size = size.start;
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
@@ -412,6 +409,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
             if !self.included_elements.contains(ix) {
                 // No use shrinking something we're not including.
                 self.shrink = Shrink::ShrinkElement(ix + 1);
+                continue;
             }
 
             if !self.elements[ix].simplify() {
@@ -492,6 +490,11 @@ mod test {
         }
 
         assert!(num_successes < 256);
+    }
+
+    #[test]
+    fn test_vec_sanity() {
+        check_strategy_sanity(vec(0i32..1000, 5..10), None);
     }
 
     #[test]

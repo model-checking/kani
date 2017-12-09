@@ -72,3 +72,13 @@ impl ValueTree for BoolValueTree {
         !r
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity(ANY, None);
+    }
+}

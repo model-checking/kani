@@ -20,6 +20,7 @@ use test_runner::*;
 pub struct TupleValueTree<T> {
     tree: T,
     shrinker: u32,
+    prev_shrinker: Option<u32>,
 }
 
 impl<T> TupleValueTree<T> {
@@ -31,6 +32,7 @@ impl<T> TupleValueTree<T> {
         TupleValueTree {
             tree: inner,
             shrinker: 0,
+            prev_shrinker: None,
         }
     }
 }
@@ -45,10 +47,7 @@ macro_rules! tuple {
                 -> Result<Self::Value, String>
             {
                 let values = ($(self.$fld.new_value(runner)?,)*);
-                Ok(TupleValueTree {
-                    tree: values,
-                    shrinker: 0,
-                })
+                Ok(TupleValueTree::new(values))
             }
         }
 
@@ -64,6 +63,7 @@ macro_rules! tuple {
                 $(
                     if $fld == self.shrinker {
                         if self.tree.$fld.simplify() {
+                            self.prev_shrinker = Some(self.shrinker);
                             return true;
                         } else {
                             self.shrinker += 1;
@@ -74,15 +74,17 @@ macro_rules! tuple {
             }
 
             fn complicate(&mut self) -> bool {
-                $(
-                    if $fld == self.shrinker {
+                if let Some(shrinker) = self.prev_shrinker {$(
+                    if $fld == shrinker {
                         if self.tree.$fld.complicate() {
+                            self.shrinker = shrinker;
                             return true;
                         } else {
-                            self.shrinker += 1;
+                            self.prev_shrinker = None;
+                            return false;
                         }
                     }
-                )*
+                )*}
                 false
             }
         }
@@ -139,5 +141,10 @@ mod test {
         }
 
         assert!(cases_tested > 32, "Didn't find enough test cases");
+    }
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity((0i32..100, 0i32..1000, 0i32..10000), None);
     }
 }

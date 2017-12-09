@@ -7,11 +7,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::cmp;
 use std::fmt;
 use std::sync::Arc;
 
+use rand::XorShiftRng;
+
 use strategy::*;
 use test_runner::*;
+
+/// The value that functions under test use for a particular `Strategy`.
+pub type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
 
 /// A strategy for producing arbitrary values of a given type.
 ///
@@ -41,10 +47,28 @@ pub trait Strategy : fmt::Debug {
     /// output is to be shrunken. Shrinking continues to take place in terms of
     /// the source value.
     fn prop_map<O : fmt::Debug,
-                F : Fn (<Self::Value as ValueTree>::Value) -> O>
+                F : Fn (ValueFor<Self>) -> O>
         (self, fun: F) -> Map<Self, F>
     where Self : Sized {
         Map { source: self, fun: Arc::new(fun) }
+    }
+
+    /// Returns a strategy which produces values transformed by the function
+    /// `fun`, which is additionally given a random number generator.
+    ///
+    /// This is exactly like `prop_map()` except for the addition of the second
+    /// argument to the function. This allows introducing chaotic variations to
+    /// generated values that are not easily expressed otherwise while allowing
+    /// shrinking to proceed reasonably.
+    ///
+    /// During shrinking, `fun` is always called with an identical random
+    /// number generator, so if it is a pure function it will always perform
+    /// the same perturbation.
+    fn prop_perturb<O : fmt::Debug,
+                    F : Fn (ValueFor<Self>, XorShiftRng) -> O>
+        (self, fun: F) -> Perturb<Self, F>
+    where Self : Sized {
+        Perturb { source: self, fun: Arc::new(fun) }
     }
 
     /// Maps values produced by this strategy into new strategies and picks
@@ -138,7 +162,7 @@ pub trait Strategy : fmt::Debug {
     /// related values as starting points while not constraining them to that
     /// relation.
     fn prop_flat_map<S : Strategy,
-                     F : Fn (<Self::Value as ValueTree>::Value) -> S>
+                     F : Fn (ValueFor<Self>) -> S>
         (self, fun: F) -> Flatten<Map<Self, F>>
     where Self : Sized {
         Flatten::new(Map { source: self, fun: Arc::new(fun) })
@@ -158,7 +182,7 @@ pub trait Strategy : fmt::Debug {
     /// See `prop_flat_map()` for a more detailed explanation on how the
     /// three flat-map combinators differ.
     fn prop_ind_flat_map<S : Strategy,
-                         F : Fn (<Self::Value as ValueTree>::Value) -> S>
+                         F : Fn (ValueFor<Self>) -> S>
         (self, fun: F) -> IndFlatten<Map<Self, F>>
     where Self : Sized {
         IndFlatten(Map { source: self, fun: Arc::new(fun) })
@@ -170,7 +194,7 @@ pub trait Strategy : fmt::Debug {
     /// See `prop_flat_map()` for a more detailed explanation on how the
     /// three flat-map combinators differ differ.
     fn prop_ind_flat_map2<S : Strategy,
-                          F : Fn (<Self::Value as ValueTree>::Value) -> S>
+                          F : Fn (ValueFor<Self>) -> S>
         (self, fun: F) -> IndFlattenMap<Self, F>
     where Self : Sized {
         IndFlattenMap { source: self, fun: Arc::new(fun) }
@@ -196,7 +220,7 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter<F : Fn (&<Self::Value as ValueTree>::Value) -> bool>
+    fn prop_filter<F : Fn (&ValueFor<Self>) -> bool>
         (self, whence: String, fun: F) -> Filter<Self, F>
     where Self : Sized {
         Filter { source: self, whence: whence, fun: Arc::new(fun) }
@@ -287,10 +311,10 @@ pub trait Strategy : fmt::Debug {
     /// # }
     /// ```
     fn prop_recursive<
-            F : Fn (Arc<BoxedStrategy<<Self::Value as ValueTree>::Value>>)
-                    -> BoxedStrategy<<Self::Value as ValueTree>::Value>>
+            F : Fn (Arc<BoxedStrategy<ValueFor<Self>>>)
+                    -> BoxedStrategy<ValueFor<Self>>>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<BoxedStrategy<<Self::Value as ValueTree>::Value>, F>
+        -> Recursive<BoxedStrategy<ValueFor<Self>>, F>
     where Self : Sized + 'static {
         Recursive {
             base: Arc::new(self.boxed()),
@@ -299,10 +323,65 @@ pub trait Strategy : fmt::Debug {
         }
     }
 
+    /// Shuffle the contents of the values produced by this strategy.
+    ///
+    /// That is, this modifies a strategy producing a `Vec`, slice, etc, to
+    /// shuffle the contents of that `Vec`/slice/etc.
+    ///
+    /// Initially, the value is fully shuffled. During shrinking, the input
+    /// value will initially be unchanged while the result will gradually be
+    /// restored to its original order. Once de-shuffling either completes or
+    /// is cancelled by calls to `complicate()` pinning it to a particular
+    /// permutation, the inner value will be simplified.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// #[macro_use] extern crate proptest;
+    /// use proptest::prelude::*;
+    ///
+    /// static VALUES: &'static [u32] = &[0, 1, 2, 3, 4];
+    ///
+    /// fn is_permutation(orig: &[u32], mut actual: Vec<u32>) -> bool {
+    ///   actual.sort();
+    ///   orig == &actual[..]
+    /// }
+    ///
+    /// proptest! {
+    ///   # /*
+    ///   #[test]
+    ///   # */
+    ///   fn test_is_permutation(
+    ///       ref perm in Just(VALUES.to_owned()).prop_shuffle()
+    ///   ) {
+    ///       assert!(is_permutation(VALUES, perm.clone()));
+    ///   }
+    /// }
+    /// #
+    /// # fn main() { test_is_permutation(); }
+    /// ```
+    fn prop_shuffle(self) -> Shuffle<Self>
+    where Self : Sized, ValueFor<Self> : Shuffleable {
+        Shuffle(self)
+    }
+
     /// Erases the type of this `Strategy` so it can be passed around as a
     /// simple trait object.
-    fn boxed(self) -> BoxedStrategy<<Self::Value as ValueTree>::Value>
+    ///
+    /// See also `sboxed()` if this `Strategy` is `Send` and `Sync` and you
+    /// want to preserve that information.
+    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
     where Self : Sized + 'static {
+        Box::new(BoxedStrategyWrapper(self))
+    }
+
+    /// Erases the type of this `Strategy` so it can be passed around as a
+    /// simple trait object.
+    ///
+    /// Unlike `boxed()`, this conversion retains the `Send` and `Sync` traits
+    /// on the output.
+    fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
+    where Self : Sized + Send + Sync + 'static {
         Box::new(BoxedStrategyWrapper(self))
     }
 
@@ -366,14 +445,36 @@ pub trait ValueTree {
     /// "high" value to the current value, and the current value to a "halfway
     /// point" between high and low, rounding towards low.
     ///
-    /// Returns whether any state changed as a result of this call.
+    /// Returns whether any state changed as a result of this call. This does
+    /// not necessarily imply that the value of `current()` has changed, since
+    /// in the most general case, it is not possible for an implementation to
+    /// determine this.
+    ///
+    /// This call needs to correctly handle being called even immediately after
+    /// it had been called previously and returned `false`.
     fn simplify(&mut self) -> bool;
     /// Attempts to partially undo the last simplification. Notionally, this
     /// sets the "low" value to one plus the current value, and the current
     /// value to a "halfway point" between high and the new low, rounding
     /// towards low.
     ///
-    /// Returns whether any state changed as a result of this call.
+    /// Returns whether any state changed as a result of this call. This does
+    /// not necessarily imply that the value of `current()` has changed, since
+    /// in the most general case, it is not possible for an implementation to
+    /// determine this.
+    ///
+    /// It is usually expected that, immediately after a call to `simplify()`
+    /// which returns true, this call will itself return true. However, this is
+    /// not always the case; in some strategies, particularly those that use
+    /// some form of rejection sampling, the act of trying to simplify may
+    /// change the state such that `simplify()` returns true, yet ultimately
+    /// left the resulting value unchanged, in which case there is nothing left
+    /// to complicate.
+    ///
+    /// This call does not need to gracefully handle being called before
+    /// `simplify()` was ever called, but does need to correctly handle being
+    /// called even immediately after it had been called previously and
+    /// returned `false`.
     fn complicate(&mut self) -> bool;
 }
 
@@ -387,12 +488,16 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 /// Shorthand for a boxed `Strategy` trait object as produced by
 /// `Strategy::boxed()`.
 pub type BoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>>>;
+/// Shorthand for a boxed `Strategy` trait object which is also `Sync` and
+/// `Send`, as produced by `Strategy::sboxed()`.
+pub type SBoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>> +
+                                 Sync + Send>;
 
 #[derive(Debug)]
 struct BoxedStrategyWrapper<T>(T);
 impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
 where T::Value : 'static {
-    type Value = Box<ValueTree<Value = <T::Value as ValueTree>::Value>>;
+    type Value = Box<ValueTree<Value = ValueFor<T>>>;
 
     fn new_value(&self, runner: &mut TestRunner)
         -> Result<Self::Value, String>
@@ -456,4 +561,188 @@ impl<T : ValueTree> ValueTree for NoShrink<T> {
 
     fn simplify(&mut self) -> bool { false }
     fn complicate(&mut self) -> bool { false }
+}
+
+/// Options passed to `check_strategy_sanity()`.
+#[derive(Clone, Copy, Debug)]
+pub struct CheckStrategySanityOptions {
+    /// If true (the default), require that `complicate()` return `true` at
+    /// least once after any call to `simplify()` which itself returns once.
+    ///
+    /// This property is not required by contract, but many strategies are
+    /// designed in a way that this is expected to hold.
+    pub strict_complicate_after_simplify: bool,
+
+    // Needs to be public for FRU syntax.
+    #[allow(missing_docs)]
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
+}
+
+impl Default for CheckStrategySanityOptions {
+    fn default() -> Self {
+        CheckStrategySanityOptions {
+            strict_complicate_after_simplify: true,
+            _non_exhaustive: (),
+        }
+    }
+}
+
+/// Run some tests on the given `Strategy` to ensure that it upholds the
+/// simplify/complicate contracts.
+///
+/// This is used to internally test proptest, but is made generally available
+/// for external implementations to use as well.
+///
+/// `options` can be passed to configure the test; if `None`, the defaults are
+/// used. Note that the defaults check for certain properties which are **not**
+/// actually required by the `Strategy` and `ValueTree` contracts; if you think
+/// your code is right but it fails the test, consider whether a non-default
+/// configuration is necessary.
+///
+/// This can work with fallible strategies, but limits how many times it will
+/// retry failures.
+pub fn check_strategy_sanity<S : Strategy>(
+    strategy: S, options: Option<CheckStrategySanityOptions>)
+where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
+    let options = options.unwrap_or_else(CheckStrategySanityOptions::default);
+    let mut runner = TestRunner::new(Config::default());
+
+    for _ in 0..1024 {
+        let mut gen_tries = 0;
+        let mut state;
+        loop {
+            let err = match strategy.new_value(&mut runner) {
+                Ok(s) => { state = s; break; },
+                Err(e) => e,
+            };
+
+            gen_tries += 1;
+            if gen_tries > 100 {
+                panic!("Strategy passed to check_strategy_sanity failed \
+                        to generate a value over 100 times in a row; \
+                        last failure reason: {}", err);
+            }
+        }
+
+        let mut num_simplifies = 0;
+        let mut before_simplified;
+        loop {
+            before_simplified = state.clone();
+            if !state.simplify() {
+                break;
+            }
+
+            let mut complicated = state.clone();
+            let before_complicated = state.clone();
+            if options.strict_complicate_after_simplify {
+                assert!(complicated.complicate(),
+                        "complicate() returned false immediately after \
+                         simplify() returned true. internal state after \
+                         {} calls to simplify():\n\
+                         {:#?}\n\
+                         simplified to:\n\
+                         {:#?}\n\
+                         complicated to:\n\
+                         {:#?}", num_simplifies, before_simplified, state,
+                        complicated);
+            }
+
+            let mut prev_complicated = complicated.clone();
+            let mut num_complications = 0;
+            loop {
+                if !complicated.complicate() {
+                    break;
+                }
+                prev_complicated = complicated.clone();
+                num_complications += 1;
+
+                if num_complications > 65536 {
+                    panic!("complicate() returned true over 65536 times in a \
+                            row; aborting due to possible infinite loop. \
+                            If this is not an infinite loop, it may be \
+                            necessary to reconsider how shrinking is \
+                            implemented or use a simpler test strategy. \
+                            Internal state:\n{:#?}", state);
+                }
+            }
+
+            assert_eq!(before_simplified.current(), complicated.current(),
+                       "Calling simplify(), then complicate() until it \
+                        returned false, did not return to the value before \
+                        simplify. Expected:\n\
+                        {:#?}\n\
+                        Actual:\n\
+                        {:#?}\n\
+                        Internal state after {} calls to simplify():\n\
+                        {:#?}\n\
+                        Internal state after another call to simplify():\n\
+                        {:#?}\n\
+                        Internal state after {} subsequent calls to \
+                        complicate():\n\
+                        {:#?}",
+                       before_simplified.current(), complicated.current(),
+                       num_simplifies, before_simplified, before_complicated,
+                       num_complications + 1, complicated);
+
+            for iter in 1..16 {
+                assert_eq!(prev_complicated.current(), complicated.current(),
+                           "complicate() returned false but changed the output \
+                            value anyway.\n\
+                            Old value:\n\
+                            {:#?}\n\
+                            New value:\n\
+                            {:#?}\n\
+                            Old internal state:\n\
+                            {:#?}\n\
+                            New internal state after {} calls to complicate()\
+                            including the :\n\
+                            {:#?}",
+                           prev_complicated.current(),
+                           complicated.current(),
+                           prev_complicated, iter, complicated);
+
+                assert!(!complicated.complicate(),
+                        "complicate() returned true after having returned \
+                         false;\n\
+                         Internal state before:\n{:#?}\n\
+                         Internal state after calling complicate() {} times:\n\
+                         {:#?}", prev_complicated, iter + 1, complicated);
+            }
+
+            num_simplifies += 1;
+            if num_simplifies > 65536 {
+                panic!("simplify() returned true over 65536 times in a row, \
+                        aborting due to possible infinite loop. If this is not \
+                        an infinite loop, it may be necessary to reconsider \
+                        how shrinking is implemented or use a simpler test \
+                        strategy. Internal state:\n{:#?}", state);
+            }
+        }
+
+        for iter in 0..16 {
+            assert_eq!(before_simplified.current(), state.current(),
+                       "simplify() returned false but changed the output \
+                        value anyway.\n\
+                        Old value:\n\
+                        {:#?}\n\
+                        New value:\n\
+                        {:#?}\n\
+                        Previous internal state:\n\
+                        {:#?}\n\
+                        New internal state after calling simplify() {} times:\n\
+                        {:#?}",
+                       before_simplified.current(),
+                       state.current(),
+                       before_simplified, iter, state);
+
+            if state.simplify() {
+                panic!("simplify() returned true after having returned false. \
+                        Previous internal state:\n\
+                        {:#?}\n\
+                        New internal state after calling simplify() {} times:\n\
+                        {:#?}", before_simplified, iter + 1, state);
+            }
+        }
+    }
 }

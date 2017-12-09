@@ -37,13 +37,13 @@ impl<S : Clone, F> Clone for Filter<S, F> {
         Filter {
             source: self.source.clone(),
             whence: self.whence.clone(),
-            fun: self.fun.clone(),
+            fun: Arc::clone(&self.fun),
         }
     }
 }
 
 impl<S : Strategy,
-     F : Fn (&<S::Value as ValueTree>::Value) -> bool>
+     F : Fn (&ValueFor<S>) -> bool>
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
@@ -57,7 +57,7 @@ Strategy for Filter<S, F> {
                 return Ok(Filter {
                     source: val,
                     whence: self.whence.clone(),
-                    fun: self.fun.clone(),
+                    fun: Arc::clone(&self.fun),
                 })
             }
         }
@@ -122,5 +122,17 @@ mod test {
             }
             assert!(0 == case.current() % 3);
         }
+    }
+
+    #[test]
+    fn test_filter_sanity() {
+        check_strategy_sanity(
+            (0..256).prop_filter("!%5".to_owned(), |&v| 0 != v % 5),
+            Some(CheckStrategySanityOptions {
+                // Due to internal rejection sampling, `simplify()` can
+                // converge back to what `complicate()` would do.
+                strict_complicate_after_simplify: false,
+                .. CheckStrategySanityOptions::default()
+            }));
     }
 }

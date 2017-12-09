@@ -9,6 +9,9 @@
 
 //! Strategies for generating `std::Option` values.
 
+#![cfg_attr(feature="cargo-clippy",
+    allow(type_complexity, expl_impl_clone_on_copy))]
+
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -53,8 +56,8 @@ opaque_strategy_wrapper! {
     /// Constructed by other functions in this module.
     #[derive(Clone)]
     pub struct OptionStrategy[<T>][where T : Strategy]
-        (TupleUnion<((u32,NoneStrategy<<T::Value as ValueTree>::Value>),
-                     (u32,statics::Map<T, WrapSome>))>)
+        (TupleUnion<(W<NoneStrategy<ValueFor<T>>>,
+                     W<statics::Map<T, WrapSome>>)>)
         -> OptionValueTree<T::Value>;
     /// `ValueTree` type corresponding to `OptionStrategy`.
     #[derive(Clone, Debug)]
@@ -128,5 +131,10 @@ mod test {
 
         let count = count_some_of_1000(weighted(0.1, Just(42i32)));
         assert!(count > 50 && count < 150);
+    }
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity(of(0i32..1000i32), None);
     }
 }

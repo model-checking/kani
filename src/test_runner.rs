@@ -13,6 +13,8 @@
 //! when implementing new low-level strategies.
 
 use std::collections::BTreeMap;
+use std::env;
+use std::ffi::OsString;
 use std::fmt;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
@@ -23,44 +25,118 @@ use rand::{self, XorShiftRng};
 
 use strategy::*;
 
+/// The default config, computed by combining environment variables and
+/// defaults.
+lazy_static! {
+    static ref DEFAULT_CONFIG: Config = {
+        let mut result = Config {
+            cases: 256,
+            max_local_rejects: 65536,
+            max_global_rejects: 1024,
+            max_flat_map_regens: 1_000_000,
+            _non_exhaustive: (),
+        };
+
+        fn parse_or_warn(dst: &mut u32, value: OsString, var: &str) {
+            if let Some(value) = value.to_str() {
+                if let Ok(value) = value.parse() {
+                    *dst = value;
+                } else {
+                    eprintln!(
+                        "proptest: The env-var {}={} can't be parsed as u32, \
+                         using default of {}.", var, value, *dst);
+                }
+            } else {
+                eprintln!(
+                    "proptest: The env-var {} is not valid, using \
+                     default of {}.", var, *dst);
+            }
+        }
+
+        for (var, value) in env::vars_os() {
+            if let Some(var) = var.to_str() {
+                match var {
+                    "PROPTEST_CASES" => parse_or_warn(
+                        &mut result.cases, value, "PROPTEST_CASES"),
+                    "PROPTEST_MAX_LOCAL_REJECTS" => parse_or_warn(
+                        &mut result.max_local_rejects, value,
+                        "PROPTEST_MAX_LOCAL_REJECTS"),
+                    "PROPTEST_MAX_GLOBAL_REJECTS" => parse_or_warn(
+                        &mut result.max_global_rejects, value,
+                        "PROPTEST_MAX_GLOBAL_REJECTS"),
+                    "PROPTEST_MAX_FLAT_MAP_REGENS" => parse_or_warn(
+                        &mut result.max_flat_map_regens, value,
+                        "PROPTEST_MAX_FLAT_MAP_REGENS"),
+                    _ => if var.starts_with("PROPTEST_") {
+                        eprintln!("proptest: Ignoring unknown env-var {}.",
+                                  var);
+                    },
+                }
+            }
+        }
+
+        result
+    };
+}
+
 /// Configuration for how a proptest test should be run.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     /// The number of successful test cases that must execute for the test as a
     /// whole to pass.
     ///
-    /// The default is 256.
+    /// The default is 256, which can be overridden by setting the
+    /// `PROPTEST_CASES` environment variable.
     pub cases: u32,
     /// The maximum number of individual inputs that may be rejected before the
     /// test as a whole aborts.
     ///
-    /// The default is 65536.
+    /// The default is 65536, which can be overridden by setting the
+    /// `PROPTEST_MAX_LOCAL_REJECTS` environment variable.
     pub max_local_rejects: u32,
     /// The maximum number of combined inputs that may be rejected before the
     /// test as a whole aborts.
     ///
-    /// The default is 1024.
+    /// The default is 1024, which can be overridden by setting the
+    /// `PROPTEST_MAX_GLOBAL_REJECTS` environment variable.
     pub max_global_rejects: u32,
     /// The maximum number of times all `Flatten` combinators will attempt to
     /// regenerate values. This puts a limit on the worst-case exponential
     /// explosion that can happen with nested `Flatten`s.
     ///
-    /// The default is 1000000.
+    /// The default is 1_000_000, which can be overridden by setting the
+    /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
     pub _non_exhaustive: (),
 }
+impl Config {
+    /// Constructs a `Config` only differing from the `default()` in the
+    /// number of test cases required to pass the test successfully.
+    ///
+    /// This is simply a more concise alternative to using field-record update
+    /// syntax:
+    ///
+    /// ```
+    /// # use proptest::test_runner::Config;
+    /// assert_eq!(
+    ///     Config::with_cases(42),
+    ///     Config { cases: 42, .. Config::default() }
+    /// );
+    /// ```
+    pub fn with_cases(n: u32) -> Self {
+        Self {
+            cases: n,
+            .. Config::default()
+        }
+    }
+}
+
 
 impl Default for Config {
-    fn default() -> Config {
-        Config {
-            cases: 256,
-            max_local_rejects: 65536,
-            max_global_rejects: 1024,
-            max_flat_map_regens: 1000000,
-            _non_exhaustive: (),
-        }
+    fn default() -> Self {
+        DEFAULT_CONFIG.clone()
     }
 }
 
@@ -188,6 +264,13 @@ impl fmt::Display for TestRunner {
     }
 }
 
+/// Equivalent to: `TestRunner::new(Config::default())`.
+impl Default for TestRunner {
+    fn default() -> Self {
+        Self::new(Config::default())
+    }
+}
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -212,7 +295,7 @@ impl TestRunner {
             local_rejects: 0,
             global_rejects: 0,
             rng: rand::weak_rng(),
-            flat_map_regens: self.flat_map_regens.clone(),
+            flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
         }
@@ -236,10 +319,9 @@ impl TestRunner {
     ///
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
-               F : Fn (&<S::Value as ValueTree>::Value)
-                       -> TestCaseResult>
+               F : Fn (&ValueFor<S>) -> TestCaseResult>
         (&mut self, strategy: &S, f: F)
-         -> Result<(), TestError<<S::Value as ValueTree>::Value>>
+         -> Result<(), TestError<ValueFor<S>>>
     {
         while self.successes < self.config.cases {
             let case = match strategy.new_value(self) {
@@ -286,11 +368,10 @@ impl TestRunner {
                 if case.simplify() {
                     loop {
                         let passed = match test!(case.current()) {
-                            Ok(_) => true,
                             // Rejections are effectively a pass here,
                             // since they indicate that any behaviour of
                             // the function under test is acceptable.
-                            Err(TestCaseError::Reject(..)) => true,
+                            Ok(_) | Err(TestCaseError::Reject(..)) => true,
 
                             Err(TestCaseError::Fail(why)) => {
                                 last_failure = (why, case.current());
@@ -302,10 +383,8 @@ impl TestRunner {
                             if !case.complicate() {
                                 break;
                             }
-                        } else {
-                            if !case.simplify() {
-                                break;
-                            }
+                        } else if !case.simplify() {
+                            break;
                         }
                     }
                 }
@@ -313,7 +392,7 @@ impl TestRunner {
                 Err(TestError::Fail(last_failure.0, last_failure.1))
             },
             Err(TestCaseError::Reject(whence)) => {
-                self.reject_global(whence)?;
+                self.reject_global(&whence)?;
                 Ok(false)
             },
         }
@@ -344,13 +423,13 @@ impl TestRunner {
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    fn reject_global<T>(&mut self, whence: String) -> Result<(),TestError<T>> {
+    fn reject_global<T>(&mut self, whence: &str) -> Result<(),TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
             Err(TestError::Abort("Too many global rejects".to_owned()))
         } else {
             self.global_rejects += 1;
             let need_insert = if let Some(count) =
-                self.global_reject_detail.get_mut(&whence)
+                self.global_reject_detail.get_mut(whence)
             {
                 *count += 1;
                 false
@@ -358,7 +437,7 @@ impl TestRunner {
                 true
             };
             if need_insert {
-                self.global_reject_detail.insert(whence.clone(), 1);
+                self.global_reject_detail.insert(whence.to_owned(), 1);
             }
 
             Ok(())
@@ -397,14 +476,14 @@ mod test {
 
     #[test]
     fn test_pass() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(1u32..), |&v| { assert!(v > 0); Ok(()) });
         assert_eq!(Ok(()), result);
     }
 
     #[test]
     fn test_fail_via_result() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
@@ -417,7 +496,7 @@ mod test {
 
     #[test]
     fn test_fail_via_panic() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let result = runner.run(&(0u32..10u32), |&v| {
             assert!(v < 5, "not less than 5");
             Ok(())

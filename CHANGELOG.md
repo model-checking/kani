@@ -1,3 +1,57 @@
+## 0.3.2
+
+### New Additions
+
+- Added `SampledBitSetStrategy` to generate bit sets based on size
+  distribution.
+
+- Added `Strategy::sboxed()` and `SBoxedStrategy` to make `Send + Sync` boxed
+  strategies.
+
+- `RegexGeneratorStrategy` is now `Send` and `Sync`.
+
+- Added a type alias `ValueFor<S>` where `S: Strategy`. This is a shorter way
+  to refer to: `<<S as Strategy>::Value as ValueTree>::Value`.
+
+- Added a type alias `type W<T> = (u32, T)` for a weighted strategy `T` in the
+  context of union strategies.
+
+- `TestRunner` now implements `Default`.
+
+- Added `Config::with_cases(number_of_cases: u32) -> Config` for simpler
+  construction of a `Config` that only differs by the number of test cases.
+
+- All default fields of `Config` can now be overridden by setting environment
+  variables. See the docs of that struct for more details.
+
+- Bumped dependency `rand = "0.3.18"`.
+
+- Added `proptest::sample::subsequence` which returns a strategy generating
+  subsequences, of the source `Vec`, with a size within the given `Range`.
+
+- Added `proptest::sample::select` which returns a strategy selecting exactly
+  one value from another collection.
+
+- Added `prop_perturb` strategy combinator.
+
+- Added `strategy::check_strategy_sanity()` function to do sanity checks on the
+  shrinking implementation of a strategy.
+
+- Added `prop_shuffle` strategy combinator.
+
+- Added `strategy::Fuse` adaptor.
+
+### Bug Fixes
+
+- Fix bug where `Vec`, array and tuple shrinking could corrupt the state of
+  their inner values, for example leading to out-of-range integers.
+
+- Fix bug where `Flatten` (a.k.a. the `prop_flat_map` combinator) could fail to
+  converge to a failing test case during shrinking.
+
+- Fix `TupleUnion` sometimes panicking during shrinking if there were more than
+  two choices.
+
 ## 0.3.1
 
 ### New Additions

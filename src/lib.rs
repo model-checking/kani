@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg_attr(feature="cargo-clippy", allow(doc_markdown))]
+
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for
 //! Python. It allows to test that certain properties of your code hold for
@@ -300,6 +302,13 @@
 //! We were off by one, and need to use the range `5..7`. After fixing this,
 //! the test passes.
 //!
+//! The `proptest!` macro has some additional syntax, including for setting
+//! configuration for things like the number of test cases to generate. See its
+//! [documentation](macro.proptest.html) <!-- NOREADME
+//! [documentation](https://docs.rs/proptest/*/proptest/macro.proptest.html)
+//! NOREADME -->
+//! for more details.
+//!
 //! There is a more in-depth tutorial
 //! [further down](#in-depth-tutorial). <!-- NOREADME
 //! [in the crate documentation](https://docs.rs/proptest/#in-depth-tutorial).
@@ -340,6 +349,20 @@
 //!
 //! The author of Hypothesis also has an [article on this
 //! topic](http://hypothesis.works/articles/integrated-shrinking/).
+//!
+//! Of course, there's also some relative downsides that fall out of what
+//! Proptest does differently:
+//!
+//! - Generating complex values in Proptest can be up to an order of magnitude
+//! slower than in QuickCheck. This is because QuickCheck performs stateless
+//! shrinking based on the output value, whereas Proptest must hold on to all
+//! the intermediate states and relationships in order for its richer shrinking
+//! model to work.
+//!
+//! - In cases where one usually does have a single canonical way to generate
+//! values per type, Proptest will be more verbose than QuickCheck since one
+//! needs to name the strategy every time rather than getting them implicitly
+//! based on types.
 //!
 //! ## Limitations of Property Testing
 //!
@@ -415,11 +438,11 @@
 //! ```rust
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
 //! fn main() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     let int_val = (0..100i32).new_value(&mut runner).unwrap();
 //!     let str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
 //!         .new_value(&mut runner).unwrap();
@@ -444,7 +467,7 @@
 //! ```rust,no_run
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
 //! fn some_function(v: i32) {
@@ -456,7 +479,7 @@
 //! #[test]
 //! # */
 //! fn some_function_doesnt_crash() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     for _ in 0..256 {
 //!         let val = (0..10000i32).new_value(&mut runner).unwrap();
 //!         some_function(val.current());
@@ -485,11 +508,11 @@
 //! ```rust
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
 //! fn main() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     let mut str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
 //!         .new_value(&mut runner).unwrap();
 //!     println!("str_val = {}", str_val.current());
@@ -566,7 +589,7 @@
 //! ```rust
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
 //! fn some_function(v: i32) -> bool {
@@ -579,7 +602,7 @@
 //! // We know the function is broken, so use a purpose-built main function to
 //! // find the breaking point.
 //! fn main() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     for _ in 0..256 {
 //!         let mut val = (0..10000i32).new_value(&mut runner).unwrap();
 //!         if some_function(val.current()) {
@@ -625,7 +648,7 @@
 //! ```rust
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{Config, TestError, TestRunner};
+//! use proptest::test_runner::{TestError, TestRunner};
 //!
 //! fn some_function(v: i32) {
 //!     // Do a bunch of stuff, but crash if v > 500.
@@ -637,7 +660,7 @@
 //! // We know the function is broken, so use a purpose-built main function to
 //! // find the breaking point.
 //! fn main() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     let result = runner.run(&(0..10000i32), |&v| {
 //!         some_function(v);
 //!         Ok(())
@@ -665,7 +688,7 @@
 //! test a function that needs inputs from more than one?
 //!
 //! ```rust,ignore
-//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::test_runner::TestRunner;
 //!
 //! fn add(a: i32, b: i32) -> i32 {
 //!     a + b
@@ -675,7 +698,7 @@
 //! #[test]
 //! # */
 //! fn test_add() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     runner.run(/* uhhm... */).unwrap();
 //! }
 //! #
@@ -694,7 +717,7 @@
 //! So for our two-argument function, our strategy is simply a tuple of ranges.
 //!
 //! ```rust
-//! use proptest::test_runner::{Config, TestRunner};
+//! use proptest::test_runner::TestRunner;
 //!
 //! fn add(a: i32, b: i32) -> i32 {
 //!     a + b
@@ -704,7 +727,7 @@
 //! #[test]
 //! # */
 //! fn test_add() {
-//!     let mut runner = TestRunner::new(Config::default());
+//!     let mut runner = TestRunner::default();
 //!     // Combine our two inputs into a strategy for one tuple. Our test
 //!     // function then destructures the generated tuples back into separate
 //!     // `a` and `b` variables to be passed in to `add()`.
@@ -1285,6 +1308,46 @@
 //! # fn main() { }
 //! ```
 //!
+//! ### Configuring the number of tests cases requried
+//!
+//! The default number of successful test cases that must execute for a test
+//! as a whole to pass is currently 256. If you are not satisfied with this
+//! and want to run more or fewer, there are a few ways to do this.
+//!
+//! The first way is to set the environment-variable `PROPTEST_CASES` to a
+//! value that can be successfully parsed as a `u32`. The value you set to this
+//! variable is now the new default.
+//!
+//! Another way is to use `#![proptest_config(expr)]` inside `proptest!` where
+//! `expr : Config`. To only change the number of test cases, you can simply
+//! write:
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::test_runner::Config;
+//!
+//! fn add(a: i32, b: i32) -> i32 { a + b }
+//!
+//! proptest! {
+//!     // The next line modifies the number of tests.
+//!     #![proptest_config(Config::with_cases(1000))]
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_add(a in 0..1000i32, b in 0..1000i32) {
+//!         let sum = add(a, b);
+//!         assert!(sum >= a);
+//!         assert!(sum >= b);
+//!     }
+//! }
+//! #
+//! # fn main() { test_add(); }
+//! ```
+//!
+//! Through the same `proptest_config` mechanism you may fine-tune your
+//! configuration through the `Config` type. See its documentation for more
+//! information.
+//!
 //! ### Conclusion
 //!
 //! That's it for the tutorial, at least for now. There are more details for
@@ -1295,6 +1358,7 @@
 #![deny(missing_docs)]
 
 extern crate bit_set;
+#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate quick_error;
 extern crate rand;
 extern crate regex_syntax;
@@ -1377,6 +1441,7 @@ pub mod char;
 pub mod string;
 pub mod option;
 pub mod result;
+pub mod sample;
 
 #[doc(hidden)]
 #[macro_use] pub mod sugar;

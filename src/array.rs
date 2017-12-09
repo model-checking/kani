@@ -22,6 +22,7 @@ use test_runner::*;
 pub struct ArrayValueTree<T> {
     tree: T,
     shrinker: usize,
+    last_shrinker: Option<usize>,
 }
 
 macro_rules! small_array {
@@ -33,7 +34,8 @@ macro_rules! small_array {
                          -> Result<Self::Value, String> {
                 Ok(ArrayValueTree {
                     tree: [$(self[$ix].new_value(runner)?,)*],
-                    shrinker: 0
+                    shrinker: 0,
+                    last_shrinker: None,
                 })
             }
         }
@@ -48,6 +50,7 @@ macro_rules! small_array {
             fn simplify(&mut self) -> bool {
                 while self.shrinker < $n {
                     if self.tree[self.shrinker].simplify() {
+                        self.last_shrinker = Some(self.shrinker);
                         return true;
                     } else {
                         self.shrinker += 1;
@@ -58,15 +61,17 @@ macro_rules! small_array {
             }
 
             fn complicate(&mut self) -> bool {
-                while self.shrinker < $n {
-                    if self.tree[self.shrinker].complicate() {
-                        return true;
+                if let Some(shrinker) = self.last_shrinker {
+                    self.shrinker = shrinker;
+                    if self.tree[shrinker].complicate() {
+                        true
                     } else {
-                        self.shrinker += 1;
+                        self.last_shrinker = None;
+                        false
                     }
+                } else {
+                    false
                 }
-
-                false
             }
         }
     }
@@ -156,5 +161,10 @@ mod test {
         }
 
         assert!(cases_tested > 32, "Didn't find enough test cases");
+    }
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity([(0i32..1000),(1i32..1000)], None);
     }
 }

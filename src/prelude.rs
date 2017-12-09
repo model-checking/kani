@@ -13,7 +13,7 @@
 //! `use proptest::prelude::*;`. Note that it re-exports the whole crate itself
 //! under the name `prop`, so you don't need a separate `use proptest;` line.
 
-pub use strategy::{BoxedStrategy, Just, Strategy};
+pub use strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
 pub use test_runner::Config as ProptestConfig;
 pub use test_runner::TestCaseError;
 
@@ -33,4 +33,5 @@ pub mod prop {
     pub use string;
     pub use option;
     pub use result;
+    pub use sample;
 }

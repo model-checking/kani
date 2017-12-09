@@ -1,5 +1,7 @@
 # Proptest
 
+[![Build Status](https://travis-ci.org/AltSysrq/proptest.svg?branch=master)](https://travis-ci.org/AltSysrq/proptest)
+
 Proptest is a property testing framework (i.e., the QuickCheck family)
 inspired by the [Hypothesis](http://hypothesis.works/) framework for
 Python. It allows to test that certain properties of your code hold for
@@ -291,6 +293,11 @@ wide. In our code:
 We were off by one, and need to use the range `5..7`. After fixing this,
 the test passes.
 
+The `proptest!` macro has some additional syntax, including for setting
+configuration for things like the number of test cases to generate. See its
+[documentation](https://docs.rs/proptest/*/proptest/macro.proptest.html)
+for more details.
+
 There is a more in-depth tutorial
 [in the crate documentation](https://docs.rs/proptest/#in-depth-tutorial).
 
@@ -329,6 +336,20 @@ to values that violate them.
 
 The author of Hypothesis also has an [article on this
 topic](http://hypothesis.works/articles/integrated-shrinking/).
+
+Of course, there's also some relative downsides that fall out of what
+Proptest does differently:
+
+- Generating complex values in Proptest can be up to an order of magnitude
+slower than in QuickCheck. This is because QuickCheck performs stateless
+shrinking based on the output value, whereas Proptest must hold on to all
+the intermediate states and relationships in order for its richer shrinking
+model to work.
+
+- In cases where one usually does have a single canonical way to generate
+values per type, Proptest will be more verbose than QuickCheck since one
+needs to name the strategy every time rather than getting them implicitly
+based on types.
 
 ## Limitations of Property Testing
 
