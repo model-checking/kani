@@ -220,4 +220,14 @@ mod test {
                     "Generated value {} {} times", ix, count);
         }
     }
+
+    #[test]
+    fn test_sample_sanity() {
+        check_strategy_sanity(subsequence(vec![0, 1, 2, 3, 4], 1..3), None);
+    }
+
+    #[test]
+    fn test_select_sanity() {
+        check_strategy_sanity(select(vec![0, 1, 2, 3, 4]), None);
+    }
 }

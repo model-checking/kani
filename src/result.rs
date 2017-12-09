@@ -250,4 +250,10 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity(maybe_ok(0i32..100i32, 0i32..100i32), None);
+        check_strategy_sanity(maybe_err(0i32..100i32, 0i32..100i32), None);
+    }
 }

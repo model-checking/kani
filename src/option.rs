@@ -132,4 +132,9 @@ mod test {
         let count = count_some_of_1000(weighted(0.1, Just(42i32)));
         assert!(count > 50 && count < 150);
     }
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity(of(0i32..1000i32), None);
+    }
 }
