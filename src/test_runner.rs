@@ -92,7 +92,7 @@ pub struct Config {
     /// test as a whole aborts.
     ///
     /// The default is 65536, which can be overridden by setting the
-    /// `PROPTEST_CASES` environment variable.
+    /// `PROPTEST_MAX_LOCAL_REJECTS` environment variable.
     pub max_local_rejects: u32,
     /// The maximum number of combined inputs that may be rejected before the
     /// test as a whole aborts.
@@ -115,7 +115,7 @@ impl Config {
     /// Constructs a `Config` only differing from the `default()` in the
     /// number of test cases required to pass the test successfully.
     ///
-    /// This is simply a more concise option to using field-record update
+    /// This is simply a more concise alternative to using field-record update
     /// syntax:
     ///
     /// ```

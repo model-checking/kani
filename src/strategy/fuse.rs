@@ -10,7 +10,7 @@
 use strategy::*;
 use test_runner::*;
 
-/// Adaptor for `Strategy` and `Value` tree which guards `simplify()` and
+/// Adaptor for `Strategy` and `ValueTree` which guards `simplify()` and
 /// `complicate()` to avoid contract violations.
 ///
 /// This can be used as an intermediate when the caller would otherwise need
