@@ -392,7 +392,7 @@ impl TestRunner {
                 Err(TestError::Fail(last_failure.0, last_failure.1))
             },
             Err(TestCaseError::Reject(whence)) => {
-                self.reject_global(whence)?;
+                self.reject_global(&whence)?;
                 Ok(false)
             },
         }
@@ -423,13 +423,13 @@ impl TestRunner {
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    fn reject_global<T>(&mut self, whence: String) -> Result<(),TestError<T>> {
+    fn reject_global<T>(&mut self, whence: &str) -> Result<(),TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
             Err(TestError::Abort("Too many global rejects".to_owned()))
         } else {
             self.global_rejects += 1;
             let need_insert = if let Some(count) =
-                self.global_reject_detail.get_mut(&whence)
+                self.global_reject_detail.get_mut(whence)
             {
                 *count += 1;
                 false
@@ -437,7 +437,7 @@ impl TestRunner {
                 true
             };
             if need_insert {
-                self.global_reject_detail.insert(whence.clone(), 1);
+                self.global_reject_detail.insert(whence.to_owned(), 1);
             }
 
             Ok(())
