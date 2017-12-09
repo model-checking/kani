@@ -185,11 +185,14 @@ macro_rules! def_access_tuple {
                             {
                                 $b body
                             } else {
-                                unreachable!()
+                                panic!("TupleUnion tried to access \
+                                        uninitialised slot {}", $n)
                             }
                         },
                     )*
-                    _ => unreachable!() }
+                    _ => panic!("TupleUnion tried to access out-of-range \
+                                 slot {}", $b ix),
+                }
             }
         }
     }
@@ -246,7 +249,7 @@ macro_rules! tuple_union {
                 Ok(TupleUnionValueTree {
                     options: (
                         ((self.0).0).1.new_value(runner)?,
-                        $(if pick <= $ix {
+                        $(if $ix <= pick {
                             Some(((self.0).$ix).1.new_value(runner)?)
                         } else {
                             None
@@ -386,6 +389,15 @@ mod test {
     }
 
     #[test]
+    fn test_union_sanity() {
+        check_strategy_sanity(Union::new_weighted(vec![
+            (1, 0i32..100),
+            (2, 200i32..300),
+            (1, 400i32..500),
+        ]), None);
+    }
+
+    #[test]
     fn test_tuple_union() {
         let input = TupleUnion::new(
             ((1, 10u32..20u32),
@@ -476,5 +488,13 @@ mod test {
         test!(r, r, r, r, r, r, r); // 8
         test!(r, r, r, r, r, r, r, r); // 9
         test!(r, r, r, r, r, r, r, r, r); // 10
+    }
+
+    #[test]
+    fn test_tuple_union_sanity() {
+        check_strategy_sanity(
+            TupleUnion::new(((1, 0i32..100i32), (1, 200i32..1000i32),
+                             (1, 2000i32..3000i32))),
+            None);
     }
 }

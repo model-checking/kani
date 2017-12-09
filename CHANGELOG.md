@@ -49,6 +49,9 @@
 - Fix bug where `Flatten` (a.k.a. the `prop_flat_map` combinator) could fail to
   converge to a failing test case during shrinking.
 
+- Fix `TupleUnion` sometimes panicking during shrinking if there were more than
+  two choices.
+
 ## 0.3.1
 
 ### New Additions
