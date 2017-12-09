@@ -1,5 +1,7 @@
 # Proptest
 
+[![Build Status](https://travis-ci.org/AltSysrq/proptest.svg?branch=master)](https://travis-ci.org/AltSysrq/proptest)
+
 Proptest is a property testing framework (i.e., the QuickCheck family)
 inspired by the [Hypothesis](http://hypothesis.works/) framework for
 Python. It allows to test that certain properties of your code hold for
