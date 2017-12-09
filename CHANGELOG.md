@@ -39,6 +39,8 @@
 
 - Added `prop_shuffle` strategy combinator.
 
+- Added `strategy::Fuse` adaptor.
+
 ### Bug Fixes
 
 - Fix bug where `Vec`, array and tuple shrinking could corrupt the state of
