@@ -337,6 +337,20 @@ to values that violate them.
 The author of Hypothesis also has an [article on this
 topic](http://hypothesis.works/articles/integrated-shrinking/).
 
+Of course, there's also some relative downsides that fall out of what
+Proptest does differently:
+
+- Generating complex values in Proptest can be up to an order of magnitude
+slower than in QuickCheck. This is because QuickCheck performs stateless
+shrinking based on the output value, whereas Proptest must hold on to all
+the intermediate states and relationships in order for its richer shrinking
+model to work.
+
+- In cases where one usually does have a single canonical way to generate
+values per type, Proptest will be more verbose than QuickCheck since one
+needs to name the strategy every time rather than getting them implicitly
+based on types.
+
 ## Limitations of Property Testing
 
 Given infinite time, property testing will eventually explore the whole
