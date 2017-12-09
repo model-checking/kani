@@ -490,4 +490,9 @@ mod test {
             assert_eq!(4, value.current().count_ones());
         }
     }
+
+    #[test]
+    fn test_sanity() {
+        check_strategy_sanity(u32::masked(0xdeadbeef));
+    }
 }
