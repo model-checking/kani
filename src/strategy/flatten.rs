@@ -11,6 +11,7 @@ use std::fmt;
 use std::mem;
 use std::sync::Arc;
 
+use strategy::fuse::Fuse;
 use strategy::traits::*;
 use test_runner::*;
 
@@ -42,11 +43,11 @@ where ValueFor<S> : Strategy {
 
 /// The `ValueTree` produced by `Flatten`.
 pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
-    meta: S,
-    current: <S::Value as Strategy>::Value,
+    meta: Fuse<S>,
+    current: Fuse<<S::Value as Strategy>::Value>,
     // The final value to produce after successive calls to complicate() on the
     // underlying objects return false.
-    final_complication: Option<<S::Value as Strategy>::Value>,
+    final_complication: Option<Fuse<<S::Value as Strategy>::Value>>,
     // When `simplify()` or `complicate()` causes a new `Strategy` to be
     // chosen, we need to find a new failing input for that case. To do this,
     // we implement `complicate()` by regenerating values up to a number of
@@ -59,6 +60,21 @@ pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
     // than other implementations of higher-order strategies.
     runner: TestRunner,
     complicate_regen_remaining: u32,
+}
+
+impl<S : ValueTree> Clone for FlattenValueTree<S>
+where S::Value : Strategy + Clone,
+      S : Clone,
+      <S::Value as Strategy>::Value : Clone {
+    fn clone(&self) -> Self {
+        FlattenValueTree {
+            meta: self.meta.clone(),
+            current: self.current.clone(),
+            final_complication: self.final_complication.clone(),
+            runner: self.runner.clone(),
+            complicate_regen_remaining: self.complicate_regen_remaining,
+        }
+    }
 }
 
 impl<S : ValueTree> fmt::Debug for FlattenValueTree<S>
@@ -79,7 +95,8 @@ impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
     fn new(runner: &mut TestRunner, meta: S) -> Result<Self, String> {
         let current = meta.current().new_value(runner)?;
         Ok(FlattenValueTree {
-            meta, current,
+            meta: Fuse::new(meta),
+            current: Fuse::new(current),
             final_complication: None,
             runner: runner.partial_clone(),
             complicate_regen_remaining: 0
@@ -99,6 +116,13 @@ where S::Value : Strategy {
         self.complicate_regen_remaining = 0;
 
         if self.current.simplify() {
+            // Now that we've simplified the derivative value, we can't
+            // re-complicate the meta value unless it gets simplified again.
+            // We also mustn't complicate back to whatever's in
+            // `final_complication` since the new state of `self.current` is
+            // the most complicated state.
+            self.meta.disallow_complicate();
+            self.final_complication = None;
             true
         } else if !self.meta.simplify() {
             false
@@ -106,8 +130,12 @@ where S::Value : Strategy {
             match self.meta.current().new_value(&mut self.runner) {
                 Ok(v) => {
                     // Shift current into final_complication and `v` into
-                    // `current`.
-                    self.final_complication = Some(v);
+                    // `current`. We also need to prevent that value from
+                    // complicating beyond the current point in the future
+                    // since we're going to return `true` from `simplify()`
+                    // ourselves.
+                    self.current.disallow_complicate();
+                    self.final_complication = Some(Fuse::new(v));
                     mem::swap(self.final_complication.as_mut().unwrap(),
                               &mut self.current);
                     // Initially complicate by regenerating the chosen value.
@@ -126,7 +154,7 @@ where S::Value : Strategy {
                 self.complicate_regen_remaining -= 1;
 
                 if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
-                    self.current = v;
+                    self.current = Fuse::new(v);
                     return true;
                 }
             } else {
@@ -141,7 +169,7 @@ where S::Value : Strategy {
                 Ok(v) => {
                     self.complicate_regen_remaining =
                         self.runner.config().cases;
-                    self.current = v;
+                    self.current = Fuse::new(v);
                     true
                 },
                 Err(_) => false,
@@ -258,6 +286,13 @@ mod test {
     }
 
     #[test]
+    fn test_flat_map_sanity() {
+        check_strategy_sanity(
+            (0..65536).prop_flat_map(|a| (Just(a), (a-5..a+5))),
+            None);
+    }
+
+    #[test]
     fn flat_map_respects_regen_limit() {
         use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -286,5 +321,19 @@ mod test {
                 Err(TestCaseError::Fail("fail".to_owned()))
             }
         });
+    }
+
+    #[test]
+    fn test_ind_flat_map_sanity() {
+        check_strategy_sanity(
+            (0..65536).prop_ind_flat_map(|a| (Just(a), (a-5..a+5))),
+            None);
+    }
+
+    #[test]
+    fn test_ind_flat_map2_sanity() {
+        check_strategy_sanity(
+            (0..65536).prop_ind_flat_map2(|a| a-5..a+5),
+            None);
     }
 }

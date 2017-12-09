@@ -46,6 +46,9 @@
 - Fix bug where `Vec`, array and tuple shrinking could corrupt the state of
   their inner values, for example leading to out-of-range integers.
 
+- Fix bug where `Flatten` (a.k.a. the `prop_flat_map` combinator) could fail to
+  converge to a failing test case during shrinking.
+
 ## 0.3.1
 
 ### New Additions
