@@ -1,6 +1,7 @@
 # Proptest
 
 [![Build Status](https://travis-ci.org/AltSysrq/proptest.svg?branch=master)](https://travis-ci.org/AltSysrq/proptest)
+[![](http://meritbadge.herokuapp.com/proptest)](https://crates.io/crates/proptest)
 
 Proptest is a property testing framework (i.e., the QuickCheck family)
 inspired by the [Hypothesis](http://hypothesis.works/) framework for
