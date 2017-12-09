@@ -41,8 +41,8 @@
 
 ### Bug Fixes
 
-- Fix bug where `Vec` shrinking could corrupt the state of its values, for
-  example leading to out-of-range integers.
+- Fix bug where `Vec` and array shrinking could corrupt the state of its
+  values, for example leading to out-of-range integers.
 
 ## 0.3.1
 
