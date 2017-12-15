@@ -211,7 +211,7 @@ impl fmt::Display for TestCaseError {
 
 impl<E : ::std::error::Error> From<E> for TestCaseError {
     fn from(cause: E) -> Self {
-        TestCaseError::Fail(cause.to_string().into())
+        fail_case(cause.to_string())
     }
 }
 
@@ -389,7 +389,7 @@ impl TestRunner {
                             .or_else(|what|
                                 what.downcast::<Box<str>>().map(|b| reject(*b)))
                             .unwrap_or_else(|_| reject("<unknown panic value>"));
-                        Err(TestCaseError::Fail(msg))
+                        Err(fail_case(msg))
                     },
                 }
             } }
@@ -426,7 +426,6 @@ impl TestRunner {
                 Err(TestError::Fail(last_failure.0, last_failure.1))
             },
             Err(TestCaseError::Reject(whence)) => {
-                let whence = reject(whence); // FIXME.
                 self.reject_global(whence)?;
                 Ok(false)
             },

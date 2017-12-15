@@ -470,7 +470,7 @@ mod test {
                 if v.iter().map(|&v| v).sum::<usize>() < 9 {
                     Ok(())
                 } else {
-                    Err(TestCaseError::Fail(reject("greater than 8")))
+                    Err(fail_case("greater than 8"))
                 }
             });
 

@@ -129,11 +129,10 @@ macro_rules! prop_assume {
 
     ($expr:expr, $fmt:tt $(, $fmt_arg:expr),*) => {
         if !$expr {
-            return Err($crate::test_runner::TestCaseError::Reject(
-                $crate::strategy::reject(
+            return Err($crate::test_runner::reject_case(
                 format!(concat!("{}:{}:{}: ", $fmt),
                         file!(), line!(), column!()
-                        $(, $fmt_arg)*))));
+                        $(, $fmt_arg)*)));
         }
     };
 }
@@ -518,8 +517,7 @@ macro_rules! prop_assert {
         if !$cond {
             let message = format!($($fmt)*);
             let message = format!("{} at {}:{}", message, file!(), line!());
-            return Err($crate::test_runner::TestCaseError::Fail(
-                $crate::strategy::reject(message)));
+            return Err($crate::test_runner::fail_case(message));
         }
     };
 }
