@@ -14,7 +14,7 @@ use self::Rejection::*;
 ///
 /// # Representation
 /// 
-/// This type is currently (representationally) equivalent to:
+/// This type is currently representationally equivalent to:
 ///
 /// ```rust
 /// use std::rc::Rc;
@@ -64,7 +64,7 @@ pub enum Rejection {
 /// }
 /// ```
 ///
-/// [`Rejection`]: type.Rejection.html
+/// [`Rejection`]: enum.Rejection.html
 pub fn reject<S: Into<Rejection>>(string: S) -> Rejection {
     string.into()
 }
