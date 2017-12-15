@@ -24,8 +24,7 @@ macro_rules! numeric_api {
         impl Strategy for Any {
             type Value = BinarySearch;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<BinarySearch, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new(runner.rng().gen()))
             }
         }
@@ -33,8 +32,7 @@ macro_rules! numeric_api {
         impl Strategy for Range<$typ> {
             type Value = BinarySearch;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<BinarySearch, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let range = rand::distributions::Range::new(
                     self.start, self.end);
                 Ok(BinarySearch::new_clamped(
@@ -46,8 +44,7 @@ macro_rules! numeric_api {
         impl Strategy for RangeFrom<$typ> {
             type Value = BinarySearch;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<BinarySearch, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 // TODO `rand` has no way to express the inclusive-end range we
                 // need here.
                 let range = rand::distributions::Range::new(
@@ -61,8 +58,7 @@ macro_rules! numeric_api {
         impl Strategy for RangeTo<$typ> {
             type Value = BinarySearch;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<BinarySearch, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let range = rand::distributions::Range::new(
                     ::std::$typ::MIN, self.end);
                 Ok(BinarySearch::new_clamped(

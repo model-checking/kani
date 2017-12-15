@@ -16,6 +16,17 @@ use rand::XorShiftRng;
 use strategy::*;
 use test_runner::*;
 
+/// A new [`ValueTree`] from a [`Strategy`] when [`Ok`] or otherwise [`Err`]
+/// when a new value-tree can not be produced for some reason such as
+/// in the case of filtering with a predicate which always returns false.
+/// You should pass in your strategy as the type parameter.
+///
+/// [`Strategy`]: trait.Strategy.html
+/// [`ValueTree`]: trait.ValueTree.html
+/// [`Ok`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Ok
+/// [`Err`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Err
+pub type NewTree<S> = Result<<S as Strategy>::Value, Rejection>;
+
 /// The value that functions under test use for a particular `Strategy`.
 pub type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
 
@@ -36,9 +47,7 @@ pub trait Strategy : fmt::Debug {
     /// This may fail if there are constraints on the generated value and the
     /// generator is unable to produce anything that satisfies them. Any
     /// failure is wrapped in `TestError::Abort`.
-    fn new_value
-        (&self, runner: &mut TestRunner)
-         -> Result<Self::Value, String>;
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self>;
 
     /// Returns a strategy which produces values transformed by the function
     /// `fun`.
@@ -220,10 +229,10 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter<F : Fn (&ValueFor<Self>) -> bool>
-        (self, whence: String, fun: F) -> Filter<Self, F>
+    fn prop_filter<R: Into<Rejection>, F : Fn (&ValueFor<Self>) -> bool>
+        (self, whence: R, fun: F) -> Filter<Self, F>
     where Self : Sized {
-        Filter { source: self, whence: whence, fun: Arc::new(fun) }
+        Filter::new(self, whence.into(), fun)
     }
 
     /// Returns a strategy which picks uniformly from `self` and `other`.
@@ -404,9 +413,9 @@ macro_rules! proxy_strategy {
         impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
             type Value = S::Value;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<Self::Value, String>
-            { (**self).new_value(runner) }
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                (**self).new_value(runner)
+            }
         }
     };
 }
@@ -499,9 +508,7 @@ impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
 where T::Value : 'static {
     type Value = Box<ValueTree<Value = ValueFor<T>>>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-        -> Result<Self::Value, String>
-    {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(Box::new(self.0.new_value(runner)?))
     }
 }
@@ -520,7 +527,7 @@ pub use self::Just as Singleton;
 impl<T : Clone + fmt::Debug> Strategy for Just<T> {
     type Value = Self;
 
-    fn new_value(&self, _: &mut TestRunner) -> Result<Self::Value, String> {
+    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
@@ -546,8 +553,7 @@ pub struct NoShrink<T>(T);
 impl<T : Strategy> Strategy for NoShrink<T> {
     type Value = NoShrink<T::Value>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.0.new_value(runner).map(NoShrink)
     }
 }

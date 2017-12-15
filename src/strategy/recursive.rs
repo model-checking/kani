@@ -51,8 +51,7 @@ impl<T : fmt::Debug + 'static,
 Strategy for Recursive<BoxedStrategy<T>, F> {
     type Value = Box<ValueTree<Value = T>>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         // Since the generator is stateless, we can't implement any "absolutely
         // X many items" rule. We _can_, however, with extremely high
         // probability, obtain a value near what we want by using decaying

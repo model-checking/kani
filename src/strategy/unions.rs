@@ -89,8 +89,7 @@ fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
 impl<T : Strategy> Strategy for Union<T> {
     type Value = UnionValueTree<T::Value>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         fn extract_weight<V>(&(w, _): &W<V>) -> u32 { w }
 
         let pick = pick_weighted(
@@ -240,8 +239,7 @@ macro_rules! tuple_union {
             type Value = TupleUnionValueTree<
                 (A::Value, $(Option<$gen::Value>),*)>;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<Self::Value, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let weights = [((self.0).0).0, $(((self.0).$ix).0),*];
                 let pick = pick_weighted(runner, weights.iter().cloned(),
                                          weights.iter().cloned());
@@ -348,7 +346,7 @@ mod test {
             let result = runner.run_one(case, |&v| if v < 15 {
                 Ok(())
             } else {
-                Err(TestCaseError::Fail("fail".to_owned()))
+                Err(TestCaseError::Fail("fail".into()))
             });
 
             match result {
@@ -415,7 +413,7 @@ mod test {
             let result = runner.run_one(case, |&v| if v < 15 {
                 Ok(())
             } else {
-                Err(TestCaseError::Fail("fail".to_owned()))
+                Err(TestCaseError::Fail("fail".into()))
             });
 
             match result {

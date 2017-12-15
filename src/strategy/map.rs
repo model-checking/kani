@@ -46,8 +46,7 @@ impl<S : Strategy, O : fmt::Debug,
 Strategy for Map<S, F> {
     type Value = Map<S::Value, F>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.source.new_value(runner).map(
             |v| Map { source: v, fun: Arc::clone(&self.fun) })
     }
@@ -101,8 +100,7 @@ impl<S : Strategy, O : fmt::Debug,
 Strategy for Perturb<S, F> {
     type Value = PerturbValueTree<S::Value, F>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = XorShiftRng::from_seed(runner.rng().gen());
 
         self.source.new_value(runner).map(

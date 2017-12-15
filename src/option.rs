@@ -37,7 +37,7 @@ impl<T> fmt::Debug for NoneStrategy<T> {
 impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
     type Value = Self;
 
-    fn new_value(&self, _: &mut TestRunner) -> Result<Self, String> {
+    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(*self)
     }
 }

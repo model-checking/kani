@@ -91,8 +91,7 @@ impl<S : Strategy> Strategy for Shuffle<S>
 where ValueFor<S> : Shuffleable {
     type Value = ShuffleValueTree<S::Value>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = XorShiftRng::from_seed(runner.rng().gen());
 
         self.0.new_value(runner).map(|inner| ShuffleValueTree {

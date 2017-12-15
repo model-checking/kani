@@ -111,6 +111,7 @@ pub struct Config {
     #[doc(hidden)]
     pub _non_exhaustive: (),
 }
+
 impl Config {
     /// Constructs a `Config` only differing from the `default()` in the
     /// number of test cases required to pass the test successfully.
@@ -132,7 +133,6 @@ impl Config {
         }
     }
 }
-
 
 impl Default for Config {
     fn default() -> Self {
@@ -157,12 +157,12 @@ pub enum TestCaseError {
     ///
     /// The string gives the location and context of the rejection, and
     /// should be suitable for formatting like `Foo did X at {whence}`.
-    Reject(String),
+    Reject(Rejection),
     /// The code under test failed the test.
     ///
     /// The string should indicate the location of the failure, but may
     /// generally be any string.
-    Fail(String),
+    Fail(Rejection),
 }
 
 /// Convenience for the type returned by test cases.
@@ -181,7 +181,7 @@ impl fmt::Display for TestCaseError {
 
 impl<E : ::std::error::Error> From<E> for TestCaseError {
     fn from(cause: E) -> Self {
-        TestCaseError::Fail(cause.to_string())
+        TestCaseError::Fail(cause.to_string().into())
     }
 }
 
@@ -190,11 +190,11 @@ impl<E : ::std::error::Error> From<E> for TestCaseError {
 pub enum TestError<T> {
     /// The test was aborted for the given reason, for example, due to too many
     /// inputs having been rejected.
-    Abort(String),
+    Abort(Rejection),
     /// A failing test case was found. The string indicates where and/or why
     /// the test failed. The `T` is the minimal input found to reproduce the
     /// failure.
-    Fail(String, T),
+    Fail(Rejection, T),
 }
 
 impl<T : fmt::Debug> fmt::Display for TestError<T> {
@@ -218,6 +218,8 @@ impl<T : fmt::Debug> ::std::error::Error for TestError<T> {
     }
 }
 
+type RejectionDetail = BTreeMap<Rejection, u32>;
+
 /// State used when running a proptest test.
 #[derive(Clone)]
 pub struct TestRunner {
@@ -228,8 +230,8 @@ pub struct TestRunner {
     rng: XorShiftRng,
     flat_map_regens: Arc<AtomicUsize>,
 
-    local_reject_detail: BTreeMap<String, u32>,
-    global_reject_detail: BTreeMap<String, u32>,
+    local_reject_detail: RejectionDetail,
+    global_reject_detail: RejectionDetail,
 }
 
 impl fmt::Debug for TestRunner {
@@ -351,10 +353,12 @@ impl TestRunner {
                     Ok(r) => r,
                     Err(what) => {
                         let msg = what.downcast::<&'static str>()
-                            .map(|s| (*s).to_owned())
-                            .or_else(|what| what.downcast::<String>().map(|b| *b))
-                            .unwrap_or_else(
-                                |_| "<unknown panic value>".to_owned());
+                            .map(|s| reject(*s))
+                            .or_else(|what|
+                                what.downcast::<String>().map(|b| reject(*b)))
+                            .or_else(|what|
+                                what.downcast::<Box<str>>().map(|b| reject(*b)))
+                            .unwrap_or_else(|_| reject("<unknown panic value>"));
                         Err(TestCaseError::Fail(msg))
                     },
                 }
@@ -392,7 +396,8 @@ impl TestRunner {
                 Err(TestError::Fail(last_failure.0, last_failure.1))
             },
             Err(TestCaseError::Reject(whence)) => {
-                self.reject_global(&whence)?;
+                let whence = reject(whence); // FIXME.
+                self.reject_global(whence)?;
                 Ok(false)
             },
         }
@@ -400,48 +405,45 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    pub fn reject_local(&mut self, whence: String) -> Result<(),String> {
+    pub fn reject_local<R>(&mut self, whence: R) -> Result<(), Rejection>
+    where
+        R: Into<Rejection>
+    {
         if self.local_rejects >= self.config.max_local_rejects {
-            Err("Too many local rejects".to_owned())
+            Err(reject("Too many local rejects"))
         } else {
             self.local_rejects += 1;
-            let need_insert = if let Some(count) =
-                self.local_reject_detail.get_mut(&whence)
-            {
-                *count += 1;
-                false
-            } else {
-                true
-            };
-            if need_insert {
-                self.local_reject_detail.insert(whence, 1);
-            }
-
+            Self::insert_or_increment(&mut self.local_reject_detail,
+                whence.into());
             Ok(())
         }
     }
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    fn reject_global<T>(&mut self, whence: &str) -> Result<(),TestError<T>> {
+    fn reject_global<T>(&mut self, whence: Rejection) -> Result<(),TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
-            Err(TestError::Abort("Too many global rejects".to_owned()))
+            Err(TestError::Abort(reject("Too many global rejects")))
         } else {
             self.global_rejects += 1;
-            let need_insert = if let Some(count) =
-                self.global_reject_detail.get_mut(whence)
-            {
-                *count += 1;
-                false
-            } else {
-                true
-            };
-            if need_insert {
-                self.global_reject_detail.insert(whence.to_owned(), 1);
-            }
-
+            Self::insert_or_increment(&mut self.global_reject_detail, whence);
             Ok(())
         }
+    }
+
+    /// Insert 1 or increment the rejection detail at key for whence.
+    fn insert_or_increment(into: &mut RejectionDetail, whence: Rejection) {
+        use std::collections::btree_map::Entry::*;
+        match into.entry(whence) {
+            Occupied(oe) => { *oe.into_mut() += 1; },
+            Vacant(ve)   => { ve.insert(1); },
+        }
+        /*
+        // TODO: Replace with once and_modify is stable:
+        into.entry(whence)
+            .and_modify(|count| { *count += 1 })
+            .or_insert(1);
+        */
     }
 
     /// Increment the counter of flat map regenerations and return whether it
@@ -465,7 +467,7 @@ mod test {
         let runs = Cell::new(0);
         let result = runner.run(&(0u32..), |_| {
             runs.set(runs.get() + 1);
-            Err(TestCaseError::Reject("reject".to_owned()))
+            Err(TestCaseError::Reject("reject".into()))
         });
         match result {
             Err(TestError::Abort(_)) => (),
@@ -487,11 +489,10 @@ mod test {
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
-            Err(TestCaseError::Fail("not less than 5".to_owned()))
+            Err(TestCaseError::Fail("not less than 5".into()))
         });
 
-        assert_eq!(Err(TestError::Fail("not less than 5".to_owned(), 5)),
-                   result);
+        assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
     }
 
     #[test]
@@ -501,7 +502,6 @@ mod test {
             assert!(v < 5, "not less than 5");
             Ok(())
         });
-        assert_eq!(Err(TestError::Fail("not less than 5".to_owned(), 5)),
-                   result);
+        assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
     }
 }

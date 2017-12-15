@@ -151,8 +151,7 @@ impl<T : BitSetLike> BitSetStrategy<T> {
 impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
     type Value = BitSetValueTree<T>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut inner = T::new_bitset(self.max);
         for bit in self.min..self.max {
             if self.mask.as_ref().map_or(true, |mask| mask.test(bit)) &&
@@ -212,8 +211,7 @@ impl<T : BitSetLike> SampledBitSetStrategy<T> {
 impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     type Value = BitSetValueTree<T>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end);
         let count = runner.rng().gen_range(self.size.start, self.size.end);
         for bit in rand::sample(runner.rng(), self.bits.clone(), count) {

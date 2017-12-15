@@ -227,8 +227,7 @@ pub struct CharValueTree {
 impl<'a> Strategy for CharStrategy<'a> {
     type Value = CharValueTree;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<CharValueTree, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (base, offset) = select_range_index(
             runner.rng(), &self.special, &self.preferred, &self.ranges);
 
@@ -311,7 +310,7 @@ mod test {
                         |lo| ::std::char::from_u32(hi).map(
                             |hi| (min(lo, hi), max(lo, hi))))
                         .ok_or_else(|| TestCaseError::Reject(
-                            "non-char".to_owned())))
+                            reject("non-char"))))
                     .collect::<Result<Vec<CharRange>,_>>()?));
 
                 let mut runner = TestRunner::new(Config::default());

@@ -178,7 +178,7 @@ where ValueFor<T> : Hash + Eq {
     let min_size = size.start;
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToHashSet),
-        "HashSet minimum size".to_owned(),
+        reject("HashSet minimum size"),
         MinSize(min_size)))
 }
 
@@ -224,7 +224,7 @@ where ValueFor<T> : Ord {
 
     BTreeSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToBTreeSet),
-        "BTreeSet minimum size".to_owned(),
+        reject("BTreeSet minimum size"),
         MinSize(min_size)))
 }
 
@@ -275,7 +275,7 @@ where ValueFor<K> : Hash + Eq {
     let min_size = size.start;
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size), VecToHashMap),
-        "HashMap minimum size".to_owned(),
+        reject("HashMap minimum size"),
         MinSize(min_size)))
 }
 
@@ -326,7 +326,7 @@ where ValueFor<K> : Ord {
     let min_size = size.start;
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
-        "BTreeMap minimum size".to_owned(),
+        reject("BTreeMap minimum size"),
         MinSize(min_size)))
 }
 
@@ -349,8 +349,7 @@ pub struct VecValueTree<T : ValueTree> {
 impl<T : Strategy> Strategy for VecStrategy<T> {
     type Value = VecValueTree<T::Value>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let max_size = rand::distributions::Range::new(
             self.size.start, self.size.end).ind_sample(runner.rng());
         let mut elements = Vec::with_capacity(max_size);
@@ -471,7 +470,7 @@ mod test {
                 if v.iter().map(|&v| v).sum::<usize>() < 9 {
                     Ok(())
                 } else {
-                    Err(TestCaseError::Fail("greater than 8".to_owned()))
+                    Err(TestCaseError::Fail(reject("greater than 8")))
                 }
             });
 
