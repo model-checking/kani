@@ -168,6 +168,36 @@ pub enum TestCaseError {
 /// Convenience for the type returned by test cases.
 pub type TestCaseResult = Result<(), TestCaseError>;
 
+impl TestCaseError {
+    /// Rejects the generated test input as invalid for this test case. This
+    /// does not count as a test failure (nor a success); rather, it simply
+    /// signals to generate a new input and try again.
+    ///
+    /// The string gives the location and context of the rejection, and
+    /// should be suitable for formatting like `Foo did X at {whence}`.
+    pub fn reject<R: Into<Rejection>>(reason: R) -> Self {
+        TestCaseError::Reject(reason.into())
+    }
+
+    /// The code under test failed the test.
+    ///
+    /// The string should indicate the location of the failure, but may
+    /// generally be any string.
+    pub fn fail<R: Into<Rejection>>(reason: R) -> Self {
+        TestCaseError::Fail(reason.into())
+    }
+}
+
+/// Short-hand for `TestCaseError::reject`.
+pub fn reject_case<R: Into<Rejection>>(reason: R) -> TestCaseError {
+    TestCaseError::reject(reason)
+}
+
+/// Short-hand for `TestCaseError::fail`.
+pub fn fail_case<R: Into<Rejection>>(reason: R) -> TestCaseError {
+    TestCaseError::fail(reason)
+}
+
 impl fmt::Display for TestCaseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -467,7 +497,7 @@ mod test {
         let runs = Cell::new(0);
         let result = runner.run(&(0u32..), |_| {
             runs.set(runs.get() + 1);
-            Err(TestCaseError::Reject("reject".into()))
+            Err(reject_case("reject"))
         });
         match result {
             Err(TestError::Abort(_)) => (),
@@ -489,10 +519,10 @@ mod test {
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
-            Err(TestCaseError::Fail("not less than 5".into()))
+            Err(fail_case("not less than 5"))
         });
 
-        assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
+        assert_eq!(Err(fail_case("not less than 5", 5)), result);
     }
 
     #[test]
@@ -502,6 +532,6 @@ mod test {
             assert!(v < 5, "not less than 5");
             Ok(())
         });
-        assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
+        assert_eq!(Err(fail_case("not less than 5", 5)), result);
     }
 }

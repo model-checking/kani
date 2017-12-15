@@ -16,6 +16,8 @@
 pub use strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
 pub use test_runner::Config as ProptestConfig;
 pub use test_runner::TestCaseError;
+pub use test_runner::fail_case;
+pub use test_runner::reject_case;
 
 /// Re-exports the entire public API of proptest so that an import of `prelude`
 /// allows simply writing, for example, `prop::num::i32::ANY` rather than
