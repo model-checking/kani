@@ -522,7 +522,7 @@ mod test {
             Err(fail_case("not less than 5"))
         });
 
-        assert_eq!(Err(fail_case("not less than 5", 5)), result);
+        assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
     }
 
     #[test]
@@ -532,6 +532,6 @@ mod test {
             assert!(v < 5, "not less than 5");
             Ok(())
         });
-        assert_eq!(Err(fail_case("not less than 5", 5)), result);
+        assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
     }
 }
