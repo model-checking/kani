@@ -126,8 +126,8 @@ impl Deref for Rejection {
     fn deref(&self) -> &Self::Target {
         match *self {
             Borrowed(s) => s,
-            BoxOwned(s) => &*s,
-            RcOwned(s)  => &*s,
+            BoxOwned(ref s) => &*s,
+            RcOwned(ref s)  => &*s,
         }
     }
 }
@@ -135,22 +135,22 @@ impl Deref for Rejection {
 impl Clone for Rejection {
     fn clone(&self) -> Self {
         match *self {
-            Borrowed(s) => Borrowed(s),
-            BoxOwned(s) => BoxOwned(s.clone()),
-            RcOwned(s)  => RcOwned(s.clone()),
+            Borrowed(ref s) => Borrowed(s),
+            BoxOwned(ref s) => BoxOwned(s.clone()),
+            RcOwned(ref s)  => RcOwned(s.clone()),
         }
     }
 }
 
 impl fmt::Debug for Rejection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&*self, f)
+        fmt::Debug::fmt(self.as_ref(), f)
     }
 }
 
 impl fmt::Display for Rejection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&*self, f)
+        fmt::Display::fmt(self.as_ref(), f)
     }
 }
 
@@ -180,6 +180,6 @@ impl Ord for Rejection {
 
 impl Hash for Rejection {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (&*self).hash(state)
+        self.as_ref().hash(state)
     }
 }
