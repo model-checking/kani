@@ -197,7 +197,7 @@ mod test {
         let input = Filter::new((0..256), "%3".into(), MyFilter);
 
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let mut case = input.new_value(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);
@@ -220,7 +220,7 @@ mod test {
 
         let input = Map::new((0..10), MyMap);
 
-        TestRunner::new(Config::default())
+        TestRunner::default()
             .run(&input, |&v| {
                 assert!(0 == v % 2);
                 Ok(())

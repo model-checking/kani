@@ -147,7 +147,7 @@ mod test {
                 .prop_map(Tree::Branch).boxed());
 
 
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..65536 {
             let tree = strat.new_value(&mut runner).unwrap().current();
             let (depth, count) = tree.stats();

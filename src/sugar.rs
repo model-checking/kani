@@ -911,7 +911,7 @@ mod test {
             use strategy::*;
             use test_runner::*;
 
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let mut seen = HashSet::new();
             for _ in 0..1024 {
                 seen.insert(s.new_value(&mut runner).unwrap().current());

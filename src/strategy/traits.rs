@@ -612,7 +612,7 @@ pub fn check_strategy_sanity<S : Strategy>(
     strategy: S, options: Option<CheckStrategySanityOptions>)
 where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
     let options = options.unwrap_or_else(CheckStrategySanityOptions::default);
-    let mut runner = TestRunner::new(Config::default());
+    let mut runner = TestRunner::default();
 
     for _ in 0..1024 {
         let mut gen_tries = 0;

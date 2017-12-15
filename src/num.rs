@@ -453,7 +453,7 @@ mod test {
 
     #[test]
     fn signed_integer_range_including_zero_converges_to_zero() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..100 {
             let mut state = (-42i32..64i32).new_value(&mut runner).unwrap();
             let init_value = state.current();
@@ -470,7 +470,7 @@ mod test {
 
     #[test]
     fn negative_integer_range_stays_in_bounds() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..100 {
             let mut state = (..-42i32).new_value(&mut runner).unwrap();
             let init_value = state.current();
@@ -487,7 +487,7 @@ mod test {
 
     #[test]
     fn positive_signed_integer_range_stays_in_bounds() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..100 {
             let mut state = (42i32..).new_value(&mut runner).unwrap();
             let init_value = state.current();
@@ -504,7 +504,7 @@ mod test {
 
     #[test]
     fn unsigned_integer_range_stays_in_bounds() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..100 {
             let mut state = (42u32..56u32).new_value(&mut runner).unwrap();
             let init_value = state.current();
@@ -533,7 +533,7 @@ mod test {
 
     #[test]
     fn positive_float_simplifies_to_zero() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut value = (0.0f64..2.0).new_value(&mut runner).unwrap();
 
         while value.simplify() { }
@@ -543,7 +543,7 @@ mod test {
 
     #[test]
     fn positive_float_simplifies_to_base() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut value = (1.0f64..2.0).new_value(&mut runner).unwrap();
 
         while value.simplify() { }
@@ -553,7 +553,7 @@ mod test {
 
     #[test]
     fn negative_float_simplifies_to_zero() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut value = (-2.0f64..0.0).new_value(&mut runner).unwrap();
 
         while value.simplify() { }
@@ -563,7 +563,7 @@ mod test {
 
     #[test]
     fn positive_float_complicates_to_original() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut value = (1.0f64..2.0).new_value(&mut runner).unwrap();
         let orig = value.current();
 
@@ -611,7 +611,7 @@ mod test {
 
     #[test]
     fn float_simplifies_to_smallest_normal() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut value = (::std::f64::MIN_POSITIVE..2.0)
             .new_value(&mut runner).unwrap();
 

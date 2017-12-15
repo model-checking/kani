@@ -122,7 +122,7 @@ mod test {
         let input = (0..256).prop_filter("%3".to_owned(), |&v| 0 == v % 3);
 
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let mut case = input.new_value(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);

@@ -458,7 +458,7 @@ mod test {
         let mut num_successes = 0;
 
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
             let start = case.current();
             // Has correct length
@@ -500,7 +500,7 @@ mod test {
     fn test_map() {
         // Only 8 possible keys
         let input = hash_map("[ab]{3}", "a", 2..3);
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
 
         for _ in 0..256 {
             let v = input.new_value(&mut runner).unwrap().current();
@@ -512,7 +512,7 @@ mod test {
     fn test_set() {
         // Only 8 possible values
         let input = hash_set("[ab]{3}", 2..3);
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
 
         for _ in 0..256 {
             let v = input.new_value(&mut runner).unwrap().current();
