@@ -376,39 +376,39 @@ impl TestRunner {
                    F : Fn (&V::Value) -> TestCaseResult>
         (&mut self, mut case: V, f: F) -> Result<bool, TestError<V::Value>>
     {
-        macro_rules! test {
-            ($v:expr) => { {
-                let v = $v;
-                match panic::catch_unwind(AssertUnwindSafe(|| f(&v))) {
-                    Ok(r) => r,
-                    Err(what) => {
-                        let msg = what.downcast::<&'static str>()
-                            .map(|s| reject(*s))
-                            .or_else(|what|
-                                what.downcast::<String>().map(|b| reject(*b)))
-                            .or_else(|what|
-                                what.downcast::<Box<str>>().map(|b| reject(*b)))
-                            .unwrap_or_else(|_| reject("<unknown panic value>"));
-                        Err(fail_case(msg))
-                    },
-                }
-            } }
-        }
+        let test = |v| {
+            let e = match panic::catch_unwind(AssertUnwindSafe(|| f(&v))) {
+                Ok(r) => r,
+                Err(what) => {
+                    let msg = what.downcast::<&'static str>()
+                        .map(|s| reject(*s))
+                        .or_else(|what|
+                            what.downcast::<String>().map(|b| reject(*b)))
+                        .or_else(|what|
+                            what.downcast::<Box<str>>().map(|b| reject(*b)))
+                        .unwrap_or_else(|_| reject("<unknown panic value>"));
+                    Err(fail_case(msg))
+                },
+            };
+            (v, e)
+        };
 
-        match test!(case.current()) {
-            Ok(_) => Ok(true),
-            Err(TestCaseError::Fail(why)) => {
-                let mut last_failure = (why, case.current());
+        match test(case.current()) {
+            (_, Ok(_)) => Ok(true),
+            (curr, Err(TestCaseError::Fail(why))) => {
+                let mut last_failure = (why, curr);
+
                 if case.simplify() {
                     loop {
-                        let passed = match test!(case.current()) {
+                        let passed = match test(case.current()) {
                             // Rejections are effectively a pass here,
                             // since they indicate that any behaviour of
                             // the function under test is acceptable.
-                            Ok(_) | Err(TestCaseError::Reject(..)) => true,
+                            (_, Ok(_)) | (_, Err(TestCaseError::Reject(..)))
+                                => true,
 
-                            Err(TestCaseError::Fail(why)) => {
-                                last_failure = (why, case.current());
+                            (curr, Err(TestCaseError::Fail(why))) => {
+                                last_failure = (why, curr);
                                 false
                             },
                         };
@@ -425,7 +425,7 @@ impl TestRunner {
 
                 Err(TestError::Fail(last_failure.0, last_failure.1))
             },
-            Err(TestCaseError::Reject(whence)) => {
+            (_, Err(TestCaseError::Reject(whence))) => {
                 self.reject_global(whence)?;
                 Ok(false)
             },
