@@ -17,6 +17,8 @@ use self::Rejection::*;
 /// This type is currently (representationally) equivalent to:
 ///
 /// ```rust
+/// use std::rc::Rc;
+/// 
 /// pub enum Rejection {
 ///     Borrowed(&'static str),
 ///     BoxOwned(Box<str>),
