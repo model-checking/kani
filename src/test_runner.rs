@@ -303,6 +303,24 @@ impl Default for TestRunner {
     }
 }
 
+fn panic_guard<V, F: Fn(&V) -> TestCaseResult>(case: &V, test: &F)
+    -> TestCaseResult
+{
+    match panic::catch_unwind(AssertUnwindSafe(|| test(&case))) {
+        Ok(r) => r,
+        Err(what) => {
+            let msg = what.downcast::<&'static str>()
+                .map(|s| reject(*s))
+                .or_else(|what|
+                    what.downcast::<String>().map(|b| reject(*b)))
+                .or_else(|what|
+                    what.downcast::<Box<str>>().map(|b| reject(*b)))
+                .unwrap_or_else(|_| reject("<unknown panic value>"));
+            Err(fail_case(msg))
+        },
+    }
+}
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -352,7 +370,7 @@ impl TestRunner {
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
                F : Fn (&ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, f: F)
+        (&mut self, strategy: &S, test: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
         while self.successes < self.config.cases {
@@ -360,7 +378,7 @@ impl TestRunner {
                 Ok(v) => v,
                 Err(msg) => return Err(TestError::Abort(msg)),
             };
-            if self.run_one(case, &f)? {
+            if self.run_one(case, &test)? {
                 self.successes += 1;
             }
         }
@@ -374,40 +392,24 @@ impl TestRunner {
     /// does not fail, returns whether it succeeded or was filtered out.
     pub fn run_one<V : ValueTree,
                    F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, mut case: V, f: F) -> Result<bool, TestError<V::Value>>
+        (&mut self, mut case: V, test: F) -> Result<bool, TestError<V::Value>>
     {
-        let test = |v| {
-            let e = match panic::catch_unwind(AssertUnwindSafe(|| f(&v))) {
-                Ok(r) => r,
-                Err(what) => {
-                    let msg = what.downcast::<&'static str>()
-                        .map(|s| reject(*s))
-                        .or_else(|what|
-                            what.downcast::<String>().map(|b| reject(*b)))
-                        .or_else(|what|
-                            what.downcast::<Box<str>>().map(|b| reject(*b)))
-                        .unwrap_or_else(|_| reject("<unknown panic value>"));
-                    Err(fail_case(msg))
-                },
-            };
-            (v, e)
-        };
-
-        match test(case.current()) {
-            (_, Ok(_)) => Ok(true),
-            (curr, Err(TestCaseError::Fail(why))) => {
+        let curr = case.current();
+        match panic_guard(&curr, &test) {
+            Ok(_) => Ok(true),
+            Err(TestCaseError::Fail(why)) => {
                 let mut last_failure = (why, curr);
 
                 if case.simplify() {
                     loop {
-                        let passed = match test(case.current()) {
+                        let curr = case.current();
+                        let passed = match panic_guard(&curr, &test) {
                             // Rejections are effectively a pass here,
                             // since they indicate that any behaviour of
                             // the function under test is acceptable.
-                            (_, Ok(_)) | (_, Err(TestCaseError::Reject(..)))
-                                => true,
+                            Ok(_) | Err(TestCaseError::Reject(..)) => true,
 
-                            (curr, Err(TestCaseError::Fail(why))) => {
+                            Err(TestCaseError::Fail(why)) => {
                                 last_failure = (why, curr);
                                 false
                             },
@@ -425,7 +427,7 @@ impl TestRunner {
 
                 Err(TestError::Fail(last_failure.0, last_failure.1))
             },
-            (_, Err(TestCaseError::Reject(whence))) => {
+            Err(TestCaseError::Reject(whence)) => {
                 self.reject_global(whence)?;
                 Ok(false)
             },
