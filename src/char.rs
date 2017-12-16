@@ -309,7 +309,7 @@ mod test {
                     |&(lo, hi)| ::std::char::from_u32(lo).and_then(
                         |lo| ::std::char::from_u32(hi).map(
                             |hi| (min(lo, hi), max(lo, hi))))
-                        .ok_or_else(|| reject_case("non-char")))
+                        .ok_or_else(|| TestCaseError::reject("non-char")))
                     .collect::<Result<Vec<CharRange>,_>>()?));
 
                 let mut runner = TestRunner::default();

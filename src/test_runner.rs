@@ -188,14 +188,14 @@ impl TestCaseError {
     }
 }
 
-/// Short-hand for `TestCaseError::reject`.
-pub fn reject_case<R: Into<Rejection>>(reason: R) -> TestCaseError {
-    TestCaseError::reject(reason)
+/// Short-hand for `Err(TestCaseError::reject(..))`.
+pub fn reject_case<R: Into<Rejection>>(reason: R) -> TestCaseResult {
+    Err(TestCaseError::reject(reason))
 }
 
-/// Short-hand for `TestCaseError::fail`.
-pub fn fail_case<R: Into<Rejection>>(reason: R) -> TestCaseError {
-    TestCaseError::fail(reason)
+/// Short-hand for `Err(TestCaseError::fail(..))`.
+pub fn fail_case<R: Into<Rejection>>(reason: R) -> TestCaseResult {
+    Err(TestCaseError::fail(reason))
 }
 
 impl fmt::Display for TestCaseError {
@@ -211,7 +211,7 @@ impl fmt::Display for TestCaseError {
 
 impl<E : ::std::error::Error> From<E> for TestCaseError {
     fn from(cause: E) -> Self {
-        fail_case(cause.to_string())
+        TestCaseError::fail(cause.to_string())
     }
 }
 
@@ -303,21 +303,17 @@ impl Default for TestRunner {
     }
 }
 
-fn panic_guard<V, F: Fn(&V) -> TestCaseResult>(case: &V, test: &F)
-    -> TestCaseResult
+fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
+where
+    F: Fn(&V) -> TestCaseResult
 {
     match panic::catch_unwind(AssertUnwindSafe(|| test(&case))) {
         Ok(r) => r,
-        Err(what) => {
-            let msg = what.downcast::<&'static str>()
-                .map(|s| reject(*s))
-                .or_else(|what|
-                    what.downcast::<String>().map(|b| reject(*b)))
-                .or_else(|what|
-                    what.downcast::<Box<str>>().map(|b| reject(*b)))
-                .unwrap_or_else(|_| reject("<unknown panic value>"));
-            Err(fail_case(msg))
-        },
+        Err(what) => fail_case(
+            what.downcast::<&'static str>().map(|s| reject(*s))
+                .or_else(|what| what.downcast::<String>().map(|b| reject(*b)))
+                .or_else(|what| what.downcast::<Box<str>>().map(|b| reject(*b)))
+                .unwrap_or_else(|_| reject("<unknown panic value>"))),
     }
 }
 
@@ -498,7 +494,7 @@ mod test {
         let runs = Cell::new(0);
         let result = runner.run(&(0u32..), |_| {
             runs.set(runs.get() + 1);
-            Err(reject_case("reject"))
+            reject_case("reject")
         });
         match result {
             Err(TestError::Abort(_)) => (),
@@ -520,7 +516,7 @@ mod test {
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
-            Err(fail_case("not less than 5"))
+            fail_case("not less than 5")
         });
 
         assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);

@@ -266,7 +266,7 @@ mod test {
                 if a <= 10000 || b <= a {
                     Ok(())
                 } else {
-                    Err(fail_case("fail"))
+                    fail_case("fail")
                 }
             });
 
@@ -316,7 +316,7 @@ mod test {
             if pass.fetch_or(true, Ordering::SeqCst) {
                 Ok(())
             } else {
-                Err(fail_case("fail"))
+                fail_case("fail")
             }
         });
     }
