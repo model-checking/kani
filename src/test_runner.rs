@@ -296,7 +296,7 @@ impl fmt::Display for TestRunner {
     }
 }
 
-/// Equivalent to: `TestRunner::default()`.
+/// Equivalent to: `TestRunner::default(Config::default())`.
 impl Default for TestRunner {
     fn default() -> Self {
         Self::new(Config::default())
