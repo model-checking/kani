@@ -1,3 +1,11 @@
+## Unreleased
+
+### New Additions
+
+- Added support for `i128` and `u128`. Since this is an unstable feature in
+  Rust, this is hidden behind the feature `unstable` which you have to
+  explicitly opt into in your `Cargo.toml` file.
+
 ## 0.3.2
 
 ### New Additions

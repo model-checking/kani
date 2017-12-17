@@ -272,6 +272,11 @@ unsigned_integer_bin_search!(u32);
 unsigned_integer_bin_search!(u64);
 unsigned_integer_bin_search!(usize);
 
+#[cfg(feature = "unstable")]
+signed_integer_bin_search!(i128);
+#[cfg(feature = "unstable")]
+unsigned_integer_bin_search!(u128);
+
 macro_rules! float_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
