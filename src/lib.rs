@@ -128,8 +128,17 @@
 //! '
 //! ```
 //!
-//! The first thing we should do is copy the failing case to a traditional unit
-//! test since it has exposed a bug.
+//! The first thing we should do is add the new [failure
+//! persistence](#failure-persistence) file to our source control, for example
+//! with git:
+//!
+//! ```text
+//! $ git add src/proptest-failures.txt
+//! ```
+//!
+//! The next thing we should do is copy the failing case to a traditional unit
+//! test since it has exposed a bug not similar to what we've tested in the
+//! past.
 //!
 //! ```rust,ignore
 //! #[test]
@@ -278,7 +287,12 @@
 //! the `0000-06-20` and `0000-09-20` test cases _passed_.
 //!
 //! In the end, we get the date `0000-10-01`, which apparently gets parsed as
-//! `0000-00-01`. Again, let's add this as its own unit test:
+//! `0000-00-01`. Again, this failing case was added to the failure persistence
+//! file, and we should add this as its own unit test:
+//!
+//! ```text
+//! $ git add src/proptest-failures.txt
+//! ```
 //!
 //! ```rust,ignore
 //! #[test]
@@ -395,6 +409,43 @@
 //! which actually produces useful inputs. A strategy of `.{1,4096}` may be
 //! great to fuzz a C parser, but is highly unlikely to produce anything that
 //! makes it to a code generator.
+//!
+//! ## Failure Persistence
+//!
+//! By default, when Proptest finds a failing test case, it _persists_ that
+//! failing case in a file named `proptest-failures.txt` at the root of your
+//! source tree. Later runs of tests will replay those test cases before
+//! generating novel cases. This ensures that the test will not fail on one run
+//! and then spuriously pass on the next, and also exposes similar tests to the
+//! same known-problematic input.
+//!
+//! It is recommended to check this file in to your source control so that
+//! other test runners (e.g., collaborators or a CI system) also replay these
+//! cases.
+//!
+//! Note that, by default, all tests in the same crate will share that one
+//! persistence file. If you have a very large number of tests, it may be
+//! desirable to separate them into smaller groups so the number of extra test
+//! cases that get run is reduced. This can be done by adjusting the
+//! `failure_persistence` flag on `Config`.
+//!
+//! There are two ways this persistence could theoretically be done.
+//!
+//! The immediately obvious option is to persist a representation of the value
+//! itself, for example by using Serde. While this has some advantages,
+//! particularly being resistant to changes like tweaking the input strategy,
+//! it also has a lot of problems. Most importantly, there is no way to
+//! determine whether any given value is actually within the domain of the
+//! strategy that produces it. Thus, some (likely extremely fragile) mechanism
+//! to ensure that the strategy that produced the value exactly matches the one
+//! in use in a test case would be required.
+//!
+//! The other option is to store the _seed_ that was used to produce the
+//! failing test case. This approach requires no support from the strategy or
+//! the produced value. If the strategy in use differs from the one used to
+//! produce failing case that was persisted, the seed may or may not produce
+//! the problematic value, but nonetheless produces a valid value. Due to these
+//! advantages, this is the approach Proptest uses.
 //!
 //! <!-- ENDREADME -->
 //!
@@ -648,7 +699,8 @@
 //! ```rust
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{TestError, TestRunner};
+//! use proptest::test_runner::{Config, FailurePersistence,
+//!                             TestError, TestRunner};
 //!
 //! fn some_function(v: i32) {
 //!     // Do a bunch of stuff, but crash if v > 500.
@@ -660,7 +712,11 @@
 //! // We know the function is broken, so use a purpose-built main function to
 //! // find the breaking point.
 //! fn main() {
-//!     let mut runner = TestRunner::default();
+//!     let mut runner = TestRunner::new(Config {
+//!         // Turn failure persistence off for demonstration
+//!         failure_persistence: FailurePersistence::Off,
+//!         .. Config::default()
+//!     });
 //!     let result = runner.run(&(0..10000i32), |&v| {
 //!         some_function(v);
 //!         Ok(())

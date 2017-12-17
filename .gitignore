@@ -4,3 +4,4 @@ Cargo.lock
 
 # VSCode:
 .vscode/
+persistence-test.txt
