@@ -10,6 +10,11 @@
   save the seed for the failing test to a file, and later runs will test the
   persisted failing cases before generating new ones.
 
+### Bug Fixes
+
+- Fix a case where certain combinations of strategies, like two
+  `prop_shuffle()`s in close proximity, could result in low-quality randomness.
+
 ## 0.3.2
 
 ### New Additions

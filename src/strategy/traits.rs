@@ -36,6 +36,13 @@ pub trait Strategy : fmt::Debug {
     /// This may fail if there are constraints on the generated value and the
     /// generator is unable to produce anything that satisfies them. Any
     /// failure is wrapped in `TestError::Abort`.
+    ///
+    /// This method is generally expected to be deterministic. That is, given a
+    /// `TestRunner` with its RNG in a particular state, this should produce an
+    /// identical `ValueTree` every time. Non-deterministic strategies do not
+    /// cause problems during normal operation, but they do break failure
+    /// persistence since it is implemented by simply saving the seed used to
+    /// generate the test case.
     fn new_value
         (&self, runner: &mut TestRunner)
          -> Result<Self::Value, String>;

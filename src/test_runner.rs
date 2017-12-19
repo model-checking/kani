@@ -555,14 +555,17 @@ impl TestRunner {
     }
 
     /// Create a fresh `TestRunner` with the same config and global counters as
-    /// this one, but with local state reset and an independent `Rng`.
-    pub(crate) fn partial_clone(&self) -> Self {
+    /// this one, but with local state reset and an independent `Rng` (but
+    /// deterministic).
+    pub(crate) fn partial_clone(&mut self) -> Self {
+        let rng = self.new_rng();
+
         TestRunner {
             config: self.config.clone(),
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: rand::weak_rng(),
+            rng: rng,
             flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
@@ -573,6 +576,23 @@ impl TestRunner {
     /// Returns the RNG for this test run.
     pub fn rng(&mut self) -> &mut XorShiftRng {
         &mut self.rng
+    }
+
+    fn new_rng_seed(&mut self) -> [u32;4] {
+        let mut seed = <[u32;4] as Rand>::rand(&mut self.rng);
+        // Directly using XorShiftRng::from_seed() at this point would result
+        // in self.rng and the returned value being exactly the same. Perturb
+        // the seed with some arbitrary values to prevent this.
+        for word in &mut seed {
+            *word ^= 0xdeadbeef;
+        }
+        seed
+    }
+
+    /// Create a new, independent but deterministic RNG from the RNG in this
+    /// runner.
+    pub fn new_rng(&mut self) -> XorShiftRng {
+        XorShiftRng::from_seed(self.new_rng_seed())
     }
 
     /// Returns the configuration of this runner.
@@ -622,7 +642,7 @@ impl TestRunner {
         while self.successes < self.config.cases {
             // Generate a new seed and make an RNG from that so that we know
             // what seed to persist if this case fails.
-            let seed = <[u32;4] as Rand>::rand(&mut self.rng);
+            let seed = self.new_rng_seed();
             self.rng = XorShiftRng::from_seed(seed);
             let result = self.gen_and_run_case(strategy, &f);
             if let Err(TestError::Fail(_, ref value)) = result {
@@ -959,5 +979,17 @@ mod test {
 
         assert_eq!(first_sub_failure, second_sub_failure);
         assert_eq!(first_super_failure, second_super_failure);
+    }
+
+    #[test]
+    fn new_rng_makes_separate_rng() {
+        let mut runner = TestRunner::default();
+        let mut rng2 = runner.new_rng();
+        let rng1 = runner.rng();
+
+        let from_1 = <[u32;4] as Rand>::rand(rng1);
+        let from_2 = <[u32;4] as Rand>::rand(&mut rng2);
+
+        assert_ne!(from_1, from_2);
     }
 }
