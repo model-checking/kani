@@ -1357,6 +1357,8 @@
 
 #![deny(missing_docs)]
 
+#![cfg_attr(feature = "unstable", feature(i128_type))]
+
 extern crate bit_set;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate quick_error;
