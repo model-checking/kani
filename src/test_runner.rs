@@ -119,7 +119,7 @@ pub struct Config {
     /// See the docs of [`FailurePersistence`](enum.FailurePersistence.html)
     /// for more information.
     ///
-    /// The default is `FailurePersistence::WithMain("proptest-failures.txt")`.
+    /// The default is `FailurePersistence::SourceParallel("proptest-regressions")`.
     /// The default cannot currently be overridden by an environment variable.
     pub failure_persistence: FailurePersistence,
     // Needs to be public so FRU syntax can be used.
@@ -160,6 +160,9 @@ impl Default for Config {
 ///
 /// Note that file names in this enum are `&str` rather than `&Path` since
 /// constant functions are not yet in Rust stable as of 2017-12-16.
+///
+/// In all cases, if a derived path references a directory which does not yet
+/// exist, proptest will attempt to create all necessary parent directories.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FailurePersistence {
     /// Completely disables persistence of failing test cases.
@@ -168,24 +171,33 @@ pub enum FailurePersistence {
     /// `Direct("NUL")` on Windows (though it is internally handled by simply
     /// not doing any I/O).
     Off,
-    /// The path given to `TestRunner::set_source_file()` is parsed, and
-    /// proptest traverses the directory tree upwards. The string given in this
-    /// value is resolved against the first directory which contains `lib.rs`
-    /// or `main.rs`, as per
-    /// [`PathBuf::push`](https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.push).
+    /// The path given to `TestRunner::set_source_file()` is parsed. The path
+    /// is traversed up the directory tree until a directory containing a file
+    /// named `lib.rs` or `main.rs` is found. A sibling to that directory with
+    /// the name given by the string in this configuration is created, and a
+    /// file with the same name and path relative to the source directory, but
+    /// with the extension changed to `.txt`, is used.
+    ///
+    /// For example, given a source path of
+    /// `/home/jsmith/code/project/src/foo/bar.rs` and a configuration of
+    /// `SourceParallel("proptest-regressions")` (the default), assuming the
+    /// `src` directory has a `lib.rs` or `main.rs`, the resulting file would
+    /// be `/home/jsmith/code/project/proptest-regressions/foo/bar.txt`.
     ///
     /// If no `lib.rs` or `main.rs` can be found, a warning is printed and this
-    /// option behaves like `WithSource`. If `TestRunner::set_source_file()`
-    /// has not been called, a warning is printed and this option behaves like
-    /// `Direct`.
-    WithMain(&'static str),
-    /// The path given to `TestRunner::set_source_file()` is parsed. The string
-    /// given in this value is resolved against the parent directory of the
-    /// source file, as per
-    /// [`PathBuf::push`](https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.push).
+    /// behaves like `WithSource`.
     ///
-    /// If `TestRunner::set_source_ifle()` has not been called, a warning is
-    /// printed and this option behaves like `Direct`.
+    /// If no source file has been configured, a warning is printed and this
+    /// behaves like `Off`.
+    SourceParallel(&'static str),
+    /// The path given to `TestRunner::set_source_file()` is parsed. The
+    /// extension of the path is changed to the string given in this
+    /// configuration, and that filename is used.
+    ///
+    /// For example, given a source path of
+    /// `/home/jsmith/code/project/src/foo/bar.rs` and a configuration of
+    /// `WithSource("regressions")`, the resulting path would be
+    /// `/home/jsmith/code/project/src/foo/bar.regressions`.
     WithSource(&'static str),
     /// The string given in this option is directly used as a file path without
     /// any further processing.
@@ -197,7 +209,7 @@ pub enum FailurePersistence {
 
 impl Default for FailurePersistence {
     fn default() -> Self {
-        FailurePersistence::WithMain("proptest-failures.txt")
+        FailurePersistence::SourceParallel("proptest-regressions")
     }
 }
 
@@ -208,7 +220,7 @@ impl FailurePersistence {
         match *self {
             FailurePersistence::Off => None,
 
-            FailurePersistence::WithMain(path) => match source {
+            FailurePersistence::SourceParallel(sibling) => match source {
                 Some(source_path) => {
                     let mut dir = source_path.to_owned();
                     let mut found = false;
@@ -222,29 +234,44 @@ impl FailurePersistence {
                     }
 
                     if !found {
-                        eprintln!("proptest: FailurePersistence::WithMain set, \
-                                   but failed to find lib.rs or main.rs");
-                        FailurePersistence::WithSource(path).resolve(source)
+                        eprintln!(
+                            "proptest: FailurePersistence::SourceParallel set, \
+                             but failed to find lib.rs or main.rs");
+                        FailurePersistence::WithSource(sibling).resolve(source)
                     } else {
-                        Some(dir.join(path))
+                        let suffix = source_path.strip_prefix(&dir)
+                            .expect("parent of source is not a prefix of it?")
+                            .to_owned();
+                        let mut result = dir;
+                        // If we've somehow reached the root, or someone gave
+                        // us a relative path that we've exhausted, just accept
+                        // creating a subdirectory instead.
+                        let _ = result.pop();
+                        result.push(sibling);
+                        result.push(&suffix);
+                        result.set_extension("txt");
+                        Some(result)
                     }
                 },
                 None => {
-                    eprintln!("proptest: FailurePersistence::WithMain set, \
-                               but no source file known");
-                    Some(Path::new(path).to_owned())
+                    eprintln!(
+                        "proptest: FailurePersistence::SourceParallel set, \
+                         but no source file known");
+                    None
                 },
             },
 
-            FailurePersistence::WithSource(path) => match source {
-                Some(source_path) =>
-                    Some(source_path.parent().unwrap_or(source_path)
-                         .join(path)),
+            FailurePersistence::WithSource(extension) => match source {
+                Some(source_path) => {
+                    let mut result = source_path.to_owned();
+                    result.set_extension(extension);
+                    Some(result)
+                },
 
                 None => {
                     eprintln!("proptest: FailurePersistence::WithSource set, \
                                but no source file known");
-                    Some(Path::new(path).to_owned())
+                    None
                 },
             },
 
@@ -472,37 +499,44 @@ fn save_persisted_failure(path: Option<&PathBuf>,
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.")
                     .expect("writeln! to vec failed");
+        }
+        let mut data_line = Vec::<u8>::new();
+        write!(data_line, "xs {} {} {} {} # shrinks to {:?}",
+               seed[0], seed[1], seed[2], seed[3],
+               value).expect("write! to vec failed");
+        // Ensure there are no newlines in the debug output
+        for byte in &mut data_line {
+            if b'\n' == *byte || b'\r' == *byte {
+                *byte = b' ';
             }
-            let mut data_line = Vec::<u8>::new();
-            write!(data_line, "xs {} {} {} {} # shrinks to {:?}",
-                   seed[0], seed[1], seed[2], seed[3],
-                   value).expect("write! to vec failed");
-            // Ensure there are no newlines in the debug output
-            for byte in &mut data_line {
-                if b'\n' == *byte || b'\r' == *byte {
-                    *byte = b' ';
-                }
-            }
+        }
+        to_write.extend(data_line);
+        to_write.push(b'\n');
 
-            to_write.extend(data_line);
-            to_write.push(b'\n');
+        fn do_write(dst: &Path, data: &[u8]) -> io::Result<()> {
+            if let Some(parent) = dst.parent() {
+                fs::create_dir_all(parent)?;
+            }
 
             let mut options = fs::OpenOptions::new();
             options.append(true).create(true);
-            let res = options.open(path).and_then(
-                |mut out| out.write_all(&to_write));
+            let mut out = options.open(dst)?;
+            out.write_all(data)?;
 
-            if let Err(e) = res {
-                eprintln!(
-                    "proptest: failed to append to {}: {}",
-                    path.display(), e);
-            } else if is_new {
-                eprintln!(
-                    "proptest: Saving this and future failures in {}",
-                    path.display());
-            }
+            Ok(())
+        }
+
+        if let Err(e) = do_write(path, &to_write) {
+            eprintln!(
+                "proptest: failed to append to {}: {}",
+                path.display(), e);
+        } else if is_new {
+            eprintln!(
+                "proptest: Saving this and future failures in {}",
+                path.display());
         }
     }
+}
 
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
@@ -795,8 +829,6 @@ mod test {
 
     struct TestPaths {
         crate_root: &'static Path,
-        lib_root: PathBuf,
-        src_subdir: PathBuf,
         src_file: PathBuf,
         subdir_file: PathBuf,
         misplaced_file: PathBuf,
@@ -811,7 +843,7 @@ mod test {
             let subdir_file = src_subdir.join("foo.rs");
             let misplaced_file = crate_root.join("foo.rs");
             TestPaths {
-                crate_root, lib_root, src_subdir,
+                crate_root,
                 src_file, subdir_file, misplaced_file
             }
         };
@@ -834,42 +866,31 @@ mod test {
                    FailurePersistence::Direct("bar.txt").resolve(
                        Some(&TEST_PATHS.subdir_file)));
 
-        // For WithSource, it should be located under src_subdir if the source
-        // file is available and the configuration is relative. Otherwise, it
-        // is the configuration exactly.
-        assert_eq!(Some(TEST_PATHS.src_subdir.join("bar.txt")),
-                   FailurePersistence::WithSource("bar.txt").resolve(
-                       Some(&TEST_PATHS.subdir_file)));
-        assert_eq!(Some(Path::new("/foo/bar.txt").to_owned()),
-                   FailurePersistence::WithSource("/foo/bar.txt").resolve(
-                       Some(&TEST_PATHS.subdir_file)));
-        assert_eq!(Some(Path::new("bar.txt").to_owned()),
-                   FailurePersistence::WithSource("bar.txt").resolve(None));
+        // For WithSource, only the extension changes, but we get nothing if no
+        // source file was configured.
+        assert_eq!(Some(Path::new("/foo/bar.ext").to_owned()),
+                   FailurePersistence::WithSource("ext").resolve(
+                       Some(Path::new("/foo/bar.rs"))));
+        assert_eq!(None,
+                   FailurePersistence::WithSource("ext").resolve(None));
 
-        // For WithMain, a file alongside lib.rs or in a subdirectory results
-        // in a file in the same dir as lib.rs...
-        assert_eq!(Some(TEST_PATHS.lib_root.join("bar.txt")),
-                   FailurePersistence::WithMain("bar.txt").resolve(
+        // For SourceParallel, we make a sibling directory tree and change the
+        // extensions to .txt ...
+        assert_eq!(Some(TEST_PATHS.crate_root.join("sib").join("foo.txt")),
+                   FailurePersistence::SourceParallel("sib").resolve(
+                       Some(&TEST_PATHS.src_file)));
+        assert_eq!(Some(TEST_PATHS.crate_root.join("sib")
+                        .join("strategy").join("foo.txt")),
+                   FailurePersistence::SourceParallel("sib").resolve(
                        Some(&TEST_PATHS.subdir_file)));
-        assert_eq!(Some(TEST_PATHS.lib_root.join("bar.txt")),
-                   FailurePersistence::WithMain("bar.txt").resolve(
-                       Some(&TEST_PATHS.src_file)));
-        // ... but if neither lib.rs nor main.rs can be found, it ends up
-        // alongside the source ...
-        assert_eq!(Some(TEST_PATHS.crate_root.join("bar.txt")),
-                   FailurePersistence::WithMain("bar.txt").resolve(
+        // ... but if we can't find lib.rs / main.rs, give up and set the
+        // extension instead ...
+        assert_eq!(Some(TEST_PATHS.crate_root.join("foo.sib")),
+                   FailurePersistence::SourceParallel("sib").resolve(
                        Some(&TEST_PATHS.misplaced_file)));
-        // ... but if the configured path is absolute, the result is also
-        // absolute in both cases ...
-        assert_eq!(Some(Path::new("/foo/bar.txt").to_owned()),
-                   FailurePersistence::WithMain("/foo/bar.txt").resolve(
-                       Some(&TEST_PATHS.src_file)));
-        assert_eq!(Some(Path::new("/foo/bar.txt").to_owned()),
-                   FailurePersistence::WithMain("/foo/bar.txt").resolve(
-                       Some(&TEST_PATHS.misplaced_file)));
-        // ... and if no source is available, we just use the raw path
-        assert_eq!(Some(Path::new("bar.txt").to_owned()),
-                   FailurePersistence::WithMain("bar.txt").resolve(None));
+        // ... and if no source is configured, we do nothing
+        assert_eq!(None,
+                   FailurePersistence::SourceParallel("ext").resolve(None));
     }
 
     #[derive(Clone, Copy, PartialEq)]

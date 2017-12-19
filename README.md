@@ -120,12 +120,14 @@ thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it 
 '
 ```
 
-The first thing we should do is add the new [failure
-persistence](#failure-persistence) file to our source control, for example
-with git:
+If we look at the top directory after the test fails, we'll see a new
+`proptest-regressions` directory, which contains some files corresponding
+to source files containing failing test cases. These are [_failure
+persistence_](#failure-persistence) files. The first thing we should do is
+add these to source control.
 
 ```text
-$ git add src/proptest-failures.txt
+$ git add proptest-regressions
 ```
 
 The next thing we should do is copy the failing case to a traditional unit
@@ -283,7 +285,7 @@ In the end, we get the date `0000-10-01`, which apparently gets parsed as
 file, and we should add this as its own unit test:
 
 ```text
-$ git add src/proptest-failures.txt
+$ git add proptest-regressions
 ```
 
 ```rust
@@ -397,13 +399,17 @@ makes it to a code generator.
 ## Failure Persistence
 
 By default, when Proptest finds a failing test case, it _persists_ that
-failing case in a file named `proptest-failures.txt` at the root of your
-source tree. Later runs of tests will replay those test cases before
-generating novel cases. This ensures that the test will not fail on one run
-and then spuriously pass on the next, and also exposes similar tests to the
-same known-problematic input.
+failing case in a file named after the source containing the failing test,
+but in a separate directory tree rooted at `proptest-regressions`† . Later
+runs of tests will replay those test cases before generating novel cases.
+This ensures that the test will not fail on one run and then spuriously
+pass on the next, and also exposes similar tests to the same
+known-problematic input.
 
-It is recommended to check this file in to your source control so that
+(†  If you do not have an obvious source directory, you may instead find
+files next to the source files, with a different extension.)
+
+It is recommended to check these files in to your source control so that
 other test runners (e.g., collaborators or a CI system) also replay these
 cases.
 
