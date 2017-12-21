@@ -17,6 +17,11 @@
 //! and shrinking is defined on a per-value basis instead of per-type, which
 //! makes it much more flexible and simplifies composition.
 //!
+//! If you have dependencies which provide QuickCheck `Arbitrary`
+//! implementations, see also the related
+//! [`proptest-quickcheck-interop`](https://crates.io/crates/proptest-quickcheck-interop)
+//! crates which enables reusing those implementations with proptest.
+//!
 //! <!-- NOREADME
 //! ## Status of this crate
 //!
