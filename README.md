@@ -120,8 +120,19 @@ thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it 
 '
 ```
 
-The first thing we should do is copy the failing case to a traditional unit
-test since it has exposed a bug.
+If we look at the top directory after the test fails, we'll see a new
+`proptest-regressions` directory, which contains some files corresponding
+to source files containing failing test cases. These are [_failure
+persistence_](#failure-persistence) files. The first thing we should do is
+add these to source control.
+
+```text
+$ git add proptest-regressions
+```
+
+The next thing we should do is copy the failing case to a traditional unit
+test since it has exposed a bug not similar to what we've tested in the
+past.
 
 ```rust
 #[test]
@@ -270,7 +281,12 @@ Between those two, though, we see something different: it tried to shrink
 the `0000-06-20` and `0000-09-20` test cases _passed_.
 
 In the end, we get the date `0000-10-01`, which apparently gets parsed as
-`0000-00-01`. Again, let's add this as its own unit test:
+`0000-00-01`. Again, this failing case was added to the failure persistence
+file, and we should add this as its own unit test:
+
+```text
+$ git add proptest-regressions
+```
 
 ```rust
 #[test]
@@ -379,6 +395,47 @@ Similarly, in some cases it can be hard or impossible to define a strategy
 which actually produces useful inputs. A strategy of `.{1,4096}` may be
 great to fuzz a C parser, but is highly unlikely to produce anything that
 makes it to a code generator.
+
+## Failure Persistence
+
+By default, when Proptest finds a failing test case, it _persists_ that
+failing case in a file named after the source containing the failing test,
+but in a separate directory tree rooted at `proptest-regressions`† . Later
+runs of tests will replay those test cases before generating novel cases.
+This ensures that the test will not fail on one run and then spuriously
+pass on the next, and also exposes similar tests to the same
+known-problematic input.
+
+(†  If you do not have an obvious source directory, you may instead find
+files next to the source files, with a different extension.)
+
+It is recommended to check these files in to your source control so that
+other test runners (e.g., collaborators or a CI system) also replay these
+cases.
+
+Note that, by default, all tests in the same crate will share that one
+persistence file. If you have a very large number of tests, it may be
+desirable to separate them into smaller groups so the number of extra test
+cases that get run is reduced. This can be done by adjusting the
+`failure_persistence` flag on `Config`.
+
+There are two ways this persistence could theoretically be done.
+
+The immediately obvious option is to persist a representation of the value
+itself, for example by using Serde. While this has some advantages,
+particularly being resistant to changes like tweaking the input strategy,
+it also has a lot of problems. Most importantly, there is no way to
+determine whether any given value is actually within the domain of the
+strategy that produces it. Thus, some (likely extremely fragile) mechanism
+to ensure that the strategy that produced the value exactly matches the one
+in use in a test case would be required.
+
+The other option is to store the _seed_ that was used to produce the
+failing test case. This approach requires no support from the strategy or
+the produced value. If the strategy in use differs from the one used to
+produce failing case that was persisted, the seed may or may not produce
+the problematic value, but nonetheless produces a valid value. Due to these
+advantages, this is the approach Proptest uses.
 
 
 # Acknowledgements

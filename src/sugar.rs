@@ -82,6 +82,7 @@ macro_rules! proptest {
             fn $test_name() {
                 let mut runner = $crate::test_runner::TestRunner::new(
                     $config.clone());
+                runner.set_source_file(::std::path::Path::new(file!()));
                 let names = proptest_helper!(@_WRAPSTR ($($parm),*));
                 match runner.run(
                     &$crate::strategy::Strategy::prop_map(

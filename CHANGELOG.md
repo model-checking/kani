@@ -6,6 +6,15 @@
   Rust, this is hidden behind the feature `unstable` which you have to
   explicitly opt into in your `Cargo.toml` file.
 
+- Failing case persistence. By default, when a test fails, Proptest will now
+  save the seed for the failing test to a file, and later runs will test the
+  persisted failing cases before generating new ones.
+
+### Bug Fixes
+
+- Fix a case where certain combinations of strategies, like two
+  `prop_shuffle()`s in close proximity, could result in low-quality randomness.
+
 ## 0.3.2
 
 ### New Additions

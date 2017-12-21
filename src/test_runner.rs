@@ -16,12 +16,15 @@ use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
+use std::fs;
+use std::io::{self, BufRead, Write};
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
 
-use rand::{self, XorShiftRng};
+use rand::{self, Rand, SeedableRng, XorShiftRng};
 
 use strategy::*;
 
@@ -34,6 +37,7 @@ lazy_static! {
             max_local_rejects: 65536,
             max_global_rejects: 1024,
             max_flat_map_regens: 1_000_000,
+            failure_persistence: FailurePersistence::default(),
             _non_exhaustive: (),
         };
 
@@ -85,6 +89,8 @@ pub struct Config {
     /// The number of successful test cases that must execute for the test as a
     /// whole to pass.
     ///
+    /// This does not include implicitly-replayed persisted failing cases.
+    ///
     /// The default is 256, which can be overridden by setting the
     /// `PROPTEST_CASES` environment variable.
     pub cases: u32,
@@ -107,10 +113,20 @@ pub struct Config {
     /// The default is 1_000_000, which can be overridden by setting the
     /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
+    /// Indicates how to determine the file to use for persisting failed test
+    /// results.
+    ///
+    /// See the docs of [`FailurePersistence`](enum.FailurePersistence.html)
+    /// for more information.
+    ///
+    /// The default is `FailurePersistence::SourceParallel("proptest-regressions")`.
+    /// The default cannot currently be overridden by an environment variable.
+    pub failure_persistence: FailurePersistence,
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
     pub _non_exhaustive: (),
 }
+
 impl Config {
     /// Constructs a `Config` only differing from the `default()` in the
     /// number of test cases required to pass the test successfully.
@@ -137,6 +153,134 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         DEFAULT_CONFIG.clone()
+    }
+}
+
+/// Describes how failing test cases are persisted.
+///
+/// Note that file names in this enum are `&str` rather than `&Path` since
+/// constant functions are not yet in Rust stable as of 2017-12-16.
+///
+/// In all cases, if a derived path references a directory which does not yet
+/// exist, proptest will attempt to create all necessary parent directories.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FailurePersistence {
+    /// Completely disables persistence of failing test cases.
+    ///
+    /// This is semantically equivalent to `Direct("/dev/null")` on Unix and
+    /// `Direct("NUL")` on Windows (though it is internally handled by simply
+    /// not doing any I/O).
+    Off,
+    /// The path given to `TestRunner::set_source_file()` is parsed. The path
+    /// is traversed up the directory tree until a directory containing a file
+    /// named `lib.rs` or `main.rs` is found. A sibling to that directory with
+    /// the name given by the string in this configuration is created, and a
+    /// file with the same name and path relative to the source directory, but
+    /// with the extension changed to `.txt`, is used.
+    ///
+    /// For example, given a source path of
+    /// `/home/jsmith/code/project/src/foo/bar.rs` and a configuration of
+    /// `SourceParallel("proptest-regressions")` (the default), assuming the
+    /// `src` directory has a `lib.rs` or `main.rs`, the resulting file would
+    /// be `/home/jsmith/code/project/proptest-regressions/foo/bar.txt`.
+    ///
+    /// If no `lib.rs` or `main.rs` can be found, a warning is printed and this
+    /// behaves like `WithSource`.
+    ///
+    /// If no source file has been configured, a warning is printed and this
+    /// behaves like `Off`.
+    SourceParallel(&'static str),
+    /// The path given to `TestRunner::set_source_file()` is parsed. The
+    /// extension of the path is changed to the string given in this
+    /// configuration, and that filename is used.
+    ///
+    /// For example, given a source path of
+    /// `/home/jsmith/code/project/src/foo/bar.rs` and a configuration of
+    /// `WithSource("regressions")`, the resulting path would be
+    /// `/home/jsmith/code/project/src/foo/bar.regressions`.
+    WithSource(&'static str),
+    /// The string given in this option is directly used as a file path without
+    /// any further processing.
+    Direct(&'static str),
+    #[doc(hidden)]
+    #[allow(missing_docs)]
+    _NonExhaustive,
+}
+
+impl Default for FailurePersistence {
+    fn default() -> Self {
+        FailurePersistence::SourceParallel("proptest-regressions")
+    }
+}
+
+impl FailurePersistence {
+    /// Given the nominal source path, determine the location of the failure
+    /// persistence file, if any.
+    fn resolve(&self, source: Option<&Path>) -> Option<PathBuf> {
+        match *self {
+            FailurePersistence::Off => None,
+
+            FailurePersistence::SourceParallel(sibling) => match source {
+                Some(source_path) => {
+                    let mut dir = source_path.to_owned();
+                    let mut found = false;
+                    while dir.pop() {
+                        if dir.join("lib.rs").is_file() ||
+                            dir.join("main.rs").is_file()
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if !found {
+                        eprintln!(
+                            "proptest: FailurePersistence::SourceParallel set, \
+                             but failed to find lib.rs or main.rs");
+                        FailurePersistence::WithSource(sibling).resolve(source)
+                    } else {
+                        let suffix = source_path.strip_prefix(&dir)
+                            .expect("parent of source is not a prefix of it?")
+                            .to_owned();
+                        let mut result = dir;
+                        // If we've somehow reached the root, or someone gave
+                        // us a relative path that we've exhausted, just accept
+                        // creating a subdirectory instead.
+                        let _ = result.pop();
+                        result.push(sibling);
+                        result.push(&suffix);
+                        result.set_extension("txt");
+                        Some(result)
+                    }
+                },
+                None => {
+                    eprintln!(
+                        "proptest: FailurePersistence::SourceParallel set, \
+                         but no source file known");
+                    None
+                },
+            },
+
+            FailurePersistence::WithSource(extension) => match source {
+                Some(source_path) => {
+                    let mut result = source_path.to_owned();
+                    result.set_extension(extension);
+                    Some(result)
+                },
+
+                None => {
+                    eprintln!("proptest: FailurePersistence::WithSource set, \
+                               but no source file known");
+                    None
+                },
+            },
+
+            FailurePersistence::Direct(path) =>
+                Some(Path::new(path).to_owned()),
+
+            FailurePersistence::_NonExhaustive =>
+                panic!("FailurePersistence set to _NonExhaustive"),
+        }
     }
 }
 
@@ -230,6 +374,8 @@ pub struct TestRunner {
 
     local_reject_detail: BTreeMap<String, u32>,
     global_reject_detail: BTreeMap<String, u32>,
+
+    source_file: Option<&'static Path>,
 }
 
 impl fmt::Debug for TestRunner {
@@ -243,6 +389,7 @@ impl fmt::Debug for TestRunner {
             .field("flat_map_regens", &self.flat_map_regens)
             .field("local_reject_detail", &self.local_reject_detail)
             .field("global_reject_detail", &self.global_reject_detail)
+            .field("source_file", &self.source_file)
             .finish()
     }
 }
@@ -271,6 +418,126 @@ impl Default for TestRunner {
     }
 }
 
+lazy_static! {
+    /// Used to guard access to the persistence file(s) so that a single
+    /// process will not step on its own toes.
+    ///
+    /// We don't have much protecting us should two separate process try to
+    /// write to the same file at once (depending on how atomic append mode is
+    /// on the OS), but this should be extremely rare.
+    static ref PERSISTENCE_LOCK: RwLock<()> = RwLock::new(());
+}
+
+fn load_persisted_failures(path: Option<&PathBuf>) -> Vec<[u32;4]> {
+    let result: io::Result<Vec<[u32;4]>> =
+        path.map_or_else(|| Ok(vec![]), |path| {
+            // .ok() instead of .unwrap() so we don't propagate panics here
+            let _lock = PERSISTENCE_LOCK.read().ok();
+
+            let mut ret = Vec::new();
+
+            let input = io::BufReader::new(fs::File::open(path)?);
+            for (lineno, line) in input.lines().enumerate() {
+                let mut line = line?;
+                if let Some(comment_start) = line.find('#') {
+                    line.truncate(comment_start);
+                }
+
+                let parts = line.trim().split(' ').collect::<Vec<_>>();
+                if 5 == parts.len() && "xs" == parts[0] {
+                    let seed = parts[1].parse::<u32>().and_then(
+                        |a| parts[2].parse::<u32>().and_then(
+                            |b| parts[3].parse::<u32>().and_then(
+                                |c| parts[4].parse::<u32>().map(
+                                    |d| [a, b, c, d]))));
+                    if let Ok(seed) = seed {
+                        ret.push(seed);
+                    } else {
+                        eprintln!(
+                            "proptest: {}:{}: unparsable line, \
+                             ignoring", path.display(), lineno + 1);
+                    }
+                } else if parts.len() > 1 {
+                    eprintln!("proptest: {}:{}: unknown case type `{}` \
+                               (corrupt file or newer proptest version?)",
+                              path.display(), lineno + 1, parts[0]);
+                }
+            }
+
+            Ok(ret)
+        });
+
+    match result {
+        Ok(r) => r,
+        Err(err) => {
+            if io::ErrorKind::NotFound != err.kind() {
+                eprintln!(
+                    "proptest: failed to open {}: {}",
+                    path.map(|x| &**x).unwrap_or(Path::new("??")).display(),
+                    err);
+            }
+            vec![]
+        },
+    }
+}
+
+fn save_persisted_failure(path: Option<&PathBuf>,
+                          seed: [u32;4],
+                          value: &fmt::Debug) {
+    if let Some(path) = path {
+        // .ok() instead of .unwrap() so we don't propagate panics here
+        let _lock = PERSISTENCE_LOCK.write().ok();
+        let is_new = !path.is_file();
+
+        let mut to_write = Vec::<u8>::new();
+        if is_new {
+            writeln!(to_write, "\
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.")
+                    .expect("writeln! to vec failed");
+        }
+        let mut data_line = Vec::<u8>::new();
+        write!(data_line, "xs {} {} {} {} # shrinks to {:?}",
+               seed[0], seed[1], seed[2], seed[3],
+               value).expect("write! to vec failed");
+        // Ensure there are no newlines in the debug output
+        for byte in &mut data_line {
+            if b'\n' == *byte || b'\r' == *byte {
+                *byte = b' ';
+            }
+        }
+        to_write.extend(data_line);
+        to_write.push(b'\n');
+
+        fn do_write(dst: &Path, data: &[u8]) -> io::Result<()> {
+            if let Some(parent) = dst.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            let mut options = fs::OpenOptions::new();
+            options.append(true).create(true);
+            let mut out = options.open(dst)?;
+            out.write_all(data)?;
+
+            Ok(())
+        }
+
+        if let Err(e) = do_write(path, &to_write) {
+            eprintln!(
+                "proptest: failed to append to {}: {}",
+                path.display(), e);
+        } else if is_new {
+            eprintln!(
+                "proptest: Saving this and future failures in {}",
+                path.display());
+        }
+    }
+}
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -283,21 +550,26 @@ impl TestRunner {
             flat_map_regens: Arc::new(AtomicUsize::new(0)),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
+            source_file: None,
         }
     }
 
     /// Create a fresh `TestRunner` with the same config and global counters as
-    /// this one, but with local state reset and an independent `Rng`.
-    pub(crate) fn partial_clone(&self) -> Self {
+    /// this one, but with local state reset and an independent `Rng` (but
+    /// deterministic).
+    pub(crate) fn partial_clone(&mut self) -> Self {
+        let rng = self.new_rng();
+
         TestRunner {
             config: self.config.clone(),
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: rand::weak_rng(),
+            rng: rng,
             flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
+            source_file: self.source_file,
         }
     }
 
@@ -306,9 +578,38 @@ impl TestRunner {
         &mut self.rng
     }
 
+    fn new_rng_seed(&mut self) -> [u32;4] {
+        let mut seed = <[u32;4] as Rand>::rand(&mut self.rng);
+        // Directly using XorShiftRng::from_seed() at this point would result
+        // in self.rng and the returned value being exactly the same. Perturb
+        // the seed with some arbitrary values to prevent this.
+        for word in &mut seed {
+            *word ^= 0xdeadbeef;
+        }
+        seed
+    }
+
+    /// Create a new, independent but deterministic RNG from the RNG in this
+    /// runner.
+    pub fn new_rng(&mut self) -> XorShiftRng {
+        XorShiftRng::from_seed(self.new_rng_seed())
+    }
+
     /// Returns the configuration of this runner.
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Set the source file to use for resolving the location of the persisted
+    /// failing cases file.
+    ///
+    /// See [`FailurePersistence`](enum.FailurePersistence.html) for details on
+    /// how this value is used.
+    ///
+    /// This is normally called automatically by the `proptest!` macro, which
+    /// passes `file!()`.
+    pub fn set_source_file(&mut self, source: &'static Path) {
+        self.source_file = Some(source);
     }
 
     /// Run test cases against `f`, choosing inputs via `strategy`.
@@ -317,22 +618,54 @@ impl TestRunner {
     /// report that. If invoking `f` panics, the panic is turned into a
     /// `TestCaseError::Fail`.
     ///
+    /// If failure persistence is enabled, all persisted failing cases are
+    /// tested first. If a later non-persisted case fails, its seed is
+    /// persisted before returning failure.
+    ///
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
                F : Fn (&ValueFor<S>) -> TestCaseResult>
         (&mut self, strategy: &S, f: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
+        let persist_path =
+            self.config.failure_persistence.resolve(self.source_file);
+
+        let old_rng = self.rng.clone();
+        for persisted_seed in load_persisted_failures(persist_path.as_ref())
+        {
+            self.rng = XorShiftRng::from_seed(persisted_seed);
+            self.gen_and_run_case(strategy, &f)?;
+        }
+        self.rng = old_rng;
+
         while self.successes < self.config.cases {
-            let case = match strategy.new_value(self) {
-                Ok(v) => v,
-                Err(msg) => return Err(TestError::Abort(msg)),
-            };
-            if self.run_one(case, &f)? {
-                self.successes += 1;
+            // Generate a new seed and make an RNG from that so that we know
+            // what seed to persist if this case fails.
+            let seed = self.new_rng_seed();
+            self.rng = XorShiftRng::from_seed(seed);
+            let result = self.gen_and_run_case(strategy, &f);
+            if let Err(TestError::Fail(_, ref value)) = result {
+                save_persisted_failure(persist_path.as_ref(), seed, value);
             }
+
+            let _ = result?;
         }
 
+        Ok(())
+    }
+
+    fn gen_and_run_case<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
+        (&mut self, strategy: &S, f: &F)
+        -> Result<(), TestError<ValueFor<S>>>
+    {
+        let case = match strategy.new_value(self) {
+            Ok(v) => v,
+            Err(msg) => return Err(TestError::Abort(msg)),
+        };
+        if self.run_one(case, f)? {
+            self.successes += 1;
+        }
         Ok(())
     }
 
@@ -455,8 +788,11 @@ impl TestRunner {
 #[cfg(test)]
 mod test {
     use std::cell::Cell;
+    use std::fs;
 
     use super::*;
+    use strategy::Strategy;
+
 
     #[test]
     fn gives_up_after_too_many_rejections() {
@@ -483,7 +819,10 @@ mod test {
 
     #[test]
     fn test_fail_via_result() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::new(Config {
+            failure_persistence: FailurePersistence::Off,
+            .. Config::default()
+        });
         let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
             Ok(())
         } else {
@@ -496,12 +835,161 @@ mod test {
 
     #[test]
     fn test_fail_via_panic() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::new(Config {
+            failure_persistence: FailurePersistence::Off,
+            .. Config::default()
+        });
         let result = runner.run(&(0u32..10u32), |&v| {
             assert!(v < 5, "not less than 5");
             Ok(())
         });
         assert_eq!(Err(TestError::Fail("not less than 5".to_owned(), 5)),
                    result);
+    }
+
+    struct TestPaths {
+        crate_root: &'static Path,
+        src_file: PathBuf,
+        subdir_file: PathBuf,
+        misplaced_file: PathBuf,
+    }
+
+    lazy_static! {
+        static ref TEST_PATHS: TestPaths = {
+            let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+            let lib_root = crate_root.join("src");
+            let src_subdir = lib_root.join("strategy");
+            let src_file = lib_root.join("foo.rs");
+            let subdir_file = src_subdir.join("foo.rs");
+            let misplaced_file = crate_root.join("foo.rs");
+            TestPaths {
+                crate_root,
+                src_file, subdir_file, misplaced_file
+            }
+        };
+    }
+
+    // This test assumes UNIX-like paths
+    #[cfg(unix)]
+    #[test]
+    fn persistence_file_location_resolved_correctly() {
+        // If off, there is never a file
+        assert_eq!(None, FailurePersistence::Off.resolve(None));
+        assert_eq!(None, FailurePersistence::Off.resolve(
+            Some(&TEST_PATHS.subdir_file)));
+
+        // For direct, we don't care about the source file, and instead always
+        // use whatever is in the config.
+        assert_eq!(Some(Path::new("bar.txt").to_owned()),
+                   FailurePersistence::Direct("bar.txt").resolve(None));
+        assert_eq!(Some(Path::new("bar.txt").to_owned()),
+                   FailurePersistence::Direct("bar.txt").resolve(
+                       Some(&TEST_PATHS.subdir_file)));
+
+        // For WithSource, only the extension changes, but we get nothing if no
+        // source file was configured.
+        assert_eq!(Some(Path::new("/foo/bar.ext").to_owned()),
+                   FailurePersistence::WithSource("ext").resolve(
+                       Some(Path::new("/foo/bar.rs"))));
+        assert_eq!(None,
+                   FailurePersistence::WithSource("ext").resolve(None));
+
+        // For SourceParallel, we make a sibling directory tree and change the
+        // extensions to .txt ...
+        assert_eq!(Some(TEST_PATHS.crate_root.join("sib").join("foo.txt")),
+                   FailurePersistence::SourceParallel("sib").resolve(
+                       Some(&TEST_PATHS.src_file)));
+        assert_eq!(Some(TEST_PATHS.crate_root.join("sib")
+                        .join("strategy").join("foo.txt")),
+                   FailurePersistence::SourceParallel("sib").resolve(
+                       Some(&TEST_PATHS.subdir_file)));
+        // ... but if we can't find lib.rs / main.rs, give up and set the
+        // extension instead ...
+        assert_eq!(Some(TEST_PATHS.crate_root.join("foo.sib")),
+                   FailurePersistence::SourceParallel("sib").resolve(
+                       Some(&TEST_PATHS.misplaced_file)));
+        // ... and if no source is configured, we do nothing
+        assert_eq!(None,
+                   FailurePersistence::SourceParallel("ext").resolve(None));
+    }
+
+    #[derive(Clone, Copy, PartialEq)]
+    struct PoorlyBehavedDebug(i32);
+    impl fmt::Debug for PoorlyBehavedDebug {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "\r\n{:?}\r\n", self.0)
+        }
+    }
+
+    #[test]
+    fn failing_cases_persisted_and_reloaded() {
+        const FILE: &'static str = "persistence-test.txt";
+        let _ = fs::remove_file(FILE);
+
+        let max = 10_000_000i32;
+        let input = (0i32..max).prop_map(PoorlyBehavedDebug);
+        let config = Config {
+            failure_persistence: FailurePersistence::Direct(FILE),
+            .. Config::default()
+        };
+
+        // First test with cases that fail above half max, and then below half
+        // max, to ensure we can correctly parse both lines of the persistence
+        // file.
+        let first_sub_failure = {
+            let mut runner = TestRunner::new(config.clone());
+            runner.run(&input, |v| {
+                if v.0 < max/2 {
+                    Ok(())
+                } else {
+                    Err(TestCaseError::Fail("too big".to_owned()))
+                }
+            }).err().expect("didn't fail?")
+        };
+        let first_super_failure = {
+            let mut runner = TestRunner::new(config.clone());
+            runner.run(&input, |v| {
+                if v.0 >= max/2 {
+                    Ok(())
+                } else {
+                    Err(TestCaseError::Fail("too small".to_owned()))
+                }
+            }).err().expect("didn't fail?")
+        };
+        let second_sub_failure = {
+            let mut runner = TestRunner::new(config.clone());
+            runner.run(&input, |v| {
+                if v.0 < max/2 {
+                    Ok(())
+                } else {
+                    Err(TestCaseError::Fail("too big".to_owned()))
+                }
+            }).err().expect("didn't fail?")
+        };
+        let second_super_failure = {
+            let mut runner = TestRunner::new(config.clone());
+            runner.run(&input, |v| {
+                if v.0 >= max/2 {
+                    Ok(())
+                } else {
+                    Err(TestCaseError::Fail("too small".to_owned()))
+                }
+            }).err().expect("didn't fail?")
+        };
+
+        assert_eq!(first_sub_failure, second_sub_failure);
+        assert_eq!(first_super_failure, second_super_failure);
+    }
+
+    #[test]
+    fn new_rng_makes_separate_rng() {
+        let mut runner = TestRunner::default();
+        let mut rng2 = runner.new_rng();
+        let rng1 = runner.rng();
+
+        let from_1 = <[u32;4] as Rand>::rand(rng1);
+        let from_2 = <[u32;4] as Rand>::rand(&mut rng2);
+
+        assert_ne!(from_1, from_2);
     }
 }
