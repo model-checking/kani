@@ -71,6 +71,29 @@ pub trait Strategy : fmt::Debug {
     /// During shrinking, `fun` is always called with an identical random
     /// number generator, so if it is a pure function it will always perform
     /// the same perturbation.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// #[macro_use] extern crate proptest;
+    /// // The prelude also gets us the `Rng` trait.
+    /// use proptest::prelude::*;
+    ///
+    /// proptest! {
+    ///   #[test]
+    ///   fn test_something(a in (0i32..10).prop_perturb(
+    ///       // Perturb the integer `a` (range 0..10) to a pair of that
+    ///       // integer and another that's ± 10 of it.
+    ///       // Note that this particular case would be better implemented as
+    ///       // `(0i32..10, -10i32..10).prop_map(|(a, b)| (a, a + b))`
+    ///       // but is shown here for simplicity.
+    ///       |centre, rng| (centre, centre + rng.gen_range(-10, 10))))
+    ///   {
+    ///       // Test stuff
+    ///   }
+    /// }
+    /// # fn main() { }
+    /// ```
     fn prop_perturb<O : fmt::Debug,
                     F : Fn (ValueFor<Self>, XorShiftRng) -> O>
         (self, fun: F) -> Perturb<Self, F>

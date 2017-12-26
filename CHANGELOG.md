@@ -2,9 +2,6 @@
 
 ### New Additions
 
-- Added `UniformArrayStrategy` and helper functions to simplify generating
-  homogeneous arrays with non-`Copy` inner strategies.
-
 - Added support for `i128` and `u128`. Since this is an unstable feature in
   Rust, this is hidden behind the feature `unstable` which you have to
   explicitly opt into in your `Cargo.toml` file.
@@ -12,6 +9,12 @@
 - Failing case persistence. By default, when a test fails, Proptest will now
   save the seed for the failing test to a file, and later runs will test the
   persisted failing cases before generating new ones.
+
+- Added `UniformArrayStrategy` and helper functions to simplify generating
+  homogeneous arrays with non-`Copy` inner strategies.
+
+- Trait `rand::Rng` and struct `rand::XorShiftRng` are now included in
+  `proptest::prelude`.
 
 ### Bug Fixes
 
