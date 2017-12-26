@@ -2,6 +2,9 @@
 
 ### New Additions
 
+- Added `UniformArrayStrategy` and helper functions to simplify generating
+  homogeneous arrays with non-`Copy` inner strategies.
+
 - Added support for `i128` and `u128`. Since this is an unstable feature in
   Rust, this is hidden behind the feature `unstable` which you have to
   explicitly opt into in your `Cargo.toml` file.
