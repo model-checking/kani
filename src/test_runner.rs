@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 Jason Lingle
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -12,6 +12,7 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
@@ -375,7 +376,7 @@ pub struct TestRunner {
     local_reject_detail: BTreeMap<String, u32>,
     global_reject_detail: BTreeMap<String, u32>,
 
-    source_file: Option<&'static Path>,
+    source_file: Option<Cow<'static, Path>>,
 }
 
 impl fmt::Debug for TestRunner {
@@ -569,7 +570,7 @@ impl TestRunner {
             flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
-            source_file: self.source_file,
+            source_file: self.source_file.clone(),
         }
     }
 
@@ -603,13 +604,72 @@ impl TestRunner {
     /// Set the source file to use for resolving the location of the persisted
     /// failing cases file.
     ///
+    /// The source location can only be used if it is absolute. If `source` is
+    /// not an absolute path, an attempt will be made to determine the absolute
+    /// path based on the current working directory and its parents. If no
+    /// absolute path can be determined, a warning will be printed and proptest
+    /// will continue as if this function had never been called.
+    ///
     /// See [`FailurePersistence`](enum.FailurePersistence.html) for details on
-    /// how this value is used.
+    /// how this value is used once it is made absolute.
     ///
     /// This is normally called automatically by the `proptest!` macro, which
     /// passes `file!()`.
     pub fn set_source_file(&mut self, source: &'static Path) {
-        self.source_file = Some(source);
+        self.set_source_file_with_cwd(env::current_dir, source)
+    }
+
+    pub(crate) fn set_source_file_with_cwd<F>(
+        &mut self, getcwd: F,
+        source: &'static Path)
+    where F : FnOnce () -> io::Result<PathBuf> {
+        self.source_file = if source.is_absolute() {
+            // On Unix, `file!()` is absolute. In these cases, we can use
+            // that path directly.
+            Some(Cow::Borrowed(source))
+        } else {
+            // On Windows, `file!()` is relative to the crate root, but the
+            // test is not generally run with the crate root as the working
+            // directory, so the path is not directly usable. However, the
+            // working directory is almost always a subdirectory of the crate
+            // root, so pop directories off until pushing the source onto the
+            // directory results in a path that refers to an existing file.
+            // Once we find such a path, we can use that.
+            //
+            // If we can't figure out an absolute path, print a warning and act
+            // as if no source had been given.
+            match getcwd() {
+                Ok(mut cwd) => {
+                    loop {
+                        let joined = cwd.join(source);
+                        if joined.is_file() {
+                            break Some(Cow::Owned(joined));
+                        }
+
+                        if !cwd.pop() {
+                            eprintln!(
+                                "proptest: Failed to find absolute path of \
+                                 source file '{:?}'. Ensure the test is \
+                                 being run from somewhere within the crate \
+                                 directory hierarchy.", source);
+                            break None;
+                        }
+                    }
+                },
+
+                Err(e) => {
+                    eprintln!("proptest: Failed to determine current \
+                               directory, so the relative source path \
+                               '{:?}' cannot be resolved: {}",
+                              source, e);
+                    None
+                }
+            }
+        }
+    }
+
+    pub(crate) fn source_file(&self) -> Option<&Path> {
+        self.source_file.as_ref().map(|cow| &**cow)
     }
 
     /// Run test cases against `f`, choosing inputs via `strategy`.
@@ -628,8 +688,8 @@ impl TestRunner {
         (&mut self, strategy: &S, f: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
-        let persist_path =
-            self.config.failure_persistence.resolve(self.source_file);
+        let persist_path = self.config.failure_persistence.resolve(
+            self.source_file());
 
         let old_rng = self.rng.clone();
         for persisted_seed in load_persisted_failures(persist_path.as_ref())
@@ -852,6 +912,7 @@ mod test {
         src_file: PathBuf,
         subdir_file: PathBuf,
         misplaced_file: PathBuf,
+        test_runner_relative: PathBuf,
     }
 
     lazy_static! {
@@ -862,9 +923,12 @@ mod test {
             let src_file = lib_root.join("foo.rs");
             let subdir_file = src_subdir.join("foo.rs");
             let misplaced_file = crate_root.join("foo.rs");
+            let test_runner_relative = ["src", "test_runner.rs"]
+                .iter().collect();
             TestPaths {
                 crate_root,
-                src_file, subdir_file, misplaced_file
+                src_file, subdir_file, misplaced_file,
+                test_runner_relative,
             }
         };
     }
@@ -985,6 +1049,29 @@ mod test {
 
         assert_eq!(first_sub_failure, second_sub_failure);
         assert_eq!(first_super_failure, second_super_failure);
+    }
+
+    #[test]
+    fn relative_source_files_absolutified() {
+        let expected = [
+            env!("CARGO_MANIFEST_DIR"),
+            "src",
+            "test_runner.rs",
+        ].iter().collect::<PathBuf>();
+
+        let mut runner = TestRunner::default();
+        // Running from crate root
+        runner.set_source_file_with_cwd(
+            || Ok(Path::new(env!("CARGO_MANIFEST_DIR")).to_owned()),
+            &TEST_PATHS.test_runner_relative);
+        assert_eq!(&*expected, runner.source_file().unwrap());
+
+        // Running from test subdirectory
+        runner.set_source_file_with_cwd(
+            || Ok(Path::new(env!("CARGO_MANIFEST_DIR"))
+                  .join("target")),
+            &TEST_PATHS.test_runner_relative);
+        assert_eq!(&*expected, runner.source_file().unwrap());
     }
 
     #[test]

@@ -1,3 +1,13 @@
+## Unreleased
+
+### Bug Fixes
+
+- Cases where `file!()` returns a relative path, such as on Windows, are now
+  handled more reasonably. See
+  [#24](https://github.com/AltSysrq/proptest/issues/24) for more details and
+  instructions on how to migrate any persistence files that had been written to
+  the wrong location.
+
 ## 0.3.3
 
 Boxing Day Special
