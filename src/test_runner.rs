@@ -869,8 +869,6 @@ mod test {
         };
     }
 
-    // This test assumes UNIX-like paths
-    #[cfg(unix)]
     #[test]
     fn persistence_file_location_resolved_correctly() {
         // If off, there is never a file
@@ -888,9 +886,17 @@ mod test {
 
         // For WithSource, only the extension changes, but we get nothing if no
         // source file was configured.
-        assert_eq!(Some(Path::new("/foo/bar.ext").to_owned()),
-                   FailurePersistence::WithSource("ext").resolve(
-                       Some(Path::new("/foo/bar.rs"))));
+        // Accounting for the way absolute paths work on Windows would be more
+        // complex, so for now don't test that case.
+        #[cfg(unix)]
+        fn absolute_path_case() {
+            assert_eq!(Some(Path::new("/foo/bar.ext").to_owned()),
+                       FailurePersistence::WithSource("ext").resolve(
+                           Some(Path::new("/foo/bar.rs"))));
+        }
+        #[cfg(not(unix))]
+        fn absolute_path_case() { }
+        absolute_path_case();
         assert_eq!(None,
                    FailurePersistence::WithSource("ext").resolve(None));
 
