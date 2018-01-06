@@ -154,8 +154,6 @@ In the interest of making the code changes as small as possible, we'll just
 check that the string is ASCII and reject anything that isn't.
 
 ```rust
-use std::ascii::AsciiExt;
-
 fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
     if 10 != s.len() { return None; }
 

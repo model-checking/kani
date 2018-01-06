@@ -162,8 +162,8 @@
 //! check that the string is ASCII and reject anything that isn't.
 //!
 //! ```rust,no_run
-//! use std::ascii::AsciiExt;
-//!
+//! # use std::ascii::AsciiExt; //NOREADME
+//! # // NOREADME
 //! fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
 //!     if 10 != s.len() { return None; }
 //!
