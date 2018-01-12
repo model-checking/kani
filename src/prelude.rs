@@ -12,12 +12,19 @@
 //! This module is intended to be wildcard-imported, i.e.,
 //! `use proptest::prelude::*;`. Note that it re-exports the whole crate itself
 //! under the name `prop`, so you don't need a separate `use proptest;` line.
+//!
+//! In addition to Proptest's own APIs, this also reexports a small portion of
+//! the `rand` crate sufficient to easily use `prop_perturb` and other
+//! functionality that exposes random number generators. Please note that this
+//! is will always be a direct reexport; using these in preference to using the
+//! `rand` crate directly will not provide insulation from the upcoming
+//! revision to the `rand` crate.
 
 pub use strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
 pub use test_runner::Config as ProptestConfig;
 pub use test_runner::TestCaseError;
-pub use test_runner::fail_case;
-pub use test_runner::reject_case;
+
+pub use rand::{Rng, XorShiftRng};
 
 /// Re-exports the entire public API of proptest so that an import of `prelude`
 /// allows simply writing, for example, `prop::num::i32::ANY` rather than
