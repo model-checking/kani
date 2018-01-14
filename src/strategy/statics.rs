@@ -39,15 +39,15 @@ pub trait FilterFn<T> {
 #[derive(Clone)]
 pub struct Filter<S, F> {
     source: S,
-    whence: Rejection,
+    whence: Reason,
     fun: F,
 }
 
 impl<S, F> Filter<S, F> {
     /// Adapt strategy `source` to reject values which do not pass `filter`,
     /// using `whence` as the reported reason/location.
-    pub fn new(source: S, whence: Rejection, filter: F) -> Self {
-        // NOTE: We don't use universal quantification R: Into<Rejection>
+    pub fn new(source: S, whence: Reason, filter: F) -> Self {
+        // NOTE: We don't use universal quantification R: Into<Reason>
         // since the module is not conviniently exposed.
         Filter { source, whence, fun: filter }
     }

@@ -2,17 +2,18 @@
 
 ### Potential Breaking Changes
 
-- Instead of returning `-> Result<Self::Value, String>`, strategies are expected
-  to return `-> Result<Self::Value, Rejection>` instead. `Rejection` reduces
-  the amount of heap allocations, especially for `.prop_filter(..)` where
-  you may now also pass in `&'static str` as well as `Rc<str>`.
-  You will only experience breaks if you've written your own strategy types
-  or if you've used `TestCaseError::Reject` or `TestCaseError::Fail` expliclty.
+- Instead of returning `-> Result<Self::Value, String>`, strategies are
+  expected to return `-> Result<Self::Value, Reason>` instead. `Reason` reduces
+  the amount of heap allocations, especially for `.prop_filter(..)` where you
+  may now also pass in `&'static str`. You will only experience breaks if
+  you've written your own strategy types or if you've used
+  `TestCaseError::Reject` or `TestCaseError::Fail` explicitly.
 
 ### New Additions
 
-- Added `proptest::test_runner::Rejection` which allows you to avoid heap
-  allocation in some places or share allocation with string-interning.
+- Added `proptest::test_runner::Reason` which allows you to avoid heap
+  allocation in some places and may be used to make the API richer in the
+  future without incurring more breaking changes.
 
 - Added a type alias `proptest::strategy::NewTree<S>` where `S: Strategy`
   defined as: `type NewTree<S> = Result<<S as Strategy>::Value, Rejection>`.

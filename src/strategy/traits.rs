@@ -25,7 +25,7 @@ use test_runner::*;
 /// [`ValueTree`]: trait.ValueTree.html
 /// [`Ok`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Ok
 /// [`Err`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Err
-pub type NewTree<S> = Result<<S as Strategy>::Value, Rejection>;
+pub type NewTree<S> = Result<<S as Strategy>::Value, Reason>;
 
 /// The value that functions under test use for a particular `Strategy`.
 pub type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
@@ -259,7 +259,7 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter<R: Into<Rejection>, F : Fn (&ValueFor<Self>) -> bool>
+    fn prop_filter<R: Into<Reason>, F : Fn (&ValueFor<Self>) -> bool>
         (self, whence: R, fun: F) -> Filter<Self, F>
     where Self : Sized {
         Filter::new(self, whence.into(), fun)

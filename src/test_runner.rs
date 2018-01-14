@@ -287,40 +287,40 @@ impl FailurePersistence {
 
 /// The reason for why something, such as a generated value, was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Rejection(Cow<'static, str>);
+pub struct Reason(Cow<'static, str>);
 
-impl From<&'static str> for Rejection {
+impl From<&'static str> for Reason {
     fn from(s: &'static str) -> Self {
-        Rejection(s.into())
+        Reason(s.into())
     }
 }
 
-impl From<String> for Rejection {
+impl From<String> for Reason {
     fn from(s: String) -> Self {
-        Rejection(s.into())
+        Reason(s.into())
     }
 }
 
-impl From<Box<str>> for Rejection {
+impl From<Box<str>> for Reason {
     fn from(s: Box<str>) -> Self {
-        Rejection(String::from(s).into())
+        Reason(String::from(s).into())
     }
 }
 
-impl ops::Deref for Rejection {
+impl ops::Deref for Reason {
     type Target = str;
     fn deref(&self) -> &Self::Target { self.0.deref() }
 }
 
-impl AsRef<str> for Rejection {
+impl AsRef<str> for Reason {
     fn as_ref(&self) -> &str { &*self }
 }
 
-impl Borrow<str> for Rejection {
+impl Borrow<str> for Reason {
     fn borrow(&self) -> &str { &*self }
 }
 
-impl fmt::Display for Rejection {
+impl fmt::Display for Reason {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self.as_ref(), f)
     }
@@ -343,12 +343,12 @@ pub enum TestCaseError {
     ///
     /// The string gives the location and context of the rejection, and
     /// should be suitable for formatting like `Foo did X at {whence}`.
-    Reject(Rejection),
+    Reject(Reason),
     /// The code under test failed the test.
     ///
     /// The string should indicate the location of the failure, but may
     /// generally be any string.
-    Fail(Rejection),
+    Fail(Reason),
 }
 
 /// Convenience for the type returned by test cases.
@@ -361,7 +361,7 @@ impl TestCaseError {
     ///
     /// The string gives the location and context of the rejection, and
     /// should be suitable for formatting like `Foo did X at {whence}`.
-    pub fn reject<R: Into<Rejection>>(reason: R) -> Self {
+    pub fn reject<R: Into<Reason>>(reason: R) -> Self {
         TestCaseError::Reject(reason.into())
     }
 
@@ -369,7 +369,7 @@ impl TestCaseError {
     ///
     /// The string should indicate the location of the failure, but may
     /// generally be any string.
-    pub fn fail<R: Into<Rejection>>(reason: R) -> Self {
+    pub fn fail<R: Into<Reason>>(reason: R) -> Self {
         TestCaseError::Fail(reason.into())
     }
 }
@@ -396,11 +396,11 @@ impl<E : ::std::error::Error> From<E> for TestCaseError {
 pub enum TestError<T> {
     /// The test was aborted for the given reason, for example, due to too many
     /// inputs having been rejected.
-    Abort(Rejection),
+    Abort(Reason),
     /// A failing test case was found. The string indicates where and/or why
     /// the test failed. The `T` is the minimal input found to reproduce the
     /// failure.
-    Fail(Rejection, T),
+    Fail(Reason, T),
 }
 
 impl<T : fmt::Debug> fmt::Display for TestError<T> {
@@ -424,7 +424,7 @@ impl<T : fmt::Debug> ::std::error::Error for TestError<T> {
     }
 }
 
-type RejectionDetail = BTreeMap<Rejection, u32>;
+type RejectionDetail = BTreeMap<Reason, u32>;
 
 /// State used when running a proptest test.
 #[derive(Clone)]
@@ -856,9 +856,9 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    pub fn reject_local<R>(&mut self, whence: R) -> Result<(), Rejection>
+    pub fn reject_local<R>(&mut self, whence: R) -> Result<(), Reason>
     where
-        R: Into<Rejection>
+        R: Into<Reason>
     {
         if self.local_rejects >= self.config.max_local_rejects {
             Err("Too many local rejects".into())
@@ -872,7 +872,7 @@ impl TestRunner {
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    fn reject_global<T>(&mut self, whence: Rejection) -> Result<(),TestError<T>> {
+    fn reject_global<T>(&mut self, whence: Reason) -> Result<(),TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
             Err(TestError::Abort("Too many global rejects".into()))
         } else {
@@ -883,7 +883,7 @@ impl TestRunner {
     }
 
     /// Insert 1 or increment the rejection detail at key for whence.
-    fn insert_or_increment(into: &mut RejectionDetail, whence: Rejection) {
+    fn insert_or_increment(into: &mut RejectionDetail, whence: Reason) {
         use std::collections::btree_map::Entry::*;
         match into.entry(whence) {
             Occupied(oe) => { *oe.into_mut() += 1; },

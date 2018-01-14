@@ -91,7 +91,7 @@ where S::Value : Strategy,
 }
 
 impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
-    fn new(runner: &mut TestRunner, meta: S) -> Result<Self, Rejection> {
+    fn new(runner: &mut TestRunner, meta: S) -> Result<Self, Reason> {
         let current = meta.current().new_value(runner)?;
         Ok(FlattenValueTree {
             meta: Fuse::new(meta),

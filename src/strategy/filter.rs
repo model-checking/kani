@@ -18,12 +18,12 @@ use test_runner::*;
 /// See `Strategy::prop_filter()`.
 pub struct Filter<S, F> {
     pub(super) source: S,
-    pub(super) whence: Rejection,
+    pub(super) whence: Reason,
     pub(super) fun: Arc<F>,
 }
 
 impl<S, F> Filter<S, F> {
-    pub (super) fn new(source: S, whence: Rejection, fun: F) -> Self {
+    pub (super) fn new(source: S, whence: Reason, fun: F) -> Self {
         Self { source, whence, fun: Arc::new(fun) }
     }
 }
