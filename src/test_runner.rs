@@ -12,14 +12,13 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::io::{self, BufRead, Write};
-use std::ops;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -286,8 +285,24 @@ impl FailurePersistence {
 }
 
 /// The reason for why something, such as a generated value, was rejected.
+///
+/// Currently this is merely a wrapper around a message, but more properties
+/// may be added in the future.
+///
+/// This is constructed via `.into()` on a `String`, `&'static str`, or
+/// `Box<str>`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Reason(Cow<'static, str>);
+
+impl Reason {
+    /// Return the message for this `Reason`.
+    ///
+    /// The message is intended for human consumption, and is not guaranteed to
+    /// have any format in particular.
+    pub fn message(&self) -> &str {
+        &*self.0
+    }
+}
 
 impl From<&'static str> for Reason {
     fn from(s: &'static str) -> Self {
@@ -307,22 +322,9 @@ impl From<Box<str>> for Reason {
     }
 }
 
-impl ops::Deref for Reason {
-    type Target = str;
-    fn deref(&self) -> &Self::Target { self.0.deref() }
-}
-
-impl AsRef<str> for Reason {
-    fn as_ref(&self) -> &str { &*self }
-}
-
-impl Borrow<str> for Reason {
-    fn borrow(&self) -> &str { &*self }
-}
-
 impl fmt::Display for Reason {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self.as_ref(), f)
+        fmt::Display::fmt(self.message(), f)
     }
 }
 
