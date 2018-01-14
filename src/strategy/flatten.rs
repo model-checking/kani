@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use strategy::fuse::Fuse;
 use strategy::traits::*;
-use strategy::Rejection;
 use test_runner::*;
 
 /// Adaptor that flattens a `Strategy` which produces other `Strategy`s into a

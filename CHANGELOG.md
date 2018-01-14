@@ -11,7 +11,7 @@
 
 ### New Additions
 
-- Added `proptest::strategy::Rejection` which allows you to avoid heap
+- Added `proptest::test_runner::Rejection` which allows you to avoid heap
   allocation in some places or share allocation with string-interning.
 
 - Added a type alias `proptest::strategy::NewTree<S>` where `S: Strategy`

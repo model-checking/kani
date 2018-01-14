@@ -1,5 +1,5 @@
 //-
-// Copyright 2017, 2018 Jason Lingle
+// Copyright 2017, 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -12,13 +12,14 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::io::{self, BufRead, Write};
+use std::ops;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -281,6 +282,47 @@ impl FailurePersistence {
             FailurePersistence::_NonExhaustive =>
                 panic!("FailurePersistence set to _NonExhaustive"),
         }
+    }
+}
+
+/// The reason for why something, such as a generated value, was rejected.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Rejection(Cow<'static, str>);
+
+impl From<&'static str> for Rejection {
+    fn from(s: &'static str) -> Self {
+        Rejection(s.into())
+    }
+}
+
+impl From<String> for Rejection {
+    fn from(s: String) -> Self {
+        Rejection(s.into())
+    }
+}
+
+impl From<Box<str>> for Rejection {
+    fn from(s: Box<str>) -> Self {
+        Rejection(String::from(s).into())
+    }
+}
+
+impl ops::Deref for Rejection {
+    type Target = str;
+    fn deref(&self) -> &Self::Target { self.0.deref() }
+}
+
+impl AsRef<str> for Rejection {
+    fn as_ref(&self) -> &str { &*self }
+}
+
+impl Borrow<str> for Rejection {
+    fn borrow(&self) -> &str { &*self }
+}
+
+impl fmt::Display for Rejection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self.as_ref(), f)
     }
 }
 

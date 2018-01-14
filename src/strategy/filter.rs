@@ -11,7 +11,6 @@ use std::fmt;
 use std::sync::Arc;
 
 use strategy::traits::*;
-use strategy::rejection::Rejection;
 use test_runner::*;
 
 /// `Strategy` and `ValueTree` filter adaptor.

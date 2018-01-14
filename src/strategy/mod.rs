@@ -9,7 +9,6 @@
 
 //! Defines the core traits used by Proptest.
 
-mod rejection;
 mod traits;
 mod map;
 mod filter;
@@ -19,7 +18,6 @@ mod recursive;
 mod shuffle;
 mod fuse;
 
-pub use self::rejection::*;
 pub use self::traits::*;
 pub use self::map::*;
 pub use self::filter::*;

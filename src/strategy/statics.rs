@@ -27,7 +27,6 @@
 use std::fmt;
 
 use strategy::traits::*;
-use strategy::Rejection;
 use test_runner::*;
 
 /// Essentially `Fn (&T) -> bool`.
