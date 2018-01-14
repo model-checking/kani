@@ -343,10 +343,9 @@ mod test {
         for _ in 0..256 {
             let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| if v < 15 {
+            let result = runner.run_one(case, |&v| {
+                prop_assert!(v < 15);
                 Ok(())
-            } else {
-                fail_case("fail")
             });
 
             match result {
@@ -410,10 +409,9 @@ mod test {
         for _ in 0..256 {
             let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| if v < 15 {
+            let result = runner.run_one(case, |&v| {
+                prop_assert!(v < 15);
                 Ok(())
-            } else {
-                fail_case("fail")
             });
 
             match result {

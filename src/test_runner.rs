@@ -332,16 +332,6 @@ impl TestCaseError {
     }
 }
 
-/// Short-hand for `Err(TestCaseError::reject(..))`.
-pub fn reject_case<R: Into<Rejection>>(reason: R) -> TestCaseResult {
-    Err(TestCaseError::reject(reason))
-}
-
-/// Short-hand for `Err(TestCaseError::fail(..))`.
-pub fn fail_case<R: Into<Rejection>>(reason: R) -> TestCaseResult {
-    Err(TestCaseError::fail(reason))
-}
-
 impl fmt::Display for TestCaseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -576,11 +566,11 @@ where
 {
     match panic::catch_unwind(AssertUnwindSafe(|| test(&case))) {
         Ok(r) => r,
-        Err(what) => fail_case(
-            what.downcast::<&'static str>().map(|s| reject(*s))
-                .or_else(|what| what.downcast::<String>().map(|b| reject(*b)))
-                .or_else(|what| what.downcast::<Box<str>>().map(|b| reject(*b)))
-                .unwrap_or_else(|_| reject("<unknown panic value>"))),
+        Err(what) => Err(TestCaseError::Fail(
+            what.downcast::<&'static str>().map(|s| (*s).into())
+                .or_else(|what| what.downcast::<String>().map(|b| (*b).into()))
+                .or_else(|what| what.downcast::<Box<str>>().map(|b| (*b).into()))
+                .unwrap_or_else(|_| "<unknown panic value>".into()))),
     }
 }
 
@@ -829,7 +819,7 @@ impl TestRunner {
         R: Into<Rejection>
     {
         if self.local_rejects >= self.config.max_local_rejects {
-            Err(reject("Too many local rejects"))
+            Err("Too many local rejects".into())
         } else {
             self.local_rejects += 1;
             Self::insert_or_increment(&mut self.local_reject_detail,
@@ -842,7 +832,7 @@ impl TestRunner {
     /// return `Ok` if the caller should keep going or `Err` to abort.
     fn reject_global<T>(&mut self, whence: Rejection) -> Result<(),TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
-            Err(TestError::Abort(reject("Too many global rejects")))
+            Err(TestError::Abort("Too many global rejects".into()))
         } else {
             self.global_rejects += 1;
             Self::insert_or_increment(&mut self.global_reject_detail, whence);
@@ -889,7 +879,7 @@ mod test {
         let runs = Cell::new(0);
         let result = runner.run(&(0u32..), |_| {
             runs.set(runs.get() + 1);
-            reject_case("reject")
+            Err(TestCaseError::reject("reject"))
         });
         match result {
             Err(TestError::Abort(_)) => (),
@@ -911,11 +901,14 @@ mod test {
             failure_persistence: FailurePersistence::Off,
             .. Config::default()
         });
-        let result = runner.run(&(0u32..10u32), |&v| if v < 5 {
-            Ok(())
-        } else {
-            fail_case("not less than 5")
-        });
+        let result = runner.run(
+            &(0u32..10u32), |&v| {
+                if v < 5 {
+                    Ok(())
+                } else {
+                    Err(TestCaseError::fail("not less than 5"))
+                }
+            });
 
         assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
     }

@@ -19,25 +19,6 @@ use std::borrow::Cow;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Rejection(Cow<'static, str>);
 
-/// Constructs and returns a [`Rejection`] based on the input type.
-/// See the `From<T> for Rejection` implementations for details.
-///
-/// # Example
-///
-/// ```rust
-/// fn main() {
-///     use proptest::strategy::reject;
-///     let reason = format!("The value {:?} was too much!", 100);
-///     let reject = reject(reason);
-///     println!("{:?}", reject);
-/// }
-/// ```
-///
-/// [`Rejection`]: enum.Rejection.html
-pub fn reject<S: Into<Rejection>>(reason: S) -> Rejection {
-    reason.into()
-}
-
 impl From<&'static str> for Rejection {
     fn from(s: &'static str) -> Self {
         Rejection(s.into())

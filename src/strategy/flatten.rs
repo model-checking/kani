@@ -266,7 +266,7 @@ mod test {
                 if a <= 10000 || b <= a {
                     Ok(())
                 } else {
-                    fail_case("fail")
+                    Err(TestCaseError::fail("fail"))
                 }
             });
 
@@ -313,11 +313,9 @@ mod test {
         });
         let case = input.new_value(&mut runner).unwrap();
         let _ = runner.run_one(case, |_| {
-            if pass.fetch_or(true, Ordering::SeqCst) {
-                Ok(())
-            } else {
-                fail_case("fail")
-            }
+            // Only the first run fails, all others succeed
+            prop_assert!(pass.fetch_or(true, Ordering::SeqCst));
+            Ok(())
         });
     }
 

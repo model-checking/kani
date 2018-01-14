@@ -1497,6 +1497,9 @@ macro_rules! opaque_strategy_wrapper {
     }
 }
 
+#[doc(hidden)]
+#[macro_use] pub mod sugar;
+
 pub mod test_runner;
 pub mod strategy;
 pub mod bool;
@@ -1510,8 +1513,5 @@ pub mod string;
 pub mod option;
 pub mod result;
 pub mod sample;
-
-#[doc(hidden)]
-#[macro_use] pub mod sugar;
 
 pub mod prelude;

@@ -178,7 +178,7 @@ where ValueFor<T> : Hash + Eq {
     let min_size = size.start;
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToHashSet),
-        reject("HashSet minimum size"),
+        "HashSet minimum size".into(),
         MinSize(min_size)))
 }
 
@@ -224,7 +224,7 @@ where ValueFor<T> : Ord {
 
     BTreeSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToBTreeSet),
-        reject("BTreeSet minimum size"),
+        "BTreeSet minimum size".into(),
         MinSize(min_size)))
 }
 
@@ -275,7 +275,7 @@ where ValueFor<K> : Hash + Eq {
     let min_size = size.start;
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size), VecToHashMap),
-        reject("HashMap minimum size"),
+        "HashMap minimum size".into(),
         MinSize(min_size)))
 }
 
@@ -326,7 +326,7 @@ where ValueFor<K> : Ord {
     let min_size = size.start;
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
-        reject("BTreeMap minimum size"),
+        "BTreeMap minimum size".into(),
         MinSize(min_size)))
 }
 
@@ -467,11 +467,9 @@ mod test {
             assert!(start.iter().map(|&v| v).collect::<BitSet>().len() >= 2);
 
             let result = runner.run_one(case, |v| {
-                if v.iter().map(|&v| v).sum::<usize>() < 9 {
-                    Ok(())
-                } else {
-                    fail_case("greater than 8")
-                }
+                prop_assert!(v.iter().map(|&v| v).sum::<usize>() < 9,
+                             "greater than 8");
+                Ok(())
             });
 
             match result {
