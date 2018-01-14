@@ -102,8 +102,7 @@ macro_rules! small_array {
         impl<S : Strategy> Strategy for [S;$n] {
             type Value = ArrayValueTree<[S::Value;$n]>;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<Self::Value, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(ArrayValueTree {
                     tree: [$(self[$ix].new_value(runner)?,)*],
                     shrinker: 0,
@@ -116,8 +115,7 @@ macro_rules! small_array {
         for UniformArrayStrategy<S, [ValueFor<S>; $n]> {
             type Value = ArrayValueTree<[S::Value; $n]>;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<Self::Value, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(ArrayValueTree {
                     tree: [$({
                         let _ = $ix;
@@ -256,7 +254,7 @@ mod test {
         }
 
         let input = [0..32, 0..32];
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
 
         let mut cases_tested = 0;
         for _ in 0..256 {

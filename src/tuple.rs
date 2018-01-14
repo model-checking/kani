@@ -42,10 +42,7 @@ macro_rules! tuple {
         impl<$($typ : Strategy),*> Strategy for ($($typ,)*) {
             type Value = TupleValueTree<($($typ::Value,)*)>;
 
-            fn new_value
-                (&self, runner: &mut TestRunner)
-                -> Result<Self::Value, String>
-            {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let values = ($(self.$fld.new_value(runner)?,)*);
                 Ok(TupleValueTree::new(values))
             }
@@ -115,7 +112,7 @@ mod test {
         }
 
         let input = (0..32, 0..32);
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
 
         let mut cases_tested = 0;
         for _ in 0..256 {

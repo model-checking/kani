@@ -183,7 +183,7 @@ mod test {
 
     fn count_ok_of_1000<S : Strategy>(s: S) -> u32
     where S::Value : ValueTree<Value = Result<(), ()>> {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {
             count += s.new_value(&mut runner).unwrap()
@@ -222,7 +222,7 @@ mod test {
 
     #[test]
     fn shrink_to_correct_case() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         {
             let input = maybe_err(Just(()), Just(()));
             for _ in 0..64 {

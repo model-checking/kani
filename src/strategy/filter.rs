@@ -11,6 +11,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use strategy::traits::*;
+use strategy::rejection::Rejection;
 use test_runner::*;
 
 /// `Strategy` and `ValueTree` filter adaptor.
@@ -18,8 +19,14 @@ use test_runner::*;
 /// See `Strategy::prop_filter()`.
 pub struct Filter<S, F> {
     pub(super) source: S,
-    pub(super) whence: String,
+    pub(super) whence: Rejection,
     pub(super) fun: Arc<F>,
+}
+
+impl<S, F> Filter<S, F> {
+    pub (super) fn new(source: S, whence: Rejection, fun: F) -> Self {
+        Self { source, whence, fun: Arc::new(fun) }
+    }
 }
 
 impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
@@ -47,8 +54,7 @@ impl<S : Strategy,
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
             let val = self.source.new_value(runner)?;
             if !(self.fun)(&val.current()) {
@@ -112,7 +118,7 @@ mod test {
         let input = (0..256).prop_filter("%3".to_owned(), |&v| 0 == v % 3);
 
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let mut case = input.new_value(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);

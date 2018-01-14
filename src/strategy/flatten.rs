@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use strategy::fuse::Fuse;
 use strategy::traits::*;
+use strategy::Rejection;
 use test_runner::*;
 
 /// Adaptor that flattens a `Strategy` which produces other `Strategy`s into a
@@ -34,8 +35,7 @@ impl<S : Strategy> Strategy for Flatten<S>
 where ValueFor<S> : Strategy {
     type Value = FlattenValueTree<S::Value>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let meta = self.source.new_value(runner)?;
         FlattenValueTree::new(runner, meta)
     }
@@ -92,7 +92,7 @@ where S::Value : Strategy,
 }
 
 impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
-    fn new(runner: &mut TestRunner, meta: S) -> Result<Self, String> {
+    fn new(runner: &mut TestRunner, meta: S) -> Result<Self, Rejection> {
         let current = meta.current().new_value(runner)?;
         Ok(FlattenValueTree {
             meta: Fuse::new(meta),
@@ -199,8 +199,7 @@ impl<S : Strategy> Strategy for IndFlatten<S>
 where ValueFor<S> : Strategy {
     type Value = <ValueFor<S> as Strategy>::Value;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let inner = self.0.new_value(runner)?;
         inner.current().new_value(runner)
     }
@@ -238,8 +237,7 @@ impl<S : Strategy, R : Strategy,
 Strategy for IndFlattenMap<S, F> {
     type Value = ::tuple::TupleValueTree<(S::Value, R::Value)>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let left = self.source.new_value(runner)?;
         let right_source = (self.fun)(left.current());
         let right = right_source.new_value(runner)?;
@@ -262,13 +260,13 @@ mod test {
 
         let mut failures = 0;
         for _ in 0..1000 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
             let result = runner.run_one(case, |&(a, b)| {
                 if a <= 10000 || b <= a {
                     Ok(())
                 } else {
-                    Err(TestCaseError::Fail("fail".to_owned()))
+                    fail_case("fail")
                 }
             });
 
@@ -318,7 +316,7 @@ mod test {
             if pass.fetch_or(true, Ordering::SeqCst) {
                 Ok(())
             } else {
-                Err(TestCaseError::Fail("fail".to_owned()))
+                fail_case("fail")
             }
         });
     }

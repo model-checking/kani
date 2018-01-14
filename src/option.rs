@@ -37,7 +37,7 @@ impl<T> fmt::Debug for NoneStrategy<T> {
 impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
     type Value = Self;
 
-    fn new_value(&self, _: &mut TestRunner) -> Result<Self, String> {
+    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(*self)
     }
 }
@@ -108,7 +108,7 @@ mod test {
     use super::*;
 
     fn count_some_of_1000(s: OptionStrategy<Just<i32>>) -> u32 {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {
             count += s.new_value(&mut runner).unwrap()

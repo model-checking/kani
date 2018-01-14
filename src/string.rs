@@ -60,8 +60,7 @@ opaque_strategy_wrapper! {
 impl Strategy for str {
     type Value = RegexGeneratorValueTree<String>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         string_regex(self).unwrap().new_value(runner)
     }
 }

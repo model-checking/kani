@@ -14,11 +14,11 @@
 
 extern crate proptest;
 
-use proptest::test_runner::{Config, TestRunner};
+use proptest::test_runner::TestRunner;
 use proptest::strategy::{Strategy, ValueTree};
 
 fn main() {
-    let mut runner = TestRunner::new(Config::default());
+    let mut runner = TestRunner::default();
     let int_val = (0..100i32).new_value(&mut runner).unwrap();
     let str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
         .new_value(&mut runner).unwrap();

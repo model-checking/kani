@@ -27,6 +27,7 @@
 use std::fmt;
 
 use strategy::traits::*;
+use strategy::Rejection;
 use test_runner::*;
 
 /// Essentially `Fn (&T) -> bool`.
@@ -39,14 +40,16 @@ pub trait FilterFn<T> {
 #[derive(Clone)]
 pub struct Filter<S, F> {
     source: S,
-    whence: String,
+    whence: Rejection,
     fun: F,
 }
 
 impl<S, F> Filter<S, F> {
     /// Adapt strategy `source` to reject values which do not pass `filter`,
     /// using `whence` as the reported reason/location.
-    pub fn new(source: S, whence: String, filter: F) -> Self {
+    pub fn new(source: S, whence: Rejection, filter: F) -> Self {
+        // NOTE: We don't use universal quantification R: Into<Rejection>
+        // since the module is not conviniently exposed.
         Filter { source, whence, fun: filter }
     }
 }
@@ -66,8 +69,7 @@ impl<S : Strategy,
 Strategy for Filter<S, F> {
     type Value = Filter<S::Value, F>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
             let val = self.source.new_value(runner)?;
             if !self.fun.apply(&val.current()) {
@@ -157,8 +159,7 @@ impl<S : Strategy,
 Strategy for Map<S, F> {
     type Value = Map<S::Value, F>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.source.new_value(runner).map(
             |v| Map { source: v, fun: self.fun.clone() })
     }
@@ -193,10 +194,10 @@ mod test {
             fn apply(&self, &v: &i32) -> bool { 0 == v % 3 }
         }
 
-        let input = Filter::new((0..256), "%3".to_owned(), MyFilter);
+        let input = Filter::new((0..256), "%3".into(), MyFilter);
 
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let mut case = input.new_value(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);
@@ -219,7 +220,7 @@ mod test {
 
         let input = Map::new((0..10), MyMap);
 
-        TestRunner::new(Config::default())
+        TestRunner::default()
             .run(&input, |&v| {
                 assert!(0 == v % 2);
                 Ok(())
