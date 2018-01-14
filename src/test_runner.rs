@@ -342,14 +342,8 @@ pub enum TestCaseError {
     /// The input was not valid for the test case. This does not count as a
     /// test failure (nor a success); rather, it simply signals to generate
     /// a new input and try again.
-    ///
-    /// The string gives the location and context of the rejection, and
-    /// should be suitable for formatting like `Foo did X at {whence}`.
     Reject(Reason),
     /// The code under test failed the test.
-    ///
-    /// The string should indicate the location of the failure, but may
-    /// generally be any string.
     Fail(Reason),
 }
 
