@@ -2,6 +2,10 @@
 
 ### Potential Breaking Changes
 
+- `proptest::char::ANY` replaced with `proptest::char::any()`.
+  `proptest::char::ANY` is present but deprecated, and will be removed in
+  proptest 0.5.0.
+
 - Instead of returning `-> Result<Self::Value, String>`, strategies are
   expected to return `-> Result<Self::Value, Reason>` instead. `Reason` reduces
   the amount of heap allocations, especially for `.prop_filter(..)` where you

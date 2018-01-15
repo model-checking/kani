@@ -190,8 +190,18 @@ const WHOLE_RANGE: &[CharRange] = &[
     ('\x00', ::std::char::MAX)
 ];
 
-/// The `CharStrategy` which picks from literally any character, with
-/// the default biases.
+/// Creates a `CharStrategy` which picks from literally any character, with the
+/// default biases.
+pub fn any() -> CharStrategy<'static> {
+    CharStrategy {
+        special: Cow::Borrowed(DEFAULT_SPECIAL_CHARS),
+        preferred: Cow::Borrowed(DEFAULT_PREFERRED_RANGES),
+        ranges: Cow::Borrowed(WHOLE_RANGE),
+    }
+}
+
+#[allow(missing_docs)]
+#[deprecated(since="0.4.0", note="replaced with proptest::char::any()")]
 pub const ANY: CharStrategy<'static> = CharStrategy {
     special: Cow::Borrowed(DEFAULT_SPECIAL_CHARS),
     preferred: Cow::Borrowed(DEFAULT_PREFERRED_RANGES),
@@ -336,7 +346,7 @@ mod test {
         let mut runner = TestRunner::default();
 
         for _ in 0..1024 {
-            let ch = ANY.new_value(&mut runner).unwrap().current();
+            let ch = any().new_value(&mut runner).unwrap().current();
             if '🕴' == ch {
                 men_in_business_suits_levitating += 1;
             } else if ch >= ' ' && ch <= '~' {
@@ -354,7 +364,7 @@ mod test {
         let mut runner = TestRunner::default();
 
         for _ in 0..256 {
-            let mut value = ANY.new_value(&mut runner).unwrap();
+            let mut value = any().new_value(&mut runner).unwrap();
 
             if value.current() <= ' ' { continue; }
 
@@ -369,7 +379,7 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        check_strategy_sanity(ANY, Some(CheckStrategySanityOptions {
+        check_strategy_sanity(any(), Some(CheckStrategySanityOptions {
             // `simplify()` can itself `complicate()` back to the starting
             // position, so the overly strict complicate-after-simplify check
             // must be disabled.

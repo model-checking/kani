@@ -123,7 +123,7 @@ pub fn bytes_regex_parsed(expr: &rs::Expr)
                          .collect::<Vec<_>>()).sboxed())
         },
 
-        AnyChar => Ok(char::ANY.prop_map(to_bytes).sboxed()),
+        AnyChar => Ok(char::any().prop_map(to_bytes).sboxed()),
         AnyCharNoNL => {
             static NONL_RANGES: &[(char,char)] = &[
                 ('\x00', '\x09'),
