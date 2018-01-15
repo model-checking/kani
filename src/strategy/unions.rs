@@ -89,8 +89,7 @@ fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
 impl<T : Strategy> Strategy for Union<T> {
     type Value = UnionValueTree<T::Value>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         fn extract_weight<V>(&(w, _): &W<V>) -> u32 { w }
 
         let pick = pick_weighted(
@@ -240,8 +239,7 @@ macro_rules! tuple_union {
             type Value = TupleUnionValueTree<
                 (A::Value, $(Option<$gen::Value>),*)>;
 
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<Self::Value, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let weights = [((self.0).0).0, $(((self.0).$ix).0),*];
                 let pick = pick_weighted(runner, weights.iter().cloned(),
                                          weights.iter().cloned());
@@ -343,12 +341,11 @@ mod test {
         let mut converged_low = 0;
         let mut converged_high = 0;
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| if v < 15 {
+            let result = runner.run_one(case, |&v| {
+                prop_assert!(v < 15);
                 Ok(())
-            } else {
-                Err(TestCaseError::Fail("fail".to_owned()))
             });
 
             match result {
@@ -376,7 +373,7 @@ mod test {
         ]);
 
         let mut counts = [0, 0, 0];
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..65536 {
             counts[input.new_value(&mut runner).unwrap().current()] += 1;
         }
@@ -410,12 +407,11 @@ mod test {
         let mut converged_low = 0;
         let mut converged_high = 0;
         for _ in 0..256 {
-            let mut runner = TestRunner::new(Config::default());
+            let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| if v < 15 {
+            let result = runner.run_one(case, |&v| {
+                prop_assert!(v < 15);
                 Ok(())
-            } else {
-                Err(TestCaseError::Fail("fail".to_owned()))
             });
 
             match result {
@@ -443,7 +439,7 @@ mod test {
         ));
 
         let mut counts = [0, 0, 0];
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..65536 {
             counts[input.new_value(&mut runner).unwrap().current()] += 1;
         }
@@ -457,7 +453,7 @@ mod test {
 
     #[test]
     fn test_tuple_union_all_sizes() {
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let r = 1i32..10;
 
         macro_rules! test {

@@ -151,8 +151,7 @@ impl<T : BitSetLike> BitSetStrategy<T> {
 impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
     type Value = BitSetValueTree<T>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut inner = T::new_bitset(self.max);
         for bit in self.min..self.max {
             if self.mask.as_ref().map_or(true, |mask| mask.test(bit)) &&
@@ -212,8 +211,7 @@ impl<T : BitSetLike> SampledBitSetStrategy<T> {
 impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     type Value = BitSetValueTree<T>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end);
         let count = runner.rng().gen_range(self.size.start, self.size.end);
         for bit in rand::sample(runner.rng(), self.bits.clone(), count) {
@@ -370,7 +368,7 @@ mod test {
     fn generates_values_in_range() {
         let input = u32::between(4, 8);
 
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..256 {
             let value = input.new_value(&mut runner).unwrap().current();
             assert!(0 == value & !0xF0u32,
@@ -382,7 +380,7 @@ mod test {
     fn generates_values_in_mask() {
         let mut accum = 0;
 
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let input = u32::masked(0xdeadbeef);
         for _ in 0..1024 {
             accum |= input.new_value(&mut runner).unwrap().current();
@@ -400,7 +398,7 @@ mod test {
         mask.insert(0);
         mask.insert(2);
 
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         let input = bitset::masked(mask);
         for _ in 0..32 {
             let v = input.new_value(&mut runner).unwrap().current();
@@ -416,7 +414,7 @@ mod test {
     fn shrinks_to_zero() {
         let input = u32::between(4, 24);
 
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..256 {
             let mut value = input.new_value(&mut runner).unwrap();
             let mut prev = value.current();
@@ -435,7 +433,7 @@ mod test {
     fn complicates_to_previous() {
         let input = u32::between(4, 24);
 
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
         for _ in 0..256 {
             let mut value = input.new_value(&mut runner).unwrap();
             let orig = value.current();

@@ -1484,8 +1484,7 @@ macro_rules! opaque_strategy_wrapper {
 
         impl $($sgen)* Strategy for $stratname $($sgen)* $($swhere)* {
             type Value = $stratvtty;
-            fn new_value(&self, runner: &mut TestRunner)
-                         -> Result<Self::Value, String> {
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 self.0.new_value(runner).map($vtname)
             }
         }
@@ -1497,6 +1496,9 @@ macro_rules! opaque_strategy_wrapper {
         }
     }
 }
+
+#[doc(hidden)]
+#[macro_use] pub mod sugar;
 
 pub mod test_runner;
 pub mod strategy;
@@ -1511,8 +1513,5 @@ pub mod string;
 pub mod option;
 pub mod result;
 pub mod sample;
-
-#[doc(hidden)]
-#[macro_use] pub mod sugar;
 
 pub mod prelude;

@@ -227,8 +227,7 @@ pub struct CharValueTree {
 impl<'a> Strategy for CharStrategy<'a> {
     type Value = CharValueTree;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<CharValueTree, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (base, offset) = select_range_index(
             runner.rng(), &self.special, &self.preferred, &self.ranges);
 
@@ -304,17 +303,16 @@ mod test {
             (0..::std::char::MAX as u32,
              0..::std::char::MAX as u32),
             1..5);
-        TestRunner::new(Config::default()).run(
+        TestRunner::default().run(
             &meta_input, |input_ranges| {
                 let input = ranges(Cow::Owned(input_ranges.iter().map(
                     |&(lo, hi)| ::std::char::from_u32(lo).and_then(
                         |lo| ::std::char::from_u32(hi).map(
                             |hi| (min(lo, hi), max(lo, hi))))
-                        .ok_or_else(|| TestCaseError::Reject(
-                            "non-char".to_owned())))
+                        .ok_or_else(|| TestCaseError::reject("non-char")))
                     .collect::<Result<Vec<CharRange>,_>>()?));
 
-                let mut runner = TestRunner::new(Config::default());
+                let mut runner = TestRunner::default();
                 for _ in 0..256 {
                     let mut value = input.new_value(&mut runner).unwrap();
                     loop {
@@ -335,7 +333,7 @@ mod test {
     fn applies_desired_bias() {
         let mut men_in_business_suits_levitating = 0;
         let mut ascii_printable = 0;
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
 
         for _ in 0..1024 {
             let ch = ANY.new_value(&mut runner).unwrap().current();
@@ -353,7 +351,7 @@ mod test {
     #[test]
     fn doesnt_shrink_to_ascii_control() {
         let mut accepted = 0;
-        let mut runner = TestRunner::new(Config::default());
+        let mut runner = TestRunner::default();
 
         for _ in 0..256 {
             let mut value = ANY.new_value(&mut runner).unwrap();

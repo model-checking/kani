@@ -70,8 +70,7 @@ pub struct Subsequence<T : Clone + 'static> {
 impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
     type Value = SubsequenceValueTree<T>;
 
-    fn new_value(&self, runner: &mut TestRunner)
-                 -> Result<Self::Value, String> {
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(SubsequenceValueTree {
             values: Arc::clone(&self.values),
             inner: self.bit_strategy.new_value(runner)?,
