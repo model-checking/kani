@@ -26,7 +26,7 @@ unstable = []
 [dependencies]
 bit-set = "0.4.0"
 quick-error = "1.2.1"
-rand = "0.3.18"
+rand = "0.4.2"
 regex-syntax = "0.4.1"
 lazy_static = "0.2.8"
 

@@ -13,6 +13,8 @@
   you've written your own strategy types or if you've used
   `TestCaseError::Reject` or `TestCaseError::Fail` explicitly.
 
+- Update of externally-visible crate `rand` to `0.4.2`.
+
 ### New Additions
 
 - Added `proptest::test_runner::Reason` which allows you to avoid heap

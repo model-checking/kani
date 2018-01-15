@@ -214,7 +214,10 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end);
         let count = runner.rng().gen_range(self.size.start, self.size.end);
-        for bit in rand::sample(runner.rng(), self.bits.clone(), count) {
+        for bit in
+            rand::seq::sample_iter(runner.rng(), self.bits.clone(), count)
+            .expect("not enough bits to sample")
+        {
             bits.set(bit);
         }
 
