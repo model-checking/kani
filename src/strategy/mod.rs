@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -10,6 +10,7 @@
 //! Defines the core traits used by Proptest.
 
 mod traits;
+mod just;
 mod map;
 mod filter;
 mod flatten;
@@ -19,6 +20,7 @@ mod shuffle;
 mod fuse;
 
 pub use self::traits::*;
+pub use self::just::*;
 pub use self::map::*;
 pub use self::filter::*;
 pub use self::flatten::*;

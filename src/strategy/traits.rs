@@ -543,36 +543,6 @@ where T::Value : 'static {
     }
 }
 
-/// A `Strategy` which always produces a single value value and never
-/// simplifies.
-#[derive(Clone, Copy, Debug)]
-pub struct Just<T : Clone + fmt::Debug>(
-    /// The value produced by this strategy.
-    pub T);
-
-/// Deprecated alias for `Just`.
-#[deprecated]
-pub use self::Just as Singleton;
-
-impl<T : Clone + fmt::Debug> Strategy for Just<T> {
-    type Value = Self;
-
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
-        Ok(self.clone())
-    }
-}
-
-impl<T : Clone + fmt::Debug> ValueTree for Just<T> {
-    type Value = T;
-
-    fn current(&self) -> T {
-        self.0.clone()
-    }
-
-    fn simplify(&mut self) -> bool { false }
-    fn complicate(&mut self) -> bool { false }
-}
-
 /// Wraps a `Strategy` or `ValueTree` to suppress shrinking of generated
 /// values.
 ///

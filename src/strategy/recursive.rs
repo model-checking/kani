@@ -109,6 +109,7 @@ Strategy for Recursive<BoxedStrategy<T>, F> {
 mod test {
     use std::cmp::max;
 
+    use strategy::just::Just;
     use super::*;
 
     #[test]

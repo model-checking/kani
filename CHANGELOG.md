@@ -1,3 +1,10 @@
+## Unreleased
+
+### New Additions
+
+- A `LazyJust` strategy that can be used instead of `Just` when you have
+  non-`Clone` types.
+
 ## 0.4.0
 
 ### Potential Breaking Changes

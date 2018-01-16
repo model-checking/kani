@@ -203,6 +203,7 @@ mod test {
     use std::i32;
 
     use collection;
+    use strategy::just::Just;
     use super::*;
 
     static VALUES: &'static [i32] = &[

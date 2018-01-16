@@ -328,6 +328,7 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
 
 #[cfg(test)]
 mod test {
+    use strategy::just::Just;
     use super::*;
 
     #[test]
