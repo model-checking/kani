@@ -11,7 +11,7 @@
 
 use std::ops::*;
 
-use strategy::Strategy;
+use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
 
@@ -26,7 +26,7 @@ wrap_ctor!(RangeToInclusive, |a| ..=a);
 arbitrary!(
     [A: PartialOrd + Arbitrary] RangeInclusive<A>,
     SMapped<(A, A), Self>, product_type![A::Parameters, A::Parameters];
-    args => static_map(any_with(args),
+    args => static_map(any_with::<(A, A)>(args),
         |(a, b)| if b < a { b..=a } else { a..=b })
 );
 
@@ -56,14 +56,17 @@ arbitrary!(
     args => {
         let product_unpack![y, r] = args;
         prop_oneof![
-            static_map(any_with(y), GeneratorState::Yielded),
-            static_map(any_with(r), GeneratorState::Complete)
+            static_map(any_with::<Y>(y), GeneratorState::Yielded),
+            static_map(any_with::<R>(r), GeneratorState::Complete)
         ]
     }
 );
 
 #[cfg(feature = "unstable")]
-impl<A: Debug + 'static, B: Debug + 'static>
+use std::fmt;
+
+#[cfg(feature = "unstable")]
+impl<A: fmt::Debug + 'static, B: fmt::Debug + 'static>
     functor::ArbitraryF2<A, B>
 for GeneratorState<A, B> {
     type Parameters = ();

@@ -41,11 +41,11 @@ mod panic;
 //mod path;
 mod rc;
 mod result;
-/*
 mod str;
 mod string;
 pub use self::string::*;
+/*
 mod sync;
-mod thread;
 */
+mod thread;
 mod time;
