@@ -194,7 +194,7 @@ macro_rules! lift1 {
     ([$($bounds : tt)*] $typ: ty, $params: ty;
      $base: ident, $args: ident => $logic: expr) => {
         impl<A: ::std::fmt::Debug + $($bounds)*>
-        $crate::functor::ArbitraryF1<A>
+        $crate::arbitrary::functor::ArbitraryF1<A>
         for $typ {
             type Parameters = $params;
 
