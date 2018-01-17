@@ -1436,6 +1436,10 @@
     , try_from
     , integer_atomics
     , mpsc_select
+    , ip
+    , decode_utf8
+    , iterator_step_by
+    , io
 ))]
 
 #[cfg(feature = "frunk")]

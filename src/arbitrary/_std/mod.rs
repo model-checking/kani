@@ -9,29 +9,23 @@
 
 //! Arbitrary implementations for libstd.
 
-/*
 mod ascii;
-*/
 mod boxed;
 mod cell;
-//mod char;
+mod char;
 mod cmp;
 mod collections;
 mod convert;
-/*
 mod env;
 mod ffi;
-*/
 mod fmt;
 mod fs;
 mod hash;
 #[cfg(feature = "unstable")]
 mod heap;
-/*
 mod io;
 mod iter;
 mod marker;
-*/
 mod mem;
 mod net;
 mod num;
