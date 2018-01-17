@@ -274,6 +274,7 @@ lift1!(['static] Bound<A>; base => {
 #[cfg(test)]
 mod test {
     no_panic_test!(
+        size_bounds => SizeBounds,
         vec => Vec<u8>,
         box_slice => Box<[u8]>,
         rc_slice  => Rc<[u8]>,
@@ -293,7 +294,6 @@ mod test {
         into_iter_btree_set => btree_set::IntoIter<u8>,
         into_iter_btree_map => btree_map::IntoIter<u8, u8>,
         into_iter_hash_set => hash_set::IntoIter<u8>,
-        into_iter_hash_map => hash_map::IntoIter<u8, u8>,
-        size_bounds => SizeBounds
+        into_iter_hash_map => hash_map::IntoIter<u8, u8>
     );
 }
