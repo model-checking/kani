@@ -2,6 +2,10 @@
 
 ### New Additions
 
+- A `.prop_map_into()` operation on all strategies that map
+  using `Into<OutputType>`. This is a clerarer and cheaper
+  operation than using `.prop_map(OutputType::from)`.
+
 - A `LazyJust` strategy that can be used instead of `Just` when you have
   non-`Clone` types.
 

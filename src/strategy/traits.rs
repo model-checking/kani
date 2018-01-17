@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -67,6 +67,23 @@ pub trait Strategy : fmt::Debug {
         (self, fun: F) -> Map<Self, F>
     where Self : Sized {
         Map { source: self, fun: Arc::new(fun) }
+    }
+
+    /// Returns a strategy which produces values of type `O` by transforming
+    /// `Self` with `Into<O>`.
+    ///
+    /// You should always prefer this operation instead of `prop_map` when
+    /// you can as it is both clearer and also currently more efficient.
+    ///
+    /// There is no need (or possibility, for that matter) to define how the
+    /// output is to be shrunken. Shrinking continues to take place in terms of
+    /// the source value.
+    fn prop_map_into<O : fmt::Debug>(self) -> MapInto<Self, O>
+    where
+        Self : Sized,
+        ValueFor<Self>: Into<O>
+    {
+        MapInto::new(self)
     }
 
     /// Returns a strategy which produces values transformed by the function

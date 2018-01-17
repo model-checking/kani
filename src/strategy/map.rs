@@ -9,11 +9,16 @@
 
 use std::fmt;
 use std::sync::Arc;
+use std::marker::PhantomData;
 
 use rand::XorShiftRng;
 
 use strategy::traits::*;
 use test_runner::*;
+
+//==============================================================================
+// Map
+//==============================================================================
 
 /// `Strategy` and `ValueTree` map adaptor.
 ///
@@ -68,6 +73,75 @@ ValueTree for Map<S, F> {
         self.source.complicate()
     }
 }
+
+//==============================================================================
+// MapInto
+//==============================================================================
+
+// NOTE: Since this is external stable API,
+// we avoid relying on the Map in `statics`.
+
+/// `Strategy` and `ValueTree` map into adaptor.
+///
+/// See `Strategy::prop_map_into()`.
+pub struct MapInto<S, O> {
+    pub(super) source: S,
+    pub(super) output: PhantomData<O>,
+}
+
+impl<S, O> MapInto<S, O> {
+    /// Construct a `MapInto` mapper from an `S` strategy into a strategy
+    /// producing `O`s.
+    pub(super) fn new(source: S) -> Self {
+        Self { source, output: PhantomData }
+    }
+}
+
+impl<S : fmt::Debug, O> fmt::Debug for MapInto<S, O> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MapInto").field("source", &self.source).finish()
+    }
+}
+
+impl<S : Clone, O> Clone for MapInto<S, O> {
+    fn clone(&self) -> Self {
+        Self::new(self.source.clone())
+    }
+}
+
+impl<S : Strategy, O : fmt::Debug> Strategy for MapInto<S, O>
+where
+    ValueFor<S>: Into<O>
+{
+    type Value = MapInto<S::Value, O>;
+
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.source.new_value(runner).map(MapInto::new)
+    }
+}
+
+impl<S : ValueTree, O : fmt::Debug> ValueTree for MapInto<S, O>
+where
+    S::Value: Into<O>
+{
+    type Value = O;
+
+    fn current(&self) -> O {
+        self.source.current().into()
+    }
+
+    fn simplify(&mut self) -> bool {
+        self.source.simplify()
+    }
+
+    fn complicate(&mut self) -> bool {
+        self.source.complicate()
+    }
+}
+
+//==============================================================================
+// Perturb
+//==============================================================================
 
 /// `Strategy` perturbation adaptor.
 ///
@@ -158,12 +232,17 @@ ValueTree for PerturbValueTree<S, F> {
     }
 }
 
+//==============================================================================
+// Tests
+//==============================================================================
+
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
 
     use rand::Rng;
 
+    use strategy::just::Just;
     use super::*;
 
     #[test]
@@ -171,6 +250,15 @@ mod test {
         TestRunner::default()
             .run(&(0..10).prop_map(|v| v * 2), |&v| {
                 assert!(0 == v % 2);
+                Ok(())
+            }).unwrap();
+    }
+
+    #[test]
+    fn test_map_into() {
+        TestRunner::default()
+            .run(&(0..10u8).prop_map_into::<usize>(), |&v| {
+                assert!(v < 10);
                 Ok(())
             }).unwrap();
     }
