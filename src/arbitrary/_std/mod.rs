@@ -33,11 +33,11 @@ mod iter;
 mod marker;
 mod mem;
 mod net;
-mod num;
 */
+mod num;
 mod ops;
-/*
 mod option;
+/*
 mod panic;
 mod path;
 mod rc;
