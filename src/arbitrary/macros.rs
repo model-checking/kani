@@ -98,7 +98,7 @@ macro_rules! lazy_just {
     ($($self: ty, $fun: expr);+) => {
         $(
             arbitrary!($self, $crate::strategy::LazyJust<Self, fn() -> Self>;
-                $crate::LazyJust::new($fun));
+                $crate::strategy::LazyJust::new($fun));
         )+
     };
 }
