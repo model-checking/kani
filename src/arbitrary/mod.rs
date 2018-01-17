@@ -13,6 +13,14 @@
 //! [`Arbitrary`]: trait.Arbitrary.html
 
 mod traits;
+
+#[macro_use]
 pub mod functor;
 
+#[macro_use]
+mod macros;
+
+mod primitives;
+
+pub use self::primitives::*;
 pub use self::traits::*;
