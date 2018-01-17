@@ -15,7 +15,6 @@ use std::ops::Range;
 
 use strategy::*;
 use strategy::statics::static_map;
-use collection::size_range;
 use arbitrary::*;
 
 macro_rules! impl_wrap_char {
@@ -25,30 +24,36 @@ macro_rules! impl_wrap_char {
     };
 }
 
-impl_wrap_char!(EscapeDebug,   char::escape_debug);
+impl_wrap_char!(EscapeDebug, char::escape_debug);
 impl_wrap_char!(EscapeDefault, char::escape_default);
 impl_wrap_char!(EscapeUnicode, char::escape_unicode);
 #[cfg(feature = "unstable")]
-impl_wrap_char!(ToLowercase,   char::to_lowercase);
+impl_wrap_char!(ToLowercase, char::to_lowercase);
 #[cfg(feature = "unstable")]
-impl_wrap_char!(ToUppercase,   char::to_uppercase);
+impl_wrap_char!(ToUppercase, char::to_uppercase);
 
 #[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,
     Flatten<Mapped<u16, SMapped<Vec<u8>, Self>>>;
-    any::<u16>().prop_flat_map(|size| static_map(any_with::<Vec<u8>>(
-        product_pack![size_range(..size as usize), Default::default()]),
-        decode_utf8
-    ))
+    {
+        use collection::size_range;
+        any::<u16>().prop_flat_map(|size| static_map(any_with::<Vec<u8>>(
+            product_pack![size_range(..size as usize), Default::default()]),
+            decode_utf8
+        ))
+    }
 );
 
 #[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
     Flatten<Mapped<u16, SMapped<Vec<u16>, Self>>>;
-    any::<u16>().prop_flat_map(|size| static_map(any_with::<Vec<u16>>(
-        product_pack![size_range(..size as usize), Default::default()]),
-        decode_utf16
-    ))
+    {
+        use collection::size_range;
+        any::<u16>().prop_flat_map(|size| static_map(any_with::<Vec<u16>>(
+            product_pack![size_range(..size as usize), Default::default()]),
+            decode_utf16
+        ))
+    }
 );
 
 arbitrary!(ParseCharError, IndFlatten<Mapped<bool, Just<Self>>>;
@@ -81,7 +86,7 @@ mod test {
     no_panic_test!(
         to_lowercase => ToLowercase,
         to_uppercase => ToUppercase,
-        decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>
+        decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
         decode_utf8 => DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,
         char_try_from_error => CharTryFromError
     );

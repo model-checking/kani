@@ -274,7 +274,7 @@ lift1!(['static] Bound<A>; base => {
 #[cfg(test)]
 mod test {
     no_panic_test!(
-        size_bounds => SizeBounds,
+        size_bounds => SizeRange,
         vec => Vec<u8>,
         box_slice => Box<[u8]>,
         rc_slice  => Rc<[u8]>,

@@ -34,7 +34,7 @@ mod test {
 
     no_panic_test!(
         discriminant_struct => Discriminant<super::DummyStruct>,
-        discriminant_enum   => Discriminant<std::num::FpCategory>,
+        discriminant_enum   => Discriminant<::std::num::FpCategory>,
         manually_drop       => ManuallyDrop<u8> // Trivial destructor.
     );
 }

@@ -168,7 +168,7 @@ mod test {
         enumerate => Enumerate<Repeat<u8>>,
         fuse      => Fuse<Once<u8>>,
         peekable  => Peekable<Repeat<u8>>,
-        rev       => Rev<std::vec::IntoIter<u8>>,
+        rev       => Rev<::std::vec::IntoIter<u8>>,
         zip       => Zip<Repeat<u8>, Repeat<u16>>,
         chain     => Chain<Once<u8>, Once<u8>>,
         skip      => Skip<Repeat<u8>>,

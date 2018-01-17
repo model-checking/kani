@@ -11,7 +11,9 @@
 
 use std::thread::*;
 
+#[cfg(feature = "unstable")]
 use strategy::*;
+
 use strategy::statics::static_map;
 use option::prob;
 use arbitrary::*;
