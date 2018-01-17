@@ -16,7 +16,7 @@ mod boxed;
 mod cell;
 //mod char;
 mod cmp;
-//mod collections;
+mod collections;
 mod convert;
 /*
 mod env;
@@ -34,7 +34,9 @@ mod marker;
 mod mem;
 mod net;
 mod num;
+*/
 mod ops;
+/*
 mod option;
 mod panic;
 mod path;
