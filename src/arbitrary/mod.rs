@@ -13,5 +13,6 @@
 //! [`Arbitrary`]: trait.Arbitrary.html
 
 mod traits;
+pub mod functor;
 
 pub use self::traits::*;
