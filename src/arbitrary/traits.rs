@@ -199,11 +199,11 @@ pub fn any<A: Arbitrary>() -> StrategyFor<A> {
 /// ```rust
 /// #[macro_use] extern crate proptest;
 /// use proptest::prelude::any_with;
-/// use proptest::collections::size_bounds;
+/// use proptest::collection::size_range;
 ///
 /// proptest! {
 ///     fn reverse_reverse_is_identity
-///         (ref vec in any_with::<Vec<u32>>(size_bounds(1000).lift()))
+///         (ref vec in any_with::<Vec<u32>>(size_range(1000).lift()))
 ///     {
 ///         let vec2 = vec.iter().cloned().rev().rev().collect::<Vec<u32>>();
 ///         prop_assert_eq!(vec, &vec2);
@@ -288,10 +288,10 @@ where
 /// ```rust
 /// extern crate proptest;
 /// use proptest::arbitrary::{arbitrary_with, StrategyFor};
-/// use proptest::collections::size_bounds;
+/// use proptest::collection::size_range;
 ///
-/// fn gen_vec_5_u32() -> StrategyFor<Vec<u32>> {
-///     arbitrary_with(size_bounds(10).lift())
+/// fn gen_vec_10_u32() -> StrategyFor<Vec<u32>> {
+///     arbitrary_with(size_range(10).lift())
 /// }
 ///
 /// # fn main() {}
