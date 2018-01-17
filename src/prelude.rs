@@ -21,6 +21,7 @@
 //! revision to the `rand` crate.
 
 pub use strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
+pub use arbitrary::{Arbitrary, any, any_with};
 pub use test_runner::Config as ProptestConfig;
 pub use test_runner::TestCaseError;
 
@@ -32,6 +33,7 @@ pub use rand::{Rng, XorShiftRng};
 pub mod prop {
     pub use test_runner;
     pub use strategy;
+    pub use arbitrary;
     pub use bool;
     pub use num;
     pub use bits;

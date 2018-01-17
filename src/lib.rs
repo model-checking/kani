@@ -1502,6 +1502,7 @@ macro_rules! opaque_strategy_wrapper {
 
 pub mod test_runner;
 pub mod strategy;
+pub mod arbitrary;
 pub mod bool;
 pub mod num;
 pub mod bits;
