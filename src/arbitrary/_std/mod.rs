@@ -37,15 +37,15 @@ mod net;
 mod num;
 mod ops;
 mod option;
-/*
 mod panic;
-mod path;
+//mod path;
 mod rc;
+/*
 mod result;
 mod str;
 mod string;
 pub use self::string::*;
 mod sync;
 mod thread;
-mod time;
 */
+mod time;
