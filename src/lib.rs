@@ -1428,6 +1428,14 @@
       i128_type
     , i128
     , allocator_api
+    , inclusive_range_syntax
+    , inclusive_range
+    , thread_local_state
+    , try_trait
+    , generator_trait
+    , try_from
+    , integer_atomics
+    , mpsc_select
 ))]
 
 #[cfg(feature = "frunk")]
