@@ -1430,11 +1430,15 @@
     , allocator_api
 ))]
 
-/*
 #[cfg(feature = "frunk")]
 #[macro_use]
 extern crate frunk_core;
-*/
+
+#[cfg(feature = "frunk")]
+#[macro_use] mod product_frunk;
+
+#[cfg(not(feature = "frunk"))]
+#[macro_use] mod product_tuple;
 
 extern crate bit_set;
 #[macro_use] extern crate lazy_static;

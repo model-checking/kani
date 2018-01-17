@@ -11,14 +11,6 @@
 // Macros for quick implementing:
 //==============================================================================
 
-macro_rules! default {
-    ($type: ty, $val: expr) => {
-        impl Default for $type {
-            fn default() -> Self { $val.into() }
-        }
-    };
-}
-
 macro_rules! valuetree {
     () => {
         type ValueTree = <Self::Strategy as $crate::strategy::Strategy>::Value;

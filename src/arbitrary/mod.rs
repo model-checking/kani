@@ -15,11 +15,9 @@
 use strategy::{Map, ValueFor};
 use strategy::statics;
 
-#[cfg(feature = "frunk")]
-#[macro_use] mod product_frunk;
-
-#[cfg(not(feature = "frunk"))]
-#[macro_use] mod product_tuple;
+//==============================================================================
+// Trait and impls
+//==============================================================================
 
 mod traits;
 
