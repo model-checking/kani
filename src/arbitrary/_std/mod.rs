@@ -40,8 +40,8 @@ mod option;
 mod panic;
 //mod path;
 mod rc;
-/*
 mod result;
+/*
 mod str;
 mod string;
 pub use self::string::*;
