@@ -32,13 +32,13 @@ mod io;
 mod iter;
 mod marker;
 mod mem;
-mod net;
 */
+mod net;
 mod num;
 mod ops;
 mod option;
 mod panic;
-//mod path;
+mod path;
 mod rc;
 mod result;
 mod str;
