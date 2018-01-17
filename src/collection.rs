@@ -15,7 +15,7 @@ use std::cmp::Ord;
 use std::collections::*;
 use std::fmt;
 use std::hash::Hash;
-use std::ops::Range;
+use std::ops::{Add, Range, RangeTo};
 
 use bit_set::BitSet;
 use rand;
@@ -25,23 +25,118 @@ use strategy::*;
 use tuple::TupleValueTree;
 use test_runner::*;
 
+//==============================================================================
+// SizeRange
+//==============================================================================
+
+/// Creates a `SizeRange` from some value that is convertible into it.
+pub fn size_range<X: Into<SizeRange>>(from: X) -> SizeRange {
+    from.into()
+}
+
+impl Default for SizeRange {
+    /// Constructs a `SizeBounds` that will ranges between 0 and 100 elements.
+    fn default() -> Self {
+        size_range(0..100)
+    }
+}
+
+impl SizeRange {
+    /// Creates a `SizeBounds` from a `Range<usize>`.
+    pub fn new(range: Range<usize>) -> Self {
+        SizeRange(range)
+    }
+
+    // Don't rely on these existing internally:
+
+    /// Merges self together with some other argument producing a product
+    /// type expected by some impelementations of `A: Arbitrary` in
+    /// `A::Parameters`. This can be more ergonomic to work with and may
+    /// help type inference.
+    pub fn with<X>(self, and: X) -> product_type![Self, X] {
+        product_pack![self, and]
+    }
+
+    /// Merges self together with some other argument generated with a
+    /// default value producing a product type expected by some
+    /// impelementations of `A: Arbitrary` in `A::Parameters`.
+    /// This can be more ergonomic to work with and may help type inference.
+    pub fn lift<X: Default>(self) -> product_type![Self, X] {
+        self.with(Default::default())
+    }
+}
+
+/// Given `(low: usize, high: usize)`,
+/// then a size range of `[low..high)` is the result.
+impl From<(usize, usize)> for SizeRange {
+    fn from(x: (usize, usize)) -> Self {
+        (x.0..x.1).into()
+    }
+}
+
+/// Given `exact`, then a size range of `[exact..exact + 1)` is the result.
+impl From<usize> for SizeRange {
+    fn from(exact: usize) -> Self { size_range(exact..exact + 1) }
+}
+
+/// Given `..high`, then a size range `[0..high)` is the result.
+impl From<RangeTo<usize>> for SizeRange {
+    fn from(high: RangeTo<usize>) -> Self { size_range(0..high.end) }
+}
+
+/// Given `low..high`, then a size range `[low..high)` is the result.
+impl From<Range<usize>> for SizeRange {
+    fn from(x: Range<usize>) -> Self { SizeRange(x) }
+}
+
+impl From<SizeRange> for Range<usize> {
+    fn from(x: SizeRange) -> Self { x.0 }
+}
+
+#[cfg(feature = "frunk")]
+impl Generic for SizeRange {
+    type Repr = Range<usize>;
+
+    /// Converts the `SizeBounds` into `Range<usize>`.
+    fn into(self) -> Self::Repr { self.0 }
+
+    /// Converts `Range<usize>` into `SizeBounds`.
+    fn from(r: Self::Repr) -> Self { r.into() }
+}
+
+/// Adds `usize` to both start and end of the bounds.
+impl Add<usize> for SizeRange {
+    type Output = SizeRange;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        let Range { start, end } = self.0;
+        size_range((start + rhs)..(end + rhs))
+    }
+}
+
+/// The minimum and maximum range/bounds on the size of a collection.
+/// The interval must form a subset of `[0, std::usize::MAX)`.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct SizeRange(Range<usize>);
+
+//==============================================================================
+// Strategies
+//==============================================================================
+
 /// Strategy to create `Vec`s with a length in a certain range.
 ///
 /// Created by the `vec()` function in the same module.
 #[derive(Clone, Debug)]
 pub struct VecStrategy<T : Strategy> {
     element: T,
-    size: Range<usize>,
+    size: SizeRange,
 }
 
 /// Create a strategy to generate `Vec`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn vec<T : Strategy>(element: T, size: Range<usize>)
-                         -> VecStrategy<T> {
-    VecStrategy {
-        element: element,
-        size: size,
-    }
+pub fn vec<T: Strategy, S: Into<SizeRange>>(element: T, size: S)
+    -> VecStrategy<T> {
+    VecStrategy { element, size: size.into() }
 }
 
 mapfn! {
@@ -67,8 +162,7 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `VecDeque`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn vec_deque<T : Strategy>
-    (element: T, size: Range<usize>)
+pub fn vec_deque<T: Strategy, S: Into<SizeRange>>(element: T, size: S)
     -> VecDequeStrategy<T>
 {
     VecDequeStrategy(statics::Map::new(vec(element, size), VecToDeque))
@@ -97,8 +191,7 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `LinkedList`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn linked_list<T : Strategy>
-    (element: T, size: Range<usize>)
+pub fn linked_list<T : Strategy, S: Into<SizeRange>>(element: T, size: S)
      -> LinkedListStrategy<T>
 {
     LinkedListStrategy(statics::Map::new(vec(element, size), VecToLl))
@@ -127,8 +220,7 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `BinaryHeap`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn binary_heap<T : Strategy>
-    (element: T, size: Range<usize>)
+pub fn binary_heap<T : Strategy, S: Into<SizeRange>>(element: T, size: S)
     -> BinaryHeapStrategy<T>
 where ValueFor<T> : Ord {
     BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
@@ -171,10 +263,13 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the `HashSet`
 /// has at least the minimum number of elements, in case `element` should
 /// produce duplicate values.
-pub fn hash_set<T : Strategy>
-    (element: T, size: Range<usize>)
-    -> HashSetStrategy<T>
-where ValueFor<T> : Hash + Eq {
+pub fn hash_set<T, S>(element: T, size: S) -> HashSetStrategy<T>
+where
+    T: Strategy,
+    ValueFor<T>: Hash + Eq,
+    S: Into<SizeRange>,
+{
+    let size = size.into().0;
     let min_size = size.start;
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size), VecToHashSet),
@@ -216,10 +311,13 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeSet` has at least the minimum number of elements, in case `element`
 /// should produce duplicate values.
-pub fn btree_set<T : Strategy>
-    (element: T, size: Range<usize>)
-    -> BTreeSetStrategy<T>
-where ValueFor<T> : Ord {
+pub fn btree_set<T, S>(element: T, size: S) -> BTreeSetStrategy<T>
+where
+    T: Strategy,
+    ValueFor<T>: Ord,
+    S: Into<SizeRange>
+{
+    let size = size.into().0;
     let min_size = size.start;
 
     BTreeSetStrategy(statics::Filter::new(
@@ -268,10 +366,14 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the `HashMap`
 /// has at least the minimum number of elements, in case `key` should produce
 /// duplicate values.
-pub fn hash_map<K : Strategy, V : Strategy>
-    (key: K, value: V, size: Range<usize>)
-    -> HashMapStrategy<K, V>
-where ValueFor<K> : Hash + Eq {
+pub fn hash_map<K, V, S>(key: K, value: V, size: S) -> HashMapStrategy<K, V>
+where
+    K: Strategy,
+    V: Strategy,
+    ValueFor<K>: Hash + Eq,
+    S: Into<SizeRange>,
+{
+    let size = size.into().0;
     let min_size = size.start;
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size), VecToHashMap),
@@ -319,10 +421,14 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeMap` has at least the minimum number of elements, in case `key`
 /// should produce duplicate values.
-pub fn btree_map<K : Strategy + 'static, V : Strategy + 'static>
-    (key: K, value: V, size: Range<usize>)
-    -> BTreeMapStrategy<K, V>
-where ValueFor<K> : Ord {
+pub fn btree_map<K, V, S>(key: K, value: V, size: S) -> BTreeMapStrategy<K, V>
+where
+    K: Strategy + 'static,
+    V: Strategy + 'static,
+    ValueFor<K>: Ord,
+    S: Into<SizeRange>,
+{
+    let size = size.into().0;
     let min_size = size.start;
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
@@ -350,8 +456,10 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     type Value = VecValueTree<T::Value>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let max_size = rand::distributions::Range::new(
-            self.size.start, self.size.end).ind_sample(runner.rng());
+        let Range { start, end } = self.size.0;
+
+        let max_size = rand::distributions::Range::new(start, end)
+                        .ind_sample(runner.rng());
         let mut elements = Vec::with_capacity(max_size);
         while elements.len() < max_size {
             elements.push(self.element.new_value(runner)?);
@@ -360,7 +468,7 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
         Ok(VecValueTree {
             elements: elements,
             included_elements: (0..max_size).collect(),
-            min_size: self.size.start,
+            min_size: start,
             shrink: Shrink::DeleteElement(0),
             prev_shrink: None,
         })
@@ -447,6 +555,10 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
         }
     }
 }
+
+//==============================================================================
+// Tests
+//==============================================================================
 
 #[cfg(test)]
 mod test {

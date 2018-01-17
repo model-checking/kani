@@ -1,6 +1,17 @@
 ## Unreleased
 
+### Potential Breaking Changes
+
+- There is a small chance of breakage wrt. type inference due to the
+  introduction of `SizeRange`.
+
 ### New Additions
+
+- The strategies in `proptest::collections` now accept a type `SizeRange`
+  which is a wrapper around `Range<usize>`. Convertions from types
+  such as `usize` and `Range<usize>` are provided to make the interface
+  ergonomic to use. Users may also use the `proptest::collections::size_bounds`
+  function to explicitly construct the type.
 
 - A `.prop_map_into()` operation on all strategies that map
   using `Into<OutputType>`. This is a clerarer and cheaper
