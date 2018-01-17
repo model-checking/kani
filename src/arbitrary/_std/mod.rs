@@ -23,8 +23,8 @@ mod env;
 mod ffi;
 mod fmt;
 mod fs;
-mod hash;
 */
+mod hash;
 #[cfg(feature = "unstable")]
 mod heap;
 /*
