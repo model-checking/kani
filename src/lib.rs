@@ -1426,6 +1426,12 @@
 
 #![cfg_attr(feature = "unstable", feature(i128_type))]
 
+/*
+#[cfg(feature = "frunk")]
+#[macro_use]
+extern crate frunk_core;
+*/
+
 extern crate bit_set;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate quick_error;

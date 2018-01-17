@@ -12,15 +12,46 @@
 //!
 //! [`Arbitrary`]: trait.Arbitrary.html
 
+use strategy::{Map, ValueFor};
+use strategy::statics;
+
+#[cfg(feature = "frunk")]
+#[macro_use] mod product_frunk;
+
+#[cfg(not(feature = "frunk"))]
+#[macro_use] mod product_tuple;
+
 mod traits;
 
-#[macro_use]
-pub mod functor;
+#[macro_use] pub mod functor;
 
-#[macro_use]
-mod macros;
+#[macro_use] mod macros;
 
 mod primitives;
+mod arrays;
+mod tuples;
+mod _std;
 
-pub use self::primitives::*;
 pub use self::traits::*;
+
+//==============================================================================
+// SMapped + Mapped aliases to make documentation clearer.
+//==============================================================================
+
+pub(crate) type SFnPtrMap<S, O> = statics::Map<S, fn(ValueFor<S>) -> O>;
+
+/// A static map from a strategy of `I` to `O`.
+///
+/// # Stability
+///
+/// This is provided to make documentation more readable.
+/// Do not rely on it existing in your own code.
+pub type SMapped<I, O> = statics::Map<StrategyFor<I>, fn(I) -> O>;
+
+/// A normal map from a strategy of `I` to `O`.
+///
+/// # Stability
+///
+/// This is provided to make documentation more readable.
+/// Do not rely on it existing in your own code.
+pub type Mapped<I, O> = Map<StrategyFor<I>, fn(I) -> O>;

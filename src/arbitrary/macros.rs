@@ -71,9 +71,10 @@ macro_rules! wrap_ctor {
         wrap_ctor!([$($bound)*] $wrap, $wrap::new);
     };
     ([$($bound : tt)*] $wrap: ident, $maker: expr) => {
-        arbitrary!([A: $crate::Arbitrary + $($bound)*] $wrap<A>,
-            $crate::SMapped<A, Self>, A::Parameters;
-            args => $crate::any_with_smap(args, $maker));
+        arbitrary!([A: $crate::arbitrary::Arbitrary + $($bound)*] $wrap<A>,
+            $crate::arbitrary::SMapped<A, Self>, A::Parameters;
+            args => $crate::strategy::statics::static_map(
+                $crate::arbitrary::any_with::<A>(args), $maker));
 
         lift1!([$($bound)*] $wrap<A>; $maker);
     };
@@ -87,8 +88,7 @@ macro_rules! wrap_from {
         arbitrary!([A: $crate::arbitrary::Arbitrary + $($bound)*] $wrap<A>,
             $crate::strategy::MapInto<A::Strategy, Self>, A::Parameters;
             args => $crate::strategy::Strategy::prop_map_into(
-                        $crate::arbitrary::any_with::<A>(args)
-                    ));
+                $crate::arbitrary::any_with::<A>(args)));
 
         lift1!([$($bound)*] $wrap<A>);
     };
