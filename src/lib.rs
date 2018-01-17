@@ -1424,7 +1424,10 @@
 
 #![deny(missing_docs)]
 
-#![cfg_attr(feature = "unstable", feature(i128_type))]
+#![cfg_attr(feature = "unstable", feature(
+      i128_type
+    , i128
+))]
 
 /*
 #[cfg(feature = "frunk")]

@@ -26,7 +26,7 @@ unstable = []
 [dependencies]
 bit-set = "0.4.0"
 quick-error = "1.2.1"
-rand = "0.4.2"
+rand = { version = "0.4.2", features = ["nightly"] }
 regex-syntax = "0.4.2"
 lazy_static = "1.0.0"
 
