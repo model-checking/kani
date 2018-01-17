@@ -1427,6 +1427,7 @@
 #![cfg_attr(feature = "unstable", feature(
       i128_type
     , i128
+    , allocator_api
 ))]
 
 /*
