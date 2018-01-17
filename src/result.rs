@@ -35,6 +35,9 @@ use std::marker::PhantomData;
 use strategy::*;
 use test_runner::*;
 
+// Re-export the type for easier usage.
+pub use option::{prob, Probability};
+
 struct WrapOk<T, E>(PhantomData<T>, PhantomData<E>);
 impl<T, E> Clone for WrapOk<T, E> {
     fn clone(&self) -> Self { *self }
@@ -138,10 +141,11 @@ pub fn maybe_ok<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeOk<T, E> {
 /// that `Ok` is initially chosen.
 ///
 /// Generated values shrink to `Err`.
-pub fn maybe_ok_weighted<T : Strategy, E : Strategy>(
-    probability_of_ok: f64, t: T, e: E) -> MaybeOk<T, E>
+pub fn maybe_ok_weighted<T : Strategy, E : Strategy, P: Into<Probability>>(
+    probability_of_ok: P, t: T, e: E) -> MaybeOk<T, E>
 {
-    let (ok_weight, err_weight) = float_to_weight(probability_of_ok);
+    let prob = probability_of_ok.into().into();
+    let (ok_weight, err_weight) = float_to_weight(prob);
 
     MaybeOk(TupleUnion::new((
         (err_weight, statics::Map::new(e, WrapErr(PhantomData, PhantomData))),
@@ -166,10 +170,11 @@ pub fn maybe_err<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeErr<T, E> {
 /// that `Err` is initially chosen.
 ///
 /// Generated values shrink to `Ok`.
-pub fn maybe_err_weighted<T : Strategy, E : Strategy>(
-    probability_of_err: f64, t: T, e: E) -> MaybeErr<T, E>
+pub fn maybe_err_weighted<T: Strategy, E: Strategy, P: Into<Probability>>(
+    probability_of_err: P, t: T, e: E) -> MaybeErr<T, E>
 {
-    let (err_weight, ok_weight) = float_to_weight(probability_of_err);
+    let prob = probability_of_err.into().into();
+    let (err_weight, ok_weight) = float_to_weight(prob);
 
     MaybeErr(TupleUnion::new((
         (ok_weight, statics::Map::new(t, WrapOk(PhantomData, PhantomData))),

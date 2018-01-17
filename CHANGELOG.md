@@ -10,10 +10,10 @@
 
 ### New Additions
 
-- The strategies in `proptest::option` now accept a type `Probability`
-  which is a wrapper around `f64`. Convertions from types such as `f64` are
-  provided to make the interface ergonomic to use. Users may also use the
-  `proptest::option::prob` function to explicitly construct the type.
+- The strategies in `proptest::option` and ``proptest::result` now accept a type
+  `Probability` which is a wrapper around `f64`. Convertions from types such as
+  `f64` are provided to make the interface ergonomic to use. Users may also use
+  the `proptest::option::prob` function to explicitly construct the type.
 
 - The strategies in `proptest::collections` now accept a type `SizeRange`
   which is a wrapper around `Range<usize>`. Convertions from types
