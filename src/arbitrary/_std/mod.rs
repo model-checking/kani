@@ -31,8 +31,8 @@ mod heap;
 mod io;
 mod iter;
 mod marker;
-mod mem;
 */
+mod mem;
 mod net;
 mod num;
 mod ops;
