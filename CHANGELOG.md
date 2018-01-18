@@ -1,6 +1,25 @@
+## Unreleased
+
+### New Additions
+
+- The `proptest::num::f32` and `proptest::num::f64` modules now have additional
+  constants (e.g., `POSITIVE`, `SUBNORMAL`, `INFINITE`) which can be used to
+  generate subsets of the floating-point domain by class and sign.
+
+### Bug Fixes
+
+- `proptest::num::f32::ANY` and `proptest::num::f64::ANY` now actually produce
+  arbitrary values. Previously, they had the same effect as `0.0..1.0`. While
+  this fix is a very substantial change in behaviour, it was not considered a
+  breaking change since (a) the new behaviour is consistent with the
+  documentation and expectations, (b) it's quite unlikely anyone was depending
+  on the old behaviour since anyone who wanted that range would have written it
+  out, and (c) Proptest isn't generally a transitive dependency so the chance
+  of this update happening "by surprise" is low.
+
 ## 0.4.0
 
-### Potential Breaking Changes
+### Deprecations and Potential Breaking Changes
 
 - `proptest::char::ANY` replaced with `proptest::char::any()`.
   `proptest::char::ANY` is present but deprecated, and will be removed in

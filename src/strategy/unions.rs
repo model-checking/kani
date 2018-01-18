@@ -222,7 +222,7 @@ impl<T> TupleUnion<T> {
     /// must be a 2- to 10-tuple of `(u32, impl Strategy)` pairs where all
     /// strategies ultimately produce the same value. Each `u32` indicates the
     /// relative weight of its corresponding strategy.
-    /// You may use `W<S>` as an alias for `(u32, S>`.
+    /// You may use `W<S>` as an alias for `(u32, S)`.
     ///
     /// Using this constructor directly is discouraged; prefer to use
     /// `prop_oneof!` since it is generally clearer.

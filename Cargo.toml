@@ -24,6 +24,7 @@ default = []
 unstable = []
 
 [dependencies]
+bitflags = "1.0.1"
 bit-set = "0.4.0"
 quick-error = "1.2.1"
 rand = "0.4.2"
