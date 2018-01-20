@@ -474,6 +474,12 @@ proxy_strategy!(::std::sync::Arc<S>);
 /// failing test case, and that repeated calls to `complicate()` will return
 /// `false` only once the "current" value has returned to what it was before
 /// the last call to `simplify()`.
+///
+/// While it would be possible for default do-nothing implementations of
+/// `simplify()` and `complicate()` to be provided, this was not done
+/// deliberately since the majority of strategies will want to define their own
+/// shrinking anyway, and the minority that do not must call it out explicitly
+/// by their own implementation.
 pub trait ValueTree {
     /// The type of the value produced by this `ValueTree`.
     type Value : fmt::Debug;
