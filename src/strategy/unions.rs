@@ -52,7 +52,7 @@ impl<T : Strategy> Union<T> {
     /// Each strategy is assigned a non-zero weight which determines how
     /// frequently that strategy is chosen. For example, a strategy with a
     /// weight of 2 will be chosen twice as frequently as one with a weight of
-    /// 1.
+    /// 1\.
     ///
     /// ## Panics
     ///
