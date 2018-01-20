@@ -23,15 +23,18 @@
 //! crates which enables reusing those implementations with proptest.
 //!
 //! <!-- NOREADME
-//! ## Status of this crate
-//!
+//! NOREADME The funky ampersand stuff here is necessary since pulldown doesn't
+//! NOREADME allow HTML comments to span paragraphs. gen-readme.sh turns
+//! NOREADME these into the appropriate markup.
+//! &H2 Status of this crate
+//! &NL
 //! The majority of the functionality offered by proptest is in active use and
 //! is known to work well.
-//!
+//! &NL
 //! The API is unlikely to see drastic breaking changes, but there may still be
 //! minor breaking changes here and there, particularly when "impl Trait"
 //! becomes stable and after the upcoming redesign of the `rand` crate.
-//!
+//! &NL
 //! See the [changelog](https://github.com/AltSysrq/proptest/blob/master/CHANGELOG.md)
 //! for a full list of substantial historical changes, breaking and otherwise.
 //! NOREADME -->
@@ -1426,6 +1429,7 @@
 
 #![cfg_attr(feature = "unstable", feature(i128_type))]
 
+#[macro_use] extern crate bitflags;
 extern crate bit_set;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate quick_error;
