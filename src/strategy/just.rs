@@ -12,6 +12,13 @@ use std::fmt;
 use strategy::{Strategy, ValueTree, NewTree};
 use test_runner::TestRunner;
 
+macro_rules! noshrink {
+    () => {
+        fn simplify(&mut self) -> bool { false }
+        fn complicate(&mut self) -> bool { false }
+    };
+}
+
 //==============================================================================
 // Just
 //==============================================================================
@@ -37,13 +44,8 @@ impl<T : Clone + fmt::Debug> Strategy for Just<T> {
 
 impl<T : Clone + fmt::Debug> ValueTree for Just<T> {
     type Value = T;
-
-    fn current(&self) -> T {
-        self.0.clone()
-    }
-
-    fn simplify(&mut self) -> bool { false }
-    fn complicate(&mut self) -> bool { false }
+    noshrink!();
+    fn current(&self) -> T { self.0.clone() }
 }
 
 //==============================================================================
@@ -86,15 +88,10 @@ impl<T: fmt::Debug, F: Clone + Fn() -> T> Strategy for LazyJust<T, F> {
     }
 }
 
-impl<V: fmt::Debug, F: Fn() -> V> ValueTree for LazyJust<V, F> {
-    type Value = V;
-
-    fn current(&self) -> Self::Value {
-        (self.function)()
-    }
-
-    fn simplify(&mut self) -> bool { false }
-    fn complicate(&mut self) -> bool { false }
+impl<T: fmt::Debug, F: Fn() -> T> ValueTree for LazyJust<T, F> {
+    type Value = T;
+    noshrink!();
+    fn current(&self) -> Self::Value { (self.function)() }
 }
 
 impl<T, F: Copy + Fn() -> T> Copy for LazyJust<T, F> {}
@@ -105,10 +102,28 @@ impl<T, F: Clone + Fn() -> T> Clone for LazyJust<T, F> {
     }
 }
 
-impl<V, F: Fn() -> V> fmt::Debug for LazyJust<V, F> {
+impl<T, F: Fn() -> T> fmt::Debug for LazyJust<T, F> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("LazyJust")
            .field("function", &"<function>")
            .finish()
     }
+}
+
+//==============================================================================
+// Any `fn() -> T` is a Strategy
+//==============================================================================
+
+// TODO: try 'F: Fn() -> T' instead when we've got specialization.
+
+impl<T: fmt::Debug> Strategy for fn() -> T {
+    type Value = Self;
+
+    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
+}
+
+impl<T: fmt::Debug> ValueTree for fn() -> T {
+    type Value = T;
+    noshrink!();
+    fn current(&self) -> Self::Value { self() }
 }
