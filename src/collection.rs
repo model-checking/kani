@@ -425,8 +425,8 @@ opaque_strategy_wrapper! {
 /// should produce duplicate values.
 pub fn btree_map<K, V, S>(key: K, value: V, size: S) -> BTreeMapStrategy<K, V>
 where
-    K: Strategy + 'static,
-    V: Strategy + 'static,
+    K: Strategy,
+    V: Strategy,
     ValueFor<K>: Ord,
     S: Into<SizeRange>,
 {

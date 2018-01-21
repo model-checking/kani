@@ -174,19 +174,13 @@ for hash_map::IntoIter<A, B> {
 // BTreeMap:
 //==============================================================================
 
-impl<A: Arbitrary + Ord, B: Arbitrary> Arbitrary for BTreeMap<A, B>
-where
-    StrategyFor<A>: 'static,
-    StrategyFor<B>: 'static,
-{
-    valuetree!();
-    type Parameters = RangedParams2<A::Parameters, B::Parameters>;
-    type Strategy = BTreeMapStrategy<A::Strategy, B::Strategy>;
-    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+arbitrary!([A: Arbitrary + Ord, B: Arbitrary] BTreeMap<A, B>,
+    BTreeMapStrategy<A::Strategy, B::Strategy>,
+    RangedParams2<A::Parameters, B::Parameters>;
+    args => {
         let product_unpack![range, a, b] = args;
         btree_map(any_with::<A>(a), any_with::<B>(b), range)
-    }
-}
+    });
 
 lift1!([, K: Ord + Arbitrary + 'static] BTreeMap<K, A>,
     RangedParams1<K::Parameters>;
@@ -211,18 +205,10 @@ for BTreeMap<A, B> {
     }
 }
 
-impl<A: Arbitrary + Ord, B: Arbitrary> Arbitrary for btree_map::IntoIter<A, B>
-where
-    StrategyFor<A>: 'static,
-    StrategyFor<B>: 'static,
-{
-    valuetree!();
-    type Parameters = <BTreeMap<A, B> as Arbitrary>::Parameters;
-    type Strategy = SMapped<BTreeMap<A, B>, Self>;
-    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
-        static_map(arbitrary_with(args), BTreeMap::into_iter)        
-    }
-}
+arbitrary!([A: Arbitrary + Ord, B: Arbitrary] btree_map::IntoIter<A, B>,
+    SMapped<BTreeMap<A, B>, Self>,
+    <BTreeMap<A, B> as Arbitrary>::Parameters;
+    args => static_map(any_with::<BTreeMap<A, B>>(args), BTreeMap::into_iter));
 
 impl<A: fmt::Debug + Ord + 'static, B: fmt::Debug + 'static>
     functor::ArbitraryF2<A, B>
