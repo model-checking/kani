@@ -16,6 +16,9 @@ use std::ops::Range;
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
+use collection::vec;
+
+const VEC_MAX: usize = ::std::u16::MAX as usize;
 
 macro_rules! impl_wrap_char {
     ($type: ty, $mapper: expr) => {
@@ -34,26 +37,14 @@ impl_wrap_char!(ToUppercase, char::to_uppercase);
 
 #[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,
-    Flatten<Mapped<u16, SMapped<Vec<u8>, Self>>>;
-    {
-        use collection::size_range;
-        any::<u16>().prop_flat_map(|size| static_map(any_with::<Vec<u8>>(
-            product_pack![size_range(..size as usize), Default::default()]),
-            decode_utf8
-        ))
-    }
+    SMapped<Vec<u8>, Self>;
+    static_map(vec(any::<u8>(), ..VEC_MAX), decode_utf8)
 );
 
 #[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
-    Flatten<Mapped<u16, SMapped<Vec<u16>, Self>>>;
-    {
-        use collection::size_range;
-        any::<u16>().prop_flat_map(|size| static_map(any_with::<Vec<u16>>(
-            product_pack![size_range(..size as usize), Default::default()]),
-            decode_utf16
-        ))
-    }
+    SMapped<Vec<u16>, Self>;
+    static_map(vec(any::<u16>(), ..VEC_MAX), decode_utf16)
 );
 
 arbitrary!(ParseCharError, IndFlatten<Mapped<bool, Just<Self>>>;
