@@ -22,10 +22,7 @@ lazy_just!(BorrowError, || {
         let _rc = RefCell::new(());
         let _bm = _rc.borrow_mut();
         let _tb = _rc.try_borrow();
-        let ret = match _rc.try_borrow() {
-            Ok(_) => panic!("should never happen!"),
-            Err(e) => e,
-        };
+        let ret = _rc.try_borrow().expect_err("reborrowed RefCell");
         ret
     }
 });
@@ -36,10 +33,7 @@ lazy_just!(BorrowMutError, || {
         let _rc = RefCell::new(());
         let _bm = _rc.borrow_mut();
         let _tb = _rc.try_borrow();
-        let ret = match _rc.try_borrow_mut() {
-            Ok(_) => panic!("should never happen!"),
-            Err(e) => e,
-        };
+        let ret = _rc.try_borrow_mut().expect_err("reborrowed RefCell");
         ret
     }
 });
