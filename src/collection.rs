@@ -116,6 +116,8 @@ impl Add<usize> for SizeRange {
 
 /// The minimum and maximum range/bounds on the size of a collection.
 /// The interval must form a subset of `[0, std::usize::MAX)`.
+///
+/// The `Default` is `0..100`.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct SizeRange(Range<usize>);
 

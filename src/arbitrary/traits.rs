@@ -276,7 +276,7 @@ where
 /// [`any_with::<A>(args)`] instead.
 ///
 /// For clarity, it is often a good idea to specify the type generated, and
-/// so using [`any::<A>()`] can be a good idea.
+/// so using [`any_with::<A>(args)`] can be a good idea.
 ///
 /// If you don't want to specify any arguments and instead use the default
 /// behavior, you should use [`arbitrary()`].
