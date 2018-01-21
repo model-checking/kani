@@ -35,8 +35,8 @@ mod test {
     arbitrary!(DummyStruct; DummyStruct);
 
     no_panic_test!(
+        //manually_drop       => ManuallyDrop<u8>, // Trivial destructor.
         discriminant_struct => Discriminant<super::DummyStruct>,
-        discriminant_enum   => Discriminant<::std::num::FpCategory>,
-        manually_drop       => ManuallyDrop<u8> // Trivial destructor.
+        discriminant_enum   => Discriminant<::std::num::FpCategory>
     );
 }

@@ -16,9 +16,6 @@ use std::ops::Range;
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
-use collection::vec;
-
-const VEC_MAX: usize = ::std::u16::MAX as usize;
 
 macro_rules! impl_wrap_char {
     ($type: ty, $mapper: expr) => {
@@ -34,6 +31,12 @@ impl_wrap_char!(EscapeUnicode, char::escape_unicode);
 impl_wrap_char!(ToLowercase, char::to_lowercase);
 #[cfg(feature = "unstable")]
 impl_wrap_char!(ToUppercase, char::to_uppercase);
+
+#[cfg(feature = "unstable")]
+use collection::vec;
+
+#[cfg(feature = "unstable")]
+const VEC_MAX: usize = ::std::u16::MAX as usize;
 
 #[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,

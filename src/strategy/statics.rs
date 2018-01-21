@@ -240,7 +240,7 @@ mod test {
             fn apply(&self, v: i32) -> i32 { v * 2 }
         }
 
-        let input = Map::new((0..10), MyMap);
+        let input = Map::new(0..10, MyMap);
 
         TestRunner::default()
             .run(&input, |&v| {
