@@ -23,8 +23,10 @@ lift1!(['static] Discriminant<A>;
     base => static_map(base, |x| discriminant(&x))
 );
 
-// The user is responsible for dropping!
-wrap_ctor!(ManuallyDrop);
+// Not supported at the moment since the user won't be able to call
+// https://doc.rust-lang.org/nightly/std/mem/union.ManuallyDrop.html#method.drop
+// in any case so the use case is not great for this.
+//wrap_ctor!(ManuallyDrop);
 
 #[cfg(test)]
 mod test {
