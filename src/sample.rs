@@ -25,6 +25,9 @@ use num;
 use strategy::*;
 use test_runner::*;
 
+/// Re-exported to make usage more ergonomic.
+pub use collection::{SizeRange, size_range};
+
 /// Sample subsequences whose size are within `size` from the given collection
 /// `values`.
 ///
@@ -42,10 +45,15 @@ use test_runner::*;
 /// `values`.
 ///
 /// Panics if `size` is a zero-length range.
-pub fn subsequence<T, A>(values: A, size: Range<usize>) -> Subsequence<T>
-where A : 'static + Into<Cow<'static, [T]>>, T : Clone + 'static {
+pub fn subsequence<T, A, S>(values: A, size: S) -> Subsequence<T>
+where
+    A : 'static + Into<Cow<'static, [T]>>,
+    T : Clone + 'static,
+    S : Into<SizeRange>
+{
     let values = values.into();
     let len = values.len();
+    let size: Range<usize> = size.into().into();
 
     assert!(size.start != size.end, "Zero-length range passed to subsequence");
     assert!(size.end <= len + 1,
