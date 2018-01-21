@@ -1428,6 +1428,7 @@
 #![deny(missing_docs)]
 
 #![cfg_attr(feature = "unstable", feature(i128_type))]
+#![cfg_attr(feature = "unstable", feature(i128))]
 
 #[macro_use] extern crate bitflags;
 extern crate bit_set;

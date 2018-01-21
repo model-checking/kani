@@ -21,7 +21,7 @@ travis-ci = { repository = "AltSysrq/proptest" }
 default = []
 
 # Enables unstable features of Rust.
-unstable = []
+unstable = ["rand/i128_support"]
 
 [dependencies]
 bitflags = "1.0.1"
