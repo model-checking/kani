@@ -396,7 +396,7 @@
 //!     # /* NOREADME
 //!     #[test]
 //!     # NOREADME */
-//!     fn i64_abs_is_never_negative(a in prop::num::i64::ANY) {
+//!     fn i64_abs_is_never_negative(a in any::<i64>()) {
 //!         assert!(a.abs() >= 0);
 //!     }
 //! }
@@ -902,8 +902,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref v in prop::num::u32::ANY.prop_map(
-//!                          |v| v.to_string())) {
+//!     fn test_do_stuff(ref v in any::<u32>().prop_map(|v| v.to_string())) {
 //!         do_stuff(v);
 //!     }
 //! }
@@ -946,7 +945,7 @@
 //!     # */
 //!     fn test_do_stuff(
 //!         ref order in
-//!         (prop::num::u32::ANY.prop_map(|v| v.to_string()),
+//!         (any::<u32>().prop_map(|v| v.to_string()),
 //!          "[a-z]*", 1..1000u32).prop_map(
 //!              |(id, item, quantity)| Order { id, item, quantity })
 //!     ) {
@@ -983,7 +982,7 @@
 //! # }
 //!
 //! fn arb_order(max_quantity: u32) -> BoxedStrategy<Order> {
-//!     (prop::num::u32::ANY.prop_map(|v| v.to_string()),
+//!     (any::<u32>().prop_map(|v| v.to_string()),
 //!      "[a-z]*", 1..max_quantity)
 //!     .prop_map(|(id, item, quantity)| Order { id, item, quantity })
 //!     .boxed()
@@ -1044,7 +1043,7 @@
 //! # }
 //!
 //! prop_compose! {
-//!     fn arb_order_id()(id in prop::num::u32::ANY) -> String {
+//!     fn arb_order_id()(id in any::<u32>()) -> String {
 //!         id.to_string()
 //!     }
 //! }
@@ -1191,6 +1190,7 @@
 //! filter.
 //!
 //! ### Generating Recursive Data
+//! [generating-recursive-data]: #generating-recursive-data
 //!
 //! Randomly generating recursive data structures is trickier than it sounds.
 //! For example, the below is a naïve attempt at generating a JSON AST by using
@@ -1216,8 +1216,8 @@
 //! fn arb_json() -> BoxedStrategy<Json> {
 //!     prop_oneof![
 //!         Just(Json::Null),
-//!         prop::bool::ANY.prop_map(Json::Bool),
-//!         prop::num::f64::ANY.prop_map(Json::Number),
+//!         any::<bool>().prop_map(Json::Bool),
+//!         any::<f64>().prop_map(Json::Number),
 //!         ".*".prop_map(Json::String),
 //!         prop::collection::vec(arb_json(), 0..10).prop_map(Json::Array),
 //!         prop::collection::hash_map(
@@ -1260,8 +1260,8 @@
 //! fn arb_json() -> BoxedStrategy<Json> {
 //!     let leaf = prop_oneof![
 //!         Just(Json::Null),
-//!         prop::bool::ANY.prop_map(Json::Bool),
-//!         prop::num::f64::ANY.prop_map(Json::Number),
+//!         any::<bool>().prop_map(Json::Bool),
+//!         any::<f64>().prop_map(Json::Number),
 //!         ".*".prop_map(Json::String),
 //!     ];
 //!     leaf.prop_recursive(
@@ -1369,6 +1369,21 @@
 //! }
 //! # fn main() { }
 //! ```
+//!
+//! ### Defining a canonical `Strategy` for a type
+//!
+//! We previously used the function `any` as in `any::<u32>()` to generate a
+//! strategy for all `u32`s. This function works with the trait `Arbitrary`,
+//! which QuickCheck users may be familiar with. In proptest, this trait
+//! is already implemented for most owned types in the standard library,
+//! but you can of course implement it for your own types.
+//!
+//! In some cases, where it makes sense to define a canonical strategy, such
+//! as in the [JSON AST example][generating-recursive-data], it is a good
+//! idea to implement `Arbitrary`.
+//!
+//! Stay tuned for more information about this. Soon you will be able to
+//! derive `Arbitrary` for a lot of cases.
 //!
 //! ### Configuring the number of tests cases requried
 //!
