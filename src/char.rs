@@ -13,7 +13,7 @@
 //! biased to particular values known to be difficult to handle in various
 //! circumstances.
 //!
-//! The main things of interest are `ANY` to generate truly arbitrary
+//! The main things of interest are `any()` to generate truly arbitrary
 //! characters, and `range()` and `ranges()` to select characters from
 //! inclusive ranges.
 

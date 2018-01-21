@@ -491,6 +491,12 @@ proxy_strategy!(::std::sync::Arc<S>);
 /// failing test case, and that repeated calls to `complicate()` will return
 /// `false` only once the "current" value has returned to what it was before
 /// the last call to `simplify()`.
+///
+/// While it would be possible for default do-nothing implementations of
+/// `simplify()` and `complicate()` to be provided, this was not done
+/// deliberately since the majority of strategies will want to define their own
+/// shrinking anyway, and the minority that do not must call it out explicitly
+/// by their own implementation.
 pub trait ValueTree {
     /// The type of the value produced by this `ValueTree`.
     type Value : fmt::Debug;
@@ -628,6 +634,18 @@ impl Default for CheckStrategySanityOptions {
 pub fn check_strategy_sanity<S : Strategy>(
     strategy: S, options: Option<CheckStrategySanityOptions>)
 where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
+    // Like assert_eq!, but also pass if both values do not equal themselves.
+    // This allows the test to work correctly with things like NaN.
+    macro_rules! assert_same {
+        ($a:expr, $b:expr, $($stuff:tt)*) => { {
+            let a = $a;
+            let b = $b;
+            if a == a || b == b {
+                assert_eq!(a, b, $($stuff)*);
+            }
+        } }
+    }
+
     let options = options.unwrap_or_else(CheckStrategySanityOptions::default);
     let mut runner = TestRunner::default();
 
@@ -690,40 +708,40 @@ where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
                 }
             }
 
-            assert_eq!(before_simplified.current(), complicated.current(),
-                       "Calling simplify(), then complicate() until it \
-                        returned false, did not return to the value before \
-                        simplify. Expected:\n\
-                        {:#?}\n\
-                        Actual:\n\
-                        {:#?}\n\
-                        Internal state after {} calls to simplify():\n\
-                        {:#?}\n\
-                        Internal state after another call to simplify():\n\
-                        {:#?}\n\
-                        Internal state after {} subsequent calls to \
-                        complicate():\n\
-                        {:#?}",
-                       before_simplified.current(), complicated.current(),
-                       num_simplifies, before_simplified, before_complicated,
-                       num_complications + 1, complicated);
+            assert_same!(before_simplified.current(), complicated.current(),
+                         "Calling simplify(), then complicate() until it \
+                          returned false, did not return to the value before \
+                          simplify. Expected:\n\
+                          {:#?}\n\
+                          Actual:\n\
+                          {:#?}\n\
+                          Internal state after {} calls to simplify():\n\
+                          {:#?}\n\
+                          Internal state after another call to simplify():\n\
+                          {:#?}\n\
+                          Internal state after {} subsequent calls to \
+                          complicate():\n\
+                          {:#?}",
+                         before_simplified.current(), complicated.current(),
+                         num_simplifies, before_simplified, before_complicated,
+                         num_complications + 1, complicated);
 
             for iter in 1..16 {
-                assert_eq!(prev_complicated.current(), complicated.current(),
-                           "complicate() returned false but changed the output \
-                            value anyway.\n\
-                            Old value:\n\
-                            {:#?}\n\
-                            New value:\n\
-                            {:#?}\n\
-                            Old internal state:\n\
-                            {:#?}\n\
-                            New internal state after {} calls to complicate()\
-                            including the :\n\
-                            {:#?}",
-                           prev_complicated.current(),
-                           complicated.current(),
-                           prev_complicated, iter, complicated);
+                assert_same!(prev_complicated.current(), complicated.current(),
+                             "complicate() returned false but changed the output \
+                              value anyway.\n\
+                              Old value:\n\
+                              {:#?}\n\
+                              New value:\n\
+                              {:#?}\n\
+                              Old internal state:\n\
+                              {:#?}\n\
+                              New internal state after {} calls to complicate()\
+                              including the :\n\
+                              {:#?}",
+                             prev_complicated.current(),
+                             complicated.current(),
+                             prev_complicated, iter, complicated);
 
                 assert!(!complicated.complicate(),
                         "complicate() returned true after having returned \
@@ -744,20 +762,20 @@ where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
         }
 
         for iter in 0..16 {
-            assert_eq!(before_simplified.current(), state.current(),
-                       "simplify() returned false but changed the output \
-                        value anyway.\n\
-                        Old value:\n\
-                        {:#?}\n\
-                        New value:\n\
-                        {:#?}\n\
-                        Previous internal state:\n\
-                        {:#?}\n\
-                        New internal state after calling simplify() {} times:\n\
-                        {:#?}",
-                       before_simplified.current(),
-                       state.current(),
-                       before_simplified, iter, state);
+            assert_same!(before_simplified.current(), state.current(),
+                         "simplify() returned false but changed the output \
+                          value anyway.\n\
+                          Old value:\n\
+                          {:#?}\n\
+                          New value:\n\
+                          {:#?}\n\
+                          Previous internal state:\n\
+                          {:#?}\n\
+                          New internal state after calling simplify() {} times:\n\
+                          {:#?}",
+                         before_simplified.current(),
+                         state.current(),
+                         before_simplified, iter, state);
 
             if state.simplify() {
                 panic!("simplify() returned true after having returned false. \
