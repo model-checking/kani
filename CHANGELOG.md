@@ -54,9 +54,11 @@
 
 - Relaxed the constraints of `btree_map` removing `'static`.
 
+## 0.4.2
+
 ### Bug Fixes
 
-- Fixed support for `u128` and `i128` on nightly.
+- The `unstable` feature now works again.
 
 ## 0.4.1
 

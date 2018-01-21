@@ -1,6 +1,6 @@
 [package]
 name = "proptest"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Jason Lingle"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
@@ -21,7 +21,7 @@ travis-ci = { repository = "AltSysrq/proptest" }
 default = []
 
 # Enables unstable features of Rust.
-unstable = ["rand/nightly"]
+unstable = ["rand/i128_support"]
 
 [dependencies]
 bitflags = "1.0.1"
