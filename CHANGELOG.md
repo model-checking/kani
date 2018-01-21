@@ -50,6 +50,10 @@
   proptest for unit tests with manual input space partition where `fn() -> T`
   provides fixtures.
 
+### Minor changes
+
+- Relaxed the constraints of `btree_map` removing `'static`.
+
 ### Bug Fixes
 
 - Fixed support for `u128` and `i128` on nightly.

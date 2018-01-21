@@ -26,6 +26,8 @@ use arbitrary::*;
 
 wrap_from!(Arc);
 
+// Not doing Weak because .upgrade() would always return None.
+
 #[cfg(not(feature = "unstable"))]
 wrap_ctor!(Mutex);
 #[cfg(feature = "unstable")]

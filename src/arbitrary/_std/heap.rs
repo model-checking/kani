@@ -20,7 +20,7 @@ arbitrary!(CannotReallocInPlace; CannotReallocInPlace);
 arbitrary!(Heap; Heap);
 
 // Not Debug.
-//generator!(System, || System);
+//lazy_just!(System, || System);
 
 arbitrary!(Layout, BoxedStrategy<Layout>;
     (0u8..32u8).prop_flat_map(|align_power| {

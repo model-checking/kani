@@ -10,6 +10,7 @@
 //! Arbitrary implementations for libstd.
 
 mod ascii;
+mod borrow;
 mod boxed;
 mod cell;
 mod char;
