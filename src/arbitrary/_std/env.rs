@@ -71,15 +71,14 @@ fn make_utf16_invalid(buf: &mut Vec<u16>, p: usize) {
 #[cfg(target_os = "windows")]
 fn osstring_invalid_string() -> BoxedStrategy<OsString> {
     use std::os::windows::ffi::OsStringExt;
-    use collection::vec;
-
-    any::<u16>().prop_flat_map(|vlen| {
-        let len = vlen as usize;
-        let sbuf = vec(..::std::u16::MAX, len..len + 1);
-        static_map((sbuf, 0..len - 1), |(mut buf, p)| {
-            make_utf16_invalid(&mut buf, p);
-            OsString::from_wide(buf.as_slice()).into_string().unwrap_err()
-        })
+    let size = 0..::std::u16::MAX as usize;
+    let vec_gen = ::collection::vec(..::std::u16::MAX, size.clone());
+    (size, vec_gen).prop_map(|(p, mut sbuf)| {
+        // Not quite a uniform distribution due to clamping,
+        // but probably good enough
+        let p = ::std::cmp::min(p, sbuf.len() - 1);
+        make_utf16_invalid(&mut sbuf, p);
+        OsString::from_wide(sbuf.as_slice()).into_string().unwrap_err()
     }).boxed()
 }
 
