@@ -10,19 +10,19 @@
 //! Provides higher order `Arbitrary` traits.
 //! This is mainly for use by `proptest_derive`.
 //!
-/// ## Stability note
-///
-/// This trait is mainly defined for `proptest_derive` to simplify the
-/// mechanics of deriving recursive types. If you have custom containers
-/// and want to support recursive for those, it is a good idea to implement
-/// this trait.
-///
-/// There are clearer and terser ways that work better with
-/// inference such as using `proptest::collection::vec(..)`
-/// to achieve the same result.
-///
-/// For these reasons, the traits here are deliberatly
-/// not exported in a convenient way.
+//! ## Stability note
+//!
+//! This trait is mainly defined for `proptest_derive` to simplify the
+//! mechanics of deriving recursive types. If you have custom containers
+//! and want to support recursive for those, it is a good idea to implement
+//! this trait.
+//!
+//! There are clearer and terser ways that work better with
+//! inference such as using `proptest::collection::vec(..)`
+//! to achieve the same result.
+//!
+//! For these reasons, the traits here are deliberatly
+//! not exported in a convenient way.
 
 use std::fmt;
 
