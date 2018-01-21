@@ -12,19 +12,26 @@
 use bool;
 use char;
 use num::{isize, usize, f32, f64, i16, i32, i64, i8, u16, u32, u64, u8};
+#[cfg(feature = "unstable")]
+use num::{u128, i128};
 
 arbitrary!(
-    bool, f32, f64,
+    bool,
     i8, i16, i32, i64, isize,
     u8, u16, u32, u64, usize
 );
 
-/*
-TODO: deal with this...
-
 #[cfg(feature = "unstable")]
 arbitrary!(u128, i128);
-*/
+
+// Note that for floating point types we limit the space since a lot of code
+// isn't prepared for (and is not intended to be) things like NaN and infinity.
+arbitrary!(f32, f32::Any; {
+    f32::POSITIVE | f32::NEGATIVE | f32::ZERO | f32::SUBNORMAL | f32::NORMAL
+});
+arbitrary!(f64, f64::Any; {
+    f64::POSITIVE | f64::NEGATIVE | f64::ZERO | f64::SUBNORMAL | f64::NORMAL
+});
 
 arbitrary!(char, char::CharStrategy<'static>; char::any());
 
