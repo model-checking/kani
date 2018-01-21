@@ -8,6 +8,9 @@ rust:
 - nightly
 
 matrix:
+  include:
+    - rust: nightly
+      env: FEATURES=unstable
   allow_failures:
     - rust: nightly
 
