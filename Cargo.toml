@@ -21,13 +21,13 @@ travis-ci = { repository = "AltSysrq/proptest" }
 default = []
 
 # Enables unstable features of Rust.
-unstable = []
+unstable = ["rand/nightly"]
 
 [dependencies]
 bitflags = "1.0.1"
 bit-set = "0.4.0"
 quick-error = "1.2.1"
-rand = { version = "0.4.2", features = ["nightly"] }
+rand = "0.4.2"
 regex-syntax = "0.4.2"
 lazy_static = "1.0.0"
 
