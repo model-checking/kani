@@ -216,7 +216,7 @@ mod test {
             fn apply(&self, &v: &i32) -> bool { 0 == v % 3 }
         }
 
-        let input = Filter::new((0..256), "%3".into(), MyFilter);
+        let input = Filter::new(0..256, "%3".into(), MyFilter);
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
