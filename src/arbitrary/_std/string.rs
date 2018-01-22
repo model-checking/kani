@@ -75,9 +75,13 @@ arbitrary!(FromUtf8Error, SFnPtrMap<BoxedStrategy<Vec<u8>>, Self>;
     static_map(not_utf8_bytes(true), |bs| String::from_utf8(bs).unwrap_err())
 );
 
-// This could be faster.. The main cause seems to be generation of
-// Vec<char>. any::<u8>() instead of any::<u16>() speeds it up considerably.
+/// This strategy produces sequences of bytes that are guaranteed to be illegal
+/// wrt. UTF-8 with the goal of producing a suffix of bytes in the end of
+/// an otherwise legal UTF-8 string that causes the string to be illegal.
+/// This is used primarily to generate the `Utf8Error` type and similar.
 pub(crate) fn not_utf8_bytes(allow_null: bool) -> BoxedStrategy<Vec<u8>> {
+    // This could be faster.. The main cause seems to be generation of
+    // Vec<char>. any::<u8>() instead of any::<u16>() speeds it up considerably.
     (any::<u8>(), gen_el_bytes(allow_null))
         .prop_flat_map(move |(valid_up_to, el_bytes)| {
             let bounds: SizeRange = (valid_up_to as usize).into();
@@ -96,6 +100,9 @@ pub(crate) fn not_utf8_bytes(allow_null: bool) -> BoxedStrategy<Vec<u8>> {
         }).boxed()
 }
 
+/// Stands for "error_length" bytes and contains a suffix of bytes that
+/// will cause the whole string to become invalid UTF-8.
+/// See `gen_el_bytes` for more details.
 #[derive(Debug)]
 enum ELBytes {
     B1([u8; 1]),
@@ -118,19 +125,19 @@ impl<'a> IntoIterator for &'a ELBytes {
     }
 }
 
-fn b1(a: u8) -> ELBytes { ELBytes::B1([a]) }
-fn b2(a: (u8, u8)) -> ELBytes { ELBytes::B2([a.0, a.1]) }
-fn b3(a: ((u8, u8), u8)) -> ELBytes { ELBytes::B3([(a.0).0, (a.0).1, a.1]) }
-fn b4(a: ((u8, u8), u8, u8)) -> ELBytes {
-    ELBytes::B4([(a.0).0, (a.0).1, a.1, a.2])
-}
-
 // By analysis of run_utf8_validation defined at:
 // https://doc.rust-lang.org/nightly/src/core/str/mod.rs.html#1429
 // we know that .error_len() \in {None, Some(1), Some(2), Some(3)}.
 // We represent this with the range [0..4) and generate a valid
 // sequence from that.
 fn gen_el_bytes(allow_null: bool) -> BoxedStrategy<ELBytes> {
+    fn b1(a: u8) -> ELBytes { ELBytes::B1([a]) }
+    fn b2(a: (u8, u8)) -> ELBytes { ELBytes::B2([a.0, a.1]) }
+    fn b3(a: ((u8, u8), u8)) -> ELBytes { ELBytes::B3([(a.0).0, (a.0).1, a.1]) }
+    fn b4(a: ((u8, u8), u8, u8)) -> ELBytes {
+        ELBytes::B4([(a.0).0, (a.0).1, a.1, a.2])
+    }
+
     /*
     // https://tools.ietf.org/html/rfc3629
     static UTF8_CHAR_WIDTH: [u8; 256] = [
