@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use strategy::*;
 use strategy::statics::static_map;
-use collection::SizeRange;
+use collection;
 use arbitrary::*;
 
 /// Wraps the regex that forms the `Strategy` for `String` so that a sensible
@@ -80,24 +80,19 @@ arbitrary!(FromUtf8Error, SFnPtrMap<BoxedStrategy<Vec<u8>>, Self>;
 /// an otherwise legal UTF-8 string that causes the string to be illegal.
 /// This is used primarily to generate the `Utf8Error` type and similar.
 pub(crate) fn not_utf8_bytes(allow_null: bool) -> BoxedStrategy<Vec<u8>> {
-    // This could be faster.. The main cause seems to be generation of
-    // Vec<char>. any::<u8>() instead of any::<u16>() speeds it up considerably.
-    (any::<u8>(), gen_el_bytes(allow_null))
-        .prop_flat_map(move |(valid_up_to, el_bytes)| {
-            let bounds: SizeRange = (valid_up_to as usize).into();
-            any_with::<Vec<char>>(product_pack![bounds, Default::default()])
-                .prop_map(move |p: Vec<char>| {
-                let iter = p.iter();
-                let string = if allow_null {
-                    iter.collect::<String>()
-                } else {
-                    iter.filter(|&&x| x != '\u{0}').collect::<String>()
-                };
-                let mut bytes = string.into_bytes();
-                bytes.extend(el_bytes.into_iter());
-                bytes
-            })
-        }).boxed()
+    let prefix = collection::vec(any::<char>(), ..::std::u16::MAX as usize);
+    let suffix = gen_el_bytes(allow_null);
+    (prefix, suffix).prop_map(move |(prefix_bytes, el_bytes)| {
+        let iter = prefix_bytes.iter();
+        let string: String = if allow_null {
+            iter.collect()
+        } else {
+            iter.filter(|&&x| x != '\u{0}').collect()
+        };
+        let mut bytes = string.into_bytes();
+        bytes.extend(el_bytes.into_iter());
+        bytes
+    }).boxed()
 }
 
 /// Stands for "error_length" bytes and contains a suffix of bytes that
