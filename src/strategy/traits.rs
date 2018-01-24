@@ -698,7 +698,7 @@ where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
                 prev_complicated = complicated.clone();
                 num_complications += 1;
 
-                if num_complications > 65536 {
+                if num_complications > 65_536 {
                     panic!("complicate() returned true over 65536 times in a \
                             row; aborting due to possible infinite loop. \
                             If this is not an infinite loop, it may be \
@@ -752,7 +752,7 @@ where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
             }
 
             num_simplifies += 1;
-            if num_simplifies > 65536 {
+            if num_simplifies > 65_536 {
                 panic!("simplify() returned true over 65536 times in a row, \
                         aborting due to possible infinite loop. If this is not \
                         an infinite loop, it may be necessary to reconsider \

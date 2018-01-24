@@ -283,13 +283,13 @@ unsigned_integer_bin_search!(u128);
 
 bitflags! {
     pub(crate) struct FloatTypes: u32 {
-        const POSITIVE          = 0b0000001;
-        const NEGATIVE          = 0b0000010;
-        const NORMAL            = 0b0000100;
-        const SUBNORMAL         = 0b0001000;
-        const ZERO              = 0b0010000;
-        const INFINITE          = 0b0100000;
-        const QUIET_NAN         = 0b1000000;
+        const POSITIVE          = 0b000_0001;
+        const NEGATIVE          = 0b000_0010;
+        const NORMAL            = 0b000_0100;
+        const SUBNORMAL         = 0b000_1000;
+        const ZERO              = 0b001_0000;
+        const INFINITE          = 0b010_0000;
+        const QUIET_NAN         = 0b100_0000;
         const ANY =
             Self::POSITIVE.bits |
             Self::NEGATIVE.bits |
