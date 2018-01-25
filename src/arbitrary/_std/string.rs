@@ -160,13 +160,34 @@ fn gen_el_bytes(allow_null: bool) -> BoxedStrategy<ELBytes> {
     const TAG_CONT_U8: u8 = 0b1000_0000;
     */
 
+    // Continuation byte:
     let succ_byte  = 0x80u8..0xC0u8;
+
+    // Do we allow the nul byte or not?
     let start_byte = if allow_null { 0x00u8 } else { 0x01u8 };
+
+    // Invalid continuation byte:
     let fail_byte  = prop_oneof![start_byte..0x7Fu8, 0xC1u8..];
+
+    // Matches zero in the UTF8_CHAR_WIDTH table above.
     let byte0_w0   = prop_oneof![0x80u8..0xC0u8, 0xF5u8..];
+
+    // Start of a 3 (width) byte sequence:
+    // Leads here: https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1479
     let byte0_w2   = 0xC2u8..0xE0u8;
+
+    // Start of a 3 (width) byte sequence:
+    // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1484
+    // See the left column in the match.
     let byte0_w3   = 0xE0u8..0xF0u8;
+
+    // Start of a 4 (width) byte sequence:
+    // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1495
+    // See the left column in the match.
     let byte0_w4   = 0xF0u8..0xF5u8;
+
+    // The 2 first (valid) bytes of a 3 (width) byte sequence:
+    // The first byte is byte0_w3. The second is the ones produced on the right.
     let byte01_w3  = byte0_w3.clone().prop_flat_map(|x| (Just(x), match x {
         0xE0u8          => 0xA0u8..0xC0u8,
         0xE1u8...0xECu8 => 0x80u8..0xC0u8,
@@ -174,6 +195,10 @@ fn gen_el_bytes(allow_null: bool) -> BoxedStrategy<ELBytes> {
         0xEEu8...0xEFu8 => 0x80u8..0xA0u8,
         _               => panic!(),
     }));
+
+    // In a 3 (width) byte sequence, an invalid second byte is chosen such that
+    // it will yield an error length of Some(1). The second byte is on
+    // the right of the match arms.
     let byte01_w3_e1 = byte0_w3.clone().prop_flat_map(move |x| (Just(x), match x {
         0xE0u8          => prop_oneof![start_byte..0xA0u8, 0xC0u8..],
         0xE1u8...0xECu8 => prop_oneof![start_byte..0x80u8, 0xC0u8..],
@@ -181,57 +206,92 @@ fn gen_el_bytes(allow_null: bool) -> BoxedStrategy<ELBytes> {
         0xEEu8...0xEFu8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
         _               => panic!(),
     }));
+
+    // In a 4 (width) byte sequence, an invalid second byte is chosen such that
+    // it will yield an error length of Some(1). The second byte is on
+    // the right of the match arms.
     let byte01_w4_e1 = byte0_w4.clone().prop_flat_map(move |x| (Just(x), match x {
         0xF0u8          => prop_oneof![start_byte..0x90u8, 0xA0u8..],
         0xF1u8...0xF3u8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
         0xF4u8          => prop_oneof![start_byte..0x80u8, 0x90u8..],
         _               => panic!()
     }));
+
+    // The 2 first (valid) bytes of a 4 (width) byte sequence:
+    // The first byte is byte0_w4. The second is the ones produced on the right.
     let byte01_w4 = byte0_w4.clone().prop_flat_map(|x| (Just(x), match x {
         0xF0u8          => 0x90u8..0xA0u8,
         0xF1u8...0xF3u8 => 0x80u8..0xA0u8,
         0xF4u8          => 0x80u8..0x90u8,
         _               => panic!()
     }));
+
     prop_oneof![
         // error_len = None
+        // These are all happen when next!() fails to provide a byte.
         prop_oneof![
-            // w = 2
+            // width = 2
             // lacking 1 bytes:
             static_map(byte0_w2.clone(), b1),
-            // w = 3
+
+            // width = 3
             // lacking 2 bytes:
             static_map(byte0_w3, b1),
+
             // lacking 1 bytes:
             static_map(byte01_w3.clone(), b2),
-            // w = 4
+
+            // width = 4
             // lacking 3 bytes:
             static_map(byte0_w4, b1),
+
             // lacking 2 bytes:
             static_map(byte01_w4.clone(), b2),
+
             // lacking 1 byte:
             static_map((byte01_w4.clone(), succ_byte.clone()), b3),
         ],
+
         // error_len = Some(1)
         prop_oneof![
-            // w = 1 is not represented.
-            // w = 0
+            // width = 1 is not represented.
+            // width = 0
+            // path taken:
+            // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1508
             static_map(byte0_w0, b1),
-            // w = 2
+
+            // width = 2
+            // path taken:
+            // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1480
             static_map((byte0_w2, fail_byte.clone()), b2),
-            // w = 3
+
+            // width = 3
+            // path taken:
+            // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1488
             static_map(byte01_w3_e1, b2),
-            // w = 4
+
+            // width = 4
+            // path taken:
+            // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1499
             static_map(byte01_w4_e1, b2),
         ],
+
         // error_len = Some(2)
         static_map(prop_oneof![
-            // w = 3
+            // width = 3
+            // path taken:
+            // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1491
             (byte01_w3, fail_byte.clone()),
-            // w = 4
+
+            // width = 4
+            // path taken:
+            // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1502
             (byte01_w4.clone(), fail_byte.clone())
         ], b3),
-        // error_len = Some(3), w = 4
+
+        // error_len = Some(3), width = 4
+        // path taken:
+        // https://doc.rust-lang.org/1.23.0/src/core/str/mod.rs.html#1505
         static_map((byte01_w4, succ_byte, fail_byte), b4),
     ].boxed()
 }
