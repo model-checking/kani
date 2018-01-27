@@ -11,6 +11,7 @@ matrix:
   allow_failures:
     - rust: nightly
 
+# Install travis-cargo which sets `--feature unstable` for nightly builds automatically
 before_script:
   - |
       pip install 'travis-cargo<0.2' --user &&
