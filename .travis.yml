@@ -5,11 +5,9 @@ rust:
 - 1.22.1
 - stable
 - beta
+- nightly
 
 matrix:
-  include:
-    - rust: nightly
-      env: CARGO_FEATURE_UNSTABLE=1
   allow_failures:
     - rust: nightly
 
