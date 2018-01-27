@@ -7,10 +7,6 @@ rust:
 - beta
 - nightly
 
-matrix:
-  allow_failures:
-    - rust: nightly
-
 # Install travis-cargo which sets `--feature unstable` for nightly builds automatically
 before_script:
   - |
