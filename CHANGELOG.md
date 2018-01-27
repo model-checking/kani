@@ -1,3 +1,9 @@
+## 0.4.2
+
+### Bug Fixes
+
+- The `unstable` feature now works again.
+
 ## 0.4.1
 
 ### New Additions
