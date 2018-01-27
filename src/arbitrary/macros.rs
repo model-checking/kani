@@ -32,8 +32,8 @@ macro_rules! arbitrary {
     ([$($bounds : tt)*] $typ: ty, $strat: ty; $logic: expr) => {
         arbitrary!([$($bounds)*] $typ, $strat, (); _args => $logic);
     };
-    ([$($bounds : tt)*] $strat: ty; $logic: expr) => {
-        arbitrary!([$($bounds)*] $strat,
+    ([$($bounds : tt)*] $typ: ty; $logic: expr) => {
+        arbitrary!([$($bounds)*] $typ,
             $crate::strategy::Just<Self>, ();
             _args => $crate::strategy::Just($logic)
         );

@@ -1453,6 +1453,7 @@
     , decode_utf8
     , iterator_step_by
     , io
+    , never_type
 ))]
 
 #[cfg(feature = "frunk")]
