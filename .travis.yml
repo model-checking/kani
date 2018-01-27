@@ -19,7 +19,6 @@ before_script:
 script:
   - |
       travis-cargo build &&
-      travis-cargo test &&
-      travis-cargo --only nightly test --features unstable
+      travis-cargo test
 
 cache: cargo
