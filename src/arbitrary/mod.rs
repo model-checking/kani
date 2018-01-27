@@ -31,7 +31,6 @@ mod tuples;
 mod _std;
 
 pub use self::traits::*;
-pub use self::_std::*;
 
 //==============================================================================
 // SMapped + Mapped aliases to make documentation clearer.
