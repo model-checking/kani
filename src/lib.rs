@@ -1520,15 +1520,3 @@ pub mod result;
 pub mod sample;
 
 pub mod prelude;
-
-#[cfg(feature = "unstable")]
-#[test]
-fn dummy_to_test_travis_nightly() {
-    fail_on_nightly()
-}
-
-#[cfg(not(feature = "unstable"))]
-#[test]
-fn dummy_to_test_travis_stable() {
-    fail_on_stable()
-}
