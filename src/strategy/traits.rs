@@ -411,7 +411,7 @@ pub trait Strategy : fmt::Debug {
     /// want to preserve that information.
     fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
     where Self : Sized + 'static {
-        Box::new(BoxedStrategyWrapper(self))
+        BoxedStrategy(Box::new(BoxedStrategyWrapper(self)))
     }
 
     /// Erases the type of this `Strategy` so it can be passed around as a
@@ -421,7 +421,7 @@ pub trait Strategy : fmt::Debug {
     /// on the output.
     fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
     where Self : Sized + Send + Sync + 'static {
-        Box::new(BoxedStrategyWrapper(self))
+        SBoxedStrategy(Box::new(BoxedStrategyWrapper(self)))
     }
 
     /// Wraps this strategy to prevent values from being subject to shrinking.
@@ -530,13 +530,53 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
     fn complicate(&mut self) -> bool { (**self).complicate() }
 }
 
+/// A boxed `ValueTree`.
+type BoxedVT<T> = Box<ValueTree<Value = T>>;
+
 /// Shorthand for a boxed `Strategy` trait object as produced by
 /// `Strategy::boxed()`.
-pub type BoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>>>;
+#[derive(Debug)]
+pub struct BoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>>>);
+
 /// Shorthand for a boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
-pub type SBoxedStrategy<T> = Box<Strategy<Value = Box<ValueTree<Value = T>>> +
-                                 Sync + Send>;
+#[derive(Debug)]
+pub struct SBoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>> + Sync + Send>);
+
+impl<T: fmt::Debug> Strategy for BoxedStrategy<T> {
+    type Value = BoxedVT<T>;
+
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_value(runner)
+    }
+
+    // Optimization: Don't rebox the strategy.
+
+    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
+    where Self : Sized + 'static {
+        self
+    }
+}
+
+impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
+    type Value = BoxedVT<T>;
+
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_value(runner)
+    }
+
+    // Optimization: Don't rebox the strategy.
+
+    fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
+    where Self : Sized + Send + Sync + 'static {
+        self
+    }
+
+    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
+    where Self : Sized + 'static {
+        BoxedStrategy(self.0)
+    }
+}
 
 #[derive(Debug)]
 struct BoxedStrategyWrapper<T>(T);

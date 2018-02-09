@@ -1,3 +1,16 @@
+## Unreleased
+
+### Potential Breaking Changes
+
+- `BoxedStrategy` and `SBoxedStrategy` are now newtypes instead of being type
+  aliases. You will only experience breaking changes if you've directly
+  used `.boxed()` and not `(S)BoxedStrategy<T>` but rather
+  `Box<Strategy<Value = Box<ValueTree<Value = T>>>>`. The probability of
+  breakage is very small, but still possible. The benefit of this change
+  is that calling `.boxed()` or `.sboxed()` twice only boxes once. This can
+  happen in situations where you have functions `Strategy -> BoxedStrategy` or
+  with code generation.
+
 ## 0.4.2
 
 ### Bug Fixes
