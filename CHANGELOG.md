@@ -8,6 +8,15 @@
 - There is a small chance of breakage wrt. type inference due to the
   introduction of `Probability`.
 
+- `BoxedStrategy` and `SBoxedStrategy` are now newtypes instead of being type
+  aliases. You will only experience breaking changes if you've directly
+  used `.boxed()` and not `(S)BoxedStrategy<T>` but rather
+  `Box<Strategy<Value = Box<ValueTree<Value = T>>>>`. The probability of
+  breakage is very small, but still possible. The benefit of this change
+  is that calling `.boxed()` or `.sboxed()` twice only boxes once. This can
+  happen in situations where you have functions `Strategy -> BoxedStrategy` or
+  with code generation.
+
 ### New Additions
 
 - Proptest now has an `Arbitrary` trait in `proptest::arbitrary` and re-exported
