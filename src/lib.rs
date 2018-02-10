@@ -383,11 +383,6 @@
 //! the intermediate states and relationships in order for its richer shrinking
 //! model to work.
 //!
-//! - In cases where one usually does have a single canonical way to generate
-//! values per type, Proptest will be more verbose than QuickCheck since one
-//! needs to name the strategy every time rather than getting them implicitly
-//! based on types.
-//!
 //! ## Limitations of Property Testing
 //!
 //! Given infinite time, property testing will eventually explore the whole
@@ -404,7 +399,7 @@
 //!     # /* NOREADME
 //!     #[test]
 //!     # NOREADME */
-//!     fn i64_abs_is_never_negative(a in prop::num::i64::ANY) {
+//!     fn i64_abs_is_never_negative(a in any::<i64>()) {
 //!         assert!(a.abs() >= 0);
 //!     }
 //! }
@@ -910,8 +905,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref v in prop::num::u32::ANY.prop_map(
-//!                          |v| v.to_string())) {
+//!     fn test_do_stuff(ref v in any::<u32>().prop_map(|v| v.to_string())) {
 //!         do_stuff(v);
 //!     }
 //! }
@@ -954,7 +948,7 @@
 //!     # */
 //!     fn test_do_stuff(
 //!         ref order in
-//!         (prop::num::u32::ANY.prop_map(|v| v.to_string()),
+//!         (any::<u32>().prop_map(|v| v.to_string()),
 //!          "[a-z]*", 1..1000u32).prop_map(
 //!              |(id, item, quantity)| Order { id, item, quantity })
 //!     ) {
@@ -991,7 +985,7 @@
 //! # }
 //!
 //! fn arb_order(max_quantity: u32) -> BoxedStrategy<Order> {
-//!     (prop::num::u32::ANY.prop_map(|v| v.to_string()),
+//!     (any::<u32>().prop_map(|v| v.to_string()),
 //!      "[a-z]*", 1..max_quantity)
 //!     .prop_map(|(id, item, quantity)| Order { id, item, quantity })
 //!     .boxed()
@@ -1052,7 +1046,7 @@
 //! # }
 //!
 //! prop_compose! {
-//!     fn arb_order_id()(id in prop::num::u32::ANY) -> String {
+//!     fn arb_order_id()(id in any::<u32>()) -> String {
 //!         id.to_string()
 //!     }
 //! }
@@ -1199,6 +1193,7 @@
 //! filter.
 //!
 //! ### Generating Recursive Data
+//! [generating-recursive-data]: #generating-recursive-data
 //!
 //! Randomly generating recursive data structures is trickier than it sounds.
 //! For example, the below is a naïve attempt at generating a JSON AST by using
@@ -1224,8 +1219,8 @@
 //! fn arb_json() -> BoxedStrategy<Json> {
 //!     prop_oneof![
 //!         Just(Json::Null),
-//!         prop::bool::ANY.prop_map(Json::Bool),
-//!         prop::num::f64::ANY.prop_map(Json::Number),
+//!         any::<bool>().prop_map(Json::Bool),
+//!         any::<f64>().prop_map(Json::Number),
 //!         ".*".prop_map(Json::String),
 //!         prop::collection::vec(arb_json(), 0..10).prop_map(Json::Array),
 //!         prop::collection::hash_map(
@@ -1268,8 +1263,8 @@
 //! fn arb_json() -> BoxedStrategy<Json> {
 //!     let leaf = prop_oneof![
 //!         Just(Json::Null),
-//!         prop::bool::ANY.prop_map(Json::Bool),
-//!         prop::num::f64::ANY.prop_map(Json::Number),
+//!         any::<bool>().prop_map(Json::Bool),
+//!         any::<f64>().prop_map(Json::Number),
 //!         ".*".prop_map(Json::String),
 //!     ];
 //!     leaf.prop_recursive(
@@ -1378,6 +1373,21 @@
 //! # fn main() { }
 //! ```
 //!
+//! ### Defining a canonical `Strategy` for a type
+//!
+//! We previously used the function `any` as in `any::<u32>()` to generate a
+//! strategy for all `u32`s. This function works with the trait `Arbitrary`,
+//! which QuickCheck users may be familiar with. In proptest, this trait
+//! is already implemented for most owned types in the standard library,
+//! but you can of course implement it for your own types.
+//!
+//! In some cases, where it makes sense to define a canonical strategy, such
+//! as in the [JSON AST example][generating-recursive-data], it is a good
+//! idea to implement `Arbitrary`.
+//!
+//! Stay tuned for more information about this. Soon you will be able to
+//! derive `Arbitrary` for a lot of cases.
+//!
 //! ### Configuring the number of tests cases requried
 //!
 //! The default number of successful test cases that must execute for a test
@@ -1427,8 +1437,34 @@
 
 #![deny(missing_docs)]
 
-#![cfg_attr(feature = "unstable", feature(i128_type))]
-#![cfg_attr(feature = "unstable", feature(i128))]
+#![cfg_attr(feature = "unstable", feature(
+      i128_type
+    , i128
+    , allocator_api
+    , inclusive_range_syntax
+    , inclusive_range
+    , thread_local_state
+    , try_trait
+    , generator_trait
+    , try_from
+    , integer_atomics
+    , mpsc_select
+    , ip
+    , decode_utf8
+    , iterator_step_by
+    , io
+    , never_type
+))]
+
+#[cfg(feature = "frunk")]
+#[macro_use]
+extern crate frunk_core;
+
+#[cfg(feature = "frunk")]
+#[macro_use] mod product_frunk;
+
+#[cfg(not(feature = "frunk"))]
+#[macro_use] mod product_tuple;
 
 #[macro_use] extern crate bitflags;
 extern crate bit_set;
@@ -1507,6 +1543,7 @@ macro_rules! opaque_strategy_wrapper {
 
 pub mod test_runner;
 pub mod strategy;
+pub mod arbitrary;
 pub mod bool;
 pub mod num;
 pub mod bits;

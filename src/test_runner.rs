@@ -35,14 +35,14 @@ lazy_static! {
     static ref DEFAULT_CONFIG: Config = {
         let mut result = Config {
             cases: 256,
-            max_local_rejects: 65536,
+            max_local_rejects: 65_536,
             max_global_rejects: 1024,
             max_flat_map_regens: 1_000_000,
             failure_persistence: FailurePersistence::default(),
             _non_exhaustive: (),
         };
 
-        fn parse_or_warn(dst: &mut u32, value: OsString, var: &str) {
+        fn parse_or_warn(dst: &mut u32, value: &OsString, var: &str) {
             if let Some(value) = value.to_str() {
                 if let Ok(value) = value.parse() {
                     *dst = value;
@@ -62,15 +62,15 @@ lazy_static! {
             if let Some(var) = var.to_str() {
                 match var {
                     "PROPTEST_CASES" => parse_or_warn(
-                        &mut result.cases, value, "PROPTEST_CASES"),
+                        &mut result.cases, &value, "PROPTEST_CASES"),
                     "PROPTEST_MAX_LOCAL_REJECTS" => parse_or_warn(
-                        &mut result.max_local_rejects, value,
+                        &mut result.max_local_rejects, &value,
                         "PROPTEST_MAX_LOCAL_REJECTS"),
                     "PROPTEST_MAX_GLOBAL_REJECTS" => parse_or_warn(
-                        &mut result.max_global_rejects, value,
+                        &mut result.max_global_rejects, &value,
                         "PROPTEST_MAX_GLOBAL_REJECTS"),
                     "PROPTEST_MAX_FLAT_MAP_REGENS" => parse_or_warn(
-                        &mut result.max_flat_map_regens, value,
+                        &mut result.max_flat_map_regens, &value,
                         "PROPTEST_MAX_FLAT_MAP_REGENS"),
                     _ => if var.starts_with("PROPTEST_") {
                         eprintln!("proptest: Ignoring unknown env-var {}.",
@@ -533,7 +533,9 @@ fn load_persisted_failures(path: Option<&PathBuf>) -> Vec<[u32;4]> {
             if io::ErrorKind::NotFound != err.kind() {
                 eprintln!(
                     "proptest: failed to open {}: {}",
-                    path.map(|x| &**x).unwrap_or(Path::new("??")).display(),
+                    path.map(|x| &**x)
+                        .unwrap_or_else(|| Path::new("??"))
+                        .display(),
                     err);
             }
             vec![]
@@ -602,7 +604,7 @@ fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
 where
     F: Fn(&V) -> TestCaseResult
 {
-    match panic::catch_unwind(AssertUnwindSafe(|| test(&case))) {
+    match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
         Ok(r) => r,
         Err(what) => Err(TestCaseError::Fail(
             what.downcast::<&'static str>().map(|s| (*s).into())
@@ -658,7 +660,7 @@ impl TestRunner {
         // in self.rng and the returned value being exactly the same. Perturb
         // the seed with some arbitrary values to prevent this.
         for word in &mut seed {
-            *word ^= 0xdeadbeef;
+            *word ^= 0xdead_beef;
         }
         seed
     }
@@ -782,7 +784,7 @@ impl TestRunner {
                 save_persisted_failure(persist_path.as_ref(), seed, value);
             }
 
-            let _ = result?;
+            result?;
         }
 
         Ok(())

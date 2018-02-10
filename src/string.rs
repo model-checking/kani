@@ -24,6 +24,25 @@ use num;
 use strategy::*;
 use test_runner::*;
 
+/// Wraps the regex that forms the `Strategy` for `String` so that a sensible
+/// `Default` can be given. The default is a string of non-control characters.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StringParam(&'static str);
+
+impl From<StringParam> for &'static str {
+    fn from(x: StringParam) -> Self { x.0 }
+}
+
+impl From<&'static str> for StringParam {
+    fn from(x: &'static str) -> Self { StringParam(x) }
+}
+
+impl Default for StringParam {
+    fn default() -> Self {
+        StringParam("\\PC*")
+    }
+}
+
 quick_error! {
     /// Errors which may occur when preparing a regular expression for use with
     /// string generation.

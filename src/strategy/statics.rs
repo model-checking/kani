@@ -29,6 +29,10 @@ use std::fmt;
 use strategy::traits::*;
 use test_runner::*;
 
+//==============================================================================
+// Filter
+//==============================================================================
+
 /// Essentially `Fn (&T) -> bool`.
 pub trait FilterFn<T> {
     /// Test whether `t` passes the filter.
@@ -121,6 +125,10 @@ impl<S : ValueTree, F : FilterFn<S::Value>> ValueTree for Filter<S, F> {
     }
 }
 
+//==============================================================================
+// Map
+//==============================================================================
+
 /// Essentially `Fn (T) -> Output`.
 pub trait MapFn<T> {
     #[allow(missing_docs)]
@@ -181,6 +189,21 @@ ValueTree for Map<S, F> {
     }
 }
 
+impl<I, O: fmt::Debug> MapFn<I> for fn(I) -> O {
+    type Output = O;
+    fn apply(&self, x: I) -> Self::Output { self(x) }
+}
+
+pub(crate) fn static_map<S: Strategy, O: fmt::Debug>
+    (strat: S, fun: fn(ValueFor<S>) -> O)
+    -> Map<S, fn(ValueFor<S>) -> O> {
+    Map::new(strat, fun)
+}
+
+//==============================================================================
+// Tests
+//==============================================================================
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -193,7 +216,7 @@ mod test {
             fn apply(&self, &v: &i32) -> bool { 0 == v % 3 }
         }
 
-        let input = Filter::new((0..256), "%3".into(), MyFilter);
+        let input = Filter::new(0..256, "%3".into(), MyFilter);
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
@@ -217,7 +240,7 @@ mod test {
             fn apply(&self, v: i32) -> i32 { v * 2 }
         }
 
-        let input = Map::new((0..10), MyMap);
+        let input = Map::new(0..10, MyMap);
 
         TestRunner::default()
             .run(&input, |&v| {

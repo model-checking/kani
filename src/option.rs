@@ -18,6 +18,97 @@ use std::marker::PhantomData;
 use strategy::*;
 use test_runner::*;
 
+//==============================================================================
+// Probability
+//==============================================================================
+
+/// Creates a `Probability` from some value that is convertible into it.
+///
+/// # Safety
+///
+/// Panics if the converted to probability would lie
+/// outside interval `[0.0, 1.0]`. Consult the `Into` (or `From`)
+/// implementations for more details.
+pub fn prob<X: Into<Probability>>(from: X) -> Probability {
+    from.into()
+}
+
+impl Default for Probability {
+    /// The default probability is 0.5, or 50% chance.
+    fn default() -> Self { prob(0.5) }
+}
+
+impl From<f64> for Probability {
+    /// Creates a `Probability` from a `f64`.
+    /// 
+    /// # Safety
+    ///
+    /// Panics if the probability is outside interval `[0.0, 1.0]`.
+    fn from(prob: f64) -> Self {
+        Probability::new(prob)
+    }
+}
+
+impl Probability {
+    /// Creates a `Probability` from a `f64`.
+    /// 
+    /// # Safety
+    ///
+    /// Panics if the probability is outside interval `[0.0, 1.0]`.
+    pub fn new(prob: f64) -> Self {
+        assert!(prob >= 0.0 && prob <= 1.0);
+        Probability(prob)
+    }
+
+    // Don't rely on these existing internally:
+
+    /// Merges self together with some other argument producing a product
+    /// type expected by some impelementations of `A: Arbitrary` in
+    /// `A::Parameters`. This can be more ergonomic to work with and may
+    /// help type inference.
+    pub fn with<X>(self, and: X) -> product_type![Self, X] {
+        product_pack![self, and]
+    }
+
+    /// Merges self together with some other argument generated with a
+    /// default value producing a product type expected by some
+    /// impelementations of `A: Arbitrary` in `A::Parameters`.
+    /// This can be more ergonomic to work with and may help type inference.
+    pub fn lift<X: Default>(self) -> product_type![Self, X] {
+        self.with(Default::default())
+    }
+}
+
+#[cfg(feature = "frunk")]
+use frunk_core::generic::Generic;
+
+#[cfg(feature = "frunk")]
+impl Generic for Probability {
+    type Repr = f64;
+
+    /// Converts the `Probability` into an `f64`.
+    fn into(self) -> Self::Repr { self.0 }
+
+    /// Creates a `Probability` from a `f64`.
+    /// 
+    /// # Safety
+    ///
+    /// Panics if the probability is outside interval `[0.0, 1.0]`.
+    fn from(r: Self::Repr) -> Self { r.into() }
+}
+
+impl From<Probability> for f64 {
+    fn from(p: Probability) -> Self { p.0 }
+}
+
+/// A probability in the range `[0.0, 1.0]` with a default of `0.5`.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Probability(f64);
+
+//==============================================================================
+// Strategies for Option
+//==============================================================================
+
 mapfn! {
     [] fn WrapSome[<T : fmt::Debug>](t: T) -> Option<T> {
         Some(t)
@@ -82,8 +173,8 @@ impl<T : Strategy + fmt::Debug> fmt::Debug for OptionStrategy<T> {
 /// `Some` values shrink to `None`.
 ///
 /// `Some` and `None` are each chosen with 50% probability.
-pub fn of<T : Strategy>(t: T) -> OptionStrategy<T> {
-    weighted(0.5, t)
+pub fn of<T: Strategy>(t: T) -> OptionStrategy<T> {
+    weighted(Probability::default(), t)
 }
 
 /// Return a strategy producing `Optional` values wrapping values from the
@@ -93,9 +184,13 @@ pub fn of<T : Strategy>(t: T) -> OptionStrategy<T> {
 ///
 /// `Some` is chosen with a probability given by `probability_of_some`, which
 /// must be between 0.0 and 1.0, both exclusive.
-pub fn weighted<T : Strategy>(probability_of_some: f64, t: T)
-                              -> OptionStrategy<T> {
-    let (weight_some, weight_none) = float_to_weight(probability_of_some);
+pub fn weighted<T, P>(probability_of_some: P, t: T) -> OptionStrategy<T>
+where
+    T: Strategy,
+    P: Into<Probability>
+{
+    let prob = probability_of_some.into().into();
+    let (weight_some, weight_none) = float_to_weight(prob);
 
     OptionStrategy(TupleUnion::new((
         (weight_none, NoneStrategy(PhantomData)),

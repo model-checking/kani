@@ -1,3 +1,59 @@
+## Unreleased
+
+### Potential Breaking Changes
+
+- There is a small chance of breakage wrt. type inference due to the
+  introduction of `SizeRange`.
+
+- There is a small chance of breakage wrt. type inference due to the
+  introduction of `Probability`.
+
+### New Additions
+
+- Proptest now has an `Arbitrary` trait in `proptest::arbitrary` and re-exported
+  in the `proptest::prelude`. `Arbitrary` has also been `impl`emented for most
+  of the standard library. The trait provides a mechanism to define a canonical
+  `Strategy` for a given type just like `Arbitrary` in Haskell's QuickCheck.
+  Deriving for this trait will also be provided soon in the crate
+  `proptest_derive`. To use the canonical strategy for a certain type `T`,
+  you can simply use `any::<T>()`. This is the major new addition of this release.
+
+- The `any_with`, `arbitrary`, `arbitrary_with` free functions in
+  the module `proptest::arbitrary`.
+
+- The `ArbitraryF1` and `ArbitraryF2` traits in `proptest::arbitrary::functor`.
+  These are "higher order" `Arbitrary` traits that correspond to the `Arbitrary1`
+  and `Arbitrary2` type classes in Haskell's QuickCheck. They are mainly provided
+  to support a common set of container-like types in custom deriving self-recursive
+  types in  `proptest_derive`. More on this later releases.
+
+- The strategies in `proptest::option` and `proptest::result` now accept a type
+  `Probability` which is a wrapper around `f64`. Convertions from types such as
+  `f64` are provided to make the interface ergonomic to use. Users may also use
+  the `proptest::option::prob` function to explicitly construct the type.
+
+- The strategies in `proptest::collections` now accept a type `SizeRange`
+  which is a wrapper around `Range<usize>`. Convertions from types
+  such as `usize` and `Range<usize>` are provided to make the interface
+  ergonomic to use. Users may also use the `proptest::collections::size_bounds`
+  function to explicitly construct the type.
+
+- A `.prop_map_into()` operation on all strategies that map
+  using `Into<OutputType>`. This is a clerarer and cheaper
+  operation than using `.prop_map(OutputType::from)`.
+
+- A nonshrinking `LazyJust` strategy that can be used instead of `Just` when you
+  have non-`Clone` types.
+
+- Anything that can be coerced to `fn() -> T` where `T: Debug` is a `Strategy`
+  where `ValueFor<fn() -> T> == T`. This is intended to make it easier to reuse
+  proptest for unit tests with manual input space partition where `fn() -> T`
+  provides fixtures.
+
+### Minor changes
+
+- Relaxed the constraints of `btree_map` removing `'static`.
+
 ## 0.4.2
 
 ### Bug Fixes

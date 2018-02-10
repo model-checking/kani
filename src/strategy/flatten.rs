@@ -247,6 +247,7 @@ Strategy for IndFlattenMap<S, F> {
 
 #[cfg(test)]
 mod test {
+    use strategy::just::Just;
     use super::*;
 
     #[test]
