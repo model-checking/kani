@@ -30,7 +30,7 @@ use strategy::{Strategy, ValueTree, BoxedStrategy};
 
 /// `ArbitraryF1` lets you lift a [`Strategy`] to unary
 /// type constructors such as `Box`, `Vec`, and `Option`.
-/// 
+///
 /// The trait corresponds to
 /// [Haskell QuickCheck's `Arbitrary1` type class][HaskellQC].
 ///
@@ -38,7 +38,7 @@ use strategy::{Strategy, ValueTree, BoxedStrategy};
 /// https://hackage.haskell.org/package/QuickCheck-2.10.1/docs/Test-QuickCheck-Arbitrary.html#t:Arbitrary1
 ///
 /// [`Strategy`]: ../proptest/strategy/trait.Strategy.html
-pub trait ArbitraryF1<A: fmt::Debug>: fmt::Debug {
+pub trait ArbitraryF1<A: fmt::Debug>: fmt::Debug + Sized {
     //==========================================================================
     // Implementation note #1
     //==========================================================================
@@ -129,7 +129,7 @@ pub trait ArbitraryF1<A: fmt::Debug>: fmt::Debug {
 /// https://hackage.haskell.org/package/QuickCheck-2.10.1/docs/Test-QuickCheck-Arbitrary.html#t:Arbitrary2
 ///
 /// [`Strategy`]: ../proptest/strategy/trait.Strategy.html
-pub trait ArbitraryF2<A: fmt::Debug, B: fmt::Debug>: fmt::Debug {
+pub trait ArbitraryF2<A: fmt::Debug, B: fmt::Debug>: fmt::Debug + Sized {
     /// The type of parameters that [`lift2_with`] accepts for
     /// configuration of the lifted and generated [`Strategy`]. Parameters
     /// must implement [`Default`].
