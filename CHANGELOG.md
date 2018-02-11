@@ -2,6 +2,13 @@
 
 ### Potential Breaking Changes
 
+- There is a small chance of breakage if you've relied on the constraints put
+  on type inference by the closure in `leaf.prop_recursive(..)` having a fixed
+  output type. The output type is now any strategy that generates the same type
+  as `leaf`. This change is intended to make working with recursive types a bit
+  easier as you no longer have to use `.boxed()` inside the closure you pass to
+  `.prop_recursive(..)`.
+
 - There is a small chance of breakage wrt. type inference due to the
   introduction of `SizeRange`.
 
@@ -62,6 +69,8 @@
 ### Minor changes
 
 - Relaxed the constraints of `btree_map` removing `'static`.
+
+- Reduced the heap allocation inside `Recursive` somewhat.
 
 ## 0.4.2
 

@@ -367,7 +367,7 @@ pub trait Strategy : fmt::Debug {
     ///       .prop_map(JsonNode::Array),
     ///     prop::collection::hash_map(".*", element, 0..16)
     ///       .prop_map(JsonNode::Map)
-    ///   ].boxed());
+    ///   ]);
     /// # }
     /// ```
     fn prop_recursive<R, F>

@@ -1277,7 +1277,7 @@
 //!               .prop_map(Json::Array),
 //!           prop::collection::hash_map(".*", inner, 0..10)
 //!               .prop_map(Json::Map),
-//!       ].boxed()).boxed()
+//!       ]).boxed()
 //! }
 //! # fn main() { }
 //! ```
