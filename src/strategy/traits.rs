@@ -16,6 +16,10 @@ use rand::XorShiftRng;
 use strategy::*;
 use test_runner::*;
 
+//==============================================================================
+// Traits
+//==============================================================================
+
 /// A new [`ValueTree`] from a [`Strategy`] when [`Ok`] or otherwise [`Err`]
 /// when a new value-tree can not be produced for some reason such as
 /// in the case of filtering with a predicate which always returns false.
@@ -455,23 +459,6 @@ pub trait Strategy : fmt::Debug {
     }
 }
 
-macro_rules! proxy_strategy {
-    ($typ:ty $(, $lt:tt)*) => {
-        impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
-            type Value = S::Value;
-
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                (**self).new_value(runner)
-            }
-        }
-    };
-}
-proxy_strategy!(Box<S>);
-proxy_strategy!(&'a S, 'a);
-proxy_strategy!(&'a mut S, 'a);
-proxy_strategy!(::std::rc::Rc<S>);
-proxy_strategy!(::std::sync::Arc<S>);
-
 /// A generated value and its associated shrinker.
 ///
 /// Conceptually, a `ValueTree` represents a spectrum between a "minimally
@@ -540,6 +527,57 @@ pub trait ValueTree {
     fn complicate(&mut self) -> bool;
 }
 
+//==============================================================================
+// NoShrink
+//==============================================================================
+
+/// Wraps a `Strategy` or `ValueTree` to suppress shrinking of generated
+/// values.
+///
+/// See `Strategy::no_shrink()` for more details.
+#[derive(Clone, Copy, Debug)]
+pub struct NoShrink<T>(T);
+
+impl<T : Strategy> Strategy for NoShrink<T> {
+    type Value = NoShrink<T::Value>;
+
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_value(runner).map(NoShrink)
+    }
+}
+
+impl<T : ValueTree> ValueTree for NoShrink<T> {
+    type Value = T::Value;
+
+    fn current(&self) -> T::Value {
+        self.0.current()
+    }
+
+    fn simplify(&mut self) -> bool { false }
+    fn complicate(&mut self) -> bool { false }
+}
+
+//==============================================================================
+// Trait objects
+//==============================================================================
+
+macro_rules! proxy_strategy {
+    ($typ:ty $(, $lt:tt)*) => {
+        impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
+            type Value = S::Value;
+
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                (**self).new_value(runner)
+            }
+        }
+    };
+}
+proxy_strategy!(Box<S>);
+proxy_strategy!(&'a S, 'a);
+proxy_strategy!(&'a mut S, 'a);
+proxy_strategy!(::std::rc::Rc<S>);
+proxy_strategy!(::std::sync::Arc<S>);
+
 impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
     type Value = T::Value;
     fn current(&self) -> Self::Value { (**self).current() }
@@ -606,31 +644,9 @@ where T::Value : 'static {
     }
 }
 
-/// Wraps a `Strategy` or `ValueTree` to suppress shrinking of generated
-/// values.
-///
-/// See `Strategy::no_shrink()` for more details.
-#[derive(Clone, Copy, Debug)]
-pub struct NoShrink<T>(T);
-
-impl<T : Strategy> Strategy for NoShrink<T> {
-    type Value = NoShrink<T::Value>;
-
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.0.new_value(runner).map(NoShrink)
-    }
-}
-
-impl<T : ValueTree> ValueTree for NoShrink<T> {
-    type Value = T::Value;
-
-    fn current(&self) -> T::Value {
-        self.0.current()
-    }
-
-    fn simplify(&mut self) -> bool { false }
-    fn complicate(&mut self) -> bool { false }
-}
+//==============================================================================
+// Sanity checking
+//==============================================================================
 
 /// Options passed to `check_strategy_sanity()`.
 #[derive(Clone, Copy, Debug)]
