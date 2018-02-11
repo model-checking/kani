@@ -588,12 +588,11 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 /// A boxed `ValueTree`.
 type BoxedVT<T> = Box<ValueTree<Value = T>>;
 
-/// Shorthand for a boxed `Strategy` trait object as produced by
-/// `Strategy::boxed()`.
+/// A boxed `Strategy` trait object as produced by `Strategy::boxed()`.
 #[derive(Debug)]
 pub struct BoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>>>);
 
-/// Shorthand for a boxed `Strategy` trait object which is also `Sync` and
+/// A boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
 #[derive(Debug)]
 pub struct SBoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>> + Sync + Send>);
