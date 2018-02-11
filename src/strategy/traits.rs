@@ -370,17 +370,16 @@ pub trait Strategy : fmt::Debug {
     ///   ].boxed());
     /// # }
     /// ```
-    fn prop_recursive<
-            F : Fn (Arc<BoxedStrategy<ValueFor<Self>>>)
-                    -> BoxedStrategy<ValueFor<Self>>>
+    fn prop_recursive<R, F>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
         -> Recursive<BoxedStrategy<ValueFor<Self>>, F>
-    where Self : Sized + 'static {
-        Recursive {
-            base: Arc::new(self.boxed()),
-            recurse: Arc::new(recurse),
-            depth, desired_size, expected_branch_size,
-        }
+    where
+        Self : Sized + 'static,
+        F : Fn(Arc<BoxedStrategy<ValueFor<Self>>>) -> R,
+        R : Strategy + 'static,
+        R::Value : ValueTree<Value = ValueFor<Self>>
+    {
+        Recursive::new(self, depth, desired_size, expected_branch_size, recurse)
     }
 
     /// Shuffle the contents of the values produced by this strategy.

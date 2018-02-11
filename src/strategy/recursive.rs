@@ -11,7 +11,31 @@ use std::fmt;
 use std::sync::Arc;
 
 use strategy::traits::*;
+use strategy::IndFlatten;
+use strategy::statics::{Map, MapFn};
 use test_runner::*;
+
+/// A branching `MapFn` that picks `yes` (true) or
+/// `no` (false) and clones the `Arc`.
+struct BranchFn<T> {
+    /// Result on true.
+    yes: Arc<T>,
+    /// Result on false.
+    no: Arc<T>,
+}
+
+impl<T> Clone for BranchFn<T> {
+    fn clone(&self) -> Self {
+        Self { yes: Arc::clone(&self.yes), no: Arc::clone(&self.no) }
+    }
+}
+
+impl<T: fmt::Debug> MapFn<bool> for BranchFn<T> {
+    type Output = Arc<T>;
+    fn apply(&self, branch: bool) -> Self::Output {
+        Arc::clone(if branch { &self.yes } else { &self.no })
+    }
+}
 
 /// Return type from `Strategy::prop_recursive()`.
 pub struct Recursive<B, F> {
@@ -47,8 +71,35 @@ impl<B, F> Clone for Recursive<B, F> {
 }
 
 impl<T : fmt::Debug + 'static,
-     F : Fn (Arc<BoxedStrategy<T>>) -> BoxedStrategy<T>>
-Strategy for Recursive<BoxedStrategy<T>, F> {
+     R : Strategy + 'static,
+     F : Fn(Arc<BoxedStrategy<T>>) -> R>
+Recursive<BoxedStrategy<T>, F>
+where
+    R::Value : ValueTree<Value = T>
+{
+    pub(super) fn new<S>
+        (base: S, depth: u32, desired_size: u32, expected_branch_size: u32,
+        recurse: F)
+        -> Self
+    where
+        S : Strategy + 'static,
+        S::Value : ValueTree<Value = T>
+    {
+        Self {
+            base: Arc::new(base.boxed()),
+            recurse: Arc::new(recurse),
+            depth, desired_size, expected_branch_size,
+        }
+    }
+}
+
+impl<T : fmt::Debug + 'static,
+     R : Strategy + 'static,
+     F : Fn(Arc<BoxedStrategy<T>>) -> R>
+Strategy for Recursive<BoxedStrategy<T>, F>
+where
+    R::Value : ValueTree<Value = T>
+{
     type Value = Box<ValueTree<Value = T>>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
@@ -90,15 +141,15 @@ Strategy for Recursive<BoxedStrategy<T>, F> {
 
         let mut strat = Arc::clone(&self.base);
         while let Some(branch_probability) = branch_probabilities.pop() {
-            let recursive_choice = Arc::new((self.recurse)(Arc::clone(&strat)));
+            let recursed = (self.recurse)(Arc::clone(&strat));
+            let recursive_choice = Arc::new(recursed.boxed());
             let non_recursive_choice = strat;
-            strat = Arc::new(
-                ::bool::weighted(branch_probability.min(0.9))
-                    .prop_ind_flat_map(move |branch| if branch {
-                        Arc::clone(&recursive_choice)
-                    } else {
-                        Arc::clone(&non_recursive_choice)
-                    }).boxed());
+            let branch_cond = ::bool::weighted(branch_probability.min(0.9));
+            let branch = IndFlatten(Map::new(branch_cond, BranchFn {
+                yes: recursive_choice,
+                no: non_recursive_choice,
+            }));
+            strat = Arc::new(branch.boxed());
         }
 
         strat.new_value(runner)
@@ -142,11 +193,8 @@ mod test {
         let mut max_depth = 0;
         let mut max_count = 0;
 
-        let strat = Just(Tree::Leaf).prop_recursive(
-            4, 64, 16,
-            |element| ::collection::vec(element, 8..16)
-                .prop_map(Tree::Branch).boxed());
-
+        let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
+            |element| ::collection::vec(element, 8..16).prop_map(Tree::Branch));
 
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
