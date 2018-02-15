@@ -16,6 +16,10 @@ use rand::XorShiftRng;
 use strategy::*;
 use test_runner::*;
 
+//==============================================================================
+// Traits
+//==============================================================================
+
 /// A new [`ValueTree`] from a [`Strategy`] when [`Ok`] or otherwise [`Err`]
 /// when a new value-tree can not be produced for some reason such as
 /// in the case of filtering with a predicate which always returns false.
@@ -363,20 +367,19 @@ pub trait Strategy : fmt::Debug {
     ///       .prop_map(JsonNode::Array),
     ///     prop::collection::hash_map(".*", element, 0..16)
     ///       .prop_map(JsonNode::Map)
-    ///   ].boxed());
+    ///   ]);
     /// # }
     /// ```
-    fn prop_recursive<
-            F : Fn (Arc<BoxedStrategy<ValueFor<Self>>>)
-                    -> BoxedStrategy<ValueFor<Self>>>
+    fn prop_recursive<R, F>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
         -> Recursive<BoxedStrategy<ValueFor<Self>>, F>
-    where Self : Sized + 'static {
-        Recursive {
-            base: Arc::new(self.boxed()),
-            recurse: Arc::new(recurse),
-            depth, desired_size, expected_branch_size,
-        }
+    where
+        Self : Sized + 'static,
+        F : Fn(Arc<BoxedStrategy<ValueFor<Self>>>) -> R,
+        R : Strategy + 'static,
+        R::Value : ValueTree<Value = ValueFor<Self>>
+    {
+        Recursive::new(self, depth, desired_size, expected_branch_size, recurse)
     }
 
     /// Shuffle the contents of the values produced by this strategy.
@@ -455,23 +458,6 @@ pub trait Strategy : fmt::Debug {
     }
 }
 
-macro_rules! proxy_strategy {
-    ($typ:ty $(, $lt:tt)*) => {
-        impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
-            type Value = S::Value;
-
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                (**self).new_value(runner)
-            }
-        }
-    };
-}
-proxy_strategy!(Box<S>);
-proxy_strategy!(&'a S, 'a);
-proxy_strategy!(&'a mut S, 'a);
-proxy_strategy!(::std::rc::Rc<S>);
-proxy_strategy!(::std::sync::Arc<S>);
-
 /// A generated value and its associated shrinker.
 ///
 /// Conceptually, a `ValueTree` represents a spectrum between a "minimally
@@ -540,6 +526,57 @@ pub trait ValueTree {
     fn complicate(&mut self) -> bool;
 }
 
+//==============================================================================
+// NoShrink
+//==============================================================================
+
+/// Wraps a `Strategy` or `ValueTree` to suppress shrinking of generated
+/// values.
+///
+/// See `Strategy::no_shrink()` for more details.
+#[derive(Clone, Copy, Debug)]
+pub struct NoShrink<T>(T);
+
+impl<T : Strategy> Strategy for NoShrink<T> {
+    type Value = NoShrink<T::Value>;
+
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_value(runner).map(NoShrink)
+    }
+}
+
+impl<T : ValueTree> ValueTree for NoShrink<T> {
+    type Value = T::Value;
+
+    fn current(&self) -> T::Value {
+        self.0.current()
+    }
+
+    fn simplify(&mut self) -> bool { false }
+    fn complicate(&mut self) -> bool { false }
+}
+
+//==============================================================================
+// Trait objects
+//==============================================================================
+
+macro_rules! proxy_strategy {
+    ($typ:ty $(, $lt:tt)*) => {
+        impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
+            type Value = S::Value;
+
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                (**self).new_value(runner)
+            }
+        }
+    };
+}
+proxy_strategy!(Box<S>);
+proxy_strategy!(&'a S, 'a);
+proxy_strategy!(&'a mut S, 'a);
+proxy_strategy!(::std::rc::Rc<S>);
+proxy_strategy!(::std::sync::Arc<S>);
+
 impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
     type Value = T::Value;
     fn current(&self) -> Self::Value { (**self).current() }
@@ -550,12 +587,11 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 /// A boxed `ValueTree`.
 type BoxedVT<T> = Box<ValueTree<Value = T>>;
 
-/// Shorthand for a boxed `Strategy` trait object as produced by
-/// `Strategy::boxed()`.
+/// A boxed `Strategy` trait object as produced by `Strategy::boxed()`.
 #[derive(Debug)]
 pub struct BoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>>>);
 
-/// Shorthand for a boxed `Strategy` trait object which is also `Sync` and
+/// A boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
 #[derive(Debug)]
 pub struct SBoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>> + Sync + Send>);
@@ -606,31 +642,9 @@ where T::Value : 'static {
     }
 }
 
-/// Wraps a `Strategy` or `ValueTree` to suppress shrinking of generated
-/// values.
-///
-/// See `Strategy::no_shrink()` for more details.
-#[derive(Clone, Copy, Debug)]
-pub struct NoShrink<T>(T);
-
-impl<T : Strategy> Strategy for NoShrink<T> {
-    type Value = NoShrink<T::Value>;
-
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.0.new_value(runner).map(NoShrink)
-    }
-}
-
-impl<T : ValueTree> ValueTree for NoShrink<T> {
-    type Value = T::Value;
-
-    fn current(&self) -> T::Value {
-        self.0.current()
-    }
-
-    fn simplify(&mut self) -> bool { false }
-    fn complicate(&mut self) -> bool { false }
-}
+//==============================================================================
+// Sanity checking
+//==============================================================================
 
 /// Options passed to `check_strategy_sanity()`.
 #[derive(Clone, Copy, Debug)]
