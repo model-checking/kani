@@ -84,7 +84,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.4.2"
+proptest = "0.5.0"
 ```
 
 and at the top of `main.rs` or `lib.rs`:
@@ -366,11 +366,6 @@ shrinking based on the output value, whereas Proptest must hold on to all
 the intermediate states and relationships in order for its richer shrinking
 model to work.
 
-- In cases where one usually does have a single canonical way to generate
-values per type, Proptest will be more verbose than QuickCheck since one
-needs to name the strategy every time rather than getting them implicitly
-based on types.
-
 ## Limitations of Property Testing
 
 Given infinite time, property testing will eventually explore the whole
@@ -385,7 +380,7 @@ use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn i64_abs_is_never_negative(a in prop::num::i64::ANY) {
+    fn i64_abs_is_never_negative(a in any::<i64>()) {
         assert!(a.abs() >= 0);
     }
 }

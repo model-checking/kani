@@ -95,7 +95,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! proptest = "0.4.2"
+//! proptest = "0.5.0"
 //! ```
 //!
 //! and at the top of `main.rs` or `lib.rs`:
