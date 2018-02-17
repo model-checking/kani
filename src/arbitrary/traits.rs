@@ -18,12 +18,18 @@ use strategy::{Strategy, ValueTree};
 /// Arbitrary determines a canonical [`Strategy`] for the implementing type.
 ///
 /// It provides the method `arbitrary_with` which generates a `Strategy` for
-/// producing arbitrary values of the implementing type *(`Self`)*.
+/// producing arbitrary values of the implementing type *(`Self`)*. In general,
+/// these strategies will produce the entire set of values possible for the
+/// type, up to some size limitation or constraints set by their parameters.
+/// When this is not desired, strategies to produce the desired values can be
+/// built by combining [`Strategy`]s as described in the crate documentation.
 ///
-/// This trait is the equivalent of
+/// This trait analogous to
 /// [Haskell QuickCheck's implementation of `Arbitrary`][HaskellQC].
 /// In this interpretation of `Arbitrary`, `Strategy` is the equivalent of
-/// the `Gen` monad.
+/// the `Gen` monad. Unlike in QuickCheck, `Arbitrary` is not a core component;
+/// types do not need to implement `Arbitrary` unless one wants to use
+/// [`any`](fn.any.html) or other free functions in this module.
 ///
 /// `Arbitrary` currently only works for types which represent owned data as
 /// opposed to borrowed data. This is a fundamental restriction of `proptest`
@@ -139,13 +145,13 @@ pub type ParamsFor<A> = <A as Arbitrary>::Parameters;
 // Free functions that people should use
 //==============================================================================
 
-/// Generates a [`Strategy`] producing [`Arbitrary`] values of `A`.
-/// Unlike [`arbitrary`], it should be used for being explicit on what `A` is.
-/// For clarity, this may be a good idea.
+/// Generates a [`Strategy`] producing [`Arbitrary`][trait Arbitrary] values of
+/// `A`. Unlike [`arbitrary`][fn arbitrary], it should be used for being
+/// explicit on what `A` is. For clarity, this may be a good idea.
 ///
-/// Use this version instead of [`arbitrary`] if you want to be clear which
-/// type you want to generate a `Strategy` for, or if you don't have an anchoring
-/// type for type inference to work with.
+/// Use this version instead of [`arbitrary`][fn arbitrary] if you want to be
+/// clear which type you want to generate a `Strategy` for, or if you don't
+/// have an anchoring type for type inference to work with.
 ///
 /// If you want to customize how the strategy is generated, use
 /// [`any_with::<A>(args)`] where `args` are any arguments accepted by
@@ -172,8 +178,8 @@ pub type ParamsFor<A> = <A as Arbitrary>::Parameters;
 /// ```
 ///
 /// [`any_with::<A>(args)`]: fn.any_with.html
-/// [`arbitrary`]: fn.arbitrary.html
-/// [`Arbitrary`]: trait.Arbitrary.html
+/// [fn arbitrary]: fn.arbitrary.html
+/// [trait Arbitrary]: trait.Arbitrary.html
 /// [`Strategy`]: ../strategy/trait.Strategy.html
 pub fn any<A: Arbitrary>() -> StrategyFor<A> {
     // ^-- We use a shorter name so that turbofish becomes more ergonomic.
