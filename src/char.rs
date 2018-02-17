@@ -200,14 +200,6 @@ pub fn any() -> CharStrategy<'static> {
     }
 }
 
-#[allow(missing_docs)]
-#[deprecated(since="0.4.0", note="replaced with proptest::char::any()")]
-pub const ANY: CharStrategy<'static> = CharStrategy {
-    special: Cow::Borrowed(DEFAULT_SPECIAL_CHARS),
-    preferred: Cow::Borrowed(DEFAULT_PREFERRED_RANGES),
-    ranges: Cow::Borrowed(WHOLE_RANGE),
-};
-
 /// Creates a `CharStrategy` which selects characters within the given
 /// endpoints, inclusive, using the default biases.
 pub fn range(start: char, end: char) -> CharStrategy<'static> {
