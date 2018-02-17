@@ -24,7 +24,11 @@
   happen in situations where you have functions `Strategy -> BoxedStrategy` or
   with code generation.
 
-- `proptest::char::ANY` has been removed.
+- `proptest::char::ANY` has been removed. Any remaining uses must be replaced
+  by `proptest::char::any()`.
+
+- `proptest::strategy::Singleton` has been removed. Any remaining uses must be
+  replaced by `proptest::strategy::Just`.
 
 ### New Additions
 

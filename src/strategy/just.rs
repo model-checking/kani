@@ -30,10 +30,6 @@ pub struct Just<T : Clone + fmt::Debug>(
     /// The value produced by this strategy.
     pub T);
 
-/// Deprecated alias for `Just`.
-#[deprecated]
-pub use self::Just as Singleton;
-
 impl<T : Clone + fmt::Debug> Strategy for Just<T> {
     type Value = Self;
 
