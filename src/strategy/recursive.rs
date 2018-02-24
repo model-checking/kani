@@ -11,31 +11,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use strategy::traits::*;
-use strategy::IndFlatten;
-use strategy::statics::{Map, MapFn};
+use strategy::unions::float_to_weight;
 use test_runner::*;
-
-/// A branching `MapFn` that picks `yes` (true) or
-/// `no` (false) and clones the `Arc`.
-struct BranchFn<T> {
-    /// Result on true.
-    yes: Arc<T>,
-    /// Result on false.
-    no: Arc<T>,
-}
-
-impl<T> Clone for BranchFn<T> {
-    fn clone(&self) -> Self {
-        Self { yes: Arc::clone(&self.yes), no: Arc::clone(&self.no) }
-    }
-}
-
-impl<T: fmt::Debug> MapFn<bool> for BranchFn<T> {
-    type Output = Arc<T>;
-    fn apply(&self, branch: bool) -> Self::Output {
-        Arc::clone(if branch { &self.yes } else { &self.no })
-    }
-}
 
 /// Return type from `Strategy::prop_recursive()`.
 pub struct Recursive<B, F> {
@@ -144,11 +121,15 @@ where
             let recursed = (self.recurse)(Arc::clone(&strat));
             let recursive_choice = Arc::new(recursed.boxed());
             let non_recursive_choice = strat;
-            let branch_cond = ::bool::weighted(branch_probability.min(0.9));
-            let branch = IndFlatten(Map::new(branch_cond, BranchFn {
-                yes: recursive_choice,
-                no: non_recursive_choice,
-            }));
+            // Clamp the maximum branch probability to 0.9 to ensure we can
+            // generate non-recursive cases reasonably often.
+            let branch_probability = branch_probability.min(0.9);
+            let (weight_branch, weight_leaf) =
+                float_to_weight(branch_probability);
+            let branch = prop_oneof![
+                weight_leaf => non_recursive_choice,
+                weight_branch => recursive_choice,
+            ];
             strat = Arc::new(branch.boxed());
         }
 
@@ -163,33 +144,33 @@ mod test {
     use strategy::just::Just;
     use super::*;
 
-    #[test]
-    fn test_recursive() {
-        #[derive(Clone, Debug)]
-        enum Tree {
-            Leaf,
-            Branch(Vec<Tree>),
-        }
+    #[derive(Clone, Debug, PartialEq)]
+    enum Tree {
+        Leaf,
+        Branch(Vec<Tree>),
+    }
 
-        impl Tree {
-            fn stats(&self) -> (u32, u32) {
-                match *self {
-                    Tree::Leaf => (0, 1),
-                    Tree::Branch(ref children) => {
-                        let mut depth = 0;
-                        let mut count = 0;
-                        for child in children {
-                            let (d, c) = child.stats();
-                            depth = max(d, depth);
-                            count += c;
-                        }
-
-                        (depth + 1, count + 1)
+    impl Tree {
+        fn stats(&self) -> (u32, u32) {
+            match *self {
+                Tree::Leaf => (0, 1),
+                Tree::Branch(ref children) => {
+                    let mut depth = 0;
+                    let mut count = 0;
+                    for child in children {
+                        let (d, c) = child.stats();
+                        depth = max(d, depth);
+                        count += c;
                     }
+
+                    (depth + 1, count + 1)
                 }
             }
         }
+    }
 
+    #[test]
+    fn test_recursive() {
         let mut max_depth = 0;
         let mut max_count = 0;
 
@@ -208,5 +189,19 @@ mod test {
 
         assert!(max_depth >= 3, "Only got max depth {}", max_depth);
         assert!(max_count > 48, "Only got max count {}", max_count);
+    }
+
+    #[test]
+    fn simplifies_to_non_recursive() {
+        let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
+            |element| ::collection::vec(element, 8..16).prop_map(Tree::Branch));
+
+        let mut runner = TestRunner::default();
+        for _ in 0..256 {
+            let mut value = strat.new_value(&mut runner).unwrap();
+            while value.simplify() { }
+
+            assert_eq!(Tree::Leaf, value.current());
+        }
     }
 }

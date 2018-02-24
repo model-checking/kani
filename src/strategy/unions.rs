@@ -77,11 +77,11 @@ impl<T : Strategy> Union<T> {
 
 fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
                                            weights1: I, weights2: I) -> usize {
-    let sum = weights1.sum();
+    let sum = weights1.map(u64::from).sum();
     let weighted_pick = rand::distributions::Range::new(0, sum)
         .ind_sample(runner.rng());
-    weights2.scan(0, |state, w| {
-        *state += w;
+    weights2.scan(0u64, |state, w| {
+        *state += u64::from(w);
         Some(*state)
     }).filter(|&v| v <= weighted_pick).count()
 }

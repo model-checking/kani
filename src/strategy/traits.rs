@@ -325,6 +325,9 @@ pub trait Strategy : fmt::Debug {
     /// `expected_branch_size` (though it is not a hard limit) since the
     /// underlying code underestimates probabilities.
     ///
+    /// Shrinking shrinks both the inner values and attempts switching from
+    /// recursive to non-recursive cases.
+    ///
     /// ## Example
     ///
     /// ```rust,norun
