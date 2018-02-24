@@ -5,10 +5,16 @@
 - `proptest::strategy::Union` and `proptest::strategy::TupleUnion` now work
   with weighted strategies even if the sum of the weights overflows a `u32`.
 
+- Added `SIGNALING_NAN` strategy to generate signalling NaNs if supported by
+  the platform. Note that this is _not_ included in `ANY`.
+
 ### Bug Fixes
 
 - Fixed values produced via `prop_recursive()` not shrinking from the recursive
   to the non-recursive case.
+
+- Fix that `QUIET_NAN` would generate signalling NaNs on most platforms on Rust
+  1.24.0 and later.
 
 ## 0.5.0
 

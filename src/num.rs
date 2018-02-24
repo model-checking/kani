@@ -283,13 +283,14 @@ unsigned_integer_bin_search!(u128);
 
 bitflags! {
     pub(crate) struct FloatTypes: u32 {
-        const POSITIVE          = 0b000_0001;
-        const NEGATIVE          = 0b000_0010;
-        const NORMAL            = 0b000_0100;
-        const SUBNORMAL         = 0b000_1000;
-        const ZERO              = 0b001_0000;
-        const INFINITE          = 0b010_0000;
-        const QUIET_NAN         = 0b100_0000;
+        const POSITIVE          = 0b0000_0001;
+        const NEGATIVE          = 0b0000_0010;
+        const NORMAL            = 0b0000_0100;
+        const SUBNORMAL         = 0b0000_1000;
+        const ZERO              = 0b0001_0000;
+        const INFINITE          = 0b0010_0000;
+        const QUIET_NAN         = 0b0100_0000;
+        const SIGNALING_NAN     = 0b1000_0000;
         const ANY =
             Self::POSITIVE.bits |
             Self::NEGATIVE.bits |
@@ -309,7 +310,7 @@ impl FloatTypes {
 
         if !self.intersects(FloatTypes::NORMAL | FloatTypes::SUBNORMAL |
                             FloatTypes::ZERO | FloatTypes::INFINITE |
-                            FloatTypes::QUIET_NAN) {
+                            FloatTypes::QUIET_NAN | FloatTypes::SIGNALING_NAN) {
             self |= FloatTypes::NORMAL;
         }
         self
@@ -371,7 +372,8 @@ macro_rules! float_any {
         ///   both options.
         ///
         /// - Classes are weighted as follows, in descending order:
-        ///   `NORMAL` > `ZERO` > `SUBNORMAL` > `INFINITE` > `QUIET_NAN`.
+        ///   `NORMAL` > `ZERO` > `SUBNORMAL` > `INFINITE` > `QUIET_NAN` =
+        ///   `SIGNALING_NAN`.
         #[derive(Clone, Copy, Debug)]
         pub struct Any(FloatTypes);
 
@@ -461,23 +463,54 @@ macro_rules! float_any {
         /// Operations on quiet NaNs generally simply propagate the NaN rather
         /// than invoke any exception mechanism.
         ///
-        /// Note that there is currently no `SIGNALING_NAN` is the question of
-        /// whether generation of signaling NaNs is safe is [currently
-        /// uncertain](https://doc.rust-lang.org/stable/std/primitive.f32.html#method.from_bits).
-        ///
         /// The payload of the NaN is uniformly distributed over the possible
         /// values which safe Rust allows, including the sign bit (as
-        /// controlled by `POSITIVE` and `NEGATIVE`). Note however that as of
-        /// Rust 1.23.0, this constitutes only one particular payload due to
-        /// apparent issues with particular MIPS and PA-RISC processors which
-        /// fail to implement IEEE 754-2008 correctly.
+        /// controlled by `POSITIVE` and `NEGATIVE`).
+        ///
+        /// Note however that in Rust 1.23.0 and earlier, this constitutes only
+        /// one particular payload due to apparent issues with particular MIPS
+        /// and PA-RISC processors which fail to implement IEEE 754-2008
+        /// correctly.
+        ///
+        /// On Rust 1.24.0 and later, this does produce arbitrary payloads as
+        /// documented.
+        ///
+        /// On platforms where the CPU and the IEEE standard disagree on the
+        /// format of a quiet NaN, values generated conform to the hardware's
+        /// expectations.
         pub const QUIET_NAN: Any = Any(FloatTypes::QUIET_NAN);
+        /// Generates "Signaling NaN" floats if allowed by the platform.
+        ///
+        /// On most platforms, signalling NaNs by default behave the same as
+        /// quiet NaNs, but it is possible to configure the OS or CPU to raise
+        /// an asynchronous exception if an operation is performed on a
+        /// signalling NaN.
+        ///
+        /// In Rust 1.23.0 and earlier, this silently behaves the same as
+        /// [`QUIET_NAN`](const.QUIET_NAN.html).
+        ///
+        /// On platforms where the CPU and the IEEE standard disagree on the
+        /// format of a quiet NaN, values generated conform to the hardware's
+        /// expectations.
+        ///
+        /// Note that certain platforms — most notably, x86/AMD64 — allow the
+        /// architecture to turn a signalling NaN into a quiet NaN with the
+        /// same payload. Whether this happens can depend on what registers the
+        /// compiler decides to use to pass the value around, what CPU flags
+        /// are set, and what compiler settings are in use.
+        pub const SIGNALING_NAN: Any = Any(FloatTypes::SIGNALING_NAN);
 
         /// Generates literally arbitrary floating-point values, including
         /// infinities and quiet NaNs (but not signaling NaNs).
         ///
         /// Equivalent to `POSITIVE | NEGATIVE | NORMAL | SUBNORMAL | ZERO |
         /// INFINITE | QUIET_NAN`.
+        ///
+        /// See [`SIGNALING_NAN`](const.SIGNALING_NAN.html) if you also want to
+        /// generate signalling NaNs. This signalling NaNs are not included by
+        /// default since in most contexts they either make no difference, or
+        /// if the process enabled the relevant CPU mode, result in
+        /// hardware-triggered exceptions that usually just abort the process.
         ///
         /// Before proptest 0.4.1, this erroneously generated values in the
         /// range 0.0..1.0.
@@ -509,6 +542,15 @@ macro_rules! float_any {
                     }
                 }
 
+                // A few CPUs disagree with IEEE about the meaning of the
+                // signalling bit. Assume the `NAN` constant is a quiet NaN as
+                // interpreted by the hardware and generate values based on
+                // that.
+                let quiet_or = ::std::$typ::NAN.to_bits() &
+                    ($typ::EXP_MASK | ($typ::EXP_MASK >> 1));
+                let signaling_or = (quiet_or ^ ($typ::EXP_MASK >> 1)) |
+                    $typ::EXP_MASK;
+
                 let (class_mask, class_or, allow_edge_exp, allow_zero_mant) =
                     prop_oneof![
                         weight!(NORMAL, 20) => Just(
@@ -521,7 +563,10 @@ macro_rules! float_any {
                         weight!(INFINITE, 2) => Just(
                             (0, $typ::EXP_MASK, true, true)),
                         weight!(QUIET_NAN, 1) => Just(
-                            ($typ::MANTISSA_MASK >> 1, $typ::EXP_MASK,
+                            ($typ::MANTISSA_MASK >> 1, quiet_or,
+                             true, false)),
+                        weight!(SIGNALING_NAN, 1) => Just(
+                            ($typ::MANTISSA_MASK >> 1, signaling_or,
                              true, false)),
                     ].new_value(runner)?.current();
 
@@ -616,7 +661,12 @@ macro_rules! float_bin_search {
                     // Don't reposition if the new value is not allowed
                     let class_allowed = match self.curr.classify() {
                         FpCategory::Nan =>
-                            self.allowed.contains(FloatTypes::QUIET_NAN),
+                            // We don't need to inspect whether the
+                            // signallingness of the NaN matches the allowed
+                            // set, as we never try to switch between them,
+                            // instead shrinking to 0.
+                            self.allowed.contains(FloatTypes::QUIET_NAN) ||
+                            self.allowed.contains(FloatTypes::SIGNALING_NAN),
                         FpCategory::Infinite =>
                             self.allowed.contains(FloatTypes::INFINITE),
                         FpCategory::Zero =>
@@ -965,7 +1015,7 @@ mod test {
     }
 
     macro_rules! float_generation_test_body {
-        ($strategy:ident) => {
+        ($strategy:ident, $typ:ident) => {
             use std::num::FpCategory;
 
             let strategy = $strategy;
@@ -977,8 +1027,15 @@ mod test {
             let mut seen_subnormal = 0;
             let mut seen_zero = 0;
             let mut seen_infinite = 0;
-            let mut seen_nan = 0;
+            let mut seen_quiet_nan = 0;
+            let mut seen_signaling_nan = 0;
             let mut runner = TestRunner::default();
+
+            // Check whether this version of Rust honours the NaN payload in
+            // from_bits
+            let fidelity_1 = f32::from_bits(0x7F80_0001).to_bits();
+            let fidelity_2 = f32::from_bits(0xFF80_0001).to_bits();
+            let nan_fidelity = fidelity_1 != fidelity_2;
 
             for _ in 0..1024 {
                 let mut tree = strategy.new_value(&mut runner).unwrap();
@@ -997,15 +1054,52 @@ mod test {
                     }
 
                     match value.classify() {
+                        FpCategory::Nan if nan_fidelity => {
+                            let raw = value.to_bits();
+                            let is_negative = raw << 1 >> 1 != raw;
+                            if is_negative {
+                                prop_assert!(
+                                    bits.contains(FloatTypes::NEGATIVE));
+                                seen_negative += increment;
+                            } else {
+                                prop_assert!(
+                                    bits.contains(FloatTypes::POSITIVE));
+                                seen_positive += increment;
+                            }
+
+                            let is_quiet =
+                                raw & ($typ::EXP_MASK >> 1) ==
+                                ::std::$typ::NAN.to_bits() & ($typ::EXP_MASK >> 1);
+                            if is_quiet {
+                                // x86/AMD64 turn signalling NaNs into quiet
+                                // NaNs quite aggressively depending on what
+                                // registers LLVM decides to use to pass the
+                                // value around, so accept either case here.
+                                prop_assert!(
+                                    bits.contains(FloatTypes::QUIET_NAN) ||
+                                    bits.contains(FloatTypes::SIGNALING_NAN));
+                                seen_quiet_nan += increment;
+                                seen_signaling_nan += increment;
+                            } else {
+                                prop_assert!(
+                                    bits.contains(FloatTypes::SIGNALING_NAN));
+                                seen_signaling_nan += increment;
+                            }
+                        },
+
                         FpCategory::Nan => {
-                            prop_assert!(bits.contains(FloatTypes::QUIET_NAN));
-                            seen_nan += increment;
-                            // Since safe Rust doesn't currently allow generating
-                            // any NaN other than one particular payload, don't
-                            // check the sign and consider this to be both signs
-                            // for counting purposes.
+                            // Since safe Rust doesn't currently allow
+                            // generating any NaN other than one particular
+                            // payload, don't check the sign or signallingness
+                            // and consider this to be both signs and
+                            // signallingness for counting purposes.
                             seen_positive += increment;
                             seen_negative += increment;
+                            seen_quiet_nan += increment;
+                            seen_signaling_nan += increment;
+                            prop_assert!(
+                                bits.contains(FloatTypes::QUIET_NAN) ||
+                                bits.contains(FloatTypes::SIGNALING_NAN));
                         },
                         FpCategory::Infinite => {
                             prop_assert!(bits.contains(FloatTypes::INFINITE));
@@ -1050,7 +1144,10 @@ mod test {
                 prop_assert!(seen_infinite > 0);
             }
             if bits.contains(FloatTypes::QUIET_NAN) {
-                prop_assert!(seen_nan > 0);
+                prop_assert!(seen_quiet_nan > 0);
+            }
+            if bits.contains(FloatTypes::SIGNALING_NAN) {
+                prop_assert!(seen_signaling_nan > 0);
             }
         }
     }
@@ -1062,7 +1159,7 @@ mod test {
         fn f32_any_generates_desired_values(
             strategy in ::bits::u32::ANY.prop_map(f32::Any::from_bits)
         ) {
-            float_generation_test_body!(strategy);
+            float_generation_test_body!(strategy, f32);
         }
 
         #[test]
@@ -1079,7 +1176,7 @@ mod test {
         fn f64_any_generates_desired_values(
             strategy in ::bits::u32::ANY.prop_map(f64::Any::from_bits)
         ) {
-            float_generation_test_body!(strategy);
+            float_generation_test_body!(strategy, f64);
         }
 
         #[test]
