@@ -767,8 +767,7 @@ impl TestRunner {
             self.source_file());
 
         let old_rng = self.rng.clone();
-        for persisted_seed in load_persisted_failures(persist_path.as_ref())
-        {
+        for persisted_seed in load_persisted_failures(persist_path.as_ref()) {
             self.rng = XorShiftRng::from_seed(persisted_seed);
             self.gen_and_run_case(strategy, &test)?;
         }
@@ -808,48 +807,51 @@ impl TestRunner {
     ///
     /// If the test fails, finds the minimal failing test case. If the test
     /// does not fail, returns whether it succeeded or was filtered out.
-    pub fn run_one<V : ValueTree,
-                   F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, mut case: V, test: F) -> Result<bool, TestError<V::Value>>
+    pub fn run_one<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult>
+        (&mut self, case: V, test: F) -> Result<bool, TestError<V::Value>>
     {
         let curr = case.current();
         match panic_guard(&curr, &test) {
             Ok(_) => Ok(true),
             Err(TestCaseError::Fail(why)) => {
-                let mut last_failure = (why, curr);
-
-                if case.simplify() {
-                    loop {
-                        let curr = case.current();
-                        let passed = match panic_guard(&curr, &test) {
-                            // Rejections are effectively a pass here,
-                            // since they indicate that any behaviour of
-                            // the function under test is acceptable.
-                            Ok(_) | Err(TestCaseError::Reject(..)) => true,
-
-                            Err(TestCaseError::Fail(why)) => {
-                                last_failure = (why, curr);
-                                false
-                            },
-                        };
-
-                        if passed {
-                            if !case.complicate() {
-                                break;
-                            }
-                        } else if !case.simplify() {
-                            break;
-                        }
-                    }
-                }
-
-                Err(TestError::Fail(last_failure.0, last_failure.1))
+                let (why, curr) = self.shrink(case, test).unwrap_or((why, curr));
+                Err(TestError::Fail(why, curr))
             },
             Err(TestCaseError::Reject(whence)) => {
                 self.reject_global(whence)?;
                 Ok(false)
             },
         }
+    }
+
+    fn shrink<V: ValueTree, F : Fn (&V::Value) -> TestCaseResult>
+        (&mut self, mut case: V, test: F) -> Option<(Reason, V::Value)>
+    {
+        let mut last_failure = None;
+
+        if case.simplify() {
+            loop {
+                let curr = case.current();
+                match panic_guard(&curr, &test) {
+                    // Rejections are effectively a pass here,
+                    // since they indicate that any behaviour of
+                    // the function under test is acceptable.
+                    Ok(_) | Err(TestCaseError::Reject(..)) => {
+                        if !case.complicate() {
+                            break;
+                        }
+                    },
+                    Err(TestCaseError::Fail(why)) => {
+                        last_failure = Some((why, curr));
+                        if !case.simplify() {
+                            break;
+                        }
+                    },
+                }
+            }
+        }
+
+        last_failure
     }
 
     /// Update the state to account for a local rejection from `whence`, and
