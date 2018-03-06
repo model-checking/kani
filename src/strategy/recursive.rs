@@ -15,15 +15,15 @@ use strategy::unions::float_to_weight;
 use test_runner::*;
 
 /// Return type from `Strategy::prop_recursive()`.
-pub struct Recursive<B, F> {
-    pub(super) base: Arc<B>,
+pub struct Recursive<T, F> {
+    pub(super) base: ArcStrategy<T>,
     pub(super) recurse: Arc<F>,
     pub(super) depth: u32,
     pub(super) desired_size: u32,
     pub(super) expected_branch_size: u32,
 }
 
-impl<B : fmt::Debug, F> fmt::Debug for Recursive<B, F> {
+impl<T: fmt::Debug, F> fmt::Debug for Recursive<T, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Recursive")
             .field("base", &self.base)
@@ -35,10 +35,10 @@ impl<B : fmt::Debug, F> fmt::Debug for Recursive<B, F> {
     }
 }
 
-impl<B, F> Clone for Recursive<B, F> {
+impl<T, F> Clone for Recursive<T, F> {
     fn clone(&self) -> Self {
         Recursive {
-            base: Arc::clone(&self.base),
+            base: self.base.clone(),
             recurse: Arc::clone(&self.recurse),
             depth: self.depth,
             desired_size: self.desired_size,
@@ -47,11 +47,11 @@ impl<B, F> Clone for Recursive<B, F> {
     }
 }
 
-impl<T : fmt::Debug + 'static,
-     R : Strategy + 'static,
-     F : Fn(Arc<BoxedStrategy<T>>) -> R>
-Recursive<BoxedStrategy<T>, F>
+impl<T, R, F> Recursive<T, F>
 where
+    T : fmt::Debug + 'static,
+    R : Strategy + 'static,
+    F : Fn(ArcStrategy<T>) -> R,
     R::Value : ValueTree<Value = T>
 {
     pub(super) fn new<S>
@@ -63,18 +63,18 @@ where
         S::Value : ValueTree<Value = T>
     {
         Self {
-            base: Arc::new(base.boxed()),
+            base: base.arc_boxed(),
             recurse: Arc::new(recurse),
             depth, desired_size, expected_branch_size,
         }
     }
 }
 
-impl<T : fmt::Debug + 'static,
-     R : Strategy + 'static,
-     F : Fn(Arc<BoxedStrategy<T>>) -> R>
-Strategy for Recursive<BoxedStrategy<T>, F>
+impl<T, R, F> Strategy for Recursive<T, F>
 where
+    T : fmt::Debug + 'static,
+    R : Strategy + 'static,
+    F : Fn(ArcStrategy<T>) -> R,
     R::Value : ValueTree<Value = T>
 {
     type Value = Box<ValueTree<Value = T>>;
@@ -116,10 +116,10 @@ where
             k2 = k2.saturating_mul(u64::from(self.expected_branch_size) * 2);
         }
 
-        let mut strat = Arc::clone(&self.base);
+        let mut strat = self.base.clone();
         while let Some(branch_probability) = branch_probabilities.pop() {
-            let recursed = (self.recurse)(Arc::clone(&strat));
-            let recursive_choice = Arc::new(recursed.boxed());
+            let recursed = (self.recurse)(strat.clone());
+            let recursive_choice = recursed.arc_boxed();
             let non_recursive_choice = strat;
             // Clamp the maximum branch probability to 0.9 to ensure we can
             // generate non-recursive cases reasonably often.
@@ -130,7 +130,7 @@ where
                 weight_leaf => non_recursive_choice,
                 weight_branch => recursive_choice,
             ];
-            strat = Arc::new(branch.boxed());
+            strat = branch.arc_boxed();
         }
 
         strat.new_value(runner)

@@ -1,3 +1,21 @@
+## Unreleased
+
+### New Additions
+
+- Added `ArcStrategy<T>` and `.arc_boxed()` for boxed strategies affording
+  cheap shallow cloning by reference counting (internally using an `Arc`).
+
+### Potential Breaking Changes
+
+- There is a small change of breakage if you've relied on `Recursive` using
+  a `BoxedStrategy` as `Recursive` now internally uses `ArcStrategy<T>`
+  instead as well as expecting a `Fn(ArcStrategy<T>) -> R` instead of
+  `Fn(Arc<BoxedStrategy<T>>) -> R`.
+
+### Minor changes
+
+- Reduced indirections and heap allocations inside `Recursive` somewhat.
+
 ## 0.5.1
 
 ### New Additions

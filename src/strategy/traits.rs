@@ -375,10 +375,10 @@ pub trait Strategy : fmt::Debug {
     /// ```
     fn prop_recursive<R, F>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<BoxedStrategy<ValueFor<Self>>, F>
+        -> Recursive<ValueFor<Self>, F>
     where
         Self : Sized + 'static,
-        F : Fn(Arc<BoxedStrategy<ValueFor<Self>>>) -> R,
+        F : Fn(ArcStrategy<ValueFor<Self>>) -> R,
         R : Strategy + 'static,
         R::Value : ValueTree<Value = ValueFor<Self>>
     {
@@ -445,6 +445,17 @@ pub trait Strategy : fmt::Debug {
     fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
     where Self : Sized + Send + Sync + 'static {
         SBoxedStrategy(Box::new(BoxedStrategyWrapper(self)))
+    }
+
+    /// Erases the type of this `Strategy` so it can be passed around as a
+    /// simple trait object.
+    ///
+    /// This version internally uses `Arc` so that you can do shallow clones
+    /// of the resulting strategy with reference counting. If you don't need
+    /// this, use `boxed()` or `sboxed()` instead.
+    fn arc_boxed(self) -> ArcStrategy<ValueFor<Self>>
+    where Self : Sized + 'static {
+        ArcStrategy(Arc::new(BoxedStrategyWrapper(self)))
     }
 
     /// Wraps this strategy to prevent values from being subject to shrinking.
@@ -631,6 +642,32 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
     fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
     where Self : Sized + 'static {
         BoxedStrategy(self.0)
+    }
+}
+
+/// A boxed `Strategy` trait object as produced by `Strategy::arc_boxed()`.
+/// Strategies of this type afford cheap shallow cloning via reference counting.
+#[derive(Debug)]
+pub struct ArcStrategy<T>(Arc<Strategy<Value = BoxedVT<T>>>);
+
+impl<T> Clone for ArcStrategy<T> {
+    fn clone(&self) -> Self {
+        ArcStrategy(Arc::clone(&self.0))
+    }
+}
+
+impl<T: fmt::Debug> Strategy for ArcStrategy<T> {
+    type Value = BoxedVT<T>;
+
+    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_value(runner)
+    }
+
+    // Optimization: Don't rebox the strategy.
+
+    fn arc_boxed(self) -> ArcStrategy<ValueFor<Self>>
+    where Self : Sized + 'static {
+        self
     }
 }
 
