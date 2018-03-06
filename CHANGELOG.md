@@ -16,6 +16,11 @@
 
 - Reduced indirections and heap allocations inside `Recursive` somewhat.
 
+### Bug Fixes
+
+- Removed `impl Arbitrary for LocalKeyState` since `LocalKeyState` no longer
+  exists in the nightly compiler.
+
 ## 0.5.1
 
 ### New Additions
