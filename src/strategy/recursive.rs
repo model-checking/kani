@@ -16,11 +16,11 @@ use test_runner::*;
 
 /// Return type from `Strategy::prop_recursive()`.
 pub struct Recursive<T, F> {
-    pub(super) base: ArcStrategy<T>,
-    pub(super) recurse: Arc<F>,
-    pub(super) depth: u32,
-    pub(super) desired_size: u32,
-    pub(super) expected_branch_size: u32,
+    base: BoxedStrategy<T>,
+    recurse: Arc<F>,
+    depth: u32,
+    desired_size: u32,
+    expected_branch_size: u32,
 }
 
 impl<T: fmt::Debug, F> fmt::Debug for Recursive<T, F> {
@@ -51,7 +51,7 @@ impl<T, R, F> Recursive<T, F>
 where
     T : fmt::Debug + 'static,
     R : Strategy + 'static,
-    F : Fn(ArcStrategy<T>) -> R,
+    F : Fn(BoxedStrategy<T>) -> R,
     R::Value : ValueTree<Value = T>
 {
     pub(super) fn new<S>
@@ -63,7 +63,7 @@ where
         S::Value : ValueTree<Value = T>
     {
         Self {
-            base: base.arc_boxed(),
+            base: base.boxed(),
             recurse: Arc::new(recurse),
             depth, desired_size, expected_branch_size,
         }
@@ -74,7 +74,7 @@ impl<T, R, F> Strategy for Recursive<T, F>
 where
     T : fmt::Debug + 'static,
     R : Strategy + 'static,
-    F : Fn(ArcStrategy<T>) -> R,
+    F : Fn(BoxedStrategy<T>) -> R,
     R::Value : ValueTree<Value = T>
 {
     type Value = Box<ValueTree<Value = T>>;
@@ -119,7 +119,7 @@ where
         let mut strat = self.base.clone();
         while let Some(branch_probability) = branch_probabilities.pop() {
             let recursed = (self.recurse)(strat.clone());
-            let recursive_choice = recursed.arc_boxed();
+            let recursive_choice = recursed.boxed();
             let non_recursive_choice = strat;
             // Clamp the maximum branch probability to 0.9 to ensure we can
             // generate non-recursive cases reasonably often.
@@ -130,7 +130,7 @@ where
                 weight_leaf => non_recursive_choice,
                 weight_branch => recursive_choice,
             ];
-            strat = branch.arc_boxed();
+            strat = branch.boxed();
         }
 
         strat.new_value(runner)
