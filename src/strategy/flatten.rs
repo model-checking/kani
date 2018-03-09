@@ -125,25 +125,21 @@ where S::Value : Strategy {
             true
         } else if !self.meta.simplify() {
             false
+        } else if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+            // Shift current into final_complication and `v` into
+            // `current`. We also need to prevent that value from
+            // complicating beyond the current point in the future
+            // since we're going to return `true` from `simplify()`
+            // ourselves.
+            self.current.disallow_complicate();
+            self.final_complication = Some(Fuse::new(v));
+            mem::swap(self.final_complication.as_mut().unwrap(),
+                        &mut self.current);
+            // Initially complicate by regenerating the chosen value.
+            self.complicate_regen_remaining = self.runner.config().cases;
+            true
         } else {
-            match self.meta.current().new_value(&mut self.runner) {
-                Ok(v) => {
-                    // Shift current into final_complication and `v` into
-                    // `current`. We also need to prevent that value from
-                    // complicating beyond the current point in the future
-                    // since we're going to return `true` from `simplify()`
-                    // ourselves.
-                    self.current.disallow_complicate();
-                    self.final_complication = Some(Fuse::new(v));
-                    mem::swap(self.final_complication.as_mut().unwrap(),
-                              &mut self.current);
-                    // Initially complicate by regenerating the chosen value.
-                    self.complicate_regen_remaining =
-                        self.runner.config().cases;
-                    true
-                },
-                Err(_) => false,
-            }
+            false
         }
     }
 
@@ -161,25 +157,17 @@ where S::Value : Strategy {
             }
         }
 
-        let res = if self.current.complicate() {
-            true
+        if self.current.complicate() {
+            return true;
         } else if self.meta.complicate() {
-            match self.meta.current().new_value(&mut self.runner) {
-                Ok(v) => {
-                    self.complicate_regen_remaining =
-                        self.runner.config().cases;
-                    self.current = Fuse::new(v);
-                    true
-                },
-                Err(_) => false,
+            if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+                self.complicate_regen_remaining = self.runner.config().cases;
+                self.current = Fuse::new(v);
+                return true;
             }
-        } else {
-            false
-        };
+        }
 
-        if res {
-            true
-        } else if let Some(v) = self.final_complication.take() {
+        if let Some(v) = self.final_complication.take() {
             self.current = v;
             true
         } else {

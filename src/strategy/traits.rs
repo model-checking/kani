@@ -375,10 +375,10 @@ pub trait Strategy : fmt::Debug {
     /// ```
     fn prop_recursive<R, F>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<BoxedStrategy<ValueFor<Self>>, F>
+        -> Recursive<ValueFor<Self>, F>
     where
         Self : Sized + 'static,
-        F : Fn(Arc<BoxedStrategy<ValueFor<Self>>>) -> R,
+        F : Fn(BoxedStrategy<ValueFor<Self>>) -> R,
         R : Strategy + 'static,
         R::Value : ValueTree<Value = ValueFor<Self>>
     {
@@ -432,9 +432,12 @@ pub trait Strategy : fmt::Debug {
     ///
     /// See also `sboxed()` if this `Strategy` is `Send` and `Sync` and you
     /// want to preserve that information.
+    ///
+    /// Strategies of this type afford cheap shallow cloning via reference
+    /// counting by using an `Arc` internally.
     fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
     where Self : Sized + 'static {
-        BoxedStrategy(Box::new(BoxedStrategyWrapper(self)))
+        BoxedStrategy(Arc::new(BoxedStrategyWrapper(self)))
     }
 
     /// Erases the type of this `Strategy` so it can be passed around as a
@@ -442,9 +445,12 @@ pub trait Strategy : fmt::Debug {
     ///
     /// Unlike `boxed()`, this conversion retains the `Send` and `Sync` traits
     /// on the output.
+    ///
+    /// Strategies of this type afford cheap shallow cloning via reference
+    /// counting by using an `Arc` internally.
     fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
     where Self : Sized + Send + Sync + 'static {
-        SBoxedStrategy(Box::new(BoxedStrategyWrapper(self)))
+        SBoxedStrategy(Arc::new(BoxedStrategyWrapper(self)))
     }
 
     /// Wraps this strategy to prevent values from being subject to shrinking.
@@ -591,13 +597,31 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 type BoxedVT<T> = Box<ValueTree<Value = T>>;
 
 /// A boxed `Strategy` trait object as produced by `Strategy::boxed()`.
+///
+/// Strategies of this type afford cheap shallow cloning via reference
+/// counting by using an `Arc` internally.
 #[derive(Debug)]
-pub struct BoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>>>);
+pub struct BoxedStrategy<T>(Arc<Strategy<Value = BoxedVT<T>>>);
 
 /// A boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
+///
+/// Strategies of this type afford cheap shallow cloning via reference
+/// counting by using an `Arc` internally.
 #[derive(Debug)]
-pub struct SBoxedStrategy<T>(Box<Strategy<Value = BoxedVT<T>> + Sync + Send>);
+pub struct SBoxedStrategy<T>(Arc<Strategy<Value = BoxedVT<T>> + Sync + Send>);
+
+impl<T> Clone for BoxedStrategy<T> {
+    fn clone(&self) -> Self {
+        BoxedStrategy(Arc::clone(&self.0))
+    }
+}
+
+impl<T> Clone for SBoxedStrategy<T> {
+    fn clone(&self) -> Self {
+        SBoxedStrategy(Arc::clone(&self.0))
+    }
+}
 
 impl<T: fmt::Debug> Strategy for BoxedStrategy<T> {
     type Value = BoxedVT<T>;

@@ -11,9 +11,6 @@
 
 use std::thread::*;
 
-#[cfg(feature = "unstable")]
-use strategy::*;
-
 use strategy::statics::static_map;
 use option::prob;
 use arbitrary::*;
@@ -61,25 +58,10 @@ arbitrary!([A: 'static + Send + Arbitrary<'a>] JoinHandle<A>,
 );
 */
 
-#[cfg(feature = "unstable")]
-arbitrary!(LocalKeyState,
-    TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>)>;
-    prop_oneof![
-        Just(LocalKeyState::Uninitialized),
-        Just(LocalKeyState::Valid),
-        Just(LocalKeyState::Destroyed)
-    ]
-);
-
 #[cfg(test)]
 mod test {
     no_panic_test!(
         builder => Builder
-    );
-
-    #[cfg(feature = "unstable")]
-    no_panic_test!(
-        local_key_state => LocalKeyState
     );
 
     /*

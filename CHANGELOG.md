@@ -1,3 +1,27 @@
+## Unreleased
+
+### Potential Breaking Changes
+
+- There is a small change of breakage if you've relied on `Recursive` using
+  an `Arc<BoxedStrategy<T>>` as `Recursive` now internally uses `BoxedStrategy<T>`
+  instead as well as expecting a `Fn(BoxedStrategy<T>) -> R` instead of
+  `Fn(BoxedStrategy<T>) -> R`. In addition, the type of recursive strategies
+  has changed from `Recursive<BoxedStrategy<T>, F>` to just `Recursive<T, F>`.
+
+### Minor changes
+
+- Reduced indirections and heap allocations inside `Recursive<T, F>` somewhat.
+
+- `BoxedStrategy<T>` and `SBoxedStrategy<T>` now use `Arc` internally instead of
+  using `Box`. While this has marginal overhead, it also reduces the overhead
+  in `Recursive<T, F>`. The upside to this change is also that you can very
+  cheaply clone strategies.
+
+### Bug Fixes
+
+- Removed `impl Arbitrary for LocalKeyState` since `LocalKeyState` no longer
+  exists in the nightly compiler.
+
 ## 0.5.1
 
 ### New Additions
