@@ -25,8 +25,6 @@ arbitrary!(Probability, MapInto<Range<f64>, Self>;
 arbitrary!(Option<::std::string::ParseError>; None);
 #[cfg(feature = "unstable")]
 arbitrary!(Option<!>; None);
-#[cfg(feature = "unstable")]
-arbitrary!(Option<::std::convert::Infallible>; None);
 
 arbitrary!([A: Arbitrary] opt::Option<A>, OptionStrategy<A::Strategy>,
     product_type![Probability, A::Parameters];
@@ -56,12 +54,5 @@ mod test {
         option      => Option<u8>,
         option_iter => opt::IntoIter<u8>,
         option_parse_error => Option<::std::string::ParseError>
-    );
-
-    #[cfg(feature = "unstable")]
-    no_panic_test!(
-        none_error => opt::NoneError,
-        option_never_type => Option<!>,
-        option_infallible => Option<::std::convert::Infallible>
     );
 }

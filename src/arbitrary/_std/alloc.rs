@@ -9,9 +9,9 @@
 
 //! Arbitrary implementations for `std::hash`.
 
+use std::alloc::*;
 use std::cmp;
 use std::ops::Range;
-use std::heap::*;
 use std::usize;
 
 use strategy::*;
@@ -19,7 +19,7 @@ use strategy::statics::static_map;
 use arbitrary::*;
 
 arbitrary!(CannotReallocInPlace; CannotReallocInPlace);
-arbitrary!(Heap; Heap);
+arbitrary!(Global; Global);
 
 // Not Debug.
 //lazy_just!(System, || System);
@@ -36,22 +36,16 @@ arbitrary!(Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
     })
 );
 
-arbitrary!(AllocErr, TupleUnion<(W<SMapped<Layout, Self>>, W<Just<Self>>)>;
-    prop_oneof![
-        static_map(any::<Layout>(), |request| AllocErr::Exhausted { request }),
-        Just(AllocErr::Unsupported {
-            // We could randomly generate a string and then leak it, but let's
-            // not do that since we might run out of memory in testing or
-            // otherwise make the TestRunner really slow.
-            details: "<Unsupported>"
-        })
-    ]
-);
+arbitrary!(AllocErr, Just<Self>; Just(AllocErr));
+arbitrary!(CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+           prop_oneof![Just(CollectionAllocErr::AllocErr),
+                       Just(CollectionAllocErr::CapacityOverflow)]);
 
 #[cfg(test)]
 mod test {
     no_panic_test!(
         layout => Layout,
-        alloc_err => AllocErr
+        alloc_err => AllocErr,
+        collection_alloc_err => CollectionAllocErr
     );
 }

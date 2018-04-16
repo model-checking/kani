@@ -24,6 +24,8 @@
 - Removed `impl Arbitrary for LocalKeyState` since `LocalKeyState` no longer
   exists in the nightly compiler.
 
+- Unstable features compile on latest nightly again.
+
 ## 0.5.1
 
 ### New Additions

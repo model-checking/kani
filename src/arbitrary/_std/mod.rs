@@ -9,6 +9,8 @@
 
 //! Arbitrary implementations for libstd.
 
+#[cfg(feature = "unstable")]
+mod alloc;
 mod ascii;
 mod borrow;
 mod boxed;
@@ -22,8 +24,6 @@ mod ffi;
 mod fmt;
 mod fs;
 mod hash;
-#[cfg(feature = "unstable")]
-mod heap;
 mod io;
 mod iter;
 mod marker;
