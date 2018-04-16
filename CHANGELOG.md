@@ -1,12 +1,13 @@
-## Unreleased
+## 0.6.0
 
 ### Potential Breaking Changes
 
-- There is a small change of breakage if you've relied on `Recursive` using
-  an `Arc<BoxedStrategy<T>>` as `Recursive` now internally uses `BoxedStrategy<T>`
+- There is a small change of breakage if you've relied on `Recursive` using an
+  `Arc<BoxedStrategy<T>>` as `Recursive` now internally uses `BoxedStrategy<T>`
   instead as well as expecting a `Fn(BoxedStrategy<T>) -> R` instead of
-  `Fn(BoxedStrategy<T>) -> R`. In addition, the type of recursive strategies
-  has changed from `Recursive<BoxedStrategy<T>, F>` to just `Recursive<T, F>`.
+  `Fn(Arc<BoxedStrategy<T>>) -> R`. In addition, the type of recursive
+  strategies has changed from `Recursive<BoxedStrategy<T>, F>` to just
+  `Recursive<T, F>`.
 
 ### Minor changes
 
