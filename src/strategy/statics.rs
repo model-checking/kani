@@ -80,7 +80,7 @@ Strategy for Filter<S, F> {
             } else {
                 return Ok(Filter {
                     source: val,
-                    whence: self.whence.clone(),
+                    whence: "unused".into(),
                     fun: self.fun.clone(),
                 })
             }

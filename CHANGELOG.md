@@ -17,6 +17,8 @@
   in `Recursive<T, F>`. The upside to this change is also that you can very
   cheaply clone strategies.
 
+- `Filter` is marginally faster.
+
 ### Bug Fixes
 
 - Removed `impl Arbitrary for LocalKeyState` since `LocalKeyState` no longer

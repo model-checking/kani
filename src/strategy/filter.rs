@@ -42,7 +42,7 @@ impl<S : Clone, F> Clone for Filter<S, F> {
     fn clone(&self) -> Self {
         Filter {
             source: self.source.clone(),
-            whence: self.whence.clone(),
+            whence: "unused".into(),
             fun: Arc::clone(&self.fun),
         }
     }
