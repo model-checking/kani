@@ -1018,3 +1018,14 @@ mod test {
         ]));
     }
 }
+
+#[cfg(test)]
+mod another_test {
+    use sugar;
+
+    // Ensure that we can access the `[pub]` composed function above.
+    #[allow(dead_code)]
+    fn can_access_pub_compose() {
+        let _ = sugar::test::two_ints_pub(42);
+    }
+}
