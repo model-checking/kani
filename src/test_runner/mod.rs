@@ -12,16 +12,32 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-use std::env;
-use std::fmt;
-use std::io;
+use core::fmt;
+#[cfg(feature = "std")]
 use std::panic::{self, AssertUnwindSafe};
-use std::path::{Path, PathBuf};
+use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::Ordering::SeqCst;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::arc::Arc;
+#[cfg(feature = "std")]
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::BTreeMap;
+#[cfg(feature = "std")]
+use std::collections::BTreeMap;
+
+#[cfg(feature = "std")]
+use std::boxed::Box;
+
+#[cfg(feature = "std")]
+use std::string::String;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 use rand::{self, Rand, SeedableRng, XorShiftRng};
 
@@ -51,8 +67,6 @@ pub struct TestRunner {
 
     local_reject_detail: RejectionDetail,
     global_reject_detail: RejectionDetail,
-
-    source_file: Option<Cow<'static, Path>>,
 }
 
 impl fmt::Debug for TestRunner {
@@ -66,7 +80,6 @@ impl fmt::Debug for TestRunner {
             .field("flat_map_regens", &self.flat_map_regens)
             .field("local_reject_detail", &self.local_reject_detail)
             .field("global_reject_detail", &self.global_reject_detail)
-            .field("source_file", &self.source_file)
             .finish()
     }
 }
@@ -95,6 +108,15 @@ impl Default for TestRunner {
     }
 }
 
+#[cfg(not(feature = "std"))]
+fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
+    where
+        F: Fn(&V) -> TestCaseResult
+{
+    test(case)
+}
+
+#[cfg(feature = "std")]
 fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
 where
     F: Fn(&V) -> TestCaseResult
@@ -117,12 +139,21 @@ impl TestRunner {
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: rand::weak_rng(),
+            rng: Self::default_rng(),
             flat_map_regens: Arc::new(AtomicUsize::new(0)),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
-            source_file: None,
         }
+    }
+
+    #[cfg(feature = "std")]
+    fn default_rng() -> rand::XorShiftRng {
+        rand::weak_rng()
+    }
+
+    #[cfg(not(feature = "std"))]
+    fn default_rng() -> rand::XorShiftRng {
+        rand::XorShiftRng::new_unseeded()
     }
 
     /// Create a fresh `TestRunner` with the same config and global counters as
@@ -140,7 +171,6 @@ impl TestRunner {
             flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
-            source_file: self.source_file.clone(),
         }
     }
 
@@ -171,77 +201,6 @@ impl TestRunner {
         &self.config
     }
 
-    /// Set the source file to use for resolving the location of the persisted
-    /// failing cases file.
-    ///
-    /// The source location can only be used if it is absolute. If `source` is
-    /// not an absolute path, an attempt will be made to determine the absolute
-    /// path based on the current working directory and its parents. If no
-    /// absolute path can be determined, a warning will be printed and proptest
-    /// will continue as if this function had never been called.
-    ///
-    /// See [`FailurePersistence`](enum.FailurePersistence.html) for details on
-    /// how this value is used once it is made absolute.
-    ///
-    /// This is normally called automatically by the `proptest!` macro, which
-    /// passes `file!()`.
-    pub fn set_source_file(&mut self, source: &'static Path) {
-        self.set_source_file_with_cwd(env::current_dir, source)
-    }
-
-    pub(crate) fn set_source_file_with_cwd<F>(
-        &mut self, getcwd: F,
-        source: &'static Path)
-    where F : FnOnce () -> io::Result<PathBuf> {
-        self.source_file = if source.is_absolute() {
-            // On Unix, `file!()` is absolute. In these cases, we can use
-            // that path directly.
-            Some(Cow::Borrowed(source))
-        } else {
-            // On Windows, `file!()` is relative to the crate root, but the
-            // test is not generally run with the crate root as the working
-            // directory, so the path is not directly usable. However, the
-            // working directory is almost always a subdirectory of the crate
-            // root, so pop directories off until pushing the source onto the
-            // directory results in a path that refers to an existing file.
-            // Once we find such a path, we can use that.
-            //
-            // If we can't figure out an absolute path, print a warning and act
-            // as if no source had been given.
-            match getcwd() {
-                Ok(mut cwd) => {
-                    loop {
-                        let joined = cwd.join(source);
-                        if joined.is_file() {
-                            break Some(Cow::Owned(joined));
-                        }
-
-                        if !cwd.pop() {
-                            eprintln!(
-                                "proptest: Failed to find absolute path of \
-                                 source file '{:?}'. Ensure the test is \
-                                 being run from somewhere within the crate \
-                                 directory hierarchy.", source);
-                            break None;
-                        }
-                    }
-                },
-
-                Err(e) => {
-                    eprintln!("proptest: Failed to determine current \
-                               directory, so the relative source path \
-                               '{:?}' cannot be resolved: {}",
-                              source, e);
-                    None
-                }
-            }
-        }
-    }
-
-    pub(crate) fn source_file(&self) -> Option<&Path> {
-        self.source_file.as_ref().map(|cow| &**cow)
-    }
-
     /// Run test cases against `f`, choosing inputs via `strategy`.
     ///
     /// If any failure cases occur, try to find a minimal failure case and
@@ -258,11 +217,17 @@ impl TestRunner {
         (&mut self, strategy: &S, test: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
-        let persist_path = self.config.failure_persistence.resolve(
-            self.source_file());
-
         let old_rng = self.rng.clone();
-        for persisted_seed in load_persisted_failures(persist_path.as_ref()) {
+
+        let persisted_failure_seeds: Vec<[u32; 4]> = {
+            let config = &self.config;
+            let source_file = config.source_file;
+            match config.failure_persistence {
+                Some(ref f) => f.load_persisted_failures(source_file),
+                None => Vec::new()
+            }
+        };
+        for persisted_seed in persisted_failure_seeds {
             self.rng = XorShiftRng::from_seed(persisted_seed);
             self.gen_and_run_case(strategy, &test)?;
         }
@@ -275,7 +240,10 @@ impl TestRunner {
             self.rng = XorShiftRng::from_seed(seed);
             let result = self.gen_and_run_case(strategy, &test);
             if let Err(TestError::Fail(_, ref value)) = result {
-                save_persisted_failure(persist_path.as_ref(), seed, value);
+                if let Some(ref mut failure_persistence) = self.config.failure_persistence {
+                    let source_file = &self.config.source_file;
+                    failure_persistence.save_persisted_failure(*source_file, seed, value);
+                }
             }
 
             result?;
@@ -379,6 +347,9 @@ impl TestRunner {
 
     /// Insert 1 or increment the rejection detail at key for whence.
     fn insert_or_increment(into: &mut RejectionDetail, whence: Reason) {
+        #[cfg(all(feature = "alloc", not(feature = "std")))]
+        use alloc::btree_map::Entry::*;
+        #[cfg(feature = "std")]
         use std::collections::btree_map::Entry::*;
         match into.entry(whence) {
             Occupied(oe) => { *oe.into_mut() += 1; },
@@ -434,7 +405,7 @@ mod test {
     #[test]
     fn test_fail_via_result() {
         let mut runner = TestRunner::new(Config {
-            failure_persistence: FailurePersistence::Off,
+            failure_persistence: None,
             .. Config::default()
         });
         let result = runner.run(
@@ -452,7 +423,7 @@ mod test {
     #[test]
     fn test_fail_via_panic() {
         let mut runner = TestRunner::new(Config {
-            failure_persistence: FailurePersistence::Off,
+            failure_persistence: None,
             .. Config::default()
         });
         let result = runner.run(&(0u32..10u32), |&v| {
@@ -478,7 +449,9 @@ mod test {
         let max = 10_000_000i32;
         let input = (0i32..max).prop_map(PoorlyBehavedDebug);
         let config = Config {
-            failure_persistence: FailurePersistence::Direct(FILE),
+            failure_persistence: Some(Box::new(
+                FileFailurePersistence::Direct(FILE)
+            )),
             .. Config::default()
         };
 
@@ -524,33 +497,6 @@ mod test {
 
         assert_eq!(first_sub_failure, second_sub_failure);
         assert_eq!(first_super_failure, second_super_failure);
-    }
-
-    #[test]
-    fn relative_source_files_absolutified() {
-        const TEST_RUNNER_PATH: &[&str] = &["src", "test_runner", "mod.rs"];
-        lazy_static! {
-            static ref TEST_RUNNER_RELATIVE: PathBuf =
-                TEST_RUNNER_PATH.iter().collect();
-        }
-        const CARGO_DIR: &str = env!("CARGO_MANIFEST_DIR");
-
-        let expected = ::std::iter::once(CARGO_DIR)
-                        .chain(TEST_RUNNER_PATH.iter().map(|s| *s))
-                        .collect::<PathBuf>();
-
-        let mut runner = TestRunner::default();
-        // Running from crate root
-        runner.set_source_file_with_cwd(
-            || Ok(Path::new(CARGO_DIR).to_owned()),
-            &TEST_RUNNER_RELATIVE);
-        assert_eq!(&*expected, runner.source_file().unwrap());
-
-        // Running from test subdirectory
-        runner.set_source_file_with_cwd(
-            || Ok(Path::new(CARGO_DIR).join("target")),
-            &TEST_RUNNER_RELATIVE);
-        assert_eq!(&*expected, runner.source_file().unwrap());
     }
 
     #[test]

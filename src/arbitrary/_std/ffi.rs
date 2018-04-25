@@ -12,6 +12,21 @@
 use std::ffi::*;
 use std::ops::Range;
 
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::string::String;
+#[cfg(feature = "std")]
+use std::string::String;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 use strategy::*;
 use strategy::statics::static_map;
 use collection::*;

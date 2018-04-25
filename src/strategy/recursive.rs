@@ -7,8 +7,25 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::fmt;
+use core::fmt;
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+use core::num::Float;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::arc::Arc;
+#[cfg(feature = "std")]
 use std::sync::Arc;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 use strategy::traits::*;
 use strategy::unions::float_to_weight;

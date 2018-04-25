@@ -17,6 +17,10 @@
 //! characters, and `range()` and `ranges()` to select characters from
 //! inclusive ranges.
 
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::borrow::Cow;
+#[cfg(feature = "std")]
 use std::borrow::Cow;
 
 use rand::Rng;
@@ -90,7 +94,7 @@ pub fn select_char<R : Rng>(rnd: &mut R,
                             preferred: &[CharRange],
                             ranges: &[CharRange]) -> char {
     let (base, offset) = select_range_index(rnd, special, preferred, ranges);
-    ::std::char::from_u32(base + offset).expect("bad character selected")
+    ::core::char::from_u32(base + offset).expect("bad character selected")
 }
 
 fn select_range_index<R : Rng>(rnd: &mut R,
@@ -110,7 +114,7 @@ fn select_range_index<R : Rng>(rnd: &mut R,
 
     if !preferred.is_empty() && rnd.gen() {
         let (lo, hi) = preferred[rnd.gen_range(0, preferred.len())];
-        if let Some(ch) = ::std::char::from_u32(
+        if let Some(ch) = ::core::char::from_u32(
             rnd.gen_range(lo as u32, hi as u32 + 1))
         {
             if let Some(ret) = in_range(ranges, ch) { return ret; }
@@ -119,7 +123,7 @@ fn select_range_index<R : Rng>(rnd: &mut R,
 
     for _ in 0..65_536 {
         let (lo, hi) = ranges[rnd.gen_range(0, ranges.len())];
-        if let Some(ch) = ::std::char::from_u32(
+        if let Some(ch) = ::core::char::from_u32(
             rnd.gen_range(lo as u32, hi as u32 + 1))
         { return (lo as u32, ch as u32 - lo as u32); }
     }
@@ -187,7 +191,7 @@ impl<'a> CharStrategy<'a> {
 }
 
 const WHOLE_RANGE: &[CharRange] = &[
-    ('\x00', ::std::char::MAX)
+    ('\x00', ::core::char::MAX)
 ];
 
 /// Creates a `CharStrategy` which picks from literally any character, with the
@@ -257,7 +261,7 @@ impl<'a> Strategy for CharStrategy<'a> {
 
 impl CharValueTree {
     fn reposition(&mut self) {
-        while ::std::char::from_u32(self.value.current()).is_none() {
+        while ::core::char::from_u32(self.value.current()).is_none() {
             if !self.value.complicate() {
                 panic!("Converged to non-char value");
             }
@@ -269,7 +273,7 @@ impl ValueTree for CharValueTree {
     type Value = char;
 
     fn current(&self) -> char {
-        ::std::char::from_u32(self.value.current()).expect(
+        ::core::char::from_u32(self.value.current()).expect(
             "Generated non-char value")
     }
 
@@ -295,6 +299,7 @@ impl ValueTree for CharValueTree {
 #[cfg(test)]
 mod test {
     use std::cmp::{min, max};
+    use std::vec::Vec;
 
     use super::*;
     use collection;

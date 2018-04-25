@@ -33,7 +33,7 @@ macro_rules! int_any {
 
 macro_rules! numeric_api {
     ($typ:ident, $epsilon:expr) => {
-        impl Strategy for Range<$typ> {
+        impl Strategy for ::core::ops::Range<$typ> {
             type Value = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
@@ -45,28 +45,28 @@ macro_rules! numeric_api {
             }
         }
 
-        impl Strategy for RangeFrom<$typ> {
+        impl Strategy for ::core::ops::RangeFrom<$typ> {
             type Value = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 // TODO `rand` has no way to express the inclusive-end range we
                 // need here.
                 let range = rand::distributions::Range::new(
-                    self.start, ::std::$typ::MAX);
+                    self.start, ::core::$typ::MAX);
                 Ok(BinarySearch::new_clamped(
                     self.start, range.ind_sample(runner.rng()),
-                    ::std::$typ::MAX))
+                    ::core::$typ::MAX))
             }
         }
 
-        impl Strategy for RangeTo<$typ> {
+        impl Strategy for ::core::ops::RangeTo<$typ> {
             type Value = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let range = rand::distributions::Range::new(
-                    ::std::$typ::MIN, self.end);
+                    ::core::$typ::MIN, self.end);
                 Ok(BinarySearch::new_clamped(
-                    ::std::$typ::MIN, range.ind_sample(runner.rng()),
+                    ::core::$typ::MIN, range.ind_sample(runner.rng()),
                     self.end))
             }
         }
@@ -77,7 +77,6 @@ macro_rules! signed_integer_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
         pub mod $typ {
-            use std::ops::{Range, RangeFrom, RangeTo};
 
             use rand::{self, Rng};
             use rand::distributions::IndependentSample;
@@ -109,7 +108,7 @@ macro_rules! signed_integer_bin_search {
                 /// on the other side of `lo` or `hi` from `start`. `lo` is
                 /// inclusive, `hi` is exclusive.
                 fn new_clamped(lo: $typ, start: $typ, hi: $typ) -> Self {
-                    use std::cmp::{min, max};
+                    use core::cmp::{min, max};
 
                     BinarySearch {
                         lo: if start < 0 { min(0, hi-1) } else { max(0, lo) },
@@ -182,7 +181,6 @@ macro_rules! unsigned_integer_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
         pub mod $typ {
-            use std::ops::{Range, RangeFrom, RangeTo};
 
             use rand::{self, Rng};
             use rand::distributions::IndependentSample;
@@ -546,7 +544,7 @@ macro_rules! float_any {
                 // signalling bit. Assume the `NAN` constant is a quiet NaN as
                 // interpreted by the hardware and generate values based on
                 // that.
-                let quiet_or = ::std::$typ::NAN.to_bits() &
+                let quiet_or = ::core::$typ::NAN.to_bits() &
                     ($typ::EXP_MASK | ($typ::EXP_MASK >> 1));
                 let signaling_or = (quiet_or ^ ($typ::EXP_MASK >> 1)) |
                     $typ::EXP_MASK;
@@ -596,7 +594,9 @@ macro_rules! float_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
         pub mod $typ {
-            use std::ops::{self, Range, RangeFrom, RangeTo};
+            use core::ops;
+            #[cfg(all(feature = "alloc", not(feature = "std")))]
+            use core::num::Float;
 
             use rand::{self, Rng};
             use rand::distributions::IndependentSample;
@@ -656,7 +656,7 @@ macro_rules! float_bin_search {
                 }
 
                 fn current_allowed(&self) -> bool {
-                    use std::num::FpCategory;
+                    use core::num::FpCategory;
 
                     // Don't reposition if the new value is not allowed
                     let class_allowed = match self.curr.classify() {

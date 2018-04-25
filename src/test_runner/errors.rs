@@ -7,7 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::fmt;
+use core::fmt;
+
+#[cfg(feature = "std")]
+use std::string::ToString;
 
 use test_runner::Reason;
 
@@ -64,6 +67,7 @@ impl fmt::Display for TestCaseError {
     }
 }
 
+#[cfg(feature = "std")]
 impl<E : ::std::error::Error> From<E> for TestCaseError {
     fn from(cause: E) -> Self {
         TestCaseError::fail(cause.to_string())
@@ -94,6 +98,7 @@ impl<T : fmt::Debug> fmt::Display for TestError<T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T : fmt::Debug> ::std::error::Error for TestError<T> {
     fn description(&self) -> &str {
         match *self {

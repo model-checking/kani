@@ -18,7 +18,7 @@
 //!
 //! General implementations are available for sizes 1 through 32.
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use strategy::*;
 use test_runner::*;

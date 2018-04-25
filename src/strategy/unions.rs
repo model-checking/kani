@@ -7,8 +7,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cmp::{max, min};
-use std::u32;
+use core::cmp::{max, min};
+use core::u32;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 use rand;
 use rand::distributions::IndependentSample;
@@ -320,10 +325,20 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
 
     // Clamp to 1..WEIGHT_BASE-1 so that we never produce a weight of 0.
     let pos = max(1, min(WEIGHT_BASE - 1,
-                         (f * f64::from(WEIGHT_BASE)).round() as u32));
+                         round(f * f64::from(WEIGHT_BASE)) as u32));
     let neg = WEIGHT_BASE - pos;
 
     (pos, neg)
+}
+
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+fn round(f: f64) -> f64{
+    unsafe { ::core::intrinsics::roundf64(f) }
+}
+#[cfg(feature = "std")]
+fn round(f: f64) -> f64 {
+    f.round()
 }
 
 #[cfg(test)]

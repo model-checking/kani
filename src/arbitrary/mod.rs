@@ -28,6 +28,7 @@ mod traits;
 mod primitives;
 mod arrays;
 mod tuples;
+#[cfg(feature = "std")]
 mod _std;
 
 pub use self::traits::*;

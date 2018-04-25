@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![cfg_attr(feature="cargo-clippy", allow(doc_markdown))]
+#![cfg_attr(feature = "cargo-clippy", allow(doc_markdown))]
 
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for
@@ -708,7 +708,7 @@
 //! ```rust
 //! extern crate proptest;
 //!
-//! use proptest::test_runner::{Config, FailurePersistence,
+//! use proptest::test_runner::{Config, FileFailurePersistence,
 //!                             TestError, TestRunner};
 //!
 //! fn some_function(v: i32) {
@@ -723,7 +723,7 @@
 //! fn main() {
 //!     let mut runner = TestRunner::new(Config {
 //!         // Turn failure persistence off for demonstration
-//!         failure_persistence: FailurePersistence::Off,
+//!         failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
 //!         .. Config::default()
 //!     });
 //!     let result = runner.run(&(0..10000i32), |&v| {
@@ -1436,7 +1436,6 @@
 //! perusing the module tree below.
 
 #![deny(missing_docs)]
-
 #![cfg_attr(feature = "unstable", feature(
     // i128 here produces a warning since it's going to be stable in 1.26, but
     // that's not stable *now*, so keep it in so the warning acts as a
@@ -1459,25 +1458,51 @@
     , never_type
     , try_reserve
 ))]
+#![no_std]
+#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(alloc))]
+#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_float))]
+#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_intrinsics))]
+
+#[cfg(any(feature = "std", test))]
+#[macro_use]
+extern crate std;
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+#[macro_use]
+extern crate alloc;
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+extern crate hashmap_core;
 
 #[cfg(feature = "frunk")]
 #[macro_use]
 extern crate frunk_core;
 
 #[cfg(feature = "frunk")]
-#[macro_use] mod product_frunk;
+#[macro_use]
+mod product_frunk;
 
 #[cfg(not(feature = "frunk"))]
-#[macro_use] mod product_tuple;
+#[macro_use]
+mod product_tuple;
 
-#[macro_use] extern crate bitflags;
+#[macro_use]
+extern crate bitflags;
 extern crate bit_set;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate quick_error;
-extern crate rand;
-extern crate regex_syntax;
+#[macro_use]
+extern crate lazy_static;
 
-#[cfg(test)] extern crate regex;
+// Only required for the string module.
+#[cfg(feature = "std")]
+#[macro_use]
+extern crate quick_error;
+// Only required for the string module.
+#[cfg(feature = "std")]
+extern crate regex_syntax;
+extern crate rand;
+
+#[cfg(test)]
+extern crate regex;
 
 // Pervasive internal sugar
 macro_rules! mapfn {
@@ -1543,21 +1568,24 @@ macro_rules! opaque_strategy_wrapper {
 }
 
 #[doc(hidden)]
-#[macro_use] pub mod sugar;
+#[macro_use]
+pub mod sugar;
 
-pub mod test_runner;
-pub mod strategy;
 pub mod arbitrary;
-pub mod bool;
-pub mod num;
-pub mod bits;
-pub mod tuple;
 pub mod array;
-pub mod collection;
+pub mod bits;
+pub mod bool;
 pub mod char;
-pub mod string;
+pub mod collection;
+pub mod num;
+pub mod strategy;
+pub mod test_runner;
+pub mod tuple;
+
 pub mod option;
 pub mod result;
 pub mod sample;
+#[cfg(feature = "std")]
+pub mod string;
 
 pub mod prelude;

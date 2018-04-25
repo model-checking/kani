@@ -7,7 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::fmt;
+use core::fmt;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::arc::Arc;
+#[cfg(feature = "std")]
 use std::sync::Arc;
 
 use strategy::traits::*;
@@ -111,6 +115,7 @@ ValueTree for Filter<S, F> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::borrow::ToOwned;
 
     #[test]
     fn test_filter() {

@@ -1,6 +1,6 @@
 [package]
 name = "proptest"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Jason Lingle"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
@@ -18,18 +18,49 @@ travis-ci = { repository = "AltSysrq/proptest" }
 
 [features]
 
-default = []
+default = ["std"]
 
 # Enables unstable features of Rust.
 unstable = ["rand/i128_support"]
 
+# Required for no_std usage thanks to lazy_static's
+# dependency on the spin crate, which is nightly-only
+# for no_std.
+nightly = ["lazy_static/spin_no_std"]
+
+# Enables the use of standard-library dependent feature
+std = ["rand/std", "bit-set/std", "quick-error", "regex-syntax"]
+
+# For use in no_std environments with access to an allocator
+alloc = ["hashmap_core"]
+
 [dependencies]
 bitflags = "1.0.1"
-bit-set = "0.4.0"
-quick-error = "1.2.1"
-rand = "0.4.2"
-regex-syntax = "0.4.2"
-lazy_static = "1.0.0"
+
+[dependencies.hashmap_core]
+version = "0.1.4"
+optional = true
+
+[dependencies.lazy_static]
+version = "1.0.0"
+default-features = false
+
+[dependencies.quick-error]
+version = "1.2.1"
+optional = true
+
+[dependencies.regex-syntax]
+version = "0.4.2"
+optional = true
+
+[dependencies.bit-set]
+version = "0.5.0"
+default-features = false
+
+[dependencies.rand]
+version = "0.4.2"
+default-features = false
+features = ["alloc"]
 
 [dev-dependencies]
 regex = "0.2.5"
