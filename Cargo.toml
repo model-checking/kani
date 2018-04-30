@@ -29,7 +29,7 @@ unstable = ["rand/i128_support"]
 nightly = ["lazy_static/spin_no_std"]
 
 # Enables the use of standard-library dependent feature
-std = ["rand/std", "bit-set/std", "quick-error", "regex-syntax"]
+std = ["rand/std", "bit-set/std", "quick-error", "regex-syntax", "num-traits/std"]
 
 # For use in no_std environments with access to an allocator
 alloc = ["hashmap_core"]
@@ -38,11 +38,15 @@ alloc = ["hashmap_core"]
 bitflags = "1.0.1"
 
 [dependencies.hashmap_core]
-version = "0.1.4"
+version = "0.1.5"
 optional = true
 
 [dependencies.lazy_static]
 version = "1.0.0"
+default-features = false
+
+[dependencies.num-traits]
+version = "0.2.2"
 default-features = false
 
 [dependencies.quick-error]

@@ -595,8 +595,8 @@ macro_rules! float_bin_search {
         #[allow(missing_docs)]
         pub mod $typ {
             use core::ops;
-            #[cfg(all(feature = "alloc", not(feature = "std")))]
-            use core::num::Float;
+            #[cfg(not(feature = "std"))]
+            use num_traits::float::FloatCore;
 
             use rand::{self, Rng};
             use rand::distributions::IndependentSample;

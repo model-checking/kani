@@ -9,9 +9,6 @@
 
 use core::fmt;
 
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use core::num::Float;
-
 #[cfg(all(feature = "alloc", not(feature="std")))]
 use alloc::arc::Arc;
 #[cfg(feature = "std")]

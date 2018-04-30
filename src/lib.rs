@@ -1492,6 +1492,8 @@ extern crate bit_set;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate num_traits;
+
 // Only required for the string module.
 #[cfg(feature = "std")]
 #[macro_use]
