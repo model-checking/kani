@@ -27,7 +27,9 @@ use alloc::{BTreeMap, BTreeSet};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Failure persistence option that loads and saves seeds in memory
-/// on the heap.
+/// on the heap. This may be useful when accumulating test failures
+/// across multiple `TestRunner` instances for external reporting
+/// or batched persistence.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapFailurePersistence {
     /// Backing map, keyed by source_file.
