@@ -12,6 +12,12 @@
 use std::env::*;
 use std::iter::once;
 use std::ffi::OsString;
+#[cfg(all(feature = "alloc", not(feature="std")))]
+#[allow(unused_imports)]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+use std::vec::Vec;
 
 use strategy::*;
 use strategy::statics::static_map;
