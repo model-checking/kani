@@ -41,6 +41,7 @@ pub mod prop {
     pub use array;
     pub use collection;
     pub use char;
+    #[cfg(feature = "std")]
     pub use string;
     pub use option;
     pub use result;

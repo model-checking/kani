@@ -17,12 +17,30 @@
 
 use std::fmt;
 use std::hash::Hash;
-use std::vec::Vec;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::ops::Range;
 use std::collections::*;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::{vec_deque, linked_list, btree_set, binary_heap};
+#[cfg(feature = "std")]
+use std::collections::{vec_deque, linked_list, btree_set, binary_heap};
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec;
+#[cfg(feature = "std")]
 use std::vec;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
 
 use strategy::*;
 use strategy::statics::static_map;

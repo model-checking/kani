@@ -10,9 +10,28 @@
 //! Strategies for generating strings and byte strings from regular
 //! expressions.
 
-use std::borrow::Cow;
 use std::fmt;
 use std::u32;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::borrow::{Cow, ToOwned};
+#[cfg(feature = "std")]
+use std::borrow::{Cow, ToOwned};
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::string::String;
+#[cfg(feature = "std")]
+use std::string::String;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 use regex_syntax as rs;
 

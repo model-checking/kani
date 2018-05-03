@@ -11,6 +11,11 @@
 
 use std::thread::*;
 
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::string::String;
+#[cfg(feature = "std")]
+use std::string::String;
+
 use strategy::statics::static_map;
 use option::prob;
 use arbitrary::*;

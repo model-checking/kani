@@ -24,7 +24,7 @@
 //! For these reasons, the traits here are deliberatly
 //! not exported in a convenient way.
 
-use std::fmt;
+use core::fmt;
 
 use strategy::{Strategy, ValueTree, BoxedStrategy};
 

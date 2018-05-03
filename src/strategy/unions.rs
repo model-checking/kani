@@ -7,8 +7,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cmp::{max, min};
-use std::u32;
+use core::cmp::{max, min};
+use core::u32;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
+#[cfg(not(feature="std"))]
+use num_traits::float::FloatCore;
 
 use rand;
 use rand::distributions::IndependentSample;

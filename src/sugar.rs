@@ -7,7 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[cfg(feature = "std")]
 use std::fmt;
+#[cfg(not(feature = "std"))]
+use core::fmt;
 
 /// Easily define `proptest` tests.
 ///
@@ -81,8 +84,7 @@ macro_rules! proptest {
             $(#[$meta])*
             fn $test_name() {
                 let mut runner = $crate::test_runner::TestRunner::new(
-                    $config.clone());
-                runner.set_source_file(::std::path::Path::new(file!()));
+                    $config.clone_with_source_file(file!()));
                 let names = proptest_helper!(@_WRAPSTR ($($parm),*));
                 match runner.run(
                     &$crate::strategy::Strategy::prop_map(

@@ -12,6 +12,11 @@
 use std::iter::repeat;
 use std::str::{ParseBoolError, Utf8Error, from_utf8};
 
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;

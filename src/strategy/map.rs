@@ -7,9 +7,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::fmt;
+use core::fmt;
+use core::marker::PhantomData;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::arc::Arc;
+#[cfg(feature = "std")]
 use std::sync::Arc;
-use std::marker::PhantomData;
 
 use rand::XorShiftRng;
 

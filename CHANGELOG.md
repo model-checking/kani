@@ -1,3 +1,24 @@
+## 0.7.0
+
+### Potential Breaking Changes
+
+- The persistence system has been refactored to allow for
+  non-file-system based persistence. `FailurePersistence`
+  is now a trait, and the prior file-based enum which fulfilled
+  that purpose is now called `FileFailurePersistence` and implements
+  the generic trait. The default behavior has not changed.
+- Reflecting the change to persistence, `Config.failure_persistence`
+  is now of type `Option<Box<FailurePersistence>>`.
+- The `source_file` used as an optional reference point to the location of the
+  calling test is now tracked on the `Config` struct rather than the `TestRunner`.
+
+### New Additions
+
+- Experimental support on nightly for working in `#![no_std]` environments has been added.
+  To use it, one must disable the default-features for proptest and use the
+  new "alloc" and "nightly" features. Currently access to a heap allocator is
+  still required.
+
 ## 0.6.0
 
 ### Potential Breaking Changes

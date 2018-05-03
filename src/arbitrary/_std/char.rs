@@ -17,6 +17,12 @@ use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
 
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[allow(unused_imports)]
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 macro_rules! impl_wrap_char {
     ($type: ty, $mapper: expr) => {
         arbitrary!($type, SMapped<char, Self>;

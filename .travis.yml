@@ -16,6 +16,7 @@ before_script:
 script:
   - |
       travis-cargo build &&
-      travis-cargo test
+      travis-cargo test &&
+      travis-cargo --only nightly build -- --no-default-features --features "alloc nightly"
 
 cache: cargo

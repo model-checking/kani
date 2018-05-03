@@ -12,6 +12,18 @@
 use std::io::*;
 use std::io::ErrorKind::*;
 
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::string::String;
+#[cfg(feature = "std")]
+use std::string::String;
+
+#[allow(unused_imports)]
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[allow(unused_imports)]
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
@@ -149,6 +161,7 @@ arbitrary!(CharsError, SMapped<Option<Error>, Self>;
 
 #[cfg(test)]
 mod test {
+
     no_panic_test!(
         buf_reader  => BufReader<Repeat>,
         buf_writer  => BufWriter<Sink>,
@@ -162,7 +175,7 @@ mod test {
         stdout      => Stdout,
         lines       => Lines<Empty>,
         repeat      => Repeat,
-        spit        => Split<Cursor<Vec<u8>>>,
+        split       => Split<Cursor<Vec<u8>>>,
         take        => Take<Repeat>,
         error_kind  => ErrorKind,
         seek_from   => SeekFrom,

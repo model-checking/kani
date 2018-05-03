@@ -7,9 +7,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cmp;
-use std::fmt;
+use core::cmp;
+use core::fmt;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::arc::Arc;
+#[cfg(feature = "std")]
 use std::sync::Arc;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
 
 use rand::XorShiftRng;
 
@@ -583,7 +592,15 @@ macro_rules! proxy_strategy {
 proxy_strategy!(Box<S>);
 proxy_strategy!(&'a S, 'a);
 proxy_strategy!(&'a mut S, 'a);
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+proxy_strategy!(::alloc::rc::Rc<S>);
+#[cfg(feature = "std")]
 proxy_strategy!(::std::rc::Rc<S>);
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+proxy_strategy!(::alloc::arc::Arc<S>);
+#[cfg(feature = "std")]
 proxy_strategy!(::std::sync::Arc<S>);
 
 impl<T : ValueTree + ?Sized> ValueTree for Box<T> {

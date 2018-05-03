@@ -9,6 +9,11 @@
 
 //! Arbitrary implementations for `std::boxed`.
 
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
+
 wrap_from!(Box);
 
 #[cfg(test)]

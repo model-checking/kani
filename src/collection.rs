@@ -11,11 +11,30 @@
 
 #![cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 
-use std::cmp::Ord;
-use std::collections::*;
-use std::fmt;
-use std::hash::Hash;
-use std::ops::{Add, Range, RangeTo};
+use core::cmp::Ord;
+use core::fmt;
+use core::hash::Hash;
+use core::ops::{Add, Range, RangeTo};
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::vec_deque::VecDeque;
+#[cfg(feature = "std")]
+use std::collections::VecDeque;
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::{BinaryHeap, BTreeMap, BTreeSet, LinkedList};
+#[cfg(feature = "std")]
+use std::collections::{BinaryHeap, BTreeMap, BTreeSet, LinkedList};
+
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use hashmap_core::{HashMap, HashSet};
+#[cfg(feature = "std")]
+use std::collections::{HashMap, HashSet};
 
 use bit_set::BitSet;
 use rand;

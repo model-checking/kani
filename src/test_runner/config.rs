@@ -7,65 +7,89 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[cfg(feature = "std")]
 use std::env;
+#[cfg(feature = "std")]
 use std::ffi::OsString;
 
-use test_runner::FailurePersistence;
+#[cfg(all(feature = "alloc", not(feature="std")))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
 
+use test_runner::FailurePersistence;
+#[cfg(feature = "std")]
+use test_runner::FileFailurePersistence;
+
+#[cfg(feature = "std")]
 const CASES: &str = "PROPTEST_CASES";
+#[cfg(feature = "std")]
 const MAX_LOCAL_REJECTS: &str = "PROPTEST_MAX_LOCAL_REJECTS";
+#[cfg(feature = "std")]
 const MAX_GLOBAL_REJECTS: &str = "PROPTEST_MAX_GLOBAL_REJECTS";
+#[cfg(feature = "std")]
 const MAX_FLAT_MAP_REGENS: &str = "PROPTEST_MAX_FLAT_MAP_REGENS";
 
 /// The default config, computed by combining environment variables and
 /// defaults.
 lazy_static! {
     static ref DEFAULT_CONFIG: Config = {
-        let mut result = Config {
+        let result = Config {
             cases: 256,
             max_local_rejects: 65_536,
             max_global_rejects: 1024,
             max_flat_map_regens: 1_000_000,
-            failure_persistence: FailurePersistence::default(),
+            failure_persistence: None,
+            source_file: None,
             _non_exhaustive: (),
         };
 
-        fn parse_or_warn(src: &OsString, dst: &mut u32, var: &str) {
-            if let Some(src) = src.to_str() {
-                if let Ok(value) = src.parse() {
-                    *dst = value;
+        #[cfg(feature = "std")]
+        fn contextualize_config(mut result: Config) -> Config {
+
+            fn parse_or_warn(src: &OsString, dst: &mut u32, var: &str) {
+                if let Some(src) = src.to_str() {
+                    if let Ok(value) = src.parse() {
+                        *dst = value;
+                    } else {
+                        eprintln!(
+                            "proptest: The env-var {}={} can't be parsed as u32, \
+                             using default of {}.", var, src, *dst);
+                    }
                 } else {
                     eprintln!(
-                        "proptest: The env-var {}={} can't be parsed as u32, \
-                         using default of {}.", var, src, *dst);
-                }
-            } else {
-                eprintln!(
-                    "proptest: The env-var {} is not valid, using \
-                     default of {}.", var, *dst);
-            }
-        }
-
-        for (var, value) in env::vars_os() {
-            if let Some(var) = var.to_str() {
-                match var {
-                    CASES => parse_or_warn(&value,
-                        &mut result.cases, CASES),
-                    MAX_LOCAL_REJECTS => parse_or_warn(&value,
-                        &mut result.max_local_rejects, MAX_LOCAL_REJECTS),
-                    MAX_GLOBAL_REJECTS => parse_or_warn(&value,
-                        &mut result.max_global_rejects, MAX_GLOBAL_REJECTS),
-                    MAX_FLAT_MAP_REGENS => parse_or_warn(&value,
-                        &mut result.max_flat_map_regens, MAX_FLAT_MAP_REGENS),
-                    _ => if var.starts_with("PROPTEST_") {
-                        eprintln!("proptest: Ignoring unknown env-var {}.",
-                                  var);
-                    },
+                        "proptest: The env-var {} is not valid, using \
+                         default of {}.", var, *dst);
                 }
             }
+
+            result.failure_persistence = Some(Box::new(FileFailurePersistence::default()));
+            for (var, value) in env::vars_os() {
+                if let Some(var) = var.to_str() {
+                    match var {
+                        CASES => parse_or_warn(&value,
+                            &mut result.cases, CASES),
+                        MAX_LOCAL_REJECTS => parse_or_warn(&value,
+                            &mut result.max_local_rejects, MAX_LOCAL_REJECTS),
+                        MAX_GLOBAL_REJECTS => parse_or_warn(&value,
+                            &mut result.max_global_rejects, MAX_GLOBAL_REJECTS),
+                        MAX_FLAT_MAP_REGENS => parse_or_warn(&value,
+                            &mut result.max_flat_map_regens, MAX_FLAT_MAP_REGENS),
+                        _ => if var.starts_with("PROPTEST_") {
+                            eprintln!("proptest: Ignoring unknown env-var {}.",
+                                      var);
+                        },
+                    }
+                }
+            }
+
+            result
         }
 
-        result
+        #[cfg(not(feature = "std"))]
+        fn contextualize_config(result: Config) -> Config { result }
+
+        contextualize_config(result)
     };
 }
 
@@ -99,15 +123,30 @@ pub struct Config {
     /// The default is 1_000_000, which can be overridden by setting the
     /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
-    /// Indicates how to determine the file to use for persisting failed test
-    /// results.
+    /// Indicates whether and how to persist failed test results.
     ///
-    /// See the docs of [`FailurePersistence`](enum.FailurePersistence.html)
-    /// for more information.
+    /// When compiling with "std" feature (i.e. the standard library is available), the default
+    /// is `Some(Box::new(FileFailurePersistence::SourceParallel("proptest-regressions")))`.
     ///
-    /// The default is `FailurePersistence::SourceParallel("proptest-regressions")`.
+    /// Without the standard library, the default is `None`, and no persistence occurs.
+    ///
+    /// See the docs of [`FileFailurePersistence`](enum.FileFailurePersistence.html)
+    /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
+    ///
     /// The default cannot currently be overridden by an environment variable.
-    pub failure_persistence: FailurePersistence,
+    ///
+    ///
+    pub failure_persistence: Option<Box<FailurePersistence>>,
+
+    /// File location of the current test, relevant for persistence
+    /// and debugging.
+    ///
+    /// Note the use of `&str` rather than `Path` to be compatible with
+    /// `#![no_std] use cases where `Path` is unavailable.
+    ///
+    /// See the docs of [`FileFailurePersistence`](enum.FileFailurePersistence.html)
+    /// for more information on how it may be used for persistence.
+    pub source_file: Option<&'static str>,
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
     pub _non_exhaustive: (),
@@ -129,6 +168,46 @@ impl Config {
     /// ```
     pub fn with_cases(cases: u32) -> Self {
         Self { cases, .. Config::default() }
+    }
+    /// Constructs a `Config` only differing from the `default()` in the
+    /// source_file of the present test.
+    ///
+    /// This is simply a more concise alternative to using field-record update
+    /// syntax:
+    ///
+    /// ```
+    /// # use proptest::test_runner::Config;
+    /// assert_eq!(
+    ///     Config::with_source_file("computer/question"),
+    ///     Config { source_file: Some("computer/question"), .. Config::default() }
+    /// );
+    /// ```
+    pub fn with_source_file(source_file: &'static str) -> Self {
+        Self { source_file: Some(source_file), .. Config::default() }
+    }
+    /// Constructs a `Config` only differing from the provided Config instance, `self`,
+    /// in the source_file of the present test.
+    ///
+    /// This is simply a more concise alternative to using field-record update
+    /// syntax:
+    ///
+    /// ```
+    /// # use proptest::test_runner::Config;
+    /// let a = Config::with_source_file("computer/question");
+    /// let b = a.clone_with_source_file("answer/42");
+    /// assert_eq!(
+    ///     a,
+    ///     Config { source_file: Some("computer/question"), .. Config::default() }
+    /// );
+    /// assert_eq!(
+    ///     b,
+    ///     Config { source_file: Some("answer/42"), .. Config::default() }
+    /// );
+    /// ```
+    pub fn clone_with_source_file(&self, source_file: &'static str) -> Self {
+        let mut result = self.clone();
+        result.source_file = Some(source_file);
+        result
     }
 }
 
