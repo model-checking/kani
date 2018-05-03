@@ -359,7 +359,7 @@ mod test {
     }
 
     #[test]
-    fn test_start() {
+    fn test_star() {
         do_test("a*", 33, 33, 256);
     }
 
@@ -380,12 +380,12 @@ mod test {
 
     #[test]
     fn test_ascii_class() {
-        do_test("[[:digit:]]", 10, 10, 64);
+        do_test("[[:digit:]]", 10, 10, 256);
     }
 
     #[test]
     fn test_unicode_class() {
-        do_test("\\p{Greek}", 24, 256, 64);
+        do_test("\\p{Greek}", 24, 256, 256);
     }
 
     #[test]
