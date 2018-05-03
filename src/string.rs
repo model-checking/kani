@@ -385,7 +385,7 @@ mod test {
 
     #[test]
     fn test_unicode_class() {
-        do_test("\\p{Greek}", 24, 256, 256);
+        do_test("\\p{Greek}", 24, 512, 256);
     }
 
     #[test]
