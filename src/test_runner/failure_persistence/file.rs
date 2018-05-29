@@ -152,10 +152,7 @@ impl FailurePersistence for FileFailurePersistence {
                     .as_ref()
                     .map(|cow| &**cow));
 
-        let path: Option<&PathBuf> = match p {
-            Some(ref inner_path) => Some(inner_path),
-            None => None,
-        };
+        let path: Option<&PathBuf> = p.as_ref();
         let result: io::Result<Vec<[u32; 4]>> = path.map_or_else(
             || Ok(vec![]),
             |path| {
@@ -281,7 +278,7 @@ impl FailurePersistence for FileFailurePersistence {
     }
 
     fn box_clone(&self) -> Box<FailurePersistence> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 
     fn eq(&self, other: &FailurePersistence) -> bool {

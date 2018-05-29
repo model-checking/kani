@@ -487,7 +487,7 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
         }
 
         Ok(VecValueTree {
-            elements: elements,
+            elements,
             included_elements: (0..max_size).collect(),
             min_size: start,
             shrink: Shrink::DeleteElement(0),

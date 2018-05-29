@@ -104,7 +104,7 @@ enum ELBytes {
 
 impl<'a> IntoIterator for &'a ELBytes {
     type Item = u8;
-    type IntoIter = iter::Map<slice::Iter<'a, u8>, fn(&u8) -> u8>;
+    type IntoIter = iter::Cloned<slice::Iter<'a, u8>>;
     fn into_iter(self) -> Self::IntoIter {
         use self::ELBytes::*;
         (match *self {
@@ -112,7 +112,7 @@ impl<'a> IntoIterator for &'a ELBytes {
             B2(ref a) => a.iter(),
             B3(ref a) => a.iter(),
             B4(ref a) => a.iter(),
-        }).map(|x| *x)
+        }).cloned()
     }
 }
 

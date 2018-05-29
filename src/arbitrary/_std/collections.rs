@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::collections`.
 
-#![cfg_attr(feature="cargo-clippy", allow(implicit_hasher))]
+//#![cfg_attr(feature="cargo-clippy", allow(implicit_hasher))]
 
 //==============================================================================
 // Imports:

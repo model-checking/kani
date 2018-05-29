@@ -74,7 +74,6 @@ impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<E> for WrapErr<T, E> {
 type MapErr<T, E> = statics::Map<E, WrapErr<ValueFor<T>, ValueFor<E>>>;
 type MapOk <T, E> = statics::Map<T, WrapOk <ValueFor<T>, ValueFor<E>>>;
 
-#[cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
     /// delegate strategies.
@@ -92,7 +91,6 @@ opaque_strategy_wrapper! {
         -> Result<T::Value, E::Value>;
 }
 
-#[cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
     /// delegate strategies.

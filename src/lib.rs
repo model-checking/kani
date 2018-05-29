@@ -8,6 +8,8 @@
 // except according to those terms.
 
 #![cfg_attr(feature = "cargo-clippy", allow(doc_markdown))]
+// We have a lot of these lints for associated types... And we don't care.
+#![cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
 
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for

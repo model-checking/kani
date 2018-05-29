@@ -110,12 +110,7 @@ impl<T : Strategy> Strategy for Union<T> {
             options.push(option.1.new_value(runner)?);
         }
 
-        Ok(UnionValueTree {
-            options: options,
-            pick: pick,
-            min_pick: 0,
-            prev_pick: None,
-        })
+        Ok(UnionValueTree { options, pick, min_pick: 0, prev_pick: None })
     }
 }
 

@@ -86,8 +86,8 @@ impl fmt::Debug for TestRunner {
 
 impl fmt::Display for TestRunner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\tsuccesses: {}\n\
-                   \tlocal rejects: {}\n",
+        writeln!(f, "\tsuccesses: {}\n\
+                   \tlocal rejects: {}",
                self.successes, self.local_rejects)?;
         for (whence, count) in &self.local_reject_detail {
             writeln!(f, "\t\t{} times at {}", count, whence)?;
@@ -135,7 +135,7 @@ impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
         TestRunner {
-            config: config,
+            config,
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
@@ -167,7 +167,7 @@ impl TestRunner {
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: rng,
+            rng,
             flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),

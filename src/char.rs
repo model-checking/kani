@@ -171,11 +171,7 @@ impl<'a> CharStrategy<'a> {
     pub fn new(special: Cow<'a, [char]>,
                preferred: Cow<'a, [CharRange]>,
                ranges: Cow<'a, [CharRange]>) -> Self {
-        CharStrategy {
-            special: special,
-            preferred: preferred,
-            ranges: ranges,
-        }
+        CharStrategy { special, preferred, ranges }
     }
 
     /// Same as `CharStrategy::new()` but using `Cow::Borrowed` for all parts.
@@ -220,7 +216,7 @@ pub fn ranges(ranges: Cow<[CharRange]>) -> CharStrategy {
     CharStrategy {
         special: Cow::Borrowed(DEFAULT_SPECIAL_CHARS),
         preferred: Cow::Borrowed(DEFAULT_PREFERRED_RANGES),
-        ranges: ranges,
+        ranges,
     }
 }
 

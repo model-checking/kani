@@ -41,7 +41,7 @@ impl FailurePersistence for MapFailurePersistence {
         source_file
             .and_then(|source| self.map.get(source))
             .map(|seeds| seeds.iter().cloned().collect::<Vec<_>>())
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
     }
     fn save_persisted_failure(
         &mut self,
@@ -53,7 +53,7 @@ impl FailurePersistence for MapFailurePersistence {
             Some(sf) => sf,
             None => return
         };
-        let set = self.map.entry(s).or_insert(BTreeSet::new());
+        let set = self.map.entry(s).or_insert_with(BTreeSet::new);
         set.insert(seed);
     }
 

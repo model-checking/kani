@@ -607,6 +607,14 @@ macro_rules! float_bin_search {
 
             float_any!($typ);
 
+            fn nearly_eq(l: $typ, r: $typ) -> bool {
+                if l == r {
+                    true
+                } else {
+                    (l - r).abs() < ::std::$typ::EPSILON
+                }
+            }
+
             /// Shrinks a float towards 0, using binary search to find boundary
             /// points.
             ///
@@ -656,25 +664,21 @@ macro_rules! float_bin_search {
                 }
 
                 fn current_allowed(&self) -> bool {
-                    use core::num::FpCategory;
+                    use core::num::FpCategory::*;
 
                     // Don't reposition if the new value is not allowed
                     let class_allowed = match self.curr.classify() {
-                        FpCategory::Nan =>
+                        Nan =>
                             // We don't need to inspect whether the
                             // signallingness of the NaN matches the allowed
                             // set, as we never try to switch between them,
                             // instead shrinking to 0.
                             self.allowed.contains(FloatTypes::QUIET_NAN) ||
                             self.allowed.contains(FloatTypes::SIGNALING_NAN),
-                        FpCategory::Infinite =>
-                            self.allowed.contains(FloatTypes::INFINITE),
-                        FpCategory::Zero =>
-                            self.allowed.contains(FloatTypes::ZERO),
-                        FpCategory::Subnormal =>
-                            self.allowed.contains(FloatTypes::SUBNORMAL),
-                        FpCategory::Normal =>
-                            self.allowed.contains(FloatTypes::NORMAL),
+                        Infinite => self.allowed.contains(FloatTypes::INFINITE),
+                        Zero => self.allowed.contains(FloatTypes::ZERO),
+                        Subnormal => self.allowed.contains(FloatTypes::SUBNORMAL),
+                        Normal => self.allowed.contains(FloatTypes::NORMAL),
                     };
                     let signum = self.curr.signum();
                     let sign_allowed = if signum > 0.0 {
@@ -706,13 +710,13 @@ macro_rules! float_bin_search {
                     };
                     let new_mid = self.lo + interval/2.0;
 
-                    let new_mid = if new_mid == self.curr || 0.0 == interval {
+                    let new_mid = if nearly_eq(new_mid, self.curr) || 0.0 == interval {
                         new_mid
                     } else {
                         self.lo
                     };
 
-                    if new_mid == self.curr {
+                    if nearly_eq(new_mid, self.curr) {
                         false
                     } else {
                         self.curr = new_mid;
@@ -729,11 +733,11 @@ macro_rules! float_bin_search {
                         return false;
                     }
 
-                    if self.curr == self.lo {
-                        self.lo = self.hi;
+                    self.lo = if nearly_eq(self.curr, self.lo) {
+                        self.hi
                     } else {
-                        self.lo = self.curr;
-                    }
+                        self.curr
+                    };
 
                     self.reposition()
                 }
