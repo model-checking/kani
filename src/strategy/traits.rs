@@ -20,8 +20,6 @@ use alloc::boxed::Box;
 #[cfg(feature = "std")]
 use std::boxed::Box;
 
-use rand::XorShiftRng;
-
 use strategy::*;
 use test_runner::*;
 
@@ -134,7 +132,7 @@ pub trait Strategy : fmt::Debug {
     /// # fn main() { }
     /// ```
     fn prop_perturb<O : fmt::Debug,
-                    F : Fn (ValueFor<Self>, XorShiftRng) -> O>
+                    F : Fn (ValueFor<Self>, TestRng) -> O>
         (self, fun: F) -> Perturb<Self, F>
     where Self : Sized {
         Perturb { source: self, fun: Arc::new(fun) }

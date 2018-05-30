@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::vec::Vec;
 
-use rand::{Rng, XorShiftRng};
+use rand::Rng;
 
 use num;
 use strategy::traits::*;
@@ -120,7 +120,7 @@ where ValueFor<S> : Shuffleable {
 #[derive(Clone, Debug)]
 pub struct ShuffleValueTree<V> {
     inner: V,
-    rng: XorShiftRng,
+    rng: TestRng,
     /// The maximum amount to move any one element during shuffling.
     ///
     /// This is `Cell` since we can't determine the bounds of the value until

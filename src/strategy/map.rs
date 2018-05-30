@@ -15,8 +15,6 @@ use alloc::arc::Arc;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 
-use rand::XorShiftRng;
-
 use strategy::traits::*;
 use test_runner::*;
 
@@ -174,19 +172,16 @@ impl<S : Clone, F> Clone for Perturb<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (ValueFor<S>, XorShiftRng) -> O>
+     F : Fn (ValueFor<S>, TestRng) -> O>
 Strategy for Perturb<S, F> {
     type Value = PerturbValueTree<S::Value, F>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();
 
-        self.source.new_value(runner).map(
-            |v| PerturbValueTree {
-                source: v,
-                fun: Arc::clone(&self.fun),
-                rng,
-            })
+        self.source.new_value(runner).map(|source|
+            PerturbValueTree { source, rng, fun: Arc::clone(&self.fun) }
+        )
     }
 }
 
@@ -196,7 +191,7 @@ Strategy for Perturb<S, F> {
 pub struct PerturbValueTree<S, F> {
     source: S,
     fun: Arc<F>,
-    rng: XorShiftRng,
+    rng: TestRng,
 }
 
 impl<S : fmt::Debug, F> fmt::Debug for PerturbValueTree<S, F> {
@@ -219,7 +214,7 @@ impl<S : Clone, F> Clone for PerturbValueTree<S, F> {
     }
 }
 
-impl<S : ValueTree, O : fmt::Debug, F : Fn (S::Value, XorShiftRng) -> O>
+impl<S : ValueTree, O : fmt::Debug, F : Fn (S::Value, TestRng) -> O>
 ValueTree for PerturbValueTree<S, F> {
     type Value = O;
 
@@ -244,7 +239,7 @@ ValueTree for PerturbValueTree<S, F> {
 mod test {
     use std::collections::HashSet;
 
-    use rand::Rng;
+    use rand::RngCore;
 
     use strategy::just::Just;
     use super::*;

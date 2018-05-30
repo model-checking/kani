@@ -39,15 +39,15 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::vec::Vec;
 
-use rand::{self, Rand, SeedableRng, XorShiftRng};
-
 use strategy::*;
 
+mod rng;
 mod failure_persistence;
 mod config;
 mod reason;
 mod errors;
 
+pub use self::rng::*;
 pub use self::failure_persistence::*;
 pub use self::config::*;
 pub use self::reason::*;
@@ -62,7 +62,7 @@ pub struct TestRunner {
     successes: u32,
     local_rejects: u32,
     global_rejects: u32,
-    rng: XorShiftRng,
+    rng: TestRng,
     flat_map_regens: Arc<AtomicUsize>,
 
     local_reject_detail: RejectionDetail,
@@ -76,7 +76,7 @@ impl fmt::Debug for TestRunner {
             .field("successes", &self.successes)
             .field("local_rejects", &self.local_rejects)
             .field("global_rejects", &self.global_rejects)
-            .field("rng", &"<XorShiftRng>")
+            .field("rng", &"<TestRng>")
             .field("flat_map_regens", &self.flat_map_regens)
             .field("local_reject_detail", &self.local_reject_detail)
             .field("global_reject_detail", &self.global_reject_detail)
@@ -139,21 +139,11 @@ impl TestRunner {
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: Self::default_rng(),
+            rng: TestRng::default_rng(),
             flat_map_regens: Arc::new(AtomicUsize::new(0)),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
         }
-    }
-
-    #[cfg(feature = "std")]
-    fn default_rng() -> rand::XorShiftRng {
-        rand::weak_rng()
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn default_rng() -> rand::XorShiftRng {
-        rand::XorShiftRng::new_unseeded()
     }
 
     /// Create a fresh `TestRunner` with the same config and global counters as
@@ -175,25 +165,14 @@ impl TestRunner {
     }
 
     /// Returns the RNG for this test run.
-    pub fn rng(&mut self) -> &mut XorShiftRng {
+    pub fn rng(&mut self) -> &mut TestRng {
         &mut self.rng
-    }
-
-    fn new_rng_seed(&mut self) -> [u32;4] {
-        let mut seed = <[u32;4] as Rand>::rand(&mut self.rng);
-        // Directly using XorShiftRng::from_seed() at this point would result
-        // in self.rng and the returned value being exactly the same. Perturb
-        // the seed with some arbitrary values to prevent this.
-        for word in &mut seed {
-            *word ^= 0xdead_beef;
-        }
-        seed
     }
 
     /// Create a new, independent but deterministic RNG from the RNG in this
     /// runner.
-    pub fn new_rng(&mut self) -> XorShiftRng {
-        XorShiftRng::from_seed(self.new_rng_seed())
+    pub fn new_rng(&mut self) -> TestRng {
+        self.rng.gen_rng()
     }
 
     /// Returns the configuration of this runner.
@@ -219,7 +198,7 @@ impl TestRunner {
     {
         let old_rng = self.rng.clone();
 
-        let persisted_failure_seeds: Vec<[u32; 4]> = {
+        let persisted_failure_seeds: Vec<Seed> = {
             let config = &self.config;
             let source_file = config.source_file;
             match config.failure_persistence {
@@ -228,7 +207,7 @@ impl TestRunner {
             }
         };
         for persisted_seed in persisted_failure_seeds {
-            self.rng = XorShiftRng::from_seed(persisted_seed);
+            self.rng.set_seed(persisted_seed);
             self.gen_and_run_case(strategy, &test)?;
         }
         self.rng = old_rng;
@@ -236,8 +215,7 @@ impl TestRunner {
         while self.successes < self.config.cases {
             // Generate a new seed and make an RNG from that so that we know
             // what seed to persist if this case fails.
-            let seed = self.new_rng_seed();
-            self.rng = XorShiftRng::from_seed(seed);
+            let seed = self.rng.gen_get_seed();
             let result = self.gen_and_run_case(strategy, &test);
             if let Err(TestError::Fail(_, ref value)) = result {
                 if let Some(ref mut failure_persistence) = self.config.failure_persistence {
@@ -375,6 +353,7 @@ impl TestRunner {
 mod test {
     use std::cell::Cell;
     use std::fs;
+    use rand::Rng;
 
     use super::*;
     use strategy::Strategy;
@@ -505,9 +484,8 @@ mod test {
         let mut rng2 = runner.new_rng();
         let rng1 = runner.rng();
 
-        let from_1 = <[u32;4] as Rand>::rand(rng1);
-        let from_2 = <[u32;4] as Rand>::rand(&mut rng2);
-
+        let from_1 = rng1.gen::<[u8; 16]>();
+        let from_2 = rng2.gen::<[u8; 16]>();
         assert_ne!(from_1, from_2);
     }
 }

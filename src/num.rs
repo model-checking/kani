@@ -12,6 +12,24 @@
 //!
 //! All strategies in this module shrink by binary searching towards 0.
 
+use rand::distributions::{Distribution, Standard};
+use rand::distributions::uniform::{Uniform, SampleUniform};
+use core::ops::Range;
+use test_runner::TestRunner;
+
+pub(crate) fn sample_uniform<X: SampleUniform>
+    (run: &mut TestRunner, range: Range<X>) -> X {
+    Uniform::new(range.start, range.end).sample(run.rng())
+}
+
+pub(crate) fn sample_uniform_incl<X>
+    (run: &mut TestRunner, start: X, end: X) -> X
+where
+    X: SampleUniform
+{
+    Uniform::new_inclusive(start, end).sample(run.rng())
+}
+
 macro_rules! int_any {
     () => {
         /// Type of the `ANY` constant.
@@ -37,11 +55,10 @@ macro_rules! numeric_api {
             type Value = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                let range = rand::distributions::Range::new(
-                    self.start, self.end);
                 Ok(BinarySearch::new_clamped(
-                    self.start, range.ind_sample(runner.rng()),
-                    self.end-$epsilon))
+                    self.start,
+                    $crate::num::sample_uniform(runner, self.clone()),
+                    self.end - $epsilon))
             }
         }
 
@@ -51,10 +68,10 @@ macro_rules! numeric_api {
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 // TODO `rand` has no way to express the inclusive-end range we
                 // need here.
-                let range = rand::distributions::Range::new(
-                    self.start, ::core::$typ::MAX);
                 Ok(BinarySearch::new_clamped(
-                    self.start, range.ind_sample(runner.rng()),
+                    self.start,
+                    $crate::num::sample_uniform_incl(runner,
+                        self.start, ::core::$typ::MAX),
                     ::core::$typ::MAX))
             }
         }
@@ -63,13 +80,15 @@ macro_rules! numeric_api {
             type Value = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                let range = rand::distributions::Range::new(
-                    ::core::$typ::MIN, self.end);
                 Ok(BinarySearch::new_clamped(
-                    ::core::$typ::MIN, range.ind_sample(runner.rng()),
+                    ::core::$typ::MIN,
+                    $crate::num::sample_uniform(runner, ::core::$typ::MIN..self.end),
                     self.end))
             }
         }
+
+        //FIXME
+        //impl Strategy for ::core::ops::RangeToInclusive<$typ>
     }
 }
 
@@ -77,9 +96,7 @@ macro_rules! signed_integer_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
         pub mod $typ {
-
-            use rand::{self, Rng};
-            use rand::distributions::IndependentSample;
+            use rand::Rng;
 
             use strategy::*;
             use test_runner::TestRunner;
@@ -181,9 +198,7 @@ macro_rules! unsigned_integer_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
         pub mod $typ {
-
-            use rand::{self, Rng};
-            use rand::distributions::IndependentSample;
+            use rand::Rng;
 
             use strategy::*;
             use test_runner::TestRunner;
@@ -315,8 +330,11 @@ impl FloatTypes {
     }
 }
 
-trait FloatLayout {
-    type Bits : ::rand::Rand + Copy;
+trait FloatLayout
+where
+    Standard: Distribution<Self::Bits>,
+{
+    type Bits: Copy;
 
     const SIGN_MASK: Self::Bits;
     const EXP_MASK: Self::Bits;
@@ -598,8 +616,7 @@ macro_rules! float_bin_search {
             #[cfg(not(feature = "std"))]
             use num_traits::float::FloatCore;
 
-            use rand::{self, Rng};
-            use rand::distributions::IndependentSample;
+            use rand::Rng;
 
             use strategy::*;
             use test_runner::TestRunner;

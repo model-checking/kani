@@ -37,9 +37,8 @@ use hashmap_core::{HashMap, HashSet};
 use std::collections::{HashMap, HashSet};
 
 use bit_set::BitSet;
-use rand;
-use rand::distributions::IndependentSample;
 
+use num::sample_uniform;
 use strategy::*;
 use tuple::TupleValueTree;
 use test_runner::*;
@@ -479,8 +478,7 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let Range { start, end } = self.size.0;
 
-        let max_size = rand::distributions::Range::new(start, end)
-                        .ind_sample(runner.rng());
+        let max_size = sample_uniform(runner, start..end);
         let mut elements = Vec::with_capacity(max_size);
         while elements.len() < max_size {
             elements.push(self.element.new_value(runner)?);
