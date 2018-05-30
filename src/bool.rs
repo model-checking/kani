@@ -47,7 +47,7 @@ impl Strategy for Weighted {
     type Value = BoolValueTree;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        Ok(BoolValueTree(runner.rng().next_f64() < self.0))
+        Ok(BoolValueTree(runner.rng().gen_bool(self.0)))
     }
 }
 
