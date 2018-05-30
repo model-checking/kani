@@ -7,10 +7,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![cfg_attr(feature = "cargo-clippy", allow(doc_markdown))]
-// We have a lot of these lints for associated types... And we don't care.
-#![cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
-
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for
 //! Python. It allows to test that certain properties of your code hold for
@@ -1438,32 +1434,44 @@
 //! perusing the module tree below.
 
 #![deny(missing_docs)]
+#![no_std]
+#![cfg_attr(feature = "cargo-clippy", allow(
+    doc_markdown,
+    // We have a lot of these lints for associated types... And we don't care.
+    type_complexity
+))]
 #![cfg_attr(feature = "unstable", feature(
     // i128 here produces a warning since it's going to be stable in 1.26, but
     // that's not stable *now*, so keep it in so the warning acts as a
     // reminder.
-      i128_type
-    , i128
-    , allocator_api
-    , inclusive_range_syntax
-    , inclusive_range
-    , thread_local_state
-    , try_trait
-    , generator_trait
-    , try_from
-    , integer_atomics
-    , mpsc_select
-    , ip
-    , decode_utf8
-    , iterator_step_by
-    , io
-    , never_type
-    , try_reserve
+    i128_type
+    i128,
+    allocator_api,
+    inclusive_range_syntax,
+    inclusive_range,
+    thread_local_state,
+    try_trait,
+    generator_trait,
+    try_from,
+    integer_atomics,
+    mpsc_select,
+    ip,
+    decode_utf8,
+    iterator_step_by,
+    io,
+    never_type,
+    try_reserve,
 ))]
-#![no_std]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(alloc))]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_float))]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_intrinsics))]
+#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(
+    alloc,
+    core_float,
+    core_intrinsics
+))]
+
+// FIXME: remove this after refactoring!
+#![allow(renamed_and_removed_lints)]
+
+mod std_facade;
 
 #[cfg(any(feature = "std", test))]
 #[macro_use]
@@ -1475,6 +1483,8 @@ extern crate alloc;
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 extern crate hashmap_core;
+
+extern crate byteorder;
 
 #[cfg(feature = "frunk")]
 #[macro_use]
@@ -1569,6 +1579,16 @@ macro_rules! opaque_strategy_wrapper {
             delegate_vt_0!();
         }
     }
+}
+
+// Example: unwrap_or!(result, err => handle_err(err));
+macro_rules! unwrap_or {
+    ($unwrap: expr, $err: ident => $on_err: expr) => {
+        match $unwrap {
+            Ok(ok) => ok,
+            Err($err) => $on_err,
+        }
+    };
 }
 
 #[doc(hidden)]
