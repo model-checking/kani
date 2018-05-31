@@ -104,9 +104,6 @@ arbitrary!(
 lift1!(['static + Read] Take<A>;
     base => (base, any::<u64>()).prop_map(|(a, b)| a.take(b)));
 
-#[cfg(feature = "unstable")]
-wrap_ctor!([Read] Chars, Read::chars);
-
 arbitrary!(ErrorKind, Union<Just<Self>>;
     Union::new(
     [ NotFound
@@ -149,14 +146,6 @@ arbitrary!(Error, SMapped<(ErrorKind, Option<String>), Self>;
     static_map(arbitrary(), |(k, os)|
         if let Some(s) = os { Error::new(k, s) } else { k.into() }
     )
-);
-
-#[cfg(feature = "unstable")]
-arbitrary!(CharsError, SMapped<Option<Error>, Self>;
-    static_map(arbitrary(), |oe| {
-        use std::io::CharsError::*;
-        if let Some(e) = oe { Other(e) } else { NotUtf8 }
-    })
 );
 
 #[cfg(test)]

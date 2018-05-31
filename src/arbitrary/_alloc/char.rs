@@ -40,12 +40,6 @@ use collection::vec;
 const VEC_MAX: usize = ::core::u16::MAX as usize;
 
 #[cfg(feature = "unstable")]
-arbitrary!(DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,
-    SMapped<Vec<u8>, Self>;
-    static_map(vec(any::<u8>(), ..VEC_MAX), decode_utf8)
-);
-
-#[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
     SMapped<Vec<u16>, Self>;
     static_map(vec(any::<u16>(), ..VEC_MAX), decode_utf16)
