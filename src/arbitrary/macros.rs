@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg_attr(not(feature = "std"), allow(unused_macros))]
+
 //==============================================================================
 // Macros for quick implementing:
 //==============================================================================

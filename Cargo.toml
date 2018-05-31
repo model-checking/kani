@@ -16,6 +16,11 @@ Hypothesis-like property-based testing and shrinking.
 [badges]
 travis-ci = { repository = "AltSysrq/proptest" }
 
+[badges.appveyor]
+repository = "AltSysrq/proptest"
+branch = "master"
+service = "github"
+
 [features]
 
 default = ["std"]
@@ -32,14 +37,15 @@ nightly = ["lazy_static/spin_no_std"]
 std = ["rand/std", "bit-set/std", "quick-error", "regex-syntax", "num-traits/std"]
 
 # For use in no_std environments with access to an allocator
-alloc = ["hashmap_core"]
+#alloc = ["hashmap_core"]
+alloc = []
 
 [dependencies]
 bitflags = "1.0.1"
 
-[dependencies.hashmap_core]
-version = "0.1.5"
-optional = true
+# [dependencies.hashmap_core]
+# version = "0.1.5"
+# optional = true
 
 [dependencies.lazy_static]
 version = "1.0.0"
