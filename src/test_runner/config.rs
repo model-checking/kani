@@ -10,7 +10,11 @@
 #[cfg(feature = "std")]
 use std::env;
 #[cfg(feature = "std")]
+use std::fmt;
+#[cfg(feature = "std")]
 use std::ffi::OsString;
+#[cfg(feature = "std")]
+use std::str::FromStr;
 
 #[cfg(all(feature = "alloc", not(feature="std")))]
 use alloc::boxed::Box;
@@ -29,6 +33,62 @@ const MAX_LOCAL_REJECTS: &str = "PROPTEST_MAX_LOCAL_REJECTS";
 const MAX_GLOBAL_REJECTS: &str = "PROPTEST_MAX_GLOBAL_REJECTS";
 #[cfg(feature = "std")]
 const MAX_FLAT_MAP_REGENS: &str = "PROPTEST_MAX_FLAT_MAP_REGENS";
+#[cfg(feature = "std")]
+const FORK: &str = "PROPTEST_FORK";
+#[cfg(feature = "std")]
+const TIMEOUT: &str = "PROPTEST_TIMEOUT";
+
+#[cfg(feature = "std")]
+fn contextualize_config(mut result: Config) -> Config {
+    fn parse_or_warn<T : FromStr + fmt::Display>(
+        src: &OsString, dst: &mut T, typ: &str, var: &str
+    ) {
+        if let Some(src) = src.to_str() {
+            if let Ok(value) = src.parse() {
+                *dst = value;
+            } else {
+                eprintln!(
+                    "proptest: The env-var {}={} can't be parsed as {}, \
+                     using default of {}.", var, src, typ, *dst);
+            }
+        } else {
+            eprintln!(
+                "proptest: The env-var {} is not valid, using \
+                 default of {}.", var, *dst);
+        }
+    }
+
+    result.failure_persistence = Some(Box::new(FileFailurePersistence::default()));
+    for (var, value) in env::vars_os().filter_map(
+            |(k,v)| k.into_string().ok().map(|k| (k,v))) {
+        match var.as_str() {
+            CASES => parse_or_warn(&value, &mut result.cases, "u32", CASES),
+            MAX_LOCAL_REJECTS => parse_or_warn(
+                &value, &mut result.max_local_rejects,
+                "u32", MAX_LOCAL_REJECTS),
+            MAX_GLOBAL_REJECTS => parse_or_warn(
+                &value, &mut result.max_global_rejects,
+                "u32", MAX_GLOBAL_REJECTS),
+            MAX_FLAT_MAP_REGENS => parse_or_warn(
+                &value, &mut result.max_flat_map_regens,
+                "u32", MAX_FLAT_MAP_REGENS),
+            #[cfg(feature = "fork")]
+            FORK => parse_or_warn(&value, &mut result.fork, "bool", FORK),
+            #[cfg(feature = "timeout")]
+            TIMEOUT => parse_or_warn(
+                &value, &mut result.timeout, "timeout", TIMEOUT),
+
+            _ => if var.starts_with("PROPTEST_") {
+                eprintln!("proptest: Ignoring unknown env-var {}.", var);
+            },
+        }
+    }
+
+    result
+}
+
+#[cfg(not(feature = "std"))]
+fn contextualize_config(result: Config) -> Config { result }
 
 /// The default config, computed by combining environment variables and
 /// defaults.
@@ -41,53 +101,13 @@ lazy_static! {
             max_flat_map_regens: 1_000_000,
             failure_persistence: None,
             source_file: None,
+            test_name: None,
+            #[cfg(feature = "fork")]
+            fork: false,
+            #[cfg(feature = "timeout")]
+            timeout: 0,
             _non_exhaustive: (),
         };
-
-        #[cfg(feature = "std")]
-        fn contextualize_config(mut result: Config) -> Config {
-
-            fn parse_or_warn(src: &OsString, dst: &mut u32, var: &str) {
-                if let Some(src) = src.to_str() {
-                    if let Ok(value) = src.parse() {
-                        *dst = value;
-                    } else {
-                        eprintln!(
-                            "proptest: The env-var {}={} can't be parsed as u32, \
-                             using default of {}.", var, src, *dst);
-                    }
-                } else {
-                    eprintln!(
-                        "proptest: The env-var {} is not valid, using \
-                         default of {}.", var, *dst);
-                }
-            }
-
-            result.failure_persistence = Some(Box::new(FileFailurePersistence::default()));
-            for (var, value) in env::vars_os() {
-                if let Some(var) = var.to_str() {
-                    match var {
-                        CASES => parse_or_warn(&value,
-                            &mut result.cases, CASES),
-                        MAX_LOCAL_REJECTS => parse_or_warn(&value,
-                            &mut result.max_local_rejects, MAX_LOCAL_REJECTS),
-                        MAX_GLOBAL_REJECTS => parse_or_warn(&value,
-                            &mut result.max_global_rejects, MAX_GLOBAL_REJECTS),
-                        MAX_FLAT_MAP_REGENS => parse_or_warn(&value,
-                            &mut result.max_flat_map_regens, MAX_FLAT_MAP_REGENS),
-                        _ => if var.starts_with("PROPTEST_") {
-                            eprintln!("proptest: Ignoring unknown env-var {}.",
-                                      var);
-                        },
-                    }
-                }
-            }
-
-            result
-        }
-
-        #[cfg(not(feature = "std"))]
-        fn contextualize_config(result: Config) -> Config { result }
 
         contextualize_config(result)
     };
@@ -134,19 +154,56 @@ pub struct Config {
     /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
     ///
     /// The default cannot currently be overridden by an environment variable.
-    ///
-    ///
     pub failure_persistence: Option<Box<FailurePersistence>>,
 
     /// File location of the current test, relevant for persistence
     /// and debugging.
     ///
     /// Note the use of `&str` rather than `Path` to be compatible with
-    /// `#![no_std] use cases where `Path` is unavailable.
+    /// `#![no_std]` use cases where `Path` is unavailable.
     ///
     /// See the docs of [`FileFailurePersistence`](enum.FileFailurePersistence.html)
     /// for more information on how it may be used for persistence.
     pub source_file: Option<&'static str>,
+
+    /// The fully-qualified name of the test being run, as would be passed to
+    /// the test executable to run just that test.
+    ///
+    /// This must be set if `fork` is `true`. Otherwise, it is unused. It is
+    /// automatically set by `proptest!`.
+    pub test_name: Option<&'static str>,
+
+    /// If true, tests are run in a subprocess.
+    ///
+    /// Forking allows proptest to work with tests which may fail by aborting
+    /// the process, causing a segmentation fault, etc, but can be a lot slower
+    /// in certain environments or when running a very large number of tests.
+    ///
+    /// For forking to work correctly, both the `Strategy` and the content of
+    /// the test case itself must be deterministic.
+    ///
+    /// This requires the "fork" feature, enabled by default.
+    ///
+    /// The default is `false`, which can be overridden by setting the
+    /// `PROPTEST_FORK` environment variable.
+    #[cfg(feature = "fork")]
+    pub fork: bool,
+
+    /// If non-zero, tests are run in a subprocess and each generated case
+    /// fails if it takes longer than this number of milliseconds.
+    ///
+    /// This implicitly enables forking, even if the `fork` field is `false`.
+    ///
+    /// The type here is plain `u32` (rather than
+    /// `Option<std::time::Duration>`) for the sake of ergonomics.
+    ///
+    /// This requires the "timeout" feature, enabled by default.
+    ///
+    /// The default is `0` (i.e., no timeout), which can be overridden by
+    /// setting the `PROPTEST_TIMEOUT` environment variable.
+    #[cfg(feature = "timeout")]
+    pub timeout: u32,
+
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
     pub _non_exhaustive: (),
@@ -169,6 +226,7 @@ impl Config {
     pub fn with_cases(cases: u32) -> Self {
         Self { cases, .. Config::default() }
     }
+
     /// Constructs a `Config` only differing from the `default()` in the
     /// source_file of the present test.
     ///
@@ -185,6 +243,7 @@ impl Config {
     pub fn with_source_file(source_file: &'static str) -> Self {
         Self { source_file: Some(source_file), .. Config::default() }
     }
+
     /// Constructs a `Config` only differing from the provided Config instance, `self`,
     /// in the source_file of the present test.
     ///
@@ -208,6 +267,42 @@ impl Config {
         let mut result = self.clone();
         result.source_file = Some(source_file);
         result
+    }
+
+    /// Return whether this configuration implies forking.
+    ///
+    /// This method exists even if the "fork" feature is disabled, in which
+    /// case it simply returns false.
+    pub fn fork(&self) -> bool {
+        self._fork() || self.timeout() > 0
+    }
+
+    #[cfg(feature = "fork")]
+    fn _fork(&self) -> bool {
+        self.fork
+    }
+
+    #[cfg(not(feature = "fork"))]
+    fn _fork(&self) -> bool {
+        false
+    }
+
+    /// Returns the configured timeout.
+    ///
+    /// This method exists even if the "timeout" feature is disabled, in which
+    /// case it simply returns 0.
+    #[cfg(feature = "timeout")]
+    pub fn timeout(&self) -> u32 {
+        self.timeout
+    }
+
+    /// Returns the configured timeout.
+    ///
+    /// This method exists even if the "timeout" feature is disabled, in which
+    /// case it simply returns 0.
+    #[cfg(not(feature = "timeout"))]
+    pub fn timeout(&self) -> u32 {
+        0
     }
 }
 

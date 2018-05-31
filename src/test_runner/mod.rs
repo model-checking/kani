@@ -39,6 +39,11 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::vec::Vec;
 
+#[cfg(feature = "std")]
+use std::iter;
+#[cfg(not(feature = "std"))]
+use core::iter;
+
 use rand::{self, Rand, SeedableRng, XorShiftRng};
 
 use strategy::*;
@@ -47,6 +52,8 @@ mod failure_persistence;
 mod config;
 mod reason;
 mod errors;
+#[cfg(feature = "fork")]
+mod replay;
 
 pub use self::failure_persistence::*;
 pub use self::config::*;
@@ -109,26 +116,53 @@ impl Default for TestRunner {
 }
 
 #[cfg(not(feature = "std"))]
-fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
-    where
-        F: Fn(&V) -> TestCaseResult
+fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
+    (case: &V, test: &F, replay: &mut R, _timeout: u32) -> TestCaseResult
 {
+    if let Some(result) = replay.next() {
+        return result;
+    }
+
     test(case)
 }
 
 #[cfg(feature = "std")]
-fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
-where
-    F: Fn(&V) -> TestCaseResult
+fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
+    (case: &V, test: &F, replay: &mut R, timeout: u32) -> TestCaseResult
 {
-    match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
+    use std::time;
+
+    if let Some(result) = replay.next() {
+        return result;
+    }
+
+    let time_start = time::Instant::now();
+
+    let nominal = match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
         Ok(r) => r,
         Err(what) => Err(TestCaseError::Fail(
             what.downcast::<&'static str>().map(|s| (*s).into())
                 .or_else(|what| what.downcast::<String>().map(|b| (*b).into()))
                 .or_else(|what| what.downcast::<Box<str>>().map(|b| (*b).into()))
                 .unwrap_or_else(|_| "<unknown panic value>".into()))),
+    };
+
+    // If there is a timeout and we exceeded it, fail the test here so we get
+    // consistent behaviour. (The parent process cannot precisely time the test
+    // cases itself.)
+    if timeout > 0 && nominal.is_ok() {
+        let elapsed = time_start.elapsed();
+        let elapsed_millis = elapsed.as_secs() as u32 * 1000 +
+            elapsed.subsec_nanos() / 1_000_000;
+
+        if elapsed_millis > timeout {
+            return Err(TestCaseError::fail(
+                format!("Timeout of {} ms exceeded: test took {} ms",
+                        timeout, elapsed_millis)));
+        }
     }
+
+    nominal
 }
 
 impl TestRunner {
@@ -217,6 +251,18 @@ impl TestRunner {
         (&mut self, strategy: &S, test: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
+        if self.config.fork() {
+            unimplemented!()
+        } else {
+            self.run_in_process(strategy, test)
+        }
+    }
+
+    fn run_in_process<S : Strategy,
+                      F : Fn (&ValueFor<S>) -> TestCaseResult>
+        (&mut self, strategy: &S, test: F)
+         -> Result<(), TestError<ValueFor<S>>>
+    {
         let old_rng = self.rng.clone();
 
         let persisted_failure_seeds: Vec<[u32; 4]> = {
@@ -270,14 +316,27 @@ impl TestRunner {
     ///
     /// If the test fails, finds the minimal failing test case. If the test
     /// does not fail, returns whether it succeeded or was filtered out.
+    ///
+    /// This does not honour the `fork` config, and will not be able to
+    /// terminate the run if it runs for longer than `timeout`. However, if the
+    /// test function returns but took longer than `timeout`, the test case
+    /// will fail.
     pub fn run_one<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult>
         (&mut self, case: V, test: F) -> Result<bool, TestError<V::Value>>
     {
+        self.run_one_with_replay(case, test, &mut iter::empty::<TestCaseResult>().fuse())
+    }
+
+    fn run_one_with_replay<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult,
+                           R : Iterator<Item = TestCaseResult>>
+        (&mut self, case: V, test: F, replay: &mut R)
+         -> Result<bool, TestError<V::Value>>
+    {
         let curr = case.current();
-        match panic_guard(&curr, &test) {
+        match call_test(&curr, &test, replay, self.config.timeout()) {
             Ok(_) => Ok(true),
             Err(TestCaseError::Fail(why)) => {
-                let (why, curr) = self.shrink(case, test).unwrap_or((why, curr));
+                let (why, curr) = self.shrink(case, test, replay).unwrap_or((why, curr));
                 Err(TestError::Fail(why, curr))
             },
             Err(TestCaseError::Reject(whence)) => {
@@ -287,15 +346,17 @@ impl TestRunner {
         }
     }
 
-    fn shrink<V: ValueTree, F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, mut case: V, test: F) -> Option<(Reason, V::Value)>
+    fn shrink<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult,
+              R : Iterator<Item = TestCaseResult>>
+        (&mut self, mut case: V, test: F, replay: &mut R)
+         -> Option<(Reason, V::Value)>
     {
         let mut last_failure = None;
 
         if case.simplify() {
             loop {
                 let curr = case.current();
-                match panic_guard(&curr, &test) {
+                match call_test(&curr, &test, replay, self.config.timeout()) {
                     // Rejections are effectively a pass here,
                     // since they indicate that any behaviour of
                     // the function under test is acceptable.

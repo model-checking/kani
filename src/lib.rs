@@ -1503,6 +1503,15 @@ extern crate quick_error;
 extern crate regex_syntax;
 extern crate rand;
 
+#[cfg(feature = "fork")]
+extern crate rusty_fork;
+
+#[cfg(feature = "fork")]
+extern crate tempfile;
+
+#[cfg(feature = "timeout")]
+extern crate wait_timeout;
+
 #[cfg(test)]
 extern crate regex;
 
