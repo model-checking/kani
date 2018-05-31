@@ -628,7 +628,7 @@ macro_rules! float_bin_search {
                 if l == r {
                     true
                 } else {
-                    (l - r).abs() < ::std::$typ::EPSILON
+                    (l - r).abs() < ::core::$typ::EPSILON
                 }
             }
 

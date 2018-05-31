@@ -12,32 +12,11 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
-use core::fmt;
 #[cfg(feature = "std")]
 use std::panic::{self, AssertUnwindSafe};
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::SeqCst;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::BTreeMap;
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(feature = "std")]
-use std::string::String;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std_facade::{fmt, Box, Arc, BTreeMap, String, Vec};
 
 use strategy::*;
 
@@ -399,6 +378,9 @@ mod test {
         assert_eq!(Err(TestError::Fail("not less than 5".into(), 5)), result);
     }
 
+    // Test is not valid on not(std) because the panic guard doesn't catch
+    // panics.
+    #[cfg(feature = "std")]
     #[test]
     fn test_fail_via_panic() {
         let mut runner = TestRunner::new(Config {
@@ -420,6 +402,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn failing_cases_persisted_and_reloaded() {
         const FILE: &'static str = "persistence-test.txt";

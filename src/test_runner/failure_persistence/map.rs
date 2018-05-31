@@ -8,9 +8,7 @@
 // except according to those terms.
 
 use core::any::Any;
-use core::fmt;
-
-use std_facade::{Box, Vec, BTreeMap, BTreeSet};
+use std_facade::{fmt, Box, Vec, BTreeMap, BTreeSet};
 
 use test_runner::failure_persistence::FailurePersistence;
 use test_runner::Seed;

@@ -13,24 +13,9 @@
 //! is, the input collection is not itself a strategy, but is rather fixed when
 //! the strategy is created.
 
-
 use core::fmt;
 use core::ops::Range;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::borrow::Cow;
-#[cfg(feature = "std")]
-use std::borrow::Cow;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::{Cow, Vec, Arc};
 
 use bit_set::BitSet;
 

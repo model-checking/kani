@@ -7,20 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use core::cell::Cell;
-#[cfg(feature = "std")]
-use std::cell::Cell;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec_deque::VecDeque;
-#[cfg(feature = "std")]
-use std::collections::VecDeque;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std_facade::{Cell, VecDeque, Vec};
 
 use rand::Rng;
 

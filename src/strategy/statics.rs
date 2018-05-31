@@ -24,7 +24,7 @@
 //! **This module is subject to removal at some point after the language
 //! features linked above become stable.**
 
-use core::fmt;
+use std_facade::fmt;
 
 use strategy::traits::*;
 use test_runner::*;

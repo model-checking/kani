@@ -8,17 +8,7 @@
 // except according to those terms.
 
 use core::cmp;
-use core::fmt;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
+use std_facade::{fmt, Arc, Box};
 
 use strategy::*;
 use test_runner::*;

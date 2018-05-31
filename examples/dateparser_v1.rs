@@ -32,6 +32,7 @@ fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
 }
 
 // NB We omit #[test] on these functions so that main() can call them.
+#[cfg(feature = "std")]
 proptest! {
     fn doesnt_crash(ref s in "\\PC*") {
         parse_date(s);
@@ -39,11 +40,14 @@ proptest! {
 }
 
 fn main() {
-    assert_eq!(None, parse_date("2017-06-1"));
-    assert_eq!(None, parse_date("2017-06-170"));
-    assert_eq!(None, parse_date("2017006-17"));
-    assert_eq!(None, parse_date("2017-06017"));
-    assert_eq!(Some((2017, 6, 17)), parse_date("2017-06-17"));
+    #[cfg(feature = "std")]
+    {
+        assert_eq!(None, parse_date("2017-06-1"));
+        assert_eq!(None, parse_date("2017-06-170"));
+        assert_eq!(None, parse_date("2017006-17"));
+        assert_eq!(None, parse_date("2017-06017"));
+        assert_eq!(Some((2017, 6, 17)), parse_date("2017-06-17"));
 
-    doesnt_crash();
+        doesnt_crash();
+    }
 }

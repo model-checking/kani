@@ -9,11 +9,7 @@
 
 use core::cmp::{max, min};
 use core::u32;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std_facade::Vec;
 
 #[cfg(not(feature="std"))]
 use num_traits::float::FloatCore;

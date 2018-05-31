@@ -7,15 +7,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std_facade::Box;
+
 #[cfg(feature = "std")]
 use std::env;
 #[cfg(feature = "std")]
 use std::ffi::OsString;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
 
 use test_runner::FailurePersistence;
 #[cfg(feature = "std")]

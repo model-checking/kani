@@ -16,10 +16,10 @@
 //! others). For integers treated as numeric values, see the corresponding
 //! modules of the `num` module instead.
 
-use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
 use core::ops::Range;
+use std_facade::fmt;
 
 use bit_set::BitSet;
 use rand::{self, Rng};

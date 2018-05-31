@@ -9,32 +9,14 @@
 
 //! Strategies for generating `std::collections` of values.
 
-#![cfg_attr(feature="cargo-clippy", allow(type_complexity))]
-
 use core::cmp::Ord;
-use core::fmt;
 use core::hash::Hash;
 use core::ops::{Add, Range, RangeTo};
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec_deque::VecDeque;
-#[cfg(feature = "std")]
-use std::collections::VecDeque;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::{BinaryHeap, BTreeMap, BTreeSet, LinkedList};
-#[cfg(feature = "std")]
-use std::collections::{BinaryHeap, BTreeMap, BTreeSet, LinkedList};
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use hashmap_core::{HashMap, HashSet};
-#[cfg(feature = "std")]
-use std::collections::{HashMap, HashSet};
+use std_facade::{
+    fmt,
+    Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList, HashMap, HashSet
+};
 
 use bit_set::BitSet;
 
@@ -625,6 +607,7 @@ mod test {
         check_strategy_sanity(vec(0i32..1000, 5..10), None);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_map() {
         // Only 8 possible keys
@@ -637,6 +620,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_set() {
         // Only 8 possible values

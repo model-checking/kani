@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use rand::{Error, RngCore, Rng, SeedableRng, FromEntropy};
+use rand::{Error, RngCore, Rng, SeedableRng};
 use rand::prng::XorShiftRng;
 
 /// Proptest's random number generator.
@@ -31,6 +31,7 @@ impl TestRng {
     /// Construct a default TestRng from entropy.
     #[cfg(feature = "std")]
     pub(crate) fn default_rng() -> Self {
+        use rand::FromEntropy;
         Self { rng: XorShiftRng::from_entropy() }
     }
 

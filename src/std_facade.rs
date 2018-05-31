@@ -9,31 +9,37 @@
 
 //! This module provides #[cfg(..)]ed type aliases over features.
 
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::boxed::Box as ABox;
-#[cfg(feature = "std")]
-use std::boxed::Box as ABox;
+macro_rules! multiplex_alloc {
+    ($alloc: path, $std: path) => {
+        #[cfg(all(feature = "alloc", not(feature = "std")))]
+        pub(crate) use $alloc;
+        #[cfg(feature = "std")]
+        pub(crate) use $std;
+    };
+}
 
-pub(crate) type Box<T> = ABox<T>;
+macro_rules! multiplex_core {
+    ($core: path, $std: path) => {
+        #[cfg(not(feature = "std"))]
+        pub(crate) use $core;
+        #[cfg(feature = "std")]
+        pub(crate) use $std;
+    };
+}
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc as AArc;
-#[cfg(feature = "std")]
-use std::sync::Arc as AArc;
+multiplex_alloc!(alloc::borrow::Cow, ::std::borrow::Cow);
+multiplex_alloc!(alloc::borrow::ToOwned, ::std::borrow::ToOwned);
+multiplex_alloc!(alloc::boxed::Box, ::std::boxed::Box);
+multiplex_alloc!(alloc::String, ::std::string::String);
+multiplex_alloc!(alloc::arc::Arc, ::std::sync::Arc);
+multiplex_alloc!(alloc::Vec, ::std::vec::Vec);
+multiplex_alloc!(alloc::VecDeque, std::collections::VecDeque);
+multiplex_alloc!(alloc::BinaryHeap, ::std::collections::BinaryHeap);
+multiplex_alloc!(alloc::LinkedList, ::std::collections::LinkedList);
+multiplex_alloc!(alloc::BTreeSet, ::std::collections::BTreeSet);
+multiplex_alloc!(alloc::BTreeMap, ::std::collections::BTreeMap);
+multiplex_alloc!(hashmap_core::HashMap, ::std::collections::HashMap);
+multiplex_alloc!(hashmap_core::HashSet, ::std::collections::HashSet);
 
-pub(crate) type Arc<T> = AArc<T>;
-
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::vec::Vec as AVec;
-#[cfg(feature = "std")]
-use std::vec::Vec as AVec;
-
-pub(crate) type Vec<T> = AVec<T>;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::{BTreeMap as ABTreeMap, BTreeSet as ABTreeSet};
-#[cfg(feature = "std")]
-use std::collections::{BTreeMap as ABTreeMap, BTreeSet as ABTreeSet};
-
-pub(crate) type BTreeMap<K, V> = ABTreeMap<K, V>;
-pub(crate) type BTreeSet<T> = ABTreeSet<T>;
+multiplex_core!(core::fmt, ::std::fmt);
+multiplex_core!(core::cell::Cell, ::std::cell::Cell);

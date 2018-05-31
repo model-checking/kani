@@ -9,8 +9,7 @@
 
 //! Strategies for generating `std::Option` values.
 
-#![cfg_attr(feature="cargo-clippy",
-    allow(type_complexity, expl_impl_clone_on_copy))]
+#![cfg_attr(feature="cargo-clippy", allow(expl_impl_clone_on_copy))]
 
 use core::fmt;
 use core::marker::PhantomData;

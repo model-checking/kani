@@ -7,10 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[cfg(feature = "std")]
-use std::fmt;
-#[cfg(not(feature = "std"))]
-use core::fmt;
+use std_facade::fmt;
 
 /// Easily define `proptest` tests.
 ///

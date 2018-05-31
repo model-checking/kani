@@ -17,11 +17,7 @@
 //! characters, and `range()` and `ranges()` to select characters from
 //! inclusive ranges.
 
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::borrow::Cow;
-#[cfg(feature = "std")]
-use std::borrow::Cow;
+use std_facade::Cow;
 
 use rand::Rng;
 

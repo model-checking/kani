@@ -7,13 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
 use core::any::Any;
-
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::{boxed::Box, vec::Vec};
-#[cfg(feature = "std")]
-use std::{boxed::Box, vec::Vec};
+use std_facade::{fmt, Box, Vec};
 
 #[cfg(feature = "std")]
 mod file;
