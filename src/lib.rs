@@ -1441,12 +1441,7 @@
     type_complexity
 ))]
 #![cfg_attr(feature = "unstable", feature(
-    // i128 here produces a warning since it's going to be stable in 1.26, but
-    // that's not stable *now*, so keep it in so the warning acts as a
-    // reminder.
-    i128,
     allocator_api,
-    inclusive_range,
     thread_local_state,
     try_trait,
     generator_trait,
