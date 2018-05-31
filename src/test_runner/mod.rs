@@ -100,14 +100,12 @@ fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
 where
     F: Fn(&V) -> TestCaseResult
 {
-    match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
-        Ok(r) => r,
-        Err(what) => Err(TestCaseError::Fail(
+    unwrap_or!(panic::catch_unwind(AssertUnwindSafe(|| test(case))), what =>
+        Err(TestCaseError::Fail(
             what.downcast::<&'static str>().map(|s| (*s).into())
                 .or_else(|what| what.downcast::<String>().map(|b| (*b).into()))
                 .or_else(|what| what.downcast::<Box<str>>().map(|b| (*b).into()))
-                .unwrap_or_else(|_| "<unknown panic value>".into()))),
-    }
+                .unwrap_or_else(|_| "<unknown panic value>".into()))))
 }
 
 impl TestRunner {
@@ -177,14 +175,12 @@ impl TestRunner {
     {
         let old_rng = self.rng.clone();
 
-        let persisted_failure_seeds: Vec<Seed> = {
-            let config = &self.config;
-            let source_file = config.source_file;
-            match config.failure_persistence {
-                Some(ref f) => f.load_persisted_failures(source_file),
-                None => Vec::new()
-            }
-        };
+        let persisted_failure_seeds: Vec<Seed> =
+            self.config.failure_persistence
+                .as_ref()
+                .map(|f| f.load_persisted_failures(self.config.source_file))
+                .unwrap_or_default();
+
         for persisted_seed in persisted_failure_seeds {
             self.rng.set_seed(persisted_seed);
             self.gen_and_run_case(strategy, &test)?;
@@ -213,10 +209,8 @@ impl TestRunner {
         (&mut self, strategy: &S, f: &F)
         -> Result<(), TestError<ValueFor<S>>>
     {
-        let case = match strategy.new_value(self) {
-            Ok(v) => v,
-            Err(msg) => return Err(TestError::Abort(msg)),
-        };
+        let case = unwrap_or!(strategy.new_value(self),
+                        msg => return Err(TestError::Abort(msg)));
         if self.run_one(case, f)? {
             self.successes += 1;
         }
@@ -304,20 +298,7 @@ impl TestRunner {
 
     /// Insert 1 or increment the rejection detail at key for whence.
     fn insert_or_increment(into: &mut RejectionDetail, whence: Reason) {
-        #[cfg(all(feature = "alloc", not(feature = "std")))]
-        use alloc::btree_map::Entry::*;
-        #[cfg(feature = "std")]
-        use std::collections::btree_map::Entry::*;
-        match into.entry(whence) {
-            Occupied(oe) => { *oe.into_mut() += 1; },
-            Vacant(ve)   => { ve.insert(1); },
-        }
-        /*
-        // TODO: Replace with once and_modify is stable:
-        into.entry(whence)
-            .and_modify(|count| { *count += 1 })
-            .or_insert(1);
-        */
+        into.entry(whence).and_modify(|count| { *count += 1 }).or_insert(1);
     }
 
     /// Increment the counter of flat map regenerations and return whether it
