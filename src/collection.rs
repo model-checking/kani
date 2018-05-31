@@ -13,6 +13,7 @@
 
 use core::cmp::Ord;
 use core::fmt;
+#[cfg(feature = "std")]
 use core::hash::Hash;
 use core::ops::{Add, Range, RangeTo};
 
@@ -31,8 +32,8 @@ use alloc::{BinaryHeap, BTreeMap, BTreeSet, LinkedList};
 #[cfg(feature = "std")]
 use std::collections::{BinaryHeap, BTreeMap, BTreeSet, LinkedList};
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use hashmap_core::{HashMap, HashSet};
+//#[cfg(all(feature = "alloc", not(feature="std")))]
+//use hashmap_core::{HashMap, HashSet};
 #[cfg(feature = "std")]
 use std::collections::{HashMap, HashSet};
 
@@ -248,6 +249,7 @@ where ValueFor<T> : Ord {
 }
 
 mapfn! {
+    {#[cfg(feature = "std")]}
     [] fn VecToHashSet[<T : fmt::Debug + Hash + Eq>](vec: Vec<T>)
                                                      -> HashSet<T> {
         vec.into_iter().collect()
@@ -257,6 +259,7 @@ mapfn! {
 #[derive(Debug, Clone, Copy)]
 struct MinSize(usize);
 
+#[cfg(feature = "std")]
 impl<T : Eq + Hash> statics::FilterFn<HashSet<T>> for MinSize {
     fn apply(&self, set: &HashSet<T>) -> bool {
         set.len() >= self.0
@@ -264,6 +267,7 @@ impl<T : Eq + Hash> statics::FilterFn<HashSet<T>> for MinSize {
 }
 
 opaque_strategy_wrapper! {
+    {#[cfg(feature = "std")]}
     /// Strategy to create `HashSet`s with a length in a certain range.
     ///
     /// Created by the `hash_set()` function in the same module.
@@ -284,6 +288,7 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the `HashSet`
 /// has at least the minimum number of elements, in case `element` should
 /// produce duplicate values.
+#[cfg(feature = "std")]
 pub fn hash_set<T, S>(element: T, size: S) -> HashSetStrategy<T>
 where
     T: Strategy,
@@ -348,6 +353,7 @@ where
 }
 
 mapfn! {
+    {#[cfg(feature = "std")]}
     [] fn VecToHashMap[<K : fmt::Debug + Hash + Eq, V : fmt::Debug>]
         (vec: Vec<(K, V)>) -> HashMap<K, V>
     {
@@ -355,6 +361,7 @@ mapfn! {
     }
 }
 
+#[cfg(feature = "std")]
 impl<K : Hash + Eq, V> statics::FilterFn<HashMap<K, V>> for MinSize {
     fn apply(&self, map: &HashMap<K, V>) -> bool {
         map.len() >= self.0
@@ -362,6 +369,7 @@ impl<K : Hash + Eq, V> statics::FilterFn<HashMap<K, V>> for MinSize {
 }
 
 opaque_strategy_wrapper! {
+    {#[cfg(feature = "std")]}
     /// Strategy to create `HashMap`s with a length in a certain range.
     ///
     /// Created by the `hash_map()` function in the same module.
@@ -387,6 +395,7 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the `HashMap`
 /// has at least the minimum number of elements, in case `key` should produce
 /// duplicate values.
+#[cfg(feature = "std")]
 pub fn hash_map<K, V, S>(key: K, value: V, size: S) -> HashMapStrategy<K, V>
 where
     K: Strategy,
@@ -628,6 +637,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn test_map() {
         // Only 8 possible keys
         let input = hash_map("[ab]{3}", "a", 2..3);
@@ -640,6 +650,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn test_set() {
         // Only 8 possible values
         let input = hash_set("[ab]{3}", 2..3);

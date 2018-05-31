@@ -1,3 +1,8 @@
+## Unreleased
+
+- Support for the `hashmap_core` crate is removed pending
+  https://github.com/Amanieu/hashmap_core/issues/3.
+
 ## 0.7.0
 
 ### Potential Breaking Changes
