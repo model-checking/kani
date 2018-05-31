@@ -9,9 +9,9 @@
 
 //! Arbitrary implementations for `std::iter`.
 
-use std::fmt;
-use std::iter::*;
-use std::iter::Fuse;
+use core::fmt;
+use core::iter::*;
+use core::iter::Fuse;
 
 use strategy::*;
 use strategy::statics::static_map;

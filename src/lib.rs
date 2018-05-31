@@ -1444,10 +1444,8 @@
     // i128 here produces a warning since it's going to be stable in 1.26, but
     // that's not stable *now*, so keep it in so the warning acts as a
     // reminder.
-    i128_type
     i128,
     allocator_api,
-    inclusive_range_syntax,
     inclusive_range,
     thread_local_state,
     try_trait,
@@ -1460,7 +1458,7 @@
     iterator_step_by,
     io,
     never_type,
-    try_reserve,
+    try_reserve
 ))]
 #![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(
     alloc,
@@ -1471,6 +1469,7 @@
 // FIXME: remove this after refactoring!
 #![allow(renamed_and_removed_lints)]
 
+#[macro_use]
 mod std_facade;
 
 #[cfg(any(feature = "std", test))]

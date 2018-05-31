@@ -9,8 +9,9 @@
 
 //! Arbitrary implementations for std::borrow.
 
-use std::borrow::*;
-use std::fmt;
+use core::borrow::Borrow;
+use std_facade::{ToOwned, Cow};
+use std_facade::fmt;
 
 use strategy::statics::static_map;
 use arbitrary::{any_with, SMapped, Arbitrary};

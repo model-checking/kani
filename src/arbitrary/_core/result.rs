@@ -9,8 +9,8 @@
 
 //! Arbitrary implementations for `std::result`.
 
-use std::fmt;
-use std::result::IntoIter;
+use core::fmt;
+use core::result::IntoIter;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -18,10 +18,12 @@ use result::*;
 use arbitrary::*;
 
 // These are Result with uninhabited type in some variant:
+#[cfg(feature = "std")]
 arbitrary!([A: Arbitrary] Result<A, ::std::string::ParseError>,
     SMapped<A, Self>, A::Parameters;
     args => static_map(any_with::<A>(args), Result::Ok)
 );
+#[cfg(feature = "std")]
 arbitrary!([A: Arbitrary] Result<::std::string::ParseError, A>,
     SMapped<A, Self>, A::Parameters;
     args => static_map(any_with::<A>(args), Result::Err)
@@ -37,6 +39,7 @@ arbitrary!([A: Arbitrary] Result<!, A>,
     args => static_map(any_with::<A>(args), Result::Err)
 );
 
+#[cfg(feature = "std")]
 lift1!([] Result<A, ::std::string::ParseError>; Result::Ok);
 #[cfg(feature = "unstable")]
 lift1!([] Result<A, !>; Result::Ok);

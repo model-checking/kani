@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::cmp`.
 
-use std::cmp::{Reverse, Ordering};
+use core::cmp::{Reverse, Ordering};
 
 use strategy::{Just, TupleUnion, W};
 

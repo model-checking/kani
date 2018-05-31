@@ -9,7 +9,8 @@
 
 //! Arbitrary implementations for `std::ops`.
 
-use std::ops::*;
+use core::ops::*;
+use std_facade::Arc;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -32,7 +33,7 @@ arbitrary!(
 
 #[cfg(feature = "unstable")]
 lift1!([PartialOrd] RangeInclusive<A>; base => {
-    let base = ::std::sync::Arc::new(base);
+    let base = Arc::new(base);
     (base.clone(), base).prop_map(|(a, b)| if b < a { b..=a } else { a..=b })
 });
 
@@ -44,7 +45,7 @@ arbitrary!(
 );
 
 lift1!([PartialOrd] Range<A>; base => {
-    let base = ::std::sync::Arc::new(base);
+    let base = Arc::new(base);
     (base.clone(), base).prop_map(|(a, b)| if b < a { b..a } else { a..b })
 });
 
@@ -63,7 +64,7 @@ arbitrary!(
 );
 
 #[cfg(feature = "unstable")]
-use std::fmt;
+use core::fmt;
 
 #[cfg(feature = "unstable")]
 impl<A: fmt::Debug + 'static, B: fmt::Debug + 'static>

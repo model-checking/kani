@@ -9,8 +9,8 @@
 
 //! Arbitrary implementations for `std::option`.
 
-use std::option as opt;
-use std::ops::Range;
+use core::option as opt;
+use core::ops::Range;
 
 use option::{weighted, OptionStrategy, Probability};
 use strategy::*;
@@ -22,6 +22,7 @@ arbitrary!(Probability, MapInto<Range<f64>, Self>;
 );
 
 // These are Option<AnUninhabitedType> impls:
+#[cfg(feature = "std")]
 arbitrary!(Option<::std::string::ParseError>; None);
 #[cfg(feature = "unstable")]
 arbitrary!(Option<!>; None);

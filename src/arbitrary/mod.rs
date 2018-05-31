@@ -28,6 +28,12 @@ mod traits;
 mod primitives;
 mod arrays;
 mod tuples;
+
+mod _core;
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+mod _alloc;
+
 #[cfg(feature = "std")]
 mod _std;
 

@@ -11,7 +11,6 @@
 
 use std::fmt;
 use std::sync::*;
-use std::sync::atomic::*;
 use std::sync::mpsc::*;
 use std::thread;
 use std::time::Duration;
@@ -23,8 +22,6 @@ use arbitrary::*;
 // OnceState can not escape Once::call_once_force.
 // PoisonError depends implicitly on the lifetime on MutexGuard, etc.
 // This transitively applies to TryLockError.
-
-wrap_from!(Arc);
 
 // Not doing Weak because .upgrade() would always return None.
 
@@ -87,33 +84,6 @@ fn wtr_true() -> WaitTimeoutResult {
     wtr
 }
 
-macro_rules! atomic {
-    ($($type: ident, $base: ty);+) => {
-        $(arbitrary!($type, SMapped<$base, Self>;
-            static_map(any::<$base>(), $type::new)
-        );)+
-    };
-}
-
-// impl_wrap_gen!(AtomicPtr); // We don't have impl Arbitrary for *mut T yet.
-atomic!(AtomicBool, bool; AtomicIsize, isize; AtomicUsize, usize);
-
-#[cfg(feature = "unstable")]
-atomic!(AtomicI8, i8; AtomicI16, i16; AtomicI32, i32; AtomicI64, i64;
-        AtomicU8, u8; AtomicU16, u16; AtomicU32, u32; AtomicU64, u64);
-
-arbitrary!(Ordering,
-    TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>,
-                W<Just<Self>>, W<Just<Self>>)>;
-    prop_oneof![
-        Just(Ordering::Relaxed),
-        Just(Ordering::Release),
-        Just(Ordering::Acquire),
-        Just(Ordering::AcqRel),
-        Just(Ordering::SeqCst)
-    ]
-);
-
 arbitrary!(RecvError; RecvError);
 
 arbitrary!([T: Arbitrary] SendError<T>, SMapped<T, Self>, T::Parameters;
@@ -173,7 +143,6 @@ arbitrary!([A: fmt::Debug] (SyncSender<A>, IntoIter<A>), SMapped<u16, Self>;
 #[cfg(test)]
 mod test {
     no_panic_test!(
-        arc => Arc<u8>,
         mutex => Mutex<u8>,
         rw_lock => RwLock<u8>,
         barrier => Barrier,
@@ -181,10 +150,6 @@ mod test {
         condvar => Condvar,
         once => Once,
         wait_timeout_result => WaitTimeoutResult,
-        atomic_bool => AtomicBool,
-        atomic_isize => AtomicIsize,
-        atomic_usize => AtomicUsize,
-        ordering => Ordering,
         recv_error => RecvError,
         send_error => SendError<u8>,
         recv_timeout_error => RecvTimeoutError,
@@ -198,14 +163,6 @@ mod test {
 
     #[cfg(feature = "unstable")]
     no_panic_test!(
-        select => Select,
-        atomic_i8  => AtomicI8,
-        atomic_i16 => AtomicI16,
-        atomic_i32 => AtomicI32,
-        atomic_i64 => AtomicI64,
-        atomic_u8  => AtomicU8,
-        atomic_u16 => AtomicU16,
-        atomic_u32 => AtomicU32,
-        atomic_u64 => AtomicU64
+        select => Select
     );
 }

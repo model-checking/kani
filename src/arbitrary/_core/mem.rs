@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::mem`.
 
-use std::mem::*;
+use core::mem::*;
 
 use strategy::statics::static_map;
 use arbitrary::*;

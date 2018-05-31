@@ -9,13 +9,9 @@
 
 //! Arbitrary implementations for `std::str`.
 
-use std::iter::repeat;
-use std::str::{ParseBoolError, Utf8Error, from_utf8};
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use core::iter::repeat;
+use core::str::{ParseBoolError, Utf8Error, from_utf8};
+use std_facade::Vec;
 
 use strategy::*;
 use strategy::statics::static_map;

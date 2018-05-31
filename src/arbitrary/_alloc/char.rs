@@ -9,19 +9,14 @@
 
 //! Arbitrary implementations for `std::char`.
 
-use std::char::*;
-use std::iter::once;
-use std::ops::Range;
+use core::char::*;
+use core::iter::once;
+use core::ops::Range;
+use std_facade::Vec;
 
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[allow(unused_imports)]
-#[cfg(feature = "std")]
-use std::vec::Vec;
 
 macro_rules! impl_wrap_char {
     ($type: ty, $mapper: expr) => {
@@ -42,7 +37,7 @@ impl_wrap_char!(ToUppercase, char::to_uppercase);
 use collection::vec;
 
 #[cfg(feature = "unstable")]
-const VEC_MAX: usize = ::std::u16::MAX as usize;
+const VEC_MAX: usize = ::core::u16::MAX as usize;
 
 #[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,
@@ -63,7 +58,7 @@ arbitrary!(ParseCharError, IndFlatten<Mapped<bool, Just<Self>>>;
 
 #[cfg(feature = "unstable")]
 arbitrary!(CharTryFromError; {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
     char::try_from(0xD800 as u32).unwrap_err()
 });
 

@@ -15,32 +15,20 @@
 // Imports:
 //==============================================================================
 
-use std::fmt;
-use std::hash::Hash;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::ops::Range;
-use std::collections::*;
+use core::ops::{Range, Bound};
+use core::hash::Hash;
+use std_facade::{
+    fmt, Box, Rc, Arc, Vec, BTreeMap, BTreeSet, HashMap, HashSet,
+    BinaryHeap, VecDeque, LinkedList, vec, btree_map, btree_set,
+    hash_map, hash_set,
+};
+
+//use std::collections::*;
 
 #[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::{vec_deque, linked_list, btree_set, binary_heap};
+use alloc::{vec_deque, linked_list, binary_heap};
 #[cfg(feature = "std")]
-use std::collections::{vec_deque, linked_list, btree_set, binary_heap};
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec;
-#[cfg(feature = "std")]
-use std::vec;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
+use std::collections::{vec_deque, linked_list, binary_heap};
 
 use strategy::*;
 use strategy::statics::static_map;
