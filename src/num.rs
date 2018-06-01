@@ -31,7 +31,7 @@ where
 }
 
 macro_rules! int_any {
-    () => {
+    ($typ: ident) => {
         /// Type of the `ANY` constant.
         #[derive(Clone, Copy, Debug)]
         pub struct Any(());
@@ -41,6 +41,7 @@ macro_rules! int_any {
 
         impl Strategy for Any {
             type Tree = BinarySearch;
+            type Value = $typ;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new(runner.rng().gen()))
@@ -53,6 +54,7 @@ macro_rules! numeric_api {
     ($typ:ident, $epsilon:expr) => {
         impl Strategy for ::core::ops::Range<$typ> {
             type Tree = BinarySearch;
+            type Value = $typ;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
@@ -64,6 +66,7 @@ macro_rules! numeric_api {
 
         impl Strategy for ::core::ops::RangeFrom<$typ> {
             type Tree = BinarySearch;
+            type Value = $typ;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 // TODO `rand` has no way to express the inclusive-end range we
@@ -78,6 +81,7 @@ macro_rules! numeric_api {
 
         impl Strategy for ::core::ops::RangeTo<$typ> {
             type Tree = BinarySearch;
+            type Value = $typ;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
@@ -101,7 +105,7 @@ macro_rules! signed_integer_bin_search {
             use strategy::*;
             use test_runner::TestRunner;
 
-            int_any!();
+            int_any!($typ);
 
             /// Shrinks an integer towards 0, using binary search to find
             /// boundary points.
@@ -203,7 +207,7 @@ macro_rules! unsigned_integer_bin_search {
             use strategy::*;
             use test_runner::TestRunner;
 
-            int_any!();
+            int_any!($typ);
 
             /// Shrinks an integer towards 0, using binary search to find
             /// boundary points.
@@ -534,6 +538,7 @@ macro_rules! float_any {
 
         impl Strategy for Any {
             type Tree = BinarySearch;
+            type Value = $typ;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let flags = self.0.normalise();

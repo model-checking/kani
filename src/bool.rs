@@ -25,6 +25,7 @@ pub const ANY: Any = Any(());
 
 impl Strategy for Any {
     type Tree = BoolValueTree;
+    type Value = bool;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(BoolValueTree(runner.rng().gen()))
@@ -45,6 +46,7 @@ pub struct Weighted(f64);
 
 impl Strategy for Weighted {
     type Tree = BoolValueTree;
+    type Value = bool;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(BoolValueTree(runner.rng().gen_bool(self.0)))

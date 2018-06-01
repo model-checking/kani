@@ -76,6 +76,7 @@ pub struct Subsequence<T : Clone + 'static> {
 
 impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
     type Tree = SubsequenceValueTree<T>;
+    type Value = Vec<T>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(SubsequenceValueTree {

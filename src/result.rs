@@ -183,8 +183,7 @@ pub fn maybe_err_weighted<T: Strategy, E: Strategy, P: Into<Probability>>(
 mod test {
     use super::*;
 
-    fn count_ok_of_1000<S : Strategy>(s: S) -> u32
-    where S::Tree : ValueTree<Value = Result<(), ()>> {
+    fn count_ok_of_1000(s: impl Strategy<Value = Result<(), ()>>) -> u32 {
         let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {

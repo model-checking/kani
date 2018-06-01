@@ -52,6 +52,7 @@ impl<S : Strategy, O : fmt::Debug,
      F : Fn (ValueFor<S>) -> O>
 Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
+    type Value = O;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.source.new_value(runner).map(
@@ -116,6 +117,7 @@ where
     ValueFor<S>: Into<O>
 {
     type Tree = MapInto<S::Tree, O>;
+    type Value = O;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.source.new_value(runner).map(MapInto::new)
@@ -175,6 +177,7 @@ impl<S : Strategy, O : fmt::Debug,
      F : Fn (ValueFor<S>, TestRng) -> O>
 Strategy for Perturb<S, F> {
     type Tree = PerturbValueTree<S::Tree, F>;
+    type Value = O;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();

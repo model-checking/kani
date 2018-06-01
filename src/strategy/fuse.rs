@@ -57,6 +57,7 @@ impl<T> Fuse<T> {
 
 impl<T : Strategy> Strategy for Fuse<T> {
     type Tree = Fuse<T::Tree>;
+    type Value = ValueFor<T>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.inner.new_value(runner).map(Fuse::new)

@@ -224,6 +224,7 @@ pub struct CharValueTree {
 
 impl<'a> Strategy for CharStrategy<'a> {
     type Tree = CharValueTree;
+    type Value = char;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (base, offset) = select_range_index(

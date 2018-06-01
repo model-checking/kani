@@ -150,6 +150,7 @@ impl<T : BitSetLike> BitSetStrategy<T> {
 
 impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
     type Tree = BitSetValueTree<T>;
+    type Value = T;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut inner = T::new_bitset(self.max);
@@ -210,6 +211,7 @@ impl<T : BitSetLike> SampledBitSetStrategy<T> {
 
 impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     type Tree = BitSetValueTree<T>;
+    type Value = T;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end);

@@ -143,10 +143,8 @@ for HashMap<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Tree: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         hash_map(fst, snd, args).boxed()
     }
@@ -160,10 +158,8 @@ for hash_map::IntoIter<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Tree: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         static_map(hash_map(fst, snd, args), HashMap::into_iter).boxed()
     }
@@ -195,10 +191,8 @@ for BTreeMap<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Tree: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         btree_map(fst, snd, args).boxed()
     }
@@ -217,10 +211,8 @@ for btree_map::IntoIter<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Tree: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         static_map(btree_map(fst, snd, args), BTreeMap::into_iter).boxed()
     }

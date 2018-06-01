@@ -78,6 +78,7 @@ opaque_strategy_wrapper! {
 
 impl Strategy for str {
     type Tree = RegexGeneratorValueTree<String>;
+    type Value = String;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         string_regex(self).unwrap().new_value(runner)

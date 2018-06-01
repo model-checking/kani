@@ -103,7 +103,7 @@ pub trait Arbitrary: Sized + fmt::Debug {
     /// The type of [`Strategy`] used to generate values of type `Self`.
     ///
     /// [`Strategy`]: ../strategy/trait.Strategy.html
-    type Strategy: Strategy<Tree = Self::ValueTree>;
+    type Strategy: Strategy<Value = Self, Tree = Self::ValueTree>;
 
     /// The type of [`ValueTree`] used for `Self`'s [`Strategy`].
     ///
@@ -265,7 +265,7 @@ pub fn any_with<A: Arbitrary>(args: ParamsFor<A>) -> StrategyFor<A> {
 /// [`Strategy`]: ../strategy/trait.Strategy.html
 pub fn arbitrary<A, S>() -> S
 where
-    S: Strategy,
+    S: Strategy<Value = A>,
     S::Tree: ValueTree<Value = A>,
     A: Arbitrary<Strategy = S, ValueTree = S::Tree>,
 {
@@ -310,7 +310,7 @@ where
 pub fn arbitrary_with<A, S, P>(args: P) -> S
 where
     P: Default,
-    S: Strategy,
+    S: Strategy<Value = A>,
     S::Tree: ValueTree<Value = A>,
     A: Arbitrary<Strategy = S, ValueTree = S::Tree, Parameters = P>,
 {

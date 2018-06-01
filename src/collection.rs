@@ -456,6 +456,7 @@ pub struct VecValueTree<T : ValueTree> {
 
 impl<T : Strategy> Strategy for VecStrategy<T> {
     type Tree = VecValueTree<T::Tree>;
+    type Value = Vec<ValueFor<T>>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let Range { start, end } = self.size.0;

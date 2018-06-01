@@ -905,8 +905,9 @@ mod test {
 
     #[test]
     fn oneof_all_counts() {
-        fn expect_count<S : ::strategy::Strategy>(n: usize, s: S)
-        where S::Tree : ::strategy::ValueTree<Value = i32> {
+        use ::strategy::{Strategy, TupleUnion, Union, Just as J};
+
+        fn expect_count(n: usize, s: impl Strategy<Value = i32>) {
             use std::collections::HashSet;
             use strategy::*;
             use test_runner::*;
@@ -920,15 +921,9 @@ mod test {
             assert_eq!(n, seen.len());
         }
 
-        fn assert_static<T>(v: ::strategy::TupleUnion<T>)
-                            -> ::strategy::TupleUnion<T>
-        { v }
+        fn assert_static<T>(v: TupleUnion<T>) -> TupleUnion<T> { v }
+        fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> { v }
 
-        fn assert_dynamic<T : ::strategy::Strategy>
-            (v: ::strategy::Union<T>) -> ::strategy::Union<T>
-        { v }
-
-        use strategy::Just as J;
         expect_count(1, prop_oneof![J(0i32)]);
         expect_count(2, assert_static(prop_oneof![
             J(0i32),

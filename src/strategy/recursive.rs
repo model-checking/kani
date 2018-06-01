@@ -49,17 +49,15 @@ impl<T, F> Clone for Recursive<T, F> {
 impl<T, R, F> Recursive<T, F>
 where
     T : fmt::Debug + 'static,
-    R : Strategy + 'static,
+    R : Strategy<Value = T> + 'static,
     F : Fn(BoxedStrategy<T>) -> R,
-    R::Tree : ValueTree<Value = T>
 {
     pub(super) fn new<S>
         (base: S, depth: u32, desired_size: u32, expected_branch_size: u32,
         recurse: F)
         -> Self
     where
-        S : Strategy + 'static,
-        S::Tree : ValueTree<Value = T>
+        S : Strategy<Value = T> + 'static,
     {
         Self {
             base: base.boxed(),
@@ -72,11 +70,11 @@ where
 impl<T, R, F> Strategy for Recursive<T, F>
 where
     T : fmt::Debug + 'static,
-    R : Strategy + 'static,
+    R : Strategy<Value = T> + 'static,
     F : Fn(BoxedStrategy<T>) -> R,
-    R::Tree : ValueTree<Value = T>
 {
     type Tree = Box<ValueTree<Value = T>>;
+    type Value = T;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         // Since the generator is stateless, we can't implement any "absolutely

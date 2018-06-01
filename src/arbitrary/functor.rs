@@ -26,7 +26,7 @@
 
 use std_facade::fmt;
 
-use strategy::{Strategy, ValueTree, BoxedStrategy};
+use strategy::{Strategy, BoxedStrategy};
 
 /// `ArbitraryF1` lets you lift a [`Strategy`] to unary
 /// type constructors such as `Box`, `Vec`, and `Option`.
@@ -45,7 +45,7 @@ pub trait ArbitraryF1<A: fmt::Debug>: fmt::Debug + Sized {
     // It might be better to do this with generic associated types by
     // having an associated type:
     //
-    // `type Strategy<A>: Strategy<Value = impl ValueTree<Value = Self>>`
+    // `type Strategy<A>: Strategy<Value = Self>;`
     //
     // But with this setup we will likely loose the ability to add bounds
     // such as `Hash + Eq` on `A` which is needed for `HashSet`. We might
@@ -92,10 +92,7 @@ pub trait ArbitraryF1<A: fmt::Debug>: fmt::Debug + Sized {
     /// [`X::lift1_with(base, Default::default())`]:
     ///     trait.ArbitraryF1.html#tymethod.lift1_with
     fn lift1<AS>(base: AS) -> BoxedStrategy<Self>
-    where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>
-    {
+    where AS: Strategy<Value = A> + 'static {
         Self::lift1_with(base, Self::Parameters::default())
     }
 
@@ -114,9 +111,7 @@ pub trait ArbitraryF1<A: fmt::Debug>: fmt::Debug + Sized {
     /// [`default()`]:
     ///     https://doc.rust-lang.org/nightly/std/default/trait.Default.html
     fn lift1_with<AS>(base: AS, args: Self::Parameters) -> BoxedStrategy<Self>
-    where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>;
+    where AS: Strategy<Value = A> + 'static;
 }
 
 /// `ArbitraryF2` lets you lift [`Strategy`] to binary
@@ -159,10 +154,8 @@ pub trait ArbitraryF2<A: fmt::Debug, B: fmt::Debug>: fmt::Debug + Sized {
     ///     trait.Arbitrary.html#tymethod.lift2_with
     fn lift2<AS, BS>(fst: AS, snd: BS) -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Tree: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         Self::lift2_with(fst, snd, Self::Parameters::default())
     }
@@ -184,10 +177,8 @@ pub trait ArbitraryF2<A: fmt::Debug, B: fmt::Debug>: fmt::Debug + Sized {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Tree: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Tree: ValueTree<Value = B>;
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static;
 }
 
 macro_rules! lift1 {
@@ -201,8 +192,7 @@ macro_rules! lift1 {
             fn lift1_with<S>($base: S, $args: Self::Parameters)
                 -> $crate::strategy::BoxedStrategy<Self>
             where
-                S: $crate::strategy::Strategy + 'static,
-                S::Tree: $crate::strategy::ValueTree<Value = A>
+                S: $crate::strategy::Strategy<Value = A> + 'static
             {
                 $crate::strategy::Strategy::boxed($logic)
             }

@@ -71,6 +71,7 @@ impl<S : Strategy,
      F : FilterFn<ValueFor<S>> + Clone>
 Strategy for Filter<S, F> {
     type Tree = Filter<S::Tree, F>;
+    type Value = ValueFor<S>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
@@ -165,6 +166,7 @@ impl<S : Strategy,
      F : Clone + MapFn<ValueFor<S>>>
 Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
+    type Value = F::Output;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.source.new_value(runner).map(

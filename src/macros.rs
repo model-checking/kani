@@ -59,6 +59,7 @@ macro_rules! opaque_strategy_wrapper {
 
         impl $($sgen)* Strategy for $stratname $($sgen)* $($swhere)* {
             type Tree = $stratvtty;
+            type Value = $actualty;
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 self.0.new_value(runner).map($vtname)
             }
