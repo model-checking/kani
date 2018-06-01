@@ -1038,14 +1038,12 @@
 //! #     assert_eq!(s, order.id);
 //! # }
 //!
-//! # #[cfg(feature = "std")]
 //! fn arb_order(max_quantity: u32) -> impl Strategy<Value = Order> {
 //!     (any::<u32>().prop_map(|v| v.to_string()),
 //!      "[a-z]*", 1..max_quantity)
 //!     .prop_map(|(id, item, quantity)| Order { id, item, quantity })
 //! }
 //!
-//! # #[cfg(feature = "std")]
 //! proptest! {
 //!     # /*
 //!     #[test]
@@ -1054,7 +1052,7 @@
 //!         do_stuff(order);
 //!     }
 //! }
-//! # #[cfg(feature = "std")]
+//!
 //! # fn main() { test_do_stuff(); }
 //! ```
 //!
@@ -1563,8 +1561,6 @@ mod macros;
 #[macro_use]
 pub mod sugar;
 
-/*
-*/
 pub mod arbitrary;
 pub mod array;
 pub mod bits;
@@ -1583,5 +1579,3 @@ pub mod sample;
 pub mod string;
 
 pub mod prelude;
-/*
-*/

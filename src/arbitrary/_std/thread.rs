@@ -10,11 +10,7 @@
 //! Arbitrary implementations for `std::thread`.
 
 use std::thread::*;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::String;
-#[cfg(feature = "std")]
-use std::string::String;
+use std_facade::String;
 
 use strategy::statics::static_map;
 use option::prob;

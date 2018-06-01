@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use core::cmp;
-use std_facade::{fmt, Arc, Box};
+use std_facade::{fmt, Box, Rc, Arc};
 
 use strategy::*;
 use test_runner::*;
@@ -585,16 +585,8 @@ macro_rules! proxy_strategy {
 proxy_strategy!(Box<S>);
 proxy_strategy!(&'a S, 'a);
 proxy_strategy!(&'a mut S, 'a);
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-proxy_strategy!(::alloc::rc::Rc<S>);
-#[cfg(feature = "std")]
-proxy_strategy!(::std::rc::Rc<S>);
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-proxy_strategy!(::alloc::arc::Arc<S>);
-#[cfg(feature = "std")]
-proxy_strategy!(::std::sync::Arc<S>);
+proxy_strategy!(Rc<S>);
+proxy_strategy!(Arc<S>);
 
 impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
     type Value = T::Value;

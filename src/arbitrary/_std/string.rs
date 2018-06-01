@@ -15,10 +15,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std_facade::{Box, Vec, String};
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::{FromUtf8Error, FromUtf16Error};
-#[cfg(feature = "std")]
-use std::string::{FromUtf8Error, FromUtf16Error};
+multiplex_alloc! {
+    alloc::string::FromUtf8Error, ::std::string::FromUtf8Error,
+    alloc::string::FromUtf16Error, ::std::string::FromUtf16Error
+}
 
 use strategy::*;
 use strategy::statics::static_map;

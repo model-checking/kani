@@ -29,15 +29,13 @@ pub(crate) type Seed = [u8; 16];
 
 impl TestRng {
     /// Construct a default TestRng from entropy.
-    #[cfg(feature = "std")]
     pub(crate) fn default_rng() -> Self {
-        use rand::FromEntropy;
-        Self { rng: XorShiftRng::from_entropy() }
-    }
-
-    /// Construct a default TestRng from entropy.
-    #[cfg(not(feature = "std"))]
-    pub(crate) fn default_rng() -> Self {
+        #[cfg(feature = "std")]
+        {
+            use rand::FromEntropy;
+            Self { rng: XorShiftRng::from_entropy() }
+        }
+        #[cfg(not(feature = "std"))]
         Self::from_seed([
             0x19, 0x3a, 0x67, 0x54, // x
             0x69, 0xd4, 0xa7, 0xa8, // y

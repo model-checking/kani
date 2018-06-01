@@ -9,11 +9,7 @@
 
 use core::fmt;
 use core::marker::PhantomData;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::Arc;
 
 use strategy::traits::*;
 use test_runner::*;
