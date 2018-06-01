@@ -1449,7 +1449,6 @@
     integer_atomics,
     mpsc_select,
     ip,
-    decode_utf8,
     iterator_step_by,
     io,
     never_type,
@@ -1512,78 +1511,8 @@ extern crate rand;
 #[cfg(test)]
 extern crate regex;
 
-// Pervasive internal sugar
-macro_rules! mapfn {
-    ($(#[$meta:meta])* [$($vis:tt)*]
-     fn $name:ident[$($gen:tt)*]($parm:ident: $input:ty) -> $output:ty {
-         $($body:tt)*
-     }) => {
-        $(#[$meta])*
-        #[derive(Clone, Copy, Debug)]
-        $($vis)* struct $name;
-        impl $($gen)* ::strategy::statics::MapFn<$input> for $name {
-            type Output = $output;
-            fn apply(&self, $parm: $input) -> $output {
-                $($body)*
-            }
-        }
-    }
-}
-
-macro_rules! delegate_vt_0 {
-    () => {
-        fn current(&self) -> Self::Value {
-            self.0.current()
-        }
-
-        fn simplify(&mut self) -> bool {
-            self.0.simplify()
-        }
-
-        fn complicate(&mut self) -> bool {
-            self.0.complicate()
-        }
-    }
-}
-
-macro_rules! opaque_strategy_wrapper {
-    ($(#[$smeta:meta])* pub struct $stratname:ident
-     [$($sgen:tt)*][$($swhere:tt)*]
-     ($innerstrat:ty) -> $stratvtty:ty;
-
-     $(#[$vmeta:meta])* pub struct $vtname:ident
-     [$($vgen:tt)*][$($vwhere:tt)*]
-     ($innervt:ty) -> $actualty:ty;
-    ) => {
-        $(#[$smeta])* pub struct $stratname $($sgen)* ($innerstrat)
-            $($swhere)*;
-
-        $(#[$vmeta])* pub struct $vtname $($vgen)* ($innervt) $($vwhere)*;
-
-        impl $($sgen)* Strategy for $stratname $($sgen)* $($swhere)* {
-            type Value = $stratvtty;
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                self.0.new_value(runner).map($vtname)
-            }
-        }
-
-        impl $($vgen)* ValueTree for $vtname $($vgen)* $($vwhere)* {
-            type Value = $actualty;
-
-            delegate_vt_0!();
-        }
-    }
-}
-
-// Example: unwrap_or!(result, err => handle_err(err));
-macro_rules! unwrap_or {
-    ($unwrap: expr, $err: ident => $on_err: expr) => {
-        match $unwrap {
-            Ok(ok) => ok,
-            Err($err) => $on_err,
-        }
-    };
-}
+#[macro_use]
+mod macros;
 
 #[doc(hidden)]
 #[macro_use]
