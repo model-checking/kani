@@ -13,7 +13,7 @@
 //! arbitrary inputs, and if a failure is found, automatically finds the
 //! minimal test case to reproduce the problem. Unlike QuickCheck, generation
 //! and shrinking is defined on a per-value basis instead of per-type, which
-//! makes it much more flexible and simplifies composition.
+//! makes it more flexible and simplifies composition.
 //!
 //! If you have dependencies which provide QuickCheck `Arbitrary`
 //! implementations, see also the related
