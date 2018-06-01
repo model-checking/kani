@@ -1517,8 +1517,8 @@ extern crate std;
 #[macro_use]
 extern crate alloc;
 
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-extern crate hashmap_core;
+//#[cfg(all(feature = "alloc", not(feature = "std")))]
+//extern crate hashmap_core;
 
 extern crate byteorder;
 
