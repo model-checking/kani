@@ -12,8 +12,17 @@
 use core::char::*;
 use core::iter::once;
 use core::ops::Range;
-#[cfg(feature = "unstable")]
 use std_facade::Vec;
+
+use collection::vec;
+
+multiplex_alloc! {
+    core::char::DecodeUtf16, std::char::DecodeUtf16,
+    core::char::DecodeUtf16Error, std::char::DecodeUtf16Error,
+    core::char::decode_utf16, std::char::decode_utf16
+}
+
+const VEC_MAX: usize = ::core::u16::MAX as usize;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -34,13 +43,6 @@ impl_wrap_char!(ToLowercase, char::to_lowercase);
 #[cfg(feature = "unstable")]
 impl_wrap_char!(ToUppercase, char::to_uppercase);
 
-#[cfg(feature = "unstable")]
-use collection::vec;
-
-#[cfg(feature = "unstable")]
-const VEC_MAX: usize = ::core::u16::MAX as usize;
-
-#[cfg(feature = "unstable")]
 arbitrary!(DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
     SMapped<Vec<u16>, Self>;
     static_map(vec(any::<u16>(), ..VEC_MAX), decode_utf16)
