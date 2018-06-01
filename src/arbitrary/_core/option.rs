@@ -11,6 +11,7 @@
 
 use core::option as opt;
 use core::ops::Range;
+use std_facade::string;
 
 use option::{weighted, OptionStrategy, Probability};
 use strategy::*;
@@ -22,8 +23,8 @@ arbitrary!(Probability, MapInto<Range<f64>, Self>;
 );
 
 // These are Option<AnUninhabitedType> impls:
-#[cfg(feature = "std")]
-arbitrary!(Option<::std::string::ParseError>; None);
+
+arbitrary!(Option<string::ParseError>; None);
 #[cfg(feature = "unstable")]
 arbitrary!(Option<!>; None);
 
@@ -54,6 +55,6 @@ mod test {
         probability => Probability,
         option      => Option<u8>,
         option_iter => opt::IntoIter<u8>,
-        option_parse_error => Option<::std::string::ParseError>
+        option_parse_error => Option<string::ParseError>
     );
 }

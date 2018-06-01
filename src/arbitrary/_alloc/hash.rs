@@ -22,8 +22,12 @@ lazy_just!(DefaultHasher, Default::default; RandomState, Default::default);
 
 #[cfg(test)]
 mod test {
+    #[cfg(feature = "std")]
     no_panic_test!(
-        default_hasher => DefaultHasher,
+        default_hasher => DefaultHasher
+    );
+
+    no_panic_test!(
         random_state => RandomState,
         build_hasher_default => BuildHasherDefault<DefaultHasher>
     );

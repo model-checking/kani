@@ -12,6 +12,7 @@
 use core::char::*;
 use core::iter::once;
 use core::ops::Range;
+#[cfg(feature = "unstable")]
 use std_facade::Vec;
 
 use strategy::*;
@@ -76,7 +77,6 @@ mod test {
         to_lowercase => ToLowercase,
         to_uppercase => ToUppercase,
         decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
-        decode_utf8 => DecodeUtf8<<Vec<u8> as IntoIterator>::IntoIter>,
         char_try_from_error => CharTryFromError
     );
 }

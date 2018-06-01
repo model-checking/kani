@@ -20,15 +20,8 @@ use core::hash::Hash;
 use std_facade::{
     fmt, Box, Rc, Arc, Vec, BTreeMap, BTreeSet, HashMap, HashSet,
     BinaryHeap, VecDeque, LinkedList, vec, btree_map, btree_set,
-    hash_map, hash_set,
+    hash_map, hash_set, vec_deque, linked_list, binary_heap,
 };
-
-//use std::collections::*;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::{vec_deque, linked_list, binary_heap};
-#[cfg(feature = "std")]
-use std::collections::{vec_deque, linked_list, binary_heap};
 
 use strategy::*;
 use strategy::statics::static_map;

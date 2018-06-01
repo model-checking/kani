@@ -13,21 +13,12 @@ use std::iter;
 use std::slice;
 use std::rc::Rc;
 use std::sync::Arc;
+use std_facade::{Box, Vec, String};
 
 #[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
+use alloc::string::{FromUtf8Error, FromUtf16Error};
 #[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::{String, FromUtf8Error, FromUtf16Error};
-#[cfg(feature = "std")]
-use std::string::{String, FromUtf8Error, FromUtf16Error};
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std::string::{FromUtf8Error, FromUtf16Error};
 
 use strategy::*;
 use strategy::statics::static_map;

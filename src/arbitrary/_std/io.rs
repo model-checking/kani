@@ -11,18 +11,9 @@
 
 use std::io::*;
 use std::io::ErrorKind::*;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::String;
-#[cfg(feature = "std")]
-use std::string::String;
-
-#[allow(unused_imports)]
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[allow(unused_imports)]
-#[cfg(feature = "std")]
-use std::vec::Vec;
+#[cfg(test)]
+use std_facade::Vec;
+use std_facade::String;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -169,11 +160,5 @@ mod test {
         error_kind  => ErrorKind,
         seek_from   => SeekFrom,
         error       => Error
-    );
-
-    #[cfg(feature = "unstable")]
-    no_panic_test!(
-        chars       => Chars<Repeat>,
-        chars_error => CharsError
     );
 }
