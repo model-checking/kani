@@ -11,18 +11,14 @@
 
 use bool;
 use char;
-use num::{isize, usize, f32, f64, i16, i32, i64, i8, u16, u32, u64, u8};
-#[cfg(feature = "unstable")]
-use num::{u128, i128};
+use num::{isize, usize, f32, f64, i16, i32, i64, i8, u16, u32, u64, u8,
+          u128, i128};
 
 arbitrary!(
     bool,
-    i8, i16, i32, i64, isize,
-    u8, u16, u32, u64, usize
+    i8, i16, i32, i64, i128, isize,
+    u8, u16, u32, u64, u128, usize
 );
-
-#[cfg(feature = "unstable")]
-arbitrary!(u128, i128);
 
 // Note that for floating point types we limit the space since a lot of code
 // isn't prepared for (and is not intended to be) things like NaN and infinity.
@@ -42,7 +38,7 @@ mod test {
         char => char,
         f32 => f32, f64 => f64,
         isize => isize, usize => usize,
-        i8 => i8, i16 => i16, i32 => i32, i64 => i64,
-        u8 => u8, u16 => u16, u32 => u32, u64 => u64
+        i8 => i8, i16 => i16, i32 => i32, i64 => i64, i128 => i128,
+        u8 => u8, u16 => u16, u32 => u32, u64 => u64, u128 => u128
     );
 }

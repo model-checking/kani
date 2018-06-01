@@ -65,7 +65,7 @@ default-features = false
 [dependencies.rand]
 version = "0.5.0"
 default-features = false
-features = ["alloc"]
+features = ["alloc", "i128_support"]
 
 [dependencies.byteorder]
 version = "1.2.3"
