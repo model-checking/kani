@@ -11,13 +11,14 @@
 
 // Pervasive internal sugar
 macro_rules! mapfn {
-    ($(#[$meta:meta])* [$($vis:tt)*]
+    ($({#[$allmeta:meta]})* $(#[$meta:meta])* [$($vis:tt)*]
      fn $name:ident[$($gen:tt)*]($parm:ident: $input:ty) -> $output:ty {
          $($body:tt)*
      }) => {
-        $(#[$meta])*
+        $(#[$allmeta])* $(#[$meta])*
         #[derive(Clone, Copy, Debug)]
         $($vis)* struct $name;
+        $(#[$allmeta])*
         impl $($gen)* ::strategy::statics::MapFn<$input> for $name {
             type Output = $output;
             fn apply(&self, $parm: $input) -> $output {
@@ -44,7 +45,8 @@ macro_rules! delegate_vt_0 {
 }
 
 macro_rules! opaque_strategy_wrapper {
-    ($(#[$smeta:meta])* pub struct $stratname:ident
+    ($({#[$allmeta:meta]})*
+     $(#[$smeta:meta])* pub struct $stratname:ident
      [$($sgen:tt)*][$($swhere:tt)*]
      ($innerstrat:ty) -> $stratvtty:ty;
 
@@ -52,11 +54,14 @@ macro_rules! opaque_strategy_wrapper {
      [$($vgen:tt)*][$($vwhere:tt)*]
      ($innervt:ty) -> $actualty:ty;
     ) => {
+        $(#[$allmeta])*
         $(#[$smeta])* pub struct $stratname $($sgen)* ($innerstrat)
             $($swhere)*;
 
+        $(#[$allmeta])*
         $(#[$vmeta])* pub struct $vtname $($vgen)* ($innervt) $($vwhere)*;
 
+        $(#[$allmeta])*
         impl $($sgen)* Strategy for $stratname $($sgen)* $($swhere)* {
             type Tree = $stratvtty;
             type Value = $actualty;
@@ -65,6 +70,7 @@ macro_rules! opaque_strategy_wrapper {
             }
         }
 
+        $(#[$allmeta])*
         impl $($vgen)* ValueTree for $vtname $($vgen)* $($vwhere)* {
             type Value = $actualty;
 

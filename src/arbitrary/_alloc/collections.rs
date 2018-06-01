@@ -18,10 +18,12 @@
 use core::ops::{Range, Bound};
 use core::hash::Hash;
 use std_facade::{
-    fmt, Box, Rc, Arc, Vec, BTreeMap, BTreeSet, HashMap, HashSet,
-    BinaryHeap, VecDeque, LinkedList, vec, btree_map, btree_set,
-    hash_map, hash_set, vec_deque, linked_list, binary_heap,
+    fmt, Box, Rc, Arc, Vec, vec, BTreeMap, BTreeSet, btree_map, btree_set,
+    BinaryHeap, binary_heap, VecDeque, vec_deque, LinkedList, linked_list,
 };
+
+#[cfg(feature = "std")]
+use std_facade::{hash_map, HashMap, hash_set, HashSet};
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -76,6 +78,7 @@ impl_1!(VecDeque, VecDequeStrategy, => vec_deque);
 impl_1!(LinkedList, LinkedListStrategy, => linked_list);
 impl_1!(BTreeSet, BTreeSetStrategy, Ord => btree_set);
 impl_1!(BinaryHeap, BinaryHeapStrategy, Ord => binary_heap);
+#[cfg(feature = "std")]
 impl_1!(HashSet, HashSetStrategy, Hash, Eq => hash_set);
 
 //==============================================================================
@@ -101,12 +104,14 @@ into_iter_1!(vec_deque, VecDeque);
 into_iter_1!(linked_list, LinkedList);
 into_iter_1!(btree_set, BTreeSet, Ord);
 into_iter_1!(binary_heap, BinaryHeap, Ord);
+#[cfg(feature = "std")]
 into_iter_1!(hash_set, HashSet, Hash, Eq);
 
 //==============================================================================
 // HashMap:
 //==============================================================================
 
+#[cfg(feature = "std")]
 arbitrary!([A: Arbitrary + Hash + Eq, B: Arbitrary] HashMap<A, B>,
     HashMapStrategy<A::Strategy, B::Strategy>,
     RangedParams2<A::Parameters, B::Parameters>;
@@ -115,11 +120,13 @@ arbitrary!([A: Arbitrary + Hash + Eq, B: Arbitrary] HashMap<A, B>,
         hash_map(any_with::<A>(a), any_with::<B>(b), range)
     });
 
+#[cfg(feature = "std")]
 arbitrary!([A: Arbitrary + Hash + Eq, B: Arbitrary] hash_map::IntoIter<A, B>,
     SMapped<HashMap<A, B>, Self>,
     <HashMap<A, B> as Arbitrary>::Parameters;
     args => static_map(any_with::<HashMap<A, B>>(args), HashMap::into_iter));
 
+#[cfg(feature = "std")]
 lift1!([, K: Hash + Eq + Arbitrary + 'static] HashMap<K, A>,
     RangedParams1<K::Parameters>;
     base, args => {
@@ -128,6 +135,7 @@ lift1!([, K: Hash + Eq + Arbitrary + 'static] HashMap<K, A>,
     }
 );
 
+#[cfg(feature = "std")]
 lift1!(['static, K: Hash + Eq + Arbitrary + 'static] hash_map::IntoIter<K, A>,
     RangedParams1<K::Parameters>;
     base, args => {
@@ -136,6 +144,7 @@ lift1!(['static, K: Hash + Eq + Arbitrary + 'static] hash_map::IntoIter<K, A>,
     }
 );
 
+#[cfg(feature = "std")]
 impl<A: fmt::Debug + Eq + Hash, B: fmt::Debug> functor::ArbitraryF2<A, B>
 for HashMap<A, B> {
     type Parameters = SizeRange;
@@ -150,6 +159,7 @@ for HashMap<A, B> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<A: fmt::Debug + Eq + Hash + 'static, B: fmt::Debug + 'static>
     functor::ArbitraryF2<A, B>
 for hash_map::IntoIter<A, B> {
@@ -260,8 +270,6 @@ mod test {
         linked_list => LinkedList<u8>,
         btree_set => BTreeSet<u8>,
         btree_map => BTreeMap<u8, u8>,
-        hash_set => HashSet<u8>,
-        hash_map => HashMap<u8, u8>,
         bound => Bound<u8>,
         binary_heap => BinaryHeap<u8>,
         into_iter_vec => vec::IntoIter<u8>,
@@ -269,7 +277,13 @@ mod test {
         into_iter_linked_list => linked_list::IntoIter<u8>,
         into_iter_binary_heap => binary_heap::IntoIter<u8>,
         into_iter_btree_set => btree_set::IntoIter<u8>,
-        into_iter_btree_map => btree_map::IntoIter<u8, u8>,
+        into_iter_btree_map => btree_map::IntoIter<u8, u8>
+    );
+
+    #[cfg(feature = "std")]
+    no_panic_test!(
+        hash_set => HashSet<u8>,
+        hash_map => HashMap<u8, u8>,
         into_iter_hash_set => hash_set::IntoIter<u8>,
         into_iter_hash_map => hash_map::IntoIter<u8, u8>
     );

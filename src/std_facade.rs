@@ -52,17 +52,21 @@ multiplex_alloc! {
     alloc::BTreeSet, ::std::collections::BTreeSet,
     alloc::BTreeMap, ::std::collections::BTreeMap,
     alloc::btree_map, ::std::collections::btree_map,
-    alloc::btree_set, ::std::collections::btree_set,
+    alloc::btree_set, ::std::collections::btree_set
+}
+
+#[cfg(feature = "std")]
+multiplex_alloc! {
     hashmap_core::HashMap, ::std::collections::HashMap,
     hashmap_core::HashSet, ::std::collections::HashSet
 }
 
-#[cfg(not(feature = "std"))]
-pub(crate) use hashmap_core::map as hash_map;
+//#[cfg(not(feature = "std"))]
+//pub(crate) use hashmap_core::map as hash_map;
 #[cfg(feature = "std")]
 pub(crate) use ::std::collections::hash_map;
-#[cfg(not(feature = "std"))]
-pub(crate) use hashmap_core::set as hash_set;
+//#[cfg(not(feature = "std"))]
+//pub(crate) use hashmap_core::set as hash_set;
 #[cfg(feature = "std")]
 pub(crate) use ::std::collections::hash_set;
 
