@@ -15,7 +15,6 @@ use array::UniformArrayStrategy;
 macro_rules! array {
     ($($n: expr),*) => { $(
         impl<A: Arbitrary> Arbitrary for [A; $n] {
-            valuetree!();
             type Parameters = A::Parameters;
             type Strategy = UniformArrayStrategy<A::Strategy, [A; $n]>;
             fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {

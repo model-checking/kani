@@ -11,17 +11,10 @@
 // Macros for quick implementing:
 //==============================================================================
 
-macro_rules! valuetree {
-    () => {
-        type ValueTree = <Self::Strategy as $crate::strategy::Strategy>::Tree;
-    };
-}
-
 macro_rules! arbitrary {
     ([$($bounds : tt)*] $typ: ty, $strat: ty, $params: ty;
         $args: ident => $logic: expr) => {
         impl<$($bounds)*> $crate::arbitrary::Arbitrary for $typ {
-            valuetree!();
             type Parameters = $params;
             type Strategy = $strat;
             fn arbitrary_with($args: Self::Parameters) -> Self::Strategy {

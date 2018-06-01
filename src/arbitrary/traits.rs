@@ -9,7 +9,7 @@
 
 use core::fmt;
 
-use strategy::{Strategy, ValueTree};
+use strategy::Strategy;
 
 //==============================================================================
 // Arbitrary trait
@@ -85,35 +85,10 @@ pub trait Arbitrary: Sized + fmt::Debug {
     ///     https://doc.rust-lang.org/nightly/std/default/trait.Default.html
     fn arbitrary_with(args: Self::Parameters) -> Self::Strategy;
 
-    //==========================================================================
-    // Implementation note #3
-    //==========================================================================
-    // These associated types may be removed in the future and replaced with
-    // -> impl Strategy<Value = impl ValueTree<Self>> instead.
-    //==========================================================================
-
-    //==========================================================================
-    // Implementation note #2
-    //==========================================================================
-    // We also can't get rid of `ValueTree` yet since it would require:
-    // type Strategy: Strategy<Value = impl ValueTree<Value = Self>>;
-    // which we can't express yet.
-    //==========================================================================
-
     /// The type of [`Strategy`] used to generate values of type `Self`.
     ///
     /// [`Strategy`]: ../strategy/trait.Strategy.html
-    type Strategy: Strategy<Value = Self, Tree = Self::ValueTree>;
-
-    /// The type of [`ValueTree`] used for `Self`'s [`Strategy`].
-    ///
-    /// **NOTE:**
-    /// This type should **NOT** be relied upon outside of this
-    /// crate other than for implementing `Arbitrary` for other types.
-    ///
-    /// [`ValueTree`]: ../strategy/trait.ValueTree.html
-    /// [`Strategy`]: ../strategy/trait.Strategy.html
-    type ValueTree: ValueTree<Value = Self>;
+    type Strategy: Strategy<Value = Self>;
 }
 
 //==============================================================================
@@ -265,9 +240,9 @@ pub fn any_with<A: Arbitrary>(args: ParamsFor<A>) -> StrategyFor<A> {
 /// [`Strategy`]: ../strategy/trait.Strategy.html
 pub fn arbitrary<A, S>() -> S
 where
+    // The backlinking here cause an injection which helps type inference.
     S: Strategy<Value = A>,
-    S::Tree: ValueTree<Value = A>,
-    A: Arbitrary<Strategy = S, ValueTree = S::Tree>,
+    A: Arbitrary<Strategy = S>,
 {
     A::arbitrary()
 }
@@ -310,9 +285,9 @@ where
 pub fn arbitrary_with<A, S, P>(args: P) -> S
 where
     P: Default,
+    // The backlinking here cause an injection which helps type inference.
     S: Strategy<Value = A>,
-    S::Tree: ValueTree<Value = A>,
-    A: Arbitrary<Strategy = S, ValueTree = S::Tree, Parameters = P>,
+    A: Arbitrary<Strategy = S, Parameters = P>,
 {
     A::arbitrary_with(args)
 }

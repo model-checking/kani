@@ -27,7 +27,6 @@ use arbitrary::*;
 use string::StringParam;
 
 impl Arbitrary for String {
-    valuetree!();
     type Parameters = StringParam;
     type Strategy = &'static str;
 
