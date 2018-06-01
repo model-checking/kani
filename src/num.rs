@@ -40,7 +40,7 @@ macro_rules! int_any {
         pub const ANY: Any = Any(());
 
         impl Strategy for Any {
-            type Value = BinarySearch;
+            type Tree = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new(runner.rng().gen()))
@@ -52,7 +52,7 @@ macro_rules! int_any {
 macro_rules! numeric_api {
     ($typ:ident, $epsilon:expr) => {
         impl Strategy for ::core::ops::Range<$typ> {
-            type Value = BinarySearch;
+            type Tree = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
@@ -63,7 +63,7 @@ macro_rules! numeric_api {
         }
 
         impl Strategy for ::core::ops::RangeFrom<$typ> {
-            type Value = BinarySearch;
+            type Tree = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 // TODO `rand` has no way to express the inclusive-end range we
@@ -77,7 +77,7 @@ macro_rules! numeric_api {
         }
 
         impl Strategy for ::core::ops::RangeTo<$typ> {
-            type Value = BinarySearch;
+            type Tree = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
@@ -533,7 +533,7 @@ macro_rules! float_any {
         pub const ANY: Any = Any(FloatTypes::ANY);
 
         impl Strategy for Any {
-            type Value = BinarySearch;
+            type Tree = BinarySearch;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let flags = self.0.normalise();

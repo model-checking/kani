@@ -88,7 +88,7 @@ fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
 }
 
 impl<T : Strategy> Strategy for Union<T> {
-    type Value = UnionValueTree<T::Value>;
+    type Tree = UnionValueTree<T::Tree>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         fn extract_weight<V>(&(w, _): &W<V>) -> u32 { w }
@@ -231,9 +231,9 @@ macro_rules! tuple_union {
     ($($gen:ident $ix:tt)*) => {
         impl<A : Strategy, $($gen: Strategy),*> Strategy
         for TupleUnion<(W<A>, $(W<$gen>),*)>
-        where $($gen::Value : ValueTree<Value = ValueFor<A>>),* {
-            type Value = TupleUnionValueTree<
-                (A::Value, $(Option<$gen::Value>),*)>;
+        where $($gen::Tree : ValueTree<Value = ValueFor<A>>),* {
+            type Tree = TupleUnionValueTree<
+                (A::Tree, $(Option<$gen::Tree>),*)>;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let weights = [((self.0).0).0, $(((self.0).$ix).0),*];

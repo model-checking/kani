@@ -64,7 +64,7 @@ where
     fn lift1_with<AS>(base: AS, args: Self::Parameters) -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>
+        AS::Tree: ValueTree<Value = A>
     {
         let product_unpack![prob, e] = args;
         let (p, a, e) = (prob, base, any_with::<E>(e));
@@ -80,9 +80,9 @@ for Result<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         maybe_ok_weighted(args, fst, snd).boxed()
     }

@@ -26,10 +26,10 @@ use test_runner::*;
 /// [`ValueTree`]: trait.ValueTree.html
 /// [`Ok`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Ok
 /// [`Err`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Err
-pub type NewTree<S> = Result<<S as Strategy>::Value, Reason>;
+pub type NewTree<S> = Result<<S as Strategy>::Tree, Reason>;
 
 /// The value that functions under test use for a particular `Strategy`.
-pub type ValueFor<S> = <<S as Strategy>::Value as ValueTree>::Value;
+pub type ValueFor<S> = <<S as Strategy>::Tree as ValueTree>::Value;
 
 /// A strategy for producing arbitrary values of a given type.
 ///
@@ -41,7 +41,7 @@ pub trait Strategy : fmt::Debug {
     ///
     /// This also implicitly describes the ultimate value type governed by the
     /// `Strategy`.
-    type Value : ValueTree;
+    type Tree : ValueTree;
 
     /// Generate a new value tree from the given runner.
     ///
@@ -377,7 +377,7 @@ pub trait Strategy : fmt::Debug {
         Self : Sized + 'static,
         F : Fn(BoxedStrategy<ValueFor<Self>>) -> R,
         R : Strategy + 'static,
-        R::Value : ValueTree<Value = ValueFor<Self>>
+        R::Tree : ValueTree<Value = ValueFor<Self>>
     {
         Recursive::new(self, depth, desired_size, expected_branch_size, recurse)
     }
@@ -544,7 +544,7 @@ pub trait ValueTree {
 pub struct NoShrink<T>(T);
 
 impl<T : Strategy> Strategy for NoShrink<T> {
-    type Value = NoShrink<T::Value>;
+    type Tree = NoShrink<T::Tree>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.0.new_value(runner).map(NoShrink)
@@ -569,7 +569,7 @@ impl<T : ValueTree> ValueTree for NoShrink<T> {
 macro_rules! proxy_strategy {
     ($typ:ty $(, $lt:tt)*) => {
         impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
-            type Value = S::Value;
+            type Tree = S::Tree;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 (**self).new_value(runner)
@@ -606,7 +606,7 @@ type BoxedVT<T> = Box<ValueTree<Value = T>>;
 /// Strategies of this type afford cheap shallow cloning via reference
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
-pub struct BoxedStrategy<T>(Arc<Strategy<Value = BoxedVT<T>>>);
+pub struct BoxedStrategy<T>(Arc<Strategy<Tree = BoxedVT<T>>>);
 
 /// A boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
@@ -614,7 +614,7 @@ pub struct BoxedStrategy<T>(Arc<Strategy<Value = BoxedVT<T>>>);
 /// Strategies of this type afford cheap shallow cloning via reference
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
-pub struct SBoxedStrategy<T>(Arc<Strategy<Value = BoxedVT<T>> + Sync + Send>);
+pub struct SBoxedStrategy<T>(Arc<Strategy<Tree = BoxedVT<T>> + Sync + Send>);
 
 impl<T> Clone for BoxedStrategy<T> {
     fn clone(&self) -> Self {
@@ -629,7 +629,7 @@ impl<T> Clone for SBoxedStrategy<T> {
 }
 
 impl<T: fmt::Debug> Strategy for BoxedStrategy<T> {
-    type Value = BoxedVT<T>;
+    type Tree = BoxedVT<T>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.0.new_value(runner)
@@ -644,7 +644,7 @@ impl<T: fmt::Debug> Strategy for BoxedStrategy<T> {
 }
 
 impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
-    type Value = BoxedVT<T>;
+    type Tree = BoxedVT<T>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.0.new_value(runner)
@@ -666,8 +666,8 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
 #[derive(Debug)]
 struct BoxedStrategyWrapper<T>(T);
 impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
-where T::Value : 'static {
-    type Value = Box<ValueTree<Value = ValueFor<T>>>;
+where T::Tree : 'static {
+    type Tree = Box<ValueTree<Value = ValueFor<T>>>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(Box::new(self.0.new_value(runner)?))
@@ -719,7 +719,7 @@ impl Default for CheckStrategySanityOptions {
 /// retry failures.
 pub fn check_strategy_sanity<S : Strategy>(
     strategy: S, options: Option<CheckStrategySanityOptions>)
-where S::Value : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
+where S::Tree : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
     // Like assert_eq!, but also pass if both values do not equal themselves.
     // This allows the test to work correctly with things like NaN.
     macro_rules! assert_same {

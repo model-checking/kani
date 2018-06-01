@@ -906,7 +906,7 @@ mod test {
     #[test]
     fn oneof_all_counts() {
         fn expect_count<S : ::strategy::Strategy>(n: usize, s: S)
-        where S::Value : ::strategy::ValueTree<Value = i32> {
+        where S::Tree : ::strategy::ValueTree<Value = i32> {
             use std::collections::HashSet;
             use strategy::*;
             use test_runner::*;

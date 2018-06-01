@@ -76,9 +76,9 @@ for GeneratorState<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         prop_oneof![
             fst.prop_map(GeneratorState::Yielded),

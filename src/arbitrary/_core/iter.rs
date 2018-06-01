@@ -40,7 +40,7 @@ for Cloned<A> {
     fn lift1_with<S>(base: S, _args: Self::Parameters) -> BoxedStrategy<Self>
     where
         S: Strategy + 'static,
-        S::Value: ValueTree<Value = A>
+        S::Tree: ValueTree<Value = A>
     {
         base.prop_map(Iterator::cloned).boxed()
     }
@@ -72,9 +72,9 @@ for Zip<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         (fst, snd).prop_map(|(a, b)| a.zip(b)).boxed()
     }
@@ -107,9 +107,9 @@ for Chain<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         (fst, snd).prop_map(|(a, b)| a.chain(b)).boxed()
     }

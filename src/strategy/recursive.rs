@@ -51,7 +51,7 @@ where
     T : fmt::Debug + 'static,
     R : Strategy + 'static,
     F : Fn(BoxedStrategy<T>) -> R,
-    R::Value : ValueTree<Value = T>
+    R::Tree : ValueTree<Value = T>
 {
     pub(super) fn new<S>
         (base: S, depth: u32, desired_size: u32, expected_branch_size: u32,
@@ -59,7 +59,7 @@ where
         -> Self
     where
         S : Strategy + 'static,
-        S::Value : ValueTree<Value = T>
+        S::Tree : ValueTree<Value = T>
     {
         Self {
             base: base.boxed(),
@@ -74,9 +74,9 @@ where
     T : fmt::Debug + 'static,
     R : Strategy + 'static,
     F : Fn(BoxedStrategy<T>) -> R,
-    R::Value : ValueTree<Value = T>
+    R::Tree : ValueTree<Value = T>
 {
-    type Value = Box<ValueTree<Value = T>>;
+    type Tree = Box<ValueTree<Value = T>>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         // Since the generator is stateless, we can't implement any "absolutely

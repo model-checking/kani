@@ -154,7 +154,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone, Debug)]
     pub struct VecDequeStrategy[<T>][where T : Strategy](
         statics::Map<VecStrategy<T>, VecToDeque>)
-        -> VecDequeValueTree<T::Value>;
+        -> VecDequeValueTree<T::Tree>;
     /// `ValueTree` corresponding to `VecDequeStrategy`.
     #[derive(Clone, Debug)]
     pub struct VecDequeValueTree[<T>][where T : ValueTree](
@@ -183,7 +183,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone, Debug)]
     pub struct LinkedListStrategy[<T>][where T : Strategy](
         statics::Map<VecStrategy<T>, VecToLl>)
-        -> LinkedListValueTree<T::Value>;
+        -> LinkedListValueTree<T::Tree>;
     /// `ValueTree` corresponding to `LinkedListStrategy`.
     #[derive(Clone, Debug)]
     pub struct LinkedListValueTree[<T>][where T : ValueTree](
@@ -212,7 +212,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone, Debug)]
     pub struct BinaryHeapStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
         statics::Map<VecStrategy<T>, VecToBinHeap>)
-        -> BinaryHeapValueTree<T::Value>;
+        -> BinaryHeapValueTree<T::Tree>;
     /// `ValueTree` corresponding to `BinaryHeapStrategy`.
     #[derive(Clone, Debug)]
     pub struct BinaryHeapValueTree[<T>][where T : ValueTree, T::Value : Ord](
@@ -251,7 +251,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone, Debug)]
     pub struct HashSetStrategy[<T>][where T : Strategy, ValueFor<T> : Hash + Eq](
         statics::Filter<statics::Map<VecStrategy<T>, VecToHashSet>, MinSize>)
-        -> HashSetValueTree<T::Value>;
+        -> HashSetValueTree<T::Tree>;
     /// `ValueTree` corresponding to `HashSetStrategy`.
     #[derive(Clone, Debug)]
     pub struct HashSetValueTree[<T>][where T : ValueTree, T::Value : Hash + Eq](
@@ -299,7 +299,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone, Debug)]
     pub struct BTreeSetStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
         statics::Filter<statics::Map<VecStrategy<T>, VecToBTreeSet>, MinSize>)
-        -> BTreeSetValueTree<T::Value>;
+        -> BTreeSetValueTree<T::Tree>;
     /// `ValueTree` corresponding to `BTreeSetStrategy`.
     #[derive(Clone, Debug)]
     pub struct BTreeSetValueTree[<T>][where T : ValueTree, T::Value : Ord](
@@ -351,7 +351,7 @@ opaque_strategy_wrapper! {
         [where K : Strategy, V : Strategy, ValueFor<K> : Hash + Eq](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToHashMap>, MinSize>)
-        -> HashMapValueTree<K::Value, V::Value>;
+        -> HashMapValueTree<K::Tree, V::Tree>;
     /// `ValueTree` corresponding to `HashMapStrategy`.
     #[derive(Clone, Debug)]
     pub struct HashMapValueTree[<K, V>]
@@ -406,7 +406,7 @@ opaque_strategy_wrapper! {
         [where K : Strategy, V : Strategy, ValueFor<K> : Ord](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToBTreeMap>, MinSize>)
-        -> BTreeMapValueTree<K::Value, V::Value>;
+        -> BTreeMapValueTree<K::Tree, V::Tree>;
     /// `ValueTree` corresponding to `BTreeMapStrategy`.
     #[derive(Clone, Debug)]
     pub struct BTreeMapValueTree[<K, V>]
@@ -455,7 +455,7 @@ pub struct VecValueTree<T : ValueTree> {
 }
 
 impl<T : Strategy> Strategy for VecStrategy<T> {
-    type Value = VecValueTree<T::Value>;
+    type Tree = VecValueTree<T::Tree>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let Range { start, end } = self.size.0;

@@ -31,7 +31,7 @@ impl<S : Strategy> Flatten<S> {
 
 impl<S : Strategy> Strategy for Flatten<S>
 where ValueFor<S> : Strategy {
-    type Value = FlattenValueTree<S::Value>;
+    type Tree = FlattenValueTree<S::Tree>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let meta = self.source.new_value(runner)?;
@@ -42,10 +42,10 @@ where ValueFor<S> : Strategy {
 /// The `ValueTree` produced by `Flatten`.
 pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
     meta: Fuse<S>,
-    current: Fuse<<S::Value as Strategy>::Value>,
+    current: Fuse<<S::Value as Strategy>::Tree>,
     // The final value to produce after successive calls to complicate() on the
     // underlying objects return false.
-    final_complication: Option<Fuse<<S::Value as Strategy>::Value>>,
+    final_complication: Option<Fuse<<S::Value as Strategy>::Tree>>,
     // When `simplify()` or `complicate()` causes a new `Strategy` to be
     // chosen, we need to find a new failing input for that case. To do this,
     // we implement `complicate()` by regenerating values up to a number of
@@ -63,7 +63,7 @@ pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
 impl<S : ValueTree> Clone for FlattenValueTree<S>
 where S::Value : Strategy + Clone,
       S : Clone,
-      <S::Value as Strategy>::Value : Clone {
+      <S::Value as Strategy>::Tree : Clone {
     fn clone(&self) -> Self {
         FlattenValueTree {
             meta: self.meta.clone(),
@@ -77,7 +77,7 @@ where S::Value : Strategy + Clone,
 
 impl<S : ValueTree> fmt::Debug for FlattenValueTree<S>
 where S::Value : Strategy,
-      S : fmt::Debug, <S::Value as Strategy>::Value : fmt::Debug {
+      S : fmt::Debug, <S::Value as Strategy>::Tree : fmt::Debug {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("FlattenValueTree")
             .field("meta", &self.meta)
@@ -183,7 +183,7 @@ pub struct IndFlatten<S>(pub(super) S);
 
 impl<S : Strategy> Strategy for IndFlatten<S>
 where ValueFor<S> : Strategy {
-    type Value = <ValueFor<S> as Strategy>::Value;
+    type Tree = <ValueFor<S> as Strategy>::Tree;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let inner = self.0.new_value(runner)?;
@@ -221,7 +221,7 @@ impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
 impl<S : Strategy, R : Strategy,
      F : Fn (ValueFor<S>) -> R>
 Strategy for IndFlattenMap<S, F> {
-    type Value = ::tuple::TupleValueTree<(S::Value, R::Value)>;
+    type Tree = ::tuple::TupleValueTree<(S::Tree, R::Tree)>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let left = self.source.new_value(runner)?;

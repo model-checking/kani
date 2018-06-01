@@ -125,7 +125,7 @@ impl<T> fmt::Debug for NoneStrategy<T> {
     }
 }
 impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
-    type Value = Self;
+    type Tree = Self;
 
     fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(*self)
@@ -148,7 +148,7 @@ opaque_strategy_wrapper! {
     pub struct OptionStrategy[<T>][where T : Strategy]
         (TupleUnion<(W<NoneStrategy<ValueFor<T>>>,
                      W<statics::Map<T, WrapSome>>)>)
-        -> OptionValueTree<T::Value>;
+        -> OptionValueTree<T::Tree>;
     /// `ValueTree` type corresponding to `OptionStrategy`.
     #[derive(Clone, Debug)]
     pub struct OptionValueTree[<T>][where T : ValueTree]

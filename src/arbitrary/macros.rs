@@ -13,7 +13,7 @@
 
 macro_rules! valuetree {
     () => {
-        type ValueTree = <Self::Strategy as $crate::strategy::Strategy>::Value;
+        type ValueTree = <Self::Strategy as $crate::strategy::Strategy>::Tree;
     };
 }
 

@@ -81,7 +81,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone)]
     pub struct MaybeOk[<T, E>][where T : Strategy, E : Strategy]
         (TupleUnion<(W<MapErr<T, E>>, W<MapOk<T, E>>)>)
-        -> MaybeOkValueTree<T::Value, E::Value>;
+        -> MaybeOkValueTree<T::Tree, E::Tree>;
     /// `ValueTree` type corresponding to `MaybeOk`.
     #[derive(Clone, Debug)]
     pub struct MaybeOkValueTree[<T, E>][where T : ValueTree, E : ValueTree]
@@ -98,7 +98,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone)]
     pub struct MaybeErr[<T, E>][where T : Strategy, E : Strategy]
         (TupleUnion<(W<MapOk<T, E>>, W<MapErr<T, E>>)>)
-        -> MaybeErrValueTree<T::Value, E::Value>;
+        -> MaybeErrValueTree<T::Tree, E::Tree>;
     /// `ValueTree` type corresponding to `MaybeErr`.
     #[derive(Clone, Debug)]
     pub struct MaybeErrValueTree[<T, E>][where T : ValueTree, E : ValueTree]
@@ -184,7 +184,7 @@ mod test {
     use super::*;
 
     fn count_ok_of_1000<S : Strategy>(s: S) -> u32
-    where S::Value : ValueTree<Value = Result<(), ()>> {
+    where S::Tree : ValueTree<Value = Result<(), ()>> {
         let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {

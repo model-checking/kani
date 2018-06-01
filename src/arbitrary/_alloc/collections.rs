@@ -144,9 +144,9 @@ for HashMap<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         hash_map(fst, snd, args).boxed()
     }
@@ -161,9 +161,9 @@ for hash_map::IntoIter<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         static_map(hash_map(fst, snd, args), HashMap::into_iter).boxed()
     }
@@ -196,9 +196,9 @@ for BTreeMap<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         btree_map(fst, snd, args).boxed()
     }
@@ -218,9 +218,9 @@ for btree_map::IntoIter<A, B> {
         -> BoxedStrategy<Self>
     where
         AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
+        AS::Tree: ValueTree<Value = A>,
         BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        BS::Tree: ValueTree<Value = B>
     {
         static_map(btree_map(fst, snd, args), BTreeMap::into_iter).boxed()
     }

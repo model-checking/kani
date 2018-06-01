@@ -24,7 +24,7 @@ pub struct Any(());
 pub const ANY: Any = Any(());
 
 impl Strategy for Any {
-    type Value = BoolValueTree;
+    type Tree = BoolValueTree;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(BoolValueTree(runner.rng().gen()))
@@ -44,7 +44,7 @@ pub fn weighted(probability: f64) -> Weighted {
 pub struct Weighted(f64);
 
 impl Strategy for Weighted {
-    type Value = BoolValueTree;
+    type Tree = BoolValueTree;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(BoolValueTree(runner.rng().gen_bool(self.0)))

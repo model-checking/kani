@@ -31,7 +31,7 @@ pub struct Just<T : Clone + fmt::Debug>(
     pub T);
 
 impl<T : Clone + fmt::Debug> Strategy for Just<T> {
-    type Value = Self;
+    type Tree = Self;
 
     fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
@@ -77,7 +77,7 @@ impl<T, F: Fn() -> T> LazyJust<T, F> {
 }
 
 impl<T: fmt::Debug, F: Clone + Fn() -> T> Strategy for LazyJust<T, F> {
-    type Value = Self;
+    type Tree = Self;
 
     fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
@@ -113,7 +113,7 @@ impl<T, F: Fn() -> T> fmt::Debug for LazyJust<T, F> {
 // TODO: try 'F: Fn() -> T' instead when we've got specialization.
 
 impl<T: fmt::Debug> Strategy for fn() -> T {
-    type Value = Self;
+    type Tree = Self;
 
     fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
 }
