@@ -89,8 +89,8 @@ impl Default for TestRunner {
 
 #[cfg(not(feature = "std"))]
 fn panic_guard<V, F>(case: V, test: &F) -> TestCaseResult
-    where
-        F: Fn(V) -> TestCaseResult
+where
+    F: Fn(V) -> TestCaseResult
 {
     test(case)
 }

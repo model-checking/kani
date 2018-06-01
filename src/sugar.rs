@@ -324,7 +324,7 @@ macro_rules! prop_oneof {
 /// used to generate the other inputs for the function. The second argument
 /// list has access to all arguments in the first. The return type indicates
 /// the type of value being generated; the final return type of the function is
-/// `BoxedStrategy<$type>`.
+/// `impl Strategy<Value = $type>`.
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
@@ -433,12 +433,10 @@ macro_rules! prop_compose {
     {
         $(#[$meta])*
         $($($vis)*)* fn $name $params
-                 -> $crate::strategy::BoxedStrategy<$return_type> {
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = proptest_helper!(@_WRAP ($($strategy)*));
-            let strat = $crate::strategy::Strategy::prop_map(
-                strat,
-                |proptest_helper!(@_WRAPPAT ($($var),*))| $body);
-            $crate::strategy::Strategy::boxed(strat)
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_WRAPPAT ($($var),*))| $body)
         }
     };
 
@@ -450,16 +448,14 @@ macro_rules! prop_compose {
     {
         $(#[$meta])*
         $($($vis)*)* fn $name $params
-                 -> $crate::strategy::BoxedStrategy<$return_type> {
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
                 strat,
                 |proptest_helper!(@_WRAPPAT ($($var),*))|
                 proptest_helper!(@_WRAP ($($strategy2)*)));
-            let strat = $crate::strategy::Strategy::prop_map(
-                strat,
-                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body);
-            $crate::strategy::Strategy::boxed(strat)
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body)
         }
     };
 }

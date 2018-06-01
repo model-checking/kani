@@ -397,6 +397,8 @@ mod test {
         ]), None);
     }
 
+    // FIXME(2018-06-01): See note on `test_union`.
+    #[cfg(feature = "std")]
     #[test]
     fn test_tuple_union() {
         let input = TupleUnion::new(

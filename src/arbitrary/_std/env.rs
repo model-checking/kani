@@ -70,7 +70,7 @@ fn make_utf16_invalid(buf: &mut Vec<u16>, p: usize) {
 /// Generates the set of `WTF-16 \ UTF-16` and makes
 /// an `OsString` that is not a valid String from it.
 #[cfg(target_os = "windows")]
-fn osstring_invalid_string() -> BoxedStrategy<OsString> {
+fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
     use std::os::windows::ffi::OsStringExt;
     let size = 1..::std::u16::MAX as usize;
     let vec_gen = ::collection::vec(..::std::u16::MAX, size.clone());
@@ -80,14 +80,14 @@ fn osstring_invalid_string() -> BoxedStrategy<OsString> {
         let p = ::std::cmp::min(p, sbuf.len() - 1);
         make_utf16_invalid(&mut sbuf, p);
         OsString::from_wide(sbuf.as_slice()).into_string().unwrap_err()
-    }).boxed()
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
-fn osstring_invalid_string() -> BoxedStrategy<OsString> {
+fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
     use std::os::unix::ffi::OsStringExt;
     use arbitrary::_std::string::not_utf8_bytes;
-    static_map(not_utf8_bytes(true), OsString::from_vec).boxed()
+    static_map(not_utf8_bytes(true), OsString::from_vec)
 }
 
 arbitrary!(VarError,
@@ -97,7 +97,7 @@ arbitrary!(VarError,
     )>;
     prop_oneof![
         Just(VarError::NotPresent),
-        static_map(osstring_invalid_string(), VarError::NotUnicode)
+        static_map(osstring_invalid_string().boxed(), VarError::NotUnicode)
     ]
 );
 

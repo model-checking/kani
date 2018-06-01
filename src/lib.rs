@@ -1013,6 +1013,51 @@
 //! can simply call `arb_order(12)` rather than needing to write out a whole
 //! new strategy.
 //!
+//! We can also use `-> impl Strategy<Value = Order>` instead to avoid the
+//! overhead as in the following example. You should use `-> impl Strategy<..>`
+//! unless you need the dynamic dispatch.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! // snip
+//! #
+//! # #[derive(Clone, Debug)]
+//! # struct Order {
+//! #   id: String,
+//! #   // Some other fields, though the test doesn't do anything with them
+//! #   item: String,
+//! #   quantity: u32,
+//! # }
+//! #
+//! 
+//! # fn do_stuff(order: Order) {
+//! #     let i: u32 = order.id.parse().unwrap();
+//! #     let s = i.to_string();
+//! #     assert_eq!(s, order.id);
+//! # }
+//!
+//! # #[cfg(feature = "std")]
+//! fn arb_order(max_quantity: u32) -> impl Strategy<Value = Order> {
+//!     (any::<u32>().prop_map(|v| v.to_string()),
+//!      "[a-z]*", 1..max_quantity)
+//!     .prop_map(|(id, item, quantity)| Order { id, item, quantity })
+//! }
+//!
+//! # #[cfg(feature = "std")]
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(order in arb_order(1000)) {
+//!         do_stuff(order);
+//!     }
+//! }
+//! # #[cfg(feature = "std")]
+//! # fn main() { test_do_stuff(); }
+//! ```
+//!
 //! ### Syntax Sugar: `prop_compose!`
 //!
 //! Defining strategy-returning functions like this is extremely useful, but
@@ -1073,8 +1118,8 @@
 //! generated function takes the first parameter list as arguments. These
 //! arguments are used to select the strategies in the second argument list.
 //! Values are then drawn from those strategies and transformed by the function
-//! body. The actual function as a return type of `BoxedStrategy<T>` where `T`
-//! is the declared return type.
+//! body. The actual function has a return type of `impl Strategy<Value = T>`
+//! where `T` is the declared return type.
 //!
 //! ### Filtering
 //!
@@ -1214,7 +1259,7 @@
 //!     Map(HashMap<String, Json>),
 //! }
 //!
-//! fn arb_json() -> BoxedStrategy<Json> {
+//! fn arb_json() -> impl Strategy<Value = Json> {
 //!     prop_oneof![
 //!         Just(Json::Null),
 //!         any::<bool>().prop_map(Json::Bool),
@@ -1223,7 +1268,7 @@
 //!         prop::collection::vec(arb_json(), 0..10).prop_map(Json::Array),
 //!         prop::collection::hash_map(
 //!           ".*", arb_json(), 0..10).prop_map(Json::Map),
-//!     ].boxed()
+//!     ]
 //! }
 //! # fn main() { }
 //! ```
@@ -1258,7 +1303,7 @@
 //!     Map(HashMap<String, Json>),
 //! }
 //!
-//! fn arb_json() -> BoxedStrategy<Json> {
+//! fn arb_json() -> impl Strategy<Value = Json> {
 //!     let leaf = prop_oneof![
 //!         Just(Json::Null),
 //!         any::<bool>().prop_map(Json::Bool),
@@ -1275,7 +1320,7 @@
 //!               .prop_map(Json::Array),
 //!           prop::collection::hash_map(".*", inner, 0..10)
 //!               .prop_map(Json::Map),
-//!       ]).boxed()
+//!       ])
 //! }
 //! # fn main() { }
 //! ```
@@ -1323,12 +1368,12 @@
 //!     // Do stuff
 //! }
 //!
-//! fn vec_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
+//! fn vec_and_index() -> impl Strategy<Value = (Vec<String>, usize)> {
 //!     prop::collection::vec(".*", 1..100)
 //!         .prop_flat_map(|vec| {
 //!             let len = vec.len();
 //!             (Just(vec), 0..len)
-//!         }).boxed()
+//!         })
 //! }
 //!
 //! proptest! {

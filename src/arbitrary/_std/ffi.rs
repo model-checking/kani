@@ -75,7 +75,7 @@ arbitrary!(FromBytesWithNulError, SMapped<Option<u16>, Self>; {
 });
 
 arbitrary!(IntoStringError, SFnPtrMap<BoxedStrategy<Vec<u8>>, Self>;
-    static_map(not_utf8_bytes(false), |bytes|
+    static_map(not_utf8_bytes(false).boxed(), |bytes|
         CString::new(bytes).unwrap().into_string().unwrap_err()
     )
 );
