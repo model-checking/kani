@@ -88,17 +88,17 @@ impl Default for TestRunner {
 }
 
 #[cfg(not(feature = "std"))]
-fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
+fn panic_guard<V, F>(case: V, test: &F) -> TestCaseResult
     where
-        F: Fn(&V) -> TestCaseResult
+        F: Fn(V) -> TestCaseResult
 {
     test(case)
 }
 
 #[cfg(feature = "std")]
-fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
+fn panic_guard<V, F>(case: V, test: &F) -> TestCaseResult
 where
-    F: Fn(&V) -> TestCaseResult
+    F: Fn(V) -> TestCaseResult
 {
     unwrap_or!(panic::catch_unwind(AssertUnwindSafe(|| test(case))), what =>
         Err(TestCaseError::Fail(
@@ -169,7 +169,7 @@ impl TestRunner {
     ///
     /// Returns success or failure indicating why the test as a whole failed.
     pub fn run<S : Strategy,
-               F : Fn (&ValueFor<S>) -> TestCaseResult>
+               F : Fn (ValueFor<S>) -> TestCaseResult>
         (&mut self, strategy: &S, test: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
@@ -205,7 +205,7 @@ impl TestRunner {
         Ok(())
     }
 
-    fn gen_and_run_case<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
+    fn gen_and_run_case<S: Strategy, F: Fn(ValueFor<S>) -> TestCaseResult>
         (&mut self, strategy: &S, f: &F)
         -> Result<(), TestError<ValueFor<S>>>
     {
@@ -221,15 +221,14 @@ impl TestRunner {
     ///
     /// If the test fails, finds the minimal failing test case. If the test
     /// does not fail, returns whether it succeeded or was filtered out.
-    pub fn run_one<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, case: V, test: F) -> Result<bool, TestError<V::Value>>
+    pub fn run_one<V : ValueTree, F: Fn(V::Value) -> TestCaseResult>
+        (&mut self, mut case: V, test: F) -> Result<bool, TestError<V::Value>>
     {
-        let curr = case.current();
-        match panic_guard(&curr, &test) {
+        match panic_guard(case.current(), &test) {
             Ok(_) => Ok(true),
             Err(TestCaseError::Fail(why)) => {
-                let (why, curr) = self.shrink(case, test).unwrap_or((why, curr));
-                Err(TestError::Fail(why, curr))
+                let why = self.shrink(&mut case, test).unwrap_or(why);
+                Err(TestError::Fail(why, case.current()))
             },
             Err(TestCaseError::Reject(whence)) => {
                 self.reject_global(whence)?;
@@ -238,15 +237,14 @@ impl TestRunner {
         }
     }
 
-    fn shrink<V: ValueTree, F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, mut case: V, test: F) -> Option<(Reason, V::Value)>
+    fn shrink<V: ValueTree, F: Fn(V::Value) -> TestCaseResult>
+        (&mut self, case: &mut V, test: F) -> Option<Reason>
     {
         let mut last_failure = None;
 
         if case.simplify() {
             loop {
-                let curr = case.current();
-                match panic_guard(&curr, &test) {
+                match panic_guard(case.current(), &test) {
                     // Rejections are effectively a pass here,
                     // since they indicate that any behaviour of
                     // the function under test is acceptable.
@@ -256,7 +254,7 @@ impl TestRunner {
                         }
                     },
                     Err(TestCaseError::Fail(why)) => {
-                        last_failure = Some((why, curr));
+                        last_failure = Some(why);
                         if !case.simplify() {
                             break;
                         }
@@ -337,7 +335,7 @@ mod test {
     #[test]
     fn test_pass() {
         let mut runner = TestRunner::default();
-        let result = runner.run(&(1u32..), |&v| { assert!(v > 0); Ok(()) });
+        let result = runner.run(&(1u32..), |v| { assert!(v > 0); Ok(()) });
         assert_eq!(Ok(()), result);
     }
 
@@ -348,7 +346,7 @@ mod test {
             .. Config::default()
         });
         let result = runner.run(
-            &(0u32..10u32), |&v| {
+            &(0u32..10u32), |v| {
                 if v < 5 {
                     Ok(())
                 } else {
@@ -368,7 +366,7 @@ mod test {
             failure_persistence: None,
             .. Config::default()
         });
-        let result = runner.run(&(0u32..10u32), |&v| {
+        let result = runner.run(&(0u32..10u32), |v| {
             assert!(v < 5, "not less than 5");
             Ok(())
         });

@@ -243,7 +243,7 @@ mod test {
         let input = Map::new(0..10, MyMap);
 
         TestRunner::default()
-            .run(&input, |&v| {
+            .run(&input, |v| {
                 assert!(0 == v % 2);
                 Ok(())
             }).unwrap();

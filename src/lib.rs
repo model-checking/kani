@@ -112,7 +112,7 @@
 //! ```rust,ignore
 //! proptest! {
 //!     #[test]
-//!     fn doesnt_crash(ref s in "\\PC*") {
+//!     fn doesnt_crash(s in "\\PC*") {
 //!         parse_date(s);
 //!     }
 //! }
@@ -127,7 +127,7 @@
 //! with
 //!
 //! ```text
-//! thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: ref s = "aAௗ0㌀0"
+//! thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: s = "aAௗ0㌀0"
 //! 	successes: 102
 //! 	local rejects: 0
 //! 	global rejects: 0
@@ -195,7 +195,7 @@
 //!     // snip...
 //!
 //!     #[test]
-//!     fn parses_all_valid_dates(ref s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
+//!     fn parses_all_valid_dates(s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
 //!         parse_date(s).unwrap();
 //!     }
 //! }
@@ -724,7 +724,7 @@
 //!         failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
 //!         .. Config::default()
 //!     });
-//!     let result = runner.run(&(0..10000i32), |&v| {
+//!     let result = runner.run(&(0..10000i32), |v| {
 //!         some_function(v);
 //!         Ok(())
 //!     });
@@ -738,9 +738,9 @@
 //! }
 //! ```
 //!
-//! That's a lot better! Still a bit boilerplatey; the `proptest!` will help
-//! with that, but it does some other stuff we haven't covered yet, so for the
-//! moment we'll keep using `TestRunner` directly.
+//! That's a lot better! Still a bit boilerplatey; the `proptest!` macro will
+//! help with that, but it does some other stuff we haven't covered yet, so for
+//! the moment we'll keep using `TestRunner` directly.
 //!
 //! ### Compound Strategies
 //!
@@ -794,7 +794,7 @@
 //!     // Combine our two inputs into a strategy for one tuple. Our test
 //!     // function then destructures the generated tuples back into separate
 //!     // `a` and `b` variables to be passed in to `add()`.
-//!     runner.run(&(0..1000i32, 0..1000i32), |&(a, b)| {
+//!     runner.run(&(0..1000i32, 0..1000i32), |(a, b)| {
 //!         let sum = add(a, b);
 //!         assert!(sum >= a);
 //!         assert!(sum >= b);
@@ -856,17 +856,17 @@
 //! ```rust
 //! #[macro_use] extern crate proptest;
 //!
-//! fn do_stuff(v: &str) {
+//! fn do_stuff(v: String) {
 //!     let i: u32 = v.parse().unwrap();
 //!     let s = i.to_string();
-//!     assert_eq!(&s, v);
+//!     assert_eq!(s, v);
 //! }
 //!
 //! proptest! {
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref v in "[1-9][0-9]{0,8}") {
+//!     fn test_do_stuff(v in "[1-9][0-9]{0,8}") {
 //!         do_stuff(v);
 //!     }
 //! }
@@ -893,17 +893,17 @@
 //! // Grab `Strategy` and a shorter namespace prefix
 //! use proptest::prelude::*;
 //!
-//! fn do_stuff(v: &str) {
+//! fn do_stuff(v: String) {
 //!     let i: u32 = v.parse().unwrap();
 //!     let s = i.to_string();
-//!     assert_eq!(&s, v);
+//!     assert_eq!(s, v);
 //! }
 //!
 //! proptest! {
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref v in any::<u32>().prop_map(|v| v.to_string())) {
+//!     fn test_do_stuff(v in any::<u32>().prop_map(|v| v.to_string())) {
 //!         do_stuff(v);
 //!     }
 //! }
@@ -934,7 +934,7 @@
 //!   quantity: u32,
 //! }
 //!
-//! fn do_stuff(order: &Order) {
+//! fn do_stuff(order: Order) {
 //!     let i: u32 = order.id.parse().unwrap();
 //!     let s = i.to_string();
 //!     assert_eq!(s, order.id);
@@ -945,7 +945,7 @@
 //!     #[test]
 //!     # */
 //!     fn test_do_stuff(
-//!         ref order in
+//!         order in
 //!         (any::<u32>().prop_map(|v| v.to_string()),
 //!          "[a-z]*", 1..1000u32).prop_map(
 //!              |(id, item, quantity)| Order { id, item, quantity })
@@ -976,7 +976,7 @@
 //! #   quantity: u32,
 //! # }
 //! #
-//! # fn do_stuff(order: &Order) {
+//! # fn do_stuff(order: Order) {
 //! #     let i: u32 = order.id.parse().unwrap();
 //! #     let s = i.to_string();
 //! #     assert_eq!(s, order.id);
@@ -993,7 +993,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref order in arb_order(1000)) {
+//!     fn test_do_stuff(order in arb_order(1000)) {
 //!         do_stuff(order);
 //!     }
 //! }
@@ -1037,7 +1037,7 @@
 //! #   quantity: u32,
 //! # }
 //! #
-//! # fn do_stuff(order: &Order) {
+//! # fn do_stuff(order: Order) {
 //! #     let i: u32 = order.id.parse().unwrap();
 //! #     let s = i.to_string();
 //! #     assert_eq!(s, order.id);
@@ -1061,7 +1061,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref order in arb_order(1000)) {
+//!     fn test_do_stuff(order in arb_order(1000)) {
 //!         do_stuff(order);
 //!     }
 //! }
@@ -1296,7 +1296,7 @@
 //! proptest! {
 //!     #[test]
 //!     fn test_some_function(
-//!         ref stuff in prop::collection::vec(".*", 1..100),
+//!         stuff in prop::collection::vec(".*", 1..100),
 //!         index in 0..100usize
 //!     ) {
 //!         prop_assume!(index < stuff.len());
@@ -1318,7 +1318,7 @@
 //! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
-//! fn some_function(stuff: &[String], index: usize) {
+//! fn some_function(stuff: Vec<String>, index: usize) {
 //!     let _ = &stuff[index];
 //!     // Do stuff
 //! }
@@ -1335,7 +1335,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_some_function((ref vec, index) in vec_and_index()) {
+//!     fn test_some_function((vec, index) in vec_and_index()) {
 //!         some_function(vec, index);
 //!     }
 //! }

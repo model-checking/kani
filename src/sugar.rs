@@ -87,7 +87,7 @@ macro_rules! proptest {
                     &$crate::strategy::Strategy::prop_map(
                         proptest_helper!(@_WRAP ($($strategy)*)),
                         |values| $crate::sugar::NamedArguments(names, values)),
-                    |&$crate::sugar::NamedArguments(
+                    |$crate::sugar::NamedArguments(
                         _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
                     {
                         $body;
@@ -1026,5 +1026,41 @@ mod another_test {
     #[allow(dead_code)]
     fn can_access_pub_compose() {
         let _ = sugar::test::two_ints_pub(42);
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    #[cfg(feature = "std")]
+    proptest! {
+        #[test]
+        fn accept_ref_arg(ref s in "[0-9]") {
+            use std_facade::String;
+            fn assert_string(_s: &String) {}
+            assert_string(s);
+        }
+
+        #[test]
+        fn accept_move_arg(s in "[0-9]") {
+            use std_facade::String;
+            fn assert_string(_s: String) {}
+            assert_string(s);
+        }
+    }
+
+    #[derive(Debug)]
+    struct NotClone();
+    const MK: fn() -> NotClone = NotClone;
+
+    proptest! {
+        #[test]
+        fn accept_noclone_arg(nc in MK) {
+            let _nc2: NotClone = nc;
+        }
+
+        #[test]
+        fn accept_noclone_ref_arg(ref nc in MK) {
+            let _nc2: &NotClone = nc;
+        }
     }
 }

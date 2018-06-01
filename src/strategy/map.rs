@@ -247,7 +247,7 @@ mod test {
     #[test]
     fn test_map() {
         TestRunner::default()
-            .run(&(0..10).prop_map(|v| v * 2), |&v| {
+            .run(&(0..10).prop_map(|v| v * 2), |v| {
                 assert!(0 == v % 2);
                 Ok(())
             }).unwrap();
@@ -256,7 +256,7 @@ mod test {
     #[test]
     fn test_map_into() {
         TestRunner::default()
-            .run(&(0..10u8).prop_map_into::<usize>(), |&v| {
+            .run(&(0..10u8).prop_map_into::<usize>(), |v| {
                 assert!(v < 10);
                 Ok(())
             }).unwrap();

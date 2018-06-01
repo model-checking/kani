@@ -249,7 +249,7 @@ mod test {
         for _ in 0..1000 {
             let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&(a, b)| {
+            let result = runner.run_one(case, |(a, b)| {
                 if a <= 10000 || b <= a {
                     Ok(())
                 } else {

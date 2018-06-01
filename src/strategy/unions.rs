@@ -327,6 +327,11 @@ mod test {
     use strategy::just::Just;
     use super::*;
 
+    // FIXME(2018-06-01): figure out a way to run this test on no_std.
+    // The problem is that the default seed is fixed and does not produce
+    // enough passed tests. We need some universal source of non-determinism
+    // for the seed, which is unlikely.
+    #[cfg(feature = "std")]
     #[test]
     fn test_union() {
         let input = (10u32..20u32).prop_union(30u32..40u32);
@@ -340,7 +345,7 @@ mod test {
         for _ in 0..256 {
             let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| {
+            let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
                 Ok(())
             });
@@ -406,7 +411,7 @@ mod test {
         for _ in 0..256 {
             let mut runner = TestRunner::default();
             let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| {
+            let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
                 Ok(())
             });
