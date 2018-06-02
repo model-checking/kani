@@ -15,3 +15,5 @@ build_script:
   - cargo build
 test_script:
   - cargo test
+  - cd test-persistence-location & run-tests.bat
+
