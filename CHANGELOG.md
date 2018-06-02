@@ -16,6 +16,11 @@
 See also [the documentation](README.md#forking-and-timeouts) for these
 features.
 
+### Bug Fixes
+
+- Fix that failure persistence file would be written to the incorrect location
+  on all platforms as of Rust 1.26.0 and on Windows for all Rust versions.
+
 ### Nightly-only breakage
 
 - Support for the `hashmap_core` crate is removed pending
