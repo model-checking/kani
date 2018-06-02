@@ -44,17 +44,16 @@ fn jpe() -> JoinPathsError {
 }
 
 // Algorithm from: https://stackoverflow.com/questions/47749164
-#[cfg(target_os = "windows")]
-fn make_utf16_invalid(buf: &mut Vec<u16>, p: usize) {
+#[cfg(any(target_os = "windows", test))]
+fn make_utf16_invalid(buf: &mut [u16], p: usize) {
     // Verify that length is non-empty.
     // An empty string is always valid UTF-16.
-    let len = buf.len();
-    assert!(len > 0);
+    assert!(buf.len() > 0);
 
     // If first elem or previous entry is not a leading surrogate.
-    let gen_trail = (0 == p) || (0xd800 != buf[p - 1] & 0xfc00);
+    let gen_trail = 0 == p || 0xd800 != (buf[p - 1] & 0xfc00);
     // If last element or succeeding entry is not a traililng surrogate.
-    let gen_lead = (p == buf.len() - 1) || (0xdc00 != buf[p + 1] & 0xfc00);
+    let gen_lead = p == buf.len() - 1 || 0xdc00 != (buf[p + 1] & 0xfc00);
     let (force_bits_mask, force_bits_value) = if gen_trail {
         if gen_lead {
             // Trailing or leading surrogate.
@@ -65,7 +64,10 @@ fn make_utf16_invalid(buf: &mut Vec<u16>, p: usize) {
         }
     } else {
         // Leading surrogate.
-        debug_assert!(gen_lead);
+        // Note that `gen_lead` and `gen_trail` could both be false here if `p`
+        // lies exactly between a leading and a trailing surrogate. In this
+        // case, it doesn't matter what we do because the UTF-16 will be
+        // invalid regardless, so just always force a leading surrogate.
         (0xfc00, 0xd800)
     };
     debug_assert_eq!(0, (force_bits_value & !force_bits_mask));
@@ -108,6 +110,10 @@ arbitrary!(VarError,
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use num;
+    use test_runner::Config;
+
     no_panic_test!(
         args => Args,
         args_os => ArgsOs,
@@ -116,4 +122,19 @@ mod test {
         join_paths_error => JoinPathsError,
         var_error => VarError
     );
+
+    proptest! {
+        #![proptest_config(Config {
+            cases: 65536,
+            .. Config::default()
+        })]
+
+        #[test]
+        fn make_utf16_invalid_doesnt_panic(
+            mut buf in [num::u16::ANY; 3],
+            p in 0usize..3
+        ) {
+            make_utf16_invalid(&mut buf, p);
+        }
+    }
 }
