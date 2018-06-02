@@ -13,6 +13,9 @@
   pathological performance behaviour. This requires the "timeout" feature (and
   transitively, the "fork" feature), enabled by default.
 
+See also [the documentation](README.md#forking-and-timeouts) for these
+features.
+
 ### Nightly-only breakage
 
 - Support for the `hashmap_core` crate is removed pending
