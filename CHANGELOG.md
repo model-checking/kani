@@ -10,7 +10,8 @@
 - Added support for setting a timeout which applies on a per-test-case (i.e.,
   single input rather than the whole test) basis. This allows using proptest to
   find inputs which cause code to get stuck in infinite loops or exhibit other
-  pathological performance behaviour.
+  pathological performance behaviour. This requires the "timeout" feature (and
+  transitively, the "fork" feature), enabled by default.
 
 ### Nightly-only breakage
 
