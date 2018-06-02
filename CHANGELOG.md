@@ -19,7 +19,10 @@ features.
 ### Bug Fixes
 
 - Fix that failure persistence file would be written to the incorrect location
-  on all platforms as of Rust 1.26.0 and on Windows for all Rust versions.
+  in projects using workspaces. See
+  [#24](https://github.com/AltSysrq/proptest/issues/24) for more details and
+  instructions on how to migrate any persistence files that had been written to
+  the wrong location.
 
 ### Nightly-only breakage
 
