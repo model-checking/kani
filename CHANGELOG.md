@@ -1,4 +1,4 @@
-## Unreleased
+## 0.7.1
 
 ### New Additions
 
