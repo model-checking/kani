@@ -1021,6 +1021,18 @@ mod test {
             J(10i32),
         ]));
     }
+
+    proptest! {
+        #![proptest_config(::test_runner::Config {
+            fork: true,
+            .. ::test_runner::Config::default()
+        })]
+
+        // Ensure that the macro sets the test name properly. If it doesn't,
+        // this test will fail to run correctly.
+        #[test]
+        fn test_name_set_correctly_for_fork(_ in 0u32..1u32) { }
+    }
 }
 
 #[cfg(test)]
