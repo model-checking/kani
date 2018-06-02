@@ -169,12 +169,12 @@ impl ForkOutput {
     fn append(&mut self, _result: &TestCaseResult) { }
     fn terminate(&mut self) { }
     fn empty() -> Self { ForkOutput }
-    fn is_in_fork() -> bool { false }
+    fn is_in_fork(&self) -> bool { false }
 }
 
 #[cfg(not(feature = "std"))]
 fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
-    (case: &V, test: &F, replay: &mut R, _timeout: u32) -> TestCaseResult
+    (case: &V, test: &F, replay: &mut R, _timeout: u32, _: &mut ForkOutput) -> TestCaseResult
 {
     if let Some(result) = replay.next() {
         return result;
