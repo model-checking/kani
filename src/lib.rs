@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 Jason Lingle
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -517,6 +517,22 @@
 //! where it was originally tested, it found that the maximum value that
 //! `fib()` could handle was 39, despite having dozens of processes dump core
 //! due to stack overflow or time out along the way.
+//!
+//! If you just want to run tests in subprocesses or with a timeout every now
+//! and then, you can do that by setting the `PROPTEST_FORK` or
+//! `PROPTEST_TIMEOUT` environment variables to alter the default
+//! configuration. For example, on Unix,
+//!
+//! ```sh
+//! # Run all the proptest tests in subprocesses with no timeout.
+//! # Individual tests can still opt out by setting `fork: false` in their
+//! # own configuration.
+//! PROPTEST_FORK=true cargo test
+//! # Run all the proptest tests in subprocesses with a 1 second timeout.
+//! # Tests can still opt out or use a different timeout by setting `timeout: 0`
+//! # or another timeout in their own configuration.
+//! PROPTEST_TIMEOUT=1000 cargo test
+//! ```
 //!
 //! <!-- ENDREADME -->
 //!
