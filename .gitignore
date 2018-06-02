@@ -1,6 +1,7 @@
 *~
 target
 Cargo.lock
+*.core
 
 # VSCode:
 .vscode/

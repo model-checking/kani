@@ -39,6 +39,22 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::vec::Vec;
 
+#[cfg(feature = "std")]
+use std::iter;
+#[cfg(not(feature = "std"))]
+use core::iter;
+
+#[cfg(feature = "fork")]
+use std::fs;
+#[cfg(feature = "fork")]
+use std::env;
+#[cfg(feature = "fork")]
+use std::cell::RefCell;
+#[cfg(feature = "fork")]
+use rusty_fork;
+#[cfg(feature = "fork")]
+use tempfile;
+
 use rand::{self, Rand, SeedableRng, XorShiftRng};
 
 use strategy::*;
@@ -47,11 +63,16 @@ mod failure_persistence;
 mod config;
 mod reason;
 mod errors;
+#[cfg(feature = "fork")]
+mod replay;
 
 pub use self::failure_persistence::*;
 pub use self::config::*;
 pub use self::reason::*;
 pub use self::errors::*;
+
+#[cfg(feature = "fork")]
+const ENV_FORK_FILE: &'static str = "_PROPTEST_FORKFILE";
 
 type RejectionDetail = BTreeMap<Reason, u32>;
 
@@ -108,27 +129,100 @@ impl Default for TestRunner {
     }
 }
 
+#[cfg(feature = "fork")]
+#[derive(Debug)]
+struct ForkOutput {
+    file: Option<fs::File>,
+}
+
+#[cfg(feature = "fork")]
+impl ForkOutput {
+    fn append(&mut self, result: &TestCaseResult) {
+        if let Some(ref mut file) = self.file {
+            replay::append(file, result)
+                .expect("Failed to append to replay file");
+        }
+    }
+
+    fn terminate(&mut self) {
+        if let Some(ref mut file) = self.file {
+            replay::terminate(file)
+                .expect("Failed to append to replay file");
+        }
+    }
+
+    fn empty() -> Self {
+        ForkOutput { file: None }
+    }
+
+    fn is_in_fork(&self) -> bool {
+        self.file.is_some()
+    }
+}
+
+#[cfg(not(feature = "fork"))]
+#[derive(Debug)]
+struct ForkOutput;
+
+#[cfg(not(feature = "fork"))]
+impl ForkOutput {
+    fn append(&mut self, _result: &TestCaseResult) { }
+    fn terminate(&mut self) { }
+    fn empty() -> Self { ForkOutput }
+    fn is_in_fork() -> bool { false }
+}
+
 #[cfg(not(feature = "std"))]
-fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
-    where
-        F: Fn(&V) -> TestCaseResult
+fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
+    (case: &V, test: &F, replay: &mut R, _timeout: u32) -> TestCaseResult
 {
+    if let Some(result) = replay.next() {
+        return result;
+    }
+
     test(case)
 }
 
 #[cfg(feature = "std")]
-fn panic_guard<V, F>(case: &V, test: &F) -> TestCaseResult
-where
-    F: Fn(&V) -> TestCaseResult
+fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
+    (case: &V, test: &F, replay: &mut R, timeout: u32, fork_output: &mut ForkOutput)
+     -> TestCaseResult
 {
-    match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
+    use std::time;
+
+    if let Some(result) = replay.next() {
+        return result;
+    }
+
+    let time_start = time::Instant::now();
+
+    let mut result = match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
         Ok(r) => r,
         Err(what) => Err(TestCaseError::Fail(
             what.downcast::<&'static str>().map(|s| (*s).into())
                 .or_else(|what| what.downcast::<String>().map(|b| (*b).into()))
                 .or_else(|what| what.downcast::<Box<str>>().map(|b| (*b).into()))
                 .unwrap_or_else(|_| "<unknown panic value>".into()))),
+    };
+
+    // If there is a timeout and we exceeded it, fail the test here so we get
+    // consistent behaviour. (The parent process cannot precisely time the test
+    // cases itself.)
+    if timeout > 0 && result.is_ok() {
+        let elapsed = time_start.elapsed();
+        let elapsed_millis = elapsed.as_secs() as u32 * 1000 +
+            elapsed.subsec_nanos() / 1_000_000;
+
+        if elapsed_millis > timeout {
+            result = Err(TestCaseError::fail(
+                format!("Timeout of {} ms exceeded: test took {} ms",
+                        timeout, elapsed_millis)));
+        }
     }
+
+    fork_output.append(&result);
+
+    result
 }
 
 impl TestRunner {
@@ -217,6 +311,123 @@ impl TestRunner {
         (&mut self, strategy: &S, test: F)
          -> Result<(), TestError<ValueFor<S>>>
     {
+        if self.config.fork() {
+            self.run_in_fork(strategy, test)
+        } else {
+            self.run_in_process(strategy, test)
+        }
+    }
+
+    #[cfg(not(feature = "fork"))]
+    fn run_in_fork<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
+        (&mut self, _: &S, _: F) -> Result<(), TestError<ValueFor<S>>>
+    {
+        unreachable!()
+    }
+
+    #[cfg(feature = "fork")]
+    fn run_in_fork<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
+        (&mut self, strategy: &S, test: F) -> Result<(), TestError<ValueFor<S>>>
+    {
+        let mut test = Some(test);
+
+        let test_name = rusty_fork::fork_test::fix_module_path(
+            self.config.test_name.expect(
+                "Must supply test_name when forking enabled"));
+        let forkfile: RefCell<Option<tempfile::NamedTempFile>> =
+            RefCell::new(None);
+        let seed = self.new_rng_seed();
+        let mut replay = replay::Replay { seed, steps: vec![] };
+        let mut child_count = 0;
+        let timeout = self.config.timeout();
+
+        loop {
+            let child_error = rusty_fork::fork(
+                test_name,
+                rusty_fork_id!(),
+                |cmd| {
+                    let mut forkfile = forkfile.borrow_mut();
+                    if forkfile.is_none() {
+                        *forkfile =
+                            Some(tempfile::NamedTempFile::new().expect(
+                                "Failed to create temporary file for fork"));
+                        replay.init_file(
+                            forkfile.as_mut().unwrap()).expect(
+                            "Failed to initialise temporary file for fork");
+                    }
+
+                    cmd.env(ENV_FORK_FILE, forkfile.as_ref().unwrap().path());
+                },
+                |child, _| await_child(
+                    child, &mut forkfile.borrow_mut().as_mut().unwrap(),
+                    timeout),
+                || match self.run_in_process(strategy, test.take().unwrap()) {
+                    Ok(_) => (),
+                    Err(e) =>
+                        panic!("Test failed normally in child process.\n{}\n{}",
+                               e, self),
+                })
+                .expect("Fork failed");
+
+            let parsed = replay::Replay::parse_from(
+                &mut forkfile.borrow_mut().as_mut().unwrap())
+                .expect("Failed to re-read fork file");
+            match parsed {
+                replay::ReplayFileStatus::InProgress(new_replay) =>
+                    replay = new_replay,
+                replay::ReplayFileStatus::Terminated(new_replay) => {
+                    replay = new_replay;
+                    break;
+                },
+                replay::ReplayFileStatus::Corrupt =>
+                    panic!("Child process corrupted replay file"),
+            }
+
+            // The child only terminates early if it outright crashes or we
+            // kill it due to timeout, so add a synthetic failure to the
+            // output.
+            let error = Err(child_error.unwrap_or(
+                TestCaseError::fail("Child process was terminated abruptly \
+                                     but with successful status")));
+            replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
+                .expect("Failed to append to replay file");
+            replay.steps.push(error);
+
+            // Bail if we've gone through too many processes in case the
+            // shrinking process itself is crashing.
+            child_count += 1;
+            if child_count >= 10000 {
+                return Err(TestError::Abort(
+                    "Giving up after 10000 child processes crashed".into()));
+            }
+        }
+
+        // Run through the steps in-process (without ever running the actual
+        // tests) to produce the shrunken value and update the persistence
+        // file.
+        self.rng = XorShiftRng::from_seed(replay.seed);
+        self.run_in_process_with_replay(
+            strategy, |_| panic!("Ran past the end of the replay"),
+            replay.steps.into_iter(), ForkOutput::empty())
+    }
+
+    fn run_in_process<S : Strategy,
+                      F : Fn (&ValueFor<S>) -> TestCaseResult>
+        (&mut self, strategy: &S, test: F)
+         -> Result<(), TestError<ValueFor<S>>>
+    {
+        let (replay_steps, fork_output) = init_replay(&mut self.rng);
+        self.run_in_process_with_replay(
+            strategy, test, replay_steps.into_iter(), fork_output)
+    }
+
+    fn run_in_process_with_replay<S : Strategy,
+                                  F : Fn (&ValueFor<S>) -> TestCaseResult,
+                                  R : Iterator<Item = TestCaseResult>>
+        (&mut self, strategy: &S, test: F, mut replay: R,
+         mut fork_output: ForkOutput)
+         -> Result<(), TestError<ValueFor<S>>>
+    {
         let old_rng = self.rng.clone();
 
         let persisted_failure_seeds: Vec<[u32; 4]> = {
@@ -229,7 +440,7 @@ impl TestRunner {
         };
         for persisted_seed in persisted_failure_seeds {
             self.rng = XorShiftRng::from_seed(persisted_seed);
-            self.gen_and_run_case(strategy, &test)?;
+            self.gen_and_run_case(strategy, &test, &mut replay, &mut fork_output)?;
         }
         self.rng = old_rng;
 
@@ -238,29 +449,42 @@ impl TestRunner {
             // what seed to persist if this case fails.
             let seed = self.new_rng_seed();
             self.rng = XorShiftRng::from_seed(seed);
-            let result = self.gen_and_run_case(strategy, &test);
+            let result = self.gen_and_run_case(
+                strategy, &test, &mut replay, &mut fork_output);
             if let Err(TestError::Fail(_, ref value)) = result {
                 if let Some(ref mut failure_persistence) = self.config.failure_persistence {
                     let source_file = &self.config.source_file;
-                    failure_persistence.save_persisted_failure(*source_file, seed, value);
+
+                    // Don't update the persistence file if we're a child
+                    // process. The parent relies on it remaining consistent
+                    // and will take care of updating it itself.
+                    if !fork_output.is_in_fork() {
+                        failure_persistence.save_persisted_failure(
+                            *source_file, seed, value);
+                    }
                 }
             }
 
-            result?;
+            if let Err(e) = result {
+                fork_output.terminate();
+                return Err(e.into());
+            }
         }
 
+        fork_output.terminate();
         Ok(())
     }
 
-    fn gen_and_run_case<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, f: &F)
+    fn gen_and_run_case<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult,
+                        R : Iterator<Item = TestCaseResult>>
+        (&mut self, strategy: &S, f: &F, replay: &mut R, fork_output: &mut ForkOutput)
         -> Result<(), TestError<ValueFor<S>>>
     {
         let case = match strategy.new_value(self) {
             Ok(v) => v,
             Err(msg) => return Err(TestError::Abort(msg)),
         };
-        if self.run_one(case, f)? {
+        if self.run_one_with_replay(case, f, replay, fork_output)? {
             self.successes += 1;
         }
         Ok(())
@@ -270,14 +494,30 @@ impl TestRunner {
     ///
     /// If the test fails, finds the minimal failing test case. If the test
     /// does not fail, returns whether it succeeded or was filtered out.
+    ///
+    /// This does not honour the `fork` config, and will not be able to
+    /// terminate the run if it runs for longer than `timeout`. However, if the
+    /// test function returns but took longer than `timeout`, the test case
+    /// will fail.
     pub fn run_one<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult>
         (&mut self, case: V, test: F) -> Result<bool, TestError<V::Value>>
     {
+        self.run_one_with_replay(
+            case, test, &mut iter::empty::<TestCaseResult>().fuse(),
+            &mut ForkOutput::empty())
+    }
+
+    fn run_one_with_replay<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult,
+                           R : Iterator<Item = TestCaseResult>>
+        (&mut self, case: V, test: F, replay: &mut R, fork_output: &mut ForkOutput)
+         -> Result<bool, TestError<V::Value>>
+    {
         let curr = case.current();
-        match panic_guard(&curr, &test) {
+        match call_test(&curr, &test, replay, self.config.timeout(), fork_output) {
             Ok(_) => Ok(true),
             Err(TestCaseError::Fail(why)) => {
-                let (why, curr) = self.shrink(case, test).unwrap_or((why, curr));
+                let (why, curr) = self.shrink(case, test, replay, fork_output)
+                    .unwrap_or((why, curr));
                 Err(TestError::Fail(why, curr))
             },
             Err(TestCaseError::Reject(whence)) => {
@@ -287,15 +527,18 @@ impl TestRunner {
         }
     }
 
-    fn shrink<V: ValueTree, F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, mut case: V, test: F) -> Option<(Reason, V::Value)>
+    fn shrink<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult,
+              R : Iterator<Item = TestCaseResult>>
+        (&mut self, mut case: V, test: F, replay: &mut R,
+         fork_output: &mut ForkOutput)
+         -> Option<(Reason, V::Value)>
     {
         let mut last_failure = None;
 
         if case.simplify() {
             loop {
                 let curr = case.current();
-                match panic_guard(&curr, &test) {
+                match call_test(&curr, &test, replay, self.config.timeout(), fork_output) {
                     // Rejections are effectively a pass here,
                     // since they indicate that any behaviour of
                     // the function under test is acceptable.
@@ -368,6 +611,101 @@ impl TestRunner {
     pub fn flat_map_regen(&self) -> bool {
         self.flat_map_regens.fetch_add(1, SeqCst) <
             self.config.max_flat_map_regens as usize
+    }
+}
+
+#[cfg(feature = "fork")]
+fn init_replay(rng: &mut XorShiftRng) -> (Vec<TestCaseResult>, ForkOutput) {
+    if let Some(path) = env::var_os(ENV_FORK_FILE) {
+        let mut file = replay::open_file(&path).expect(
+            "Failed to open replay file");
+        let loaded = replay::Replay::parse_from(&mut file).expect(
+            "Failed to read replay file");
+        match loaded {
+            replay::ReplayFileStatus::InProgress(replay) => {
+                *rng = XorShiftRng::from_seed(replay.seed);
+                (replay.steps, ForkOutput { file: Some(file) })
+            },
+
+            replay::ReplayFileStatus::Terminated(_) =>
+                panic!("Replay file for child process is terminated?"),
+
+            replay::ReplayFileStatus::Corrupt =>
+                panic!("Replay file for child process is corrupt"),
+        }
+    } else {
+        (vec![], ForkOutput::empty())
+    }
+}
+
+#[cfg(not(feature = "fork"))]
+fn init_replay(_rng: &mut XorShiftRng)
+               -> (iter::Empty<TestCaseResult>, ForkOutput) {
+    (iter::empty(), ForkOutput::empty())
+}
+
+#[cfg(feature = "fork")]
+fn await_child_without_timeout(child: &mut rusty_fork::ChildWrapper)
+                               -> Option<TestCaseError> {
+    let status = child.wait().expect("Failed to wait for child process");
+
+    if status.success() {
+        None
+    } else {
+        Some(TestCaseError::fail(format!(
+            "Child process exited with {}", status)))
+    }
+}
+
+#[cfg(all(feature = "fork", not(feature = "timeout")))]
+fn await_child(child: &mut rusty_fork::ChildWrapper,
+               _: &mut tempfile::NamedTempFile,
+               _timeout: u32)
+               -> Option<TestCaseError> {
+    await_child_without_timeout(child)
+}
+
+#[cfg(all(feature = "fork", feature = "timeout"))]
+fn await_child(child: &mut rusty_fork::ChildWrapper,
+               forkfile: &mut tempfile::NamedTempFile,
+               timeout: u32)
+               -> Option<TestCaseError> {
+    use std::time::Duration;
+
+    if 0 == timeout {
+        return await_child_without_timeout(child);
+    }
+
+    // The child can run for longer than the timeout since it may run
+    // multiple tests. Each time the timeout expires, we check whether the
+    // file has grown larger. If it has, we allow the child to keep running
+    // until the next timeout.
+    let mut last_forkfile_len = forkfile.as_file().metadata()
+        .map(|md| md.len()).unwrap_or(0);
+
+    loop {
+        if let Some(status) =
+            child.wait_timeout(Duration::from_millis(timeout.into()))
+            .expect("Failed to wait for child process")
+        {
+            if status.success() {
+                return None;
+            } else {
+                return Some(TestCaseError::fail(format!(
+                    "Child process exited with {}", status)));
+            }
+        }
+
+        let current_len = forkfile.as_file().metadata()
+            .map(|md| md.len()).unwrap_or(0);
+        // If we've gone a full timeout period without the file growing,
+        // fail the test and kill the child.
+        if current_len <= last_forkfile_len {
+            return Some(TestCaseError::fail(format!(
+                "Timed out waiting for child process")));
+        } else {
+            last_forkfile_len = current_len;
+        }
     }
 }
 
@@ -509,5 +847,141 @@ mod test {
         let from_2 = <[u32;4] as Rand>::rand(&mut rng2);
 
         assert_ne!(from_1, from_2);
+    }
+
+    #[cfg(feature = "fork")]
+    #[test]
+    fn run_successful_test_in_fork() {
+        let mut runner = TestRunner::new(Config {
+            fork: true,
+            test_name: Some(concat!(
+                module_path!(), "::run_successful_test_in_fork")),
+            .. Config::default()
+        });
+
+        assert!(runner.run(&(0u32..1000), |_| Ok(())).is_ok());
+    }
+
+    #[cfg(feature = "fork")]
+    #[test]
+    fn normal_failure_in_fork_results_in_correct_failure() {
+        let mut runner = TestRunner::new(Config {
+            fork: true,
+            test_name: Some(concat!(
+                module_path!(), "::normal_failure_in_fork_results_in_correct_failure")),
+            .. Config::default()
+        });
+
+        let failure = runner.run(&(0u32..1000), |&v| {
+            prop_assert!(v < 500);
+            Ok(())
+        }).err().unwrap();
+
+        match failure {
+            TestError::Fail(_, value) => assert_eq!(500, value),
+            failure => panic!("Unexpected failure: {:?}", failure),
+        }
+    }
+
+    #[cfg(feature = "fork")]
+    #[test]
+    fn nonsuccessful_exit_finds_correct_failure() {
+        let mut runner = TestRunner::new(Config {
+            fork: true,
+            test_name: Some(concat!(
+                module_path!(), "::nonsuccessful_exit_finds_correct_failure")),
+            .. Config::default()
+        });
+
+        let failure = runner.run(&(0u32..1000), |&v| {
+            if v >= 500 {
+                ::std::process::exit(1);
+            }
+            Ok(())
+        }).err().unwrap();
+
+        match failure {
+            TestError::Fail(_, value) => assert_eq!(500, value),
+            failure => panic!("Unexpected failure: {:?}", failure),
+        }
+    }
+
+    #[cfg(feature = "fork")]
+    #[test]
+    fn spurious_exit_finds_correct_failure() {
+        let mut runner = TestRunner::new(Config {
+            fork: true,
+            test_name: Some(concat!(
+                module_path!(), "::spurious_exit_finds_correct_failure")),
+            .. Config::default()
+        });
+
+        let failure = runner.run(&(0u32..1000), |&v| {
+            if v >= 500 {
+                ::std::process::exit(0);
+            }
+            Ok(())
+        }).err().unwrap();
+
+        match failure {
+            TestError::Fail(_, value) => assert_eq!(500, value),
+            failure => panic!("Unexpected failure: {:?}", failure),
+        }
+    }
+
+    #[cfg(feature = "timeout")]
+    #[test]
+    fn long_sleep_timeout_finds_correct_failure() {
+        let mut runner = TestRunner::new(Config {
+            fork: true,
+            timeout: 500,
+            test_name: Some(concat!(
+                module_path!(), "::long_sleep_timeout_finds_correct_failure")),
+            .. Config::default()
+        });
+
+        let failure = runner.run(&(0u32..1000), |&v| {
+            if v >= 500 {
+                ::std::thread::sleep(::std::time::Duration::from_millis(10_000));
+            }
+            Ok(())
+        }).err().unwrap();
+
+        match failure {
+            TestError::Fail(_, value) => assert_eq!(500, value),
+            failure => panic!("Unexpected failure: {:?}", failure),
+        }
+    }
+
+    #[cfg(feature = "timeout")]
+    #[test]
+    fn mid_sleep_timeout_finds_correct_failure() {
+        let mut runner = TestRunner::new(Config {
+            fork: true,
+            timeout: 500,
+            test_name: Some(concat!(
+                module_path!(), "::mid_sleep_timeout_finds_correct_failure")),
+            .. Config::default()
+        });
+
+        let failure = runner.run(&(0u32..1000), |&v| {
+            if v >= 500 {
+                // Sleep a little longer than the timeout. This means that
+                // sometimes the test case itself will return before the parent
+                // process has noticed the child is timing out, so it's up to
+                // the child to mark it as a failure.
+                ::std::thread::sleep(::std::time::Duration::from_millis(600));
+            } else {
+                // Sleep a bit so that the parent and child timing don't stay
+                // in sync.
+                ::std::thread::sleep(::std::time::Duration::from_millis(100))
+            }
+            Ok(())
+        }).err().unwrap();
+
+        match failure {
+            TestError::Fail(_, value) => assert_eq!(500, value),
+            failure => panic!("Unexpected failure: {:?}", failure),
+        }
     }
 }

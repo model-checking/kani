@@ -83,8 +83,10 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut runner = $crate::test_runner::TestRunner::new(
-                    $config.clone_with_source_file(file!()));
+                let mut config = $config.clone_with_source_file(file!());
+                config.test_name = Some(
+                    concat!(module_path!(), "::", stringify!($test_name)));
+                let mut runner = $crate::test_runner::TestRunner::new(config);
                 let names = proptest_helper!(@_WRAPSTR ($($parm),*));
                 match runner.run(
                     &$crate::strategy::Strategy::prop_map(
