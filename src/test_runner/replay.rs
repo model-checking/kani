@@ -17,6 +17,8 @@ use std::vec::Vec;
 
 use test_runner::{TestCaseError, TestCaseResult};
 
+const SENTINEL: &'static str = "proptest-forkfile";
+
 /// A "replay" of a `TestRunner` invocation.
 ///
 /// The replay mechanism is used to support forking. When a child process
@@ -30,12 +32,12 @@ use test_runner::{TestCaseError, TestCaseResult};
 /// to the persistence file will perturb the replay.
 ///
 /// `Replay` has a special string format for being stored in files. It starts
-/// with four lines containing the values of `seed`, then an unterminated line
-/// consisting of `+`, `-`, and `!` characters to indicate test case
-/// passes/failures/rejects, or `.` to indicate termination of the test run.
-/// This format makes it easy for the child process to blindly append to the
-/// file without having to worry about the possibility of appends being
-/// non-atomic.
+/// with a line just containing the text in `SENTINEL`, then four lines
+/// containing the values of `seed`, then an unterminated line consisting of
+/// `+`, `-`, and `!` characters to indicate test case passes/failures/rejects,
+/// or `.` to indicate termination of the test run. This format makes it easy
+/// for the child process to blindly append to the file without having to worry
+/// about the possibility of appends being non-atomic.
 #[derive(Clone, Debug)]
 pub struct Replay {
     /// The seed of the RNG used to start running the test cases.
@@ -98,6 +100,8 @@ pub fn terminate<F : Write>(mut file: F) -> io::Result<()> {
 impl Replay {
     /// Write the full state of this `Replay` to the given output.
     pub fn init_file<F : Write>(&self, mut file: F) -> io::Result<()> {
+        writeln!(file, "{}", SENTINEL)?;
+
         for word in &self.seed {
             writeln!(file, "{}", word)?;
         }
@@ -126,6 +130,23 @@ impl Replay {
 
         let mut reader = io::BufReader::new(&mut file);
         let mut line = String::new();
+
+        // Ensure it starts with the sentinel. We do this since we rely on a
+        // named temporary file which could be in a location where another
+        // actor could replace it with, eg, a symlink to a location they don't
+        // control but we do. By rejecting a read from a file missing the
+        // sentinel, and not doing any writes if we can't read the file, we
+        // won't risk overwriting another file since the prospective attacker
+        // would need to be able to change the file to start with the sentinel
+        // themselves.
+        //
+        // There are still some possible symlink attacks that can work by
+        // tricking us into reading, but those are non-destructive things like
+        // interfering with a FIFO or Unix socket.
+        reader.read_line(&mut line)?;
+        if SENTINEL != line.trim() {
+            return Ok(ReplayFileStatus::Corrupt);
+        }
 
         let mut seed = [0u32;4];
         for word in &mut seed {
