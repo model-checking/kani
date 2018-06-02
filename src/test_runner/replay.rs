@@ -56,11 +56,12 @@ impl Replay {
 }
 
 /// Result of loading a replay file.
+#[derive(Clone, Debug)]
 pub enum ReplayFileStatus {
     /// The file is valid and represents a currently-in-progress test.
     InProgress(Replay),
     /// The file is valid, but indicates that all testing has completed.
-    Terminated,
+    Terminated(Replay),
     /// The file is not parsable.
     Corrupt,
 }
@@ -83,6 +84,17 @@ fn step_to_char(step: &TestCaseResult) -> char {
     }
 }
 
+/// Append the given step to the given output.
+pub fn append<F : Write>(mut file: F, step: &TestCaseResult)
+                         -> io::Result<()> {
+    write!(file, "{}", step_to_char(step))
+}
+
+/// Append a termination mark to the given output.
+pub fn terminate<F : Write>(mut file: F) -> io::Result<()> {
+    write!(file, ".")
+}
+
 impl Replay {
     /// Write the full state of this `Replay` to the given output.
     pub fn init_file<F : Write>(&self, mut file: F) -> io::Result<()> {
@@ -97,14 +109,6 @@ impl Replay {
 
         file.write_all(&step_data)?;
 
-        Ok(())
-    }
-
-    /// Append the given step to both this `Replay` and the given output.
-    pub fn append<F : Write>(&mut self, mut file: F, step: TestCaseResult)
-                             -> io::Result<()> {
-        write!(file, "{}", step_to_char(&step))?;
-        self.steps.push(step);
         Ok(())
     }
 
@@ -127,9 +131,8 @@ impl Replay {
         for word in &mut seed {
             line.clear();
             reader.read_line(&mut line)?;
-            line.trim();
 
-            match line.parse::<u32>() {
+            match line.trim().parse::<u32>() {
                 Ok(w) => *word = w,
                 Err(_) => return Ok(ReplayFileStatus::Corrupt),
             }
@@ -146,7 +149,8 @@ impl Replay {
                     "failed in other process"))),
                 '!' => steps.push(Err(TestCaseError::reject(
                     "rejected in other process"))),
-                '.' => return Ok(ReplayFileStatus::Terminated),
+                '.' => return Ok(ReplayFileStatus::Terminated(
+                    Replay { seed, steps })),
                 _ => return Ok(ReplayFileStatus::Corrupt),
             }
         }

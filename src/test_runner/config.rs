@@ -33,9 +33,9 @@ const MAX_LOCAL_REJECTS: &str = "PROPTEST_MAX_LOCAL_REJECTS";
 const MAX_GLOBAL_REJECTS: &str = "PROPTEST_MAX_GLOBAL_REJECTS";
 #[cfg(feature = "std")]
 const MAX_FLAT_MAP_REGENS: &str = "PROPTEST_MAX_FLAT_MAP_REGENS";
-#[cfg(feature = "std")]
+#[cfg(feature = "fork")]
 const FORK: &str = "PROPTEST_FORK";
-#[cfg(feature = "std")]
+#[cfg(feature = "timeout")]
 const TIMEOUT: &str = "PROPTEST_TIMEOUT";
 
 #[cfg(feature = "std")]
@@ -171,6 +171,9 @@ pub struct Config {
     ///
     /// This must be set if `fork` is `true`. Otherwise, it is unused. It is
     /// automatically set by `proptest!`.
+    ///
+    /// This must include the crate name at the beginning, as produced by
+    /// `module_path!()`.
     pub test_name: Option<&'static str>,
 
     /// If true, tests are run in a subprocess.

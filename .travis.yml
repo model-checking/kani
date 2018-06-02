@@ -17,6 +17,7 @@ script:
   - |
       travis-cargo build &&
       travis-cargo test &&
+      travis-cargo --only stable build -- --no-default-features --features fork &&
       travis-cargo --only nightly build -- --no-default-features --features "alloc nightly"
 
 cache: cargo

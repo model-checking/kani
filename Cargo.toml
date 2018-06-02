@@ -48,7 +48,7 @@ fork = ["std", "rusty-fork", "tempfile"]
 # Enables use of the "timeout" feature.
 #
 # Requires the "fork" feature.
-timeout = ["fork", "wait-timeout"]
+timeout = ["fork", "rusty-fork/timeout"]
 
 [dependencies]
 bitflags = "1.0.1"
@@ -83,16 +83,12 @@ default-features = false
 features = ["alloc"]
 
 [dependencies.rusty-fork]
-version = "0.1"
+version = "0.2"
 optional = true
 default-features = false
 
 [dependencies.tempfile]
 version = "3.0"
-optional = true
-
-[dependencies.wait-timeout]
-version = "0.1"
 optional = true
 
 [dev-dependencies]
