@@ -16,6 +16,14 @@
 See also [the documentation](README.md#forking-and-timeouts) for these
 features.
 
+### Bug Fixes
+
+- Fix that failure persistence file would be written to the incorrect location
+  in projects using workspaces. See
+  [#24](https://github.com/AltSysrq/proptest/issues/24) for more details and
+  instructions on how to migrate any persistence files that had been written to
+  the wrong location.
+
 ### Nightly-only breakage
 
 - Support for the `hashmap_core` crate is removed pending
