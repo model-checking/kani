@@ -24,6 +24,9 @@ features.
   instructions on how to migrate any persistence files that had been written to
   the wrong location.
 
+- Fix a case where `any::<ArgsOs>()` or `any::<VarsOs>()` could panic on
+  Windows.
+
 ### Nightly-only breakage
 
 - Support for the `hashmap_core` crate is removed pending
