@@ -479,17 +479,13 @@ proptest! {
         .. ProptestConfig::default()
     })]
 
-# /*
     #[test]
-# */
     fn test_fib(n in prop::num::u64::ANY) {
         // For large n, this will variously run for an extremely long time,
         // overflow the stack, or panic due to integer overflow.
         assert!(fib(n) >= n);
     }
 }
-#
-# fn main() { }
 ```
 
 The exact value of the test failure depends heavily on the performance of
