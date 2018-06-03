@@ -193,6 +193,8 @@ where
     result
 }
 
+type TestRunResult<S> = Result<(), TestError<<S as Strategy>::Value>>;
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -251,10 +253,10 @@ impl TestRunner {
     /// persisted before returning failure.
     ///
     /// Returns success or failure indicating why the test as a whole failed.
-    pub fn run<S: Strategy,
-               F: Fn(ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, test: F)
-         -> Result<(), TestError<ValueFor<S>>>
+    pub fn run<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(ValueFor<S>) -> TestCaseResult,
     {
         if self.config.fork() {
             self.run_in_fork(strategy, test)
@@ -264,15 +266,19 @@ impl TestRunner {
     }
 
     #[cfg(not(feature = "fork"))]
-    fn run_in_fork<S: Strategy, F: Fn(ValueFor<S>) -> TestCaseResult>
-        (&mut self, _: &S, _: F) -> Result<(), TestError<ValueFor<S>>>
+    fn run_in_fork<S, F>(&mut self, _: &S, _: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(ValueFor<S>) -> TestCaseResult,
     {
         unreachable!()
     }
 
     #[cfg(feature = "fork")]
-    fn run_in_fork<S: Strategy, F: Fn(ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, test: F) -> Result<(), TestError<ValueFor<S>>>
+    fn run_in_fork<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(ValueFor<S>) -> TestCaseResult,
     {
         let mut test = Some(test);
 
@@ -356,22 +362,24 @@ impl TestRunner {
             replay.steps.into_iter(), ForkOutput::empty())
     }
 
-    fn run_in_process<S: Strategy,
-                      F: Fn(ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, test: F)
-         -> Result<(), TestError<ValueFor<S>>>
+    fn run_in_process<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(ValueFor<S>) -> TestCaseResult,
     {
         let (replay_steps, fork_output) = init_replay(&mut self.rng);
         self.run_in_process_with_replay(
             strategy, test, replay_steps.into_iter(), fork_output)
     }
 
-    fn run_in_process_with_replay<S: Strategy,
-                                  F: Fn(ValueFor<S>) -> TestCaseResult,
-                                  R: Iterator<Item = TestCaseResult>>
+    fn run_in_process_with_replay<S, F, R>
         (&mut self, strategy: &S, test: F, mut replay: R,
          mut fork_output: ForkOutput)
-         -> Result<(), TestError<ValueFor<S>>>
+        -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(ValueFor<S>) -> TestCaseResult,
+        R: Iterator<Item = TestCaseResult>,
     {
         let old_rng = self.rng.clone();
 
@@ -417,10 +425,14 @@ impl TestRunner {
         Ok(())
     }
 
-    fn gen_and_run_case<S: Strategy, F: Fn(ValueFor<S>) -> TestCaseResult,
-                        R: Iterator<Item = TestCaseResult>>
-        (&mut self, strategy: &S, f: &F, replay: &mut R, fork_output: &mut ForkOutput)
-        -> Result<(), TestError<ValueFor<S>>>
+    fn gen_and_run_case<S, F, R>
+        (&mut self, strategy: &S, f: &F,
+         replay: &mut R, fork_output: &mut ForkOutput)
+        -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(ValueFor<S>) -> TestCaseResult,
+        R: Iterator<Item = TestCaseResult>,
     {
         let case =
             unwrap_or!(strategy.new_value(self), msg =>
@@ -441,8 +453,11 @@ impl TestRunner {
     /// terminate the run if it runs for longer than `timeout`. However, if the
     /// test function returns but took longer than `timeout`, the test case
     /// will fail.
-    pub fn run_one<V: ValueTree, F: Fn(V::Value) -> TestCaseResult>
-        (&mut self, case: V, test: F) -> Result<bool, TestError<V::Value>>
+    pub fn run_one<V, F>(&mut self, case: V, test: F)
+        -> Result<bool, TestError<V::Value>>
+    where
+        V: ValueTree,
+        F: Fn(V::Value) -> TestCaseResult
     {
         self.run_one_with_replay(
             case, test,
@@ -452,7 +467,7 @@ impl TestRunner {
 
     fn run_one_with_replay<V, F, R>
         (&mut self, mut case: V, test: F, replay: &mut R, fork_output: &mut ForkOutput)
-         -> Result<bool, TestError<V::Value>>
+        -> Result<bool, TestError<V::Value>>
     where
         V: ValueTree,
         F: Fn(V::Value) -> TestCaseResult,
@@ -479,7 +494,7 @@ impl TestRunner {
     fn shrink<V, F, R>
         (&mut self, case: &mut V, test: F, replay: &mut R,
          fork_output: &mut ForkOutput)
-         -> Option<Reason>
+        -> Option<Reason>
     where
         V: ValueTree,
         F: Fn(V::Value) -> TestCaseResult,
