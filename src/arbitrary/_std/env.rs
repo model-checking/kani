@@ -12,7 +12,6 @@
 use std::env::*;
 use std::iter::once;
 use std::ffi::OsString;
-use std_facade::Vec;
 
 use strategy::*;
 use strategy::statics::static_map;
