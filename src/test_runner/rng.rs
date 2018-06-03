@@ -44,11 +44,6 @@ impl TestRng {
         ])
     }
 
-    /// Construct a TestRng from a given seed.
-    pub(crate) fn from_seed(seed: Seed) -> Self {
-        Self { rng: XorShiftRng::from_seed(seed) }
-    }
-
     /// Construct a TestRng by the perturbed randomized seed
     /// from an existing TestRng.
     pub(crate) fn gen_rng(&mut self) -> Self {
@@ -69,7 +64,7 @@ impl TestRng {
     }
 
     /// Randomize a perturbed randomized seed from the given TestRng.
-    fn new_rng_seed(&mut self) -> Seed {
+    pub(crate) fn new_rng_seed(&mut self) -> Seed {
         let mut seed = self.rng.gen::<Seed>();
         
         // Directly using XorShiftRng::from_seed() at this point would result
@@ -83,5 +78,10 @@ impl TestRng {
         }
 
         seed
+    }
+
+    /// Construct a TestRng from a given seed.
+    fn from_seed(seed: Seed) -> Self {
+        Self { rng: XorShiftRng::from_seed(seed) }
     }
 }

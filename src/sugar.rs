@@ -80,8 +80,10 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut runner = $crate::test_runner::TestRunner::new(
-                    $config.clone_with_source_file(file!()));
+                let mut config = $config.clone_with_source_file(file!());
+                config.test_name = Some(
+                    concat!(module_path!(), "::", stringify!($test_name)));
+                let mut runner = $crate::test_runner::TestRunner::new(config);
                 let names = proptest_helper!(@_WRAPSTR ($($parm),*));
                 match runner.run(
                     &$crate::strategy::Strategy::prop_map(
@@ -1006,6 +1008,18 @@ mod test {
             J(9i32),
             J(10i32),
         ]));
+    }
+
+    proptest! {
+        #![proptest_config(::test_runner::Config {
+            fork: true,
+            .. ::test_runner::Config::default()
+        })]
+
+        // Ensure that the macro sets the test name properly. If it doesn't,
+        // this test will fail to run correctly.
+        #[test]
+        fn test_name_set_correctly_for_fork(_ in 0u32..1u32) { }
     }
 }
 

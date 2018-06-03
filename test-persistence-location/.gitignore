@@ -1,0 +1,4 @@
+# Ignore any regressions files that get emitted since they're essentially test
+# output here.
+proptest-regressions
+*.txt

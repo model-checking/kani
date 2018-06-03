@@ -1,4 +1,33 @@
-## Unreleased
+## 0.7.1
+
+### New Additions
+
+- It is now possible to run test cases in sub-processes. This allows using
+  proptest to test functions which may cause the test process to terminate
+  abruptly, such as by calling `abort()` or even suffering a segmentation
+  fault. This requires the "fork" feature, enabled by default.
+
+- Added support for setting a timeout which applies on a per-test-case (i.e.,
+  single input rather than the whole test) basis. This allows using proptest to
+  find inputs which cause code to get stuck in infinite loops or exhibit other
+  pathological performance behaviour. This requires the "timeout" feature (and
+  transitively, the "fork" feature), enabled by default.
+
+See also [the documentation](README.md#forking-and-timeouts) for these
+features.
+
+### Bug Fixes
+
+- Fix that failure persistence file would be written to the incorrect location
+  in projects using workspaces. See
+  [#24](https://github.com/AltSysrq/proptest/issues/24) for more details and
+  instructions on how to migrate any persistence files that had been written to
+  the wrong location.
+
+- Fix a case where `any::<ArgsOs>()` or `any::<VarsOs>()` could panic on
+  Windows.
+
+### Nightly-only breakage
 
 - Support for the `hashmap_core` crate is removed pending
   https://github.com/Amanieu/hashmap_core/issues/3.
@@ -12,17 +41,20 @@
   is now a trait, and the prior file-based enum which fulfilled
   that purpose is now called `FileFailurePersistence` and implements
   the generic trait. The default behavior has not changed.
+
 - Reflecting the change to persistence, `Config.failure_persistence`
   is now of type `Option<Box<FailurePersistence>>`.
+
 - The `source_file` used as an optional reference point to the location of the
-  calling test is now tracked on the `Config` struct rather than the `TestRunner`.
+  calling test is now tracked on the `Config` struct rather than the
+  `TestRunner`.
 
 ### New Additions
 
-- Experimental support on nightly for working in `#![no_std]` environments has been added.
-  To use it, one must disable the default-features for proptest and use the
-  new "alloc" and "nightly" features. Currently access to a heap allocator is
-  still required.
+- Experimental support on nightly for working in `#![no_std]` environments has
+  been added. To use it, one must disable the default-features for proptest and
+  use the new "alloc" and "nightly" features. Currently access to a heap
+  allocator is still required.
 
 ## 0.6.0
 

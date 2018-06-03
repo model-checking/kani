@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 Jason Lingle
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -93,7 +93,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! proptest = "0.6.0"
+//! proptest = "0.7.1"
 //! ```
 //!
 //! and at the top of `main.rs` or `lib.rs`:
@@ -453,6 +453,84 @@
 //! produce failing case that was persisted, the seed may or may not produce
 //! the problematic value, but nonetheless produces a valid value. Due to these
 //! advantages, this is the approach Proptest uses.
+//!
+//! ## Forking and Timeouts
+//!
+//! By default, proptest tests are run in-process and are allowed to run for
+//! however long it takes them. This is resource-efficient and produces the
+//! nicest test output, and for many use cases is sufficient. However, problems
+//! like overflowing the stack, aborting the process, or getting stuck in an
+//! infinite will simply break the entire test process and prevent proptest
+//! from determining a minimal reproducible case.
+//!
+//! As of version 0.7.1, proptest has optional "fork" and "timeout" features
+//! (both enabled by default), which make it possible to run your test cases in
+//! a subprocess and limit how long they may run. This is generally slower,
+//! may make using a debugger more difficult, and makes test output harder to
+//! interpret, but allows proptest to find and minimise test cases for these
+//! situations as well.
+//!
+//! To enable these features, simply set the `fork` and/or `timeout` fields on
+//! the `Config`. (Setting `timeout` implies `fork`.)
+//!
+//! Here is a simple example of using both features:
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! // The worst possible way to calculate Fibonacci numbers
+//! fn fib(n: u64) -> u64 {
+//!     if n <= 1 {
+//!         n
+//!     } else {
+//!         fib(n - 1) + fib(n - 2)
+//!     }
+//! }
+//!
+//! proptest! {
+//!     #![proptest_config(ProptestConfig {
+//!         // Setting both fork and timeout is redundant since timeout implies
+//!         // fork, but both are shown for clarity.
+//!         fork: true,
+//!         timeout: 1000,
+//!         .. ProptestConfig::default()
+//!     })]
+//!
+//! # /* NOREADME
+//!     #[test]
+//! # NOREADME */
+//!     fn test_fib(n in prop::num::u64::ANY) {
+//!         // For large n, this will variously run for an extremely long time,
+//!         // overflow the stack, or panic due to integer overflow.
+//!         assert!(fib(n) >= n);
+//!     }
+//! }
+//! # //NOREADME
+//! # fn main() { } //NOREADME
+//! ```
+//!
+//! The exact value of the test failure depends heavily on the performance of
+//! the host system, the rust version, and compiler flags, but on the system
+//! where it was originally tested, it found that the maximum value that
+//! `fib()` could handle was 39, despite having dozens of processes dump core
+//! due to stack overflow or time out along the way.
+//!
+//! If you just want to run tests in subprocesses or with a timeout every now
+//! and then, you can do that by setting the `PROPTEST_FORK` or
+//! `PROPTEST_TIMEOUT` environment variables to alter the default
+//! configuration. For example, on Unix,
+//!
+//! ```sh
+//! # Run all the proptest tests in subprocesses with no timeout.
+//! # Individual tests can still opt out by setting `fork: false` in their
+//! # own configuration.
+//! PROPTEST_FORK=true cargo test
+//! # Run all the proptest tests in subprocesses with a 1 second timeout.
+//! # Tests can still opt out or use a different timeout by setting `timeout: 0`
+//! # or another timeout in their own configuration.
+//! PROPTEST_TIMEOUT=1000 cargo test
+//! ```
 //!
 //! <!-- ENDREADME -->
 //!
@@ -1119,6 +1197,93 @@
 //! body. The actual function has a return type of `impl Strategy<Value = T>`
 //! where `T` is the declared return type.
 //!
+//! ### Generating Enums
+//!
+//! The syntax sugar for defining strategies for `enum`s is currently somewhat
+//! limited. Creating such strategies with `prop_compose!` is possible but
+//! generally is not very readable, so in most cases defining the function by
+//! hand is preferable.
+//!
+//! The core building block is the [`prop_oneof!`](macro.prop_oneof.html)
+//! macro, in which you list one case for each case in your `enum`. For `enum`s
+//! which have no data, the strategy for each case is
+//! `Just(YourEnum::TheCase)`. Enum cases with data generally require putting
+//! the data in a tuple and then using `prop_map` to map it into the enum case.
+//!
+//! Here is a simple example:
+//!
+//! ```rust,no_run
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! #[derive(Debug, Clone)]
+//! enum MyEnum {
+//!     SimpleCase,
+//!     CaseWithSingleDatum(u32),
+//!     CaseWithMultipleData(u32, String),
+//! }
+//!
+//! fn my_enum_strategy() -> BoxedStrategy<MyEnum> {
+//!   prop_oneof![
+//!     // For cases without data, `Just` is all you need
+//!     Just(MyEnum::SimpleCase),
+//!
+//!     // For cases with data, write a strategy for the interior data, then
+//!     // map into the actual enum case.
+//!     prop::num::u32::ANY.prop_map(MyEnum::CaseWithSingleDatum),
+//!
+//!     (prop::num::u32::ANY, ".*").prop_map(
+//!       |(a, b)| MyEnum::CaseWithMultipleData(a, b)),
+//!   ].boxed()
+//! }
+//! #
+//! # fn main() { }
+//! ```
+//!
+//! In general, it is best to list the enum cases in order from "simplest" to
+//! "most complex", since shrinking will shrink down toward items earlier in
+//! the list.
+//!
+//! For particularly complex enum cases, it can be helpful to extract the
+//! strategy for that case to a separate strategy. Here,
+//! [`prop_compose!`](macro.prop_compose.html) can be of use.
+//!
+//! ```rust,no_run
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! #[derive(Debug, Clone)]
+//! enum MyComplexEnum {
+//!     SimpleCase,
+//!     AnotherSimpleCase,
+//!     ComplexCase {
+//!         product_code: String,
+//!         id: u64,
+//!         chapter: String,
+//!     },
+//! }
+//!
+//! prop_compose! {
+//!   fn my_complex_enum_complex_case()(
+//!       product_code in "[0-9A-Z]{10,20}",
+//!       id in 1u64..10000u64,
+//!       chapter in "X{0,2}(V?I{1,3}|IV|IX)",
+//!   ) -> MyComplexEnum {
+//!       MyComplexEnum::ComplexCase { product_code, id, chapter }
+//!   }
+//! }
+//!
+//! fn my_enum_strategy() -> BoxedStrategy<MyComplexEnum> {
+//!   prop_oneof![
+//!     Just(MyComplexEnum::SimpleCase),
+//!     Just(MyComplexEnum::AnotherSimpleCase),
+//!     my_complex_enum_complex_case(),
+//!   ].boxed()
+//! }
+//! #
+//! # fn main() { }
+//! ```
+//!
 //! ### Filtering
 //!
 //! Sometimes, you have a case where your input values have some sort of
@@ -1550,6 +1715,13 @@ extern crate quick_error;
 #[cfg(feature = "std")]
 extern crate regex_syntax;
 extern crate rand;
+
+#[cfg(feature = "fork")]
+#[macro_use]
+extern crate rusty_fork;
+
+#[cfg(feature = "fork")]
+extern crate tempfile;
 
 #[cfg(test)]
 extern crate regex;

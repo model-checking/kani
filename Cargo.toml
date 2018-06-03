@@ -1,6 +1,6 @@
 [package]
 name = "proptest"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Jason Lingle"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
@@ -23,7 +23,7 @@ service = "github"
 
 [features]
 
-default = ["std"]
+default = ["std", "fork", "timeout"]
 
 # Enables unstable features of Rust.
 unstable = ["rand/i128_support"]
@@ -40,6 +40,16 @@ std = ["rand/std", "bit-set/std", "byteorder/std",
 # For use in no_std environments with access to an allocator
 #alloc = ["hashmap_core"]
 alloc = []
+
+# Enables use of the "fork" feature.
+#
+# Requires std.
+fork = ["std", "rusty-fork", "tempfile"]
+
+# Enables use of the "timeout" feature.
+#
+# Requires the "fork" feature.
+timeout = ["fork", "rusty-fork/timeout"]
 
 [dependencies]
 bitflags = "1.0.1"
@@ -76,6 +86,15 @@ features = ["alloc", "i128_support"]
 [dependencies.byteorder]
 version = "1.2.3"
 default-features = false
+
+[dependencies.rusty-fork]
+version = "0.2"
+optional = true
+default-features = false
+
+[dependencies.tempfile]
+version = "3.0"
+optional = true
 
 [dev-dependencies]
 regex = "0.2.5"

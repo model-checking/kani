@@ -351,12 +351,14 @@ impl FileFailurePersistence {
     /// Given the nominal source path, determine the location of the failure
     /// persistence file, if any.
     pub(super) fn resolve(&self, source: Option<&Path>) -> Option<PathBuf> {
+        let source = source.and_then(absolutize_source_file);
+
         match *self {
             Off => None,
 
             SourceParallel(sibling) => match source {
                 Some(source_path) => {
-                    let mut dir = source_path.to_owned();
+                    let mut dir = Cow::into_owned(source_path.clone());
                     let mut found = false;
                     while dir.pop() {
                         if dir.join("lib.rs").is_file() || dir.join("main.rs").is_file() {
@@ -370,7 +372,7 @@ impl FileFailurePersistence {
                             "proptest: FileFailurePersistence::SourceParallel set, \
                              but failed to find lib.rs or main.rs"
                         );
-                        WithSource(sibling).resolve(source)
+                        WithSource(sibling).resolve(Some(&*source_path))
                     } else {
                         let suffix = source_path
                             .strip_prefix(&dir)
@@ -398,7 +400,7 @@ impl FileFailurePersistence {
 
             WithSource(extension) => match source {
                 Some(source_path) => {
-                    let mut result = source_path.to_owned();
+                    let mut result = Cow::into_owned(source_path);
                     result.set_extension(extension);
                     Some(result)
                 }

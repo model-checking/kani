@@ -12,6 +12,7 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
+/*
 #[cfg(feature = "std")]
 use std::panic::{self, AssertUnwindSafe};
 use core::sync::atomic::AtomicUsize;
@@ -19,18 +20,25 @@ use core::sync::atomic::Ordering::SeqCst;
 use std_facade::{fmt, Box, Arc, BTreeMap, String, Vec};
 
 use strategy::*;
+*/
 
 mod rng;
 mod failure_persistence;
 mod config;
 mod reason;
 mod errors;
+#[cfg(feature = "fork")]
+mod replay;
+mod runner;
 
 pub use self::rng::*;
 pub use self::failure_persistence::*;
 pub use self::config::*;
 pub use self::reason::*;
 pub use self::errors::*;
+
+/*
+<<<<<<< HEAD
 
 type RejectionDetail = BTreeMap<Reason, u32>;
 
@@ -451,3 +459,7 @@ mod test {
         assert_ne!(from_1, from_2);
     }
 }
+=======
+*/
+pub use self::runner::*;
+//>>>>>>> 9a8c3033d4fcf88e105dbce8a717f988b044334e
