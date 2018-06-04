@@ -15,7 +15,7 @@
 // Imports:
 //==============================================================================
 
-use core::ops::{Range, Bound};
+use core::ops::{RangeInclusive, Bound};
 use core::hash::Hash;
 use std_facade::{
     fmt, Box, Rc, Arc, Vec, vec, BTreeMap, BTreeSet, btree_map, btree_set,
@@ -54,8 +54,8 @@ macro_rules! impl_1 {
     };
 }
 
-arbitrary!(SizeRange, MapInto<StrategyFor<Range<usize>>, Self>;
-    any::<Range<usize>>().prop_map_into()
+arbitrary!(SizeRange, MapInto<StrategyFor<RangeInclusive<usize>>, Self>;
+    any::<RangeInclusive<usize>>().prop_map_into()
 );
 
 //==============================================================================

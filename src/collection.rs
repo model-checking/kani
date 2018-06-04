@@ -11,7 +11,7 @@
 
 use core::cmp::Ord;
 use core::hash::Hash;
-use core::ops::{Add, Range, RangeTo};
+use core::ops::{Add, Range, RangeTo, RangeInclusive, RangeToInclusive};
 
 use std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList};
 
@@ -20,7 +20,7 @@ use std_facade::{HashMap, HashSet};
 
 use bit_set::BitSet;
 
-use num::sample_uniform;
+use num::sample_uniform_incl;
 use strategy::*;
 use tuple::TupleValueTree;
 use test_runner::*;
@@ -35,15 +35,15 @@ pub fn size_range<X: Into<SizeRange>>(from: X) -> SizeRange {
 }
 
 impl Default for SizeRange {
-    /// Constructs a `SizeBounds` that will ranges between 0 and 100 elements.
+    /// Constructs a `SizeRange` equivalent to `size_range(0..100)`.
     fn default() -> Self {
         size_range(0..100)
     }
 }
 
 impl SizeRange {
-    /// Creates a `SizeBounds` from a `Range<usize>`.
-    pub fn new(range: Range<usize>) -> Self {
+    /// Creates a `SizeBounds` from a `RangeInclusive<usize>`.
+    pub fn new(range: RangeInclusive<usize>) -> Self {
         SizeRange(range)
     }
 
@@ -64,62 +64,93 @@ impl SizeRange {
     pub fn lift<X: Default>(self) -> product_type![Self, X] {
         self.with(Default::default())
     }
+
+    /// Extract the ends `[low, high]` of a `SizeRange`.
+    pub(crate) fn extract(&self) -> (usize, usize) {
+        let start = self.0.clone().next().unwrap();
+        let end = self.0.clone().next_back().unwrap();
+        (start, end)
+    }
+
+    pub(crate) fn start(&self) -> usize {
+        self.0.clone().next().unwrap()
+    }
 }
 
 /// Given `(low: usize, high: usize)`,
 /// then a size range of `[low..high)` is the result.
 impl From<(usize, usize)> for SizeRange {
-    fn from(x: (usize, usize)) -> Self {
-        (x.0..x.1).into()
-    }
+    fn from((low, high): (usize, usize)) -> Self { size_range(low..high) }
 }
 
-/// Given `exact`, then a size range of `[exact..exact + 1)` is the result.
+/// Given `exact`, then a size range of `[exact, exact]` is the result.
 impl From<usize> for SizeRange {
-    fn from(exact: usize) -> Self { size_range(exact..exact + 1) }
+    fn from(exact: usize) -> Self { size_range(exact..=exact) }
 }
 
-/// Given `..high`, then a size range `[0..high)` is the result.
+/// Given `..high`, then a size range `[0, high)` is the result.
 impl From<RangeTo<usize>> for SizeRange {
     fn from(high: RangeTo<usize>) -> Self { size_range(0..high.end) }
 }
 
-/// Given `low..high`, then a size range `[low..high)` is the result.
+/// Given `low .. high`, then a size range `[low, high)` is the result.
 impl From<Range<usize>> for SizeRange {
-    fn from(x: Range<usize>) -> Self { SizeRange(x) }
+    fn from(r: Range<usize>) -> Self { size_range(r.start..=r.end - 1) }
 }
 
+/// Given `low ..= high`, then a size range `[low, high]` is the result.
+impl From<RangeInclusive<usize>> for SizeRange {
+    fn from(r: RangeInclusive<usize>) -> Self { Self::new(r) }
+}
+
+/// Given `..=high`, then a size range `[0, high]` is the result.
+impl From<RangeToInclusive<usize>> for SizeRange {
+    fn from(high: RangeToInclusive<usize>) -> Self { size_range(0..=high.end) }
+}
+
+/// Given a size range `[low, high]`, then a range`low..(high + 1)` is returned.
+/// This will panic if `high == usize::MAX`.
 impl From<SizeRange> for Range<usize> {
-    fn from(x: SizeRange) -> Self { x.0 }
+    fn from(sr: SizeRange) -> Self {        
+        let (start, end) = sr.extract();
+        start..end + 1
+    }
+}
+
+/// Given a size range `[low, high]`, then a range `low..=high` is returned.
+impl From<SizeRange> for RangeInclusive<usize> {
+    fn from(sr: SizeRange) -> Self { sr.0 }
 }
 
 #[cfg(feature = "frunk")]
 impl Generic for SizeRange {
-    type Repr = Range<usize>;
+    type Repr = RangeInclusive<usize>;
 
-    /// Converts the `SizeBounds` into `Range<usize>`.
+    /// Converts the `SizeRange` into `Range<usize>`.
     fn into(self) -> Self::Repr { self.0 }
 
-    /// Converts `Range<usize>` into `SizeBounds`.
+    /// Converts `RangeInclusive<usize>` into `SizeRange`.
     fn from(r: Self::Repr) -> Self { r.into() }
 }
 
 /// Adds `usize` to both start and end of the bounds.
+///
+/// Panics if adding to either end overflows `usize`.
 impl Add<usize> for SizeRange {
     type Output = SizeRange;
 
     fn add(self, rhs: usize) -> Self::Output {
-        let Range { start, end } = self.0;
-        size_range((start + rhs)..(end + rhs))
+        let (start, end) = self.extract();
+        size_range((start + rhs)..=(end + rhs))
     }
 }
 
 /// The minimum and maximum range/bounds on the size of a collection.
-/// The interval must form a subset of `[0, std::usize::MAX)`.
+/// The interval must form a subset of `[0, std::usize::MAX]`.
 ///
 /// The `Default` is `0..100`.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SizeRange(Range<usize>);
+pub struct SizeRange(RangeInclusive<usize>);
 
 //==============================================================================
 // Strategies
@@ -275,12 +306,11 @@ where
     ValueFor<T>: Hash + Eq,
     S: Into<SizeRange>,
 {
-    let size = size.into().0;
-    let min_size = size.start;
+    let size = size.into();
     HashSetStrategy(statics::Filter::new(
-        statics::Map::new(vec(element, size), VecToHashSet),
+        statics::Map::new(vec(element, size.clone()), VecToHashSet),
         "HashSet minimum size".into(),
-        MinSize(min_size)))
+        MinSize(size.start())))
 }
 
 mapfn! {
@@ -323,13 +353,11 @@ where
     ValueFor<T>: Ord,
     S: Into<SizeRange>
 {
-    let size = size.into().0;
-    let min_size = size.start;
-
+    let size = size.into();
     BTreeSetStrategy(statics::Filter::new(
-        statics::Map::new(vec(element, size), VecToBTreeSet),
+        statics::Map::new(vec(element, size.clone()), VecToBTreeSet),
         "BTreeSet minimum size".into(),
-        MinSize(min_size)))
+        MinSize(size.start())))
 }
 
 mapfn! {
@@ -383,12 +411,11 @@ where
     ValueFor<K>: Hash + Eq,
     S: Into<SizeRange>,
 {
-    let size = size.into().0;
-    let min_size = size.start;
+    let size = size.into();
     HashMapStrategy(statics::Filter::new(
-        statics::Map::new(vec((key, value), size), VecToHashMap),
+        statics::Map::new(vec((key, value), size.clone()), VecToHashMap),
         "HashMap minimum size".into(),
-        MinSize(min_size)))
+        MinSize(size.start())))
 }
 
 mapfn! {
@@ -438,12 +465,11 @@ where
     ValueFor<K>: Ord,
     S: Into<SizeRange>,
 {
-    let size = size.into().0;
-    let min_size = size.start;
+    let size = size.into();
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
         "BTreeMap minimum size".into(),
-        MinSize(min_size)))
+        MinSize(size.start())))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -467,9 +493,8 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     type Value = Vec<ValueFor<T>>;
 
     fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let Range { start, end } = self.size.0;
-
-        let max_size = sample_uniform(runner, start..end);
+        let (start, end) = self.size.extract();
+        let max_size = sample_uniform_incl(runner, start, end);
         let mut elements = Vec::with_capacity(max_size);
         while elements.len() < max_size {
             elements.push(self.element.new_value(runner)?);

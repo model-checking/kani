@@ -18,6 +18,7 @@ use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
 
+// FIXME(2018-06-04): use 0.0..=1.0 instead. Needs 1.27.
 arbitrary!(Probability, MapInto<Range<f64>, Self>;
     (0.0..1.0).prop_map_into()
 );

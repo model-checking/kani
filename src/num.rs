@@ -69,12 +69,10 @@ macro_rules! numeric_api {
             type Value = $typ;
 
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                // TODO `rand` has no way to express the inclusive-end range we
-                // need here.
                 Ok(BinarySearch::new_clamped(
                     self.start,
-                    $crate::num::sample_uniform_incl(runner,
-                        self.start, ::core::$typ::MAX),
+                    $crate::num::sample_uniform_incl(
+                        runner, self.start, ::core::$typ::MAX),
                     ::core::$typ::MAX))
             }
         }
@@ -86,14 +84,47 @@ macro_rules! numeric_api {
             fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
-                    $crate::num::sample_uniform(runner, ::core::$typ::MIN..self.end),
+                    $crate::num::sample_uniform(
+                        runner, ::core::$typ::MIN..self.end),
                     self.end))
             }
         }
 
-        //FIXME
-        //impl Strategy for ::core::ops::RangeToInclusive<$typ>
+        impl Strategy for ::core::ops::RangeToInclusive<$typ> {
+            type Tree = BinarySearch;
+            type Value = $typ;
+
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                Ok(BinarySearch::new_clamped(
+                    ::core::$typ::MIN,
+                    $crate::num::sample_uniform_incl(
+                        runner, ::core::$typ::MIN, self.end
+                    ),
+                    self.end
+                ))
+            }
+        }
     }
+}
+
+macro_rules! num_incl_api {
+    ($typ:ident, $epsilon:expr) => {
+        impl Strategy for ::core::ops::RangeInclusive<$typ> {
+            type Tree = BinarySearch;
+            type Value = $typ;
+
+            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                let start = self.clone().next().unwrap();
+                let end = self.clone().next_back().unwrap();
+
+                Ok(BinarySearch::new_clamped(
+                    start,
+                    $crate::num::sample_uniform_incl(runner, start, end),
+                    end - $epsilon
+                ))
+            }
+        }
+    };
 }
 
 macro_rules! signed_integer_bin_search {
@@ -194,6 +225,7 @@ macro_rules! signed_integer_bin_search {
             }
 
             numeric_api!($typ, 1);
+            num_incl_api!($typ, 1);
         }
     }
 }
@@ -278,6 +310,7 @@ macro_rules! unsigned_integer_bin_search {
             }
 
             numeric_api!($typ, 1);
+            num_incl_api!($typ, 1);
         }
     }
 }
@@ -806,6 +839,40 @@ mod test {
     use test_runner::*;
 
     use super::*;
+
+    #[test]
+    fn u8_inclusive_end_included() {
+        let mut runner = TestRunner::default();
+        let mut ok = 0;
+        for _ in 0..20 {
+            let tree = (0..=1).new_value(&mut runner).unwrap();
+            let test = runner.run_one(tree, |v| {
+                prop_assert_eq!(v, 1);
+                Ok(())
+            });
+            if test.is_ok() {
+                ok += 1;
+            }
+        }
+        assert!(ok > 1, "inclusive end not included.");
+    }
+
+    #[test]
+    fn u8_inclusive_to_end_included() {
+        let mut runner = TestRunner::default();
+        let mut ok = 0;
+        for _ in 0..20 {
+            let tree = (..=1u8).new_value(&mut runner).unwrap();
+            let test = runner.run_one(tree, |v| {
+                prop_assert_eq!(v, 1);
+                Ok(())
+            });
+            if test.is_ok() {
+                ok += 1;
+            }
+        }
+        assert!(ok > 1, "inclusive end not included.");
+    }
 
     #[test]
     fn i8_binary_search_always_converges() {

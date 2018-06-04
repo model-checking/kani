@@ -71,6 +71,7 @@ mod test {
         escape_default => EscapeDefault,
         escape_unicode => EscapeUnicode,
         parse_char_error => ParseCharError,
+        decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
         decode_utf16_error => DecodeUtf16Error
     );
 
@@ -78,7 +79,6 @@ mod test {
     no_panic_test!(
         to_lowercase => ToLowercase,
         to_uppercase => ToUppercase,
-        decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
         char_try_from_error => CharTryFromError
     );
 }

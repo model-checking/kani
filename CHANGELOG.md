@@ -6,6 +6,21 @@
 
 - More implementations of `Arbitrary` are supported for `alloc` + `no_std` users.
 
+- `size_range` now accepts inclusive ranges of form `low..=high` and `..=high`.
+  Thus, you can construct a `vec` strategy as: `vec(elt_strategy, low..=high)`
+  and `vec(elt_strategy, ..=high)`. This also applies to other functions
+  accepting `Into<SizeRange>`.
+
+- `..= high` is now a valid strategy. Please note that `..= 1` will include
+  numbers lower than `0`. If you want the range `0..=1`, then you have to write
+  `..=1u<size>` where `<size>` is one of `u8`, `u16`, `u32`, `u64`, `usize`.
+
+- `low..=high` is also a valid strategy except for `f32` and `f64` which will
+  soon be supported in newer editions (1.27+) of Rust.
+
+- `Arbitrary` is implemented for `RangeInclusive<Idx>`, `RangeToInclusive`,
+  and `DecodeUtf16` on stable.
+
 ### Minor changes
 
 - The Bernoulli distribution is now used for `proptest::bool::weighted`.
@@ -54,6 +69,9 @@
   Therefore, `-> BoxedStrategy<T>` is no longer the correct type.
   The new return type is `-> impl Strategy<Value = T>`.
   If you want the old behaviour, you can use `.boxed()` yourself.
+
+- `Arbitrary` for `SizeRange` changed its associated type to use `RangeInclusive`.
+  Same applies for `CString`.
 
 ### Nightly-only breakage
 

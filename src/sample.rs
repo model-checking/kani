@@ -52,6 +52,8 @@ where
 {
     let values = values.into();
     let len = values.len();
+    // FIXME(2018-06-04): .extract() from the SizeRange instead?
+    // FIXME(2018-06-04): Should bitset::sampled accept Into<SizeRange> instead of Range?
     let size: Range<usize> = size.into().into();
 
     assert!(size.start != size.end, "Zero-length range passed to subsequence");

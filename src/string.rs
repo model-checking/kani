@@ -124,10 +124,12 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
 
         Class(class) => Ok(match class {
             hir::Class::Unicode(class) => {
+                // FIXME: look at this!
                 let ranges = class.iter().map(|r| (r.start(), r.end())).collect();
                 char::ranges(Cow::Owned(ranges)).prop_map(to_bytes).sboxed()
             },
             hir::Class::Bytes(class) => {
+                // FIXME: look at this!
                 let subs = class.iter().map(|r| if 255u8 == r.end() {
                     (r.start()..).sboxed()
                 } else {
@@ -220,9 +222,9 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
 
 fn to_range(kind: RepetitionKind) -> Result<SizeRange, Error> {
     Ok(match kind {
-        ZeroOrOne => size_range(0..2),
-        ZeroOrMore => size_range(0..33),
-        OneOrMore => size_range(1..33),
+        ZeroOrOne => size_range(0..=1),
+        ZeroOrMore => size_range(0..=32),
+        OneOrMore => size_range(1..=32),
         Range(range) => match range {
             Exactly(count) if u32::MAX == count =>
                 return unsupported("Cannot have repetition of exactly u32::MAX"),
