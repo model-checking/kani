@@ -45,8 +45,18 @@ impl<T : Strategy> Union<T> {
         let options: Vec<W<T>> = options.into_iter()
             .map(|v| (1, v)).collect();
         assert!(!options.is_empty());
+        Self { options }
+    }
 
-        Union { options }
+    pub(crate) fn try_new<E, I>(it: I) -> Result<Self, E>
+    where
+        I: Iterator<Item = Result<T, E>>
+    {
+        let options: Vec<W<T>> = it.map(|r| r.map(|v| (1, v)))
+            .collect::<Result<_, _>>()?;
+
+        assert!(!options.is_empty());
+        Ok(Self { options })
     }
 
     /// Create a strategy which selects from the given delegate strategies.
@@ -67,7 +77,7 @@ impl<T : Strategy> Union<T> {
                 "Union option has a weight of 0");
         assert!(options.iter().map(|&(w, _)| u64::from(w)).sum::<u64>() <=
                 u64::from(u32::MAX), "Union weights overflow u32");
-        Union { options }
+        Self { options }
     }
 
     /// Add `other` as an additional alternate strategy with weight 1.
