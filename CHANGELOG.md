@@ -1,3 +1,65 @@
+## Unreleased (target = 0.8)
+
+### New Additions
+
+- `i128` and `u128` are now supported without any feature flags and on stable.
+
+- More implementations of `Arbitrary` are supported for `alloc` + `no_std` users.
+
+### Minor changes
+
+- The Bernoulli distribution is now used for `proptest::bool::weighted`.
+
+### Breaking changes
+
+- A minimum version of 1.26 of Rust is now required.
+
+- `regex-syntax` version 0.6 is now used.
+
+- `rand` version 0.5 is now used.
+
+- As a consequence, the stored seed is now `[u8; 16]` instead of `[u32; 4]`.
+  To minimize breakage for failure persistence, proptest will until version 0.9
+  accept both the new and old seed format in persisted files.
+  When you run proptest on version 0.8, it will automatically convert your
+  persisted files to the new format.
+
+- The RNG used by proptest has been changed to a PRNG `TestRng` which proptest
+  exposes. This is currently a simple new-type wrapper around `XorShiftRng`.
+  In the future, this will give us more freedom to make changes without breakage.
+
+- The feature flag `i128_support` has been removed. The features it added are
+  now always supported.
+
+- The associated type `Value` of `Strategy` has been renamed to `Tree`.
+  A new associated type `Value` has been added to `Strategy` which always refers
+  to the same type as `<S::Tree as ValueTree>::Value` for some strategy `S`.
+  This change allows you to write `-> impl Strategy<Value = T>` for functions
+  returning a `Strategy` generating `T`s. This is more ergonomic to use than
+  `-> impl Strategy<Value = impl ValueTree<Value = T>>`.
+
+- As a consequence change, the associated type `ValueTree` has been removed from
+  `Arbitrary`.
+
+- The methods `run` and `run_one` on `TestRunner` now takes a function-under-test
+  that accepts the generated type by value instead of by reference instead.
+  This means that you don't need to write `ref value in my_strategy` and can
+  write `value in my_strategy` instead even if `typeof(value)` doesn't implement
+  `Copy`. This is also a step in the direction of allowing strategies to generate
+  references when generic associated types (GATs) land.
+  However, `ref value in my_strategy` will still be accepted, so not a lot of
+  breakage should come of this if you've used `proptest! { .. }`.
+
+- `prop_compose!` no longer applies `.boxed()` to the strategy produced.
+  Therefore, `-> BoxedStrategy<T>` is no longer the correct type.
+  The new return type is `-> impl Strategy<Value = T>`.
+  If you want the old behaviour, you can use `.boxed()` yourself.
+
+### Nightly-only breakage
+
+- As `std::io::{Chars, CharsError}` have been deprecated on nightly,
+  their `Arbitrary` implementations have been removed.
+
 ## 0.7.1
 
 ### New Additions
