@@ -659,14 +659,6 @@ macro_rules! float_bin_search {
 
             float_any!($typ);
 
-            fn nearly_eq(l: $typ, r: $typ) -> bool {
-                if l == r {
-                    true
-                } else {
-                    (l - r).abs() < ::core::$typ::EPSILON
-                }
-            }
-
             /// Shrinks a float towards 0, using binary search to find boundary
             /// points.
             ///
@@ -762,13 +754,13 @@ macro_rules! float_bin_search {
                     };
                     let new_mid = self.lo + interval/2.0;
 
-                    let new_mid = if nearly_eq(new_mid, self.curr) || 0.0 == interval {
+                    let new_mid = if new_mid == self.curr || 0.0 == interval {
                         new_mid
                     } else {
                         self.lo
                     };
 
-                    if nearly_eq(new_mid, self.curr) {
+                    if new_mid == self.curr {
                         false
                     } else {
                         self.curr = new_mid;
@@ -785,7 +777,7 @@ macro_rules! float_bin_search {
                         return false;
                     }
 
-                    self.lo = if nearly_eq(self.curr, self.lo) {
+                    self.lo = if self.curr == self.lo {
                         self.hi
                     } else {
                         self.curr
