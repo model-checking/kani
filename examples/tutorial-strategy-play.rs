@@ -17,7 +17,6 @@ extern crate proptest;
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
 
-#[cfg(feature = "std")]
 fn main() {
     let mut runner = TestRunner::default();
     let int_val = (0..100i32).new_tree(&mut runner).unwrap();
@@ -30,6 +29,3 @@ fn main() {
         str_val.current()
     );
 }
-
-#[cfg(not(feature = "std"))]
-fn main() {}

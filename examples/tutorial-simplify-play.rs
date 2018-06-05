@@ -17,7 +17,6 @@ extern crate proptest;
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
 
-#[cfg(feature = "std")]
 fn main() {
     let mut runner = TestRunner::default();
     let mut str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
@@ -28,6 +27,3 @@ fn main() {
         println!("        = {}", str_val.current());
     }
 }
-
-#[cfg(not(feature = "std"))]
-fn main() {}
