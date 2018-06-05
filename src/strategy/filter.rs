@@ -48,10 +48,10 @@ impl<S : Clone, F> Clone for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : Fn (&ValueFor<S>) -> bool>
+     F : Fn (&S::Value) -> bool>
 Strategy for Filter<S, F> {
     type Tree = Filter<S::Tree, F>;
-    type Value = ValueFor<S>;
+    type Value = S::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {

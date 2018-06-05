@@ -12,7 +12,7 @@
 //!
 //! [`Arbitrary`]: trait.Arbitrary.html
 
-use strategy::{Map, ValueFor};
+use strategy::{Map, Strategy};
 use strategy::statics;
 
 //==============================================================================
@@ -43,7 +43,7 @@ pub use self::traits::*;
 // SMapped + Mapped aliases to make documentation clearer.
 //==============================================================================
 
-pub(crate) type SFnPtrMap<S, O> = statics::Map<S, fn(ValueFor<S>) -> O>;
+pub(crate) type SFnPtrMap<S, O> = statics::Map<S, fn(<S as Strategy>::Value) -> O>;
 
 /// A static map from a strategy of `I` to `O`.
 ///

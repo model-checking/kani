@@ -70,8 +70,10 @@ impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<E> for WrapErr<T, E> {
     }
 }
 
-type MapErr<T, E> = statics::Map<E, WrapErr<ValueFor<T>, ValueFor<E>>>;
-type MapOk <T, E> = statics::Map<T, WrapOk <ValueFor<T>, ValueFor<E>>>;
+type MapErr<T, E> = statics::Map<E, WrapErr<
+    <T as Strategy>::Value, <E as Strategy>::Value>>;
+type MapOk <T, E> = statics::Map<T, WrapOk<
+    <T as Strategy>::Value, <E as Strategy>::Value>>;
 
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two

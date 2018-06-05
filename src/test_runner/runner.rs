@@ -256,7 +256,7 @@ impl TestRunner {
     pub fn run<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
     where
         S: Strategy,
-        F: Fn(ValueFor<S>) -> TestCaseResult,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         if self.config.fork() {
             self.run_in_fork(strategy, test)
@@ -269,7 +269,7 @@ impl TestRunner {
     fn run_in_fork<S, F>(&mut self, _: &S, _: F) -> TestRunResult<S>
     where
         S: Strategy,
-        F: Fn(ValueFor<S>) -> TestCaseResult,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         unreachable!()
     }
@@ -278,7 +278,7 @@ impl TestRunner {
     fn run_in_fork<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
     where
         S: Strategy,
-        F: Fn(ValueFor<S>) -> TestCaseResult,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         let mut test = Some(test);
 
@@ -365,7 +365,7 @@ impl TestRunner {
     fn run_in_process<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
     where
         S: Strategy,
-        F: Fn(ValueFor<S>) -> TestCaseResult,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         let (replay_steps, fork_output) = init_replay(&mut self.rng);
         self.run_in_process_with_replay(
@@ -378,7 +378,7 @@ impl TestRunner {
         -> TestRunResult<S>
     where
         S: Strategy,
-        F: Fn(ValueFor<S>) -> TestCaseResult,
+        F: Fn(S::Value) -> TestCaseResult,
         R: Iterator<Item = TestCaseResult>,
     {
         let old_rng = self.rng.clone();
@@ -431,7 +431,7 @@ impl TestRunner {
         -> TestRunResult<S>
     where
         S: Strategy,
-        F: Fn(ValueFor<S>) -> TestCaseResult,
+        F: Fn(S::Value) -> TestCaseResult,
         R: Iterator<Item = TestCaseResult>,
     {
         let case =

@@ -45,7 +45,7 @@ impl<S : Clone, F> Clone for Map<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (ValueFor<S>) -> O>
+     F : Fn(S::Value) -> O>
 Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
     type Value = O;
@@ -110,7 +110,7 @@ impl<S : Clone, O> Clone for MapInto<S, O> {
 
 impl<S : Strategy, O : fmt::Debug> Strategy for MapInto<S, O>
 where
-    ValueFor<S>: Into<O>
+    S::Value : Into<O>
 {
     type Tree = MapInto<S::Tree, O>;
     type Value = O;
@@ -170,7 +170,7 @@ impl<S : Clone, F> Clone for Perturb<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (ValueFor<S>, TestRng) -> O>
+     F : Fn(S::Value, TestRng) -> O>
 Strategy for Perturb<S, F> {
     type Tree = PerturbValueTree<S::Tree, F>;
     type Value = O;

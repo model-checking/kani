@@ -29,6 +29,7 @@ use test_runner::*;
 pub type NewTree<S> = Result<<S as Strategy>::Tree, Reason>;
 
 /// The value that functions under test use for a particular `Strategy`.
+#[deprecated(since = "0.8.0", note="please use `S::Value` instead")]
 pub type ValueFor<S> = <<S as Strategy>::Tree as ValueTree>::Value;
 
 /// A strategy for producing arbitrary values of a given type.
@@ -68,7 +69,7 @@ pub trait Strategy : fmt::Debug {
     /// output is to be shrunken. Shrinking continues to take place in terms of
     /// the source value.
     fn prop_map<O : fmt::Debug,
-                F : Fn (ValueFor<Self>) -> O>
+                F : Fn (Self::Value) -> O>
         (self, fun: F) -> Map<Self, F>
     where Self : Sized {
         Map { source: self, fun: Arc::new(fun) }
@@ -86,7 +87,7 @@ pub trait Strategy : fmt::Debug {
     fn prop_map_into<O : fmt::Debug>(self) -> MapInto<Self, O>
     where
         Self : Sized,
-        ValueFor<Self>: Into<O>
+        Self::Value: Into<O>
     {
         MapInto::new(self)
     }
@@ -126,7 +127,7 @@ pub trait Strategy : fmt::Debug {
     /// # fn main() { }
     /// ```
     fn prop_perturb<O : fmt::Debug,
-                    F : Fn (ValueFor<Self>, TestRng) -> O>
+                    F : Fn (Self::Value, TestRng) -> O>
         (self, fun: F) -> Perturb<Self, F>
     where Self : Sized {
         Perturb { source: self, fun: Arc::new(fun) }
@@ -223,7 +224,7 @@ pub trait Strategy : fmt::Debug {
     /// related values as starting points while not constraining them to that
     /// relation.
     fn prop_flat_map<S : Strategy,
-                     F : Fn (ValueFor<Self>) -> S>
+                     F : Fn (Self::Value) -> S>
         (self, fun: F) -> Flatten<Map<Self, F>>
     where Self : Sized {
         Flatten::new(Map { source: self, fun: Arc::new(fun) })
@@ -243,7 +244,7 @@ pub trait Strategy : fmt::Debug {
     /// See `prop_flat_map()` for a more detailed explanation on how the
     /// three flat-map combinators differ.
     fn prop_ind_flat_map<S : Strategy,
-                         F : Fn (ValueFor<Self>) -> S>
+                         F : Fn (Self::Value) -> S>
         (self, fun: F) -> IndFlatten<Map<Self, F>>
     where Self : Sized {
         IndFlatten(Map { source: self, fun: Arc::new(fun) })
@@ -255,7 +256,7 @@ pub trait Strategy : fmt::Debug {
     /// See `prop_flat_map()` for a more detailed explanation on how the
     /// three flat-map combinators differ differ.
     fn prop_ind_flat_map2<S : Strategy,
-                          F : Fn (ValueFor<Self>) -> S>
+                          F : Fn (Self::Value) -> S>
         (self, fun: F) -> IndFlattenMap<Self, F>
     where Self : Sized {
         IndFlattenMap { source: self, fun: Arc::new(fun) }
@@ -281,7 +282,7 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter<R: Into<Reason>, F : Fn (&ValueFor<Self>) -> bool>
+    fn prop_filter<R: Into<Reason>, F : Fn (&Self::Value) -> bool>
         (self, whence: R, fun: F) -> Filter<Self, F>
     where Self : Sized {
         Filter::new(self, whence.into(), fun)
@@ -376,11 +377,11 @@ pub trait Strategy : fmt::Debug {
     /// ```
     fn prop_recursive<R, F>
         (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<ValueFor<Self>, F>
+        -> Recursive<Self::Value, F>
     where
         Self : Sized + 'static,
-        F : Fn(BoxedStrategy<ValueFor<Self>>) -> R,
-        R : Strategy<Value = ValueFor<Self>> + 'static,
+        F : Fn(BoxedStrategy<Self::Value>) -> R,
+        R : Strategy<Value = Self::Value> + 'static,
     {
         Recursive::new(self, depth, desired_size, expected_branch_size, recurse)
     }
@@ -423,7 +424,10 @@ pub trait Strategy : fmt::Debug {
     /// # fn main() { test_is_permutation(); }
     /// ```
     fn prop_shuffle(self) -> Shuffle<Self>
-    where Self : Sized, ValueFor<Self> : Shuffleable {
+    where
+        Self : Sized,
+        Self::Value : Shuffleable
+    {
         Shuffle(self)
     }
 
@@ -435,7 +439,7 @@ pub trait Strategy : fmt::Debug {
     ///
     /// Strategies of this type afford cheap shallow cloning via reference
     /// counting by using an `Arc` internally.
-    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
+    fn boxed(self) -> BoxedStrategy<Self::Value>
     where Self : Sized + 'static {
         BoxedStrategy(Arc::new(BoxedStrategyWrapper(self)))
     }
@@ -448,7 +452,7 @@ pub trait Strategy : fmt::Debug {
     ///
     /// Strategies of this type afford cheap shallow cloning via reference
     /// counting by using an `Arc` internally.
-    fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
+    fn sboxed(self) -> SBoxedStrategy<Self::Value>
     where Self : Sized + Send + Sync + 'static {
         SBoxedStrategy(Arc::new(BoxedStrategyWrapper(self)))
     }
@@ -548,7 +552,7 @@ pub struct NoShrink<T>(T);
 
 impl<T : Strategy> Strategy for NoShrink<T> {
     type Tree = NoShrink<T::Tree>;
-    type Value = ValueFor<T>;
+    type Value = T::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         self.0.new_tree(runner).map(NoShrink)
@@ -574,7 +578,7 @@ macro_rules! proxy_strategy {
     ($typ:ty $(, $lt:tt)*) => {
         impl<$($lt,)* S : Strategy + ?Sized> Strategy for $typ {
             type Tree = S::Tree;
-            type Value = ValueFor<S>;
+            type Value = S::Value;
 
             fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 (**self).new_tree(runner)
@@ -637,7 +641,7 @@ impl<T: fmt::Debug> Strategy for BoxedStrategy<T> {
 
     // Optimization: Don't rebox the strategy.
 
-    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
+    fn boxed(self) -> BoxedStrategy<Self::Value>
     where Self : Sized + 'static {
         self
     }
@@ -653,12 +657,12 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
 
     // Optimization: Don't rebox the strategy.
 
-    fn sboxed(self) -> SBoxedStrategy<ValueFor<Self>>
+    fn sboxed(self) -> SBoxedStrategy<Self::Value>
     where Self : Sized + Send + Sync + 'static {
         self
     }
 
-    fn boxed(self) -> BoxedStrategy<ValueFor<Self>>
+    fn boxed(self) -> BoxedStrategy<Self::Value>
     where Self : Sized + 'static {
         BoxedStrategy(self.0)
     }
@@ -668,8 +672,8 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
 struct BoxedStrategyWrapper<T>(T);
 impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
 where T::Tree : 'static {
-    type Tree = Box<ValueTree<Value = ValueFor<T>>>;
-    type Value = ValueFor<T>;
+    type Tree = Box<ValueTree<Value = T::Value>>;
+    type Value = T::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(Box::new(self.0.new_tree(runner)?))
@@ -721,7 +725,7 @@ impl Default for CheckStrategySanityOptions {
 /// retry failures.
 pub fn check_strategy_sanity<S : Strategy>(
     strategy: S, options: Option<CheckStrategySanityOptions>)
-where S::Tree : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
+where S::Tree : Clone + fmt::Debug, S::Value : cmp::PartialEq {
     // Like assert_eq!, but also pass if both values do not equal themselves.
     // This allows the test to work correctly with things like NaN.
     macro_rules! assert_same {

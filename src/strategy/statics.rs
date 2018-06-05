@@ -68,10 +68,10 @@ impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : FilterFn<ValueFor<S>> + Clone>
+     F : FilterFn<S::Value> + Clone>
 Strategy for Filter<S, F> {
     type Tree = Filter<S::Tree, F>;
-    type Value = ValueFor<S>;
+    type Value = S::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
@@ -162,9 +162,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
     }
 }
 
-impl<S : Strategy,
-     F : Clone + MapFn<ValueFor<S>>>
-Strategy for Map<S, F> {
+impl<S : Strategy, F : Clone + MapFn<S::Value>> Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
     type Value = F::Output;
 
@@ -197,8 +195,8 @@ impl<I, O: fmt::Debug> MapFn<I> for fn(I) -> O {
 }
 
 pub(crate) fn static_map<S: Strategy, O: fmt::Debug>
-    (strat: S, fun: fn(ValueFor<S>) -> O)
-    -> Map<S, fn(ValueFor<S>) -> O> {
+    (strat: S, fun: fn(S::Value) -> O)
+    -> Map<S, fn(S::Value) -> O> {
     Map::new(strat, fun)
 }
 

@@ -241,7 +241,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `binary_heap()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct BinaryHeapStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
+    pub struct BinaryHeapStrategy[<T>][where T : Strategy, T::Value : Ord](
         statics::Map<VecStrategy<T>, VecToBinHeap>)
         -> BinaryHeapValueTree<T::Tree>;
     /// `ValueTree` corresponding to `BinaryHeapStrategy`.
@@ -255,7 +255,7 @@ opaque_strategy_wrapper! {
 /// `element` and with a size range given by `size`.
 pub fn binary_heap<T : Strategy, S: Into<SizeRange>>(element: T, size: S)
     -> BinaryHeapStrategy<T>
-where ValueFor<T> : Ord {
+where T::Value : Ord {
     BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
 }
 
@@ -283,7 +283,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `hash_set()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct HashSetStrategy[<T>][where T : Strategy, ValueFor<T> : Hash + Eq](
+    pub struct HashSetStrategy[<T>][where T : Strategy, T::Value : Hash + Eq](
         statics::Filter<statics::Map<VecStrategy<T>, VecToHashSet>, MinSize>)
         -> HashSetValueTree<T::Tree>;
     /// `ValueTree` corresponding to `HashSetStrategy`.
@@ -303,7 +303,7 @@ opaque_strategy_wrapper! {
 pub fn hash_set<T, S>(element: T, size: S) -> HashSetStrategy<T>
 where
     T: Strategy,
-    ValueFor<T>: Hash + Eq,
+    T::Value: Hash + Eq,
     S: Into<SizeRange>,
 {
     let size = size.into();
@@ -331,7 +331,7 @@ opaque_strategy_wrapper! {
     ///
     /// Created by the `btree_set()` function in the same module.
     #[derive(Clone, Debug)]
-    pub struct BTreeSetStrategy[<T>][where T : Strategy, ValueFor<T> : Ord](
+    pub struct BTreeSetStrategy[<T>][where T : Strategy, T::Value : Ord](
         statics::Filter<statics::Map<VecStrategy<T>, VecToBTreeSet>, MinSize>)
         -> BTreeSetValueTree<T::Tree>;
     /// `ValueTree` corresponding to `BTreeSetStrategy`.
@@ -350,7 +350,7 @@ opaque_strategy_wrapper! {
 pub fn btree_set<T, S>(element: T, size: S) -> BTreeSetStrategy<T>
 where
     T: Strategy,
-    ValueFor<T>: Ord,
+    T::Value: Ord,
     S: Into<SizeRange>
 {
     let size = size.into();
@@ -383,7 +383,7 @@ opaque_strategy_wrapper! {
     /// Created by the `hash_map()` function in the same module.
     #[derive(Clone, Debug)]
     pub struct HashMapStrategy[<K, V>]
-        [where K : Strategy, V : Strategy, ValueFor<K> : Hash + Eq](
+        [where K : Strategy, V : Strategy, K::Value : Hash + Eq](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToHashMap>, MinSize>)
         -> HashMapValueTree<K::Tree, V::Tree>;
@@ -408,7 +408,7 @@ pub fn hash_map<K, V, S>(key: K, value: V, size: S) -> HashMapStrategy<K, V>
 where
     K: Strategy,
     V: Strategy,
-    ValueFor<K>: Hash + Eq,
+    K::Value: Hash + Eq,
     S: Into<SizeRange>,
 {
     let size = size.into();
@@ -438,7 +438,7 @@ opaque_strategy_wrapper! {
     /// Created by the `btree_map()` function in the same module.
     #[derive(Clone, Debug)]
     pub struct BTreeMapStrategy[<K, V>]
-        [where K : Strategy, V : Strategy, ValueFor<K> : Ord](
+        [where K : Strategy, V : Strategy, K::Value : Ord](
             statics::Filter<statics::Map<VecStrategy<(K,V)>,
             VecToBTreeMap>, MinSize>)
         -> BTreeMapValueTree<K::Tree, V::Tree>;
@@ -462,7 +462,7 @@ pub fn btree_map<K, V, S>(key: K, value: V, size: S) -> BTreeMapStrategy<K, V>
 where
     K: Strategy,
     V: Strategy,
-    ValueFor<K>: Ord,
+    K::Value: Ord,
     S: Into<SizeRange>,
 {
     let size = size.into();
@@ -490,7 +490,7 @@ pub struct VecValueTree<T : ValueTree> {
 
 impl<T : Strategy> Strategy for VecStrategy<T> {
     type Tree = VecValueTree<T::Tree>;
-    type Value = Vec<ValueFor<T>>;
+    type Value = Vec<T::Value>;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (start, end) = self.size.extract();

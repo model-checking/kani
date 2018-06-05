@@ -87,9 +87,9 @@ shuffleable!([T;31]);
 shuffleable!([T;32]);
 
 impl<S : Strategy> Strategy for Shuffle<S>
-where ValueFor<S> : Shuffleable {
+where S::Value : Shuffleable {
     type Tree = ShuffleValueTree<S::Tree>;
-    type Value = ValueFor<S>;
+    type Value = S::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();

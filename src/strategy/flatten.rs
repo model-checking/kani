@@ -30,9 +30,9 @@ impl<S : Strategy> Flatten<S> {
 }
 
 impl<S : Strategy> Strategy for Flatten<S>
-where ValueFor<S> : Strategy {
+where S::Value : Strategy {
     type Tree = FlattenValueTree<S::Tree>;
-    type Value = ValueFor<ValueFor<S>>;
+    type Value = <S::Value as Strategy>::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let meta = self.source.new_tree(runner)?;
@@ -105,7 +105,7 @@ impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
 
 impl<S : ValueTree> ValueTree for FlattenValueTree<S>
 where S::Value : Strategy {
-    type Value = ValueFor<S::Value>;
+    type Value = <S::Value as Strategy>::Value;
 
     fn current(&self) -> Self::Value {
         self.current.current()
@@ -183,9 +183,9 @@ where S::Value : Strategy {
 pub struct IndFlatten<S>(pub(super) S);
 
 impl<S : Strategy> Strategy for IndFlatten<S>
-where ValueFor<S> : Strategy {
-    type Tree = <ValueFor<S> as Strategy>::Tree;
-    type Value = ValueFor<ValueFor<S>>;
+where S::Value : Strategy {
+    type Tree = <S::Value as Strategy>::Tree;
+    type Value = <S::Value as Strategy>::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let inner = self.0.new_tree(runner)?;
@@ -221,10 +221,10 @@ impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
 }
 
 impl<S : Strategy, R : Strategy,
-     F : Fn (ValueFor<S>) -> R>
+     F : Fn(S::Value) -> R>
 Strategy for IndFlattenMap<S, F> {
     type Tree = ::tuple::TupleValueTree<(S::Tree, R::Tree)>;
-    type Value = (ValueFor<S>, ValueFor<R>);
+    type Value = (S::Value, R::Value);
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let left = self.source.new_tree(runner)?;

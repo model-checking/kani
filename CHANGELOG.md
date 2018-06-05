@@ -25,6 +25,11 @@
 
 - The Bernoulli distribution is now used for `proptest::bool::weighted`.
 
+### Deprecations
+
+- The type alias `ValueFor<S>` is now deprecated and will be removed in
+  version 0.9. You should just use `S::Value` instead.
+
 ### Breaking changes
 
 - A minimum version of 1.26 of Rust is now required.

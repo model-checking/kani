@@ -91,7 +91,7 @@ macro_rules! small_array {
         /// See [`UniformArrayStrategy`](struct.UniformArrayStrategy.html) for
         /// example usage.
         pub fn $uni<S : Strategy>
-            (strategy: S) -> UniformArrayStrategy<S, [ValueFor<S>; $n]>
+            (strategy: S) -> UniformArrayStrategy<S, [S::Value; $n]>
         {
             UniformArrayStrategy {
                 strategy,
@@ -101,7 +101,7 @@ macro_rules! small_array {
 
         impl<S : Strategy> Strategy for [S; $n] {
             type Tree = ArrayValueTree<[S::Tree; $n]>;
-            type Value = [ValueFor<S>; $n];
+            type Value = [S::Value; $n];
 
             fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(ArrayValueTree {
@@ -113,9 +113,9 @@ macro_rules! small_array {
         }
 
         impl<S : Strategy> Strategy
-        for UniformArrayStrategy<S, [ValueFor<S>; $n]> {
+        for UniformArrayStrategy<S, [S::Value; $n]> {
             type Tree = ArrayValueTree<[S::Tree; $n]>;
-            type Value = [ValueFor<S>; $n];
+            type Value = [S::Value; $n];
 
             fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(ArrayValueTree {
