@@ -181,10 +181,12 @@ fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'stat
         ('\x0B', ::std::char::MAX),
     ];
 
+    let dotnnl = |x: &hir::ClassUnicodeRange, y: &hir::ClassUnicodeRange|
+        x.start() == '\0' && x.end() == '\x09' &&
+        y.start() == '\x0B' && y.end() == '\u{10FFFF}';
+
     char::ranges(match class.ranges() {
-        [x, y] if x.start() == '\0' && x.end() == '\x09'
-               && y.start() == '\x0B' && y.end() == '\u{10FFFF}'
-          => Cow::Borrowed(NONL_RANGES),
+        [x, y] if dotnnl(x, y) || dotnnl(y, x) => Cow::Borrowed(NONL_RANGES),
         _ => Cow::Owned(class.iter().map(|r| (r.start(), r.end())).collect()),
     })
 }
