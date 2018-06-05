@@ -27,7 +27,7 @@ use rand::{self, Rng};
 use strategy::*;
 use test_runner::*;
 
-// FIXME(2016-06-04): Consistently use Into<SizeRange>
+// FIXME(2018-06-04): Consistently use Into<SizeRange>
 // instead of `Range<usize>` in this module?
 
 /// Trait for types which can be handled with `BitSetStrategy`.
