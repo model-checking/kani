@@ -34,8 +34,8 @@ where ValueFor<S> : Strategy {
     type Tree = FlattenValueTree<S::Tree>;
     type Value = ValueFor<ValueFor<S>>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let meta = self.source.new_value(runner)?;
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let meta = self.source.new_tree(runner)?;
         FlattenValueTree::new(runner, meta)
     }
 }
@@ -92,7 +92,7 @@ where S::Value : Strategy,
 
 impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
     fn new(runner: &mut TestRunner, meta: S) -> Result<Self, Reason> {
-        let current = meta.current().new_value(runner)?;
+        let current = meta.current().new_tree(runner)?;
         Ok(FlattenValueTree {
             meta: Fuse::new(meta),
             current: Fuse::new(current),
@@ -125,7 +125,7 @@ where S::Value : Strategy {
             true
         } else if !self.meta.simplify() {
             false
-        } else if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+        } else if let Ok(v) = self.meta.current().new_tree(&mut self.runner) {
             // Shift current into final_complication and `v` into
             // `current`. We also need to prevent that value from
             // complicating beyond the current point in the future
@@ -148,7 +148,7 @@ where S::Value : Strategy {
             if self.runner.flat_map_regen() {
                 self.complicate_regen_remaining -= 1;
 
-                if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+                if let Ok(v) = self.meta.current().new_tree(&mut self.runner) {
                     self.current = Fuse::new(v);
                     return true;
                 }
@@ -160,7 +160,7 @@ where S::Value : Strategy {
         if self.current.complicate() {
             return true;
         } else if self.meta.complicate() {
-            if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+            if let Ok(v) = self.meta.current().new_tree(&mut self.runner) {
                 self.complicate_regen_remaining = self.runner.config().cases;
                 self.current = Fuse::new(v);
                 return true;
@@ -187,9 +187,9 @@ where ValueFor<S> : Strategy {
     type Tree = <ValueFor<S> as Strategy>::Tree;
     type Value = ValueFor<ValueFor<S>>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let inner = self.0.new_value(runner)?;
-        inner.current().new_value(runner)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let inner = self.0.new_tree(runner)?;
+        inner.current().new_tree(runner)
     }
 }
 
@@ -226,10 +226,10 @@ Strategy for IndFlattenMap<S, F> {
     type Tree = ::tuple::TupleValueTree<(S::Tree, R::Tree)>;
     type Value = (ValueFor<S>, ValueFor<R>);
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let left = self.source.new_value(runner)?;
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let left = self.source.new_tree(runner)?;
         let right_source = (self.fun)(left.current());
-        let right = right_source.new_value(runner)?;
+        let right = right_source.new_tree(runner)?;
 
         Ok(::tuple::TupleValueTree::new((left, right)))
     }
@@ -251,7 +251,7 @@ mod test {
         let mut failures = 0;
         for _ in 0..1000 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
+            let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |(a, b)| {
                 if a <= 10000 || b <= a {
                     Ok(())
@@ -301,7 +301,7 @@ mod test {
             max_flat_map_regens: 1000,
             .. Config::default()
         });
-        let case = input.new_value(&mut runner).unwrap();
+        let case = input.new_tree(&mut runner).unwrap();
         let _ = runner.run_one(case, |_| {
             // Only the first run fails, all others succeed
             prop_assert!(pass.fetch_or(true, Ordering::SeqCst));

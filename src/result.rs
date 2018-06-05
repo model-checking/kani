@@ -187,7 +187,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {
-            count += s.new_value(&mut runner).unwrap()
+            count += s.new_tree(&mut runner).unwrap()
                 .current().is_ok() as u32;
         }
 
@@ -227,7 +227,7 @@ mod test {
         {
             let input = maybe_err(Just(()), Just(()));
             for _ in 0..64 {
-                let mut val = input.new_value(&mut runner).unwrap();
+                let mut val = input.new_tree(&mut runner).unwrap();
                 if val.current().is_ok() {
                     assert!(!val.simplify());
                     assert!(val.current().is_ok());
@@ -240,7 +240,7 @@ mod test {
         {
             let input = maybe_ok(Just(()), Just(()));
             for _ in 0..64 {
-                let mut val = input.new_value(&mut runner).unwrap();
+                let mut val = input.new_tree(&mut runner).unwrap();
                 if val.current().is_err() {
                     assert!(!val.simplify());
                     assert!(val.current().is_err());

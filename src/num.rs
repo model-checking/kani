@@ -43,7 +43,7 @@ macro_rules! int_any {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new(runner.rng().gen()))
             }
         }
@@ -56,7 +56,7 @@ macro_rules! numeric_api {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
                     self.start,
                     $crate::num::sample_uniform(runner, self.clone()),
@@ -68,7 +68,7 @@ macro_rules! numeric_api {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
                     self.start,
                     $crate::num::sample_uniform_incl(
@@ -81,7 +81,7 @@ macro_rules! numeric_api {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
                     $crate::num::sample_uniform(
@@ -94,7 +94,7 @@ macro_rules! numeric_api {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
                     $crate::num::sample_uniform_incl(
@@ -113,7 +113,7 @@ macro_rules! num_incl_api {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let start = self.clone().next().unwrap();
                 let end = self.clone().next_back().unwrap();
 
@@ -570,7 +570,7 @@ macro_rules! float_any {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let flags = self.0.normalise();
                 let sign_mask = if flags.contains(FloatTypes::NEGATIVE) {
                     $typ::SIGN_MASK
@@ -619,7 +619,7 @@ macro_rules! float_any {
                         weight!(SIGNALING_NAN, 1) => Just(
                             ($typ::MANTISSA_MASK >> 1, signaling_or,
                              true, false)),
-                    ].new_value(runner)?.current();
+                    ].new_tree(runner)?.current();
 
                 let mut generated_value: <$typ as FloatLayout>::Bits =
                     runner.rng().gen();
@@ -845,7 +845,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut ok = 0;
         for _ in 0..20 {
-            let tree = (0..=1).new_value(&mut runner).unwrap();
+            let tree = (0..=1).new_tree(&mut runner).unwrap();
             let test = runner.run_one(tree, |v| {
                 prop_assert_eq!(v, 1);
                 Ok(())
@@ -862,7 +862,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut ok = 0;
         for _ in 0..20 {
-            let tree = (..=1u8).new_value(&mut runner).unwrap();
+            let tree = (..=1u8).new_tree(&mut runner).unwrap();
             let test = runner.run_one(tree, |v| {
                 prop_assert_eq!(v, 1);
                 Ok(())
@@ -939,7 +939,7 @@ mod test {
     fn signed_integer_range_including_zero_converges_to_zero() {
         let mut runner = TestRunner::default();
         for _ in 0..100 {
-            let mut state = (-42i32..64i32).new_value(&mut runner).unwrap();
+            let mut state = (-42i32..64i32).new_tree(&mut runner).unwrap();
             let init_value = state.current();
             assert!(init_value >= -42 && init_value < 64);
 
@@ -956,7 +956,7 @@ mod test {
     fn negative_integer_range_stays_in_bounds() {
         let mut runner = TestRunner::default();
         for _ in 0..100 {
-            let mut state = (..-42i32).new_value(&mut runner).unwrap();
+            let mut state = (..-42i32).new_tree(&mut runner).unwrap();
             let init_value = state.current();
             assert!(init_value < -42);
 
@@ -973,7 +973,7 @@ mod test {
     fn positive_signed_integer_range_stays_in_bounds() {
         let mut runner = TestRunner::default();
         for _ in 0..100 {
-            let mut state = (42i32..).new_value(&mut runner).unwrap();
+            let mut state = (42i32..).new_tree(&mut runner).unwrap();
             let init_value = state.current();
             assert!(init_value >= 42);
 
@@ -990,7 +990,7 @@ mod test {
     fn unsigned_integer_range_stays_in_bounds() {
         let mut runner = TestRunner::default();
         for _ in 0..100 {
-            let mut state = (42u32..56u32).new_value(&mut runner).unwrap();
+            let mut state = (42u32..56u32).new_tree(&mut runner).unwrap();
             let init_value = state.current();
             assert!(init_value >= 42 && init_value < 56);
 
@@ -1018,7 +1018,7 @@ mod test {
     #[test]
     fn positive_float_simplifies_to_zero() {
         let mut runner = TestRunner::default();
-        let mut value = (0.0f64..2.0).new_value(&mut runner).unwrap();
+        let mut value = (0.0f64..2.0).new_tree(&mut runner).unwrap();
 
         while value.simplify() { }
 
@@ -1028,7 +1028,7 @@ mod test {
     #[test]
     fn positive_float_simplifies_to_base() {
         let mut runner = TestRunner::default();
-        let mut value = (1.0f64..2.0).new_value(&mut runner).unwrap();
+        let mut value = (1.0f64..2.0).new_tree(&mut runner).unwrap();
 
         while value.simplify() { }
 
@@ -1038,7 +1038,7 @@ mod test {
     #[test]
     fn negative_float_simplifies_to_zero() {
         let mut runner = TestRunner::default();
-        let mut value = (-2.0f64..0.0).new_value(&mut runner).unwrap();
+        let mut value = (-2.0f64..0.0).new_tree(&mut runner).unwrap();
 
         while value.simplify() { }
 
@@ -1048,7 +1048,7 @@ mod test {
     #[test]
     fn positive_float_complicates_to_original() {
         let mut runner = TestRunner::default();
-        let mut value = (1.0f64..2.0).new_value(&mut runner).unwrap();
+        let mut value = (1.0f64..2.0).new_tree(&mut runner).unwrap();
         let orig = value.current();
 
         assert!(value.simplify());
@@ -1097,7 +1097,7 @@ mod test {
     fn float_simplifies_to_smallest_normal() {
         let mut runner = TestRunner::default();
         let mut value = (::std::f64::MIN_POSITIVE..2.0)
-            .new_value(&mut runner).unwrap();
+            .new_tree(&mut runner).unwrap();
 
         while value.simplify() { }
 
@@ -1128,7 +1128,7 @@ mod test {
             let nan_fidelity = fidelity_1 != fidelity_2;
 
             for _ in 0..1024 {
-                let mut tree = strategy.new_value(&mut runner).unwrap();
+                let mut tree = strategy.new_tree(&mut runner).unwrap();
                 let mut increment = 1;
 
                 loop {

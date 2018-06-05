@@ -21,7 +21,7 @@ use proptest::test_runner::TestRunner;
 fn main() {
     let mut runner = TestRunner::default();
     let mut str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
-        .new_value(&mut runner)
+        .new_tree(&mut runner)
         .unwrap();
     println!("str_val = {}", str_val.current());
     while str_val.simplify() {

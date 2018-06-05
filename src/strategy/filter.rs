@@ -53,9 +53,9 @@ Strategy for Filter<S, F> {
     type Tree = Filter<S::Tree, F>;
     type Value = ValueFor<S>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
-            let val = self.source.new_value(runner)?;
+            let val = self.source.new_tree(runner)?;
             if !(self.fun)(&val.current()) {
                 runner.reject_local(self.whence.clone())?;
             } else {
@@ -119,7 +119,7 @@ mod test {
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let mut case = input.new_value(&mut runner).unwrap();
+            let mut case = input.new_tree(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);
 

@@ -101,7 +101,7 @@ impl<T : Strategy> Strategy for Union<T> {
     type Tree = UnionValueTree<T::Tree>;
     type Value = ValueFor<T>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         fn extract_weight<V>(&(w, _): &W<V>) -> u32 { w }
 
         let pick = pick_weighted(
@@ -111,7 +111,7 @@ impl<T : Strategy> Strategy for Union<T> {
 
         let mut options = Vec::with_capacity(pick);
         for option in &self.options[0..pick+1] {
-            options.push(option.1.new_value(runner)?);
+            options.push(option.1.new_tree(runner)?);
         }
 
         Ok(UnionValueTree { options, pick, min_pick: 0, prev_pick: None })
@@ -246,16 +246,16 @@ macro_rules! tuple_union {
                 (A::Tree, $(Option<$gen::Tree>),*)>;
             type Value = ValueFor<A>;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let weights = [((self.0).0).0, $(((self.0).$ix).0),*];
                 let pick = pick_weighted(runner, weights.iter().cloned(),
                                          weights.iter().cloned());
 
                 Ok(TupleUnionValueTree {
                     options: (
-                        ((self.0).0).1.new_value(runner)?,
+                        ((self.0).0).1.new_tree(runner)?,
                         $(if $ix <= pick {
-                            Some(((self.0).$ix).1.new_value(runner)?)
+                            Some(((self.0).$ix).1.new_tree(runner)?)
                         } else {
                             None
                         }),*),
@@ -355,7 +355,7 @@ mod test {
         let mut converged_high = 0;
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
+            let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
                 Ok(())
@@ -388,7 +388,7 @@ mod test {
         let mut counts = [0, 0, 0];
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
-            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+            counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
 
         println!("{:?}", counts);
@@ -423,7 +423,7 @@ mod test {
         let mut converged_high = 0;
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
+            let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
                 Ok(())
@@ -456,7 +456,7 @@ mod test {
         let mut counts = [0, 0, 0];
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
-            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+            counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
 
         println!("{:?}", counts);
@@ -480,7 +480,7 @@ mod test {
 
                 let mut pass = false;
                 for _ in 0..1024 {
-                    if 0 == input.new_value(&mut runner).unwrap().current() {
+                    if 0 == input.new_tree(&mut runner).unwrap().current() {
                         pass = true;
                         break;
                     }

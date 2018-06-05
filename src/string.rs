@@ -83,8 +83,8 @@ impl Strategy for str {
     type Tree = RegexGeneratorValueTree<String>;
     type Value = String;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        string_regex(self).unwrap().new_value(runner)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        string_regex(self).unwrap().new_tree(runner)
     }
 }
 
@@ -305,7 +305,7 @@ mod test {
         let strategy = string_regex(pattern).unwrap();
         let mut runner = TestRunner::default();
         for _ in 0..iterations {
-            let mut value = strategy.new_value(&mut runner).unwrap();
+            let mut value = strategy.new_tree(&mut runner).unwrap();
 
             loop {
                 let s = value.current();

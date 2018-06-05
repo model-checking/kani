@@ -91,10 +91,10 @@ where ValueFor<S> : Shuffleable {
     type Tree = ShuffleValueTree<S::Tree>;
     type Value = ValueFor<S>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();
 
-        self.0.new_value(runner).map(|inner| ShuffleValueTree {
+        self.0.new_tree(runner).map(|inner| ShuffleValueTree {
             inner, rng,
             dist: Cell::new(None),
             simplifying_inner: false,
@@ -113,7 +113,7 @@ pub struct ShuffleValueTree<V> {
     ///
     /// This is `Cell` since we can't determine the bounds of the value until
     /// the first call to `current()`. (We technically _could_ by generating a
-    /// value in `new_value` and checking its length, but that would be a 100%
+    /// value in `new_tree` and checking its length, but that would be a 100%
     /// slowdown.)
     dist: Cell<Option<num::usize::BinarySearch>>,
     /// Whether we've started simplifying `inner`. After this point, we can no
@@ -220,7 +220,7 @@ mod test {
         let input = Just(VALUES.to_owned()).prop_shuffle();
 
         for _ in 0..1024 {
-            let mut value = input.new_value(&mut runner).unwrap().current();
+            let mut value = input.new_tree(&mut runner).unwrap().current();
 
             assert!(seen.insert(value.clone()),
                     "Value {:?} generated more than once", value);
@@ -236,7 +236,7 @@ mod test {
 
         let input = Just(VALUES.to_owned()).prop_shuffle();
         for _ in 0..1024 {
-            let mut value = input.new_value(&mut runner).unwrap();
+            let mut value = input.new_tree(&mut runner).unwrap();
 
             let mut prev_dist = i32::MAX;
             loop {

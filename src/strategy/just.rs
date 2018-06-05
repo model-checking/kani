@@ -34,7 +34,7 @@ impl<T : Clone + fmt::Debug> Strategy for Just<T> {
     type Tree = Self;
     type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
@@ -81,7 +81,7 @@ impl<T: fmt::Debug, F: Clone + Fn() -> T> Strategy for LazyJust<T, F> {
     type Tree = Self;
     type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
@@ -118,7 +118,7 @@ impl<T: fmt::Debug> Strategy for fn() -> T {
     type Tree = Self;
     type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
 }
 
 impl<T: fmt::Debug> ValueTree for fn() -> T {

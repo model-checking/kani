@@ -76,7 +76,7 @@ where
     type Tree = Box<ValueTree<Value = T>>;
     type Value = T;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         // Since the generator is stateless, we can't implement any "absolutely
         // X many items" rule. We _can_, however, with extremely high
         // probability, obtain a value near what we want by using decaying
@@ -130,7 +130,7 @@ where
             strat = branch.boxed();
         }
 
-        strat.new_value(runner)
+        strat.new_tree(runner)
     }
 }
 
@@ -176,7 +176,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
-            let tree = strat.new_value(&mut runner).unwrap().current();
+            let tree = strat.new_tree(&mut runner).unwrap().current();
             let (depth, count) = tree.stats();
             assert!(depth <= 4, "Got depth {}", depth);
             assert!(count <= 128, "Got count {}", count);
@@ -195,7 +195,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
-            let mut value = strat.new_value(&mut runner).unwrap();
+            let mut value = strat.new_tree(&mut runner).unwrap();
             while value.simplify() { }
 
             assert_eq!(Tree::Leaf, value.current());

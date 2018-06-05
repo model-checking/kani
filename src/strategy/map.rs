@@ -50,8 +50,8 @@ Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
     type Value = O;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_value(runner).map(
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.source.new_tree(runner).map(
             |v| Map { source: v, fun: Arc::clone(&self.fun) })
     }
 }
@@ -115,8 +115,8 @@ where
     type Tree = MapInto<S::Tree, O>;
     type Value = O;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_value(runner).map(MapInto::new)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.source.new_tree(runner).map(MapInto::new)
     }
 }
 
@@ -175,10 +175,10 @@ Strategy for Perturb<S, F> {
     type Tree = PerturbValueTree<S::Tree, F>;
     type Value = O;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();
 
-        self.source.new_value(runner).map(|source|
+        self.source.new_tree(runner).map(|source|
             PerturbValueTree { source, rng, fun: Arc::clone(&self.fun) }
         )
     }
@@ -267,7 +267,7 @@ mod test {
         let input = Just(1).prop_perturb(|v, mut rng| v + rng.next_u32());
 
         for _ in 0..16 {
-            let value = input.new_value(&mut runner).unwrap();
+            let value = input.new_tree(&mut runner).unwrap();
             assert_eq!(value.current(), value.current());
         }
     }
@@ -279,7 +279,7 @@ mod test {
 
         let mut seen = HashSet::new();
         for _ in 0..64 {
-            seen.insert(input.new_value(&mut runner).unwrap().current());
+            seen.insert(input.new_tree(&mut runner).unwrap().current());
         }
 
         assert_eq!(64, seen.len());

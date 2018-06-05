@@ -492,12 +492,12 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     type Tree = VecValueTree<T::Tree>;
     type Value = Vec<ValueFor<T>>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (start, end) = self.size.extract();
         let max_size = sample_uniform_incl(runner, start, end);
         let mut elements = Vec::with_capacity(max_size);
         while elements.len() < max_size {
-            elements.push(self.element.new_value(runner)?);
+            elements.push(self.element.new_tree(runner)?);
         }
 
         Ok(VecValueTree {
@@ -606,7 +606,7 @@ mod test {
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
+            let case = input.new_tree(&mut runner).unwrap();
             let start = case.current();
             // Has correct length
             assert!(start.len() >= 5 && start.len() < 20);
@@ -650,7 +650,7 @@ mod test {
         let mut runner = TestRunner::default();
 
         for _ in 0..256 {
-            let v = input.new_value(&mut runner).unwrap().current();
+            let v = input.new_tree(&mut runner).unwrap().current();
             assert_eq!(2, v.len());
         }
     }
@@ -664,7 +664,7 @@ mod test {
         let mut runner = TestRunner::default();
 
         for _ in 0..256 {
-            let v = input.new_value(&mut runner).unwrap().current();
+            let v = input.new_tree(&mut runner).unwrap().current();
             assert_eq!(2, v.len());
         }
     }

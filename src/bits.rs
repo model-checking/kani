@@ -155,7 +155,7 @@ impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
     type Tree = BitSetValueTree<T>;
     type Value = T;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut inner = T::new_bitset(self.max);
         for bit in self.min..self.max {
             if self.mask.as_ref().map_or(true, |mask| mask.test(bit)) &&
@@ -216,7 +216,7 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     type Tree = BitSetValueTree<T>;
     type Value = T;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end);
         let count = runner.rng().gen_range(self.size.start, self.size.end);
         for bit in
@@ -378,7 +378,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
-            let value = input.new_value(&mut runner).unwrap().current();
+            let value = input.new_tree(&mut runner).unwrap().current();
             assert!(0 == value & !0xF0u32,
                     "Generate value {}", value);
         }
@@ -391,7 +391,7 @@ mod test {
         let mut runner = TestRunner::default();
         let input = u32::masked(0xdeadbeef);
         for _ in 0..1024 {
-            accum |= input.new_value(&mut runner).unwrap().current();
+            accum |= input.new_tree(&mut runner).unwrap().current();
         }
 
         assert_eq!(0xdeadbeef, accum);
@@ -409,7 +409,7 @@ mod test {
         let mut runner = TestRunner::default();
         let input = bitset::masked(mask);
         for _ in 0..32 {
-            let v = input.new_value(&mut runner).unwrap().current();
+            let v = input.new_tree(&mut runner).unwrap().current();
             seen_0 |= v.contains(0);
             seen_2 |= v.contains(2);
         }
@@ -424,7 +424,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
-            let mut value = input.new_value(&mut runner).unwrap();
+            let mut value = input.new_tree(&mut runner).unwrap();
             let mut prev = value.current();
             while value.simplify() {
                 let v = value.current();
@@ -443,7 +443,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
-            let mut value = input.new_value(&mut runner).unwrap();
+            let mut value = input.new_tree(&mut runner).unwrap();
             let orig = value.current();
             if value.simplify() {
                 assert!(value.complicate());
@@ -460,7 +460,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..2048 {
-            let value = input.new_value(&mut runner).unwrap().current();
+            let value = input.new_tree(&mut runner).unwrap().current();
             let count = value.count_ones() as usize;
             assert!(count >= 4 && count < 8);
             seen_counts[count] += 1;
@@ -490,7 +490,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
-            let mut value = input.new_value(&mut runner).unwrap();
+            let mut value = input.new_tree(&mut runner).unwrap();
             while value.simplify() { }
 
             assert_eq!(4, value.current().count_ones());

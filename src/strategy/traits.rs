@@ -59,7 +59,7 @@ pub trait Strategy : fmt::Debug {
     /// cause problems during normal operation, but they do break failure
     /// persistence since it is implemented by simply saving the seed used to
     /// generate the test case.
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self>;
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self>;
 
     /// Returns a strategy which produces values transformed by the function
     /// `fun`.
@@ -550,8 +550,8 @@ impl<T : Strategy> Strategy for NoShrink<T> {
     type Tree = NoShrink<T::Tree>;
     type Value = ValueFor<T>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.0.new_value(runner).map(NoShrink)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_tree(runner).map(NoShrink)
     }
 }
 
@@ -576,8 +576,8 @@ macro_rules! proxy_strategy {
             type Tree = S::Tree;
             type Value = ValueFor<S>;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                (**self).new_value(runner)
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                (**self).new_tree(runner)
             }
         }
     };
@@ -631,8 +631,8 @@ impl<T: fmt::Debug> Strategy for BoxedStrategy<T> {
     type Tree = BoxedVT<T>;
     type Value = T;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.0.new_value(runner)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_tree(runner)
     }
 
     // Optimization: Don't rebox the strategy.
@@ -647,8 +647,8 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
     type Tree = BoxedVT<T>;
     type Value = T;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.0.new_value(runner)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.0.new_tree(runner)
     }
 
     // Optimization: Don't rebox the strategy.
@@ -671,8 +671,8 @@ where T::Tree : 'static {
     type Tree = Box<ValueTree<Value = ValueFor<T>>>;
     type Value = ValueFor<T>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        Ok(Box::new(self.0.new_value(runner)?))
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        Ok(Box::new(self.0.new_tree(runner)?))
     }
 }
 
@@ -741,7 +741,7 @@ where S::Tree : Clone + fmt::Debug, ValueFor<S> : cmp::PartialEq {
         let mut gen_tries = 0;
         let mut state;
         loop {
-            let err = match strategy.new_value(&mut runner) {
+            let err = match strategy.new_tree(&mut runner) {
                 Ok(s) => { state = s; break; },
                 Err(e) => e,
             };

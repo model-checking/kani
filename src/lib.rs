@@ -565,7 +565,7 @@
 //! which match the former as a regular expression.
 //!
 //! Generating a value is a two-step process. First, a `TestRunner` is passed
-//! to the `new_value()` method of the `Strategy`; this returns a `ValueTree`,
+//! to the `new_tree()` method of the `Strategy`; this returns a `ValueTree`,
 //! which we'll look at in more detail momentarily. Calling the `current()`
 //! method on the `ValueTree` produces the actual value. Knowing that, we can
 //! put the pieces together and generate values. The below is the
@@ -579,9 +579,9 @@
 //!
 //! fn main() {
 //!     let mut runner = TestRunner::default();
-//!     let int_val = (0..100i32).new_value(&mut runner).unwrap();
+//!     let int_val = (0..100i32).new_tree(&mut runner).unwrap();
 //!     let str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
-//!         .new_value(&mut runner).unwrap();
+//!         .new_tree(&mut runner).unwrap();
 //!     println!("int_val = {}, str_val = {}",
 //!              int_val.current(), str_val.current());
 //! }
@@ -617,7 +617,7 @@
 //! fn some_function_doesnt_crash() {
 //!     let mut runner = TestRunner::default();
 //!     for _ in 0..256 {
-//!         let val = (0..10000i32).new_value(&mut runner).unwrap();
+//!         let val = (0..10000i32).new_tree(&mut runner).unwrap();
 //!         some_function(val.current());
 //!     }
 //! }
@@ -650,7 +650,7 @@
 //! fn main() {
 //!     let mut runner = TestRunner::default();
 //!     let mut str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
-//!         .new_value(&mut runner).unwrap();
+//!         .new_tree(&mut runner).unwrap();
 //!     println!("str_val = {}", str_val.current());
 //!     while str_val.simplify() {
 //!         println!("        = {}", str_val.current());
@@ -740,7 +740,7 @@
 //! fn main() {
 //!     let mut runner = TestRunner::default();
 //!     for _ in 0..256 {
-//!         let mut val = (0..10000i32).new_value(&mut runner).unwrap();
+//!         let mut val = (0..10000i32).new_tree(&mut runner).unwrap();
 //!         if some_function(val.current()) {
 //!             // Test case passed
 //!             continue;

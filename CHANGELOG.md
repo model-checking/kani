@@ -53,6 +53,9 @@
   returning a `Strategy` generating `T`s. This is more ergonomic to use than
   `-> impl Strategy<Value = impl ValueTree<Value = T>>`.
 
+- The method `new_value` in `Strategy` has been renamed to `new_tree` to mirror
+  the renaming of `Value` to `Tree`.
+
 - As a consequence change, the associated type `ValueTree` has been removed from
   `Arbitrary`.
 

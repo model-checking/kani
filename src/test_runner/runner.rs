@@ -435,7 +435,7 @@ impl TestRunner {
         R: Iterator<Item = TestCaseResult>,
     {
         let case =
-            unwrap_or!(strategy.new_value(self), msg =>
+            unwrap_or!(strategy.new_tree(self), msg =>
                 return Err(TestError::Abort(msg)));
 
         if self.run_one_with_replay(case, f, replay, fork_output)? {

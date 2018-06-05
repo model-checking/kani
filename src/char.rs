@@ -226,7 +226,7 @@ impl<'a> Strategy for CharStrategy<'a> {
     type Tree = CharValueTree;
     type Value = char;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (base, offset) = select_range_index(
             runner.rng(), &self.special, &self.preferred, &self.ranges);
 
@@ -314,7 +314,7 @@ mod test {
 
                 let mut runner = TestRunner::default();
                 for _ in 0..256 {
-                    let mut value = input.new_value(&mut runner).unwrap();
+                    let mut value = input.new_tree(&mut runner).unwrap();
                     loop {
                         let ch = value.current() as u32;
                         assert!(input_ranges.iter().any(
@@ -336,7 +336,7 @@ mod test {
         let mut runner = TestRunner::default();
 
         for _ in 0..1024 {
-            let ch = any().new_value(&mut runner).unwrap().current();
+            let ch = any().new_tree(&mut runner).unwrap().current();
             if '🕴' == ch {
                 men_in_business_suits_levitating += 1;
             } else if ch >= ' ' && ch <= '~' {
@@ -354,7 +354,7 @@ mod test {
         let mut runner = TestRunner::default();
 
         for _ in 0..256 {
-            let mut value = any().new_value(&mut runner).unwrap();
+            let mut value = any().new_tree(&mut runner).unwrap();
 
             if value.current() <= ' ' { continue; }
 

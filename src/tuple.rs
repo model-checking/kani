@@ -43,8 +43,8 @@ macro_rules! tuple {
             type Tree = TupleValueTree<($($typ::Tree,)*)>;
             type Value = ($(ValueFor<$typ>,)*);
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                let values = ($(self.$fld.new_value(runner)?,)*);
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                let values = ($(self.$fld.new_tree(runner)?,)*);
                 Ok(TupleValueTree::new(values))
             }
         }
@@ -118,7 +118,7 @@ mod test {
         let mut cases_tested = 0;
         for _ in 0..256 {
             // Find a failing test case
-            let mut case = input.new_value(&mut runner).unwrap();
+            let mut case = input.new_tree(&mut runner).unwrap();
             if pass(case.current()) { continue; }
 
             loop {

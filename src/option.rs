@@ -128,7 +128,7 @@ impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
     type Tree = Self;
     type Value = Option<T>;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(*self)
     }
 }
@@ -206,7 +206,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {
-            count += s.new_value(&mut runner).unwrap()
+            count += s.new_tree(&mut runner).unwrap()
                 .current().is_some() as u32;
         }
 
