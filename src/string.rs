@@ -13,7 +13,7 @@
 use core::mem;
 use core::fmt;
 use core::u32;
-use std_facade::{Cow, Box, String, Vec};
+use std_facade::{Cow, Box, String, Vec, ToOwned};
 
 use regex_syntax::{Parser, Error as ParseError};
 use regex_syntax::hir::{
@@ -246,39 +246,8 @@ fn to_range(kind: RepetitionKind) -> Result<SizeRange, Error> {
 }
 
 fn to_bytes(khar: char) -> Vec<u8> {
-    // Logic from: https://doc.rust-lang.org/nightly/src/core/char/methods.rs.html#438-468
-
-    // UTF-8 ranges and tags for encoding characters
-    const TAG_CONT: u8     = 0b1000_0000;
-    const TAG_TWO_B: u8    = 0b1100_0000;
-    const TAG_THREE_B: u8  = 0b1110_0000;
-    const TAG_FOUR_B: u8   = 0b1111_0000;
-    const MAX_ONE_B: u32   =     0x80;
-    const MAX_TWO_B: u32   =    0x800;
-    const MAX_THREE_B: u32 =  0x10000;
-
-    let code = khar as u32;
-    if code < MAX_ONE_B {
-        vec![code as u8]
-    } else if code < MAX_TWO_B {
-        vec![
-            (code >> 6 & 0x1F) as u8 | TAG_TWO_B,
-            (code & 0x3F) as u8 | TAG_CONT,
-        ]
-    } else if code < MAX_THREE_B {
-        vec![
-            (code >> 12 & 0x0F) as u8 | TAG_THREE_B,
-            (code >>  6 & 0x3F) as u8 | TAG_CONT,
-            (code & 0x3F) as u8 | TAG_CONT,
-        ]
-    } else {
-        vec![
-            (code >> 18 & 0x07) as u8 | TAG_FOUR_B,
-            (code >> 12 & 0x3F) as u8 | TAG_CONT,
-            (code >>  6 & 0x3F) as u8 | TAG_CONT,
-            (code & 0x3F) as u8 | TAG_CONT,
-        ]
-    }
+    let mut buf = [0u8; 4];
+    khar.encode_utf8(&mut buf).as_bytes().to_owned()
 }
 
 fn regex_to_hir(pattern: &str) -> Result<Hir, Error> {
