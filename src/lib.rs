@@ -500,7 +500,7 @@
 //! # /* NOREADME
 //!     #[test]
 //! # NOREADME */
-//!     fn test_fib(n in prop::num::u64::ANY) {
+//!     fn test_fib(n in any::<u64>()) {
 //!         // For large n, this will variously run for an extremely long time,
 //!         // overflow the stack, or panic due to integer overflow.
 //!         assert!(fib(n) >= n);
@@ -1223,18 +1223,18 @@
 //!     CaseWithMultipleData(u32, String),
 //! }
 //!
-//! fn my_enum_strategy() -> BoxedStrategy<MyEnum> {
+//! fn my_enum_strategy() -> impl Strategy<Value = MyEnum> {
 //!   prop_oneof![
 //!     // For cases without data, `Just` is all you need
 //!     Just(MyEnum::SimpleCase),
 //!
 //!     // For cases with data, write a strategy for the interior data, then
 //!     // map into the actual enum case.
-//!     prop::num::u32::ANY.prop_map(MyEnum::CaseWithSingleDatum),
+//!     any::<u32>().prop_map(MyEnum::CaseWithSingleDatum),
 //!
-//!     (prop::num::u32::ANY, ".*").prop_map(
+//!     (any::<u32>(), ".*").prop_map(
 //!       |(a, b)| MyEnum::CaseWithMultipleData(a, b)),
-//!   ].boxed()
+//!   ]
 //! }
 //! #
 //! # fn main() { }
