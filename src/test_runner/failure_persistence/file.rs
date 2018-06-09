@@ -242,44 +242,27 @@ fn parse_seed_line(mut line: String, path: &Path, lineno: usize) -> Option<Seed>
     // Split by whitespace and ignore empty lines:
     let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
     let len = parts.len();
-    if len == 0 { return None; }
-
-    // Decide which parser to use depending on format:
-    let first_ok = parts[0] == "xs";
-    let parser = match len {
-        5 if first_ok => {
-            eprintln!("proptest: using old format parsing [u32; 4]. \
-                       This format will be removed in version 0.9");
-            parse_seed_old
-        },
-        17 if first_ok => parse_seed,
-        _ => {
+    if len > 0 {
+        // "xs" stands for "XorShift".
+        if parts[0] == "xs" && len == 5 {
+            // Parse using the chosen one:
+            if let Ok(seed) = parse_seed_old(&parts[1..]) {
+                return Some(seed);
+            } else {
+                eprintln!("proptest: {}:{}: unparsable line, ignoring",
+                            path.display(), lineno + 1);
+            }
+        } else {
             eprintln!("proptest: {}:{}: unknown case type `{}` \
                     (corrupt file or newer proptest version?)",
                     &path.display(), lineno + 1, parts[0]);
-            return None;
-        },
-    };
-
-    // Parse using the chosen one:
-    if let Ok(seed) = parser(&parts[1..]) {
-        Some(seed)
-    } else {
-        eprintln!("proptest: {}:{}: unparsable line, ignoring",
-                    path.display(), lineno + 1);
-        None
+        }
     }
+
+    None
 }
 
-fn parse_seed(parts: &[&str]) -> Result<[u8; 16], ParseIntError> {
-    let mut ret = [0; 16];
-    for (src, dst) in parts.iter().zip(ret.iter_mut()) {
-        *dst = src.parse()?;
-    }
-    Ok(ret)
-}
-
-fn parse_seed_old(parts: &[&str]) -> Result<[u8; 16], ParseIntError> {
+fn parse_seed_old(parts: &[&str]) -> Result<Seed, ParseIntError> {
     let mut ret = [0u32; 4];
     for (src, dst) in parts.iter().zip(ret.iter_mut()) {
         *dst = src.parse()?;
@@ -288,11 +271,18 @@ fn parse_seed_old(parts: &[&str]) -> Result<[u8; 16], ParseIntError> {
     Ok(convert_to_new_format(ret))
 }
 
-fn convert_to_new_format(old_format: [u32; 4]) -> [u8; 16] {
+fn convert_to_new_format(old_format: [u32; 4]) -> Seed {
     use byteorder::{NativeEndian, ByteOrder};
     let mut new_format = [0; 16];
     NativeEndian::write_u32_into(&old_format[..], &mut new_format);
     new_format
+}
+
+fn convert_from_new_format(new_format: Seed) -> [u32; 4] {
+    use byteorder::{NativeEndian, ByteOrder};
+    let mut old_format = [0; 4];
+    NativeEndian::read_u32_into(&new_format[..], &mut old_format);
+    old_format
 }
 
 fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &Debug)
@@ -302,7 +292,7 @@ fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &Debug)
     write!(buf, "xs ")?;
 
     // Write out each part of seed:
-    for &s in seed.iter() {
+    for &s in &convert_from_new_format(seed) {
         write!(buf, "{} ", s)?;
     }
 

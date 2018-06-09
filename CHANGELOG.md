@@ -38,11 +38,10 @@
 
 - `rand` version 0.5 is now used.
 
-- As a consequence, the stored seed is now `[u8; 16]` instead of `[u32; 4]`.
-  To minimize breakage for failure persistence, proptest will until version 0.9
-  accept both the new and old seed format in persisted files.
-  When you run proptest on version 0.8, it will automatically convert your
-  persisted files to the new format.
+- As a consequence, the `FailurePersistence` trait will now use `[u8; 16]` seeds
+  instead of `[u32; 4]`. However, the stored failure persistence files using
+  the default `FileFailurePersistence` will still use `[u32; 4]` so your old
+  failure persistence files should still work.
 
 - The RNG used by proptest has been changed to a PRNG `TestRng` which proptest
   exposes. This is currently a simple new-type wrapper around `XorShiftRng`.
