@@ -272,16 +272,17 @@ fn parse_seed_old(parts: &[&str]) -> Result<Seed, ParseIntError> {
 }
 
 fn convert_to_new_format(old_format: [u32; 4]) -> Seed {
-    use byteorder::{NativeEndian, ByteOrder};
+    use byteorder::{ByteOrder, LittleEndian};
     let mut new_format = [0; 16];
-    NativeEndian::write_u32_into(&old_format[..], &mut new_format);
+    // rand uses little endian for this conversion on all platforms
+    LittleEndian::write_u32_into(&old_format[..], &mut new_format);
     new_format
 }
 
 fn convert_from_new_format(new_format: Seed) -> [u32; 4] {
-    use byteorder::{NativeEndian, ByteOrder};
+    use byteorder::{ByteOrder, LittleEndian};
     let mut old_format = [0; 4];
-    NativeEndian::read_u32_into(&new_format[..], &mut old_format);
+    LittleEndian::read_u32_into(&new_format[..], &mut old_format);
     old_format
 }
 
