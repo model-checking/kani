@@ -8,31 +8,23 @@
 // except according to those terms.
 
 use core::any::Any;
-use core::fmt;
+use std_facade::{fmt, Box, Vec};
+
 use test_runner::failure_persistence::FailurePersistence;
-
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use test_runner::Seed;
 
 /// Failure persistence option that loads and saves nothing at all.
 #[derive(Debug, Default, PartialEq)]
 struct NoopFailurePersistence;
 
 impl FailurePersistence for NoopFailurePersistence {
-    fn load_persisted_failures(&self, _source_file: Option<&'static str>) -> Vec<[u32; 4]> {
+    fn load_persisted_failures(&self, _source_file: Option<&'static str>) -> Vec<Seed> {
         Vec::new()
     }
-    fn save_persisted_failure(
-        &mut self,
+
+    fn save_persisted_failure(&mut self,
         _source_file: Option<&'static str>,
-        _seed: [u32; 4],
+        _seed: Seed,
         _shrunken_value: &fmt::Debug,
     ) {
     }
@@ -51,21 +43,22 @@ impl FailurePersistence for NoopFailurePersistence {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_runner::failure_persistence::tests::*;
 
     #[test]
     fn default_load_is_empty() {
-        assert!(NoopFailurePersistence::default().load_persisted_failures(None).is_empty());
-        assert!(NoopFailurePersistence::default().load_persisted_failures(Some("hi")).is_empty());
+        assert!(NoopFailurePersistence::default()
+                    .load_persisted_failures(None).is_empty());
+        assert!(NoopFailurePersistence::default()
+                    .load_persisted_failures(HI_PATH).is_empty());
     }
 
     #[test]
     fn seeds_not_recoverable() {
         let mut p = NoopFailurePersistence::default();
-        let seed = [0u32, 1, 2, 3];
-        let key = Some("hi");
-        p.save_persisted_failure(key, seed, &"");
-        assert!(p.load_persisted_failures(key).is_empty());
+        p.save_persisted_failure(HI_PATH, INC_SEED, &"");
+        assert!(p.load_persisted_failures(HI_PATH).is_empty());
         assert!(p.load_persisted_failures(None).is_empty());
-        assert!(p.load_persisted_failures(Some("unrelated")).is_empty());
+        assert!(p.load_persisted_failures(UNREL_PATH).is_empty());
     }
 }

@@ -7,18 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
 use core::any::Any;
-
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std_facade::{fmt, Box, Vec};
 
 #[cfg(feature = "std")]
 mod file;
@@ -30,18 +20,20 @@ pub use self::file::*;
 pub use self::map::*;
 pub use self::noop::*;
 
+use test_runner::Seed;
+
 /// Provides external persistence for historical test failures by storing seeds.
 pub trait FailurePersistence: Send + Sync + fmt::Debug  {
     /// Supply seeds associated with the given `source_file` that may be
     /// used by a `TestRunner`'s random number generator in order to
     /// consistently recreate a previously-failing `Strategy`-provided value.
-    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<[u32; 4]>;
+    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<Seed>;
 
     /// Store a new failure-generating seed associated with the given `source_file`.
     fn save_persisted_failure(
         &mut self,
         source_file: Option<&'static str>,
-        seed: [u32; 4],
+        seed: Seed,
         shrunken_value: &fmt::Debug,
     );
 
@@ -55,7 +47,7 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
     fn as_any(&self) -> &Any;
 }
 
-impl<'a, 'b> PartialEq<FailurePersistence+'b> for FailurePersistence+'a {
+impl<'a, 'b> PartialEq<FailurePersistence + 'b> for FailurePersistence + 'a {
     fn eq(&self, other: &(FailurePersistence+'b)) -> bool {
         FailurePersistence::eq(self, other)
     }
@@ -65,4 +57,13 @@ impl Clone for Box<FailurePersistence> {
     fn clone(&self) -> Box<FailurePersistence> {
         self.box_clone()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    pub const INC_SEED: [u8; 16] =
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+    pub const HI_PATH: Option<&str> = Some("hi");
+    pub const UNREL_PATH: Option<&str> = Some("unrelated");
 }

@@ -7,12 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::{fmt, Arc};
 
 use strategy::traits::*;
 use test_runner::*;
@@ -53,13 +48,14 @@ impl<S : Clone, F> Clone for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : Fn (&ValueFor<S>) -> bool>
+     F : Fn (&S::Value) -> bool>
 Strategy for Filter<S, F> {
-    type Value = Filter<S::Value, F>;
+    type Tree = Filter<S::Tree, F>;
+    type Value = S::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
-            let val = self.source.new_value(runner)?;
+            let val = self.source.new_tree(runner)?;
             if !(self.fun)(&val.current()) {
                 runner.reject_local(self.whence.clone())?;
             } else {
@@ -123,7 +119,7 @@ mod test {
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let mut case = input.new_value(&mut runner).unwrap();
+            let mut case = input.new_tree(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);
 

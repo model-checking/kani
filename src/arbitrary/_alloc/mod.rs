@@ -7,16 +7,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Arbitrary implementations for libstd.
+//! Arbitrary implementations for liballoc.
 
-mod env;
-mod ffi;
-mod fs;
-mod io;
-mod net;
-mod panic;
-mod path;
-mod string;
+#[cfg(feature = "unstable")]
+mod alloc;
+mod borrow;
+mod boxed;
+mod char;
+mod collections;
+mod hash;
+mod ops;
+mod rc;
+mod str;
 mod sync;
-mod thread;
-mod time;

@@ -9,18 +9,12 @@
 
 use core::cmp::{max, min};
 use core::u32;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std_facade::Vec;
 
 #[cfg(not(feature="std"))]
 use num_traits::float::FloatCore;
 
-use rand;
-use rand::distributions::IndependentSample;
-
+use num::sample_uniform;
 use strategy::traits::*;
 use test_runner::*;
 
@@ -51,8 +45,18 @@ impl<T : Strategy> Union<T> {
         let options: Vec<W<T>> = options.into_iter()
             .map(|v| (1, v)).collect();
         assert!(!options.is_empty());
+        Self { options }
+    }
 
-        Union { options }
+    pub(crate) fn try_new<E, I>(it: I) -> Result<Self, E>
+    where
+        I: Iterator<Item = Result<T, E>>
+    {
+        let options: Vec<W<T>> = it.map(|r| r.map(|v| (1, v)))
+            .collect::<Result<_, _>>()?;
+
+        assert!(!options.is_empty());
+        Ok(Self { options })
     }
 
     /// Create a strategy which selects from the given delegate strategies.
@@ -73,7 +77,7 @@ impl<T : Strategy> Union<T> {
                 "Union option has a weight of 0");
         assert!(options.iter().map(|&(w, _)| u64::from(w)).sum::<u64>() <=
                 u64::from(u32::MAX), "Union weights overflow u32");
-        Union { options }
+        Self { options }
     }
 
     /// Add `other` as an additional alternate strategy with weight 1.
@@ -86,8 +90,7 @@ impl<T : Strategy> Union<T> {
 fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
                                            weights1: I, weights2: I) -> usize {
     let sum = weights1.map(u64::from).sum();
-    let weighted_pick = rand::distributions::Range::new(0, sum)
-        .ind_sample(runner.rng());
+    let weighted_pick = sample_uniform(runner, 0..sum);
     weights2.scan(0u64, |state, w| {
         *state += u64::from(w);
         Some(*state)
@@ -95,9 +98,10 @@ fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
 }
 
 impl<T : Strategy> Strategy for Union<T> {
-    type Value = UnionValueTree<T::Value>;
+    type Tree = UnionValueTree<T::Tree>;
+    type Value = T::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         fn extract_weight<V>(&(w, _): &W<V>) -> u32 { w }
 
         let pick = pick_weighted(
@@ -107,15 +111,10 @@ impl<T : Strategy> Strategy for Union<T> {
 
         let mut options = Vec::with_capacity(pick);
         for option in &self.options[0..pick+1] {
-            options.push(option.1.new_value(runner)?);
+            options.push(option.1.new_tree(runner)?);
         }
 
-        Ok(UnionValueTree {
-            options: options,
-            pick: pick,
-            min_pick: 0,
-            prev_pick: None,
-        })
+        Ok(UnionValueTree { options, pick, min_pick: 0, prev_pick: None })
     }
 }
 
@@ -241,22 +240,22 @@ impl<T> TupleUnion<T> {
 
 macro_rules! tuple_union {
     ($($gen:ident $ix:tt)*) => {
-        impl<A : Strategy, $($gen: Strategy),*> Strategy
-        for TupleUnion<(W<A>, $(W<$gen>),*)>
-        where $($gen::Value : ValueTree<Value = ValueFor<A>>),* {
-            type Value = TupleUnionValueTree<
-                (A::Value, $(Option<$gen::Value>),*)>;
+        impl<A : Strategy, $($gen: Strategy<Value = A::Value>),*>
+        Strategy for TupleUnion<(W<A>, $(W<$gen>),*)> {
+            type Tree = TupleUnionValueTree<
+                (A::Tree, $(Option<$gen::Tree>),*)>;
+            type Value = A::Value;
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let weights = [((self.0).0).0, $(((self.0).$ix).0),*];
                 let pick = pick_weighted(runner, weights.iter().cloned(),
                                          weights.iter().cloned());
 
                 Ok(TupleUnionValueTree {
                     options: (
-                        ((self.0).0).1.new_value(runner)?,
+                        ((self.0).0).1.new_tree(runner)?,
                         $(if $ix <= pick {
-                            Some(((self.0).$ix).1.new_value(runner)?)
+                            Some(((self.0).$ix).1.new_tree(runner)?)
                         } else {
                             None
                         }),*),
@@ -339,6 +338,11 @@ mod test {
     use strategy::just::Just;
     use super::*;
 
+    // FIXME(2018-06-01): figure out a way to run this test on no_std.
+    // The problem is that the default seed is fixed and does not produce
+    // enough passed tests. We need some universal source of non-determinism
+    // for the seed, which is unlikely.
+    #[cfg(feature = "std")]
     #[test]
     fn test_union() {
         let input = (10u32..20u32).prop_union(30u32..40u32);
@@ -351,8 +355,8 @@ mod test {
         let mut converged_high = 0;
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| {
+            let case = input.new_tree(&mut runner).unwrap();
+            let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
                 Ok(())
             });
@@ -384,7 +388,7 @@ mod test {
         let mut counts = [0, 0, 0];
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
-            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+            counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
 
         println!("{:?}", counts);
@@ -403,6 +407,8 @@ mod test {
         ]), None);
     }
 
+    // FIXME(2018-06-01): See note on `test_union`.
+    #[cfg(feature = "std")]
     #[test]
     fn test_tuple_union() {
         let input = TupleUnion::new(
@@ -417,8 +423,8 @@ mod test {
         let mut converged_high = 0;
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&v| {
+            let case = input.new_tree(&mut runner).unwrap();
+            let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
                 Ok(())
             });
@@ -450,7 +456,7 @@ mod test {
         let mut counts = [0, 0, 0];
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
-            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+            counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
 
         println!("{:?}", counts);
@@ -474,7 +480,7 @@ mod test {
 
                 let mut pass = false;
                 for _ in 0..1024 {
-                    if 0 == input.new_value(&mut runner).unwrap().current() {
+                    if 0 == input.new_tree(&mut runner).unwrap().current() {
                         pass = true;
                         break;
                     }

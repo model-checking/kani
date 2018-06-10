@@ -7,16 +7,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Arbitrary implementations for libstd.
+//! Arbitrary implementations for `std::fmt`.
 
-mod env;
-mod ffi;
-mod fs;
-mod io;
-mod net;
-mod panic;
-mod path;
-mod string;
-mod sync;
-mod thread;
-mod time;
+use core::fmt::Error;
+arbitrary!(Error; Error);
+
+#[cfg(test)]
+mod test {
+    no_panic_test!(error => Error);
+}

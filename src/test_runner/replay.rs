@@ -15,7 +15,7 @@ use std::path::Path;
 use std::string::String;
 use std::vec::Vec;
 
-use test_runner::{TestCaseError, TestCaseResult};
+use test_runner::{TestCaseError, TestCaseResult, Seed};
 
 const SENTINEL: &'static str = "proptest-forkfile";
 
@@ -32,7 +32,7 @@ const SENTINEL: &'static str = "proptest-forkfile";
 /// to the persistence file will perturb the replay.
 ///
 /// `Replay` has a special string format for being stored in files. It starts
-/// with a line just containing the text in `SENTINEL`, then four lines
+/// with a line just containing the text in `SENTINEL`, then 16 lines
 /// containing the values of `seed`, then an unterminated line consisting of
 /// `+`, `-`, and `!` characters to indicate test case passes/failures/rejects,
 /// or `.` to indicate termination of the test run. This format makes it easy
@@ -41,7 +41,7 @@ const SENTINEL: &'static str = "proptest-forkfile";
 #[derive(Clone, Debug)]
 pub struct Replay {
     /// The seed of the RNG used to start running the test cases.
-    pub seed: [u32;4],
+    pub seed: Seed,
     /// A log of whether certain test cases passed or failed. The runner will
     /// assume the same results occur without actually running the test cases.
     pub steps: Vec<TestCaseResult>,
@@ -148,12 +148,12 @@ impl Replay {
             return Ok(ReplayFileStatus::Corrupt);
         }
 
-        let mut seed = [0u32;4];
+        let mut seed: Seed = [0; 16];
         for word in &mut seed {
             line.clear();
             reader.read_line(&mut line)?;
 
-            match line.trim().parse::<u32>() {
+            match line.trim().parse::<u8>() {
                 Ok(w) => *word = w,
                 Err(_) => return Ok(ReplayFileStatus::Corrupt),
             }

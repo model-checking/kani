@@ -9,22 +9,23 @@
 
 //! Arbitrary implementations for `std::hash`.
 
-use std::alloc::*;
-use std::cmp;
-use std::ops::Range;
-use std::usize;
+use core::cmp;
+use core::ops::Range;
+use core::usize;
+
+multiplex_alloc!(alloc::alloc, ::std::alloc);
 
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
 
-arbitrary!(CannotReallocInPlace; CannotReallocInPlace);
-arbitrary!(Global; Global);
+arbitrary!(alloc::CannotReallocInPlace; alloc::CannotReallocInPlace);
+arbitrary!(alloc::Global; alloc::Global);
 
 // Not Debug.
 //lazy_just!(System, || System);
 
-arbitrary!(Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
+arbitrary!(alloc::Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
     // 1. align must be a power of two and <= (1 << 31):
     // 2. "when rounded up to the nearest multiple of align, must not overflow".
     static_map((0u8..32u8, any::<usize>()), |(align_power, size)| {
@@ -32,20 +33,20 @@ arbitrary!(Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
         let max_size = 0usize.wrapping_sub(align);
         // Not quite a uniform distribution due to clamping,
         // but probably good enough
-        Layout::from_size_align(cmp::min(max_size, size), align).unwrap()
+        alloc::Layout::from_size_align(cmp::min(max_size, size), align).unwrap()
     })
 );
 
-arbitrary!(AllocErr, Just<Self>; Just(AllocErr));
-arbitrary!(CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
-           prop_oneof![Just(CollectionAllocErr::AllocErr),
-                       Just(CollectionAllocErr::CapacityOverflow)]);
+arbitrary!(alloc::AllocErr, Just<Self>; Just(alloc::AllocErr));
+arbitrary!(alloc::CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+           prop_oneof![Just(alloc::CollectionAllocErr::AllocErr),
+                       Just(alloc::CollectionAllocErr::CapacityOverflow)]);
 
 #[cfg(test)]
 mod test {
     no_panic_test!(
-        layout => Layout,
-        alloc_err => AllocErr,
-        collection_alloc_err => CollectionAllocErr
+        layout => alloc::Layout,
+        alloc_err => alloc::AllocErr,
+        collection_alloc_err => alloc::CollectionAllocErr
     );
 }

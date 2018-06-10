@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
+use std_facade::fmt;
 
 use strategy::{Strategy, ValueTree, NewTree};
 use test_runner::TestRunner;
@@ -31,9 +31,10 @@ pub struct Just<T : Clone + fmt::Debug>(
     pub T);
 
 impl<T : Clone + fmt::Debug> Strategy for Just<T> {
-    type Value = Self;
+    type Tree = Self;
+    type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
@@ -77,9 +78,10 @@ impl<T, F: Fn() -> T> LazyJust<T, F> {
 }
 
 impl<T: fmt::Debug, F: Clone + Fn() -> T> Strategy for LazyJust<T, F> {
-    type Value = Self;
+    type Tree = Self;
+    type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
@@ -113,9 +115,10 @@ impl<T, F: Fn() -> T> fmt::Debug for LazyJust<T, F> {
 // TODO: try 'F: Fn() -> T' instead when we've got specialization.
 
 impl<T: fmt::Debug> Strategy for fn() -> T {
-    type Value = Self;
+    type Tree = Self;
+    type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
 }
 
 impl<T: fmt::Debug> ValueTree for fn() -> T {

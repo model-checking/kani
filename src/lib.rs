@@ -7,15 +7,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![cfg_attr(feature = "cargo-clippy", allow(doc_markdown))]
-
 //! Proptest is a property testing framework (i.e., the QuickCheck family)
 //! inspired by the [Hypothesis](http://hypothesis.works/) framework for
 //! Python. It allows to test that certain properties of your code hold for
 //! arbitrary inputs, and if a failure is found, automatically finds the
 //! minimal test case to reproduce the problem. Unlike QuickCheck, generation
 //! and shrinking is defined on a per-value basis instead of per-type, which
-//! makes it much more flexible and simplifies composition.
+//! makes it more flexible and simplifies composition.
 //!
 //! If you have dependencies which provide QuickCheck `Arbitrary`
 //! implementations, see also the related
@@ -114,7 +112,7 @@
 //! ```rust,ignore
 //! proptest! {
 //!     #[test]
-//!     fn doesnt_crash(ref s in "\\PC*") {
+//!     fn doesnt_crash(s in "\\PC*") {
 //!         parse_date(s);
 //!     }
 //! }
@@ -129,7 +127,7 @@
 //! with
 //!
 //! ```text
-//! thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: ref s = "aAௗ0㌀0"
+//! thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: s = "aAௗ0㌀0"
 //! 	successes: 102
 //! 	local rejects: 0
 //! 	global rejects: 0
@@ -197,7 +195,7 @@
 //!     // snip...
 //!
 //!     #[test]
-//!     fn parses_all_valid_dates(ref s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
+//!     fn parses_all_valid_dates(s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
 //!         parse_date(s).unwrap();
 //!     }
 //! }
@@ -502,7 +500,7 @@
 //! # /* NOREADME
 //!     #[test]
 //! # NOREADME */
-//!     fn test_fib(n in prop::num::u64::ANY) {
+//!     fn test_fib(n in any::<u64>()) {
 //!         // For large n, this will variously run for an extremely long time,
 //!         // overflow the stack, or panic due to integer overflow.
 //!         assert!(fib(n) >= n);
@@ -567,7 +565,7 @@
 //! which match the former as a regular expression.
 //!
 //! Generating a value is a two-step process. First, a `TestRunner` is passed
-//! to the `new_value()` method of the `Strategy`; this returns a `ValueTree`,
+//! to the `new_tree()` method of the `Strategy`; this returns a `ValueTree`,
 //! which we'll look at in more detail momentarily. Calling the `current()`
 //! method on the `ValueTree` produces the actual value. Knowing that, we can
 //! put the pieces together and generate values. The below is the
@@ -581,9 +579,9 @@
 //!
 //! fn main() {
 //!     let mut runner = TestRunner::default();
-//!     let int_val = (0..100i32).new_value(&mut runner).unwrap();
+//!     let int_val = (0..100i32).new_tree(&mut runner).unwrap();
 //!     let str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
-//!         .new_value(&mut runner).unwrap();
+//!         .new_tree(&mut runner).unwrap();
 //!     println!("int_val = {}, str_val = {}",
 //!              int_val.current(), str_val.current());
 //! }
@@ -619,7 +617,7 @@
 //! fn some_function_doesnt_crash() {
 //!     let mut runner = TestRunner::default();
 //!     for _ in 0..256 {
-//!         let val = (0..10000i32).new_value(&mut runner).unwrap();
+//!         let val = (0..10000i32).new_tree(&mut runner).unwrap();
 //!         some_function(val.current());
 //!     }
 //! }
@@ -652,7 +650,7 @@
 //! fn main() {
 //!     let mut runner = TestRunner::default();
 //!     let mut str_val = "[a-z]{1,4}\\p{Cyrillic}{1,4}\\p{Greek}{1,4}"
-//!         .new_value(&mut runner).unwrap();
+//!         .new_tree(&mut runner).unwrap();
 //!     println!("str_val = {}", str_val.current());
 //!     while str_val.simplify() {
 //!         println!("        = {}", str_val.current());
@@ -742,7 +740,7 @@
 //! fn main() {
 //!     let mut runner = TestRunner::default();
 //!     for _ in 0..256 {
-//!         let mut val = (0..10000i32).new_value(&mut runner).unwrap();
+//!         let mut val = (0..10000i32).new_tree(&mut runner).unwrap();
 //!         if some_function(val.current()) {
 //!             // Test case passed
 //!             continue;
@@ -804,7 +802,7 @@
 //!         failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
 //!         .. Config::default()
 //!     });
-//!     let result = runner.run(&(0..10000i32), |&v| {
+//!     let result = runner.run(&(0..10000i32), |v| {
 //!         some_function(v);
 //!         Ok(())
 //!     });
@@ -818,9 +816,9 @@
 //! }
 //! ```
 //!
-//! That's a lot better! Still a bit boilerplatey; the `proptest!` will help
-//! with that, but it does some other stuff we haven't covered yet, so for the
-//! moment we'll keep using `TestRunner` directly.
+//! That's a lot better! Still a bit boilerplatey; the `proptest!` macro will
+//! help with that, but it does some other stuff we haven't covered yet, so for
+//! the moment we'll keep using `TestRunner` directly.
 //!
 //! ### Compound Strategies
 //!
@@ -874,7 +872,7 @@
 //!     // Combine our two inputs into a strategy for one tuple. Our test
 //!     // function then destructures the generated tuples back into separate
 //!     // `a` and `b` variables to be passed in to `add()`.
-//!     runner.run(&(0..1000i32, 0..1000i32), |&(a, b)| {
+//!     runner.run(&(0..1000i32, 0..1000i32), |(a, b)| {
 //!         let sum = add(a, b);
 //!         assert!(sum >= a);
 //!         assert!(sum >= b);
@@ -936,17 +934,17 @@
 //! ```rust
 //! #[macro_use] extern crate proptest;
 //!
-//! fn do_stuff(v: &str) {
+//! fn do_stuff(v: String) {
 //!     let i: u32 = v.parse().unwrap();
 //!     let s = i.to_string();
-//!     assert_eq!(&s, v);
+//!     assert_eq!(s, v);
 //! }
 //!
 //! proptest! {
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref v in "[1-9][0-9]{0,8}") {
+//!     fn test_do_stuff(v in "[1-9][0-9]{0,8}") {
 //!         do_stuff(v);
 //!     }
 //! }
@@ -973,17 +971,17 @@
 //! // Grab `Strategy` and a shorter namespace prefix
 //! use proptest::prelude::*;
 //!
-//! fn do_stuff(v: &str) {
+//! fn do_stuff(v: String) {
 //!     let i: u32 = v.parse().unwrap();
 //!     let s = i.to_string();
-//!     assert_eq!(&s, v);
+//!     assert_eq!(s, v);
 //! }
 //!
 //! proptest! {
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref v in any::<u32>().prop_map(|v| v.to_string())) {
+//!     fn test_do_stuff(v in any::<u32>().prop_map(|v| v.to_string())) {
 //!         do_stuff(v);
 //!     }
 //! }
@@ -1014,7 +1012,7 @@
 //!   quantity: u32,
 //! }
 //!
-//! fn do_stuff(order: &Order) {
+//! fn do_stuff(order: Order) {
 //!     let i: u32 = order.id.parse().unwrap();
 //!     let s = i.to_string();
 //!     assert_eq!(s, order.id);
@@ -1025,7 +1023,7 @@
 //!     #[test]
 //!     # */
 //!     fn test_do_stuff(
-//!         ref order in
+//!         order in
 //!         (any::<u32>().prop_map(|v| v.to_string()),
 //!          "[a-z]*", 1..1000u32).prop_map(
 //!              |(id, item, quantity)| Order { id, item, quantity })
@@ -1056,7 +1054,7 @@
 //! #   quantity: u32,
 //! # }
 //! #
-//! # fn do_stuff(order: &Order) {
+//! # fn do_stuff(order: Order) {
 //! #     let i: u32 = order.id.parse().unwrap();
 //! #     let s = i.to_string();
 //! #     assert_eq!(s, order.id);
@@ -1073,7 +1071,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref order in arb_order(1000)) {
+//!     fn test_do_stuff(order in arb_order(1000)) {
 //!         do_stuff(order);
 //!     }
 //! }
@@ -1092,6 +1090,49 @@
 //! we have a test that needs an `Order` with no more than a dozen items, we
 //! can simply call `arb_order(12)` rather than needing to write out a whole
 //! new strategy.
+//!
+//! We can also use `-> impl Strategy<Value = Order>` instead to avoid the
+//! overhead as in the following example. You should use `-> impl Strategy<..>`
+//! unless you need the dynamic dispatch.
+//!
+//! ```rust
+//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
+//!
+//! // snip
+//! #
+//! # #[derive(Clone, Debug)]
+//! # struct Order {
+//! #   id: String,
+//! #   // Some other fields, though the test doesn't do anything with them
+//! #   item: String,
+//! #   quantity: u32,
+//! # }
+//! #
+//! 
+//! # fn do_stuff(order: Order) {
+//! #     let i: u32 = order.id.parse().unwrap();
+//! #     let s = i.to_string();
+//! #     assert_eq!(s, order.id);
+//! # }
+//!
+//! fn arb_order(max_quantity: u32) -> impl Strategy<Value = Order> {
+//!     (any::<u32>().prop_map(|v| v.to_string()),
+//!      "[a-z]*", 1..max_quantity)
+//!     .prop_map(|(id, item, quantity)| Order { id, item, quantity })
+//! }
+//!
+//! proptest! {
+//!     # /*
+//!     #[test]
+//!     # */
+//!     fn test_do_stuff(order in arb_order(1000)) {
+//!         do_stuff(order);
+//!     }
+//! }
+//!
+//! # fn main() { test_do_stuff(); }
+//! ```
 //!
 //! ### Syntax Sugar: `prop_compose!`
 //!
@@ -1117,7 +1158,7 @@
 //! #   quantity: u32,
 //! # }
 //! #
-//! # fn do_stuff(order: &Order) {
+//! # fn do_stuff(order: Order) {
 //! #     let i: u32 = order.id.parse().unwrap();
 //! #     let s = i.to_string();
 //! #     assert_eq!(s, order.id);
@@ -1141,7 +1182,7 @@
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_do_stuff(ref order in arb_order(1000)) {
+//!     fn test_do_stuff(order in arb_order(1000)) {
 //!         do_stuff(order);
 //!     }
 //! }
@@ -1153,8 +1194,8 @@
 //! generated function takes the first parameter list as arguments. These
 //! arguments are used to select the strategies in the second argument list.
 //! Values are then drawn from those strategies and transformed by the function
-//! body. The actual function as a return type of `BoxedStrategy<T>` where `T`
-//! is the declared return type.
+//! body. The actual function has a return type of `impl Strategy<Value = T>`
+//! where `T` is the declared return type.
 //!
 //! ### Generating Enums
 //!
@@ -1182,18 +1223,18 @@
 //!     CaseWithMultipleData(u32, String),
 //! }
 //!
-//! fn my_enum_strategy() -> BoxedStrategy<MyEnum> {
+//! fn my_enum_strategy() -> impl Strategy<Value = MyEnum> {
 //!   prop_oneof![
 //!     // For cases without data, `Just` is all you need
 //!     Just(MyEnum::SimpleCase),
 //!
 //!     // For cases with data, write a strategy for the interior data, then
 //!     // map into the actual enum case.
-//!     prop::num::u32::ANY.prop_map(MyEnum::CaseWithSingleDatum),
+//!     any::<u32>().prop_map(MyEnum::CaseWithSingleDatum),
 //!
-//!     (prop::num::u32::ANY, ".*").prop_map(
+//!     (any::<u32>(), ".*").prop_map(
 //!       |(a, b)| MyEnum::CaseWithMultipleData(a, b)),
-//!   ].boxed()
+//!   ]
 //! }
 //! #
 //! # fn main() { }
@@ -1381,7 +1422,7 @@
 //!     Map(HashMap<String, Json>),
 //! }
 //!
-//! fn arb_json() -> BoxedStrategy<Json> {
+//! fn arb_json() -> impl Strategy<Value = Json> {
 //!     prop_oneof![
 //!         Just(Json::Null),
 //!         any::<bool>().prop_map(Json::Bool),
@@ -1390,7 +1431,7 @@
 //!         prop::collection::vec(arb_json(), 0..10).prop_map(Json::Array),
 //!         prop::collection::hash_map(
 //!           ".*", arb_json(), 0..10).prop_map(Json::Map),
-//!     ].boxed()
+//!     ]
 //! }
 //! # fn main() { }
 //! ```
@@ -1425,7 +1466,7 @@
 //!     Map(HashMap<String, Json>),
 //! }
 //!
-//! fn arb_json() -> BoxedStrategy<Json> {
+//! fn arb_json() -> impl Strategy<Value = Json> {
 //!     let leaf = prop_oneof![
 //!         Just(Json::Null),
 //!         any::<bool>().prop_map(Json::Bool),
@@ -1442,7 +1483,7 @@
 //!               .prop_map(Json::Array),
 //!           prop::collection::hash_map(".*", inner, 0..10)
 //!               .prop_map(Json::Map),
-//!       ]).boxed()
+//!       ])
 //! }
 //! # fn main() { }
 //! ```
@@ -1463,7 +1504,7 @@
 //! proptest! {
 //!     #[test]
 //!     fn test_some_function(
-//!         ref stuff in prop::collection::vec(".*", 1..100),
+//!         stuff in prop::collection::vec(".*", 1..100),
 //!         index in 0..100usize
 //!     ) {
 //!         prop_assume!(index < stuff.len());
@@ -1485,24 +1526,24 @@
 //! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
-//! fn some_function(stuff: &[String], index: usize) {
+//! fn some_function(stuff: Vec<String>, index: usize) {
 //!     let _ = &stuff[index];
 //!     // Do stuff
 //! }
 //!
-//! fn vec_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
+//! fn vec_and_index() -> impl Strategy<Value = (Vec<String>, usize)> {
 //!     prop::collection::vec(".*", 1..100)
 //!         .prop_flat_map(|vec| {
 //!             let len = vec.len();
 //!             (Just(vec), 0..len)
-//!         }).boxed()
+//!         })
 //! }
 //!
 //! proptest! {
 //!     # /*
 //!     #[test]
 //!     # */
-//!     fn test_some_function((ref vec, index) in vec_and_index()) {
+//!     fn test_some_function((vec, index) in vec_and_index()) {
 //!         some_function(vec, index);
 //!     }
 //! }
@@ -1601,32 +1642,37 @@
 //! perusing the module tree below.
 
 #![deny(missing_docs)]
-#![cfg_attr(feature = "unstable", feature(
-    // i128 here produces a warning since it's going to be stable in 1.26, but
-    // that's not stable *now*, so keep it in so the warning acts as a
-    // reminder.
-      i128_type
-    , i128
-    , allocator_api
-    , inclusive_range_syntax
-    , inclusive_range
-    , thread_local_state
-    , try_trait
-    , generator_trait
-    , try_from
-    , integer_atomics
-    , mpsc_select
-    , ip
-    , decode_utf8
-    , iterator_step_by
-    , io
-    , never_type
-    , try_reserve
-))]
 #![no_std]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(alloc))]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_float))]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_intrinsics))]
+#![cfg_attr(feature = "cargo-clippy", allow(
+    doc_markdown,
+    // We have a lot of these lints for associated types... And we don't care.
+    type_complexity
+))]
+#![cfg_attr(feature = "unstable", feature(
+    allocator_api,
+    thread_local_state,
+    try_trait,
+    generator_trait,
+    try_from,
+    integer_atomics,
+    mpsc_select,
+    ip,
+    iterator_step_by,
+    io,
+    never_type,
+    try_reserve
+))]
+#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(
+    alloc,
+    core_float,
+    core_intrinsics
+))]
+
+// FIXME: remove this after refactoring!
+#![allow(renamed_and_removed_lints)]
+
+#[macro_use]
+mod std_facade;
 
 #[cfg(any(feature = "std", test))]
 #[macro_use]
@@ -1638,6 +1684,8 @@ extern crate alloc;
 
 //#[cfg(all(feature = "alloc", not(feature = "std")))]
 //extern crate hashmap_core;
+
+extern crate byteorder;
 
 #[cfg(feature = "frunk")]
 #[macro_use]
@@ -1678,74 +1726,8 @@ extern crate tempfile;
 #[cfg(test)]
 extern crate regex;
 
-// Pervasive internal sugar
-macro_rules! mapfn {
-    ($({#[$allmeta:meta]})* $(#[$meta:meta])* [$($vis:tt)*]
-     fn $name:ident[$($gen:tt)*]($parm:ident: $input:ty) -> $output:ty {
-         $($body:tt)*
-     }) => {
-        $(#[$allmeta])* $(#[$meta])*
-        #[derive(Clone, Copy, Debug)]
-        $($vis)* struct $name;
-        $(#[$allmeta])*
-        impl $($gen)* ::strategy::statics::MapFn<$input> for $name {
-            type Output = $output;
-            fn apply(&self, $parm: $input) -> $output {
-                $($body)*
-            }
-        }
-    }
-}
-
-macro_rules! delegate_vt_0 {
-    () => {
-        fn current(&self) -> Self::Value {
-            self.0.current()
-        }
-
-        fn simplify(&mut self) -> bool {
-            self.0.simplify()
-        }
-
-        fn complicate(&mut self) -> bool {
-            self.0.complicate()
-        }
-    }
-}
-
-macro_rules! opaque_strategy_wrapper {
-    ($({#[$allmeta:meta]})*
-     $(#[$smeta:meta])* pub struct $stratname:ident
-     [$($sgen:tt)*][$($swhere:tt)*]
-     ($innerstrat:ty) -> $stratvtty:ty;
-
-     $(#[$vmeta:meta])* pub struct $vtname:ident
-     [$($vgen:tt)*][$($vwhere:tt)*]
-     ($innervt:ty) -> $actualty:ty;
-    ) => {
-        $(#[$allmeta])*
-        $(#[$smeta])* pub struct $stratname $($sgen)* ($innerstrat)
-            $($swhere)*;
-
-        $(#[$allmeta])*
-        $(#[$vmeta])* pub struct $vtname $($vgen)* ($innervt) $($vwhere)*;
-
-        $(#[$allmeta])*
-        impl $($sgen)* Strategy for $stratname $($sgen)* $($swhere)* {
-            type Value = $stratvtty;
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                self.0.new_value(runner).map($vtname)
-            }
-        }
-
-        $(#[$allmeta])*
-        impl $($vgen)* ValueTree for $vtname $($vgen)* $($vwhere)* {
-            type Value = $actualty;
-
-            delegate_vt_0!();
-        }
-    }
-}
+#[macro_use]
+mod macros;
 
 #[doc(hidden)]
 #[macro_use]

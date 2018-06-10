@@ -13,24 +13,9 @@
 //! is, the input collection is not itself a strategy, but is rather fixed when
 //! the strategy is created.
 
-
 use core::fmt;
 use core::ops::Range;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::borrow::Cow;
-#[cfg(feature = "std")]
-use std::borrow::Cow;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::{Cow, Vec, Arc};
 
 use bit_set::BitSet;
 
@@ -67,6 +52,8 @@ where
 {
     let values = values.into();
     let len = values.len();
+    // FIXME(2018-06-04): .extract() from the SizeRange instead?
+    // FIXME(2018-06-04): Should bitset::sampled accept Into<SizeRange> instead of Range?
     let size: Range<usize> = size.into().into();
 
     assert!(size.start != size.end, "Zero-length range passed to subsequence");
@@ -90,12 +77,13 @@ pub struct Subsequence<T : Clone + 'static> {
 }
 
 impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
-    type Value = SubsequenceValueTree<T>;
+    type Tree = SubsequenceValueTree<T>;
+    type Value = Vec<T>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(SubsequenceValueTree {
             values: Arc::clone(&self.values),
-            inner: self.bit_strategy.new_value(runner)?,
+            inner: self.bit_strategy.new_tree(runner)?,
         })
     }
 }
@@ -184,7 +172,7 @@ mod test {
         let input = subsequence(VALUES, 3..7);
 
         for _ in 0..2048 {
-            let value = input.new_value(&mut runner).unwrap().current();
+            let value = input.new_tree(&mut runner).unwrap().current();
             // Generated the correct number of items
             assert!(value.len() >= 3 && value.len() < 7);
             // Chose distinct items
@@ -221,7 +209,7 @@ mod test {
         let mut runner = TestRunner::default();
         let input = subsequence(values, 1..3);
 
-        let _ = input.new_value(&mut runner).unwrap().current();
+        let _ = input.new_tree(&mut runner).unwrap().current();
     }
 
     #[test]
@@ -233,7 +221,7 @@ mod test {
         let input = select(values);
 
         for _ in 0..1024 {
-            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+            counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
 
         for (ix, &count) in counts.iter().enumerate() {

@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::rc`.
 
-use std::rc::Rc;
+use std_facade::Rc;
 
 // Weak would always give None on upgrade since there's no owned Rc.
 

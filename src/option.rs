@@ -9,8 +9,7 @@
 
 //! Strategies for generating `std::Option` values.
 
-#![cfg_attr(feature="cargo-clippy",
-    allow(type_complexity, expl_impl_clone_on_copy))]
+#![cfg_attr(feature="cargo-clippy", allow(expl_impl_clone_on_copy))]
 
 use core::fmt;
 use core::marker::PhantomData;
@@ -126,9 +125,10 @@ impl<T> fmt::Debug for NoneStrategy<T> {
     }
 }
 impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
-    type Value = Self;
+    type Tree = Self;
+    type Value = Option<T>;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(*self)
     }
 }
@@ -147,9 +147,9 @@ opaque_strategy_wrapper! {
     /// Constructed by other functions in this module.
     #[derive(Clone)]
     pub struct OptionStrategy[<T>][where T : Strategy]
-        (TupleUnion<(W<NoneStrategy<ValueFor<T>>>,
+        (TupleUnion<(W<NoneStrategy<T::Value>>,
                      W<statics::Map<T, WrapSome>>)>)
-        -> OptionValueTree<T::Value>;
+        -> OptionValueTree<T::Tree>;
     /// `ValueTree` type corresponding to `OptionStrategy`.
     #[derive(Clone, Debug)]
     pub struct OptionValueTree[<T>][where T : ValueTree]
@@ -206,7 +206,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {
-            count += s.new_value(&mut runner).unwrap()
+            count += s.new_tree(&mut runner).unwrap()
                 .current().is_some() as u32;
         }
 

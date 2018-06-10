@@ -11,18 +11,9 @@
 
 use std::io::*;
 use std::io::ErrorKind::*;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::String;
-#[cfg(feature = "std")]
-use std::string::String;
-
-#[allow(unused_imports)]
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[allow(unused_imports)]
-#[cfg(feature = "std")]
-use std::vec::Vec;
+#[cfg(test)]
+use std_facade::Vec;
+use std_facade::String;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -104,9 +95,6 @@ arbitrary!(
 lift1!(['static + Read] Take<A>;
     base => (base, any::<u64>()).prop_map(|(a, b)| a.take(b)));
 
-#[cfg(feature = "unstable")]
-wrap_ctor!([Read] Chars, Read::chars);
-
 arbitrary!(ErrorKind, Union<Just<Self>>;
     Union::new(
     [ NotFound
@@ -128,7 +116,7 @@ arbitrary!(ErrorKind, Union<Just<Self>>;
     , Other
     , UnexpectedEof
     // TODO: watch this type for variant-additions.
-    ].into_iter().map(Clone::clone).map(Just))
+    ].into_iter().cloned().map(Just))
 );
 
 arbitrary!(
@@ -149,14 +137,6 @@ arbitrary!(Error, SMapped<(ErrorKind, Option<String>), Self>;
     static_map(arbitrary(), |(k, os)|
         if let Some(s) = os { Error::new(k, s) } else { k.into() }
     )
-);
-
-#[cfg(feature = "unstable")]
-arbitrary!(CharsError, SMapped<Option<Error>, Self>;
-    static_map(arbitrary(), |oe| {
-        use std::io::CharsError::*;
-        if let Some(e) = oe { Other(e) } else { NotUtf8 }
-    })
 );
 
 #[cfg(test)]
@@ -180,11 +160,5 @@ mod test {
         error_kind  => ErrorKind,
         seek_from   => SeekFrom,
         error       => Error
-    );
-
-    #[cfg(feature = "unstable")]
-    no_panic_test!(
-        chars       => Chars<Repeat>,
-        chars_error => CharsError
     );
 }

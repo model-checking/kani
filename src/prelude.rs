@@ -25,7 +25,7 @@ pub use arbitrary::{Arbitrary, any, any_with};
 pub use test_runner::Config as ProptestConfig;
 pub use test_runner::TestCaseError;
 
-pub use rand::{Rng, XorShiftRng};
+pub use rand::{RngCore, Rng};
 
 /// Re-exports the entire public API of proptest so that an import of `prelude`
 /// allows simply writing, for example, `prop::num::i32::ANY` rather than

@@ -9,20 +9,23 @@
 
 //! Arbitrary implementations for `std::option`.
 
-use std::option as opt;
-use std::ops::Range;
+use core::option as opt;
+use core::ops::Range;
+use std_facade::string;
 
 use option::{weighted, OptionStrategy, Probability};
 use strategy::*;
 use strategy::statics::static_map;
 use arbitrary::*;
 
+// FIXME(2018-06-04): use 0.0..=1.0 instead. Needs 1.27.
 arbitrary!(Probability, MapInto<Range<f64>, Self>;
     (0.0..1.0).prop_map_into()
 );
 
 // These are Option<AnUninhabitedType> impls:
-arbitrary!(Option<::std::string::ParseError>; None);
+
+arbitrary!(Option<string::ParseError>; None);
 #[cfg(feature = "unstable")]
 arbitrary!(Option<!>; None);
 
@@ -53,6 +56,6 @@ mod test {
         probability => Probability,
         option      => Option<u8>,
         option_iter => opt::IntoIter<u8>,
-        option_parse_error => Option<::std::string::ParseError>
+        option_parse_error => Option<string::ParseError>
     );
 }

@@ -2,7 +2,7 @@ language: rust
 sudo: false
 dist: trusty
 rust:
-- 1.22.1
+- 1.26.0
 - stable
 - beta
 - nightly
@@ -18,7 +18,7 @@ script:
       travis-cargo build &&
       travis-cargo test &&
       travis-cargo --only stable build -- --no-default-features --features fork &&
-      travis-cargo --only nightly build -- --no-default-features --features "alloc nightly" &&
+      travis-cargo --only nightly build -- --no-default-features --features "alloc nightly unstable" &&
       (cd test-persistence-location && ./run-tests.sh)
 
 cache: cargo

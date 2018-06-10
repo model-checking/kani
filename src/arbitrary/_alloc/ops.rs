@@ -9,7 +9,8 @@
 
 //! Arbitrary implementations for `std::ops`.
 
-use std::ops::*;
+use core::ops::*;
+use std_facade::Arc;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -19,10 +20,8 @@ arbitrary!(RangeFull; ..);
 wrap_ctor!(RangeFrom, |a| a..);
 wrap_ctor!(RangeTo, |a| ..a);
 
-#[cfg(feature = "unstable")]
 wrap_ctor!(RangeToInclusive, |a| ..=a);
 
-#[cfg(feature = "unstable")]
 arbitrary!(
     [A: PartialOrd + Arbitrary] RangeInclusive<A>,
     SMapped<(A, A), Self>, product_type![A::Parameters, A::Parameters];
@@ -30,9 +29,8 @@ arbitrary!(
         |(a, b)| if b < a { b..=a } else { a..=b })
 );
 
-#[cfg(feature = "unstable")]
 lift1!([PartialOrd] RangeInclusive<A>; base => {
-    let base = ::std::sync::Arc::new(base);
+    let base = Arc::new(base);
     (base.clone(), base).prop_map(|(a, b)| if b < a { b..=a } else { a..=b })
 });
 
@@ -44,7 +42,7 @@ arbitrary!(
 );
 
 lift1!([PartialOrd] Range<A>; base => {
-    let base = ::std::sync::Arc::new(base);
+    let base = Arc::new(base);
     (base.clone(), base).prop_map(|(a, b)| if b < a { b..a } else { a..b })
 });
 
@@ -63,7 +61,7 @@ arbitrary!(
 );
 
 #[cfg(feature = "unstable")]
-use std::fmt;
+use core::fmt;
 
 #[cfg(feature = "unstable")]
 impl<A: fmt::Debug + 'static, B: fmt::Debug + 'static>
@@ -74,10 +72,8 @@ for GeneratorState<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, _args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         prop_oneof![
             fst.prop_map(GeneratorState::Yielded),
@@ -92,13 +88,13 @@ mod test {
         range_full => RangeFull,
         range_from => RangeFrom<usize>,
         range_to   => RangeTo<usize>,
-        range      => Range<usize>
+        range      => Range<usize>,
+        range_inclusive => RangeInclusive<usize>,
+        range_to_inclusive => RangeToInclusive<usize>
     );
 
     #[cfg(feature = "unstable")]
     no_panic_test!(
-        range_to_inclusive => RangeToInclusive<usize>,
-        range_inclusive => RangeInclusive<usize>,
         generator_state => GeneratorState<u32, u64>
     );
 }

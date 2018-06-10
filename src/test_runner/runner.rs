@@ -7,37 +7,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
+use core::{fmt, iter};
 #[cfg(feature = "std")]
 use std::panic::{self, AssertUnwindSafe};
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::SeqCst;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::BTreeMap;
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(feature = "std")]
-use std::string::String;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::iter;
-#[cfg(not(feature = "std"))]
-use core::iter;
+use std_facade::{Box, Arc, Vec, BTreeMap, String};
 
 #[cfg(feature = "fork")]
 use std::fs;
@@ -50,15 +25,13 @@ use rusty_fork;
 #[cfg(feature = "fork")]
 use tempfile;
 
-use rand::{self, Rand, SeedableRng, XorShiftRng};
-
+use test_runner::{TestRng, Seed};
 use test_runner::errors::*;
 use test_runner::config::*;
 use test_runner::reason::*;
 #[cfg(feature = "fork")]
 use test_runner::replay;
 use strategy::*;
-
 
 #[cfg(feature = "fork")]
 const ENV_FORK_FILE: &'static str = "_PROPTEST_FORKFILE";
@@ -72,7 +45,7 @@ pub struct TestRunner {
     successes: u32,
     local_rejects: u32,
     global_rejects: u32,
-    rng: XorShiftRng,
+    rng: TestRng,
     flat_map_regens: Arc<AtomicUsize>,
 
     local_reject_detail: RejectionDetail,
@@ -86,7 +59,7 @@ impl fmt::Debug for TestRunner {
             .field("successes", &self.successes)
             .field("local_rejects", &self.local_rejects)
             .field("global_rejects", &self.global_rejects)
-            .field("rng", &"<XorShiftRng>")
+            .field("rng", &"<TestRng>")
             .field("flat_map_regens", &self.flat_map_regens)
             .field("local_reject_detail", &self.local_reject_detail)
             .field("global_reject_detail", &self.global_reject_detail)
@@ -162,8 +135,12 @@ impl ForkOutput {
 }
 
 #[cfg(not(feature = "std"))]
-fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
-    (case: &V, test: &F, replay: &mut R, _timeout: u32, _: &mut ForkOutput) -> TestCaseResult
+fn call_test<V, F, R>
+    (case: V, test: &F, replay: &mut R, _timeout: u32, _: &mut ForkOutput)
+    -> TestCaseResult
+where
+    F: Fn(V) -> TestCaseResult,
+    R: Iterator<Item = TestCaseResult>,
 {
     if let Some(result) = replay.next() {
         return result;
@@ -173,9 +150,12 @@ fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResul
 }
 
 #[cfg(feature = "std")]
-fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResult>>
-    (case: &V, test: &F, replay: &mut R, timeout: u32, fork_output: &mut ForkOutput)
-     -> TestCaseResult
+fn call_test<V, F, R>
+    (case: V, test: &F, replay: &mut R, timeout: u32, fork_output: &mut ForkOutput)
+    -> TestCaseResult
+where
+    F: Fn(V) -> TestCaseResult,
+    R: Iterator<Item = TestCaseResult>,
 {
     use std::time;
 
@@ -185,14 +165,13 @@ fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResul
 
     let time_start = time::Instant::now();
 
-    let mut result = match panic::catch_unwind(AssertUnwindSafe(|| test(case))) {
-        Ok(r) => r,
-        Err(what) => Err(TestCaseError::Fail(
+    let mut result = unwrap_or!(
+        panic::catch_unwind(AssertUnwindSafe(|| test(case))),
+        what => Err(TestCaseError::Fail(
             what.downcast::<&'static str>().map(|s| (*s).into())
                 .or_else(|what| what.downcast::<String>().map(|b| (*b).into()))
                 .or_else(|what| what.downcast::<Box<str>>().map(|b| (*b).into()))
-                .unwrap_or_else(|_| "<unknown panic value>".into()))),
-    };
+                .unwrap_or_else(|_| "<unknown panic value>".into()))));
 
     // If there is a timeout and we exceeded it, fail the test here so we get
     // consistent behaviour. (The parent process cannot precisely time the test
@@ -214,6 +193,8 @@ fn call_test<V, F : Fn (&V) -> TestCaseResult, R : Iterator<Item = TestCaseResul
     result
 }
 
+type TestRunResult<S> = Result<(), TestError<<S as Strategy>::Value>>;
+
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
     pub fn new(config: Config) -> Self {
@@ -222,35 +203,23 @@ impl TestRunner {
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: Self::default_rng(),
+            rng: TestRng::default_rng(),
             flat_map_regens: Arc::new(AtomicUsize::new(0)),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
         }
     }
 
-    #[cfg(feature = "std")]
-    fn default_rng() -> rand::XorShiftRng {
-        rand::weak_rng()
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn default_rng() -> rand::XorShiftRng {
-        rand::XorShiftRng::new_unseeded()
-    }
-
     /// Create a fresh `TestRunner` with the same config and global counters as
     /// this one, but with local state reset and an independent `Rng` (but
     /// deterministic).
     pub(crate) fn partial_clone(&mut self) -> Self {
-        let rng = self.new_rng();
-
         TestRunner {
             config: self.config.clone(),
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: rng,
+            rng: self.new_rng(),
             flat_map_regens: Arc::clone(&self.flat_map_regens),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
@@ -258,25 +227,14 @@ impl TestRunner {
     }
 
     /// Returns the RNG for this test run.
-    pub fn rng(&mut self) -> &mut XorShiftRng {
+    pub fn rng(&mut self) -> &mut TestRng {
         &mut self.rng
-    }
-
-    fn new_rng_seed(&mut self) -> [u32;4] {
-        let mut seed = <[u32;4] as Rand>::rand(&mut self.rng);
-        // Directly using XorShiftRng::from_seed() at this point would result
-        // in self.rng and the returned value being exactly the same. Perturb
-        // the seed with some arbitrary values to prevent this.
-        for word in &mut seed {
-            *word ^= 0xdead_beef;
-        }
-        seed
     }
 
     /// Create a new, independent but deterministic RNG from the RNG in this
     /// runner.
-    pub fn new_rng(&mut self) -> XorShiftRng {
-        XorShiftRng::from_seed(self.new_rng_seed())
+    pub fn new_rng(&mut self) -> TestRng {
+        self.rng.gen_rng()
     }
 
     /// Returns the configuration of this runner.
@@ -295,10 +253,10 @@ impl TestRunner {
     /// persisted before returning failure.
     ///
     /// Returns success or failure indicating why the test as a whole failed.
-    pub fn run<S : Strategy,
-               F : Fn (&ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, test: F)
-         -> Result<(), TestError<ValueFor<S>>>
+    pub fn run<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         if self.config.fork() {
             self.run_in_fork(strategy, test)
@@ -308,15 +266,19 @@ impl TestRunner {
     }
 
     #[cfg(not(feature = "fork"))]
-    fn run_in_fork<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
-        (&mut self, _: &S, _: F) -> Result<(), TestError<ValueFor<S>>>
+    fn run_in_fork<S, F>(&mut self, _: &S, _: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         unreachable!()
     }
 
     #[cfg(feature = "fork")]
-    fn run_in_fork<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, test: F) -> Result<(), TestError<ValueFor<S>>>
+    fn run_in_fork<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         let mut test = Some(test);
 
@@ -325,7 +287,7 @@ impl TestRunner {
                 "Must supply test_name when forking enabled"));
         let forkfile: RefCell<Option<tempfile::NamedTempFile>> =
             RefCell::new(None);
-        let seed = self.new_rng_seed();
+        let seed = self.rng.new_rng_seed();
         let mut replay = replay::Replay { seed, steps: vec![] };
         let mut child_count = 0;
         let timeout = self.config.timeout();
@@ -394,41 +356,41 @@ impl TestRunner {
         // Run through the steps in-process (without ever running the actual
         // tests) to produce the shrunken value and update the persistence
         // file.
-        self.rng = XorShiftRng::from_seed(replay.seed);
+        self.rng.set_seed(replay.seed);
         self.run_in_process_with_replay(
             strategy, |_| panic!("Ran past the end of the replay"),
             replay.steps.into_iter(), ForkOutput::empty())
     }
 
-    fn run_in_process<S : Strategy,
-                      F : Fn (&ValueFor<S>) -> TestCaseResult>
-        (&mut self, strategy: &S, test: F)
-         -> Result<(), TestError<ValueFor<S>>>
+    fn run_in_process<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(S::Value) -> TestCaseResult,
     {
         let (replay_steps, fork_output) = init_replay(&mut self.rng);
         self.run_in_process_with_replay(
             strategy, test, replay_steps.into_iter(), fork_output)
     }
 
-    fn run_in_process_with_replay<S : Strategy,
-                                  F : Fn (&ValueFor<S>) -> TestCaseResult,
-                                  R : Iterator<Item = TestCaseResult>>
+    fn run_in_process_with_replay<S, F, R>
         (&mut self, strategy: &S, test: F, mut replay: R,
          mut fork_output: ForkOutput)
-         -> Result<(), TestError<ValueFor<S>>>
+        -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(S::Value) -> TestCaseResult,
+        R: Iterator<Item = TestCaseResult>,
     {
         let old_rng = self.rng.clone();
 
-        let persisted_failure_seeds: Vec<[u32; 4]> = {
-            let config = &self.config;
-            let source_file = config.source_file;
-            match config.failure_persistence {
-                Some(ref f) => f.load_persisted_failures(source_file),
-                None => Vec::new()
-            }
-        };
+        let persisted_failure_seeds: Vec<Seed> =
+            self.config.failure_persistence
+                .as_ref()
+                .map(|f| f.load_persisted_failures(self.config.source_file))
+                .unwrap_or_default();
+
         for persisted_seed in persisted_failure_seeds {
-            self.rng = XorShiftRng::from_seed(persisted_seed);
+            self.rng.set_seed(persisted_seed);
             self.gen_and_run_case(strategy, &test, &mut replay, &mut fork_output)?;
         }
         self.rng = old_rng;
@@ -436,8 +398,7 @@ impl TestRunner {
         while self.successes < self.config.cases {
             // Generate a new seed and make an RNG from that so that we know
             // what seed to persist if this case fails.
-            let seed = self.new_rng_seed();
-            self.rng = XorShiftRng::from_seed(seed);
+            let seed = self.rng.gen_get_seed();
             let result = self.gen_and_run_case(
                 strategy, &test, &mut replay, &mut fork_output);
             if let Err(TestError::Fail(_, ref value)) = result {
@@ -464,15 +425,19 @@ impl TestRunner {
         Ok(())
     }
 
-    fn gen_and_run_case<S : Strategy, F : Fn (&ValueFor<S>) -> TestCaseResult,
-                        R : Iterator<Item = TestCaseResult>>
-        (&mut self, strategy: &S, f: &F, replay: &mut R, fork_output: &mut ForkOutput)
-        -> Result<(), TestError<ValueFor<S>>>
+    fn gen_and_run_case<S, F, R>
+        (&mut self, strategy: &S, f: &F,
+         replay: &mut R, fork_output: &mut ForkOutput)
+        -> TestRunResult<S>
+    where
+        S: Strategy,
+        F: Fn(S::Value) -> TestCaseResult,
+        R: Iterator<Item = TestCaseResult>,
     {
-        let case = match strategy.new_value(self) {
-            Ok(v) => v,
-            Err(msg) => return Err(TestError::Abort(msg)),
-        };
+        let case =
+            unwrap_or!(strategy.new_tree(self), msg =>
+                return Err(TestError::Abort(msg)));
+
         if self.run_one_with_replay(case, f, replay, fork_output)? {
             self.successes += 1;
         }
@@ -488,26 +453,36 @@ impl TestRunner {
     /// terminate the run if it runs for longer than `timeout`. However, if the
     /// test function returns but took longer than `timeout`, the test case
     /// will fail.
-    pub fn run_one<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult>
-        (&mut self, case: V, test: F) -> Result<bool, TestError<V::Value>>
+    pub fn run_one<V, F>(&mut self, case: V, test: F)
+        -> Result<bool, TestError<V::Value>>
+    where
+        V: ValueTree,
+        F: Fn(V::Value) -> TestCaseResult
     {
         self.run_one_with_replay(
-            case, test, &mut iter::empty::<TestCaseResult>().fuse(),
+            case, test,
+            &mut iter::empty::<TestCaseResult>().fuse(),
             &mut ForkOutput::empty())
     }
 
-    fn run_one_with_replay<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult,
-                           R : Iterator<Item = TestCaseResult>>
-        (&mut self, case: V, test: F, replay: &mut R, fork_output: &mut ForkOutput)
-         -> Result<bool, TestError<V::Value>>
+    fn run_one_with_replay<V, F, R>
+        (&mut self, mut case: V, test: F, replay: &mut R, fork_output: &mut ForkOutput)
+        -> Result<bool, TestError<V::Value>>
+    where
+        V: ValueTree,
+        F: Fn(V::Value) -> TestCaseResult,
+        R: Iterator<Item = TestCaseResult>,
     {
-        let curr = case.current();
-        match call_test(&curr, &test, replay, self.config.timeout(), fork_output) {
+        let result = call_test(
+            case.current(), &test,
+            replay, self.config.timeout(), fork_output);
+
+        match result {
             Ok(_) => Ok(true),
             Err(TestCaseError::Fail(why)) => {
-                let (why, curr) = self.shrink(case, test, replay, fork_output)
-                    .unwrap_or((why, curr));
-                Err(TestError::Fail(why, curr))
+                let why = self.shrink(&mut case, test, replay, fork_output)
+                    .unwrap_or(why);
+                Err(TestError::Fail(why, case.current()))
             },
             Err(TestCaseError::Reject(whence)) => {
                 self.reject_global(whence)?;
@@ -516,18 +491,24 @@ impl TestRunner {
         }
     }
 
-    fn shrink<V : ValueTree, F : Fn (&V::Value) -> TestCaseResult,
-              R : Iterator<Item = TestCaseResult>>
-        (&mut self, mut case: V, test: F, replay: &mut R,
+    fn shrink<V, F, R>
+        (&mut self, case: &mut V, test: F, replay: &mut R,
          fork_output: &mut ForkOutput)
-         -> Option<(Reason, V::Value)>
+        -> Option<Reason>
+    where
+        V: ValueTree,
+        F: Fn(V::Value) -> TestCaseResult,
+        R: Iterator<Item = TestCaseResult>,
     {
         let mut last_failure = None;
 
         if case.simplify() {
             loop {
-                let curr = case.current();
-                match call_test(&curr, &test, replay, self.config.timeout(), fork_output) {
+                let result = call_test(
+                    case.current(), &test,
+                    replay, self.config.timeout(), fork_output);
+
+                match result {
                     // Rejections are effectively a pass here,
                     // since they indicate that any behaviour of
                     // the function under test is acceptable.
@@ -537,7 +518,7 @@ impl TestRunner {
                         }
                     },
                     Err(TestCaseError::Fail(why)) => {
-                        last_failure = Some((why, curr));
+                        last_failure = Some(why);
                         if !case.simplify() {
                             break;
                         }
@@ -579,20 +560,7 @@ impl TestRunner {
 
     /// Insert 1 or increment the rejection detail at key for whence.
     fn insert_or_increment(into: &mut RejectionDetail, whence: Reason) {
-        #[cfg(all(feature = "alloc", not(feature = "std")))]
-        use alloc::btree_map::Entry::*;
-        #[cfg(feature = "std")]
-        use std::collections::btree_map::Entry::*;
-        match into.entry(whence) {
-            Occupied(oe) => { *oe.into_mut() += 1; },
-            Vacant(ve)   => { ve.insert(1); },
-        }
-        /*
-        // TODO: Replace with once and_modify is stable:
-        into.entry(whence)
-            .and_modify(|count| { *count += 1 })
-            .or_insert(1);
-        */
+        into.entry(whence).and_modify(|count| { *count += 1 }).or_insert(1);
     }
 
     /// Increment the counter of flat map regenerations and return whether it
@@ -604,22 +572,23 @@ impl TestRunner {
 }
 
 #[cfg(feature = "fork")]
-fn init_replay(rng: &mut XorShiftRng) -> (Vec<TestCaseResult>, ForkOutput) {
+fn init_replay(rng: &mut TestRng) -> (Vec<TestCaseResult>, ForkOutput) {
+    use test_runner::replay::{open_file, Replay, ReplayFileStatus::*};
+
     if let Some(path) = env::var_os(ENV_FORK_FILE) {
-        let mut file = replay::open_file(&path).expect(
-            "Failed to open replay file");
-        let loaded = replay::Replay::parse_from(&mut file).expect(
-            "Failed to read replay file");
+        let mut file = open_file(&path).expect("Failed to open replay file");
+        let loaded = Replay::parse_from(&mut file)
+                        .expect("Failed to read replay file");
         match loaded {
-            replay::ReplayFileStatus::InProgress(replay) => {
-                *rng = XorShiftRng::from_seed(replay.seed);
+            InProgress(replay) => {
+                rng.set_seed(replay.seed);
                 (replay.steps, ForkOutput { file: Some(file) })
             },
 
-            replay::ReplayFileStatus::Terminated(_) =>
+            Terminated(_) =>
                 panic!("Replay file for child process is terminated?"),
 
-            replay::ReplayFileStatus::Corrupt =>
+            Corrupt =>
                 panic!("Replay file for child process is corrupt"),
         }
     } else {
@@ -628,8 +597,7 @@ fn init_replay(rng: &mut XorShiftRng) -> (Vec<TestCaseResult>, ForkOutput) {
 }
 
 #[cfg(not(feature = "fork"))]
-fn init_replay(_rng: &mut XorShiftRng)
-               -> (iter::Empty<TestCaseResult>, ForkOutput) {
+fn init_replay(_rng: &mut TestRng) -> (iter::Empty<TestCaseResult>, ForkOutput) {
     (iter::empty(), ForkOutput::empty())
 }
 
@@ -726,7 +694,7 @@ mod test {
     #[test]
     fn test_pass() {
         let mut runner = TestRunner::default();
-        let result = runner.run(&(1u32..), |&v| { assert!(v > 0); Ok(()) });
+        let result = runner.run(&(1u32..), |v| { assert!(v > 0); Ok(()) });
         assert_eq!(Ok(()), result);
     }
 
@@ -737,7 +705,7 @@ mod test {
             .. Config::default()
         });
         let result = runner.run(
-            &(0u32..10u32), |&v| {
+            &(0u32..10u32), |v| {
                 if v < 5 {
                     Ok(())
                 } else {
@@ -754,7 +722,7 @@ mod test {
             failure_persistence: None,
             .. Config::default()
         });
-        let result = runner.run(&(0u32..10u32), |&v| {
+        let result = runner.run(&(0u32..10u32), |v| {
             assert!(v < 5, "not less than 5");
             Ok(())
         });
@@ -829,13 +797,10 @@ mod test {
 
     #[test]
     fn new_rng_makes_separate_rng() {
+        use rand::Rng;
         let mut runner = TestRunner::default();
-        let mut rng2 = runner.new_rng();
-        let rng1 = runner.rng();
-
-        let from_1 = <[u32;4] as Rand>::rand(rng1);
-        let from_2 = <[u32;4] as Rand>::rand(&mut rng2);
-
+        let from_1 = runner.new_rng().gen::<Seed>();
+        let from_2 = runner.rng().gen::<Seed>();
         assert_ne!(from_1, from_2);
     }
 
@@ -862,7 +827,7 @@ mod test {
             .. Config::default()
         });
 
-        let failure = runner.run(&(0u32..1000), |&v| {
+        let failure = runner.run(&(0u32..1000), |v| {
             prop_assert!(v < 500);
             Ok(())
         }).err().unwrap();
@@ -883,7 +848,7 @@ mod test {
             .. Config::default()
         });
 
-        let failure = runner.run(&(0u32..1000), |&v| {
+        let failure = runner.run(&(0u32..1000), |v| {
             if v >= 500 {
                 ::std::process::exit(1);
             }
@@ -906,7 +871,7 @@ mod test {
             .. Config::default()
         });
 
-        let failure = runner.run(&(0u32..1000), |&v| {
+        let failure = runner.run(&(0u32..1000), |v| {
             if v >= 500 {
                 ::std::process::exit(0);
             }
@@ -930,7 +895,7 @@ mod test {
             .. Config::default()
         });
 
-        let failure = runner.run(&(0u32..1000), |&v| {
+        let failure = runner.run(&(0u32..1000), |v| {
             if v >= 500 {
                 ::std::thread::sleep(::std::time::Duration::from_millis(10_000));
             }
@@ -954,7 +919,7 @@ mod test {
             .. Config::default()
         });
 
-        let failure = runner.run(&(0u32..1000), |&v| {
+        let failure = runner.run(&(0u32..1000), |v| {
             if v >= 500 {
                 // Sleep a little longer than the timeout. This means that
                 // sometimes the test case itself will return before the parent

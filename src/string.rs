@@ -10,36 +10,20 @@
 //! Strategies for generating strings and byte strings from regular
 //! expressions.
 
-use std::fmt;
-use std::u32;
+use core::mem;
+use core::fmt;
+use core::u32;
+use std_facade::{Cow, Box, String, Vec, ToOwned};
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::borrow::{Cow, ToOwned};
-#[cfg(feature = "std")]
-use std::borrow::{Cow, ToOwned};
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::String;
-#[cfg(feature = "std")]
-use std::string::String;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-use regex_syntax as rs;
+use regex_syntax::{Parser, Error as ParseError};
+use regex_syntax::hir::{
+    self, Hir, HirKind::*, Literal::*,
+    RepetitionKind::{self, *}, RepetitionRange::*
+};
 
 use bool;
 use char;
-use collection;
-use bits;
-use num;
+use collection::{vec, size_range, SizeRange};
 use strategy::*;
 use test_runner::*;
 
@@ -68,7 +52,7 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         /// The string passed as the regex was not syntactically valid.
-        RegexSyntax(err: rs::Error) {
+        RegexSyntax(err: ParseError) {
             from()
             cause(err)
             description(err.description())
@@ -96,26 +80,27 @@ opaque_strategy_wrapper! {
 }
 
 impl Strategy for str {
-    type Value = RegexGeneratorValueTree<String>;
+    type Tree = RegexGeneratorValueTree<String>;
+    type Value = String;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        string_regex(self).unwrap().new_value(runner)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        string_regex(self).unwrap().new_tree(runner)
     }
 }
+
+type ParseResult<T> = Result<RegexGeneratorStrategy<T>, Error>;
 
 /// Creates a strategy which generates strings matching the given regular
 /// expression.
 ///
 /// If you don't need error handling and aren't limited by setup time, it is
 /// also possible to directly use a `&str` as a strategy with the same effect.
-pub fn string_regex(regex: &str)
-                    -> Result<RegexGeneratorStrategy<String>, Error> {
-    string_regex_parsed(&rs::Expr::parse(regex)?)
+pub fn string_regex(regex: &str) -> ParseResult<String> {
+    string_regex_parsed(&regex_to_hir(regex)?)
 }
 
 /// Like `string_regex()`, but allows providing a pre-parsed expression.
-pub fn string_regex_parsed(expr: &rs::Expr)
-                           -> Result<RegexGeneratorStrategy<String>, Error> {
+pub fn string_regex_parsed(expr: &Hir) -> ParseResult<String> {
     bytes_regex_parsed(expr).map(
         |v| v.prop_map(|bytes| String::from_utf8(bytes).expect(
             "non-utf8 string")).sboxed()).map(RegexGeneratorStrategy)
@@ -123,170 +108,154 @@ pub fn string_regex_parsed(expr: &rs::Expr)
 
 /// Creates a strategy which generates byte strings matching the given regular
 /// expression.
-pub fn bytes_regex(regex: &str)
-                   -> Result<RegexGeneratorStrategy<Vec<u8>>, Error> {
-    bytes_regex_parsed(&rs::Expr::parse(regex)?)
+pub fn bytes_regex(regex: &str) -> ParseResult<Vec<u8>> {
+    bytes_regex_parsed(&regex_to_hir(regex)?)
 }
 
 /// Like `bytes_regex()`, but allows providing a pre-parsed expression.
-pub fn bytes_regex_parsed(expr: &rs::Expr)
-                          -> Result<RegexGeneratorStrategy<Vec<u8>>, Error> {
-    use self::rs::Expr::*;
-
-    match *expr {
+pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
+    match expr.kind() {
         Empty => Ok(Just(vec![]).sboxed()),
-        Literal { ref chars, casei: false } =>
-            Ok(Just(chars.iter().cloned().collect::<String>()
-                         .into_bytes()).sboxed()),
-        Literal { ref chars, casei: true } => {
-            let chars = chars.to_owned();
-            Ok(bits::bitset::between(0, chars.len())
-               .prop_map(move |cases|
-                         cases.into_bit_vec().iter().zip(chars.iter())
-                         .map(|(case, &ch)| flip_case_to_bytes(case, ch))
-                         .fold(vec![], |mut accum, rhs| {
-                             accum.extend(rhs);
-                             accum
-                         }))
-               .sboxed())
-        },
-        LiteralBytes { ref bytes, casei: false } =>
-            Ok(Just(bytes.to_owned()).sboxed()),
-        LiteralBytes { ref bytes, casei: true } => {
-            let bytes = bytes.to_owned();
-            Ok(bits::bitset::between(0, bytes.len())
-               .prop_map(move |cases|
-                         cases.into_bit_vec().iter().zip(bytes.iter())
-                         .map(|(case, &byte)| flip_ascii_case(case, byte))
-                         .collect::<Vec<_>>()).sboxed())
-        },
 
-        AnyChar => Ok(char::any().prop_map(to_bytes).sboxed()),
-        AnyCharNoNL => {
-            static NONL_RANGES: &[(char,char)] = &[
-                ('\x00', '\x09'),
-                // Multiple instances of the latter range to partially make up
-                // for the bias of having such a tiny range in the control
-                // characters.
-                ('\x0B', ::std::char::MAX),
-                ('\x0B', ::std::char::MAX),
-                ('\x0B', ::std::char::MAX),
-                ('\x0B', ::std::char::MAX),
-                ('\x0B', ::std::char::MAX),
-            ];
-            Ok(char::ranges(Cow::Borrowed(NONL_RANGES))
-               .prop_map(to_bytes).sboxed())
-        },
-        AnyByte => Ok(num::u8::ANY.prop_map(|b| vec![b]).sboxed()),
-        AnyByteNoNL => Ok((0xBu8..).sboxed()
-                          .prop_union((..0xAu8).sboxed())
-                          .prop_map(|b| vec![b]).sboxed()),
+        Literal(lit) => Ok(Just(match lit {
+            Unicode(scalar) => to_bytes(*scalar),
+            Byte(byte) => vec![*byte],
+        }).sboxed()),
 
-        Class(ref class) => {
-            let ranges = (**class).iter().map(
-                |&rs::ClassRange { start, end }| (start, end)).collect();
-            Ok(char::ranges(Cow::Owned(ranges))
-               .prop_map(to_bytes).sboxed())
-        }
-
-        ClassBytes(ref class) => {
-            let subs = (**class).iter().map(
-                |&rs::ByteRange { start, end }| if 255u8 == end {
-                    (start..).sboxed()
+        Class(class) => Ok(match class {
+            hir::Class::Unicode(class) => {
+                // FIXME: look at this!
+                let ranges = class.iter().map(|r| (r.start(), r.end())).collect();
+                char::ranges(Cow::Owned(ranges)).prop_map(to_bytes).sboxed()
+            },
+            hir::Class::Bytes(class) => {
+                // FIXME: look at this!
+                let subs = class.iter().map(|r| if 255u8 == r.end() {
+                    (r.start()..).sboxed()
                 } else {
-                    (start..end).sboxed()
-                }).collect::<Vec<_>>();
-            Ok(Union::new(subs)
-               .prop_map(|b| vec![b]).sboxed())
-        },
+                    (r.start()..r.end()).sboxed()
+                });
+                Union::new(subs).prop_map(|b| vec![b]).sboxed()
+            }
+        }),
 
-        Group { ref e, .. } => bytes_regex_parsed(e).map(|v| v.0),
+        Repetition(rep) => Ok(
+            vec(bytes_regex_parsed(&rep.hir)?, to_range(rep.kind.clone())?)
+                .prop_map(|parts| parts.into_iter().fold(
+                   vec![], |mut acc, child| { acc.extend(child); acc }))
+                .sboxed()
+        ),
 
-        Repeat { ref e, r, .. } => {
-            let range = match r {
-                rs::Repeater::ZeroOrOne => 0..2,
-                rs::Repeater::ZeroOrMore => 0..33,
-                rs::Repeater::OneOrMore => 1..33,
-                rs::Repeater::Range { min, max } => {
-                    let max = if let Some(max) = max {
-                        if u32::MAX == max {
-                            return Err(Error::UnsupportedRegex(
-                                "Cannot have repetition max of u32::MAX"));
-                        } else {
-                            max as usize + 1
-                        }
-                    } else if min < u32::MAX as u32 / 2 {
-                        min as usize * 2
-                    } else {
-                        u32::MAX as usize
-                    };
+        Group(group) => bytes_regex_parsed(&group.hir).map(|v| v.0),
 
-                    (min as usize)..max
-                },
+        Concat(subs) => {
+            let subs = ConcatIter { iter: subs.iter(), buf: vec![], next: None };
+            let ext = |(mut lhs, rhs): (Vec<_>, _)| {
+                lhs.extend(rhs);
+                lhs
             };
-            Ok(collection::vec(bytes_regex_parsed(e)?, range)
-               .prop_map(|parts| parts.into_iter().fold(
-                   vec![], |mut accum, child| { accum.extend(child); accum }))
-               .sboxed())
+            Ok(subs.fold(Ok(None), |accum: Result<_, Error>, rhs| Ok(match accum? {
+                None => Some(rhs?.sboxed()),
+                Some(accum) => Some((accum, rhs?).prop_map(ext).sboxed()),
+            }))?.unwrap_or_else(|| Just(vec![]).sboxed()))
         },
 
-        Concat(ref subs) => {
-            let subs = subs.iter().map(|e| bytes_regex_parsed(e))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(subs.into_iter()
-               .fold(None, |accum, rhs| match accum {
-                   None => Some(rhs.sboxed()),
-                   Some(accum) => Some(
-                       (accum, rhs).prop_map(|(mut lhs, rhs)| {
-                           lhs.extend(rhs);
-                           lhs
-                       }).sboxed()),
-               }).unwrap_or_else(
-                   || Just(vec![]).sboxed()))
-        },
+        Alternation(subs) =>
+            Ok(Union::try_new(subs.iter().map(bytes_regex_parsed))?.sboxed()),
 
-        Alternate(ref subs) => {
-            let subs = subs.iter().map(|e| bytes_regex_parsed(e))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Union::new(subs).sboxed())
-        },
+        Anchor(_) =>
+            unsupported("line/text anchors not supported for string generation"),
 
-        StartLine |
-        EndLine |
-        StartText |
-        EndText => Err(Error::UnsupportedRegex(
-            "line/text anchors not supported for string generation")),
-
-        WordBoundary |
-        NotWordBoundary |
-        WordBoundaryAscii |
-        NotWordBoundaryAscii => Err(Error::UnsupportedRegex(
-            "word boundary tests not supported for string generation")),
+        WordBoundary(_) =>
+            unsupported("word boundary tests not supported for string generation"),
     }.map(RegexGeneratorStrategy)
 }
 
-fn flip_case_to_bytes(flip: bool, ch: char) -> Vec<u8> {
-    if flip && ch.is_uppercase() {
-        ch.to_lowercase().collect::<String>().into_bytes()
-    } else if flip && ch.is_lowercase() {
-        ch.to_uppercase().collect::<String>().into_bytes()
-    } else {
-        to_bytes(ch)
+struct ConcatIter<'a, I> {
+    buf: Vec<u8>,
+    iter: I,
+    next: Option<&'a Hir>,
+}
+
+fn flush_lit_buf<I>(it: &mut ConcatIter<'_, I>) -> Option<ParseResult<Vec<u8>>> {
+    Some(Ok(RegexGeneratorStrategy(
+        Just(mem::replace(&mut it.buf, vec![])).sboxed()
+    )))
+}
+
+impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
+    type Item = ParseResult<Vec<u8>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // A left-over node, process it first:
+        if let Some(next) = self.next.take() {
+            return Some(bytes_regex_parsed(next))
+        }
+
+        // Accumulate a literal sequence as long as we can:
+        while let Some(next) = self.iter.next() {
+            match next.kind() {
+                // A literal. Accumulate:
+                Literal(Unicode(scalar)) => self.buf.extend(to_bytes(*scalar)),
+                Literal(Byte(byte)) => self.buf.push(*byte),
+                // Ecountered a non-literal.
+                _ => return if self.buf.is_empty() {
+                    // We've accumulated a literal from before, flush it out.
+                    // Store this node so we deal with it the next call.
+                    self.next = Some(next);
+                    flush_lit_buf(self)
+                } else {
+                    // We didn't; just yield this node.
+                    Some(bytes_regex_parsed(next))
+                },
+            }
+        }
+
+        // Flush out any accumulated literal from before.
+        if self.buf.is_empty() {
+            None
+        } else {
+            flush_lit_buf(self)
+        }
     }
 }
 
-fn to_bytes(ch: char) -> Vec<u8> {
-    [ch].iter().cloned().collect::<String>().into_bytes()
+fn to_range(kind: RepetitionKind) -> Result<SizeRange, Error> {
+    Ok(match kind {
+        ZeroOrOne => size_range(0..=1),
+        ZeroOrMore => size_range(0..=32),
+        OneOrMore => size_range(1..=32),
+        Range(range) => match range {
+            Exactly(count) if u32::MAX == count =>
+                return unsupported("Cannot have repetition of exactly u32::MAX"),
+            Exactly(count) => size_range(count as usize),
+            AtLeast(min) => {
+                let max = if min < u32::MAX as u32 / 2 {
+                    min as usize * 2
+                } else {
+                    u32::MAX as usize
+                };
+                size_range((min as usize)..max)
+            },
+            Bounded(_, max) if u32::MAX == max =>
+                return unsupported("Cannot have repetition max of u32::MAX"),
+            Bounded(min, max) =>
+                size_range((min as usize)..(max as usize + 1))
+        }
+    })
 }
 
-fn flip_ascii_case(flip: bool, ch: u8) -> u8 {
-    if flip && ch >= b'a' && ch <= b'z' {
-        ch - b'a' + b'A'
-    } else if flip && ch >= b'A' && ch <= b'Z' {
-        ch - b'A' + b'a'
-    } else {
-        ch
-    }
+fn to_bytes(khar: char) -> Vec<u8> {
+    let mut buf = [0u8; 4];
+    khar.encode_utf8(&mut buf).as_bytes().to_owned()
+}
+
+fn regex_to_hir(pattern: &str) -> Result<Hir, Error> {
+    Ok(Parser::new().parse(pattern)?)
+}
+
+fn unsupported<T>(error: &'static str) -> Result<T, Error> {
+    Err(Error::UnsupportedRegex(error))
 }
 
 #[cfg(test)]
@@ -305,7 +274,7 @@ mod test {
         let strategy = string_regex(pattern).unwrap();
         let mut runner = TestRunner::default();
         for _ in 0..iterations {
-            let mut value = strategy.new_value(&mut runner).unwrap();
+            let mut value = strategy.new_tree(&mut runner).unwrap();
 
             loop {
                 let s = value.current();
@@ -315,8 +284,9 @@ mod test {
                     false
                 };
                 if !ok {
-                    panic!("Generated string {:?} which does not match {:?}",
-                           s, pattern);
+                    panic!("Generated string {:?} which does not match {:?} \
+                            where HIR = {:#?}",
+                           s, pattern, regex_to_hir(pattern).unwrap());
                 }
 
                 generated.insert(s);

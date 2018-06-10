@@ -7,10 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[cfg(feature = "std")]
-use std::fmt;
-#[cfg(not(feature = "std"))]
-use core::fmt;
+use std_facade::fmt;
 
 /// Easily define `proptest` tests.
 ///
@@ -92,7 +89,7 @@ macro_rules! proptest {
                     &$crate::strategy::Strategy::prop_map(
                         proptest_helper!(@_WRAP ($($strategy)*)),
                         |values| $crate::sugar::NamedArguments(names, values)),
-                    |&$crate::sugar::NamedArguments(
+                    |$crate::sugar::NamedArguments(
                         _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
                     {
                         $body;
@@ -329,7 +326,7 @@ macro_rules! prop_oneof {
 /// used to generate the other inputs for the function. The second argument
 /// list has access to all arguments in the first. The return type indicates
 /// the type of value being generated; the final return type of the function is
-/// `BoxedStrategy<$type>`.
+/// `impl Strategy<Value = $type>`.
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
@@ -438,12 +435,10 @@ macro_rules! prop_compose {
     {
         $(#[$meta])*
         $($($vis)*)* fn $name $params
-                 -> $crate::strategy::BoxedStrategy<$return_type> {
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = proptest_helper!(@_WRAP ($($strategy)*));
-            let strat = $crate::strategy::Strategy::prop_map(
-                strat,
-                |proptest_helper!(@_WRAPPAT ($($var),*))| $body);
-            $crate::strategy::Strategy::boxed(strat)
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_WRAPPAT ($($var),*))| $body)
         }
     };
 
@@ -455,16 +450,14 @@ macro_rules! prop_compose {
     {
         $(#[$meta])*
         $($($vis)*)* fn $name $params
-                 -> $crate::strategy::BoxedStrategy<$return_type> {
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
                 strat,
                 |proptest_helper!(@_WRAPPAT ($($var),*))|
                 proptest_helper!(@_WRAP ($($strategy2)*)));
-            let strat = $crate::strategy::Strategy::prop_map(
-                strat,
-                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body);
-            $crate::strategy::Strategy::boxed(strat)
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body)
         }
     };
 }
@@ -910,8 +903,9 @@ mod test {
 
     #[test]
     fn oneof_all_counts() {
-        fn expect_count<S : ::strategy::Strategy>(n: usize, s: S)
-        where S::Value : ::strategy::ValueTree<Value = i32> {
+        use ::strategy::{Strategy, TupleUnion, Union, Just as J};
+
+        fn expect_count(n: usize, s: impl Strategy<Value = i32>) {
             use std::collections::HashSet;
             use strategy::*;
             use test_runner::*;
@@ -919,21 +913,15 @@ mod test {
             let mut runner = TestRunner::default();
             let mut seen = HashSet::new();
             for _ in 0..1024 {
-                seen.insert(s.new_value(&mut runner).unwrap().current());
+                seen.insert(s.new_tree(&mut runner).unwrap().current());
             }
 
             assert_eq!(n, seen.len());
         }
 
-        fn assert_static<T>(v: ::strategy::TupleUnion<T>)
-                            -> ::strategy::TupleUnion<T>
-        { v }
+        fn assert_static<T>(v: TupleUnion<T>) -> TupleUnion<T> { v }
+        fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> { v }
 
-        fn assert_dynamic<T : ::strategy::Strategy>
-            (v: ::strategy::Union<T>) -> ::strategy::Union<T>
-        { v }
-
-        use strategy::Just as J;
         expect_count(1, prop_oneof![J(0i32)]);
         expect_count(2, assert_static(prop_oneof![
             J(0i32),
@@ -1043,5 +1031,41 @@ mod another_test {
     #[allow(dead_code)]
     fn can_access_pub_compose() {
         let _ = sugar::test::two_ints_pub(42);
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    #[cfg(feature = "std")]
+    proptest! {
+        #[test]
+        fn accept_ref_arg(ref s in "[0-9]") {
+            use std_facade::String;
+            fn assert_string(_s: &String) {}
+            assert_string(s);
+        }
+
+        #[test]
+        fn accept_move_arg(s in "[0-9]") {
+            use std_facade::String;
+            fn assert_string(_s: String) {}
+            assert_string(s);
+        }
+    }
+
+    #[derive(Debug)]
+    struct NotClone();
+    const MK: fn() -> NotClone = NotClone;
+
+    proptest! {
+        #[test]
+        fn accept_noclone_arg(nc in MK) {
+            let _nc2: NotClone = nc;
+        }
+
+        #[test]
+        fn accept_noclone_ref_arg(ref nc in MK) {
+            let _nc2: &NotClone = nc;
+        }
     }
 }

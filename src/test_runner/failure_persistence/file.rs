@@ -18,7 +18,10 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::vec::Vec;
-use test_runner::failure_persistence::FailurePersistence;
+use std::string::String;
+
+use test_runner::{Seed, failure_persistence::FailurePersistence};
+use self::FileFailurePersistence::*;
 
 /// Describes how failing test cases are persisted.
 ///
@@ -69,6 +72,92 @@ pub enum FileFailurePersistence {
     #[doc(hidden)]
     #[allow(missing_docs)]
     _NonExhaustive,
+}
+
+impl Default for FileFailurePersistence {
+    fn default() -> Self {
+        SourceParallel("proptest-regressions")
+    }
+}
+
+impl FailurePersistence for FileFailurePersistence {
+    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<Seed> {
+        let p = self.resolve(
+                    source_file.and_then(|s| absolutize_source_file(Path::new(s)))
+                               .as_ref()
+                               .map(|cow| &**cow)
+                );
+
+        let path: Option<&PathBuf> = p.as_ref();
+        let result: io::Result<Vec<Seed>> = path.map_or_else(
+            || Ok(vec![]),
+            |path| {
+                // .ok() instead of .unwrap() so we don't propagate panics here
+                let _lock = PERSISTENCE_LOCK.read().ok();
+                io::BufReader::new(fs::File::open(path)?)
+                    .lines().enumerate()
+                    .filter_map(|(lineno, line)| match line {
+                        Err(err) => Some(Err(err)),
+                        Ok(line) => parse_seed_line(line, path, lineno).map(Ok)
+                    }).collect()
+            },
+        );
+
+        unwrap_or!(result, err => {
+            if io::ErrorKind::NotFound != err.kind() {
+                eprintln!(
+                    "proptest: failed to open {}: {}",
+                    &path.map(|x| &**x)
+                        .unwrap_or_else(|| Path::new("??"))
+                        .display(),
+                    err
+                );
+            }
+            vec![]
+        })
+    }
+
+    fn save_persisted_failure(
+        &mut self,
+        source_file: Option<&'static str>,
+        seed: Seed,
+        shrunken_value: &Debug,
+    ) {
+        let path = self.resolve(source_file.map(Path::new));
+        if let Some(path) = path {
+            // .ok() instead of .unwrap() so we don't propagate panics here
+            let _lock = PERSISTENCE_LOCK.write().ok();
+            let is_new = !path.is_file();
+
+            let mut to_write = Vec::<u8>::new();
+            if is_new {
+                write_header(&mut to_write)
+                    .expect("proptest: couldn't write header.");
+            }
+
+            write_seed_line(&mut to_write, seed, shrunken_value)
+                .expect("proptest: couldn't write seed line.");
+
+            if let Err(e) = write_seed_data_to_file(&path, &to_write) {
+                eprintln!("proptest: failed to append to {}: {}", path.display(), e);
+            } else if is_new {
+                eprintln!(
+                    "proptest: Saving this and future failures in {}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    fn box_clone(&self) -> Box<FailurePersistence> {
+        Box::new(*self)
+    }
+
+    fn eq(&self, other: &FailurePersistence) -> bool {
+        other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
+    }
+
+    fn as_any(&self) -> &Any { self }
 }
 
 /// Ensure that the source file to use for resolving the location of the persisted
@@ -144,159 +233,108 @@ where
     }
 }
 
-impl FailurePersistence for FileFailurePersistence {
-    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<[u32; 4]> {
-        let p = self.resolve(
-                source_file
-                    .and_then(|s| absolutize_source_file(Path::new(s)))
-                    .as_ref()
-                    .map(|cow| &**cow));
+fn parse_seed_line(mut line: String, path: &Path, lineno: usize) -> Option<Seed> {
+    // Remove anything after and including '#':
+    if let Some(comment_start) = line.find('#') {
+        line.truncate(comment_start);
+    }
 
-        let path: Option<&PathBuf> = match p {
-            Some(ref inner_path) => Some(inner_path),
-            None => None,
-        };
-        let result: io::Result<Vec<[u32; 4]>> = path.map_or_else(
-            || Ok(vec![]),
-            |path| {
-                // .ok() instead of .unwrap() so we don't propagate panics here
-                let _lock = PERSISTENCE_LOCK.read().ok();
-
-                let mut ret = Vec::new();
-
-                let input = io::BufReader::new(fs::File::open(path)?);
-                for (lineno, line) in input.lines().enumerate() {
-                    let mut line = line?;
-                    if let Some(comment_start) = line.find('#') {
-                        line.truncate(comment_start);
-                    }
-
-                    let parts = line.trim().split(' ').collect::<Vec<_>>();
-                    if 5 == parts.len() && "xs" == parts[0] {
-                        if let Ok(seed) = parse_seed(&*parts) {
-                            ret.push(seed);
-                        } else {
-                            eprintln!(
-                                "proptest: {}:{}: unparsable line, \
-                             ignoring",
-                                path.display(),
-                                lineno + 1
-                            );
-                        }
-                    } else if parts.len() > 1 {
-                        eprintln!(
-                            "proptest: {}:{}: unknown case type `{}` \
-                         (corrupt file or newer proptest version?)",
-                            &path.display(),
-                            lineno + 1,
-                            parts[0]
-                        );
-                    }
-                }
-
-                Ok(ret)
-            },
-        );
-
-        match result {
-            Ok(r) => r,
-            Err(err) => {
-                if io::ErrorKind::NotFound != err.kind() {
-                    eprintln!(
-                        "proptest: failed to open {}: {}",
-                        &path.map(|x| &**x)
-                            .unwrap_or_else(|| Path::new("??"))
-                            .display(),
-                        err
-                    );
-                }
-                vec![]
+    // Split by whitespace and ignore empty lines:
+    let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
+    let len = parts.len();
+    if len > 0 {
+        // "xs" stands for "XorShift".
+        if parts[0] == "xs" && len == 5 {
+            // Parse using the chosen one:
+            if let Ok(seed) = parse_seed_old(&parts[1..]) {
+                return Some(seed);
+            } else {
+                eprintln!("proptest: {}:{}: unparsable line, ignoring",
+                            path.display(), lineno + 1);
             }
+        } else {
+            eprintln!("proptest: {}:{}: unknown case type `{}` \
+                    (corrupt file or newer proptest version?)",
+                    &path.display(), lineno + 1, parts[0]);
         }
     }
 
+    None
+}
 
-    fn save_persisted_failure(
-        &mut self,
-        source_file: Option<&'static str>,
-        seed: [u32; 4],
-        shrunken_value: &Debug,
-    ) {
-        let path = self.resolve(source_file.map(|f| Path::new(f)));
-        if let Some(path) = path {
-            // .ok() instead of .unwrap() so we don't propagate panics here
-            let _lock = PERSISTENCE_LOCK.write().ok();
-            let is_new = !path.is_file();
+fn parse_seed_old(parts: &[&str]) -> Result<Seed, ParseIntError> {
+    let mut ret = [0u32; 4];
+    for (src, dst) in parts.iter().zip(ret.iter_mut()) {
+        *dst = src.parse()?;
+    }
 
-            let mut to_write = Vec::<u8>::new();
-            if is_new {
-                writeln!(
-                    to_write,
-                    "\
+    Ok(convert_to_new_format(ret))
+}
+
+fn convert_to_new_format(old_format: [u32; 4]) -> Seed {
+    use byteorder::{NativeEndian, ByteOrder};
+    let mut new_format = [0; 16];
+    NativeEndian::write_u32_into(&old_format[..], &mut new_format);
+    new_format
+}
+
+fn convert_from_new_format(new_format: Seed) -> [u32; 4] {
+    use byteorder::{NativeEndian, ByteOrder};
+    let mut old_format = [0; 4];
+    NativeEndian::read_u32_into(&new_format[..], &mut old_format);
+    old_format
+}
+
+fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &Debug)
+    -> io::Result<()>
+{
+    // Write line start:
+    write!(buf, "xs ")?;
+
+    // Write out each part of seed:
+    for &s in &convert_from_new_format(seed) {
+        write!(buf, "{} ", s)?;
+    }
+
+    // Write out comment:
+    let debug_start = buf.len();
+    write!(buf, "# shrinks to {:?}", shrunken_value)?;
+
+    // Ensure there are no newlines in the debug output
+    for byte in &mut buf[debug_start..] {
+        if b'\n' == *byte || b'\r' == *byte {
+            *byte = b' ';
+        }
+    }
+
+    buf.push(b'\n');
+
+    Ok(())
+}
+
+fn write_header(buf: &mut Vec<u8>) -> io::Result<()> {
+    writeln!(buf,
+"\
 # Seeds for failure cases proptest has generated in the past. It is
 # automatically read and these particular cases re-run before any
 # novel cases are generated.
 #
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases."
-                ).expect("writeln! to vec failed");
-            }
-            let mut data_line = Vec::<u8>::new();
-            write!(
-                data_line,
-                "xs {} {} {} {} # shrinks to {:?}",
-                seed[0], seed[1], seed[2], seed[3], shrunken_value
-            ).expect("write! to vec failed");
-            // Ensure there are no newlines in the debug output
-            for byte in &mut data_line {
-                if b'\n' == *byte || b'\r' == *byte {
-                    *byte = b' ';
-                }
-            }
-            to_write.extend(data_line);
-            to_write.push(b'\n');
-
-            fn do_write(dst: &Path, data: &[u8]) -> io::Result<()> {
-                if let Some(parent) = dst.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-
-                let mut options = fs::OpenOptions::new();
-                options.append(true).create(true);
-                let mut out = options.open(dst)?;
-                out.write_all(data)?;
-
-                Ok(())
-            }
-
-            if let Err(e) = do_write(&path, &to_write) {
-                eprintln!("proptest: failed to append to {}: {}", path.display(), e);
-            } else if is_new {
-                eprintln!(
-                    "proptest: Saving this and future failures in {}",
-                    path.display()
-                );
-            }
-        }
-    }
-
-    fn box_clone(&self) -> Box<FailurePersistence> {
-        Box::new(self.clone())
-    }
-
-    fn eq(&self, other: &FailurePersistence) -> bool {
-        other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
-    }
-
-    fn as_any(&self) -> &Any { self }
+    )
 }
 
-use self::FileFailurePersistence::*;
-
-impl Default for FileFailurePersistence {
-    fn default() -> Self {
-        SourceParallel("proptest-regressions")
+fn write_seed_data_to_file(dst: &Path, data: &[u8]) -> io::Result<()> {
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
     }
+
+    let mut options = fs::OpenOptions::new();
+    options.append(true).create(true);
+    let mut out = options.open(dst)?;
+    out.write_all(data)?;
+
+    Ok(())
 }
 
 impl FileFailurePersistence {
@@ -381,16 +419,6 @@ lazy_static! {
     /// write to the same file at once (depending on how atomic append mode is
     /// on the OS), but this should be extremely rare.
     static ref PERSISTENCE_LOCK: RwLock<()> = RwLock::new(());
-}
-
-
-
-fn parse_seed(parts: &[&str]) -> Result<[u32; 4], ParseIntError> {
-    let a = parts[1].parse()?;
-    let b = parts[2].parse()?;
-    let c = parts[3].parse()?;
-    let d = parts[4].parse()?;
-    Ok([a, b, c, d])
 }
 
 #[cfg(test)]

@@ -9,18 +9,21 @@
 
 //! Arbitrary implementations for `std::hash`.
 
-use std::hash::{BuildHasherDefault, Hasher};
-use std::collections::hash_map::{DefaultHasher, RandomState};
+use core::hash::{BuildHasherDefault, Hasher};
+#[cfg(feature = "std")]
+use std_facade::hash_map::{DefaultHasher, RandomState};
 
 // NOTE: don't impl for std::hash::SipHasher.. since deprecated!
 
 // over-constrain on purpose!
 arbitrary!([H: Default + Hasher] BuildHasherDefault<H>; Default::default());
 
+#[cfg(feature = "std")]
 lazy_just!(DefaultHasher, Default::default; RandomState, Default::default);
 
 #[cfg(test)]
 mod test {
+    #[cfg(feature = "std")]
     no_panic_test!(
         default_hasher => DefaultHasher,
         random_state => RandomState,
