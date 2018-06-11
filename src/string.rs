@@ -123,11 +123,8 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
         }).sboxed()),
 
         Class(class) => Ok(match class {
-            hir::Class::Unicode(class) => {
-                // FIXME: look at this!
-                let ranges = class.iter().map(|r| (r.start(), r.end())).collect();
-                char::ranges(Cow::Owned(ranges)).prop_map(to_bytes).sboxed()
-            },
+            hir::Class::Unicode(class) =>
+                unicode_class_strategy(class).prop_map(to_bytes).sboxed(),
             hir::Class::Bytes(class) => {
                 // FIXME: look at this!
                 let subs = class.iter().map(|r| if 255u8 == r.end() {
@@ -169,6 +166,29 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
         WordBoundary(_) =>
             unsupported("word boundary tests not supported for string generation"),
     }.map(RegexGeneratorStrategy)
+}
+
+fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'static> {
+    static NONL_RANGES: &[(char, char)] = &[
+        ('\x00', '\x09'),
+        // Multiple instances of the latter range to partially make up
+        // for the bias of having such a tiny range in the control
+        // characters.
+        ('\x0B', ::std::char::MAX),
+        ('\x0B', ::std::char::MAX),
+        ('\x0B', ::std::char::MAX),
+        ('\x0B', ::std::char::MAX),
+        ('\x0B', ::std::char::MAX),
+    ];
+
+    let dotnnl = |x: &hir::ClassUnicodeRange, y: &hir::ClassUnicodeRange|
+        x.start() == '\0' && x.end() == '\x09' &&
+        y.start() == '\x0B' && y.end() == '\u{10FFFF}';
+
+    char::ranges(match class.ranges() {
+        [x, y] if dotnnl(x, y) || dotnnl(y, x) => Cow::Borrowed(NONL_RANGES),
+        _ => Cow::Owned(class.iter().map(|r| (r.start(), r.end())).collect()),
+    })
 }
 
 struct ConcatIter<'a, I> {
@@ -268,6 +288,16 @@ mod test {
 
     fn do_test(pattern: &str, min_distinct: usize, max_distinct: usize,
                iterations: usize) {
+        let generated = generate_values_matching_regex(pattern, iterations);
+        assert!(generated.len() >= min_distinct,
+                "Expected to generate at least {} strings, but only \
+                 generated {}", min_distinct, generated.len());
+        assert!(generated.len() <= max_distinct,
+                "Expected to generate at most {} strings, but \
+                 generated {}", max_distinct, generated.len());
+    }
+    
+    fn generate_values_matching_regex(pattern: &str, iterations: usize) -> HashSet<String> {
         let rx = Regex::new(pattern).unwrap();
         let mut generated = HashSet::new();
 
@@ -284,9 +314,8 @@ mod test {
                     false
                 };
                 if !ok {
-                    panic!("Generated string {:?} which does not match {:?} \
-                            where HIR = {:#?}",
-                           s, pattern, regex_to_hir(pattern).unwrap());
+                    panic!("Generated string {:?} which does not match {:?}",
+                           s, pattern);
                 }
 
                 generated.insert(s);
@@ -294,13 +323,17 @@ mod test {
                 if !value.simplify() { break; }
             }
         }
+        generated
+    }
 
-        assert!(generated.len() >= min_distinct,
-                "Expected to generate at least {} strings, but only \
-                 generated {}", min_distinct, generated.len());
-        assert!(generated.len() <= max_distinct,
-                "Expected to generate at most {} strings, but \
-                 generated {}", max_distinct, generated.len());
+    #[test]
+    fn test_case_insensitive_produces_all_available_values() {
+        let mut expected: HashSet<String> = HashSet::new();
+        expected.insert("a".into());
+        expected.insert("b".into());
+        expected.insert("A".into());
+        expected.insert("B".into());
+        assert_eq!(generate_values_matching_regex("(?i:a|B)", 64), expected);
     }
 
     #[test]
