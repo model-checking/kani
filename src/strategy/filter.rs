@@ -111,11 +111,10 @@ ValueTree for Filter<S, F> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::borrow::ToOwned;
 
     #[test]
     fn test_filter() {
-        let input = (0..256).prop_filter("%3".to_owned(), |&v| 0 == v % 3);
+        let input = (0..256).prop_filter("%3", |&v| 0 == v % 3);
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
@@ -133,7 +132,7 @@ mod test {
     #[test]
     fn test_filter_sanity() {
         check_strategy_sanity(
-            (0..256).prop_filter("!%5".to_owned(), |&v| 0 != v % 5),
+            (0..256).prop_filter("!%5", |&v| 0 != v % 5),
             Some(CheckStrategySanityOptions {
                 // Due to internal rejection sampling, `simplify()` can
                 // converge back to what `complicate()` would do.

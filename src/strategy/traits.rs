@@ -288,6 +288,39 @@ pub trait Strategy : fmt::Debug {
         Filter::new(self, whence.into(), fun)
     }
 
+    /// Returns a strategy which only produces transformed values where `fun`
+    /// returns `Some(value)` and rejects those where `fun` returns `None`.
+    ///
+    /// Using this method is preferable to using `.prop_map(..).prop_filter(..)`.
+    ///
+    /// This results in a very naïve form of rejection sampling and should only
+    /// be used if (a) relatively few values will actually be rejected; (b) it
+    /// isn't easy to express what you want by using another strategy and/or
+    /// `map()`.
+    ///
+    /// There are a lot of downsides to this form of filtering. It slows
+    /// testing down, since values must be generated but then discarded.
+    /// Proptest only allows a limited number of rejects this way (across the
+    /// entire `TestRunner`). Rejection can interfere with shrinking;
+    /// particularly, complex filters may largely or entirely prevent shrinking
+    /// from substantially altering the original value.
+    ///
+    /// Local rejection sampling is still preferable to rejecting the entire
+    /// input to a test (via `TestCaseError::Reject`), however, and the default
+    /// number of local rejections allowed is much higher than the number of
+    /// whole-input rejections.
+    ///
+    /// `whence` is used to record where and why the rejection occurred.
+    fn prop_filter_map<R, F, O>(self, whence: R, fun: F) -> FilterMap<Self, F>
+    where
+        Self: Sized,
+        R: Into<Reason>,
+        F: Fn(Self::Value) -> Option<O>,
+        O: fmt::Debug,
+    {
+        FilterMap::new(self, whence.into(), fun)
+    }
+
     /// Returns a strategy which picks uniformly from `self` and `other`.
     ///
     /// When shrinking, if a value from `other` was originally chosen but that

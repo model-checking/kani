@@ -1320,8 +1320,9 @@
 //! the rejection.
 //!
 //! A local filter is created with the `prop_filter` combinator. Besides a
-//! function indicating whether to accept the value, it also takes an _owned_
-//! `String` which it uses to record where/why the rejection happened.
+//! function indicating whether to accept the value, it also takes a value of
+//! type `&'static str`, `String`, .., which it uses to record where/why the
+//! rejection happened.
 //!
 //! ```rust
 //! #[macro_use] extern crate proptest;
@@ -1333,7 +1334,7 @@
 //!     # */
 //!     fn some_test(
 //!       v in (0..1000u32)
-//!         .prop_filter("Values must not divisible by 7 xor 11".to_owned(),
+//!         .prop_filter("Values must not divisible by 7 xor 11",
 //!                      |v| !((0 == v % 7) ^ (0 == v % 11)))
 //!     ) {
 //!         assert_eq!(0 == v % 7, 0 == v % 11);
