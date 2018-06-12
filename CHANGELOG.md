@@ -2,6 +2,10 @@
 
 ### New Additions
 
+- A combinator `.prop_filter_map` has been added to `Strategy`.
+  It is similar to `.filter_map` for `Iterator` in that it is the
+  combination of `.prop_filter` and `.prop_map`.
+
 - `i128` and `u128` are now supported without any feature flags and on stable.
 
 - More implementations of `Arbitrary` are supported for `alloc` + `no_std` users.
