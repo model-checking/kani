@@ -115,24 +115,19 @@ mod test {
 
     #[test]
     fn shrinks_properly() {
-        let mut runner = TestRunner::default();
+        let mut tree = BoolValueTree::new(true);
+        assert!(tree.simplify());
+        assert!(!tree.current());
+        assert!(!tree.clone().simplify());
+        assert!(tree.complicate());
+        assert!(!tree.clone().complicate());
+        assert!(tree.current());
+        assert!(!tree.simplify());
+        assert!(tree.current());
 
-        for _ in 0..256 {
-            let mut tree = ANY.new_value(&mut runner).unwrap();
-
-            if tree.current() {
-                assert!(tree.simplify());
-                assert!(!tree.current());
-                assert!(!tree.clone().simplify());
-                assert!(tree.complicate());
-                assert!(!tree.clone().complicate());
-                assert!(tree.current());
-                assert!(!tree.simplify());
-                assert!(tree.current());
-            } else {
-                assert!(!tree.clone().simplify());
-                assert!(!tree.clone().complicate());
-            }
-        }
+        tree = BoolValueTree::new(false);
+        assert!(!tree.clone().simplify());
+        assert!(!tree.clone().complicate());
+        assert!(!tree.current());
     }
 }
