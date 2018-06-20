@@ -25,6 +25,12 @@
 - `Arbitrary` is implemented for `RangeInclusive<Idx>`, `RangeToInclusive`,
   and `DecodeUtf16` on stable.
 
+### Bug Fixes
+
+- Fix a race condition where a test failing due to running ever so slightly
+  over the set timeout could cause the test harness to converge to the
+  incorrect failing value, a non-failing value, or panic.
+
 ### Minor changes
 
 - The Bernoulli distribution is now used for `proptest::bool::weighted`.

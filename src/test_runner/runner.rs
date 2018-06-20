@@ -293,7 +293,7 @@ impl TestRunner {
         let timeout = self.config.timeout();
 
         loop {
-            let child_error = rusty_fork::fork(
+            let (child_error, last_fork_file_len) = rusty_fork::fork(
                 test_name,
                 rusty_fork_id!(),
                 |cmd| {
@@ -336,13 +336,22 @@ impl TestRunner {
 
             // The child only terminates early if it outright crashes or we
             // kill it due to timeout, so add a synthetic failure to the
-            // output.
-            let error = Err(child_error.unwrap_or(
-                TestCaseError::fail("Child process was terminated abruptly \
-                                     but with successful status")));
-            replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
-                .expect("Failed to append to replay file");
-            replay.steps.push(error);
+            // output. But only do this if the length of the fork file is the
+            // same as when we last saw it, or if the child was not killed due
+            // to timeout. (This is because the child could have appended
+            // something to the file after we gave up waiting for it but before
+            // we were able to kill it).
+            if last_fork_file_len.map_or(true, |last_fork_file_len| {
+                last_fork_file_len == forkfile.borrow().as_ref().unwrap()
+                    .as_file().metadata().map(|md| md.len()).unwrap_or(0)
+            }) {
+                let error = Err(child_error.unwrap_or(
+                    TestCaseError::fail("Child process was terminated abruptly \
+                                         but with successful status")));
+                replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
+                    .expect("Failed to append to replay file");
+                replay.steps.push(error);
+            }
 
             // Bail if we've gone through too many processes in case the
             // shrinking process itself is crashing.
@@ -603,14 +612,14 @@ fn init_replay(_rng: &mut TestRng) -> (iter::Empty<TestCaseResult>, ForkOutput) 
 
 #[cfg(feature = "fork")]
 fn await_child_without_timeout(child: &mut rusty_fork::ChildWrapper)
-                               -> Option<TestCaseError> {
+                               -> (Option<TestCaseError>, Option<u64>) {
     let status = child.wait().expect("Failed to wait for child process");
 
     if status.success() {
-        None
+        (None, None)
     } else {
-        Some(TestCaseError::fail(format!(
-            "Child process exited with {}", status)))
+        (Some(TestCaseError::fail(format!(
+            "Child process exited with {}", status))), None)
     }
 }
 
@@ -618,7 +627,7 @@ fn await_child_without_timeout(child: &mut rusty_fork::ChildWrapper)
 fn await_child(child: &mut rusty_fork::ChildWrapper,
                _: &mut tempfile::NamedTempFile,
                _timeout: u32)
-               -> Option<TestCaseError> {
+               -> (Option<TestCaseError>, Option<u64>) {
     await_child_without_timeout(child)
 }
 
@@ -626,7 +635,7 @@ fn await_child(child: &mut rusty_fork::ChildWrapper,
 fn await_child(child: &mut rusty_fork::ChildWrapper,
                forkfile: &mut tempfile::NamedTempFile,
                timeout: u32)
-               -> Option<TestCaseError> {
+               -> (Option<TestCaseError>, Option<u64>) {
     use std::time::Duration;
 
     if 0 == timeout {
@@ -646,10 +655,10 @@ fn await_child(child: &mut rusty_fork::ChildWrapper,
             .expect("Failed to wait for child process")
         {
             if status.success() {
-                return None;
+                return (None, None);
             } else {
-                return Some(TestCaseError::fail(format!(
-                    "Child process exited with {}", status)));
+                return (Some(TestCaseError::fail(format!(
+                    "Child process exited with {}", status))), None);
             }
         }
 
@@ -658,8 +667,8 @@ fn await_child(child: &mut rusty_fork::ChildWrapper,
         // If we've gone a full timeout period without the file growing,
         // fail the test and kill the child.
         if current_len <= last_forkfile_len {
-            return Some(TestCaseError::fail(format!(
-                "Timed out waiting for child process")));
+            return (Some(TestCaseError::fail(format!(
+                "Timed out waiting for child process"))), Some(current_len));
         } else {
             last_forkfile_len = current_len;
         }
