@@ -31,10 +31,6 @@
   over the set timeout could cause the test harness to converge to the
   incorrect failing value, a non-failing value, or panic.
 
-### Minor changes
-
-- The Bernoulli distribution is now used for `proptest::bool::weighted`.
-
 ### Deprecations
 
 - The type alias `ValueFor<S>` is now deprecated and will be removed in
