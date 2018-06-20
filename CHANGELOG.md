@@ -89,6 +89,13 @@
 - As `std::io::{Chars, CharsError}` have been deprecated on nightly,
   their `Arbitrary` implementations have been removed.
 
+## 0.7.2
+
+### Bug Fixes
+
+- Fix that `bool` would not shrink correctly, leading to hangs when tests
+  taking `bool` parameters would fail in certain circumstances.
+
 ## 0.7.1
 
 ### New Additions

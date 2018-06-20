@@ -28,7 +28,7 @@ impl Strategy for Any {
     type Value = bool;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        Ok(BoolValueTree(runner.rng().gen()))
+        Ok(BoolValueTree::new(runner.rng().gen()))
     }
 }
 
@@ -49,27 +49,60 @@ impl Strategy for Weighted {
     type Value = bool;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        Ok(BoolValueTree(runner.rng().gen_bool(self.0)))
+        Ok(BoolValueTree::new(runner.rng().gen_bool(self.0)))
     }
 }
 
 /// The `ValueTree` to shrink booleans to false.
 #[derive(Clone, Copy, Debug)]
-pub struct BoolValueTree(bool);
+pub struct BoolValueTree {
+    current: bool,
+    state: ShrinkState,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ShrinkState {
+    Untouched, Simplified, Final
+}
+
+impl BoolValueTree {
+    fn new(current: bool) -> Self {
+        BoolValueTree { current, state: ShrinkState::Untouched }
+    }
+}
 
 impl ValueTree for BoolValueTree {
     type Value = bool;
 
-    fn current(&self) -> bool { self.0 }
+    fn current(&self) -> bool { self.current }
     fn simplify(&mut self) -> bool {
-        let r = self.0;
-        self.0 = false;
-        r
+        match self.state {
+            ShrinkState::Untouched if self.current => {
+                self.current = false;
+                self.state = ShrinkState::Simplified;
+                true
+            },
+
+            ShrinkState::Untouched | ShrinkState::Simplified |
+            ShrinkState::Final => {
+                self.state = ShrinkState::Final;
+                false
+            },
+        }
     }
     fn complicate(&mut self) -> bool {
-        let r = self.0;
-        self.0 = true;
-        !r
+        match self.state {
+            ShrinkState::Untouched | ShrinkState::Final => {
+                self.state = ShrinkState::Final;
+                false
+            },
+
+            ShrinkState::Simplified => {
+                self.current = true;
+                self.state = ShrinkState::Final;
+                true
+            }
+        }
     }
 }
 
@@ -80,5 +113,23 @@ mod test {
     #[test]
     fn test_sanity() {
         check_strategy_sanity(ANY, None);
+    }
+
+    #[test]
+    fn shrinks_properly() {
+        let mut tree = BoolValueTree::new(true);
+        assert!(tree.simplify());
+        assert!(!tree.current());
+        assert!(!tree.clone().simplify());
+        assert!(tree.complicate());
+        assert!(!tree.clone().complicate());
+        assert!(tree.current());
+        assert!(!tree.simplify());
+        assert!(tree.current());
+
+        tree = BoolValueTree::new(false);
+        assert!(!tree.clone().simplify());
+        assert!(!tree.clone().complicate());
+        assert!(!tree.current());
     }
 }

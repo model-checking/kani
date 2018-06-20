@@ -791,6 +791,18 @@ where S::Tree : Clone + fmt::Debug, S::Value : cmp::PartialEq {
             }
         }
 
+        {
+            let mut state = state.clone();
+            let mut count = 0;
+            while state.simplify() || state.complicate() {
+                count += 1;
+                if count > 65536 {
+                    panic!("Failed to converge on any value. State:\n{:#?}",
+                           state);
+                }
+            }
+        }
+
         let mut num_simplifies = 0;
         let mut before_simplified;
         loop {
