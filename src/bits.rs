@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -18,17 +18,15 @@
 
 use core::marker::PhantomData;
 use core::mem;
-use core::ops::Range;
 use std_facade::fmt;
 
 use bit_set::BitSet;
 use rand::{self, Rng};
 
+use collection::SizeRange;
+use num::sample_uniform_incl;
 use strategy::*;
 use test_runner::*;
-
-// FIXME(2018-06-04): Consistently use Into<SizeRange>
-// instead of `Range<usize>` in this module?
 
 /// Trait for types which can be handled with `BitSetStrategy`.
 #[cfg_attr(feature="cargo-clippy", allow(len_without_is_empty))]
@@ -183,8 +181,8 @@ impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
 /// Shrinking happens as with [`BitSetStrategy`](struct.BitSetStrategy.html).
 #[derive(Clone, Debug)]
 pub struct SampledBitSetStrategy<T : BitSetLike> {
-    size: Range<usize>,
-    bits: Range<usize>,
+    size: SizeRange,
+    bits: SizeRange,
     _marker: PhantomData<T>,
 }
 
@@ -200,12 +198,16 @@ impl<T : BitSetLike> SampledBitSetStrategy<T> {
     ///
     /// Panics if `size` includes a value that is greater than the number of
     /// bits in `bits`.
-    pub fn new(size: Range<usize>, bits: Range<usize>) -> Self {
-        let available_bits = bits.end - bits.start;
-        assert!(size.end <= available_bits + 1,
+    pub fn new(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
+               -> Self {
+        let size = size.into();
+        let bits = bits.into();
+
+        let available_bits = bits.end_excl() - bits.start();
+        assert!(size.end_excl() < available_bits + 1,
                 "Illegal SampledBitSetStrategy: have {} bits available, \
                  but requested size is {}..{}",
-                available_bits, size.start, size.end);
+                available_bits, size.start(), size.end_excl());
         SampledBitSetStrategy {
             size, bits, _marker: PhantomData
         }
@@ -217,10 +219,11 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     type Value = T;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let mut bits = T::new_bitset(self.bits.end);
-        let count = runner.rng().gen_range(self.size.start, self.size.end);
+        let mut bits = T::new_bitset(self.bits.end_excl());
+        let count = sample_uniform_incl(
+            runner, self.size.start(), self.size.end());
         for bit in
-            rand::seq::sample_iter(runner.rng(), self.bits.clone(), count)
+            rand::seq::sample_iter(runner.rng(), self.bits.iter(), count)
             .expect("not enough bits to sample")
         {
             bits.set(bit);
@@ -228,9 +231,9 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
 
         Ok(BitSetValueTree {
             inner: bits,
-            shrink: self.bits.start,
+            shrink: self.bits.start(),
             prev_shrink: None,
-            min_count: self.size.start,
+            min_count: self.size.start(),
         })
     }
 }
@@ -314,7 +317,7 @@ macro_rules! int_api {
             ///
             /// Panics if `size` includes a value that is greater than the
             /// number of bits in `bits`.
-            pub fn sampled(size: Range<usize>, bits: Range<usize>)
+            pub fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
                            -> SampledBitSetStrategy<$typ> {
                 SampledBitSetStrategy::new(size, bits)
             }
@@ -357,7 +360,7 @@ macro_rules! minimal_api {
             ///
             /// Panics if `size` includes a value that is greater than the
             /// number of bits in `bits`.
-            pub fn sampled(size: Range<usize>, bits: Range<usize>)
+            pub fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
                            -> SampledBitSetStrategy<$typ> {
                 SampledBitSetStrategy::new(size, bits)
             }

@@ -1,5 +1,5 @@
 //-
-// Copyright 2017 Jason Lingle
+// Copyright 2017, 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -12,6 +12,7 @@
 use core::cmp::Ord;
 use core::hash::Hash;
 use core::ops::{Add, Range, RangeTo, RangeInclusive, RangeToInclusive};
+use core::usize;
 
 use std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList};
 
@@ -67,13 +68,26 @@ impl SizeRange {
 
     /// Extract the ends `[low, high]` of a `SizeRange`.
     pub(crate) fn extract(&self) -> (usize, usize) {
-        let start = self.0.clone().next().unwrap();
-        let end = self.0.clone().next_back().unwrap();
-        (start, end)
+        (self.start(), self.end())
     }
 
     pub(crate) fn start(&self) -> usize {
-        self.0.clone().next().unwrap()
+        *self.0.start()
+    }
+
+    pub(crate) fn end(&self) -> usize {
+        *self.0.end()
+    }
+
+    pub(crate) fn end_excl(&self) -> usize {
+        let end = self.end();
+        // Quietly clamp to usize::MAX to allow RangeFrom to still be used
+        // ergonomically in APIs that can't actually handle usize::MAX itself.
+        if usize::MAX == end { end } else { end + 1}
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = usize> {
+        self.0.clone().into_iter()
     }
 }
 
@@ -111,7 +125,7 @@ impl From<RangeToInclusive<usize>> for SizeRange {
 /// Given a size range `[low, high]`, then a range`low..(high + 1)` is returned.
 /// This will panic if `high == usize::MAX`.
 impl From<SizeRange> for Range<usize> {
-    fn from(sr: SizeRange) -> Self {        
+    fn from(sr: SizeRange) -> Self {
         let (start, end) = sr.extract();
         start..end + 1
     }

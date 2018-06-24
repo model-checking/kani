@@ -25,6 +25,8 @@
 - `Arbitrary` is implemented for `RangeInclusive<Idx>`, `RangeToInclusive`,
   and `DecodeUtf16` on stable.
 
+- Bitset strategies now accept all range syntaxes.
+
 ### Bug Fixes
 
 - Fix a race condition where a test failing due to running ever so slightly
