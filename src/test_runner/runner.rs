@@ -253,11 +253,9 @@ impl TestRunner {
     /// persisted before returning failure.
     ///
     /// Returns success or failure indicating why the test as a whole failed.
-    pub fn run<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
-    {
+    pub fn run<S : Strategy>(&mut self, strategy: &S,
+                             test: impl Fn (S::Value) -> TestCaseResult)
+                             -> TestRunResult<S> {
         if self.config.fork() {
             self.run_in_fork(strategy, test)
         } else {
@@ -266,19 +264,16 @@ impl TestRunner {
     }
 
     #[cfg(not(feature = "fork"))]
-    fn run_in_fork<S, F>(&mut self, _: &S, _: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
+    fn run_in_fork<S : Strategy>
+        (&mut self, _: &S, _: impl Fn (S::Value) -> TestCaseResult) -> TestRunResult<S>
     {
         unreachable!()
     }
 
     #[cfg(feature = "fork")]
-    fn run_in_fork<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
+    fn run_in_fork<S : Strategy>(&mut self, strategy: &S,
+                                 test: impl Fn (S::Value) -> TestCaseResult)
+                                 -> TestRunResult<S>
     {
         let mut test = Some(test);
 
@@ -371,24 +366,21 @@ impl TestRunner {
             replay.steps.into_iter(), ForkOutput::empty())
     }
 
-    fn run_in_process<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
+    fn run_in_process<S : Strategy>
+        (&mut self, strategy: &S, test: impl Fn (S::Value) -> TestCaseResult)
+         -> TestRunResult<S>
     {
         let (replay_steps, fork_output) = init_replay(&mut self.rng);
         self.run_in_process_with_replay(
             strategy, test, replay_steps.into_iter(), fork_output)
     }
 
-    fn run_in_process_with_replay<S, F, R>
-        (&mut self, strategy: &S, test: F, mut replay: R,
+    fn run_in_process_with_replay<S : Strategy>
+        (&mut self, strategy: &S,
+         test: impl Fn (S::Value) -> TestCaseResult,
+         mut replay: impl Iterator<Item = TestCaseResult>,
          mut fork_output: ForkOutput)
         -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let old_rng = self.rng.clone();
 
@@ -434,14 +426,12 @@ impl TestRunner {
         Ok(())
     }
 
-    fn gen_and_run_case<S, F, R>
-        (&mut self, strategy: &S, f: &F,
-         replay: &mut R, fork_output: &mut ForkOutput)
+    fn gen_and_run_case<S : Strategy>
+        (&mut self, strategy: &S,
+         f: &impl Fn (S::Value) -> TestCaseResult,
+         replay: &mut impl Iterator<Item = TestCaseResult>,
+         fork_output: &mut ForkOutput)
         -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let case =
             unwrap_or!(strategy.new_tree(self), msg =>
@@ -462,11 +452,10 @@ impl TestRunner {
     /// terminate the run if it runs for longer than `timeout`. However, if the
     /// test function returns but took longer than `timeout`, the test case
     /// will fail.
-    pub fn run_one<V, F>(&mut self, case: V, test: F)
+    pub fn run_one<V : ValueTree>
+        (&mut self, case: V,
+         test: impl Fn (V::Value) -> TestCaseResult)
         -> Result<bool, TestError<V::Value>>
-    where
-        V: ValueTree,
-        F: Fn(V::Value) -> TestCaseResult
     {
         self.run_one_with_replay(
             case, test,
@@ -474,13 +463,12 @@ impl TestRunner {
             &mut ForkOutput::empty())
     }
 
-    fn run_one_with_replay<V, F, R>
-        (&mut self, mut case: V, test: F, replay: &mut R, fork_output: &mut ForkOutput)
+    fn run_one_with_replay<V : ValueTree>
+        (&mut self, mut case: V,
+         test: impl Fn (V::Value) -> TestCaseResult,
+         replay: &mut impl Iterator<Item = TestCaseResult>,
+         fork_output: &mut ForkOutput)
         -> Result<bool, TestError<V::Value>>
-    where
-        V: ValueTree,
-        F: Fn(V::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let result = call_test(
             case.current(), &test,
@@ -500,14 +488,12 @@ impl TestRunner {
         }
     }
 
-    fn shrink<V, F, R>
-        (&mut self, case: &mut V, test: F, replay: &mut R,
+    fn shrink<V : ValueTree>
+        (&mut self, case: &mut V,
+         test: impl Fn (V::Value) -> TestCaseResult,
+         replay: &mut impl Iterator<Item = TestCaseResult>,
          fork_output: &mut ForkOutput)
         -> Option<Reason>
-    where
-        V: ValueTree,
-        F: Fn(V::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let mut last_failure = None;
 
@@ -541,10 +527,8 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    pub fn reject_local<R>(&mut self, whence: R) -> Result<(), Reason>
-    where
-        R: Into<Reason>
-    {
+    pub fn reject_local(&mut self, whence: impl Into<Reason>)
+                        -> Result<(), Reason> {
         if self.local_rejects >= self.config.max_local_rejects {
             Err("Too many local rejects".into())
         } else {

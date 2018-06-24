@@ -86,6 +86,9 @@
 - `Arbitrary` for `SizeRange` changed its associated type to use `RangeInclusive`.
   Same applies for `CString`.
 
+- Many APIs now use `impl Trait` in argument position, which could affect code
+  using turbofishes to specify types explicitly.
+
 ### Nightly-only breakage
 
 - As `std::io::{Chars, CharsError}` have been deprecated on nightly,

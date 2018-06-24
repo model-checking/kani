@@ -41,17 +41,15 @@ impl<T : Strategy> Union<T> {
     /// ## Panics
     ///
     /// Panics if `options` is empty.
-    pub fn new<I : IntoIterator<Item = T>>(options: I) -> Self {
+    pub fn new(options: impl IntoIterator<Item = T>) -> Self {
         let options: Vec<W<T>> = options.into_iter()
             .map(|v| (1, v)).collect();
         assert!(!options.is_empty());
         Self { options }
     }
 
-    pub(crate) fn try_new<E, I>(it: I) -> Result<Self, E>
-    where
-        I: Iterator<Item = Result<T, E>>
-    {
+    pub(crate) fn try_new<E>(it: impl Iterator<Item = Result<T, E>>)
+                             -> Result<Self, E> {
         let options: Vec<W<T>> = it.map(|r| r.map(|v| (1, v)))
             .collect::<Result<_, _>>()?;
 

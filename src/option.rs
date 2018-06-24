@@ -23,12 +23,12 @@ use test_runner::*;
 
 /// Creates a `Probability` from some value that is convertible into it.
 ///
-/// # Safety
+/// # Panics
 ///
 /// Panics if the converted to probability would lie
 /// outside interval `[0.0, 1.0]`. Consult the `Into` (or `From`)
 /// implementations for more details.
-pub fn prob<X: Into<Probability>>(from: X) -> Probability {
+pub fn prob(from: impl Into<Probability>) -> Probability {
     from.into()
 }
 
@@ -39,8 +39,8 @@ impl Default for Probability {
 
 impl From<f64> for Probability {
     /// Creates a `Probability` from a `f64`.
-    /// 
-    /// # Safety
+    ///
+    /// # Panics
     ///
     /// Panics if the probability is outside interval `[0.0, 1.0]`.
     fn from(prob: f64) -> Self {
@@ -50,8 +50,8 @@ impl From<f64> for Probability {
 
 impl Probability {
     /// Creates a `Probability` from a `f64`.
-    /// 
-    /// # Safety
+    ///
+    /// # Panics
     ///
     /// Panics if the probability is outside interval `[0.0, 1.0]`.
     pub fn new(prob: f64) -> Self {
@@ -89,7 +89,7 @@ impl Generic for Probability {
     fn into(self) -> Self::Repr { self.0 }
 
     /// Creates a `Probability` from a `f64`.
-    /// 
+    ///
     /// # Safety
     ///
     /// Panics if the probability is outside interval `[0.0, 1.0]`.
@@ -173,7 +173,7 @@ impl<T : Strategy + fmt::Debug> fmt::Debug for OptionStrategy<T> {
 /// `Some` values shrink to `None`.
 ///
 /// `Some` and `None` are each chosen with 50% probability.
-pub fn of<T: Strategy>(t: T) -> OptionStrategy<T> {
+pub fn of<T : Strategy>(t: T) -> OptionStrategy<T> {
     weighted(Probability::default(), t)
 }
 
@@ -184,10 +184,8 @@ pub fn of<T: Strategy>(t: T) -> OptionStrategy<T> {
 ///
 /// `Some` is chosen with a probability given by `probability_of_some`, which
 /// must be between 0.0 and 1.0, both exclusive.
-pub fn weighted<T, P>(probability_of_some: P, t: T) -> OptionStrategy<T>
-where
-    T: Strategy,
-    P: Into<Probability>
+pub fn weighted<T : Strategy>
+    (probability_of_some: impl Into<Probability>, t: T) -> OptionStrategy<T>
 {
     let prob = probability_of_some.into().into();
     let (weight_some, weight_none) = float_to_weight(prob);

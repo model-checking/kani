@@ -144,8 +144,9 @@ opaque_strategy_wrapper! {
 /// This is largely equivalent to making a `Union` of a bunch of `Just`
 /// strategies, but is substantially more efficient and shrinks by binary
 /// search.
-pub fn select<T, A>(values: A) -> Select<T>
-where A : 'static + Into<Cow<'static, [T]>>, T : Clone + fmt::Debug + 'static {
+pub fn select<T : Clone + fmt::Debug + 'static>
+    (values: impl Into<Cow<'static, [T]>>) -> Select<T>
+{
     let cow = values.into();
 
     Select(statics::Map::new(

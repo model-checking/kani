@@ -24,7 +24,8 @@ pub struct MapFailurePersistence {
 }
 
 impl FailurePersistence for MapFailurePersistence {
-    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<Seed> {
+    fn load_persisted_failures(&self, source_file: Option<&'static str>)
+                               -> Vec<Seed> {
         source_file
             .and_then(|source| self.map.get(source))
             .map(|seeds| seeds.iter().cloned().collect::<Vec<_>>())

@@ -24,10 +24,11 @@ use test_runner::Seed;
 
 /// Provides external persistence for historical test failures by storing seeds.
 pub trait FailurePersistence: Send + Sync + fmt::Debug  {
-    /// Supply seeds associated with the given `source_file` that may be
-    /// used by a `TestRunner`'s random number generator in order to
-    /// consistently recreate a previously-failing `Strategy`-provided value.
-    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<Seed>;
+    /// Supply seeds associated with the given `source_file` that may be used
+    /// by a `TestRunner`'s random number generator in order to consistently
+    /// recreate a previously-failing `Strategy`-provided value.
+    fn load_persisted_failures(&self, source_file: Option<&'static str>)
+                               -> Vec<Seed>;
 
     /// Store a new failure-generating seed associated with the given `source_file`.
     fn save_persisted_failure(

@@ -85,19 +85,19 @@ pub const DEFAULT_PREFERRED_RANGES: &[CharRange] = &[
 /// particular characters anyway. `ranges` is usually derived from some
 /// external property, and the fact that a range is small often means it is
 /// more interesting.
-pub fn select_char<R : Rng>(rnd: &mut R,
-                            special: &[char],
-                            preferred: &[CharRange],
-                            ranges: &[CharRange]) -> char {
+pub fn select_char(rnd: &mut impl Rng,
+                   special: &[char],
+                   preferred: &[CharRange],
+                   ranges: &[CharRange]) -> char {
     let (base, offset) = select_range_index(rnd, special, preferred, ranges);
     ::core::char::from_u32(base + offset).expect("bad character selected")
 }
 
-fn select_range_index<R : Rng>(rnd: &mut R,
-                               special: &[char],
-                               preferred: &[CharRange],
-                               ranges: &[CharRange])
-                               -> (u32, u32) {
+fn select_range_index(rnd: &mut impl Rng,
+                      special: &[char],
+                      preferred: &[CharRange],
+                      ranges: &[CharRange])
+                      -> (u32, u32) {
     fn in_range(ranges: &[CharRange], ch: char) -> Option<(u32, u32)> {
         ranges.iter().find(|&&(lo, hi)| ch >= lo && ch <= hi).map(
             |&(lo, _)| (lo as u32, ch as u32 - lo as u32))

@@ -31,7 +31,7 @@ use test_runner::*;
 //==============================================================================
 
 /// Creates a `SizeRange` from some value that is convertible into it.
-pub fn size_range<X: Into<SizeRange>>(from: X) -> SizeRange {
+pub fn size_range(from: impl Into<SizeRange>) -> SizeRange {
     from.into()
 }
 
@@ -181,8 +181,8 @@ pub struct VecStrategy<T : Strategy> {
 
 /// Create a strategy to generate `Vec`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn vec<T: Strategy, S: Into<SizeRange>>(element: T, size: S)
-    -> VecStrategy<T> {
+pub fn vec<T: Strategy>(element: T, size: impl Into<SizeRange>)
+                        -> VecStrategy<T> {
     VecStrategy { element, size: size.into() }
 }
 
@@ -209,7 +209,7 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `VecDeque`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn vec_deque<T: Strategy, S: Into<SizeRange>>(element: T, size: S)
+pub fn vec_deque<T: Strategy>(element: T, size: impl Into<SizeRange>)
     -> VecDequeStrategy<T>
 {
     VecDequeStrategy(statics::Map::new(vec(element, size), VecToDeque))
@@ -238,7 +238,7 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `LinkedList`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn linked_list<T : Strategy, S: Into<SizeRange>>(element: T, size: S)
+pub fn linked_list<T : Strategy>(element: T, size: impl Into<SizeRange>)
      -> LinkedListStrategy<T>
 {
     LinkedListStrategy(statics::Map::new(vec(element, size), VecToLl))
@@ -267,7 +267,7 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `BinaryHeap`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn binary_heap<T : Strategy, S: Into<SizeRange>>(element: T, size: S)
+pub fn binary_heap<T : Strategy>(element: T, size: impl Into<SizeRange>)
     -> BinaryHeapStrategy<T>
 where T::Value : Ord {
     BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
@@ -314,12 +314,9 @@ opaque_strategy_wrapper! {
 /// has at least the minimum number of elements, in case `element` should
 /// produce duplicate values.
 #[cfg(feature = "std")]
-pub fn hash_set<T, S>(element: T, size: S) -> HashSetStrategy<T>
-where
-    T: Strategy,
-    T::Value: Hash + Eq,
-    S: Into<SizeRange>,
-{
+pub fn hash_set<T : Strategy>(element: T, size: impl Into<SizeRange>)
+                              -> HashSetStrategy<T>
+where T::Value : Hash + Eq {
     let size = size.into();
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size.clone()), VecToHashSet),
@@ -361,12 +358,9 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeSet` has at least the minimum number of elements, in case `element`
 /// should produce duplicate values.
-pub fn btree_set<T, S>(element: T, size: S) -> BTreeSetStrategy<T>
-where
-    T: Strategy,
-    T::Value: Ord,
-    S: Into<SizeRange>
-{
+pub fn btree_set<T : Strategy>(element: T, size: impl Into<SizeRange>)
+                               -> BTreeSetStrategy<T>
+where T::Value : Ord {
     let size = size.into();
     BTreeSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size.clone()), VecToBTreeSet),
@@ -418,13 +412,9 @@ opaque_strategy_wrapper! {
 /// has at least the minimum number of elements, in case `key` should produce
 /// duplicate values.
 #[cfg(feature = "std")]
-pub fn hash_map<K, V, S>(key: K, value: V, size: S) -> HashMapStrategy<K, V>
-where
-    K: Strategy,
-    V: Strategy,
-    K::Value: Hash + Eq,
-    S: Into<SizeRange>,
-{
+pub fn hash_map<K : Strategy, V : Strategy>
+    (key: K, value: V, size: impl Into<SizeRange>) -> HashMapStrategy<K, V>
+where K::Value : Hash + Eq {
     let size = size.into();
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToHashMap),
@@ -472,13 +462,9 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeMap` has at least the minimum number of elements, in case `key`
 /// should produce duplicate values.
-pub fn btree_map<K, V, S>(key: K, value: V, size: S) -> BTreeMapStrategy<K, V>
-where
-    K: Strategy,
-    V: Strategy,
-    K::Value: Ord,
-    S: Into<SizeRange>,
-{
+pub fn btree_map<K : Strategy, V : Strategy>
+    (key: K, value: V, size: impl Into<SizeRange>) -> BTreeMapStrategy<K, V>
+where K::Value : Ord {
     let size = size.into();
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),

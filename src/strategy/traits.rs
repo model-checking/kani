@@ -311,13 +311,10 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter_map<R, F, O>(self, whence: R, fun: F) -> FilterMap<Self, F>
-    where
-        Self: Sized,
-        R: Into<Reason>,
-        F: Fn(Self::Value) -> Option<O>,
-        O: fmt::Debug,
-    {
+    fn prop_filter_map<F : Fn (Self::Value) -> Option<O>,
+                       O : fmt::Debug>
+        (self, whence: impl Into<Reason>, fun: F) -> FilterMap<Self, F>
+    where Self : Sized {
         FilterMap::new(self, whence.into(), fun)
     }
 
@@ -408,14 +405,12 @@ pub trait Strategy : fmt::Debug {
     ///   ]);
     /// # }
     /// ```
-    fn prop_recursive<R, F>
-        (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<Self::Value, F>
-    where
-        Self : Sized + 'static,
-        F : Fn(BoxedStrategy<Self::Value>) -> R,
-        R : Strategy<Value = Self::Value> + 'static,
-    {
+    fn prop_recursive<R : Strategy<Value = Self::Value> + 'static,
+                      F : Fn (BoxedStrategy<Self::Value>) -> R>
+        (self, depth: u32, desired_size: u32, expected_branch_size: u32,
+         recurse: F)
+         -> Recursive<Self::Value, F>
+    where Self : Sized + 'static {
         Recursive::new(self, depth, desired_size, expected_branch_size, recurse)
     }
 

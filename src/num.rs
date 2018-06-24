@@ -17,15 +17,13 @@ use rand::distributions::uniform::{Uniform, SampleUniform};
 use core::ops::Range;
 use test_runner::TestRunner;
 
-pub(crate) fn sample_uniform<X: SampleUniform>
+pub(crate) fn sample_uniform<X : SampleUniform>
     (run: &mut TestRunner, range: Range<X>) -> X {
     Uniform::new(range.start, range.end).sample(run.rng())
 }
 
-pub(crate) fn sample_uniform_incl<X>
+pub(crate) fn sample_uniform_incl<X : SampleUniform>
     (run: &mut TestRunner, start: X, end: X) -> X
-where
-    X: SampleUniform
 {
     Uniform::new_inclusive(start, end).sample(run.rng())
 }
