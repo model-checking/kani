@@ -1109,7 +1109,7 @@
 //! #   quantity: u32,
 //! # }
 //! #
-//! 
+//!
 //! # fn do_stuff(order: Order) {
 //! #     let i: u32 = order.id.parse().unwrap();
 //! #     let s = i.to_string();
@@ -1642,7 +1642,7 @@
 //! you can find out about all the strategies provided out-of-the-box by
 //! perusing the module tree below.
 
-#![deny(missing_docs)]
+#![deny(missing_docs, bare_trait_objects)]
 #![no_std]
 #![cfg_attr(feature = "cargo-clippy", allow(
     doc_markdown,

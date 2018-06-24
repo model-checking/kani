@@ -36,7 +36,7 @@ impl FailurePersistence for MapFailurePersistence {
         &mut self,
         source_file: Option<&'static str>,
         seed: Seed,
-        _shrunken_value: &fmt::Debug,
+        _shrunken_value: &dyn fmt::Debug,
     ) {
         let s = match source_file {
             Some(sf) => sf,
@@ -46,15 +46,15 @@ impl FailurePersistence for MapFailurePersistence {
         set.insert(seed);
     }
 
-    fn box_clone(&self) -> Box<FailurePersistence> {
+    fn box_clone(&self) -> Box<dyn FailurePersistence> {
         Box::new(self.clone())
     }
 
-    fn eq(&self, other: &FailurePersistence) -> bool {
+    fn eq(&self, other: &dyn FailurePersistence) -> bool {
         other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
     }
 
-    fn as_any(&self) -> &Any { self }
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 #[cfg(test)]

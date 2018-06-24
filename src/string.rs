@@ -47,25 +47,34 @@ impl Default for StringParam {
     }
 }
 
-quick_error! {
-    /// Errors which may occur when preparing a regular expression for use with
-    /// string generation.
-    #[derive(Debug)]
-    pub enum Error {
-        /// The string passed as the regex was not syntactically valid.
-        RegexSyntax(err: ParseError) {
-            from()
-            cause(err)
-            description(err.description())
-            display("{}", err)
-        }
-        /// The regex was syntactically valid, but contains elements not
-        /// supported by proptest.
-        UnsupportedRegex(message: &'static str) {
-            description(message)
+// quick_error! uses bare trait objects, so we enclose its invocation here in a
+// module so the lint can be disabled just for it.
+#[allow(bare_trait_objects)]
+mod error_container {
+    use super::*;
+
+    quick_error! {
+        /// Errors which may occur when preparing a regular expression for use with
+        /// string generation.
+        #[derive(Debug)]
+        pub enum Error {
+            /// The string passed as the regex was not syntactically valid.
+            RegexSyntax(err: ParseError) {
+                from()
+                    cause(err)
+                    description(err.description())
+                    display("{}", err)
+            }
+            /// The regex was syntactically valid, but contains elements not
+            /// supported by proptest.
+            UnsupportedRegex(message: &'static str) {
+                description(message)
+            }
         }
     }
 }
+
+pub use self::error_container::Error;
 
 opaque_strategy_wrapper! {
     /// Strategy which generates values (i.e., `String` or `Vec<u8>`) matching
@@ -77,7 +86,7 @@ opaque_strategy_wrapper! {
         (SBoxedStrategy<T>) -> RegexGeneratorValueTree<T>;
     /// `ValueTree` corresponding to `RegexGeneratorStrategy`.
     pub struct RegexGeneratorValueTree[<T>][where T : fmt::Debug]
-        (Box<ValueTree<Value = T>>) -> T;
+        (Box<dyn ValueTree<Value = T>>) -> T;
 }
 
 impl Strategy for str {

@@ -25,19 +25,19 @@ impl FailurePersistence for NoopFailurePersistence {
     fn save_persisted_failure(&mut self,
         _source_file: Option<&'static str>,
         _seed: Seed,
-        _shrunken_value: &fmt::Debug,
+        _shrunken_value: &dyn fmt::Debug,
     ) {
     }
 
-    fn box_clone(&self) -> Box<FailurePersistence> {
+    fn box_clone(&self) -> Box<dyn FailurePersistence> {
         Box::new(NoopFailurePersistence)
     }
 
-    fn eq(&self, other: &FailurePersistence) -> bool {
+    fn eq(&self, other: &dyn FailurePersistence) -> bool {
         other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
     }
 
-    fn as_any(&self) -> &Any { self }
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 #[cfg(test)]

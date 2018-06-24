@@ -155,7 +155,7 @@ pub struct Config {
     /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
     ///
     /// The default cannot currently be overridden by an environment variable.
-    pub failure_persistence: Option<Box<FailurePersistence>>,
+    pub failure_persistence: Option<Box<dyn FailurePersistence>>,
 
     /// File location of the current test, relevant for persistence
     /// and debugging.

@@ -628,7 +628,7 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 }
 
 /// A boxed `ValueTree`.
-type BoxedVT<T> = Box<ValueTree<Value = T>>;
+type BoxedVT<T> = Box<dyn ValueTree<Value = T>>;
 
 /// A boxed `Strategy` trait object as produced by `Strategy::boxed()`.
 ///
@@ -636,7 +636,7 @@ type BoxedVT<T> = Box<ValueTree<Value = T>>;
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
 pub struct BoxedStrategy<T>(
-    Arc<Strategy<Value = T, Tree = BoxedVT<T>>>);
+    Arc<dyn Strategy<Value = T, Tree = BoxedVT<T>>>);
 
 /// A boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
@@ -645,7 +645,7 @@ pub struct BoxedStrategy<T>(
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
 pub struct SBoxedStrategy<T>(
-    Arc<Strategy<Value = T, Tree = BoxedVT<T>> + Sync + Send>);
+    Arc<dyn Strategy<Value = T, Tree = BoxedVT<T>> + Sync + Send>);
 
 impl<T> Clone for BoxedStrategy<T> {
     fn clone(&self) -> Self {
@@ -700,7 +700,7 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
 struct BoxedStrategyWrapper<T>(T);
 impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
 where T::Tree : 'static {
-    type Tree = Box<ValueTree<Value = T::Value>>;
+    type Tree = Box<dyn ValueTree<Value = T::Value>>;
     type Value = T::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {

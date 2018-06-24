@@ -35,27 +35,28 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
         &mut self,
         source_file: Option<&'static str>,
         seed: Seed,
-        shrunken_value: &fmt::Debug,
+        shrunken_value: &dyn fmt::Debug,
     );
 
     /// Delegate method for producing a trait object usable with `Clone`
-    fn box_clone(&self) -> Box<FailurePersistence>;
+    fn box_clone(&self) -> Box<dyn FailurePersistence>;
 
     /// Equality testing delegate required due to constraints of trait objects.
-    fn eq(&self, other: &FailurePersistence) -> bool;
+    fn eq(&self, other: &dyn FailurePersistence) -> bool;
 
     /// Assistant method for trait object comparison.
-    fn as_any(&self) -> &Any;
+    fn as_any(&self) -> &dyn Any;
 }
 
-impl<'a, 'b> PartialEq<FailurePersistence + 'b> for FailurePersistence + 'a {
-    fn eq(&self, other: &(FailurePersistence+'b)) -> bool {
+impl<'a, 'b> PartialEq<dyn FailurePersistence + 'b>
+for dyn FailurePersistence + 'a {
+    fn eq(&self, other: &(dyn FailurePersistence + 'b)) -> bool {
         FailurePersistence::eq(self, other)
     }
 }
 
-impl Clone for Box<FailurePersistence> {
-    fn clone(&self) -> Box<FailurePersistence> {
+impl Clone for Box<dyn FailurePersistence> {
+    fn clone(&self) -> Box<dyn FailurePersistence> {
         self.box_clone()
     }
 }

@@ -68,7 +68,7 @@ impl<T : fmt::Debug + 'static,
      R : Strategy<Value = T> + 'static,
      F : Fn (BoxedStrategy<T>) -> R>
 Strategy for Recursive<T, F> {
-    type Tree = Box<ValueTree<Value = T>>;
+    type Tree = Box<dyn ValueTree<Value = T>>;
     type Value = T;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
