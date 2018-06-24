@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
+use std_facade::fmt;
 
 use strategy::{Strategy, ValueTree, NewTree};
 use test_runner::TestRunner;
@@ -26,14 +26,16 @@ macro_rules! noshrink {
 /// A `Strategy` which always produces a single value value and never
 /// simplifies.
 #[derive(Clone, Copy, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Just<T : Clone + fmt::Debug>(
     /// The value produced by this strategy.
     pub T);
 
 impl<T : Clone + fmt::Debug> Strategy for Just<T> {
-    type Value = Self;
+    type Tree = Self;
+    type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
@@ -52,21 +54,22 @@ impl<T : Clone + fmt::Debug> ValueTree for Just<T> {
 /// simplifies. If `T` is `Clone`, you should use `Just` instead.
 ///
 /// This is a generalization of `Just` and works by calling
-/// the provided `Fn() -> T` in `.current()` every time. This is not a
+/// the provided `Fn () -> T` in `.current()` every time. This is not a
 /// very interesting strategy, but is required in cases where `T` is
 /// not `Clone`. It is also used in `proptest_derive` where we can't
 /// assume that your type is `Clone`.
 ///
 /// **It is important that the function used be pure.**
-pub struct LazyJust<T, F: Fn() -> T> {
+#[must_use = "strategies do nothing unless used"]
+pub struct LazyJust<T, F: Fn () -> T> {
     /// The function executed in `.current()`.
     function: F
 }
 
-/// Shorthand for `LazyJust<T, fn() -> T>`.
-pub type LazyJustFn<V> = LazyJust<V, fn() -> V>;
+/// Shorthand for `LazyJust<T, fn () -> T>`.
+pub type LazyJustFn<V> = LazyJust<V, fn () -> V>;
 
-impl<T, F: Fn() -> T> LazyJust<T, F> {
+impl<T, F: Fn () -> T> LazyJust<T, F> {
     /// Constructs a `LazyJust` strategy given the function/closure
     /// that produces the value.
     ///
@@ -76,29 +79,30 @@ impl<T, F: Fn() -> T> LazyJust<T, F> {
     }
 }
 
-impl<T: fmt::Debug, F: Clone + Fn() -> T> Strategy for LazyJust<T, F> {
-    type Value = Self;
+impl<T: fmt::Debug, F: Clone + Fn () -> T> Strategy for LazyJust<T, F> {
+    type Tree = Self;
+    type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
         Ok(self.clone())
     }
 }
 
-impl<T: fmt::Debug, F: Fn() -> T> ValueTree for LazyJust<T, F> {
+impl<T: fmt::Debug, F: Fn () -> T> ValueTree for LazyJust<T, F> {
     type Value = T;
     noshrink!();
     fn current(&self) -> Self::Value { (self.function)() }
 }
 
-impl<T, F: Copy + Fn() -> T> Copy for LazyJust<T, F> {}
+impl<T, F: Copy + Fn () -> T> Copy for LazyJust<T, F> {}
 
-impl<T, F: Clone + Fn() -> T> Clone for LazyJust<T, F> {
+impl<T, F: Clone + Fn () -> T> Clone for LazyJust<T, F> {
     fn clone(&self) -> Self {
         Self { function: self.function.clone() }
     }
 }
 
-impl<T, F: Fn() -> T> fmt::Debug for LazyJust<T, F> {
+impl<T, F: Fn () -> T> fmt::Debug for LazyJust<T, F> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("LazyJust")
            .field("function", &"<function>")
@@ -107,18 +111,19 @@ impl<T, F: Fn() -> T> fmt::Debug for LazyJust<T, F> {
 }
 
 //==============================================================================
-// Any `fn() -> T` is a Strategy
+// Any `fn () -> T` is a Strategy
 //==============================================================================
 
-// TODO: try 'F: Fn() -> T' instead when we've got specialization.
+// TODO: try 'F: Fn () -> T' instead when we've got specialization.
 
-impl<T: fmt::Debug> Strategy for fn() -> T {
-    type Value = Self;
+impl<T: fmt::Debug> Strategy for fn () -> T {
+    type Tree = Self;
+    type Value = T;
 
-    fn new_value(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
+    fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> { Ok(*self) }
 }
 
-impl<T: fmt::Debug> ValueTree for fn() -> T {
+impl<T: fmt::Debug> ValueTree for fn () -> T {
     type Value = T;
     noshrink!();
     fn current(&self) -> Self::Value { self() }

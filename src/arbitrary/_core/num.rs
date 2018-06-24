@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::num`.
 
-use std::num::*;
+use core::num::*;
 
 use strategy::*;
 
@@ -18,7 +18,7 @@ arbitrary!(ParseIntError; "".parse::<u32>().unwrap_err());
 
 #[cfg(feature = "unstable")]
 arbitrary!(TryFromIntError; {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
     u8::try_from(-1).unwrap_err()
 });
 
@@ -28,7 +28,7 @@ arbitrary!(FpCategory,
     TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>,
                 W<Just<Self>>, W<Just<Self>>)>;
     {
-        use std::num::FpCategory::*;
+        use core::num::FpCategory::*;
         prop_oneof![
             Just(Nan),
             Just(Infinite),

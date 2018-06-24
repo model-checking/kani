@@ -7,12 +7,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Arbitrary implementations for `std::fmt`.
+//! Arbitrary implementations for `std::boxed`.
 
-use std::fmt::Error;
-arbitrary!(Error; Error);
+use std_facade::Box;
+
+wrap_from!(Box);
 
 #[cfg(test)]
 mod test {
-    no_panic_test!(error => Error);
+    no_panic_test!(boxed => Box<u8>);
 }

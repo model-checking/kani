@@ -7,13 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
 use core::mem;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::{fmt, Arc};
 
 use strategy::fuse::Fuse;
 use strategy::traits::*;
@@ -23,6 +18,7 @@ use test_runner::*;
 /// `Strategy` that picks one of those strategies and then picks values from
 /// it.
 #[derive(Debug, Clone, Copy)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Flatten<S> {
     source: S,
 }
@@ -35,11 +31,12 @@ impl<S : Strategy> Flatten<S> {
 }
 
 impl<S : Strategy> Strategy for Flatten<S>
-where ValueFor<S> : Strategy {
-    type Value = FlattenValueTree<S::Value>;
+where S::Value : Strategy {
+    type Tree = FlattenValueTree<S::Tree>;
+    type Value = <S::Value as Strategy>::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let meta = self.source.new_value(runner)?;
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let meta = self.source.new_tree(runner)?;
         FlattenValueTree::new(runner, meta)
     }
 }
@@ -47,10 +44,10 @@ where ValueFor<S> : Strategy {
 /// The `ValueTree` produced by `Flatten`.
 pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
     meta: Fuse<S>,
-    current: Fuse<<S::Value as Strategy>::Value>,
+    current: Fuse<<S::Value as Strategy>::Tree>,
     // The final value to produce after successive calls to complicate() on the
     // underlying objects return false.
-    final_complication: Option<Fuse<<S::Value as Strategy>::Value>>,
+    final_complication: Option<Fuse<<S::Value as Strategy>::Tree>>,
     // When `simplify()` or `complicate()` causes a new `Strategy` to be
     // chosen, we need to find a new failing input for that case. To do this,
     // we implement `complicate()` by regenerating values up to a number of
@@ -68,7 +65,7 @@ pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
 impl<S : ValueTree> Clone for FlattenValueTree<S>
 where S::Value : Strategy + Clone,
       S : Clone,
-      <S::Value as Strategy>::Value : Clone {
+      <S::Value as Strategy>::Tree : Clone {
     fn clone(&self) -> Self {
         FlattenValueTree {
             meta: self.meta.clone(),
@@ -82,7 +79,7 @@ where S::Value : Strategy + Clone,
 
 impl<S : ValueTree> fmt::Debug for FlattenValueTree<S>
 where S::Value : Strategy,
-      S : fmt::Debug, <S::Value as Strategy>::Value : fmt::Debug {
+      S : fmt::Debug, <S::Value as Strategy>::Tree : fmt::Debug {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("FlattenValueTree")
             .field("meta", &self.meta)
@@ -96,7 +93,7 @@ where S::Value : Strategy,
 
 impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
     fn new(runner: &mut TestRunner, meta: S) -> Result<Self, Reason> {
-        let current = meta.current().new_value(runner)?;
+        let current = meta.current().new_tree(runner)?;
         Ok(FlattenValueTree {
             meta: Fuse::new(meta),
             current: Fuse::new(current),
@@ -109,7 +106,7 @@ impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
 
 impl<S : ValueTree> ValueTree for FlattenValueTree<S>
 where S::Value : Strategy {
-    type Value = ValueFor<S::Value>;
+    type Value = <S::Value as Strategy>::Value;
 
     fn current(&self) -> Self::Value {
         self.current.current()
@@ -129,7 +126,7 @@ where S::Value : Strategy {
             true
         } else if !self.meta.simplify() {
             false
-        } else if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+        } else if let Ok(v) = self.meta.current().new_tree(&mut self.runner) {
             // Shift current into final_complication and `v` into
             // `current`. We also need to prevent that value from
             // complicating beyond the current point in the future
@@ -152,7 +149,7 @@ where S::Value : Strategy {
             if self.runner.flat_map_regen() {
                 self.complicate_regen_remaining -= 1;
 
-                if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+                if let Ok(v) = self.meta.current().new_tree(&mut self.runner) {
                     self.current = Fuse::new(v);
                     return true;
                 }
@@ -164,7 +161,7 @@ where S::Value : Strategy {
         if self.current.complicate() {
             return true;
         } else if self.meta.complicate() {
-            if let Ok(v) = self.meta.current().new_value(&mut self.runner) {
+            if let Ok(v) = self.meta.current().new_tree(&mut self.runner) {
                 self.complicate_regen_remaining = self.runner.config().cases;
                 self.current = Fuse::new(v);
                 return true;
@@ -187,12 +184,13 @@ where S::Value : Strategy {
 pub struct IndFlatten<S>(pub(super) S);
 
 impl<S : Strategy> Strategy for IndFlatten<S>
-where ValueFor<S> : Strategy {
-    type Value = <ValueFor<S> as Strategy>::Value;
+where S::Value : Strategy {
+    type Tree = <S::Value as Strategy>::Tree;
+    type Value = <S::Value as Strategy>::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let inner = self.0.new_value(runner)?;
-        inner.current().new_value(runner)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let inner = self.0.new_tree(runner)?;
+        inner.current().new_tree(runner)
     }
 }
 
@@ -224,14 +222,15 @@ impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
 }
 
 impl<S : Strategy, R : Strategy,
-     F : Fn (ValueFor<S>) -> R>
+     F : Fn(S::Value) -> R>
 Strategy for IndFlattenMap<S, F> {
-    type Value = ::tuple::TupleValueTree<(S::Value, R::Value)>;
+    type Tree = ::tuple::TupleValueTree<(S::Tree, R::Tree)>;
+    type Value = (S::Value, R::Value);
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let left = self.source.new_value(runner)?;
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let left = self.source.new_tree(runner)?;
         let right_source = (self.fun)(left.current());
-        let right = right_source.new_value(runner)?;
+        let right = right_source.new_tree(runner)?;
 
         Ok(::tuple::TupleValueTree::new((left, right)))
     }
@@ -253,8 +252,8 @@ mod test {
         let mut failures = 0;
         for _ in 0..1000 {
             let mut runner = TestRunner::default();
-            let case = input.new_value(&mut runner).unwrap();
-            let result = runner.run_one(case, |&(a, b)| {
+            let case = input.new_tree(&mut runner).unwrap();
+            let result = runner.run_one(case, |(a, b)| {
                 if a <= 10000 || b <= a {
                     Ok(())
                 } else {
@@ -303,7 +302,7 @@ mod test {
             max_flat_map_regens: 1000,
             .. Config::default()
         });
-        let case = input.new_value(&mut runner).unwrap();
+        let case = input.new_tree(&mut runner).unwrap();
         let _ = runner.run_one(case, |_| {
             // Only the first run fails, all others succeed
             prop_assert!(pass.fetch_or(true, Ordering::SeqCst));

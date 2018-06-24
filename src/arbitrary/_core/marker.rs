@@ -7,16 +7,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Arbitrary implementations for `std::boxed`.
+//! Arbitrary implementations for `std::marker`.
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
+use core::marker::PhantomData;
 
-wrap_from!(Box);
+arbitrary!([T: ?Sized] PhantomData<T>; PhantomData);
 
 #[cfg(test)]
 mod test {
-    no_panic_test!(boxed => Box<u8>);
+    no_panic_test!(phantom_data => PhantomData<u8>);
 }

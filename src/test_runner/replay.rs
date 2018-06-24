@@ -15,7 +15,7 @@ use std::path::Path;
 use std::string::String;
 use std::vec::Vec;
 
-use test_runner::{TestCaseError, TestCaseResult};
+use test_runner::{TestCaseError, TestCaseResult, Seed};
 
 const SENTINEL: &'static str = "proptest-forkfile";
 
@@ -32,7 +32,7 @@ const SENTINEL: &'static str = "proptest-forkfile";
 /// to the persistence file will perturb the replay.
 ///
 /// `Replay` has a special string format for being stored in files. It starts
-/// with a line just containing the text in `SENTINEL`, then four lines
+/// with a line just containing the text in `SENTINEL`, then 16 lines
 /// containing the values of `seed`, then an unterminated line consisting of
 /// `+`, `-`, and `!` characters to indicate test case passes/failures/rejects,
 /// or `.` to indicate termination of the test run. This format makes it easy
@@ -41,7 +41,7 @@ const SENTINEL: &'static str = "proptest-forkfile";
 #[derive(Clone, Debug)]
 pub struct Replay {
     /// The seed of the RNG used to start running the test cases.
-    pub seed: [u32;4],
+    pub seed: Seed,
     /// A log of whether certain test cases passed or failed. The runner will
     /// assume the same results occur without actually running the test cases.
     pub steps: Vec<TestCaseResult>,
@@ -69,7 +69,7 @@ pub enum ReplayFileStatus {
 }
 
 /// Open the file in the usual read+append+create mode.
-pub fn open_file<P : AsRef<Path>>(path: P) -> io::Result<fs::File> {
+pub fn open_file(path: impl AsRef<Path>) -> io::Result<fs::File> {
     fs::OpenOptions::new()
         .read(true)
         .append(true)
@@ -87,19 +87,19 @@ fn step_to_char(step: &TestCaseResult) -> char {
 }
 
 /// Append the given step to the given output.
-pub fn append<F : Write>(mut file: F, step: &TestCaseResult)
-                         -> io::Result<()> {
+pub fn append(mut file: impl Write, step: &TestCaseResult)
+              -> io::Result<()> {
     write!(file, "{}", step_to_char(step))
 }
 
 /// Append a termination mark to the given output.
-pub fn terminate<F : Write>(mut file: F) -> io::Result<()> {
+pub fn terminate(mut file: impl Write) -> io::Result<()> {
     write!(file, ".")
 }
 
 impl Replay {
     /// Write the full state of this `Replay` to the given output.
-    pub fn init_file<F : Write>(&self, mut file: F) -> io::Result<()> {
+    pub fn init_file(&self, mut file: impl Write) -> io::Result<()> {
         writeln!(file, "{}", SENTINEL)?;
 
         for word in &self.seed {
@@ -117,15 +117,15 @@ impl Replay {
     }
 
     /// Mark the replay as complete in the file.
-    pub fn complete<F : Write>(mut file: F) -> io::Result<()> {
+    pub fn complete(mut file: impl Write) -> io::Result<()> {
         write!(file, ".")
     }
 
     /// Parse a `Replay` out of the given file.
     ///
     /// The reader is implicitly seeked to the beginning before reading.
-    pub fn parse_from<F : Read + Seek>(mut file: F)
-                                       -> io::Result<ReplayFileStatus> {
+    pub fn parse_from(mut file: impl Read + Seek)
+                      -> io::Result<ReplayFileStatus> {
         file.seek(io::SeekFrom::Start(0))?;
 
         let mut reader = io::BufReader::new(&mut file);
@@ -148,12 +148,12 @@ impl Replay {
             return Ok(ReplayFileStatus::Corrupt);
         }
 
-        let mut seed = [0u32;4];
+        let mut seed: Seed = [0; 16];
         for word in &mut seed {
             line.clear();
             reader.read_line(&mut line)?;
 
-            match line.trim().parse::<u32>() {
+            match line.trim().parse::<u8>() {
                 Ok(w) => *word = w,
                 Err(_) => return Ok(ReplayFileStatus::Corrupt),
             }

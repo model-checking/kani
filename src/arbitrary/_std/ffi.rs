@@ -10,22 +10,8 @@
 //! Arbitrary implementations for `std::ffi`.
 
 use std::ffi::*;
-use std::ops::Range;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::String;
-#[cfg(feature = "std")]
-use std::string::String;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std::ops::RangeInclusive;
+use std_facade::{Box, Vec, String};
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -35,8 +21,8 @@ use arbitrary::*;
 use super::string::not_utf8_bytes;
 
 arbitrary!(CString,
-    SFnPtrMap<VecStrategy<Range<u8>>, Self>, SizeRange;
-    args => static_map(vec(1..::std::u8::MAX, args + 1), |mut vec| {
+    SFnPtrMap<VecStrategy<RangeInclusive<u8>>, Self>, SizeRange;
+    args => static_map(vec(1..=::std::u8::MAX, args + 1), |mut vec| {
         vec.pop().unwrap();
         // Could use: Self::from_vec_unchecked(vec) safely.
         Self::new(vec).unwrap()
@@ -89,7 +75,7 @@ arbitrary!(FromBytesWithNulError, SMapped<Option<u16>, Self>; {
 });
 
 arbitrary!(IntoStringError, SFnPtrMap<BoxedStrategy<Vec<u8>>, Self>;
-    static_map(not_utf8_bytes(false), |bytes|
+    static_map(not_utf8_bytes(false).boxed(), |bytes|
         CString::new(bytes).unwrap().into_string().unwrap_err()
     )
 );

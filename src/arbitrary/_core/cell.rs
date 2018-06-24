@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::cell`.
 
-use std::cell::{Cell, RefCell, UnsafeCell, BorrowError, BorrowMutError};
+use core::cell::{Cell, RefCell, UnsafeCell, BorrowError, BorrowMutError};
 
 wrap_from!([Copy] Cell);
 wrap_from!(RefCell);

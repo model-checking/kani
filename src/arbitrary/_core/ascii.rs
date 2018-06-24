@@ -7,13 +7,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Arbitrary implementations for `std::marker`.
+//! Arbitrary implementations for `std::ascii`.
 
-use std::marker::PhantomData;
+use core::ascii::{EscapeDefault, escape_default};
 
-arbitrary!([T: ?Sized] PhantomData<T>; PhantomData);
+use strategy::statics::static_map;
+use arbitrary::*;
+
+arbitrary!(EscapeDefault, SMapped<u8, Self>;
+    static_map(any::<u8>(), escape_default));
 
 #[cfg(test)]
 mod test {
-    no_panic_test!(phantom_data => PhantomData<u8>);
+    no_panic_test!(escape_default => EscapeDefault);
 }

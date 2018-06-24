@@ -9,9 +9,9 @@
 
 //! Arbitrary implementations for `std::iter`.
 
-use std::fmt;
-use std::iter::*;
-use std::iter::Fuse;
+use core::fmt;
+use core::iter::*;
+use core::iter::Fuse;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -39,8 +39,7 @@ for Cloned<A> {
 
     fn lift1_with<S>(base: S, _args: Self::Parameters) -> BoxedStrategy<Self>
     where
-        S: Strategy + 'static,
-        S::Value: ValueTree<Value = A>
+        S: Strategy<Value = A> + 'static,
     {
         base.prop_map(Iterator::cloned).boxed()
     }
@@ -71,10 +70,8 @@ for Zip<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, _args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         (fst, snd).prop_map(|(a, b)| a.zip(b)).boxed()
     }
@@ -106,10 +103,8 @@ for Chain<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, _args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         (fst, snd).prop_map(|(a, b)| a.chain(b)).boxed()
     }

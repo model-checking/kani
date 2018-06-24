@@ -24,7 +24,7 @@
 //! **This module is subject to removal at some point after the language
 //! features linked above become stable.**
 
-use core::fmt;
+use std_facade::fmt;
 
 use strategy::traits::*;
 use test_runner::*;
@@ -41,6 +41,7 @@ pub trait FilterFn<T> {
 
 /// Static version of `strategy::Filter`.
 #[derive(Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Filter<S, F> {
     source: S,
     whence: Reason,
@@ -68,13 +69,14 @@ impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : FilterFn<ValueFor<S>> + Clone>
+     F : FilterFn<S::Value> + Clone>
 Strategy for Filter<S, F> {
-    type Value = Filter<S::Value, F>;
+    type Tree = Filter<S::Tree, F>;
+    type Value = S::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
-            let val = self.source.new_value(runner)?;
+            let val = self.source.new_tree(runner)?;
             if !self.fun.apply(&val.current()) {
                 runner.reject_local(self.whence.clone())?;
             } else {
@@ -140,6 +142,7 @@ pub trait MapFn<T> {
 
 /// Static version of `strategy::Map`.
 #[derive(Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Map<S, F> {
     source: S,
     fun: F,
@@ -161,13 +164,12 @@ impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
     }
 }
 
-impl<S : Strategy,
-     F : Clone + MapFn<ValueFor<S>>>
-Strategy for Map<S, F> {
-    type Value = Map<S::Value, F>;
+impl<S : Strategy, F : Clone + MapFn<S::Value>> Strategy for Map<S, F> {
+    type Tree = Map<S::Tree, F>;
+    type Value = F::Output;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_value(runner).map(
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.source.new_tree(runner).map(
             |v| Map { source: v, fun: self.fun.clone() })
     }
 }
@@ -195,8 +197,8 @@ impl<I, O: fmt::Debug> MapFn<I> for fn(I) -> O {
 }
 
 pub(crate) fn static_map<S: Strategy, O: fmt::Debug>
-    (strat: S, fun: fn(ValueFor<S>) -> O)
-    -> Map<S, fn(ValueFor<S>) -> O> {
+    (strat: S, fun: fn(S::Value) -> O)
+    -> Map<S, fn(S::Value) -> O> {
     Map::new(strat, fun)
 }
 
@@ -220,7 +222,7 @@ mod test {
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let mut case = input.new_value(&mut runner).unwrap();
+            let mut case = input.new_tree(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);
 
@@ -243,7 +245,7 @@ mod test {
         let input = Map::new(0..10, MyMap);
 
         TestRunner::default()
-            .run(&input, |&v| {
+            .run(&input, |v| {
                 assert!(0 == v % 2);
                 Ok(())
             }).unwrap();

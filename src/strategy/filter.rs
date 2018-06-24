@@ -7,12 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::{fmt, Arc};
 
 use strategy::traits::*;
 use test_runner::*;
@@ -20,6 +15,7 @@ use test_runner::*;
 /// `Strategy` and `ValueTree` filter adaptor.
 ///
 /// See `Strategy::prop_filter()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Filter<S, F> {
     pub(super) source: S,
     pub(super) whence: Reason,
@@ -53,13 +49,14 @@ impl<S : Clone, F> Clone for Filter<S, F> {
 }
 
 impl<S : Strategy,
-     F : Fn (&ValueFor<S>) -> bool>
+     F : Fn (&S::Value) -> bool>
 Strategy for Filter<S, F> {
-    type Value = Filter<S::Value, F>;
+    type Tree = Filter<S::Tree, F>;
+    type Value = S::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         loop {
-            let val = self.source.new_value(runner)?;
+            let val = self.source.new_tree(runner)?;
             if !(self.fun)(&val.current()) {
                 runner.reject_local(self.whence.clone())?;
             } else {
@@ -115,15 +112,14 @@ ValueTree for Filter<S, F> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::borrow::ToOwned;
 
     #[test]
     fn test_filter() {
-        let input = (0..256).prop_filter("%3".to_owned(), |&v| 0 == v % 3);
+        let input = (0..256).prop_filter("%3", |&v| 0 == v % 3);
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
-            let mut case = input.new_value(&mut runner).unwrap();
+            let mut case = input.new_tree(&mut runner).unwrap();
 
             assert!(0 == case.current() % 3);
 
@@ -137,7 +133,7 @@ mod test {
     #[test]
     fn test_filter_sanity() {
         check_strategy_sanity(
-            (0..256).prop_filter("!%5".to_owned(), |&v| 0 != v % 5),
+            (0..256).prop_filter("!%5", |&v| 0 != v % 5),
             Some(CheckStrategySanityOptions {
                 // Due to internal rejection sampling, `simplify()` can
                 // converge back to what `complicate()` would do.

@@ -9,13 +9,7 @@
 
 use core::fmt;
 use core::marker::PhantomData;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
-
-use rand::XorShiftRng;
+use std_facade::Arc;
 
 use strategy::traits::*;
 use test_runner::*;
@@ -27,6 +21,7 @@ use test_runner::*;
 /// `Strategy` and `ValueTree` map adaptor.
 ///
 /// See `Strategy::prop_map()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Map<S, F> {
     pub(super) source: S,
     pub(super) fun: Arc<F>,
@@ -51,12 +46,13 @@ impl<S : Clone, F> Clone for Map<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (ValueFor<S>) -> O>
+     F : Fn (S::Value) -> O>
 Strategy for Map<S, F> {
-    type Value = Map<S::Value, F>;
+    type Tree = Map<S::Tree, F>;
+    type Value = O;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_value(runner).map(
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.source.new_tree(runner).map(
             |v| Map { source: v, fun: Arc::clone(&self.fun) })
     }
 }
@@ -88,6 +84,7 @@ ValueTree for Map<S, F> {
 /// `Strategy` and `ValueTree` map into adaptor.
 ///
 /// See `Strategy::prop_map_into()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct MapInto<S, O> {
     pub(super) source: S,
     pub(super) output: PhantomData<O>,
@@ -115,12 +112,13 @@ impl<S : Clone, O> Clone for MapInto<S, O> {
 
 impl<S : Strategy, O : fmt::Debug> Strategy for MapInto<S, O>
 where
-    ValueFor<S>: Into<O>
+    S::Value : Into<O>
 {
-    type Value = MapInto<S::Value, O>;
+    type Tree = MapInto<S::Tree, O>;
+    type Value = O;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_value(runner).map(MapInto::new)
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        self.source.new_tree(runner).map(MapInto::new)
     }
 }
 
@@ -150,6 +148,7 @@ where
 /// `Strategy` perturbation adaptor.
 ///
 /// See `Strategy::prop_perturb()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Perturb<S, F> {
     pub(super) source: S,
     pub(super) fun: Arc<F>,
@@ -174,19 +173,17 @@ impl<S : Clone, F> Clone for Perturb<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn (ValueFor<S>, XorShiftRng) -> O>
+     F : Fn (S::Value, TestRng) -> O>
 Strategy for Perturb<S, F> {
-    type Value = PerturbValueTree<S::Value, F>;
+    type Tree = PerturbValueTree<S::Tree, F>;
+    type Value = O;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();
 
-        self.source.new_value(runner).map(
-            |v| PerturbValueTree {
-                source: v,
-                fun: Arc::clone(&self.fun),
-                rng,
-            })
+        self.source.new_tree(runner).map(|source|
+            PerturbValueTree { source, rng, fun: Arc::clone(&self.fun) }
+        )
     }
 }
 
@@ -196,7 +193,7 @@ Strategy for Perturb<S, F> {
 pub struct PerturbValueTree<S, F> {
     source: S,
     fun: Arc<F>,
-    rng: XorShiftRng,
+    rng: TestRng,
 }
 
 impl<S : fmt::Debug, F> fmt::Debug for PerturbValueTree<S, F> {
@@ -219,7 +216,7 @@ impl<S : Clone, F> Clone for PerturbValueTree<S, F> {
     }
 }
 
-impl<S : ValueTree, O : fmt::Debug, F : Fn (S::Value, XorShiftRng) -> O>
+impl<S : ValueTree, O : fmt::Debug, F : Fn (S::Value, TestRng) -> O>
 ValueTree for PerturbValueTree<S, F> {
     type Value = O;
 
@@ -244,7 +241,7 @@ ValueTree for PerturbValueTree<S, F> {
 mod test {
     use std::collections::HashSet;
 
-    use rand::Rng;
+    use rand::RngCore;
 
     use strategy::just::Just;
     use super::*;
@@ -252,7 +249,7 @@ mod test {
     #[test]
     fn test_map() {
         TestRunner::default()
-            .run(&(0..10).prop_map(|v| v * 2), |&v| {
+            .run(&(0..10).prop_map(|v| v * 2), |v| {
                 assert!(0 == v % 2);
                 Ok(())
             }).unwrap();
@@ -261,7 +258,7 @@ mod test {
     #[test]
     fn test_map_into() {
         TestRunner::default()
-            .run(&(0..10u8).prop_map_into::<usize>(), |&v| {
+            .run(&(0..10u8).prop_map_into::<usize>(), |v| {
                 assert!(v < 10);
                 Ok(())
             }).unwrap();
@@ -273,7 +270,7 @@ mod test {
         let input = Just(1).prop_perturb(|v, mut rng| v + rng.next_u32());
 
         for _ in 0..16 {
-            let value = input.new_value(&mut runner).unwrap();
+            let value = input.new_tree(&mut runner).unwrap();
             assert_eq!(value.current(), value.current());
         }
     }
@@ -285,7 +282,7 @@ mod test {
 
         let mut seen = HashSet::new();
         for _ in 0..64 {
-            seen.insert(input.new_value(&mut runner).unwrap().current());
+            seen.insert(input.new_tree(&mut runner).unwrap().current());
         }
 
         assert_eq!(64, seen.len());

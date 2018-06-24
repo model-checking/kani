@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std_facade::Box;
+
 #[cfg(feature = "std")]
 use std::env;
 #[cfg(feature = "std")]
@@ -15,11 +17,6 @@ use std::fmt;
 use std::ffi::OsString;
 #[cfg(feature = "std")]
 use std::str::FromStr;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
 
 use test_runner::FailurePersistence;
 #[cfg(feature = "std")]
@@ -124,18 +121,21 @@ pub struct Config {
     /// The default is 256, which can be overridden by setting the
     /// `PROPTEST_CASES` environment variable.
     pub cases: u32,
+
     /// The maximum number of individual inputs that may be rejected before the
     /// test as a whole aborts.
     ///
     /// The default is 65536, which can be overridden by setting the
     /// `PROPTEST_MAX_LOCAL_REJECTS` environment variable.
     pub max_local_rejects: u32,
+
     /// The maximum number of combined inputs that may be rejected before the
     /// test as a whole aborts.
     ///
     /// The default is 1024, which can be overridden by setting the
     /// `PROPTEST_MAX_GLOBAL_REJECTS` environment variable.
     pub max_global_rejects: u32,
+
     /// The maximum number of times all `Flatten` combinators will attempt to
     /// regenerate values. This puts a limit on the worst-case exponential
     /// explosion that can happen with nested `Flatten`s.
@@ -143,6 +143,7 @@ pub struct Config {
     /// The default is 1_000_000, which can be overridden by setting the
     /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
+
     /// Indicates whether and how to persist failed test results.
     ///
     /// When compiling with "std" feature (i.e. the standard library is available), the default
@@ -154,7 +155,7 @@ pub struct Config {
     /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
     ///
     /// The default cannot currently be overridden by an environment variable.
-    pub failure_persistence: Option<Box<FailurePersistence>>,
+    pub failure_persistence: Option<Box<dyn FailurePersistence>>,
 
     /// File location of the current test, relevant for persistence
     /// and debugging.

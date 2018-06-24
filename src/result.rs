@@ -26,8 +26,7 @@
 //! "maybe err" since the success case results in an easier to understand code
 //! path.
 
-#![cfg_attr(feature="cargo-clippy",
-    allow(type_complexity, expl_impl_clone_on_copy))]
+#![cfg_attr(feature="cargo-clippy", allow(expl_impl_clone_on_copy))]
 
 use core::fmt;
 use core::marker::PhantomData;
@@ -71,10 +70,11 @@ impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<E> for WrapErr<T, E> {
     }
 }
 
-type MapErr<T, E> = statics::Map<E, WrapErr<ValueFor<T>, ValueFor<E>>>;
-type MapOk <T, E> = statics::Map<T, WrapOk <ValueFor<T>, ValueFor<E>>>;
+type MapErr<T, E> = statics::Map<E, WrapErr<
+    <T as Strategy>::Value, <E as Strategy>::Value>>;
+type MapOk <T, E> = statics::Map<T, WrapOk<
+    <T as Strategy>::Value, <E as Strategy>::Value>>;
 
-#[cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
     /// delegate strategies.
@@ -83,7 +83,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone)]
     pub struct MaybeOk[<T, E>][where T : Strategy, E : Strategy]
         (TupleUnion<(W<MapErr<T, E>>, W<MapOk<T, E>>)>)
-        -> MaybeOkValueTree<T::Value, E::Value>;
+        -> MaybeOkValueTree<T::Tree, E::Tree>;
     /// `ValueTree` type corresponding to `MaybeOk`.
     #[derive(Clone, Debug)]
     pub struct MaybeOkValueTree[<T, E>][where T : ValueTree, E : ValueTree]
@@ -92,7 +92,6 @@ opaque_strategy_wrapper! {
         -> Result<T::Value, E::Value>;
 }
 
-#[cfg_attr(feature="cargo-clippy", allow(type_complexity))]
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
     /// delegate strategies.
@@ -101,7 +100,7 @@ opaque_strategy_wrapper! {
     #[derive(Clone)]
     pub struct MaybeErr[<T, E>][where T : Strategy, E : Strategy]
         (TupleUnion<(W<MapOk<T, E>>, W<MapErr<T, E>>)>)
-        -> MaybeErrValueTree<T::Value, E::Value>;
+        -> MaybeErrValueTree<T::Tree, E::Tree>;
     /// `ValueTree` type corresponding to `MaybeErr`.
     #[derive(Clone, Debug)]
     pub struct MaybeErrValueTree[<T, E>][where T : ValueTree, E : ValueTree]
@@ -141,8 +140,8 @@ pub fn maybe_ok<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeOk<T, E> {
 /// that `Ok` is initially chosen.
 ///
 /// Generated values shrink to `Err`.
-pub fn maybe_ok_weighted<T : Strategy, E : Strategy, P: Into<Probability>>(
-    probability_of_ok: P, t: T, e: E) -> MaybeOk<T, E>
+pub fn maybe_ok_weighted<T : Strategy, E : Strategy>(
+    probability_of_ok: impl Into<Probability>, t: T, e: E) -> MaybeOk<T, E>
 {
     let prob = probability_of_ok.into().into();
     let (ok_weight, err_weight) = float_to_weight(prob);
@@ -170,8 +169,8 @@ pub fn maybe_err<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeErr<T, E> {
 /// that `Err` is initially chosen.
 ///
 /// Generated values shrink to `Ok`.
-pub fn maybe_err_weighted<T: Strategy, E: Strategy, P: Into<Probability>>(
-    probability_of_err: P, t: T, e: E) -> MaybeErr<T, E>
+pub fn maybe_err_weighted<T : Strategy, E : Strategy>(
+    probability_of_err: impl Into<Probability>, t: T, e: E) -> MaybeErr<T, E>
 {
     let prob = probability_of_err.into().into();
     let (err_weight, ok_weight) = float_to_weight(prob);
@@ -186,12 +185,11 @@ pub fn maybe_err_weighted<T: Strategy, E: Strategy, P: Into<Probability>>(
 mod test {
     use super::*;
 
-    fn count_ok_of_1000<S : Strategy>(s: S) -> u32
-    where S::Value : ValueTree<Value = Result<(), ()>> {
+    fn count_ok_of_1000(s: impl Strategy<Value = Result<(), ()>>) -> u32 {
         let mut runner = TestRunner::default();
         let mut count = 0;
         for _ in 0..1000 {
-            count += s.new_value(&mut runner).unwrap()
+            count += s.new_tree(&mut runner).unwrap()
                 .current().is_ok() as u32;
         }
 
@@ -231,7 +229,7 @@ mod test {
         {
             let input = maybe_err(Just(()), Just(()));
             for _ in 0..64 {
-                let mut val = input.new_value(&mut runner).unwrap();
+                let mut val = input.new_tree(&mut runner).unwrap();
                 if val.current().is_ok() {
                     assert!(!val.simplify());
                     assert!(val.current().is_ok());
@@ -244,7 +242,7 @@ mod test {
         {
             let input = maybe_ok(Just(()), Just(()));
             for _ in 0..64 {
-                let mut val = input.new_value(&mut runner).unwrap();
+                let mut val = input.new_tree(&mut runner).unwrap();
                 if val.current().is_err() {
                     assert!(!val.simplify());
                     assert!(val.current().is_err());

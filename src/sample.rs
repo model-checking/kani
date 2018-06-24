@@ -13,24 +13,9 @@
 //! is, the input collection is not itself a strategy, but is rather fixed when
 //! the strategy is created.
 
-
 use core::fmt;
 use core::ops::Range;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::borrow::Cow;
-#[cfg(feature = "std")]
-use std::borrow::Cow;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
+use std_facade::{Cow, Vec, Arc};
 
 use bit_set::BitSet;
 
@@ -59,20 +44,18 @@ pub use collection::{SizeRange, size_range};
 /// `values`.
 ///
 /// Panics if `size` is a zero-length range.
-pub fn subsequence<T, A, S>(values: A, size: S) -> Subsequence<T>
-where
-    A : 'static + Into<Cow<'static, [T]>>,
-    T : Clone + 'static,
-    S : Into<SizeRange>
+pub fn subsequence<T : Clone + 'static>
+    (values: impl Into<Cow<'static, [T]>>,
+     size: impl Into<SizeRange>) -> Subsequence<T>
 {
     let values = values.into();
     let len = values.len();
-    let size: Range<usize> = size.into().into();
+    let size = size.into();
 
-    assert!(size.start != size.end, "Zero-length range passed to subsequence");
-    assert!(size.end <= len + 1,
+    assert!(size.start() != size.end_excl(), "Zero-length range passed to subsequence");
+    assert!(size.end() <= len,
             "Maximum size of subsequence {} exceeds length of input {}",
-            size.end, len);
+            size.end(), len);
     Subsequence {
         values: Arc::new(values),
         bit_strategy: bits::bitset::sampled(size, 0..len),
@@ -84,18 +67,20 @@ where
 ///
 /// This is created by the `subsequence` function in the same module.
 #[derive(Debug, Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Subsequence<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
     bit_strategy: SampledBitSetStrategy<BitSet>,
 }
 
 impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
-    type Value = SubsequenceValueTree<T>;
+    type Tree = SubsequenceValueTree<T>;
+    type Value = Vec<T>;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         Ok(SubsequenceValueTree {
             values: Arc::clone(&self.values),
-            inner: self.bit_strategy.new_value(runner)?,
+            inner: self.bit_strategy.new_tree(runner)?,
         })
     }
 }
@@ -160,8 +145,9 @@ opaque_strategy_wrapper! {
 /// This is largely equivalent to making a `Union` of a bunch of `Just`
 /// strategies, but is substantially more efficient and shrinks by binary
 /// search.
-pub fn select<T, A>(values: A) -> Select<T>
-where A : 'static + Into<Cow<'static, [T]>>, T : Clone + fmt::Debug + 'static {
+pub fn select<T : Clone + fmt::Debug + 'static>
+    (values: impl Into<Cow<'static, [T]>>) -> Select<T>
+{
     let cow = values.into();
 
     Select(statics::Map::new(
@@ -184,7 +170,7 @@ mod test {
         let input = subsequence(VALUES, 3..7);
 
         for _ in 0..2048 {
-            let value = input.new_value(&mut runner).unwrap().current();
+            let value = input.new_tree(&mut runner).unwrap().current();
             // Generated the correct number of items
             assert!(value.len() >= 3 && value.len() < 7);
             // Chose distinct items
@@ -221,7 +207,7 @@ mod test {
         let mut runner = TestRunner::default();
         let input = subsequence(values, 1..3);
 
-        let _ = input.new_value(&mut runner).unwrap().current();
+        let _ = input.new_tree(&mut runner).unwrap().current();
     }
 
     #[test]
@@ -233,7 +219,7 @@ mod test {
         let input = select(values);
 
         for _ in 0..1024 {
-            counts[input.new_value(&mut runner).unwrap().current()] += 1;
+            counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
 
         for (ix, &count) in counts.iter().enumerate() {

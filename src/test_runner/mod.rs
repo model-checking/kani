@@ -12,6 +12,7 @@
 //! You do not normally need to access things in this module directly except
 //! when implementing new low-level strategies.
 
+mod rng;
 mod failure_persistence;
 mod config;
 mod reason;
@@ -20,6 +21,7 @@ mod errors;
 mod replay;
 mod runner;
 
+pub use self::rng::*;
 pub use self::failure_persistence::*;
 pub use self::config::*;
 pub use self::reason::*;

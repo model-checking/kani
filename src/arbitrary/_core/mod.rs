@@ -7,17 +7,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Arbitrary implementations for `std::ascii`.
+//! Arbitrary implementations for libcore.
 
-use std::ascii::{EscapeDefault, escape_default};
-
-use strategy::statics::static_map;
-use arbitrary::*;
-
-arbitrary!(EscapeDefault, SMapped<u8, Self>;
-    static_map(any::<u8>(), escape_default));
-
-#[cfg(test)]
-mod test {
-    no_panic_test!(escape_default => EscapeDefault);
-}
+mod ascii;
+mod cell;
+mod cmp;
+mod convert;
+mod fmt;
+mod iter;
+mod marker;
+mod mem;
+mod num;
+mod option;
+mod result;

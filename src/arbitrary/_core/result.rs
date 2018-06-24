@@ -9,8 +9,9 @@
 
 //! Arbitrary implementations for `std::result`.
 
-use std::fmt;
-use std::result::IntoIter;
+use core::fmt;
+use core::result::IntoIter;
+use std_facade::string;
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -18,11 +19,11 @@ use result::*;
 use arbitrary::*;
 
 // These are Result with uninhabited type in some variant:
-arbitrary!([A: Arbitrary] Result<A, ::std::string::ParseError>,
+arbitrary!([A: Arbitrary] Result<A, string::ParseError>,
     SMapped<A, Self>, A::Parameters;
     args => static_map(any_with::<A>(args), Result::Ok)
 );
-arbitrary!([A: Arbitrary] Result<::std::string::ParseError, A>,
+arbitrary!([A: Arbitrary] Result<string::ParseError, A>,
     SMapped<A, Self>, A::Parameters;
     args => static_map(any_with::<A>(args), Result::Err)
 );
@@ -37,7 +38,7 @@ arbitrary!([A: Arbitrary] Result<!, A>,
     args => static_map(any_with::<A>(args), Result::Err)
 );
 
-lift1!([] Result<A, ::std::string::ParseError>; Result::Ok);
+lift1!([] Result<A, string::ParseError>; Result::Ok);
 #[cfg(feature = "unstable")]
 lift1!([] Result<A, !>; Result::Ok);
 
@@ -62,8 +63,7 @@ where
 
     fn lift1_with<AS>(base: AS, args: Self::Parameters) -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>
+        AS: Strategy<Value = A> + 'static,
     {
         let product_unpack![prob, e] = args;
         let (p, a, e) = (prob, base, any_with::<E>(e));
@@ -78,10 +78,8 @@ for Result<A, B> {
     fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
         -> BoxedStrategy<Self>
     where
-        AS: Strategy + 'static,
-        AS::Value: ValueTree<Value = A>,
-        BS: Strategy + 'static,
-        BS::Value: ValueTree<Value = B>
+        AS: Strategy<Value = A> + 'static,
+        BS: Strategy<Value = B> + 'static,
     {
         maybe_ok_weighted(args, fst, snd).boxed()
     }

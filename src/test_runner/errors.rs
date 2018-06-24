@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
+use std_facade::fmt;
 
 #[cfg(feature = "std")]
 use std::string::ToString;
@@ -43,7 +43,7 @@ impl TestCaseError {
     ///
     /// The string gives the location and context of the rejection, and
     /// should be suitable for formatting like `Foo did X at {whence}`.
-    pub fn reject<R: Into<Reason>>(reason: R) -> Self {
+    pub fn reject(reason: impl Into<Reason>) -> Self {
         TestCaseError::Reject(reason.into())
     }
 
@@ -51,7 +51,7 @@ impl TestCaseError {
     ///
     /// The string should indicate the location of the failure, but may
     /// generally be any string.
-    pub fn fail<R: Into<Reason>>(reason: R) -> Self {
+    pub fn fail(reason: impl Into<Reason>) -> Self {
         TestCaseError::Fail(reason.into())
     }
 }

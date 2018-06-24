@@ -7,28 +7,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::arc::Arc;
-#[cfg(feature = "std")]
-use std::sync::Arc;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use std_facade::{fmt, Arc, Box, Vec};
 
 use strategy::traits::*;
 use strategy::unions::float_to_weight;
 use test_runner::*;
 
 /// Return type from `Strategy::prop_recursive()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Recursive<T, F> {
     base: BoxedStrategy<T>,
     recurse: Arc<F>,
@@ -61,20 +47,15 @@ impl<T, F> Clone for Recursive<T, F> {
     }
 }
 
-impl<T, R, F> Recursive<T, F>
-where
-    T : fmt::Debug + 'static,
-    R : Strategy + 'static,
-    F : Fn(BoxedStrategy<T>) -> R,
-    R::Value : ValueTree<Value = T>
-{
-    pub(super) fn new<S>
-        (base: S, depth: u32, desired_size: u32, expected_branch_size: u32,
-        recurse: F)
-        -> Self
-    where
-        S : Strategy + 'static,
-        S::Value : ValueTree<Value = T>
+impl<T : fmt::Debug + 'static,
+     R : Strategy<Value = T> + 'static,
+     F : Fn (BoxedStrategy<T>) -> R>
+Recursive<T, F> {
+    pub(super) fn new
+        (base: impl Strategy<Value = T> + 'static,
+         depth: u32, desired_size: u32, expected_branch_size: u32,
+         recurse: F)
+         -> Self
     {
         Self {
             base: base.boxed(),
@@ -84,16 +65,14 @@ where
     }
 }
 
-impl<T, R, F> Strategy for Recursive<T, F>
-where
-    T : fmt::Debug + 'static,
-    R : Strategy + 'static,
-    F : Fn(BoxedStrategy<T>) -> R,
-    R::Value : ValueTree<Value = T>
-{
-    type Value = Box<ValueTree<Value = T>>;
+impl<T : fmt::Debug + 'static,
+     R : Strategy<Value = T> + 'static,
+     F : Fn (BoxedStrategy<T>) -> R>
+Strategy for Recursive<T, F> {
+    type Tree = Box<dyn ValueTree<Value = T>>;
+    type Value = T;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         // Since the generator is stateless, we can't implement any "absolutely
         // X many items" rule. We _can_, however, with extremely high
         // probability, obtain a value near what we want by using decaying
@@ -147,7 +126,7 @@ where
             strat = branch.boxed();
         }
 
-        strat.new_value(runner)
+        strat.new_tree(runner)
     }
 }
 
@@ -193,7 +172,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
-            let tree = strat.new_value(&mut runner).unwrap().current();
+            let tree = strat.new_tree(&mut runner).unwrap().current();
             let (depth, count) = tree.stats();
             assert!(depth <= 4, "Got depth {}", depth);
             assert!(count <= 128, "Got count {}", count);
@@ -212,7 +191,7 @@ mod test {
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
-            let mut value = strat.new_value(&mut runner).unwrap();
+            let mut value = strat.new_tree(&mut runner).unwrap();
             while value.simplify() { }
 
             assert_eq!(Tree::Leaf, value.current());

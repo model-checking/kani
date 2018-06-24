@@ -13,21 +13,12 @@ use std::iter;
 use std::slice;
 use std::rc::Rc;
 use std::sync::Arc;
+use std_facade::{Box, Vec, String};
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::string::{String, FromUtf8Error, FromUtf16Error};
-#[cfg(feature = "std")]
-use std::string::{String, FromUtf8Error, FromUtf16Error};
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+multiplex_alloc! {
+    alloc::string::FromUtf8Error, ::std::string::FromUtf8Error,
+    alloc::string::FromUtf16Error, ::std::string::FromUtf16Error
+}
 
 use strategy::*;
 use strategy::statics::static_map;
@@ -36,11 +27,10 @@ use arbitrary::*;
 use string::StringParam;
 
 impl Arbitrary for String {
-    valuetree!();
     type Parameters = StringParam;
     type Strategy = &'static str;
 
-    /// ## Safety
+    /// ## Panics
     ///
     /// This implementation panics if the input is not a valid regex proptest
     /// can handle.
@@ -68,14 +58,15 @@ lazy_just!(FromUtf16Error, || String::from_utf16(&[0xD800]).unwrap_err());
 // generator!(ParseError, || panic!());
 
 arbitrary!(FromUtf8Error, SFnPtrMap<BoxedStrategy<Vec<u8>>, Self>;
-    static_map(not_utf8_bytes(true), |bs| String::from_utf8(bs).unwrap_err())
+    static_map(not_utf8_bytes(true).boxed(),
+        |bs| String::from_utf8(bs).unwrap_err())
 );
 
 /// This strategy produces sequences of bytes that are guaranteed to be illegal
 /// wrt. UTF-8 with the goal of producing a suffix of bytes in the end of
 /// an otherwise legal UTF-8 string that causes the string to be illegal.
 /// This is used primarily to generate the `Utf8Error` type and similar.
-pub(crate) fn not_utf8_bytes(allow_null: bool) -> BoxedStrategy<Vec<u8>> {
+pub(crate) fn not_utf8_bytes(allow_null: bool) -> impl Strategy<Value = Vec<u8>> {
     let prefix = collection::vec(any::<char>(), ..::std::u16::MAX as usize);
     let suffix = gen_el_bytes(allow_null);
     (prefix, suffix).prop_map(move |(prefix_bytes, el_bytes)| {
@@ -88,7 +79,7 @@ pub(crate) fn not_utf8_bytes(allow_null: bool) -> BoxedStrategy<Vec<u8>> {
         let mut bytes = string.into_bytes();
         bytes.extend(el_bytes.into_iter());
         bytes
-    }).boxed()
+    })
 }
 
 /// Stands for "error_length" bytes and contains a suffix of bytes that
@@ -104,7 +95,7 @@ enum ELBytes {
 
 impl<'a> IntoIterator for &'a ELBytes {
     type Item = u8;
-    type IntoIter = iter::Map<slice::Iter<'a, u8>, fn(&u8) -> u8>;
+    type IntoIter = iter::Cloned<slice::Iter<'a, u8>>;
     fn into_iter(self) -> Self::IntoIter {
         use self::ELBytes::*;
         (match *self {
@@ -112,7 +103,7 @@ impl<'a> IntoIterator for &'a ELBytes {
             B2(ref a) => a.iter(),
             B3(ref a) => a.iter(),
             B4(ref a) => a.iter(),
-        }).map(|x| *x)
+        }).cloned()
     }
 }
 
@@ -121,7 +112,7 @@ impl<'a> IntoIterator for &'a ELBytes {
 // we know that .error_len() \in {None, Some(1), Some(2), Some(3)}.
 // We represent this with the range [0..4) and generate a valid
 // sequence from that.
-fn gen_el_bytes(allow_null: bool) -> BoxedStrategy<ELBytes> {
+fn gen_el_bytes(allow_null: bool) -> impl Strategy<Value = ELBytes> {
     fn b1(a: u8) -> ELBytes { ELBytes::B1([a]) }
     fn b2(a: (u8, u8)) -> ELBytes { ELBytes::B2([a.0, a.1]) }
     fn b3(a: ((u8, u8), u8)) -> ELBytes { ELBytes::B3([(a.0).0, (a.0).1, a.1]) }

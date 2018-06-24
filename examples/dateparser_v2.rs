@@ -10,10 +10,6 @@
 #[macro_use]
 extern crate proptest;
 
-// Needed for Rust 1.22.1 compatibility
-#[allow(unused_imports, deprecated)]
-use std::ascii::AsciiExt;
-
 fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
     if 10 != s.len() {
         return None;

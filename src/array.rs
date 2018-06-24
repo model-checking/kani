@@ -49,6 +49,7 @@ use test_runner::*;
 /// }
 /// # fn main() { }
 /// ```
+#[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
 pub struct UniformArrayStrategy<S, T> {
     strategy: S,
@@ -91,7 +92,7 @@ macro_rules! small_array {
         /// See [`UniformArrayStrategy`](struct.UniformArrayStrategy.html) for
         /// example usage.
         pub fn $uni<S : Strategy>
-            (strategy: S) -> UniformArrayStrategy<S, [ValueFor<S>; $n]>
+            (strategy: S) -> UniformArrayStrategy<S, [S::Value; $n]>
         {
             UniformArrayStrategy {
                 strategy,
@@ -99,12 +100,13 @@ macro_rules! small_array {
             }
         }
 
-        impl<S : Strategy> Strategy for [S;$n] {
-            type Value = ArrayValueTree<[S::Value;$n]>;
+        impl<S : Strategy> Strategy for [S; $n] {
+            type Tree = ArrayValueTree<[S::Tree; $n]>;
+            type Value = [S::Value; $n];
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(ArrayValueTree {
-                    tree: [$(self[$ix].new_value(runner)?,)*],
+                    tree: [$(self[$ix].new_tree(runner)?,)*],
                     shrinker: 0,
                     last_shrinker: None,
                 })
@@ -112,14 +114,15 @@ macro_rules! small_array {
         }
 
         impl<S : Strategy> Strategy
-        for UniformArrayStrategy<S, [ValueFor<S>; $n]> {
-            type Value = ArrayValueTree<[S::Value; $n]>;
+        for UniformArrayStrategy<S, [S::Value; $n]> {
+            type Tree = ArrayValueTree<[S::Tree; $n]>;
+            type Value = [S::Value; $n];
 
-            fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(ArrayValueTree {
                     tree: [$({
                         let _ = $ix;
-                        self.strategy.new_value(runner)?
+                        self.strategy.new_tree(runner)?
                     },)*],
                     shrinker: 0,
                     last_shrinker: None,
@@ -259,7 +262,7 @@ mod test {
         let mut cases_tested = 0;
         for _ in 0..256 {
             // Find a failing test case
-            let mut case = input.new_value(&mut runner).unwrap();
+            let mut case = input.new_tree(&mut runner).unwrap();
             if pass(case.current()) { continue; }
 
             loop {

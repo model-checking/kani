@@ -7,22 +7,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use core::cell::Cell;
-#[cfg(feature = "std")]
-use std::cell::Cell;
+use std_facade::{Cell, VecDeque, Vec};
 
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec_deque::VecDeque;
-#[cfg(feature = "std")]
-use std::collections::VecDeque;
-
-#[cfg(all(feature = "alloc", not(feature="std")))]
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-use rand::{Rng, XorShiftRng};
+use rand::Rng;
 
 use num;
 use strategy::traits::*;
@@ -32,6 +19,7 @@ use test_runner::*;
 ///
 /// See `Strategy::prop_shuffle()`.
 #[derive(Clone, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Shuffle<S>(pub(super) S);
 
 /// A value which can be used with the `prop_shuffle` combinator.
@@ -100,13 +88,14 @@ shuffleable!([T;31]);
 shuffleable!([T;32]);
 
 impl<S : Strategy> Strategy for Shuffle<S>
-where ValueFor<S> : Shuffleable {
-    type Value = ShuffleValueTree<S::Value>;
+where S::Value : Shuffleable {
+    type Tree = ShuffleValueTree<S::Tree>;
+    type Value = S::Value;
 
-    fn new_value(&self, runner: &mut TestRunner) -> NewTree<Self> {
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();
 
-        self.0.new_value(runner).map(|inner| ShuffleValueTree {
+        self.0.new_tree(runner).map(|inner| ShuffleValueTree {
             inner, rng,
             dist: Cell::new(None),
             simplifying_inner: false,
@@ -120,12 +109,12 @@ where ValueFor<S> : Shuffleable {
 #[derive(Clone, Debug)]
 pub struct ShuffleValueTree<V> {
     inner: V,
-    rng: XorShiftRng,
+    rng: TestRng,
     /// The maximum amount to move any one element during shuffling.
     ///
     /// This is `Cell` since we can't determine the bounds of the value until
     /// the first call to `current()`. (We technically _could_ by generating a
-    /// value in `new_value` and checking its length, but that would be a 100%
+    /// value in `new_tree` and checking its length, but that would be a 100%
     /// slowdown.)
     dist: Cell<Option<num::usize::BinarySearch>>,
     /// Whether we've started simplifying `inner`. After this point, we can no
@@ -232,7 +221,7 @@ mod test {
         let input = Just(VALUES.to_owned()).prop_shuffle();
 
         for _ in 0..1024 {
-            let mut value = input.new_value(&mut runner).unwrap().current();
+            let mut value = input.new_tree(&mut runner).unwrap().current();
 
             assert!(seen.insert(value.clone()),
                     "Value {:?} generated more than once", value);
@@ -248,7 +237,7 @@ mod test {
 
         let input = Just(VALUES.to_owned()).prop_shuffle();
         for _ in 0..1024 {
-            let mut value = input.new_value(&mut runner).unwrap();
+            let mut value = input.new_tree(&mut runner).unwrap();
 
             let mut prev_dist = i32::MAX;
             loop {
