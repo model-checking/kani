@@ -984,14 +984,14 @@ mod test {
         }
     }
 
-    mod integer_sanity {
-        macro_rules! integer_sanity {
+    mod contract_sanity {
+        macro_rules! contract_sanity {
             ($t:tt) => {
                 mod $t {
                     use strategy::check_strategy_sanity;
 
-                    const FOURTY_TWO: $t = 42;
-                    const FIFTY_SIX: $t = 56;
+                    const FOURTY_TWO: $t = 42 as $t;
+                    const FIFTY_SIX: $t = 56 as $t;
 
                     #[test]
                     fn range() {
@@ -1020,16 +1020,18 @@ mod test {
                 }
             }
         }
-        integer_sanity!(u8);
-        integer_sanity!(i8);
-        integer_sanity!(u16);
-        integer_sanity!(i16);
-        integer_sanity!(u32);
-        integer_sanity!(i32);
-        integer_sanity!(u64);
-        integer_sanity!(i64);
-        integer_sanity!(usize);
-        integer_sanity!(isize);
+        contract_sanity!(u8);
+        contract_sanity!(i8);
+        contract_sanity!(u16);
+        contract_sanity!(i16);
+        contract_sanity!(u32);
+        contract_sanity!(i32);
+        contract_sanity!(u64);
+        contract_sanity!(i64);
+        contract_sanity!(usize);
+        contract_sanity!(isize);
+        contract_sanity!(f32);
+        contract_sanity!(f64);
     }
 
     #[test]

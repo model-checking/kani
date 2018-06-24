@@ -15,12 +15,10 @@
   and `vec(elt_strategy, ..=high)`. This also applies to other functions
   accepting `Into<SizeRange>`.
 
-- `..= high` is now a valid strategy. Please note that `..= 1` will include
-  numbers lower than `0`. If you want the range `0..=1`, then you have to write
-  `..=1u<size>` where `<size>` is one of `u8`, `u16`, `u32`, `u64`, `usize`.
+- `..= high` is now a valid strategy. Please note that `..= 1` will naturally
+  include numbers lower than `0` for sized types.
 
-- `low..=high` is also a valid strategy except for `f32` and `f64` which will
-  soon be supported in newer editions (1.27+) of Rust.
+- `low..=high` is also a valid strategy.
 
 - `Arbitrary` is implemented for `RangeInclusive<Idx>`, `RangeToInclusive`,
   and `DecodeUtf16` on stable.
