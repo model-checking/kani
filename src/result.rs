@@ -199,9 +199,9 @@ mod test {
     #[test]
     fn probability_defaults_to_0p5() {
         let count = count_ok_of_1000(maybe_err(Just(()), Just(())));
-        assert!(count > 450 && count < 550);
+        assert!(count > 400 && count < 600);
         let count = count_ok_of_1000(maybe_ok(Just(()), Just(())));
-        assert!(count > 450 && count < 550);
+        assert!(count > 400 && count < 600);
     }
 
     #[test]
