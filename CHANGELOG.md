@@ -23,7 +23,7 @@
 - `Arbitrary` is implemented for `RangeInclusive<Idx>`, `RangeToInclusive`,
   and `DecodeUtf16` on stable.
 
-- Bitset strategies now accept all range syntaxes.
+- Bitset strategies and `subsequence` now accept all range syntaxes.
 
 ### Bug Fixes
 
