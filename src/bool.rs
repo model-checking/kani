@@ -41,6 +41,7 @@ pub fn weighted(probability: f64) -> Weighted {
 }
 
 /// The return type from `weighted()`.
+#[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
 pub struct Weighted(f64);
 

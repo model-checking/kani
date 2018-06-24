@@ -46,7 +46,8 @@ macro_rules! delegate_vt_0 {
 
 macro_rules! opaque_strategy_wrapper {
     ($({#[$allmeta:meta]})*
-     $(#[$smeta:meta])* pub struct $stratname:ident
+     $(#[$smeta:meta])*
+     pub struct $stratname:ident
      [$($sgen:tt)*][$($swhere:tt)*]
      ($innerstrat:ty) -> $stratvtty:ty;
 
@@ -55,7 +56,9 @@ macro_rules! opaque_strategy_wrapper {
      ($innervt:ty) -> $actualty:ty;
     ) => {
         $(#[$allmeta])*
-        $(#[$smeta])* pub struct $stratname $($sgen)* ($innerstrat)
+        $(#[$smeta])*
+        #[must_use = "strategies do nothing unless used"]
+        pub struct $stratname $($sgen)* ($innerstrat)
             $($swhere)*;
 
         $(#[$allmeta])*

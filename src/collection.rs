@@ -173,6 +173,7 @@ pub struct SizeRange(RangeInclusive<usize>);
 /// Strategy to create `Vec`s with a length in a certain range.
 ///
 /// Created by the `vec()` function in the same module.
+#[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Debug)]
 pub struct VecStrategy<T : Strategy> {
     element: T,

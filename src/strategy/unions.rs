@@ -26,6 +26,7 @@ pub type W<T> = (u32, T);
 ///
 /// See `Strategy::prop_union()`.
 #[derive(Clone, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Union<T : Strategy> {
     options: Vec<W<T>>,
 }
@@ -217,6 +218,7 @@ def_access_tuple!($ access_tupleA, 1 2 3 4 5 6 7 8 9);
 /// This allows better performance than vanilla `Union` since one does not need
 /// to resort to boxing and dynamic dispatch to handle heterogeneous
 /// strategies.
+#[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
 pub struct TupleUnion<T>(T);
 

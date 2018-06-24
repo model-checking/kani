@@ -114,6 +114,7 @@ mapfn! {
     }
 }
 
+#[must_use = "strategies do nothing unless used"]
 struct NoneStrategy<T>(PhantomData<T>);
 impl<T> Clone for NoneStrategy<T> {
     fn clone(&self) -> Self { *self }

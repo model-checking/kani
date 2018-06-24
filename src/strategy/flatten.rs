@@ -18,6 +18,7 @@ use test_runner::*;
 /// `Strategy` that picks one of those strategies and then picks values from
 /// it.
 #[derive(Debug, Clone, Copy)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Flatten<S> {
     source: S,
 }

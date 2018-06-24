@@ -153,6 +153,7 @@ fn select_range_index(rnd: &mut impl Rng,
 /// constant or `range` function. Directly constructing a `CharStrategy` is
 /// only necessary for complex ranges or to override the default biases.
 #[derive(Debug, Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct CharStrategy<'a> {
     special: Cow<'a, [char]>,
     preferred: Cow<'a, [CharRange]>,

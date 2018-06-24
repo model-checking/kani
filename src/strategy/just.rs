@@ -26,6 +26,7 @@ macro_rules! noshrink {
 /// A `Strategy` which always produces a single value value and never
 /// simplifies.
 #[derive(Clone, Copy, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Just<T : Clone + fmt::Debug>(
     /// The value produced by this strategy.
     pub T);
@@ -59,6 +60,7 @@ impl<T : Clone + fmt::Debug> ValueTree for Just<T> {
 /// assume that your type is `Clone`.
 ///
 /// **It is important that the function used be pure.**
+#[must_use = "strategies do nothing unless used"]
 pub struct LazyJust<T, F: Fn () -> T> {
     /// The function executed in `.current()`.
     function: F

@@ -14,6 +14,7 @@ use strategy::unions::float_to_weight;
 use test_runner::*;
 
 /// Return type from `Strategy::prop_recursive()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Recursive<T, F> {
     base: BoxedStrategy<T>,
     recurse: Arc<F>,

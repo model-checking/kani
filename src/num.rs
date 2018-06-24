@@ -32,6 +32,7 @@ macro_rules! int_any {
     ($typ: ident) => {
         /// Type of the `ANY` constant.
         #[derive(Clone, Copy, Debug)]
+        #[must_use = "strategies do nothing unless used"]
         pub struct Any(());
         /// Generates integers with completely arbitrary values, uniformly
         /// distributed over the whole range.
@@ -412,6 +413,7 @@ macro_rules! float_any {
         ///   `NORMAL` > `ZERO` > `SUBNORMAL` > `INFINITE` > `QUIET_NAN` =
         ///   `SIGNALING_NAN`.
         #[derive(Clone, Copy, Debug)]
+        #[must_use = "strategies do nothing unless used"]
         pub struct Any(FloatTypes);
 
         #[cfg(test)]

@@ -67,6 +67,7 @@ pub fn subsequence<T : Clone + 'static>
 ///
 /// This is created by the `subsequence` function in the same module.
 #[derive(Debug, Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Subsequence<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
     bit_strategy: SampledBitSetStrategy<BitSet>,

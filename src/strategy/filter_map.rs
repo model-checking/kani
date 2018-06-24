@@ -15,6 +15,7 @@ use test_runner::*;
 /// `Strategy` and `ValueTree` filter_map adaptor.
 ///
 /// See `Strategy::prop_filter_map()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct FilterMap<S, F> {
     pub(super) source: S,
     pub(super) whence: Reason,

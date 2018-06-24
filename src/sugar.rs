@@ -433,6 +433,7 @@ macro_rules! prop_compose {
      ($($var:pat in $strategy:expr),+ $(,)*)
        -> $return_type:ty $body:block) =>
     {
+        #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
         $($($vis)*)* fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
@@ -448,6 +449,7 @@ macro_rules! prop_compose {
      ($($var2:pat in $strategy2:expr),+ $(,)*)
        -> $return_type:ty $body:block) =>
     {
+        #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
         $($($vis)*)* fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {

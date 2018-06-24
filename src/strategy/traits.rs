@@ -576,6 +576,7 @@ pub trait ValueTree {
 ///
 /// See `Strategy::no_shrink()` for more details.
 #[derive(Clone, Copy, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct NoShrink<T>(T);
 
 impl<T : Strategy> Strategy for NoShrink<T> {
@@ -635,6 +636,7 @@ type BoxedVT<T> = Box<dyn ValueTree<Value = T>>;
 /// Strategies of this type afford cheap shallow cloning via reference
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct BoxedStrategy<T>(
     Arc<dyn Strategy<Value = T, Tree = BoxedVT<T>>>);
 
@@ -644,6 +646,7 @@ pub struct BoxedStrategy<T>(
 /// Strategies of this type afford cheap shallow cloning via reference
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct SBoxedStrategy<T>(
     Arc<dyn Strategy<Value = T, Tree = BoxedVT<T>> + Sync + Send>);
 
