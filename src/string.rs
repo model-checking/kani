@@ -127,12 +127,7 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
             hir::Class::Unicode(class) =>
                 unicode_class_strategy(class).prop_map(to_bytes).sboxed(),
             hir::Class::Bytes(class) => {
-                // FIXME: look at this!
-                let subs = class.iter().map(|r| if 255u8 == r.end() {
-                    (r.start()..).sboxed()
-                } else {
-                    (r.start()..r.end()).sboxed()
-                });
+                let subs = class.iter().map(|r| r.start() ..= r.end());
                 Union::new(subs).prop_map(|b| vec![b]).sboxed()
             }
         }),
