@@ -984,6 +984,54 @@ mod test {
         }
     }
 
+    mod integer_sanity {
+        macro_rules! integer_sanity {
+            ($t:tt) => {
+                mod $t {
+                    use strategy::check_strategy_sanity;
+
+                    const FOURTY_TWO: $t = 42;
+                    const FIFTY_SIX: $t = 56;
+
+                    #[test]
+                    fn range() {
+                        check_strategy_sanity(FOURTY_TWO..FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_inclusive() {
+                        check_strategy_sanity(FOURTY_TWO..=FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_to() {
+                        check_strategy_sanity(..FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_to_inclusive() {
+                        check_strategy_sanity(..=FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_from() {
+                        check_strategy_sanity(FOURTY_TWO.., None);
+                    }
+                }
+            }
+        }
+        integer_sanity!(u8);
+        integer_sanity!(i8);
+        integer_sanity!(u16);
+        integer_sanity!(i16);
+        integer_sanity!(u32);
+        integer_sanity!(i32);
+        integer_sanity!(u64);
+        integer_sanity!(i64);
+        integer_sanity!(usize);
+        integer_sanity!(isize);
+    }
+
     #[test]
     fn unsigned_integer_binsearch_simplify_complicate_contract_upheld() {
         check_strategy_sanity(0u32..1000u32, None);
