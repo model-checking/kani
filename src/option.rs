@@ -90,7 +90,7 @@ impl Generic for Probability {
 
     /// Creates a `Probability` from a `f64`.
     ///
-    /// # Safety
+    /// # Panics
     ///
     /// Panics if the probability is outside interval `[0.0, 1.0]`.
     fn from(r: Self::Repr) -> Self { r.into() }
