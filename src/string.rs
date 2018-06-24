@@ -12,6 +12,7 @@
 
 use core::mem;
 use core::fmt;
+use core::ops::RangeInclusive;
 use core::u32;
 use std_facade::{Cow, Box, String, Vec, ToOwned};
 
@@ -169,16 +170,16 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
 }
 
 fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'static> {
-    static NONL_RANGES: &[(char, char)] = &[
-        ('\x00', '\x09'),
+    static NONL_RANGES: &[RangeInclusive<char>] = &[
+        '\x00'..='\x09',
         // Multiple instances of the latter range to partially make up
         // for the bias of having such a tiny range in the control
         // characters.
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
     ];
 
     let dotnnl = |x: &hir::ClassUnicodeRange, y: &hir::ClassUnicodeRange|
@@ -187,7 +188,7 @@ fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'stat
 
     char::ranges(match class.ranges() {
         [x, y] if dotnnl(x, y) || dotnnl(y, x) => Cow::Borrowed(NONL_RANGES),
-        _ => Cow::Owned(class.iter().map(|r| (r.start(), r.end())).collect()),
+        _ => Cow::Owned(class.iter().map(|r| r.start() ..= r.end()).collect()),
     })
 }
 
@@ -296,7 +297,7 @@ mod test {
                 "Expected to generate at most {} strings, but \
                  generated {}", max_distinct, generated.len());
     }
-    
+
     fn generate_values_matching_regex(pattern: &str, iterations: usize) -> HashSet<String> {
         let rx = Regex::new(pattern).unwrap();
         let mut generated = HashSet::new();

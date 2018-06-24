@@ -89,6 +89,9 @@
 - Many APIs now use `impl Trait` in argument position, which could affect code
   using turbofishes to specify types explicitly.
 
+- `char` APIs which formerly represented a range as `(start, end)` now require
+  `start..=end`.
+
 ### Nightly-only breakage
 
 - As `std::io::{Chars, CharsError}` have been deprecated on nightly,
