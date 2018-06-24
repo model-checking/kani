@@ -64,6 +64,18 @@ macro_rules! numeric_api {
             }
         }
 
+        impl Strategy for ::core::ops::RangeInclusive<$typ> {
+            type Tree = BinarySearch;
+            type Value = $typ;
+
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                Ok(BinarySearch::new_clamped(
+                    *self.start(),
+                    $crate::num::sample_uniform_incl(runner, *self.start(), *self.end()),
+                    *self.end()))
+            }
+        }
+
         impl Strategy for ::core::ops::RangeFrom<$typ> {
             type Tree = BinarySearch;
             type Value = $typ;
@@ -98,33 +110,12 @@ macro_rules! numeric_api {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
                     $crate::num::sample_uniform_incl(
-                        runner, ::core::$typ::MIN, self.end
-                    ),
+                        runner, ::core::$typ::MIN, self.end),
                     self.end
                 ))
             }
         }
     }
-}
-
-macro_rules! num_incl_api {
-    ($typ:ident, $epsilon:expr) => {
-        impl Strategy for ::core::ops::RangeInclusive<$typ> {
-            type Tree = BinarySearch;
-            type Value = $typ;
-
-            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                let start = self.clone().next().unwrap();
-                let end = self.clone().next_back().unwrap();
-
-                Ok(BinarySearch::new_clamped(
-                    start,
-                    $crate::num::sample_uniform_incl(runner, start, end),
-                    end - $epsilon
-                ))
-            }
-        }
-    };
 }
 
 macro_rules! signed_integer_bin_search {
@@ -225,7 +216,6 @@ macro_rules! signed_integer_bin_search {
             }
 
             numeric_api!($typ, 1);
-            num_incl_api!($typ, 1);
         }
     }
 }
@@ -310,7 +300,6 @@ macro_rules! unsigned_integer_bin_search {
             }
 
             numeric_api!($typ, 1);
-            num_incl_api!($typ, 1);
         }
     }
 }
