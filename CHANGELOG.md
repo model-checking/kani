@@ -1,4 +1,4 @@
-## Unreleased (target = 0.8)
+## 0.8.0
 
 ### New Additions
 
@@ -38,7 +38,7 @@
 
 ### Breaking changes
 
-- A minimum version of 1.26 of Rust is now required.
+- A minimum version of 1.27 of Rust is now required.
 
 - `regex-syntax` version 0.6 is now used.
 

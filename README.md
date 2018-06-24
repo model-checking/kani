@@ -10,7 +10,7 @@ Python. It allows to test that certain properties of your code hold for
 arbitrary inputs, and if a failure is found, automatically finds the
 minimal test case to reproduce the problem. Unlike QuickCheck, generation
 and shrinking is defined on a per-value basis instead of per-type, which
-makes it much more flexible and simplifies composition.
+makes it more flexible and simplifies composition.
 
 If you have dependencies which provide QuickCheck `Arbitrary`
 implementations, see also the related
@@ -85,7 +85,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.7.2"
+proptest = "0.8.0"
 ```
 
 and at the top of `main.rs` or `lib.rs`:
@@ -104,7 +104,7 @@ there.
 ```rust
 proptest! {
     #[test]
-    fn doesnt_crash(ref s in "\\PC*") {
+    fn doesnt_crash(s in "\\PC*") {
         parse_date(s);
     }
 }
@@ -119,7 +119,7 @@ When we run this, we get a bunch of scary-looking output, eventually ending
 with
 
 ```text
-thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: ref s = "aAௗ0㌀0"
+thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it is inside 'ௗ' (bytes 2..5) of `aAௗ0㌀0`; minimal failing input: s = "aAௗ0㌀0"
 	successes: 102
 	local rejects: 0
 	global rejects: 0
@@ -185,7 +185,7 @@ proptest! {
     // snip...
 
     #[test]
-    fn parses_all_valid_dates(ref s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
+    fn parses_all_valid_dates(s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
         parse_date(s).unwrap();
     }
 }
@@ -480,7 +480,7 @@ proptest! {
     })]
 
     #[test]
-    fn test_fib(n in prop::num::u64::ANY) {
+    fn test_fib(n in any::<u64>()) {
         // For large n, this will variously run for an extremely long time,
         // overflow the stack, or panic due to integer overflow.
         assert!(fib(n) >= n);
