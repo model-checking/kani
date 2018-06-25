@@ -83,22 +83,7 @@ macro_rules! proptest {
                 let mut config = $config.clone_with_source_file(file!());
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
-                let mut runner = $crate::test_runner::TestRunner::new(config);
-                let names = proptest_helper!(@_WRAPSTR ($($parm),*));
-                match runner.run(
-                    &$crate::strategy::Strategy::prop_map(
-                        proptest_helper!(@_WRAP ($($strategy)*)),
-                        |values| $crate::sugar::NamedArguments(names, values)),
-                    |$crate::sugar::NamedArguments(
-                        _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
-                    {
-                        $body;
-                        Ok(())
-                    })
-                {
-                    Ok(_) => (),
-                    Err(e) => panic!("{}\n{}", e, runner),
-                }
+                proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
             }
         )*
     };
@@ -111,6 +96,20 @@ macro_rules! proptest {
         $($(#[$meta])*
           fn $test_name($($parm in $strategy),+) $body)*
     } };
+
+    (|($($parm:pat in $strategy:expr),+)| $body:block) => {
+        || {
+            let config = $crate::test_runner::Config::default();
+            proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
+        }
+    };
+
+    (move |($($parm:pat in $strategy:expr),+)| $body:block) => {
+        move || {
+            let config = $crate::test_runner::Config::default();
+            proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
+        }
+    };
 }
 
 /// Rejects the test input if assumptions are not met.
@@ -674,6 +673,25 @@ macro_rules! proptest_helper {
     (@_WRAPSTR ($a:pat, $($rest:pat),*)) => {
         (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
     };
+    // build a property testing block that when executed, executes the full property test.
+    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) $body:block) => {{
+        let mut runner = $crate::test_runner::TestRunner::new($config);
+        let names = proptest_helper!(@_WRAPSTR ($($parm),*));
+        match runner.run(
+            &$crate::strategy::Strategy::prop_map(
+                proptest_helper!(@_WRAP ($($strategy)*)),
+                |values| $crate::sugar::NamedArguments(names, values)),
+            |$crate::sugar::NamedArguments(
+                _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
+            {
+                $body;
+                Ok(())
+            })
+        {
+            Ok(_) => (),
+            Err(e) => panic!("{}\n{}", e, runner),
+        }
+    }};
 }
 
 #[doc(hidden)]
@@ -1069,5 +1087,19 @@ mod ownership_tests {
         fn accept_noclone_ref_arg(ref nc in MK) {
             let _nc2: &NotClone = nc;
         }
+    }
+}
+
+#[cfg(test)]
+mod closure_tests {
+    #[test]
+    fn test_simple() {
+        let x = 42;
+
+        let _ = proptest! {
+            |(y in 0..100)| {
+                assert!(x != y);
+            }
+        };
     }
 }
