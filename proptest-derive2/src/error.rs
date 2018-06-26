@@ -109,6 +109,61 @@ pub fn if_weight_present(attrs: &attr::ParsedAttributes, item: &str) {
 // Messages
 //==============================================================================
 
+use std::fmt::Display;
+use std::mem;
+
+pub struct Ctxt {
+    errors: Vec<String>,    
+}
+
+fn compile_error(msg: String) -> TokenStream {
+    quote! {
+        compile_error!(#msg);
+    }
+}
+
+impl Ctxt {
+    pub fn new() -> Self {
+        Self {
+            errors: Vec::new(),
+            //RefCell::new(Some(Vec::new())),
+        }
+    }
+
+    pub fn error<T: Display>(&mut self, msg: T) {
+        self.errors.push(msg.to_string());
+    }
+
+    pub fn check(mut self) -> Result<(), TokenStream> {
+        match self.errors.len() {
+            0 => Ok(()),
+            1 => Err(compile_error(self.errors.pop().unwrap())),
+            n => {
+                let mut msg = format!("{} errors:", n);
+                for err in self.errors {
+                    msg.push_str("\n\t# ");
+                    msg.push_str(&err);
+                }
+                Err(compile_error(msg))
+            }
+        }
+    }
+}
+
+/*
+impl Drop for Ctxt {
+    fn drop(&mut self) {
+        if !thread::panicking() && self.errors.borrow().is_some() {
+            panic!("forgot to check for errors");
+        }
+    }
+}
+*/
+
+//==============================================================================
+// Messages
+//==============================================================================
+
 /// A macro to emit an error with a code by panicing.
 macro_rules! error {
     ($error: ident, $code: ident, $msg: expr) => {
