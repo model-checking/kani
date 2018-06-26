@@ -1102,4 +1102,18 @@ mod closure_tests {
             }
         };
     }
+
+    #[test]
+    fn test_move() {
+        let foo = Foo;
+
+        let _ = proptest! {
+            move |(x in 1..100, y in 0..100)| {
+                assert!(x != y, "foo: {:?}", foo);
+            }
+        };
+
+        #[derive(Debug)]
+        struct Foo;
+    }
 }
