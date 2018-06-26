@@ -80,7 +80,7 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut config = $config.clone_with_source_file(file!());
+                let mut config = $config.clone();
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
                 proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
@@ -99,14 +99,14 @@ macro_rules! proptest {
 
     (|($($parm:pat in $strategy:expr),+)| $body:block) => {
         || {
-            let config = $crate::test_runner::Config::default();
+            let mut config = $crate::test_runner::Config::default();
             proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
         }
     };
 
     (move |($($parm:pat in $strategy:expr),+)| $body:block) => {
         move || {
-            let config = $crate::test_runner::Config::default();
+            let mut config = $crate::test_runner::Config::default();
             proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
         }
     };
@@ -675,6 +675,7 @@ macro_rules! proptest_helper {
     };
     // build a property testing block that when executed, executes the full property test.
     (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) $body:block) => {{
+        $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
         let names = proptest_helper!(@_WRAPSTR ($($parm),*));
         match runner.run(
