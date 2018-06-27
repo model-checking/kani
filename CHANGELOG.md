@@ -1,3 +1,15 @@
+## Unrelased
+
+### New Additions
+
+- `proptest!` now has form that accepts a closure. See the documentation for
+  the macro for more details.
+
+### Bug Fixes
+
+- Fix spurious warning about corrupt regression files. The files were not
+  corrupt but the parser was failing to handle the blank line at the end.
+
 ## 0.8.0
 
 ### New Additions
