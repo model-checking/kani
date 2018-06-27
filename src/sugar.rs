@@ -21,7 +21,7 @@ use std_facade::fmt;
 /// strategies. Note that the inputs are borrowed from the test runner, so if
 /// they are not `Copy`, you will need to use `ref` with each parameter name.
 ///
-/// Example:
+/// ### Example
 ///
 /// ```
 /// #[macro_use] extern crate proptest;
@@ -70,6 +70,49 @@ use std_facade::fmt;
 /// #
 /// # fn main() { test_addition(); }
 /// ```
+///
+/// ## Closure-Style Invocation
+///
+/// As of proptest 0.8.1, an alternative, "closure-style" invocation is
+/// supported. These make it possible to run multiple tests that require some
+/// expensive setup process. Note that the "fork" and "timeout" features are
+/// _not_ supported in closure style. There is currently no way to specify a
+/// custom configuration for closure style.
+///
+/// ### Example
+///
+/// ```
+/// #[macro_use] extern crate proptest;
+///
+/// #[derive(Debug)]
+/// struct BigStruct { /* Lots of fields ... */ }
+///
+/// fn very_expensive_function() -> BigStruct {
+///   // Lots of code...
+///   BigStruct { /* fields */ }
+/// }
+///
+/// # /*
+/// #[test]
+/// # */
+/// fn my_test() {
+///   // We create just one `BigStruct`
+///   let big_struct = very_expensive_function();
+///
+///   // But now can run multiple tests without needing to build it every time.
+///   // Braces around the test body are currently required.
+///   proptest!(|(x in 0u32..42u32, y in 1000u32..100000u32)| {
+///     // Test stuff
+///   });
+///
+///   // `move` closures are also supportey
+///   proptest!(move |(x in 0u32..42u32)| {
+///     // Test other stuff
+///   });
+/// }
+/// #
+/// # fn main() { my_test(); }
+/// ```
 #[macro_export]
 macro_rules! proptest {
     (#![proptest_config($config:expr)]
@@ -83,7 +126,7 @@ macro_rules! proptest {
                 let mut config = $config.clone();
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
-                proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
+                proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body);
             }
         )*
     };
@@ -97,21 +140,17 @@ macro_rules! proptest {
           fn $test_name($($parm in $strategy),+) $body)*
     } };
 
-    (|($($parm:pat in $strategy:expr),+)| $body:block) => {
-        || {
-            let mut config = $crate::test_runner::Config::default();
-            $crate::sugar::force_no_fork(&mut config);
-            proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
-        }
-    };
+    (|($($parm:pat in $strategy:expr),+)| $body:block) => { {
+        let mut config = $crate::test_runner::Config::default();
+        $crate::sugar::force_no_fork(&mut config);
+        proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body)
+    } };
 
-    (move |($($parm:pat in $strategy:expr),+)| $body:block) => {
-        move || {
-            let mut config = $crate::test_runner::Config::default();
-            $crate::sugar::force_no_fork(&mut config);
-            proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
-        }
-    };
+    (move |($($parm:pat in $strategy:expr),+)| $body:block) => { {
+        let mut config = $crate::test_runner::Config::default();
+        $crate::sugar::force_no_fork(&mut config);
+        proptest_helper!(@_BODY config ($($parm in $strategy),+) [move] $body)
+    } };
 }
 
 /// Rejects the test input if assumptions are not met.
@@ -676,7 +715,7 @@ macro_rules! proptest_helper {
         (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
     };
     // build a property testing block that when executed, executes the full property test.
-    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) $body:block) => {{
+    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) [$($mod:tt)*] $body:block) => {{
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
         let names = proptest_helper!(@_WRAPSTR ($($parm),*));
@@ -684,7 +723,7 @@ macro_rules! proptest_helper {
             &$crate::strategy::Strategy::prop_map(
                 proptest_helper!(@_WRAP ($($strategy)*)),
                 |values| $crate::sugar::NamedArguments(names, values)),
-            |$crate::sugar::NamedArguments(
+            $($mod)* |$crate::sugar::NamedArguments(
                 _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
             {
                 $body;
@@ -1113,26 +1152,32 @@ mod ownership_tests {
 mod closure_tests {
     #[test]
     fn test_simple() {
-        let x = 42;
+        let x = 420;
 
-        let _ = proptest! {
-            |(y in 0..100)| {
-                assert!(x != y);
-            }
-        };
+        proptest!(|(y in 0..100)| {
+            println!("{}", y);
+            assert!(x != y);
+        });
     }
 
     #[test]
     fn test_move() {
         let foo = Foo;
 
-        let _ = proptest! {
-            move |(x in 1..100, y in 0..100)| {
-                assert!(x != y, "foo: {:?}", foo);
-            }
-        };
+        proptest!(move |(x in 1..100, y in 0..100)| {
+            assert!(x + y > 0, "foo: {:?}", foo);
+        });
 
         #[derive(Debug)]
         struct Foo;
+    }
+
+    #[test]
+    #[should_panic]
+    #[allow(unreachable_code)]
+    fn fails_if_closure_panics() {
+        proptest!(|(_ in 0..1)| {
+            panic!()
+        });
     }
 }
