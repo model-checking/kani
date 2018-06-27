@@ -237,10 +237,10 @@ fn parse_seed_line(mut line: String, path: &Path, lineno: usize)
         line.truncate(comment_start);
     }
 
-    // Split by whitespace and ignore empty lines:
-    let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
-    let len = parts.len();
-    if len > 0 {
+    if line.len() > 0 {
+        // Split by whitespace and ignore empty lines:
+        let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
+        let len = parts.len();
         // "xs" stands for "XorShift".
         if parts[0] == "xs" && len == 5 {
             // Parse using the chosen one:

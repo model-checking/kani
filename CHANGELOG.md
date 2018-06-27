@@ -1,3 +1,20 @@
+## Unrelased
+
+### New Additions
+
+- `proptest!` now has form that accepts a closure. See the documentation for
+  the macro for more details.
+
+### Bug Fixes
+
+- Fix spurious warning about corrupt regression files. The files were not
+  corrupt but the parser was failing to handle the blank line at the end.
+
+- The `multiplex_alloc!` and `multiplex_core!` macros which were
+  unintentionally exported in 0.8.0 are no longer exported. This is not
+  considered a breaking change since they were not supposed to be accessible,
+  and in any case would not have expanded into valid code in most other crates.
+
 ## 0.8.0
 
 ### New Additions
