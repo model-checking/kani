@@ -100,7 +100,7 @@ macro_rules! proptest {
     (|($($parm:pat in $strategy:expr),+)| $body:block) => {
         || {
             let mut config = $crate::test_runner::Config::default();
-            proptest_helper!(@_NO_FORK config);
+            $crate::sugar::force_no_fork(&mut config);
             proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
         }
     };
@@ -108,7 +108,7 @@ macro_rules! proptest {
     (move |($($parm:pat in $strategy:expr),+)| $body:block) => {
         move || {
             let mut config = $crate::test_runner::Config::default();
-            proptest_helper!(@_NO_FORK config);
+            $crate::sugar::force_no_fork(&mut config);
             proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
         }
     };
@@ -675,14 +675,6 @@ macro_rules! proptest_helper {
     (@_WRAPSTR ($a:pat, $($rest:pat),*)) => {
         (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
     };
-    // make sure that configuration does not have options set that would cause it to fork.
-    (@_NO_FORK $config:ident) => {{
-        #[cfg(feature = "fork")]
-        { $config.fork = false; }
-        #[cfg(feature = "timeout")]
-        { $config.timeout = 0; }
-        assert!(!$config.fork(), "configuration should not be forking");
-    }};
     // build a property testing block that when executed, executes the full property test.
     (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) $body:block) => {{
         $config.source_file = Some(file!());
@@ -818,6 +810,22 @@ macro_rules! prop_assert_ne {
              (left: `{:?}`, right: `{:?}`): ", $fmt),
                      left, right $($args)*);
     }};
+}
+
+#[doc(hidden)]
+pub fn force_no_fork(config: &mut ::test_runner::Config) {
+    if config.fork() {
+        eprintln!("proptest: Forking/timeout not supported in closure-style \
+                   invocations; ignoring");
+
+        #[cfg(feature = "fork")] {
+            config.fork = false;
+        }
+        #[cfg(feature = "timeout")] {
+            config.timeout = 0;
+        }
+        assert!(!config.fork());
+    }
 }
 
 #[cfg(test)]
