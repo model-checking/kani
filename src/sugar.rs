@@ -105,7 +105,7 @@ use std_facade::fmt;
 ///     // Test stuff
 ///   });
 ///
-///   // `move` closures are also supportey
+///   // `move` closures are also supported
 ///   proptest!(move |(x in 0u32..42u32)| {
 ///     // Test other stuff
 ///   });
