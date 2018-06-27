@@ -42,67 +42,97 @@ pub const TY_VAR: &'static str = "a type variable";
 //==============================================================================
 
 /// Ensures that the type is not parametric over lifetimes.
-pub fn if_has_lifetimes(ast: &syn::DeriveInput) {
-    if ast.generics.lifetimes().count() > 0 { has_lifetimes() }
+pub fn if_has_lifetimes(ctx: Ctx, ast: &syn::DeriveInput) -> DeriveResult<()> {
+    if ast.generics.lifetimes().count() > 0 {
+        has_lifetimes(ctx)?;
+    }
+
+    Ok(())
 }
 
 /// Ensures that no attributes were specified on `item`.
-pub fn if_anything_specified(attrs: &attr::ParsedAttributes, item: &str) {
-    if_enum_attrs_present(attrs, item);
-    if_strategy_present(attrs, item);
-    if_specified_params(attrs, item);
+pub fn if_anything_specified(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+    -> DeriveResult<()>
+{
+    if_enum_attrs_present(ctx, attrs, item)?;
+    if_strategy_present(ctx, attrs, item)?;
+    if_specified_params(ctx, attrs, item)?;
+    Ok(())
 }
 
 /// Ensures that things only allowed on an enum variant is not present on
 /// `item` which is not an enum variant.
-pub fn if_enum_attrs_present(attrs: &attr::ParsedAttributes, item: &str) {
-    if_skip_present(attrs, item);
-    if_weight_present(attrs, item);
+pub fn if_enum_attrs_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+    -> DeriveResult<()>
+{
+    if_skip_present(ctx, attrs, item)?;
+    if_weight_present(ctx, attrs, item)?;
+    Ok(())
 }
 
 /// Ensures that parameters is not present on `item`.
-pub fn if_specified_params(attrs: &attr::ParsedAttributes, item: &str) {
-    if attrs.params.is_set() { parent_has_param(item) }
+pub fn if_specified_params(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+    -> DeriveResult<()>
+{
+    if attrs.params.is_set() { parent_has_param(ctx, item)?; }
+    Ok(())
 }
 
 /// Ensures that an explicit strategy or value is not present on `item`.
-pub fn if_strategy_present(attrs: &attr::ParsedAttributes, item: &str) {
+pub fn if_strategy_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+    -> DeriveResult<()>
+{
     use attr::StratMode::*;
     match attrs.strategy {
-        Arbitrary   => {},
-        Strategy(_) => illegal_strategy("strategy", item),
-        Value(_)    => illegal_strategy("value", item),
+        Arbitrary   => Ok(()),
+        Strategy(_) => illegal_strategy(ctx, "strategy", item),
+        Value(_)    => illegal_strategy(ctx, "value", item),
     }
 }
 
 /// Ensures that an explicit strategy or value is not present on a unit variant.
-pub fn if_strategy_present_on_unit_variant(attrs: &attr::ParsedAttributes) {
+pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &attr::ParsedAttributes)
+    -> DeriveResult<()>
+{
     use attr::StratMode::*;
     match attrs.strategy {
         Arbitrary   => {},
-        Strategy(_) => strategy_on_unit_variant("strategy"),
-        Value(_)    => strategy_on_unit_variant("value"),
+        Strategy(_) => strategy_on_unit_variant(ctx, "strategy")?,
+        Value(_)    => strategy_on_unit_variant(ctx, "value")?,
     }
+    Ok(())
 }
 
 /// Ensures that parameters is not present on a unit variant.
-pub fn if_params_present_on_unit_variant(attrs: &attr::ParsedAttributes) {
-    if attrs.params.is_set() { params_on_unit_variant() }
+pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &attr::ParsedAttributes)
+    -> DeriveResult<()>
+{
+    if attrs.params.is_set() { params_on_unit_variant(ctx)? }
+    Ok(())
 }
 
 /// Ensures that parameters is not present on a unit struct.
-pub fn if_params_present_on_unit_struct(attrs: &attr::ParsedAttributes) {
-    if attrs.params.is_set() { params_on_unit_struct() }
+pub fn if_params_present_on_unit_struct(ctx: Ctx, attrs: &attr::ParsedAttributes)
+    -> DeriveResult<()>
+{
+    if attrs.params.is_set() { params_on_unit_struct(ctx)? }
+    Ok(())
 }
 
 /// Ensures that skip is not present on `item`.
-pub fn if_skip_present(attrs: &attr::ParsedAttributes, item: &str) {
-    if attrs.skip { illegal_skip(item) }
+pub fn if_skip_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+    -> DeriveResult<()>
+{
+    if attrs.skip { illegal_skip(ctx, item)? }
+    Ok(())
 }
 
 /// Ensures that a weight is not present on `item`.
-pub fn if_weight_present(attrs: &attr::ParsedAttributes, item: &str) {
-    if attrs.weight.is_some() { illegal_weight(item) }
+pub fn if_weight_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+    -> DeriveResult<()>
+{
+    if attrs.weight.is_some() { illegal_weight(ctx, item)?; }
+    Ok(())
 }
 
 //==============================================================================
@@ -110,19 +140,17 @@ pub fn if_weight_present(attrs: &attr::ParsedAttributes, item: &str) {
 //==============================================================================
 
 use std::fmt::Display;
-use std::mem;
 
-pub struct Ctxt {
-    errors: Vec<String>,    
+#[derive(Debug)]
+pub struct Fatal;
+pub type DeriveResult<T> = Result<T, Fatal>;
+pub type Ctx<'ctx> = &'ctx mut Context;
+
+pub struct Context {
+    errors: Vec<String>,
 }
 
-fn compile_error(msg: String) -> TokenStream {
-    quote! {
-        compile_error!(#msg);
-    }
-}
-
-impl Ctxt {
+impl Context {
     pub fn new() -> Self {
         Self {
             errors: Vec::new(),
@@ -134,7 +162,18 @@ impl Ctxt {
         self.errors.push(msg.to_string());
     }
 
+    pub fn fatal<T: Display, A>(&mut self, msg: T) -> DeriveResult<A> {
+        self.error(msg);
+        Err(Fatal)
+    }
+
     pub fn check(mut self) -> Result<(), TokenStream> {
+        fn compile_error(msg: String) -> TokenStream {
+            quote! {
+                compile_error!(#msg);
+            }
+        }
+
         match self.errors.len() {
             0 => Ok(()),
             1 => Err(compile_error(self.errors.pop().unwrap())),
@@ -150,16 +189,6 @@ impl Ctxt {
     }
 }
 
-/*
-impl Drop for Ctxt {
-    fn drop(&mut self) {
-        if !thread::panicking() && self.errors.borrow().is_some() {
-            panic!("forgot to check for errors");
-        }
-    }
-}
-*/
-
 //==============================================================================
 // Messages
 //==============================================================================
@@ -167,35 +196,37 @@ impl Drop for Ctxt {
 /// A macro to emit an error with a code by panicing.
 macro_rules! error {
     ($error: ident, $code: ident, $msg: expr) => {
-        pub fn $error() -> ! {
-            panic!(
-                concat!("[proptest_derive, ", stringify!($code),
-                        "] during #[derive(Arbitrary)]: ",
-                        $msg)
-            );
+        pub fn $error<T>(ctxt: &mut Context) -> DeriveResult<T> {
+            ctxt.fatal(concat!("[proptest_derive, ", stringify!($code),
+                               "] during #[derive(Arbitrary)]: ", $msg))
+        }
+    };
+    (continue $error: ident, $code: ident, $msg: expr) => {
+        pub fn $error(ctxt: &mut Context) {
+            ctxt.error(concat!("[proptest_derive, ", stringify!($code),
+                               "] during #[derive(Arbitrary)]: ", $msg))
         }
     };
     ($error: ident ($($arg: ident: $arg_ty: ty),*), $code: ident,
      $msg: expr, $($fmt: tt)+) => {
-        pub fn $error($($arg: $arg_ty),*) -> ! {
-            panic!(
+        pub fn $error<T>(ctxt: &mut Context, $($arg: $arg_ty),*) -> DeriveResult<T> {
+            ctxt.fatal(format!(
                 concat!("[proptest_derive, ", stringify!($code),
-                        "] during #[derive(Arbitrary)]: ",
-                        $msg),
+                        "] during #[derive(Arbitrary)]: ", $msg),
                 $($fmt)+
-            )
+            ))
         }
     };
-    /*
-    ($code: ident, $msg: expr, $($fmt: tt)+) => {
-        panic!(
-            concat!("[proptest_derive, ", stringify!($code),
-                    "] during #[derive(Arbitrary)]: ",
-                    $msg),
-            $($fmt)+
-        );
+    (continue $error: ident ($($arg: ident: $arg_ty: ty),*), $code: ident,
+     $msg: expr, $($fmt: tt)+) => {
+        pub fn $error(ctxt: &mut Context, $($arg: $arg_ty),*) {
+            ctxt.fatal(format!(
+                concat!("[proptest_derive, ", stringify!($code),
+                        "] during #[derive(Arbitrary)]: ", $msg),
+                $($fmt)+
+            ))
+        }
     };
-    */
 }
 
 /// Happens when we've been asked to derive `Arbitrary` for a type

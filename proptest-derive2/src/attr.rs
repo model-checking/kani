@@ -12,6 +12,7 @@ use syn;
 
 use util;
 use error;
+use error::{Ctx, DeriveResult};
 
 //==============================================================================
 // Public API
@@ -101,41 +102,39 @@ impl StratMode {
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-pub fn parse_attributes(attrs: Vec<syn::Attribute>) -> ParsedAttributes {
-    let attrs = parse_attributes_base(attrs);
+pub fn parse_attributes(ctx: Ctx, attrs: Vec<syn::Attribute>)
+    -> DeriveResult<ParsedAttributes>
+{
+    let attrs = parse_attributes_base(ctx, attrs)?;
     if attrs.no_bound {
-        error::no_bound_set_on_non_tyvar();
+        error::no_bound_set_on_non_tyvar(ctx)?;
     }
-    attrs
+    Ok(attrs)
 }
 
 /// Parses the attributes specified on an item and parsed by syn
 /// and returns true if we've been ordered to not set an `Arbitrary`
 /// bound on the given type variable the attributes are from,
 /// no matter what.
-pub fn has_no_bound(attrs: Vec<syn::Attribute>) -> bool {
-    let attrs = parse_attributes_base(attrs);
-    error::if_anything_specified(&attrs, error::TY_VAR);
-    attrs.no_bound
+pub fn has_no_bound(ctx: Ctx, attrs: Vec<syn::Attribute>) -> DeriveResult<bool> {
+    let attrs = parse_attributes_base(ctx, attrs)?;
+    error::if_anything_specified(ctx, &attrs, error::TY_VAR)?;
+    Ok(attrs.no_bound)
 }
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-fn parse_attributes_base(attrs: Vec<syn::Attribute>) -> ParsedAttributes {
+fn parse_attributes_base(ctx: Ctx, attrs: Vec<syn::Attribute>)
+    -> DeriveResult<ParsedAttributes>
+{
     let (skip, weight, no_params, ty_params, strategy, value, no_bound)
-      = attrs.into_iter()
-             // Get rid of attributes we don't care about:
-             .filter(is_proptest_attr)
-             // Flatten attributes so we deal with them uniformly.
-             .flat_map(extract_modifiers)
-             // Accumulate attributes into a form for final processing.
-             .fold(init_parse_state(), dispatch_attribute);
+      = parse_accumulate(ctx, attrs)?;
 
     // Process params and no_params together to see which one to use.
-    let params = parse_params_mode(no_params, ty_params);
+    let params = parse_params_mode(ctx, no_params, ty_params)?;
 
     // Process strategy and value together to see which one to use.
-    let strategy = parse_strat_mode(strategy, value);
+    let strategy = parse_strat_mode(ctx, strategy, value)?;
 
     // Was skip set?
     let skip = skip.is_some();
@@ -143,7 +142,7 @@ fn parse_attributes_base(attrs: Vec<syn::Attribute>) -> ParsedAttributes {
     let no_bound = no_bound.is_some();
 
     // We're done.
-    ParsedAttributes { skip, weight, params, strategy, no_bound }
+    Ok(ParsedAttributes { skip, weight, params, strategy, no_bound })
 }
 
 //==============================================================================
@@ -168,6 +167,28 @@ fn init_parse_state() -> PAll { (None, None, None, None, None, None, None) }
 // Internals: Extraction & Filtering
 //==============================================================================
 
+fn parse_accumulate(ctx: Ctx, attrs: Vec<syn::Attribute>)
+    -> DeriveResult<PAll>
+{
+    let mut state = init_parse_state();
+    // Get rid of attributes we don't care about:
+    for attr in attrs.into_iter().filter(is_proptest_attr) {
+        // Flatten attributes so we deal with them uniformly.
+        for meta in extract_modifiers(ctx, attr)? {
+            // Accumulate attributes into a form for final processing.
+            state = dispatch_attribute(ctx, state, meta)?;
+        }
+    }
+    Ok(state)
+
+    /*
+      = attrs.into_iter()
+             .filter(is_proptest_attr)
+             .flat_map(extract_modifiers)
+             .try_fold(init_parse_state(), dispatch_attribute)?;
+    */
+}
+
 /// Returns `true` iff the attribute has to do with proptest.
 /// Otherwise, the attribute is irrevant to us and we will simply
 /// ignore it in our processing.
@@ -179,24 +200,26 @@ fn is_proptest_attr(attr: &syn::Attribute) -> bool {
 /// We do this to treat all pieces uniformly whether a single
 /// `#[proptest(..)]` was used or many. This simplifies the
 /// logic somewhat.
-fn extract_modifiers(attr: syn::Attribute) -> Box<Iterator<Item = syn::Meta>> {
+fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: syn::Attribute)
+    -> DeriveResult<Vec<syn::Meta>>
+{
     use syn::Meta::*;
     use syn::NestedMeta::*;
     use syn::MetaList;
 
     // Ensure we've been given an outer attribute form.
-    if !is_outer_attr(&attr) { error::inner_attr(); }
+    if !is_outer_attr(&attr) { error::inner_attr(ctx)?; }
 
     if let Some(meta) = attr.interpret_meta() {
         match meta {
-            Word(_) => error::bare_proptest_attr(),
-            NameValue(_) => error::literal_set_proptest(),
+            Word(_) => error::bare_proptest_attr(ctx)?,
+            NameValue(_) => error::literal_set_proptest(ctx)?,
             List(MetaList { nested, .. }) =>
-                Box::new(nested.into_iter().map(|nmi| match nmi {
-                    Literal(_) => error::immediate_literals(),
+                nested.into_iter().map(|nmi| match nmi {
+                    Literal(_) => error::immediate_literals(ctx),
                     // This is the only valid form.
-                    Meta(mi) => mi,
-                })),
+                    Meta(mi) => Ok(mi),
+                }).collect(),
         }
     } else {
         panic!("TODO");
@@ -216,7 +239,9 @@ pub fn is_outer_attr(attr: &syn::Attribute) -> bool {
 
 /// Dispatches an attribute modifier to handlers and
 /// let's them add stuff into our accumulartor.
-fn dispatch_attribute(mut acc: PAll, meta: syn::Meta) -> PAll {
+fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: syn::Meta)
+    -> DeriveResult<PAll>
+{
     // TODO: revisit when we have NLL.
 
     // Dispatch table for attributes:
@@ -236,27 +261,27 @@ fn dispatch_attribute(mut acc: PAll, meta: syn::Meta) -> PAll {
             "value"         => parse_value,
             "no_bound"      => parse_no_bound,
             // Invalid modifiers:
-            "no_bounds"     => error::did_you_mean(name, "no_bound"),
+            "no_bounds"     => error::did_you_mean(ctx, name, "no_bound")?,
             "weights" |
-            "weighted"      => error::did_you_mean(name, "weight"),
+            "weighted"      => error::did_you_mean(ctx, name, "weight")?,
             "strat" |
-            "strategies"    => error::did_you_mean(name, "strategy"),
+            "strategies"    => error::did_you_mean(ctx, name, "strategy")?,
             "values" |
             "valued" |
             "fix" |
-            "fixed"         => error::did_you_mean(name, "value"),
+            "fixed"         => error::did_you_mean(ctx, name, "value")?,
             "param" |
-            "parameters"    => error::did_you_mean(name, "params"),
+            "parameters"    => error::did_you_mean(ctx, name, "params")?,
             "no_param" |
-            "no_parameters" => error::did_you_mean(name, "no_params"),
-            modifier        => error::unkown_modifier(modifier),
+            "no_parameters" => error::did_you_mean(ctx, name, "no_params")?,
+            modifier        => error::unkown_modifier(ctx, modifier)?,
         }
     };
 
     // We now have a parser that we can dispatch to.
-    parser(&mut acc, meta);
+    parser(ctx, &mut acc, meta)?;
 
-    acc
+    Ok(acc)
 }
 
 //==============================================================================
@@ -266,8 +291,8 @@ fn dispatch_attribute(mut acc: PAll, meta: syn::Meta) -> PAll {
 /// Parse a no_bound attribute.
 /// Valid forms are:
 /// + `#[proptest(no_bound)]`
-fn parse_no_bound(set: &mut PAll, meta: syn::Meta) {
-    parse_bare_modifier(&mut set.6, meta, error::no_bound_malformed);
+fn parse_no_bound(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+    parse_bare_modifier(ctx, &mut set.6, meta, error::no_bound_malformed)
 }
 
 //==============================================================================
@@ -277,8 +302,8 @@ fn parse_no_bound(set: &mut PAll, meta: syn::Meta) {
 /// Parse a skip attribute.
 /// Valid forms are:
 /// + `#[proptest(skip)]`
-fn parse_skip(set: &mut PAll, meta: syn::Meta) {
-    parse_bare_modifier(&mut set.0, meta, error::skip_malformed);
+fn parse_skip(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+    parse_bare_modifier(ctx, &mut set.0, meta, error::skip_malformed)
 }
 
 //==============================================================================
@@ -289,9 +314,9 @@ fn parse_skip(set: &mut PAll, meta: syn::Meta) {
 /// Valid forms are:
 /// + `#[proptest(weight = <integer>)]`.
 /// The `<integer>` must also fit within an `u32` and be unsigned.
-fn parse_weight(set: &mut PAll, meta: syn::Meta) {
+fn parse_weight(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
     use std::u32;
-    error_if_set(&set.1, &meta);
+    error_if_set(ctx, &set.1, &meta)?;
 
     if let Some(syn::Lit::Int(lit)) = get_mnv_lit(&meta) {
         let value = lit.value();
@@ -300,11 +325,13 @@ fn parse_weight(set: &mut PAll, meta: syn::Meta) {
            is_int_suffix_unsigned(lit.suffix()) {
             set.1 = Some(value as u32);  
         } else {
-            error::weight_malformed(&meta);
+            error::weight_malformed(ctx, &meta)?;
         }
     } else {
-        error::weight_malformed(&meta);
+        error::weight_malformed(ctx, &meta)?;
     }
+
+    Ok(())
 }
 
 /// Returns `true` iff the given type is unsigned and false otherwise.
@@ -323,44 +350,49 @@ fn is_int_suffix_unsigned(suffix: syn::IntSuffix) -> bool {
 /// Parses an explicit value as a strategy.
 /// Valid forms are:
 /// + `#[proptest(value = "<expr>")]`.
-fn parse_value(set: &mut PAll, meta: syn::Meta) {
-    parse_strategy_base(&mut set.5, meta);
+fn parse_value(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+    parse_strategy_base(ctx, &mut set.5, meta)
 }
 
 /// Parses an explicit strategy.
 /// Valid forms are:
 /// + `#[proptest(strategy = "<expr>")]`.
-fn parse_strategy(set: &mut PAll, meta: syn::Meta) {
-    parse_strategy_base(&mut set.4, meta);
+fn parse_strategy(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+    parse_strategy_base(ctx, &mut set.4, meta)
 }
 
 /// Parses an explicit strategy. This is a helper.
 /// Valid forms are:
 /// + `#[proptest(<meta.name()> = "<expr>")]`.
-fn parse_strategy_base(set: &mut PStrategy, meta: syn::Meta) {
-    error_if_set(&set, &meta);
+fn parse_strategy_base(ctx: Ctx, set: &mut PStrategy, meta: syn::Meta)
+    -> DeriveResult<()>
+{
+    error_if_set(ctx, &set, &meta)?;
 
     if let Some(lit) = get_str_lit(&meta) {
         if let Ok(expr) = syn::parse_str(&lit) {
             *set = Some(expr);
         } else {
-            error::strategy_malformed_expr(&meta);
+            error::strategy_malformed_expr(ctx, &meta)?;
         }
     } else {
-        error::strategy_malformed(&meta);
+        error::strategy_malformed(ctx, &meta)?;
     }
+    Ok(())
 }
 
 /// Combines any parsed explicit strategy and value into a single value
 /// and fails if both an explicit strategy and value was set.
 /// Only one of them can be set, or none.
-fn parse_strat_mode(strat: PStrategy, value: PStrategy) -> StratMode {
-    match (strat, value) {
+fn parse_strat_mode(ctx: Ctx, strat: PStrategy, value: PStrategy)
+    -> DeriveResult<StratMode> 
+{
+    Ok(match (strat, value) {
         (None,     None    ) => StratMode::Arbitrary,
         (None,     Some(ty)) => StratMode::Value(ty),
         (Some(ty), None    ) => StratMode::Strategy(ty),
-        (Some(_), Some(_) )  => error::overspecified_strat(),
-    }
+        (Some(_), Some(_) )  => error::overspecified_strat(ctx)?,
+    })
 }
 
 //==============================================================================
@@ -369,13 +401,15 @@ fn parse_strat_mode(strat: PStrategy, value: PStrategy) -> StratMode {
 
 /// Combines a potentially set `params` and `no_params` into a single value
 /// and fails if both have been set. Only one of them can be set, or none.
-fn parse_params_mode(no_params: PNoParams, ty_params: PTyParams) -> ParamsMode {
-    match (no_params, ty_params) {
+fn parse_params_mode(ctx: Ctx, no_params: PNoParams, ty_params: PTyParams)
+    -> DeriveResult<ParamsMode>
+{
+    Ok(match (no_params, ty_params) {
         (None,    None    ) => ParamsMode::Passthrough,
         (None,    Some(ty)) => ParamsMode::Specified(ty),
         (Some(_), None    ) => ParamsMode::Default,
-        (Some(_), Some(_) ) => error::overspecified_param(),
-    }
+        (Some(_), Some(_) ) => error::overspecified_param(ctx)?,
+    })
 }
 
 /// Parses an explicit Parameters type.
@@ -385,17 +419,19 @@ fn parse_params_mode(no_params: PNoParams, ty_params: PTyParams) -> ParamsMode {
 /// + `#[proptest(params = "<type>"]`
 ///
 /// The latter form is required for more complex types.
-fn parse_params(set: &mut PAll, meta: syn::Meta) {
+fn parse_params(ctx: Ctx, set: &mut PAll, meta: syn::Meta)
+    -> DeriveResult<()>
+{
     let set = &mut set.3;
 
-    error_if_set(&set, &meta);
+    error_if_set(ctx, &set, &meta)?;
 
     if let Some(lit) = get_str_lit(&meta) {
         // Form is: `#[proptest(params = "<type>"]`.
         if let Ok(ty) = syn::parse_str(&lit) {
             *set = Some(ty);
         } else {
-            error::param_malformed_type();
+            error::param_malformed_type(ctx)?;
         }
     } else if let Some(ident) = get_nested_metas(meta)
                                 .and_then(util::match_singleton)
@@ -403,15 +439,19 @@ fn parse_params(set: &mut PAll, meta: syn::Meta) {
         // Form is: `#[proptest(params(<type>)]`.
         *set = Some(ident_to_type(ident));
     } else {
-        error::param_malformed();
+        error::param_malformed(ctx)?;
     }
+
+    Ok(())
 }
 
 /// Parses an order to use the default Parameters type and value.
 /// Valid forms are:
 /// + `#[proptest(no_params)]`
-fn parse_no_params(set: &mut PAll, meta: syn::Meta) {
-    parse_bare_modifier(&mut set.2, meta, error::no_params_malformed);
+fn parse_no_params(ctx: Ctx, set: &mut PAll, meta: syn::Meta)
+    -> DeriveResult<()>
+{
+    parse_bare_modifier(ctx, &mut set.2, meta, error::no_params_malformed)
 }
 
 //==============================================================================
@@ -420,15 +460,25 @@ fn parse_no_params(set: &mut PAll, meta: syn::Meta) {
 
 /// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `set`.
 fn parse_bare_modifier
-    (set: &mut Option<()>, meta: syn::Meta, malformed: fn() -> !) {
-    error_if_set(set, &meta);
-    if let syn::Meta::Word(_) = meta { *set = Some(()); }
-    else { malformed() }
+    (ctx: Ctx, set: &mut Option<()>, meta: syn::Meta,
+     malformed: fn(Ctx) -> DeriveResult<()>)
+    -> DeriveResult<()>
+{
+    error_if_set(ctx, set, &meta)?;
+    if let syn::Meta::Word(_) = meta {
+        *set = Some(());
+        Ok(())
+    } else {
+        malformed(ctx)
+    }
 }
 
 /// Emits a "set again" error iff the given option `.is_some()`.
-fn error_if_set<T>(set: &Option<T>, meta: &syn::Meta) {
-    if set.is_some() { error::set_again(meta); }
+fn error_if_set<T>(ctx: Ctx, set: &Option<T>, meta: &syn::Meta)
+    -> DeriveResult<()>
+{
+    if set.is_some() { error::set_again(ctx, meta)?; }
+    Ok(())
 }
 
 fn get_str_lit(meta: &syn::Meta) -> Option<String> {

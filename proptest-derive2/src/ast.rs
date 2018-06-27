@@ -17,6 +17,8 @@ use quote::TokenStreamExt;
 
 use util::*;
 use use_tracking::*;
+use error::Ctx;
+use error::DeriveResult;
 
 use std::ops::{Add, AddAssign};
 
@@ -70,7 +72,7 @@ impl Impl {
 
     /// Linearises the impl into a sequence of tokens.
     /// This produces the actual Rust code for the impl.
-    pub fn to_tokens(self) -> TokenStream {
+    pub fn to_tokens(self, ctx: Ctx) -> DeriveResult<TokenStream> {
         let Impl { typ, mut tracker, parts: (params, strategy, ctor) } = self;
 
         /// A `Debug` bound on a type variable.
@@ -84,7 +86,7 @@ impl Impl {
         }
 
         // Add bounds and get generics for the impl.
-        tracker.add_bounds(arbitrary_bound(), Some(debug_bound()));
+        tracker.add_bounds(ctx, arbitrary_bound(), Some(debug_bound()))?;
         let generics = tracker.consume();
         let (impl_generics, ty_generics, where_clause)
           = generics.split_for_impl();
@@ -94,7 +96,7 @@ impl Impl {
         let _const = const_ident(typ.clone());
 
         // Linearise everything. We're done after this.
-        quote! {
+        let q = quote! {
             #[allow(non_upper_case_globals)]
             const #_const: () = {
             extern crate proptest as crate_proptest;
@@ -111,7 +113,8 @@ impl Impl {
             }
 
             };
-        }
+        };
+        Ok(q)
     }
 }
 

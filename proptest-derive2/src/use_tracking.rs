@@ -22,6 +22,9 @@ use syn;
 use attr;
 use util;
 
+use error::DeriveResult;
+use error::Ctx;
+
 //==============================================================================
 // API: Type variable use tracking
 //==============================================================================
@@ -67,22 +70,27 @@ impl UseTracker {
     /// Adds the bound in `for_used` on used type variables and
     /// the bound in `for_not` (`if .is_some()`) on unused type variables.
     pub fn add_bounds(&mut self,
-        for_used: syn::TypeParamBound, for_not: Option<syn::TypeParamBound>) {
-        let iter = self.used_map.values().zip(self.generics.type_params_mut());
+        ctx: Ctx,
+        for_used: syn::TypeParamBound, for_not: Option<syn::TypeParamBound>)
+        -> DeriveResult<()>
+    {
+        let mut iter = self.used_map.values().zip(self.generics.type_params_mut());
         if let Some(for_not) = for_not {
-            iter.for_each(|(&used, tv)| {
+            iter.try_for_each(|(&used, tv)| {
                 // Steal the attributes:
                 let attrs = mem::replace(&mut tv.attrs, vec![]);
-                let no_bound = attr::has_no_bound(attrs);
+                let no_bound = attr::has_no_bound(ctx, attrs)?;
 
                 let bound = if used && !no_bound { &for_used } else { &for_not };
                 tv.bounds.push(bound.clone());
-            });
+                Ok(())
+            })?;
         } else {
             iter.for_each(|(&used, tv)|
                 if used { tv.bounds.push(for_used.clone()) }
             )
         }
+        Ok(())
     }
 
     /// Consumes the (potentially) modified generics that the
