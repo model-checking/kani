@@ -851,6 +851,7 @@ macro_rules! prop_assert_ne {
     }};
 }
 
+#[cfg(feature = "std")]
 #[doc(hidden)]
 pub fn force_no_fork(config: &mut ::test_runner::Config) {
     if config.fork() {
@@ -866,6 +867,9 @@ pub fn force_no_fork(config: &mut ::test_runner::Config) {
         assert!(!config.fork());
     }
 }
+
+#[cfg(not(feature = "std"))]
+pub fn force_no_fork(_: &mut ::test_runner::Config) { }
 
 #[cfg(test)]
 mod test {
