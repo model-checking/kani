@@ -80,25 +80,10 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut config = $config.clone_with_source_file(file!());
+                let mut config = $config.clone();
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
-                let mut runner = $crate::test_runner::TestRunner::new(config);
-                let names = proptest_helper!(@_WRAPSTR ($($parm),*));
-                match runner.run(
-                    &$crate::strategy::Strategy::prop_map(
-                        proptest_helper!(@_WRAP ($($strategy)*)),
-                        |values| $crate::sugar::NamedArguments(names, values)),
-                    |$crate::sugar::NamedArguments(
-                        _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
-                    {
-                        $body;
-                        Ok(())
-                    })
-                {
-                    Ok(_) => (),
-                    Err(e) => panic!("{}\n{}", e, runner),
-                }
+                proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
             }
         )*
     };
@@ -111,6 +96,22 @@ macro_rules! proptest {
         $($(#[$meta])*
           fn $test_name($($parm in $strategy),+) $body)*
     } };
+
+    (|($($parm:pat in $strategy:expr),+)| $body:block) => {
+        || {
+            let mut config = $crate::test_runner::Config::default();
+            proptest_helper!(@_NO_FORK config);
+            proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
+        }
+    };
+
+    (move |($($parm:pat in $strategy:expr),+)| $body:block) => {
+        move || {
+            let mut config = $crate::test_runner::Config::default();
+            proptest_helper!(@_NO_FORK config);
+            proptest_helper!(@_BODY config ($($parm in $strategy),+) $body);
+        }
+    };
 }
 
 /// Rejects the test input if assumptions are not met.
@@ -674,6 +675,34 @@ macro_rules! proptest_helper {
     (@_WRAPSTR ($a:pat, $($rest:pat),*)) => {
         (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
     };
+    // make sure that configuration does not have options set that would cause it to fork.
+    (@_NO_FORK $config:ident) => {{
+        #[cfg(feature = "fork")]
+        { $config.fork = false; }
+        #[cfg(feature = "timeout")]
+        { $config.timeout = 0; }
+        assert!(!$config.fork(), "configuration should not be forking");
+    }};
+    // build a property testing block that when executed, executes the full property test.
+    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) $body:block) => {{
+        $config.source_file = Some(file!());
+        let mut runner = $crate::test_runner::TestRunner::new($config);
+        let names = proptest_helper!(@_WRAPSTR ($($parm),*));
+        match runner.run(
+            &$crate::strategy::Strategy::prop_map(
+                proptest_helper!(@_WRAP ($($strategy)*)),
+                |values| $crate::sugar::NamedArguments(names, values)),
+            |$crate::sugar::NamedArguments(
+                _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
+            {
+                $body;
+                Ok(())
+            })
+        {
+            Ok(_) => (),
+            Err(e) => panic!("{}\n{}", e, runner),
+        }
+    }};
 }
 
 #[doc(hidden)]
@@ -1069,5 +1098,33 @@ mod ownership_tests {
         fn accept_noclone_ref_arg(ref nc in MK) {
             let _nc2: &NotClone = nc;
         }
+    }
+}
+
+#[cfg(test)]
+mod closure_tests {
+    #[test]
+    fn test_simple() {
+        let x = 42;
+
+        let _ = proptest! {
+            |(y in 0..100)| {
+                assert!(x != y);
+            }
+        };
+    }
+
+    #[test]
+    fn test_move() {
+        let foo = Foo;
+
+        let _ = proptest! {
+            move |(x in 1..100, y in 0..100)| {
+                assert!(x != y, "foo: {:?}", foo);
+            }
+        };
+
+        #[derive(Debug)]
+        struct Foo;
     }
 }
