@@ -17,15 +17,13 @@ use rand::distributions::uniform::{Uniform, SampleUniform};
 use core::ops::Range;
 use test_runner::TestRunner;
 
-pub(crate) fn sample_uniform<X: SampleUniform>
+pub(crate) fn sample_uniform<X : SampleUniform>
     (run: &mut TestRunner, range: Range<X>) -> X {
     Uniform::new(range.start, range.end).sample(run.rng())
 }
 
-pub(crate) fn sample_uniform_incl<X>
+pub(crate) fn sample_uniform_incl<X : SampleUniform>
     (run: &mut TestRunner, start: X, end: X) -> X
-where
-    X: SampleUniform
 {
     Uniform::new_inclusive(start, end).sample(run.rng())
 }
@@ -34,6 +32,7 @@ macro_rules! int_any {
     ($typ: ident) => {
         /// Type of the `ANY` constant.
         #[derive(Clone, Copy, Debug)]
+        #[must_use = "strategies do nothing unless used"]
         pub struct Any(());
         /// Generates integers with completely arbitrary values, uniformly
         /// distributed over the whole range.
@@ -61,6 +60,18 @@ macro_rules! numeric_api {
                     self.start,
                     $crate::num::sample_uniform(runner, self.clone()),
                     self.end - $epsilon))
+            }
+        }
+
+        impl Strategy for ::core::ops::RangeInclusive<$typ> {
+            type Tree = BinarySearch;
+            type Value = $typ;
+
+            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+                Ok(BinarySearch::new_clamped(
+                    *self.start(),
+                    $crate::num::sample_uniform_incl(runner, *self.start(), *self.end()),
+                    *self.end()))
             }
         }
 
@@ -98,33 +109,12 @@ macro_rules! numeric_api {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
                     $crate::num::sample_uniform_incl(
-                        runner, ::core::$typ::MIN, self.end
-                    ),
+                        runner, ::core::$typ::MIN, self.end),
                     self.end
                 ))
             }
         }
     }
-}
-
-macro_rules! num_incl_api {
-    ($typ:ident, $epsilon:expr) => {
-        impl Strategy for ::core::ops::RangeInclusive<$typ> {
-            type Tree = BinarySearch;
-            type Value = $typ;
-
-            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                let start = self.clone().next().unwrap();
-                let end = self.clone().next_back().unwrap();
-
-                Ok(BinarySearch::new_clamped(
-                    start,
-                    $crate::num::sample_uniform_incl(runner, start, end),
-                    end - $epsilon
-                ))
-            }
-        }
-    };
 }
 
 macro_rules! signed_integer_bin_search {
@@ -225,7 +215,6 @@ macro_rules! signed_integer_bin_search {
             }
 
             numeric_api!($typ, 1);
-            num_incl_api!($typ, 1);
         }
     }
 }
@@ -310,7 +299,6 @@ macro_rules! unsigned_integer_bin_search {
             }
 
             numeric_api!($typ, 1);
-            num_incl_api!($typ, 1);
         }
     }
 }
@@ -425,6 +413,7 @@ macro_rules! float_any {
         ///   `NORMAL` > `ZERO` > `SUBNORMAL` > `INFINITE` > `QUIET_NAN` =
         ///   `SIGNALING_NAN`.
         #[derive(Clone, Copy, Debug)]
+        #[must_use = "strategies do nothing unless used"]
         pub struct Any(FloatTypes);
 
         #[cfg(test)]
@@ -993,6 +982,56 @@ mod test {
 
             assert_eq!(42, state.current());
         }
+    }
+
+    mod contract_sanity {
+        macro_rules! contract_sanity {
+            ($t:tt) => {
+                mod $t {
+                    use strategy::check_strategy_sanity;
+
+                    const FOURTY_TWO: $t = 42 as $t;
+                    const FIFTY_SIX: $t = 56 as $t;
+
+                    #[test]
+                    fn range() {
+                        check_strategy_sanity(FOURTY_TWO..FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_inclusive() {
+                        check_strategy_sanity(FOURTY_TWO..=FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_to() {
+                        check_strategy_sanity(..FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_to_inclusive() {
+                        check_strategy_sanity(..=FIFTY_SIX, None);
+                    }
+
+                    #[test]
+                    fn range_from() {
+                        check_strategy_sanity(FOURTY_TWO.., None);
+                    }
+                }
+            }
+        }
+        contract_sanity!(u8);
+        contract_sanity!(i8);
+        contract_sanity!(u16);
+        contract_sanity!(i16);
+        contract_sanity!(u32);
+        contract_sanity!(i32);
+        contract_sanity!(u64);
+        contract_sanity!(i64);
+        contract_sanity!(usize);
+        contract_sanity!(isize);
+        contract_sanity!(f32);
+        contract_sanity!(f64);
     }
 
     #[test]

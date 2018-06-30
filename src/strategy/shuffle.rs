@@ -19,6 +19,7 @@ use test_runner::*;
 ///
 /// See `Strategy::prop_shuffle()`.
 #[derive(Clone, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Shuffle<S>(pub(super) S);
 
 /// A value which can be used with the `prop_shuffle` combinator.

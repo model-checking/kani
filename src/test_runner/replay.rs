@@ -69,7 +69,7 @@ pub enum ReplayFileStatus {
 }
 
 /// Open the file in the usual read+append+create mode.
-pub fn open_file<P : AsRef<Path>>(path: P) -> io::Result<fs::File> {
+pub fn open_file(path: impl AsRef<Path>) -> io::Result<fs::File> {
     fs::OpenOptions::new()
         .read(true)
         .append(true)
@@ -87,19 +87,19 @@ fn step_to_char(step: &TestCaseResult) -> char {
 }
 
 /// Append the given step to the given output.
-pub fn append<F : Write>(mut file: F, step: &TestCaseResult)
-                         -> io::Result<()> {
+pub fn append(mut file: impl Write, step: &TestCaseResult)
+              -> io::Result<()> {
     write!(file, "{}", step_to_char(step))
 }
 
 /// Append a termination mark to the given output.
-pub fn terminate<F : Write>(mut file: F) -> io::Result<()> {
+pub fn terminate(mut file: impl Write) -> io::Result<()> {
     write!(file, ".")
 }
 
 impl Replay {
     /// Write the full state of this `Replay` to the given output.
-    pub fn init_file<F : Write>(&self, mut file: F) -> io::Result<()> {
+    pub fn init_file(&self, mut file: impl Write) -> io::Result<()> {
         writeln!(file, "{}", SENTINEL)?;
 
         for word in &self.seed {
@@ -117,15 +117,15 @@ impl Replay {
     }
 
     /// Mark the replay as complete in the file.
-    pub fn complete<F : Write>(mut file: F) -> io::Result<()> {
+    pub fn complete(mut file: impl Write) -> io::Result<()> {
         write!(file, ".")
     }
 
     /// Parse a `Replay` out of the given file.
     ///
     /// The reader is implicitly seeked to the beginning before reading.
-    pub fn parse_from<F : Read + Seek>(mut file: F)
-                                       -> io::Result<ReplayFileStatus> {
+    pub fn parse_from(mut file: impl Read + Seek)
+                      -> io::Result<ReplayFileStatus> {
         file.seek(io::SeekFrom::Start(0))?;
 
         let mut reader = io::BufReader::new(&mut file);

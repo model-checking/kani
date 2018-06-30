@@ -9,7 +9,6 @@
 
 //! This module provides #[cfg(..)]ed type aliases over features.
 
-#[macro_export]
 macro_rules! multiplex_alloc {
     ($($alloc: path, $std: path),*) => {
         $(
@@ -21,7 +20,6 @@ macro_rules! multiplex_alloc {
     };
 }
 
-#[macro_export]
 macro_rules! multiplex_core {
     ($($core: path, $std: path),*) => {
         $(

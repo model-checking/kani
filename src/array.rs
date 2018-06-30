@@ -49,6 +49,7 @@ use test_runner::*;
 /// }
 /// # fn main() { }
 /// ```
+#[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
 pub struct UniformArrayStrategy<S, T> {
     strategy: S,

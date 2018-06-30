@@ -93,7 +93,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! proptest = "0.7.1"
+//! proptest = "0.8.2"
 //! ```
 //!
 //! and at the top of `main.rs` or `lib.rs`:
@@ -327,13 +327,13 @@
 //! The `proptest!` macro has some additional syntax, including for setting
 //! configuration for things like the number of test cases to generate. See its
 //! [documentation](macro.proptest.html) <!-- NOREADME
-//! [documentation](https://docs.rs/proptest/*/proptest/macro.proptest.html)
+//! [documentation](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/macro.proptest.html)
 //! NOREADME -->
 //! for more details.
 //!
 //! There is a more in-depth tutorial
 //! [further down](#in-depth-tutorial). <!-- NOREADME
-//! [in the crate documentation](https://docs.rs/proptest/#in-depth-tutorial).
+//! [in the crate documentation](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/#in-depth-tutorial).
 //! NOREADME -->
 //!
 //! ## Differences between QuickCheck and Proptest
@@ -1109,7 +1109,7 @@
 //! #   quantity: u32,
 //! # }
 //! #
-//! 
+//!
 //! # fn do_stuff(order: Order) {
 //! #     let i: u32 = order.id.parse().unwrap();
 //! #     let s = i.to_string();
@@ -1642,7 +1642,7 @@
 //! you can find out about all the strategies provided out-of-the-box by
 //! perusing the module tree below.
 
-#![deny(missing_docs)]
+#![deny(missing_docs, bare_trait_objects)]
 #![no_std]
 #![cfg_attr(feature = "cargo-clippy", allow(
     doc_markdown,

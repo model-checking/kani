@@ -44,22 +44,18 @@ pub use collection::{SizeRange, size_range};
 /// `values`.
 ///
 /// Panics if `size` is a zero-length range.
-pub fn subsequence<T, A, S>(values: A, size: S) -> Subsequence<T>
-where
-    A : 'static + Into<Cow<'static, [T]>>,
-    T : Clone + 'static,
-    S : Into<SizeRange>
+pub fn subsequence<T : Clone + 'static>
+    (values: impl Into<Cow<'static, [T]>>,
+     size: impl Into<SizeRange>) -> Subsequence<T>
 {
     let values = values.into();
     let len = values.len();
-    // FIXME(2018-06-04): .extract() from the SizeRange instead?
-    // FIXME(2018-06-04): Should bitset::sampled accept Into<SizeRange> instead of Range?
-    let size: Range<usize> = size.into().into();
+    let size = size.into();
 
-    assert!(size.start != size.end, "Zero-length range passed to subsequence");
-    assert!(size.end <= len + 1,
+    assert!(size.start() != size.end_excl(), "Zero-length range passed to subsequence");
+    assert!(size.end() <= len,
             "Maximum size of subsequence {} exceeds length of input {}",
-            size.end, len);
+            size.end(), len);
     Subsequence {
         values: Arc::new(values),
         bit_strategy: bits::bitset::sampled(size, 0..len),
@@ -71,6 +67,7 @@ where
 ///
 /// This is created by the `subsequence` function in the same module.
 #[derive(Debug, Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Subsequence<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
     bit_strategy: SampledBitSetStrategy<BitSet>,
@@ -148,8 +145,9 @@ opaque_strategy_wrapper! {
 /// This is largely equivalent to making a `Union` of a bunch of `Just`
 /// strategies, but is substantially more efficient and shrinks by binary
 /// search.
-pub fn select<T, A>(values: A) -> Select<T>
-where A : 'static + Into<Cow<'static, [T]>>, T : Clone + fmt::Debug + 'static {
+pub fn select<T : Clone + fmt::Debug + 'static>
+    (values: impl Into<Cow<'static, [T]>>) -> Select<T>
+{
     let cow = values.into();
 
     Select(statics::Map::new(

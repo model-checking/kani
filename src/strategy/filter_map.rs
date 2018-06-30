@@ -15,6 +15,7 @@ use test_runner::*;
 /// `Strategy` and `ValueTree` filter_map adaptor.
 ///
 /// See `Strategy::prop_filter_map()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct FilterMap<S, F> {
     pub(super) source: S,
     pub(super) whence: Reason,
@@ -47,12 +48,8 @@ impl<S: Clone, F> Clone for FilterMap<S, F> {
     }
 }
 
-impl<S, F, O> Strategy for FilterMap<S, F>
-where
-    S: Strategy,
-    F: Fn(S::Value) -> Option<O>,
-    O: fmt::Debug,
-{
+impl<S : Strategy, F : Fn (S::Value) -> Option<O>, O : fmt::Debug> Strategy
+for FilterMap<S, F> {
     type Tree = FilterMapValueTree<S::Tree, F, O>;
     type Value = O;
 
@@ -75,11 +72,8 @@ pub struct FilterMapValueTree<V, F, O> {
     fun: Arc<F>,
 }
 
-impl<V, F, O> Clone for FilterMapValueTree<V, F, O>
-where
-    V: Clone + ValueTree,
-    F: Fn(V::Value) -> Option<O>
-{
+impl<V : Clone + ValueTree, F : Fn (V::Value) -> Option<O>, O> Clone
+for FilterMapValueTree<V, F, O> {
     fn clone(&self) -> Self {
         Self::new(self.source.clone(), &self.fun, self.fresh_current())
     }
@@ -95,11 +89,8 @@ impl<V: fmt::Debug, F, O> fmt::Debug for FilterMapValueTree<V, F, O> {
     }
 }
 
-impl<V, F, O> FilterMapValueTree<V, F, O>
-where
-    V: ValueTree,
-    F: Fn(V::Value) -> Option<O>
-{
+impl<V : ValueTree, F : Fn (V::Value) -> Option<O>, O>
+FilterMapValueTree<V, F, O> {
     fn new(source: V, fun: &Arc<F>, current: O) -> Self {
         Self {
             source,
@@ -127,12 +118,8 @@ where
     }
 }
 
-impl<V, F, O> ValueTree for FilterMapValueTree<V, F, O>
-where
-    V: ValueTree,
-    F: Fn(V::Value) -> Option<O>,
-    O: fmt::Debug,
-{
+impl<V : ValueTree, F : Fn (V::Value) -> Option<O>, O : fmt::Debug> ValueTree
+for FilterMapValueTree<V, F, O> {
     type Value = O;
 
     fn current(&self) -> O {

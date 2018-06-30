@@ -15,6 +15,7 @@ use test_runner::*;
 /// `Strategy` and `ValueTree` filter adaptor.
 ///
 /// See `Strategy::prop_filter()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Filter<S, F> {
     pub(super) source: S,
     pub(super) whence: Reason,

@@ -311,13 +311,10 @@ pub trait Strategy : fmt::Debug {
     /// whole-input rejections.
     ///
     /// `whence` is used to record where and why the rejection occurred.
-    fn prop_filter_map<R, F, O>(self, whence: R, fun: F) -> FilterMap<Self, F>
-    where
-        Self: Sized,
-        R: Into<Reason>,
-        F: Fn(Self::Value) -> Option<O>,
-        O: fmt::Debug,
-    {
+    fn prop_filter_map<F : Fn (Self::Value) -> Option<O>,
+                       O : fmt::Debug>
+        (self, whence: impl Into<Reason>, fun: F) -> FilterMap<Self, F>
+    where Self : Sized {
         FilterMap::new(self, whence.into(), fun)
     }
 
@@ -408,14 +405,12 @@ pub trait Strategy : fmt::Debug {
     ///   ]);
     /// # }
     /// ```
-    fn prop_recursive<R, F>
-        (self, depth: u32, desired_size: u32, expected_branch_size: u32, recurse: F)
-        -> Recursive<Self::Value, F>
-    where
-        Self : Sized + 'static,
-        F : Fn(BoxedStrategy<Self::Value>) -> R,
-        R : Strategy<Value = Self::Value> + 'static,
-    {
+    fn prop_recursive<R : Strategy<Value = Self::Value> + 'static,
+                      F : Fn (BoxedStrategy<Self::Value>) -> R>
+        (self, depth: u32, desired_size: u32, expected_branch_size: u32,
+         recurse: F)
+         -> Recursive<Self::Value, F>
+    where Self : Sized + 'static {
         Recursive::new(self, depth, desired_size, expected_branch_size, recurse)
     }
 
@@ -581,6 +576,7 @@ pub trait ValueTree {
 ///
 /// See `Strategy::no_shrink()` for more details.
 #[derive(Clone, Copy, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct NoShrink<T>(T);
 
 impl<T : Strategy> Strategy for NoShrink<T> {
@@ -633,15 +629,16 @@ impl<T : ValueTree + ?Sized> ValueTree for Box<T> {
 }
 
 /// A boxed `ValueTree`.
-type BoxedVT<T> = Box<ValueTree<Value = T>>;
+type BoxedVT<T> = Box<dyn ValueTree<Value = T>>;
 
 /// A boxed `Strategy` trait object as produced by `Strategy::boxed()`.
 ///
 /// Strategies of this type afford cheap shallow cloning via reference
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct BoxedStrategy<T>(
-    Arc<Strategy<Value = T, Tree = BoxedVT<T>>>);
+    Arc<dyn Strategy<Value = T, Tree = BoxedVT<T>>>);
 
 /// A boxed `Strategy` trait object which is also `Sync` and
 /// `Send`, as produced by `Strategy::sboxed()`.
@@ -649,8 +646,9 @@ pub struct BoxedStrategy<T>(
 /// Strategies of this type afford cheap shallow cloning via reference
 /// counting by using an `Arc` internally.
 #[derive(Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct SBoxedStrategy<T>(
-    Arc<Strategy<Value = T, Tree = BoxedVT<T>> + Sync + Send>);
+    Arc<dyn Strategy<Value = T, Tree = BoxedVT<T>> + Sync + Send>);
 
 impl<T> Clone for BoxedStrategy<T> {
     fn clone(&self) -> Self {
@@ -705,7 +703,7 @@ impl<T: fmt::Debug> Strategy for SBoxedStrategy<T> {
 struct BoxedStrategyWrapper<T>(T);
 impl<T : Strategy> Strategy for BoxedStrategyWrapper<T>
 where T::Tree : 'static {
-    type Tree = Box<ValueTree<Value = T::Value>>;
+    type Tree = Box<dyn ValueTree<Value = T::Value>>;
     type Value = T::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
@@ -788,6 +786,18 @@ where S::Tree : Clone + fmt::Debug, S::Value : cmp::PartialEq {
                 panic!("Strategy passed to check_strategy_sanity failed \
                         to generate a value over 100 times in a row; \
                         last failure reason: {}", err);
+            }
+        }
+
+        {
+            let mut state = state.clone();
+            let mut count = 0;
+            while state.simplify() || state.complicate() {
+                count += 1;
+                if count > 65536 {
+                    panic!("Failed to converge on any value. State:\n{:#?}",
+                           state);
+                }
             }
         }
 

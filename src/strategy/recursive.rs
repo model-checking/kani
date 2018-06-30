@@ -14,6 +14,7 @@ use strategy::unions::float_to_weight;
 use test_runner::*;
 
 /// Return type from `Strategy::prop_recursive()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Recursive<T, F> {
     base: BoxedStrategy<T>,
     recurse: Arc<F>,
@@ -46,18 +47,15 @@ impl<T, F> Clone for Recursive<T, F> {
     }
 }
 
-impl<T, R, F> Recursive<T, F>
-where
-    T : fmt::Debug + 'static,
-    R : Strategy<Value = T> + 'static,
-    F : Fn(BoxedStrategy<T>) -> R,
-{
-    pub(super) fn new<S>
-        (base: S, depth: u32, desired_size: u32, expected_branch_size: u32,
-        recurse: F)
-        -> Self
-    where
-        S : Strategy<Value = T> + 'static,
+impl<T : fmt::Debug + 'static,
+     R : Strategy<Value = T> + 'static,
+     F : Fn (BoxedStrategy<T>) -> R>
+Recursive<T, F> {
+    pub(super) fn new
+        (base: impl Strategy<Value = T> + 'static,
+         depth: u32, desired_size: u32, expected_branch_size: u32,
+         recurse: F)
+         -> Self
     {
         Self {
             base: base.boxed(),
@@ -67,13 +65,11 @@ where
     }
 }
 
-impl<T, R, F> Strategy for Recursive<T, F>
-where
-    T : fmt::Debug + 'static,
-    R : Strategy<Value = T> + 'static,
-    F : Fn(BoxedStrategy<T>) -> R,
-{
-    type Tree = Box<ValueTree<Value = T>>;
+impl<T : fmt::Debug + 'static,
+     R : Strategy<Value = T> + 'static,
+     F : Fn (BoxedStrategy<T>) -> R>
+Strategy for Recursive<T, F> {
+    type Tree = Box<dyn ValueTree<Value = T>>;
     type Value = T;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {

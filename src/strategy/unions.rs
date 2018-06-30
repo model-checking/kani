@@ -26,6 +26,7 @@ pub type W<T> = (u32, T);
 ///
 /// See `Strategy::prop_union()`.
 #[derive(Clone, Debug)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Union<T : Strategy> {
     options: Vec<W<T>>,
 }
@@ -41,17 +42,15 @@ impl<T : Strategy> Union<T> {
     /// ## Panics
     ///
     /// Panics if `options` is empty.
-    pub fn new<I : IntoIterator<Item = T>>(options: I) -> Self {
+    pub fn new(options: impl IntoIterator<Item = T>) -> Self {
         let options: Vec<W<T>> = options.into_iter()
             .map(|v| (1, v)).collect();
         assert!(!options.is_empty());
         Self { options }
     }
 
-    pub(crate) fn try_new<E, I>(it: I) -> Result<Self, E>
-    where
-        I: Iterator<Item = Result<T, E>>
-    {
+    pub(crate) fn try_new<E>(it: impl Iterator<Item = Result<T, E>>)
+                             -> Result<Self, E> {
         let options: Vec<W<T>> = it.map(|r| r.map(|v| (1, v)))
             .collect::<Result<_, _>>()?;
 
@@ -219,6 +218,7 @@ def_access_tuple!($ access_tupleA, 1 2 3 4 5 6 7 8 9);
 /// This allows better performance than vanilla `Union` since one does not need
 /// to resort to boxing and dynamic dispatch to handle heterogeneous
 /// strategies.
+#[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
 pub struct TupleUnion<T>(T);
 

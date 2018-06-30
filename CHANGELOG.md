@@ -1,4 +1,34 @@
-## Unreleased (target = 0.8)
+## 0.8.2
+
+### New Additions
+
+- Macros which previously accepted `pattern in strategy` syntax to specify
+  arguments now also accept `pattern: type` syntax as shorthand for
+  `pattern in any::<type>()`.
+
+- Closure-style `proptest!` invocation no longer requires the body to use block
+  syntax.
+
+- Closure-style `proptest!` invocation now accepts custom configurations.
+
+## 0.8.1
+
+### New Additions
+
+- `proptest!` now has form that accepts a closure. See the documentation for
+  the macro for more details.
+
+### Bug Fixes
+
+- Fix spurious warning about corrupt regression files. The files were not
+  corrupt but the parser was failing to handle the blank line at the end.
+
+- The `multiplex_alloc!` and `multiplex_core!` macros which were
+  unintentionally exported in 0.8.0 are no longer exported. This is not
+  considered a breaking change since they were not supposed to be accessible,
+  and in any case would not have expanded into valid code in most other crates.
+
+## 0.8.0
 
 ### New Additions
 
@@ -15,19 +45,21 @@
   and `vec(elt_strategy, ..=high)`. This also applies to other functions
   accepting `Into<SizeRange>`.
 
-- `..= high` is now a valid strategy. Please note that `..= 1` will include
-  numbers lower than `0`. If you want the range `0..=1`, then you have to write
-  `..=1u<size>` where `<size>` is one of `u8`, `u16`, `u32`, `u64`, `usize`.
+- `..= high` is now a valid strategy. Please note that `..= 1` will naturally
+  include numbers lower than `0` for sized types.
 
-- `low..=high` is also a valid strategy except for `f32` and `f64` which will
-  soon be supported in newer editions (1.27+) of Rust.
+- `low..=high` is also a valid strategy.
 
 - `Arbitrary` is implemented for `RangeInclusive<Idx>`, `RangeToInclusive`,
   and `DecodeUtf16` on stable.
 
-### Minor changes
+- Bitset strategies and `subsequence` now accept all range syntaxes.
 
-- The Bernoulli distribution is now used for `proptest::bool::weighted`.
+### Bug Fixes
+
+- Fix a race condition where a test failing due to running ever so slightly
+  over the set timeout could cause the test harness to converge to the
+  incorrect failing value, a non-failing value, or panic.
 
 ### Deprecations
 
@@ -36,7 +68,7 @@
 
 ### Breaking changes
 
-- A minimum version of 1.26 of Rust is now required.
+- A minimum version of 1.27 of Rust is now required.
 
 - `regex-syntax` version 0.6 is now used.
 
@@ -84,10 +116,23 @@
 - `Arbitrary` for `SizeRange` changed its associated type to use `RangeInclusive`.
   Same applies for `CString`.
 
+- Many APIs now use `impl Trait` in argument position, which could affect code
+  using turbofishes to specify types explicitly.
+
+- `char` APIs which formerly represented a range as `(start, end)` now require
+  `start..=end`.
+
 ### Nightly-only breakage
 
 - As `std::io::{Chars, CharsError}` have been deprecated on nightly,
   their `Arbitrary` implementations have been removed.
+
+## 0.7.2
+
+### Bug Fixes
+
+- Fix that `bool` would not shrink correctly, leading to hangs when tests
+  taking `bool` parameters would fail in certain circumstances.
 
 ## 0.7.1
 

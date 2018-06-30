@@ -41,6 +41,7 @@ pub trait FilterFn<T> {
 
 /// Static version of `strategy::Filter`.
 #[derive(Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Filter<S, F> {
     source: S,
     whence: Reason,
@@ -141,6 +142,7 @@ pub trait MapFn<T> {
 
 /// Static version of `strategy::Map`.
 #[derive(Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Map<S, F> {
     source: S,
     fun: F,

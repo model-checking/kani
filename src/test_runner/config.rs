@@ -155,7 +155,7 @@ pub struct Config {
     /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
     ///
     /// The default cannot currently be overridden by an environment variable.
-    pub failure_persistence: Option<Box<FailurePersistence>>,
+    pub failure_persistence: Option<Box<dyn FailurePersistence>>,
 
     /// File location of the current test, relevant for persistence
     /// and debugging.
@@ -307,6 +307,14 @@ impl Config {
     #[cfg(not(feature = "timeout"))]
     pub fn timeout(&self) -> u32 {
         0
+    }
+
+    // Used by macros to force the config to be owned without depending on
+    // certain traits being `use`d.
+    #[allow(missing_docs)]
+    #[doc(hidden)]
+    pub fn __sugar_to_owned(&self) -> Self {
+        self.clone()
     }
 }
 

@@ -81,12 +81,12 @@ impl Default for FileFailurePersistence {
 }
 
 impl FailurePersistence for FileFailurePersistence {
-    fn load_persisted_failures(&self, source_file: Option<&'static str>) -> Vec<Seed> {
+    fn load_persisted_failures(&self, source_file: Option<&'static str>)
+                               -> Vec<Seed> {
         let p = self.resolve(
-                    source_file.and_then(|s| absolutize_source_file(Path::new(s)))
-                               .as_ref()
-                               .map(|cow| &**cow)
-                );
+            source_file.and_then(|s| absolutize_source_file(Path::new(s)))
+                .as_ref()
+                .map(|cow| &**cow));
 
         let path: Option<&PathBuf> = p.as_ref();
         let result: io::Result<Vec<Seed>> = path.map_or_else(
@@ -121,7 +121,7 @@ impl FailurePersistence for FileFailurePersistence {
         &mut self,
         source_file: Option<&'static str>,
         seed: Seed,
-        shrunken_value: &Debug,
+        shrunken_value: &dyn Debug,
     ) {
         let path = self.resolve(source_file.map(Path::new));
         if let Some(path) = path {
@@ -149,15 +149,15 @@ impl FailurePersistence for FileFailurePersistence {
         }
     }
 
-    fn box_clone(&self) -> Box<FailurePersistence> {
+    fn box_clone(&self) -> Box<dyn FailurePersistence> {
         Box::new(*self)
     }
 
-    fn eq(&self, other: &FailurePersistence) -> bool {
+    fn eq(&self, other: &dyn FailurePersistence) -> bool {
         other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
     }
 
-    fn as_any(&self) -> &Any { self }
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 /// Ensure that the source file to use for resolving the location of the persisted
@@ -179,13 +179,10 @@ fn absolutize_source_file<'a>(source: &'a Path) -> Option<Cow<'a, Path>> {
     absolutize_source_file_with_cwd(env::current_dir, source)
 }
 
-fn absolutize_source_file_with_cwd<'a, F>(
-    getcwd: F,
+fn absolutize_source_file_with_cwd<'a>(
+    getcwd: impl FnOnce () -> io::Result<PathBuf>,
     source: &'a Path,
-) -> Option<Cow<'a, Path>>
-where
-    F: FnOnce() -> io::Result<PathBuf>,
-{
+) -> Option<Cow<'a, Path>> {
     if source.is_absolute() {
         // On Unix, `file!()` is absolute. In these cases, we can use
         // that path directly.
@@ -233,16 +230,17 @@ where
     }
 }
 
-fn parse_seed_line(mut line: String, path: &Path, lineno: usize) -> Option<Seed> {
+fn parse_seed_line(mut line: String, path: &Path, lineno: usize)
+                   -> Option<Seed> {
     // Remove anything after and including '#':
     if let Some(comment_start) = line.find('#') {
         line.truncate(comment_start);
     }
 
-    // Split by whitespace and ignore empty lines:
-    let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
-    let len = parts.len();
-    if len > 0 {
+    if line.len() > 0 {
+        // Split by whitespace and ignore empty lines:
+        let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
+        let len = parts.len();
         // "xs" stands for "XorShift".
         if parts[0] == "xs" && len == 5 {
             // Parse using the chosen one:
@@ -286,7 +284,7 @@ fn convert_from_new_format(new_format: Seed) -> [u32; 4] {
     old_format
 }
 
-fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &Debug)
+fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &dyn Debug)
     -> io::Result<()>
 {
     // Write line start:
@@ -352,7 +350,9 @@ impl FileFailurePersistence {
                     let mut dir = Cow::into_owned(source_path.clone());
                     let mut found = false;
                     while dir.pop() {
-                        if dir.join("lib.rs").is_file() || dir.join("main.rs").is_file() {
+                        if dir.join("lib.rs").is_file() ||
+                            dir.join("main.rs").is_file()
+                        {
                             found = true;
                             break;
                         }

@@ -38,6 +38,7 @@ use test_runner::*;
 /// on `Strategy` since the vast majority of proptest should never need this
 /// functionality; it mainly concerns implementors of strategies.
 #[derive(Debug, Clone, Copy)]
+#[must_use = "strategies do nothing unless used"]
 pub struct Fuse<T> {
     inner: T,
     may_simplify: bool,

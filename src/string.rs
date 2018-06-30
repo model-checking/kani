@@ -12,6 +12,7 @@
 
 use core::mem;
 use core::fmt;
+use core::ops::RangeInclusive;
 use core::u32;
 use std_facade::{Cow, Box, String, Vec, ToOwned};
 
@@ -46,25 +47,34 @@ impl Default for StringParam {
     }
 }
 
-quick_error! {
-    /// Errors which may occur when preparing a regular expression for use with
-    /// string generation.
-    #[derive(Debug)]
-    pub enum Error {
-        /// The string passed as the regex was not syntactically valid.
-        RegexSyntax(err: ParseError) {
-            from()
-            cause(err)
-            description(err.description())
-            display("{}", err)
-        }
-        /// The regex was syntactically valid, but contains elements not
-        /// supported by proptest.
-        UnsupportedRegex(message: &'static str) {
-            description(message)
+// quick_error! uses bare trait objects, so we enclose its invocation here in a
+// module so the lint can be disabled just for it.
+#[allow(bare_trait_objects)]
+mod error_container {
+    use super::*;
+
+    quick_error! {
+        /// Errors which may occur when preparing a regular expression for use with
+        /// string generation.
+        #[derive(Debug)]
+        pub enum Error {
+            /// The string passed as the regex was not syntactically valid.
+            RegexSyntax(err: ParseError) {
+                from()
+                    cause(err)
+                    description(err.description())
+                    display("{}", err)
+            }
+            /// The regex was syntactically valid, but contains elements not
+            /// supported by proptest.
+            UnsupportedRegex(message: &'static str) {
+                description(message)
+            }
         }
     }
 }
+
+pub use self::error_container::Error;
 
 opaque_strategy_wrapper! {
     /// Strategy which generates values (i.e., `String` or `Vec<u8>`) matching
@@ -76,7 +86,7 @@ opaque_strategy_wrapper! {
         (SBoxedStrategy<T>) -> RegexGeneratorValueTree<T>;
     /// `ValueTree` corresponding to `RegexGeneratorStrategy`.
     pub struct RegexGeneratorValueTree[<T>][where T : fmt::Debug]
-        (Box<ValueTree<Value = T>>) -> T;
+        (Box<dyn ValueTree<Value = T>>) -> T;
 }
 
 impl Strategy for str {
@@ -126,12 +136,7 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
             hir::Class::Unicode(class) =>
                 unicode_class_strategy(class).prop_map(to_bytes).sboxed(),
             hir::Class::Bytes(class) => {
-                // FIXME: look at this!
-                let subs = class.iter().map(|r| if 255u8 == r.end() {
-                    (r.start()..).sboxed()
-                } else {
-                    (r.start()..r.end()).sboxed()
-                });
+                let subs = class.iter().map(|r| r.start() ..= r.end());
                 Union::new(subs).prop_map(|b| vec![b]).sboxed()
             }
         }),
@@ -169,16 +174,16 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
 }
 
 fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'static> {
-    static NONL_RANGES: &[(char, char)] = &[
-        ('\x00', '\x09'),
+    static NONL_RANGES: &[RangeInclusive<char>] = &[
+        '\x00'..='\x09',
         // Multiple instances of the latter range to partially make up
         // for the bias of having such a tiny range in the control
         // characters.
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
-        ('\x0B', ::std::char::MAX),
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
+        '\x0B'..=::core::char::MAX,
     ];
 
     let dotnnl = |x: &hir::ClassUnicodeRange, y: &hir::ClassUnicodeRange|
@@ -187,7 +192,7 @@ fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'stat
 
     char::ranges(match class.ranges() {
         [x, y] if dotnnl(x, y) || dotnnl(y, x) => Cow::Borrowed(NONL_RANGES),
-        _ => Cow::Owned(class.iter().map(|r| (r.start(), r.end())).collect()),
+        _ => Cow::Owned(class.iter().map(|r| r.start() ..= r.end()).collect()),
     })
 }
 
@@ -296,7 +301,7 @@ mod test {
                 "Expected to generate at most {} strings, but \
                  generated {}", max_distinct, generated.len());
     }
-    
+
     fn generate_values_matching_regex(pattern: &str, iterations: usize) -> HashSet<String> {
         let rx = Regex::new(pattern).unwrap();
         let mut generated = HashSet::new();

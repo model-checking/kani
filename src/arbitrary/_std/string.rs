@@ -30,7 +30,7 @@ impl Arbitrary for String {
     type Parameters = StringParam;
     type Strategy = &'static str;
 
-    /// ## Safety
+    /// ## Panics
     ///
     /// This implementation panics if the input is not a valid regex proptest
     /// can handle.

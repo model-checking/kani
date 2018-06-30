@@ -21,6 +21,7 @@ use test_runner::*;
 /// `Strategy` and `ValueTree` map adaptor.
 ///
 /// See `Strategy::prop_map()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Map<S, F> {
     pub(super) source: S,
     pub(super) fun: Arc<F>,
@@ -45,7 +46,7 @@ impl<S : Clone, F> Clone for Map<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn(S::Value) -> O>
+     F : Fn (S::Value) -> O>
 Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
     type Value = O;
@@ -83,6 +84,7 @@ ValueTree for Map<S, F> {
 /// `Strategy` and `ValueTree` map into adaptor.
 ///
 /// See `Strategy::prop_map_into()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct MapInto<S, O> {
     pub(super) source: S,
     pub(super) output: PhantomData<O>,
@@ -146,6 +148,7 @@ where
 /// `Strategy` perturbation adaptor.
 ///
 /// See `Strategy::prop_perturb()`.
+#[must_use = "strategies do nothing unless used"]
 pub struct Perturb<S, F> {
     pub(super) source: S,
     pub(super) fun: Arc<F>,
@@ -170,7 +173,7 @@ impl<S : Clone, F> Clone for Perturb<S, F> {
 }
 
 impl<S : Strategy, O : fmt::Debug,
-     F : Fn(S::Value, TestRng) -> O>
+     F : Fn (S::Value, TestRng) -> O>
 Strategy for Perturb<S, F> {
     type Tree = PerturbValueTree<S::Tree, F>;
     type Value = O;

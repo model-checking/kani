@@ -253,11 +253,9 @@ impl TestRunner {
     /// persisted before returning failure.
     ///
     /// Returns success or failure indicating why the test as a whole failed.
-    pub fn run<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
-    {
+    pub fn run<S : Strategy>(&mut self, strategy: &S,
+                             test: impl Fn (S::Value) -> TestCaseResult)
+                             -> TestRunResult<S> {
         if self.config.fork() {
             self.run_in_fork(strategy, test)
         } else {
@@ -266,19 +264,16 @@ impl TestRunner {
     }
 
     #[cfg(not(feature = "fork"))]
-    fn run_in_fork<S, F>(&mut self, _: &S, _: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
+    fn run_in_fork<S : Strategy>
+        (&mut self, _: &S, _: impl Fn (S::Value) -> TestCaseResult) -> TestRunResult<S>
     {
         unreachable!()
     }
 
     #[cfg(feature = "fork")]
-    fn run_in_fork<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
+    fn run_in_fork<S : Strategy>(&mut self, strategy: &S,
+                                 test: impl Fn (S::Value) -> TestCaseResult)
+                                 -> TestRunResult<S>
     {
         let mut test = Some(test);
 
@@ -293,7 +288,7 @@ impl TestRunner {
         let timeout = self.config.timeout();
 
         loop {
-            let child_error = rusty_fork::fork(
+            let (child_error, last_fork_file_len) = rusty_fork::fork(
                 test_name,
                 rusty_fork_id!(),
                 |cmd| {
@@ -336,13 +331,22 @@ impl TestRunner {
 
             // The child only terminates early if it outright crashes or we
             // kill it due to timeout, so add a synthetic failure to the
-            // output.
-            let error = Err(child_error.unwrap_or(
-                TestCaseError::fail("Child process was terminated abruptly \
-                                     but with successful status")));
-            replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
-                .expect("Failed to append to replay file");
-            replay.steps.push(error);
+            // output. But only do this if the length of the fork file is the
+            // same as when we last saw it, or if the child was not killed due
+            // to timeout. (This is because the child could have appended
+            // something to the file after we gave up waiting for it but before
+            // we were able to kill it).
+            if last_fork_file_len.map_or(true, |last_fork_file_len| {
+                last_fork_file_len == forkfile.borrow().as_ref().unwrap()
+                    .as_file().metadata().map(|md| md.len()).unwrap_or(0)
+            }) {
+                let error = Err(child_error.unwrap_or(
+                    TestCaseError::fail("Child process was terminated abruptly \
+                                         but with successful status")));
+                replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
+                    .expect("Failed to append to replay file");
+                replay.steps.push(error);
+            }
 
             // Bail if we've gone through too many processes in case the
             // shrinking process itself is crashing.
@@ -362,24 +366,21 @@ impl TestRunner {
             replay.steps.into_iter(), ForkOutput::empty())
     }
 
-    fn run_in_process<S, F>(&mut self, strategy: &S, test: F) -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
+    fn run_in_process<S : Strategy>
+        (&mut self, strategy: &S, test: impl Fn (S::Value) -> TestCaseResult)
+         -> TestRunResult<S>
     {
         let (replay_steps, fork_output) = init_replay(&mut self.rng);
         self.run_in_process_with_replay(
             strategy, test, replay_steps.into_iter(), fork_output)
     }
 
-    fn run_in_process_with_replay<S, F, R>
-        (&mut self, strategy: &S, test: F, mut replay: R,
+    fn run_in_process_with_replay<S : Strategy>
+        (&mut self, strategy: &S,
+         test: impl Fn (S::Value) -> TestCaseResult,
+         mut replay: impl Iterator<Item = TestCaseResult>,
          mut fork_output: ForkOutput)
         -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let old_rng = self.rng.clone();
 
@@ -425,14 +426,12 @@ impl TestRunner {
         Ok(())
     }
 
-    fn gen_and_run_case<S, F, R>
-        (&mut self, strategy: &S, f: &F,
-         replay: &mut R, fork_output: &mut ForkOutput)
+    fn gen_and_run_case<S : Strategy>
+        (&mut self, strategy: &S,
+         f: &impl Fn (S::Value) -> TestCaseResult,
+         replay: &mut impl Iterator<Item = TestCaseResult>,
+         fork_output: &mut ForkOutput)
         -> TestRunResult<S>
-    where
-        S: Strategy,
-        F: Fn(S::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let case =
             unwrap_or!(strategy.new_tree(self), msg =>
@@ -453,11 +452,10 @@ impl TestRunner {
     /// terminate the run if it runs for longer than `timeout`. However, if the
     /// test function returns but took longer than `timeout`, the test case
     /// will fail.
-    pub fn run_one<V, F>(&mut self, case: V, test: F)
+    pub fn run_one<V : ValueTree>
+        (&mut self, case: V,
+         test: impl Fn (V::Value) -> TestCaseResult)
         -> Result<bool, TestError<V::Value>>
-    where
-        V: ValueTree,
-        F: Fn(V::Value) -> TestCaseResult
     {
         self.run_one_with_replay(
             case, test,
@@ -465,13 +463,12 @@ impl TestRunner {
             &mut ForkOutput::empty())
     }
 
-    fn run_one_with_replay<V, F, R>
-        (&mut self, mut case: V, test: F, replay: &mut R, fork_output: &mut ForkOutput)
+    fn run_one_with_replay<V : ValueTree>
+        (&mut self, mut case: V,
+         test: impl Fn (V::Value) -> TestCaseResult,
+         replay: &mut impl Iterator<Item = TestCaseResult>,
+         fork_output: &mut ForkOutput)
         -> Result<bool, TestError<V::Value>>
-    where
-        V: ValueTree,
-        F: Fn(V::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let result = call_test(
             case.current(), &test,
@@ -491,14 +488,12 @@ impl TestRunner {
         }
     }
 
-    fn shrink<V, F, R>
-        (&mut self, case: &mut V, test: F, replay: &mut R,
+    fn shrink<V : ValueTree>
+        (&mut self, case: &mut V,
+         test: impl Fn (V::Value) -> TestCaseResult,
+         replay: &mut impl Iterator<Item = TestCaseResult>,
          fork_output: &mut ForkOutput)
         -> Option<Reason>
-    where
-        V: ValueTree,
-        F: Fn(V::Value) -> TestCaseResult,
-        R: Iterator<Item = TestCaseResult>,
     {
         let mut last_failure = None;
 
@@ -532,10 +527,8 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    pub fn reject_local<R>(&mut self, whence: R) -> Result<(), Reason>
-    where
-        R: Into<Reason>
-    {
+    pub fn reject_local(&mut self, whence: impl Into<Reason>)
+                        -> Result<(), Reason> {
         if self.local_rejects >= self.config.max_local_rejects {
             Err("Too many local rejects".into())
         } else {
@@ -603,14 +596,14 @@ fn init_replay(_rng: &mut TestRng) -> (iter::Empty<TestCaseResult>, ForkOutput) 
 
 #[cfg(feature = "fork")]
 fn await_child_without_timeout(child: &mut rusty_fork::ChildWrapper)
-                               -> Option<TestCaseError> {
+                               -> (Option<TestCaseError>, Option<u64>) {
     let status = child.wait().expect("Failed to wait for child process");
 
     if status.success() {
-        None
+        (None, None)
     } else {
-        Some(TestCaseError::fail(format!(
-            "Child process exited with {}", status)))
+        (Some(TestCaseError::fail(format!(
+            "Child process exited with {}", status))), None)
     }
 }
 
@@ -618,7 +611,7 @@ fn await_child_without_timeout(child: &mut rusty_fork::ChildWrapper)
 fn await_child(child: &mut rusty_fork::ChildWrapper,
                _: &mut tempfile::NamedTempFile,
                _timeout: u32)
-               -> Option<TestCaseError> {
+               -> (Option<TestCaseError>, Option<u64>) {
     await_child_without_timeout(child)
 }
 
@@ -626,7 +619,7 @@ fn await_child(child: &mut rusty_fork::ChildWrapper,
 fn await_child(child: &mut rusty_fork::ChildWrapper,
                forkfile: &mut tempfile::NamedTempFile,
                timeout: u32)
-               -> Option<TestCaseError> {
+               -> (Option<TestCaseError>, Option<u64>) {
     use std::time::Duration;
 
     if 0 == timeout {
@@ -646,10 +639,10 @@ fn await_child(child: &mut rusty_fork::ChildWrapper,
             .expect("Failed to wait for child process")
         {
             if status.success() {
-                return None;
+                return (None, None);
             } else {
-                return Some(TestCaseError::fail(format!(
-                    "Child process exited with {}", status)));
+                return (Some(TestCaseError::fail(format!(
+                    "Child process exited with {}", status))), None);
             }
         }
 
@@ -658,8 +651,8 @@ fn await_child(child: &mut rusty_fork::ChildWrapper,
         // If we've gone a full timeout period without the file growing,
         // fail the test and kill the child.
         if current_len <= last_forkfile_len {
-            return Some(TestCaseError::fail(format!(
-                "Timed out waiting for child process")));
+            return (Some(TestCaseError::fail(format!(
+                "Timed out waiting for child process"))), Some(current_len));
         } else {
             last_forkfile_len = current_len;
         }

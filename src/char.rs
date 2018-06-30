@@ -17,6 +17,7 @@
 //! characters, and `range()` and `ranges()` to select characters from
 //! inclusive ranges.
 
+use core::ops::RangeInclusive;
 use std_facade::Cow;
 
 use rand::Rng;
@@ -26,8 +27,7 @@ use strategy::*;
 use test_runner::*;
 
 /// An inclusive char range from fst to snd.
-/// TODO: replace with `std::ops::RangeInclusive<char>` once stabilized.
-type CharRange = (char, char);
+type CharRange = RangeInclusive<char>;
 
 /// A default set of characters to consider as "special" during character
 /// generation.
@@ -55,9 +55,9 @@ pub const DEFAULT_SPECIAL_CHARS: &[char] = &[
 /// characters.
 pub const DEFAULT_PREFERRED_RANGES: &[CharRange] = &[
     // ASCII printable
-    (' ', '~'), (' ', '~'), (' ', '~'), (' ', '~'), (' ', '~'),
+    ' '..='~', ' '..='~', ' '..='~', ' '..='~', ' '..='~',
     // Latin-1
-    ('\u{0040}', '\u{00ff}'),
+    '\u{0040}'..='\u{00ff}',
 ];
 
 /// Selects a random character the way `CharStrategy` does.
@@ -85,22 +85,22 @@ pub const DEFAULT_PREFERRED_RANGES: &[CharRange] = &[
 /// particular characters anyway. `ranges` is usually derived from some
 /// external property, and the fact that a range is small often means it is
 /// more interesting.
-pub fn select_char<R : Rng>(rnd: &mut R,
-                            special: &[char],
-                            preferred: &[CharRange],
-                            ranges: &[CharRange]) -> char {
+pub fn select_char(rnd: &mut impl Rng,
+                   special: &[char],
+                   preferred: &[CharRange],
+                   ranges: &[CharRange]) -> char {
     let (base, offset) = select_range_index(rnd, special, preferred, ranges);
     ::core::char::from_u32(base + offset).expect("bad character selected")
 }
 
-fn select_range_index<R : Rng>(rnd: &mut R,
-                               special: &[char],
-                               preferred: &[CharRange],
-                               ranges: &[CharRange])
-                               -> (u32, u32) {
+fn select_range_index(rnd: &mut impl Rng,
+                      special: &[char],
+                      preferred: &[CharRange],
+                      ranges: &[CharRange])
+                      -> (u32, u32) {
     fn in_range(ranges: &[CharRange], ch: char) -> Option<(u32, u32)> {
-        ranges.iter().find(|&&(lo, hi)| ch >= lo && ch <= hi).map(
-            |&(lo, _)| (lo as u32, ch as u32 - lo as u32))
+        ranges.iter().find(|r| ch >= *r.start() && ch <= *r.end()).map(
+            |r| (*r.start() as u32, ch as u32 - *r.start() as u32))
     }
 
     if !special.is_empty() && rnd.gen() {
@@ -109,23 +109,23 @@ fn select_range_index<R : Rng>(rnd: &mut R,
     }
 
     if !preferred.is_empty() && rnd.gen() {
-        let (lo, hi) = preferred[rnd.gen_range(0, preferred.len())];
+        let range = preferred[rnd.gen_range(0, preferred.len())].clone();
         if let Some(ch) = ::core::char::from_u32(
-            rnd.gen_range(lo as u32, hi as u32 + 1))
+            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1))
         {
             if let Some(ret) = in_range(ranges, ch) { return ret; }
         }
     }
 
     for _ in 0..65_536 {
-        let (lo, hi) = ranges[rnd.gen_range(0, ranges.len())];
+        let range = ranges[rnd.gen_range(0, ranges.len())].clone();
         if let Some(ch) = ::core::char::from_u32(
-            rnd.gen_range(lo as u32, hi as u32 + 1))
-        { return (lo as u32, ch as u32 - lo as u32); }
+            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1))
+        { return (*range.start() as u32, ch as u32 - *range.start() as u32); }
     }
 
     // Give up and return a character we at least know is valid.
-    (ranges[0].0 as u32, 0)
+    (*ranges[0].start() as u32, 0)
 }
 
 /// Strategy for generating `char`s.
@@ -153,6 +153,7 @@ fn select_range_index<R : Rng>(rnd: &mut R,
 /// constant or `range` function. Directly constructing a `CharStrategy` is
 /// only necessary for complex ranges or to override the default biases.
 #[derive(Debug, Clone)]
+#[must_use = "strategies do nothing unless used"]
 pub struct CharStrategy<'a> {
     special: Cow<'a, [char]>,
     preferred: Cow<'a, [CharRange]>,
@@ -183,7 +184,7 @@ impl<'a> CharStrategy<'a> {
 }
 
 const WHOLE_RANGE: &[CharRange] = &[
-    ('\x00', ::core::char::MAX)
+    '\x00' ..= ::core::char::MAX
 ];
 
 /// Creates a `CharStrategy` which picks from literally any character, with the
@@ -202,7 +203,7 @@ pub fn range(start: char, end: char) -> CharStrategy<'static> {
     CharStrategy {
         special: Cow::Borrowed(DEFAULT_SPECIAL_CHARS),
         preferred: Cow::Borrowed(DEFAULT_PREFERRED_RANGES),
-        ranges: Cow::Owned(vec![(start, end)]),
+        ranges: Cow::Owned(vec![start..=end]),
     }
 }
 
@@ -308,7 +309,7 @@ mod test {
                 let input = ranges(Cow::Owned(input_ranges.iter().map(
                     |&(lo, hi)| ::std::char::from_u32(lo).and_then(
                         |lo| ::std::char::from_u32(hi).map(
-                            |hi| (min(lo, hi), max(lo, hi))))
+                            |hi| min(lo, hi) ..= max(lo, hi)))
                         .ok_or_else(|| TestCaseError::reject("non-char")))
                     .collect::<Result<Vec<CharRange>,_>>()?));
 

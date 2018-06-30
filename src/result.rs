@@ -140,8 +140,8 @@ pub fn maybe_ok<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeOk<T, E> {
 /// that `Ok` is initially chosen.
 ///
 /// Generated values shrink to `Err`.
-pub fn maybe_ok_weighted<T : Strategy, E : Strategy, P: Into<Probability>>(
-    probability_of_ok: P, t: T, e: E) -> MaybeOk<T, E>
+pub fn maybe_ok_weighted<T : Strategy, E : Strategy>(
+    probability_of_ok: impl Into<Probability>, t: T, e: E) -> MaybeOk<T, E>
 {
     let prob = probability_of_ok.into().into();
     let (ok_weight, err_weight) = float_to_weight(prob);
@@ -169,8 +169,8 @@ pub fn maybe_err<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeErr<T, E> {
 /// that `Err` is initially chosen.
 ///
 /// Generated values shrink to `Ok`.
-pub fn maybe_err_weighted<T: Strategy, E: Strategy, P: Into<Probability>>(
-    probability_of_err: P, t: T, e: E) -> MaybeErr<T, E>
+pub fn maybe_err_weighted<T : Strategy, E : Strategy>(
+    probability_of_err: impl Into<Probability>, t: T, e: E) -> MaybeErr<T, E>
 {
     let prob = probability_of_err.into().into();
     let (err_weight, ok_weight) = float_to_weight(prob);
@@ -199,9 +199,9 @@ mod test {
     #[test]
     fn probability_defaults_to_0p5() {
         let count = count_ok_of_1000(maybe_err(Just(()), Just(())));
-        assert!(count > 450 && count < 550);
+        assert!(count > 400 && count < 600);
         let count = count_ok_of_1000(maybe_ok(Just(()), Just(())));
-        assert!(count > 450 && count < 550);
+        assert!(count > 400 && count < 600);
     }
 
     #[test]
