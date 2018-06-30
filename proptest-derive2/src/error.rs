@@ -404,19 +404,15 @@ error!(overspecified_param, E0022,
     `#[proptest(params(<type>))]` simultaneously. \
     Please pick one of those attributes.");
 
-/// Happens when `#[proptest(params..)]` is malformed.
+/// This happens when `#[proptest(params..)]` is malformed.
+/// For example, `#[proptest(params)]` is malformed. Another example is when
+/// `<type>` inside `#[proptest(params = "<type>")]` or
+/// `#[proptest(params("<type>"))]` is malformed. In other words, `<type>` is
+/// not a valid Rust type. Note that `syn` may not cover all valid Rust types.
 error!(param_malformed, E0023,
     "The attribute modifier `params` inside #[proptest(..)] must have the \
     format `#[proptest(params = \"<type>\")]` where `<type>` is a valid type \
-    in Rust. An example: `#[proptest(params = ComplexType<Foo>)]`.");
-
-/// This happens when `<type>` inside `#[proptest(params = "<type>")]` is
-/// malformed. In other words, `<type>` is not a valid Rust type.
-/// Note that `syn` may not cover all valid Rust types.
-error!(param_malformed_type, E0024,
-    "The attribute modifier `params` inside `#[proptest(..)]` is not assigned \
-    a valid Rust type. A valid example: \
-    `#[proptest(params = ComplexType<Foo>)]`.");
+    in Rust. An example: `#[proptest(params = \"ComplexType<Foo>\")]`.");
 
 /// Happens when both `#[proptest(strategy..)]` and `#[proptest(value..)]`
 /// were specified. They are mutually exclusive choices. The user can resolve
@@ -427,19 +423,13 @@ error!(overspecified_strat, E0025,
     Please pick one of those attributes.");
 
 /// Happens when `#[proptest(strategy..)]` or `#[proptest(value..)]` is
-/// malformed.
+/// malformed. For example, `<expr>` inside `#[proptest(strategy = "<expr>")]`
+/// or `#[proptest(value = "<expr>")]` is malformed. In other words, `<expr>`
+/// is not a valid Rust expression.
 error!(strategy_malformed(meta: &syn::Meta), E0026,
     "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
     format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
     expression.",
-    meta.name());
-
-/// This happens when `<expr>` inside `#[proptest(strategy = "<expr>")]`
-/// or `#[proptest(value = "<expr>")]` is malformed. In other words, `<expr>`
-/// is not a valid Rust expression.
-error!(strategy_malformed_expr(meta: &syn::Meta), E0027,
-    "The attribute modifier `{}` inside `#[proptest(..)]` is not assigned a \
-    valid Rust expression.",
     meta.name());
 
 /// Any attributes on a skipped variant has no effect - so we emit this error

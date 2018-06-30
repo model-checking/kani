@@ -8,13 +8,11 @@
 
 #![feature(attr_literals)]
 
-//#![allow(dead_code, unused_variables, unused_imports)]
-
 #[macro_use]
 extern crate proptest_derive;
 #[macro_use]
 extern crate proptest;
-use proptest::prelude::{any, any_with};
+use proptest::prelude::any_with;
 
 struct ComplexType {
     max: u64,

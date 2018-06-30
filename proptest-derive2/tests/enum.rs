@@ -1,5 +1,4 @@
 #![feature(never_type)]
-#![allow(dead_code, unreachable_code)]
 
 #[macro_use]
 extern crate proptest_derive;

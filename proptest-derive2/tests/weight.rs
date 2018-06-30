@@ -1,14 +1,8 @@
 #![feature(attr_literals)]
 
-#![allow(dead_code, unreachable_code)]
-
 #[macro_use]
 extern crate proptest_derive;
-
-#[macro_use]
 extern crate proptest;
-use proptest::prelude::any;
-use proptest::strategy::Strategy;
 
 #[derive(Debug, Arbitrary)]
 enum T1 {

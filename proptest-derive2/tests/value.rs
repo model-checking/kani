@@ -14,7 +14,6 @@
 extern crate proptest_derive;
 #[macro_use]
 extern crate proptest;
-use proptest::prelude::any;
 
 #[derive(Debug, Arbitrary)]
 struct T0 {
@@ -82,7 +81,7 @@ struct T6 {
 
 proptest! {
     #[test]
-    fn t0_fixed_fields(v in any::<T0>()) {
+    fn t0_fixed_fields(v: T0) {
         prop_assert_eq!(v.field, 42);
         prop_assert_eq!(v.bar, 24);
         prop_assert_eq!(v.baz, 48);
@@ -92,40 +91,40 @@ proptest! {
     }
 
     #[test]
-    fn t1_field_always_24(v in any::<T1>()) {
+    fn t1_field_always_24(v: T1) {
         prop_assert_eq!(v.0, 24);
     }
 
     #[test]
-    fn t2_v1_always_1337(v in any::<T2>()) {
+    fn t2_v1_always_1337(v: T2) {
         if let T2::V1 { field } = v {
             prop_assert_eq!(field, 1337);
         }
     }
 
     #[test]
-    fn t3_v1_always_7331(v in any::<T3>()) {
+    fn t3_v1_always_7331(v: T3) {
         if let T3::V1(v) = v {
             prop_assert_eq!(v, 7331);
         }
     }
 
     #[test]
-    fn t4_v1_always_1337(v in any::<T4>()) {
+    fn t4_v1_always_1337(v: T4) {
         if let T4::V1 { field } = v {
             prop_assert_eq!(field, 6);
         }
     }
 
     #[test]
-    fn t5_v1_always_7331(v in any::<T5>()) {
+    fn t5_v1_always_7331(v: T5) {
         if let T5::V1(v) = v {
             prop_assert_eq!(v, 9);
         }
     }
 
     #[test]
-    fn t6_alpha_beta(v in any::<T6>()) {
+    fn t6_alpha_beta(v: T6) {
         prop_assert_eq!(v.alpha, "alpha".to_string());
         prop_assert!(v.beta < 100);
     }

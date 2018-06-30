@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(dead_code, unused_variables, unused_imports)]
+#![allow(unused_variables)]
 
 #[macro_use]
 extern crate proptest_derive;
@@ -51,7 +51,7 @@ enum Bobby {
     //#[proptest(params(Complex), value = "A::E(1)")]
     //E(usize),
     // ^--- TODO: make this work!
-    #[proptest(params(Complex), strategy = "Just(Bobby::D(1))")]
+    #[proptest(params(Complex), strategy = "Just(Bobby::F(1))")]
     F(usize),
 }
 
