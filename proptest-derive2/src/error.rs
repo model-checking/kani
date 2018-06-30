@@ -338,22 +338,22 @@ error!(cant_set_param_and_value(item: &str), E0012,
 
 /// Happens when the form `#![proptest<..>]` is used. This will probably never
 /// happen - but just in case it does, we catch it and emit an error.
-error!(inner_attr, E0013,
+error!(continue inner_attr, E0013,
     "Inner attributes `#![proptest(..)]` are not currently supported.");
 
 /// Happens when the form `#[proptest]` is used. The form contains no
 /// information for us to process, so we disallow it.
-error!(bare_proptest_attr, E0014,
+error!(continue bare_proptest_attr, E0014,
     "Bare `#[proptest]` attributes are not allowed.");
 
 /// Happens when the form `#[proptest = <literal>)]` is used.
 /// Only the form `#[proptest(<contents>)]` is supported.
-error!(literal_set_proptest, E0015,
+error!(continue literal_set_proptest, E0015,
     "The attribute form `#[proptest = <literal>]` is not allowed.");
 
 /// Happens when `<modifier>` in `#[proptest(<modifier>)]` is a literal and
 /// not a real modifier.
-error!(immediate_literals, E0016,
+error!(continue immediate_literals, E0016,
     "Literals immediately inside `#[proptest(..)]` as in \
     `#[proptest(<lit>, ..)]` are not allowed.");
 
@@ -377,13 +377,13 @@ error!(continue unkown_modifier(modifier: &str), E0018,
     modifier);
 
 /// Happens when `#[proptest(no_params)]` is malformed.
-error!(no_params_malformed, E0019,
+error!(continue no_params_malformed, E0019,
     "The attribute modifier `no_params` inside `#[proptest(..)]` does not \
     support any further configuration and must be a plain modifier as in \
     `#[proptest(no_params)]`.");
 
 /// Happens when `#[proptest(skip)]` is malformed.
-error!(skip_malformed, E0020,
+error!(continue skip_malformed, E0020,
     "The attribute modifier `skip` inside `#[proptest(..)]` does not support \
     any further configuration and must be a plain modifier as in \
     `#[proptest(skip)]`.");
@@ -483,7 +483,7 @@ error!(no_bound_set_on_non_tyvar, E0031,
     has no effect and is redundant. Therefore it is not allowed.");
 
 /// Happens when `#[proptest(no_bound)]` is malformed.
-error!(no_bound_malformed, E0032,
+error!(continue no_bound_malformed, E0032,
     "The attribute modifier `no_bound` inside `#[proptest(..)]` does not \
     support any further configuration and must be a plain modifier as in \
     `#[proptest(no_bound)]`.");

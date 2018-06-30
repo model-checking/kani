@@ -150,12 +150,14 @@ fn parse_attributes_base(ctx: Ctx, attrs: Vec<Attribute>)
 // Internals: Initialization
 //==============================================================================
 
-type PSkip     = Option<()>;
+type PBare = Option<()>;
+
+type PSkip     = PBare;
 type PWeight   = Option<u32>;
-type PNoParams = Option<()>;
+type PNoParams = PBare;
 type PTyParams = Option<Type>;
 type PStrategy = Option<Expr>;
-type PNoBound  = Option<()>;
+type PNoBound  = PBare;
 type PAll      = (PSkip, PWeight,
                   PNoParams, PTyParams,
                   PStrategy, PStrategy,
@@ -175,7 +177,7 @@ fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>)
     // Get rid of attributes we don't care about:
     for attr in attrs.into_iter().filter(is_proptest_attr) {
         // Flatten attributes so we deal with them uniformly.
-        for meta in extract_modifiers(ctx, attr)? {
+        for meta in extract_modifiers(ctx, attr) {
             // Accumulate attributes into a form for final processing.
             state = dispatch_attribute(ctx, state, meta)?;
         }
@@ -201,22 +203,29 @@ fn is_proptest_attr(attr: &Attribute) -> bool {
 /// We do this to treat all pieces uniformly whether a single
 /// `#[proptest(..)]` was used or many. This simplifies the
 /// logic somewhat.
-fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: Attribute)
-    -> DeriveResult<Vec<Meta>>
-{
+fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: Attribute) -> Vec<Meta> {
     // Ensure we've been given an outer attribute form.
-    if !is_outer_attr(&attr) { error::inner_attr(ctx)?; }
+    if !is_outer_attr(&attr) {
+        error::inner_attr(ctx);
+    }
 
     match attr.interpret_meta() {
-        Some(Meta::Word(_)) => error::bare_proptest_attr(ctx)?,
-        Some(Meta::NameValue(_)) => error::literal_set_proptest(ctx)?,
-        Some(Meta::List(list)) => list.nested.into_iter().map(|nmi| match nmi {
-            NestedMeta::Literal(_) => error::immediate_literals(ctx),
-            // This is the only valid form.
-            NestedMeta::Meta(mi) => Ok(mi),
-        }).collect(),
+        Some(Meta::Word(_)) => error::bare_proptest_attr(ctx),
+        Some(Meta::NameValue(_)) => error::literal_set_proptest(ctx),
+        Some(Meta::List(list)) => {
+            return list.nested.into_iter().filter_map(|nmi| match nmi {
+                NestedMeta::Literal(_) => {
+                    error::immediate_literals(ctx);
+                    None
+                },
+                // This is the only valid form.
+                NestedMeta::Meta(mi) => Some(mi),
+            }).collect();
+        },
         None => panic!("TODO"),
     }
+
+    vec![]
 }
 
 /// Returns true iff the given attribute is an outer one, i.e: `#[<attr>]`.
@@ -291,8 +300,8 @@ fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
 /// Parse a no_bound attribute.
 /// Valid forms are:
 /// + `#[proptest(no_bound)]`
-fn parse_no_bound(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
-    parse_bare_modifier(ctx, &mut set.6, meta, error::no_bound_malformed)
+fn parse_no_bound(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+    parse_bare_modifier(ctx, &mut loc.6, meta, error::no_bound_malformed)
 }
 
 //==============================================================================
@@ -302,8 +311,8 @@ fn parse_no_bound(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// Parse a skip attribute.
 /// Valid forms are:
 /// + `#[proptest(skip)]`
-fn parse_skip(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
-    parse_bare_modifier(ctx, &mut set.0, meta, error::skip_malformed)
+fn parse_skip(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+    parse_bare_modifier(ctx, &mut loc.0, meta, error::skip_malformed)
 }
 
 //==============================================================================
@@ -349,8 +358,8 @@ fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// + `#[proptest(value = "<expr>")]`
 /// + `#[proptest(value("<expr>")]`
 /// + `#[proptest(value(<literal>)]`
-fn parse_value(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
-    parse_strategy_base(ctx, &mut set.5, meta)
+fn parse_value(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+    parse_strategy_base(ctx, &mut loc.5, meta)
 }
 
 /// Parses an explicit strategy.
@@ -359,8 +368,8 @@ fn parse_value(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// + `#[proptest(strategy = "<expr>")]`
 /// + `#[proptest(strategy("<expr>")]`
 /// + `#[proptest(strategy(<literal>)]`
-fn parse_strategy(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
-    parse_strategy_base(ctx, &mut set.4, meta)
+fn parse_strategy(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+    parse_strategy_base(ctx, &mut loc.4, meta)
 }
 
 /// Parses an explicit strategy. This is a helper.
@@ -442,9 +451,7 @@ fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// Parses an order to use the default Parameters type and value.
 /// Valid forms are:
 /// + `#[proptest(no_params)]`
-fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta)
-    -> DeriveResult<()>
-{
+fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     parse_bare_modifier(ctx, &mut loc.2, meta, error::no_params_malformed)
 }
 
@@ -452,23 +459,23 @@ fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta)
 // Internals: Utilities
 //==============================================================================
 
-/// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `set`.
-fn parse_bare_modifier
-    (ctx: Ctx, loc: &mut Option<()>, meta: Meta,
-     malformed: fn(Ctx) -> DeriveResult<()>)
+/// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `loc`.
+fn parse_bare_modifier(ctx: Ctx, loc: &mut PBare, meta: Meta, malformed: fn(Ctx))
     -> DeriveResult<()>
 {
     error_if_set(ctx, loc, &meta);
 
     if let Some(NormMeta::Plain) = normalize_meta(meta) {
-        ok_set(loc, ())
+        *loc = Some(());
     } else {
-        malformed(ctx)
+        malformed(ctx);
     }
+
+    Ok(())
 }
 
-fn ok_set<T>(set: &mut Option<T>, value: T) -> DeriveResult<()> {    
-    *set = Some(value);
+fn ok_set<T>(loc: &mut Option<T>, value: T) -> DeriveResult<()> {    
+    *loc = Some(value);
     Ok(())
 }
 

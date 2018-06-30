@@ -1,8 +1,12 @@
 #[macro_use]
 extern crate proptest_derive;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0016]
+// Show non-fatal:
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0016]
+                            //~| [proptest_derive, E0008]
 #[proptest(1)]
+#[proptest(skip)]
 struct T0;
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0016]

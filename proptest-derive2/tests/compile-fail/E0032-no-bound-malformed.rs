@@ -1,8 +1,11 @@
 #[macro_use]
 extern crate proptest_derive;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0032]
-#[proptest(no_bound = "...")]
+// Show non-fatal:
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0032]
+                            //~| [proptest_derive, E0007]
+#[proptest(no_bound = "...", value("TU0"))]
 struct TU0;
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0032]
