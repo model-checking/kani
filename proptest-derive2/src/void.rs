@@ -6,11 +6,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Provides the `IsUninhabited` trait. See the trait for more information.
+//! Provides the `IsUninhabited` trait.
+//!
+//! By nature, determining if a type is uninhabited or not given Rust's
+//! turing complete type system is undecidable. Furthermore, we don't even
+//! have access to all the information because we can't inspect type
+//! definitions, type macros, or projections via associated types.
+//!
+//! Any analysis we perform here is therefore incomplete but sound.
+//! That is, if we state that a type is uninhabited, it is so for sure.
+//! But we can't state thta all uninhabited types are uninhabited.
 
 use syn;
 use syn::visit;
+
 use util;
+use interp;
 
 //==============================================================================
 // Trait
@@ -108,17 +119,24 @@ impl IsUninhabited for syn::Type {
             // that it is uninhabited.
             fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
                 const KNOWN_UNINHABITED: &[&str] = &[
-                    "Infallible",
-                    "convert::Infallible",
-                    "std::convert::Infallible",
-                    "core::convert::Infallible",
-                    "::std::convert::Infallible",
-                    "::core::convert::Infallible",
+                    "std::string::ParseError",
+                    "::std::string::ParseError",
                 ];
 
                 if type_path.qself.is_none() &&
                    util::match_pathsegs(&type_path.path, KNOWN_UNINHABITED) {
                     self.set();
+                }
+            }
+
+            // An array is uninhabited iff:
+            // `[T; N]` where uninhabited(T) && N != 0
+            // We want to block decent if N == 0.
+            fn visit_type_array(&mut self, arr: &'ast syn::TypeArray) {
+                if let Some(len) = interp::eval_expr(&arr.len) {
+                    if len > 0 {
+                        self.visit_type(&arr.elem);
+                    }
                 }
             }
 

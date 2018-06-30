@@ -119,7 +119,7 @@ impl Impl {
 }
 
 fn const_ident(typ: syn::Ident) -> syn::Ident {
-    call_site_ident(&format!("IMPL_PROPTEST_ARBITRARY_FOR_{}", typ))
+    call_site_ident(&format!("_IMPL_PROPTEST_ARBITRARY_FOR_{}", typ))
 }
 
 //==============================================================================

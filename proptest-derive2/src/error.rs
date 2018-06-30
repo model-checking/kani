@@ -193,38 +193,39 @@ impl Context {
 // Messages
 //==============================================================================
 
+macro_rules! mk_err_msg {
+    ($code: ident, $msg: expr) => {
+        concat!(
+            "[proptest_derive, ", stringify!($code), "]",
+            " during #[derive(Arbitrary)]:\n",
+            $msg,
+            " Please see: https://PATH/TO/foo#", stringify!($code),
+            " for more information.")
+    }
+}
+
 /// A macro to emit an error with a code by panicing.
 macro_rules! error {
     ($error: ident, $code: ident, $msg: expr) => {
-        pub fn $error<T>(ctxt: &mut Context) -> DeriveResult<T> {
-            ctxt.fatal(concat!("[proptest_derive, ", stringify!($code),
-                               "] during #[derive(Arbitrary)]: ", $msg))
+        pub fn $error<T>(ctx: Ctx) -> DeriveResult<T> {
+            ctx.fatal(mk_err_msg!($code, $msg))
         }
     };
     (continue $error: ident, $code: ident, $msg: expr) => {
-        pub fn $error(ctxt: &mut Context) {
-            ctxt.error(concat!("[proptest_derive, ", stringify!($code),
-                               "] during #[derive(Arbitrary)]: ", $msg))
+        pub fn $error(ctx: Ctx) {
+            ctx.error(mk_err_msg!($code, $msg))
         }
     };
     ($error: ident ($($arg: ident: $arg_ty: ty),*), $code: ident,
      $msg: expr, $($fmt: tt)+) => {
-        pub fn $error<T>(ctxt: &mut Context, $($arg: $arg_ty),*) -> DeriveResult<T> {
-            ctxt.fatal(format!(
-                concat!("[proptest_derive, ", stringify!($code),
-                        "] during #[derive(Arbitrary)]: ", $msg),
-                $($fmt)+
-            ))
+        pub fn $error<T>(ctx: Ctx, $($arg: $arg_ty),*) -> DeriveResult<T> {
+            ctx.fatal(format!(mk_err_msg!($code, $msg), $($fmt)+))
         }
     };
     (continue $error: ident ($($arg: ident: $arg_ty: ty),*), $code: ident,
      $msg: expr, $($fmt: tt)+) => {
-        pub fn $error(ctxt: &mut Context, $($arg: $arg_ty),*) {
-            ctxt.fatal(format!(
-                concat!("[proptest_derive, ", stringify!($code),
-                        "] during #[derive(Arbitrary)]: ", $msg),
-                $($fmt)+
-            ))
+        pub fn $error(ctx: Ctx, $($arg: $arg_ty),*) {
+            ctx.error(format!(mk_err_msg!($code, $msg), $($fmt)+))
         }
     };
 }
@@ -233,16 +234,16 @@ macro_rules! error {
 /// that is parametric over lifetimes. Since proptest does not support
 /// such types (yet), neither can we.
 error!(has_lifetimes, E0001,
-    "Deriving on types that are parametric over lifetimes, such as: \
-    `struct Foo<'a> { bar: &'a str }` is currently not supported since \
-    proptest can not define strategies for such types.");
+    "Can't derive `Arbitrary` for types with generic lifetimes, such as: \
+    `struct Foo<'a> { bar: &'a str }`. Currently, strategies for such types \
+    are impossible to define.");
 
 /// Happens when we've been asked to derive `Arbitrary` for something
 /// that is neither an enum nor a struct. Most likely, we've been given
 /// a union type. This might be supported in the future, but not yet.
 error!(not_struct_or_enum, E0002,
     // Overspecified atm, to catch future support in syn for unions.
-    "Deriving is only possible and defined for structs and enums. \
+    "Deriving is only possible for structs and enums. \
     It is currently not defined unions.");
 
 /// Happens when a struct has at least one field that is uninhabited.
@@ -257,7 +258,7 @@ error!(uninhabited_struct, E0003,
 /// one variant that we can construct.
 error!(uninhabited_enum_with_no_variants, E0004,
     "The enum you are deriving `Arbitrary` for is uninhabited since it has no \
-    variants. An example of such an `enum` is: `enum Foo {}`. \
+    variants. An example of such an `enum` is: `enum Void {}`. \
     An uninhabited type is by definition impossible to generate.");
 
 /// Happens when an enum is uninhabited due all its variants being
@@ -305,7 +306,7 @@ error!(illegal_weight(item: &str), E0009,
 /// then that applies, and the `params` on `item` would be meaningless
 /// wherefore it is forbidden.
 error!(parent_has_param(item: &str), E0010,
-    "Can not set the associated type Parameters with either \
+    "Can not set the associated type `Parameters` of `Arbitrary` with either \
     `#[proptest(no_params)]` or `#[proptest(params(<type>)]` on {} since it \
     was set on the parent.",
     item);
@@ -323,15 +324,17 @@ error!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
 /// `#[proptest(value = <type>)]` is set together on `item`.
 ///
 /// This temporary restriction is due to the fact that we can't
-/// move parameters into function items. Once we get `-> impl Trait`,
-/// in stable it will be possible to use closures instead and this
-/// restriction can be lifted.
+/// move parameters into function items. Once we get
+/// `type Strategy = impl Trait;`, in stable it will be possible
+/// to use closures instead and this restriction can be lifted.
 error!(cant_set_param_and_value(item: &str), E0012,
     "Can not set `#[proptest(params = <type>)]` on {0} and set a value via \
     `#[proptest(value = <expr>)]` since `move || <expr>` closures can not be \
     coerced into function pointers. This is most likely a temporary \
-    restriction while `-> impl Trait` is not yet stable.",
+    restriction while `type Assoc = impl Trait;` is not yet stable.",
     item);
+
+// TODO: OBSOLETE THIS ^^^ ERROR via BoxedStrategy!
 
 /// Happens when the form `#![proptest<..>]` is used. This will probably never
 /// happen - but just in case it does, we catch it and emit an error.

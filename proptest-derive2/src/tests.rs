@@ -73,7 +73,7 @@ test! {
         struct MyUnitStruct;
     } expands to {
         #[allow(non_upper_case_globals)]
-        const IMPL_PROPTEST_ARBITRARY_FOR_MyUnitStruct : () = {
+        const _IMPL_PROPTEST_ARBITRARY_FOR_MyUnitStruct : () = {
             extern crate proptest as crate_proptest;
         impl crate_proptest::arbitrary::Arbitrary for MyUnitStruct {
             type Parameters = ();
@@ -93,7 +93,7 @@ test! {
         struct MyTupleUnitStruct();
     } expands to {
         #[allow(non_upper_case_globals)]
-        const IMPL_PROPTEST_ARBITRARY_FOR_MyTupleUnitStruct : () = {
+        const _IMPL_PROPTEST_ARBITRARY_FOR_MyTupleUnitStruct : () = {
             extern crate proptest as crate_proptest;
         impl crate_proptest::arbitrary::Arbitrary for MyTupleUnitStruct {
             type Parameters = ();
@@ -113,7 +113,7 @@ test! {
         struct MyNamedUnitStruct {}
     } expands to {
         #[allow(non_upper_case_globals)]
-        const IMPL_PROPTEST_ARBITRARY_FOR_MyNamedUnitStruct : () = {
+        const _IMPL_PROPTEST_ARBITRARY_FOR_MyNamedUnitStruct : () = {
             extern crate proptest as crate_proptest;
         impl crate_proptest::arbitrary::Arbitrary for MyNamedUnitStruct {
             type Parameters = ();

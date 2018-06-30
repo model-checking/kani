@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+/*
+*/
 extern crate compiletest_rs as ct;
 
 use std::env;
@@ -14,7 +16,7 @@ fn run_mode(src: &'static str, mode: &'static str) {
     let mut config = ct::Config::default();
 
     config.mode = mode.parse().expect("invalid mode");
-    config.target_rustcflags = Some("-L deps/target/debug/deps".to_owned());
+    config.target_rustcflags = Some("-L target/debug/deps".to_owned());
     if let Ok(name) = env::var("TESTNAME") {
         config.filter = Some(name);
     }
@@ -25,10 +27,10 @@ fn run_mode(src: &'static str, mode: &'static str) {
 
 #[test]
 fn compile_test() {
-    //run_mode("compile-fail");
+    run_mode("compile-fail", "compile-fail");
     //run_mode("run-pass");
 
     //#[cfg(not(feature = "stable"))]
-    run_mode("pretty", "ui");
-    run_mode("pretty", "pretty");
+    //run_mode("pretty", "ui");
+    //run_mode("pretty", "pretty");
 }

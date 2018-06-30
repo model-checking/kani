@@ -8,9 +8,10 @@
 
 //! Provides a parser from syn attributes to our logical model.
 
-use syn;
+use syn::{self, Meta, NestedMeta, Lit, Ident, Attribute, Expr, Type};
 
 use util;
+use interp;
 use error;
 use error::{Ctx, DeriveResult};
 
@@ -45,11 +46,11 @@ pub enum StratMode {
     /// This means that an explicit value has been provided.
     /// The result of this is to use a strategy that always
     /// returns the given value.
-    Value(syn::Expr),
+    Value(Expr),
     /// This means that an explicit strategy has been provided.
     /// This strategy will be used to generate whatever it
     /// is that the attribute was set on.
-    Strategy(syn::Expr),
+    Strategy(Expr),
 }
 
 /// The mode for the associated item `Parameters` to use.
@@ -71,7 +72,7 @@ pub enum ParamsMode {
     /// If it is specified on a child of the top level item, this
     /// entails that the given type will be added to the resultant
     /// product type.
-    Specified(syn::Type),
+    Specified(Type),
 }
 
 impl ParamsMode {
@@ -83,7 +84,7 @@ impl ParamsMode {
     /// Converts the mode to an `Option` of an `Option` of a type
     /// where the outer `Option` is `None` iff the mode wasn't set
     /// and the inner `Option` is `None` iff the mode was `Default`.
-    pub fn to_option(self) -> Option<Option<syn::Type>> {
+    pub fn to_option(self) -> Option<Option<Type>> {
         use self::ParamsMode::*;
         match self {
             Passthrough => None,
@@ -102,7 +103,7 @@ impl StratMode {
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-pub fn parse_attributes(ctx: Ctx, attrs: Vec<syn::Attribute>)
+pub fn parse_attributes(ctx: Ctx, attrs: Vec<Attribute>)
     -> DeriveResult<ParsedAttributes>
 {
     let attrs = parse_attributes_base(ctx, attrs)?;
@@ -116,7 +117,7 @@ pub fn parse_attributes(ctx: Ctx, attrs: Vec<syn::Attribute>)
 /// and returns true if we've been ordered to not set an `Arbitrary`
 /// bound on the given type variable the attributes are from,
 /// no matter what.
-pub fn has_no_bound(ctx: Ctx, attrs: Vec<syn::Attribute>) -> DeriveResult<bool> {
+pub fn has_no_bound(ctx: Ctx, attrs: Vec<Attribute>) -> DeriveResult<bool> {
     let attrs = parse_attributes_base(ctx, attrs)?;
     error::if_anything_specified(ctx, &attrs, error::TY_VAR)?;
     Ok(attrs.no_bound)
@@ -124,7 +125,7 @@ pub fn has_no_bound(ctx: Ctx, attrs: Vec<syn::Attribute>) -> DeriveResult<bool> 
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-fn parse_attributes_base(ctx: Ctx, attrs: Vec<syn::Attribute>)
+fn parse_attributes_base(ctx: Ctx, attrs: Vec<Attribute>)
     -> DeriveResult<ParsedAttributes>
 {
     let (skip, weight, no_params, ty_params, strategy, value, no_bound)
@@ -152,8 +153,8 @@ fn parse_attributes_base(ctx: Ctx, attrs: Vec<syn::Attribute>)
 type PSkip     = Option<()>;
 type PWeight   = Option<u32>;
 type PNoParams = Option<()>;
-type PTyParams = Option<syn::Type>;
-type PStrategy = Option<syn::Expr>;
+type PTyParams = Option<Type>;
+type PStrategy = Option<Expr>;
 type PNoBound  = Option<()>;
 type PAll      = (PSkip, PWeight,
                   PNoParams, PTyParams,
@@ -167,7 +168,7 @@ fn init_parse_state() -> PAll { (None, None, None, None, None, None, None) }
 // Internals: Extraction & Filtering
 //==============================================================================
 
-fn parse_accumulate(ctx: Ctx, attrs: Vec<syn::Attribute>)
+fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>)
     -> DeriveResult<PAll>
 {
     let mut state = init_parse_state();
@@ -192,7 +193,7 @@ fn parse_accumulate(ctx: Ctx, attrs: Vec<syn::Attribute>)
 /// Returns `true` iff the attribute has to do with proptest.
 /// Otherwise, the attribute is irrevant to us and we will simply
 /// ignore it in our processing.
-fn is_proptest_attr(attr: &syn::Attribute) -> bool {
+fn is_proptest_attr(attr: &Attribute) -> bool {
     util::eq_simple_path("proptest", &attr.path)
 }
 
@@ -200,36 +201,28 @@ fn is_proptest_attr(attr: &syn::Attribute) -> bool {
 /// We do this to treat all pieces uniformly whether a single
 /// `#[proptest(..)]` was used or many. This simplifies the
 /// logic somewhat.
-fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: syn::Attribute)
-    -> DeriveResult<Vec<syn::Meta>>
+fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: Attribute)
+    -> DeriveResult<Vec<Meta>>
 {
-    use syn::Meta::*;
-    use syn::NestedMeta::*;
-    use syn::MetaList;
-
     // Ensure we've been given an outer attribute form.
     if !is_outer_attr(&attr) { error::inner_attr(ctx)?; }
 
-    if let Some(meta) = attr.interpret_meta() {
-        match meta {
-            Word(_) => error::bare_proptest_attr(ctx)?,
-            NameValue(_) => error::literal_set_proptest(ctx)?,
-            List(MetaList { nested, .. }) =>
-                nested.into_iter().map(|nmi| match nmi {
-                    Literal(_) => error::immediate_literals(ctx),
-                    // This is the only valid form.
-                    Meta(mi) => Ok(mi),
-                }).collect(),
-        }
-    } else {
-        panic!("TODO");
+    match attr.interpret_meta() {
+        Some(Meta::Word(_)) => error::bare_proptest_attr(ctx)?,
+        Some(Meta::NameValue(_)) => error::literal_set_proptest(ctx)?,
+        Some(Meta::List(list)) => list.nested.into_iter().map(|nmi| match nmi {
+            NestedMeta::Literal(_) => error::immediate_literals(ctx),
+            // This is the only valid form.
+            NestedMeta::Meta(mi) => Ok(mi),
+        }).collect(),
+        None => panic!("TODO"),
     }
 }
 
 /// Returns true iff the given attribute is an outer one, i.e: `#[<attr>]`.
 /// An inner attribute is the other possibility and has the syntax `#![<attr>]`.
 /// Note that `<attr>` is a meta-variable for the contents inside.
-pub fn is_outer_attr(attr: &syn::Attribute) -> bool {
+pub fn is_outer_attr(attr: &Attribute) -> bool {
     syn::AttrStyle::Outer == attr.style
 }
 
@@ -239,9 +232,7 @@ pub fn is_outer_attr(attr: &syn::Attribute) -> bool {
 
 /// Dispatches an attribute modifier to handlers and
 /// let's them add stuff into our accumulartor.
-fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: syn::Meta)
-    -> DeriveResult<PAll>
-{
+fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> DeriveResult<PAll> {
     // TODO: revisit when we have NLL.
 
     // Dispatch table for attributes:
@@ -291,7 +282,7 @@ fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: syn::Meta)
 /// Parse a no_bound attribute.
 /// Valid forms are:
 /// + `#[proptest(no_bound)]`
-fn parse_no_bound(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+fn parse_no_bound(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
     parse_bare_modifier(ctx, &mut set.6, meta, error::no_bound_malformed)
 }
 
@@ -302,7 +293,7 @@ fn parse_no_bound(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()>
 /// Parse a skip attribute.
 /// Valid forms are:
 /// + `#[proptest(skip)]`
-fn parse_skip(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+fn parse_skip(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
     parse_bare_modifier(ctx, &mut set.0, meta, error::skip_malformed)
 }
 
@@ -312,34 +303,28 @@ fn parse_skip(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
 
 /// Parses a weight.
 /// Valid forms are:
-/// + `#[proptest(weight = <integer>)]`.
+/// + `#[proptest(weight = <integer>)]`
+/// + `#[proptest(weight = "<expr>")]`
+/// + `#[proptest(weight(<integer>))]`
+/// + `#[proptest(weight("<expr>""))]`
+///
 /// The `<integer>` must also fit within an `u32` and be unsigned.
-fn parse_weight(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     use std::u32;
-    error_if_set(ctx, &set.1, &meta)?;
+    error_if_set(ctx, &loc.1, &meta)?;
 
-    if let Some(syn::Lit::Int(lit)) = get_mnv_lit(&meta) {
-        let value = lit.value();
-        // Ensure that `val` fits within an `u32` as proptest requires that.
-        if value <= u32::MAX as u64 &&
-           is_int_suffix_unsigned(lit.suffix()) {
-            set.1 = Some(value as u32);  
-        } else {
-            error::weight_malformed(ctx, &meta)?;
-        }
+    // Convert to value if possible:
+    let value = extract_lit_expr(meta.clone())
+        // Evaluate the expression into a value:
+        .as_ref().and_then(interp::eval_expr)
+        // Ensure that `val` fits within an `u32` as proptest requires that:
+        .filter(|&value| value <= u128::from(u32::MAX))
+        .map(|value| value as u32);
+
+    if let Some(value) = value {
+        ok_set(&mut loc.1, value)
     } else {
-        error::weight_malformed(ctx, &meta)?;
-    }
-
-    Ok(())
-}
-
-/// Returns `true` iff the given type is unsigned and false otherwise.
-fn is_int_suffix_unsigned(suffix: syn::IntSuffix) -> bool {
-    use syn::IntSuffix::*;
-    match suffix {
-        U8 | U16 | U32 | U64 | U128 | Usize | None => true,
-        _ => false,
+        error::weight_malformed(ctx, &meta)
     }
 }
 
@@ -347,38 +332,43 @@ fn is_int_suffix_unsigned(suffix: syn::IntSuffix) -> bool {
 // Internals: Strategy
 //==============================================================================
 
+// FIXME: make these parsers accept the formats below!
+
 /// Parses an explicit value as a strategy.
 /// Valid forms are:
-/// + `#[proptest(value = "<expr>")]`.
-fn parse_value(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+/// + `#[proptest(value = <literal>)]`
+/// + `#[proptest(value = "<expr>")]`
+/// + `#[proptest(value("<expr>")]`
+/// + `#[proptest(value(<literal>)]`
+fn parse_value(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
     parse_strategy_base(ctx, &mut set.5, meta)
 }
 
 /// Parses an explicit strategy.
 /// Valid forms are:
-/// + `#[proptest(strategy = "<expr>")]`.
-fn parse_strategy(ctx: Ctx, set: &mut PAll, meta: syn::Meta) -> DeriveResult<()> {
+/// + `#[proptest(strategy = <literal>)]`
+/// + `#[proptest(strategy = "<expr>")]`
+/// + `#[proptest(strategy("<expr>")]`
+/// + `#[proptest(strategy(<literal>)]`
+fn parse_strategy(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
     parse_strategy_base(ctx, &mut set.4, meta)
 }
 
 /// Parses an explicit strategy. This is a helper.
 /// Valid forms are:
-/// + `#[proptest(<meta.name()> = "<expr>")]`.
-fn parse_strategy_base(ctx: Ctx, set: &mut PStrategy, meta: syn::Meta)
+/// + `#[proptest(<meta.name()> = <literal>)]`
+/// + `#[proptest(<meta.name()> = "<expr>")]`
+/// + `#[proptest(<meta.name()>("<expr>")]`
+/// + `#[proptest(<meta.name()>(<literal>)]`
+fn parse_strategy_base(ctx: Ctx, loc: &mut PStrategy, meta: Meta)
     -> DeriveResult<()>
 {
-    error_if_set(ctx, &set, &meta)?;
-
-    if let Some(lit) = get_str_lit(&meta) {
-        if let Ok(expr) = syn::parse_str(&lit) {
-            *set = Some(expr);
-        } else {
-            error::strategy_malformed_expr(ctx, &meta)?;
-        }
+    error_if_set(ctx, &loc, &meta)?;
+    if let Some(expr) = extract_lit_expr(meta.clone()) {
+        ok_set(loc, expr)
     } else {
-        error::strategy_malformed(ctx, &meta)?;
+        error::strategy_malformed(ctx, &meta)
     }
-    Ok(())
 }
 
 /// Combines any parsed explicit strategy and value into a single value
@@ -416,42 +406,37 @@ fn parse_params_mode(ctx: Ctx, no_params: PNoParams, ty_params: PTyParams)
 ///
 /// Valid forms are:
 /// + `#[proptest(params(<type>)]`
+/// + `#[proptest(params("<type>")]`
 /// + `#[proptest(params = "<type>"]`
 ///
 /// The latter form is required for more complex types.
-fn parse_params(ctx: Ctx, set: &mut PAll, meta: syn::Meta)
-    -> DeriveResult<()>
-{
-    let set = &mut set.3;
+fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+    let loc = &mut loc.3;
+    error_if_set(ctx, &loc, &meta)?;
 
-    error_if_set(ctx, &set, &meta)?;
-
-    if let Some(lit) = get_str_lit(&meta) {
-        // Form is: `#[proptest(params = "<type>"]`.
-        if let Ok(ty) = syn::parse_str(&lit) {
-            *set = Some(ty);
-        } else {
-            error::param_malformed_type(ctx)?;
-        }
-    } else if let Some(ident) = get_nested_metas(meta)
-                                .and_then(util::match_singleton)
-                                .and_then(get_nmw) {
+    let typ = match normalize_meta(meta) {
         // Form is: `#[proptest(params(<type>)]`.
-        *set = Some(ident_to_type(ident));
-    } else {
-        error::param_malformed(ctx)?;
-    }
+        Some(NormMeta::Word(ident)) => Some(ident_to_type(ident)),
+        // Form is: `#[proptest(params = "<type>"]` or,
+        // Form is: `#[proptest(params("<type>")]`..
+        Some(NormMeta::Lit(Lit::Str(lit))) => lit.parse().ok(),
+        _ => None,
+    };
 
-    Ok(())
+    if let Some(typ) = typ {
+        ok_set(loc, typ)
+    } else {
+        error::param_malformed(ctx)
+    }
 }
 
 /// Parses an order to use the default Parameters type and value.
 /// Valid forms are:
 /// + `#[proptest(no_params)]`
-fn parse_no_params(ctx: Ctx, set: &mut PAll, meta: syn::Meta)
+fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta)
     -> DeriveResult<()>
 {
-    parse_bare_modifier(ctx, &mut set.2, meta, error::no_params_malformed)
+    parse_bare_modifier(ctx, &mut loc.2, meta, error::no_params_malformed)
 }
 
 //==============================================================================
@@ -460,62 +445,80 @@ fn parse_no_params(ctx: Ctx, set: &mut PAll, meta: syn::Meta)
 
 /// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `set`.
 fn parse_bare_modifier
-    (ctx: Ctx, set: &mut Option<()>, meta: syn::Meta,
+    (ctx: Ctx, loc: &mut Option<()>, meta: Meta,
      malformed: fn(Ctx) -> DeriveResult<()>)
     -> DeriveResult<()>
 {
-    error_if_set(ctx, set, &meta)?;
-    if let syn::Meta::Word(_) = meta {
-        *set = Some(());
-        Ok(())
+    error_if_set(ctx, loc, &meta)?;
+    if let Some(NormMeta::Plain) = normalize_meta(meta) {
+        ok_set(loc, ())
     } else {
         malformed(ctx)
     }
 }
 
+fn ok_set<T>(set: &mut Option<T>, value: T) -> DeriveResult<()> {    
+    *set = Some(value);
+    Ok(())
+}
+
 /// Emits a "set again" error iff the given option `.is_some()`.
-fn error_if_set<T>(ctx: Ctx, set: &Option<T>, meta: &syn::Meta)
+fn error_if_set<T>(ctx: Ctx, set: &Option<T>, meta: &Meta)
     -> DeriveResult<()>
 {
     if set.is_some() { error::set_again(ctx, meta)?; }
     Ok(())
 }
 
-fn get_str_lit(meta: &syn::Meta) -> Option<String> {
-    if let syn::Lit::Str(lit) = get_mnv_lit(&meta)? {
-        Some(lit.value())
-    } else {
-        None
-    }
+/// Constructs a type out of an identifier.
+fn ident_to_type(ident: Ident) -> Type {
+    Type::Path(syn::TypePath { qself: None, path: ident.into() })
 }
 
-fn get_mnv_lit(meta: &syn::Meta) -> Option<&syn::Lit> {
-    if let syn::Meta::NameValue(syn::MetaNameValue { lit, .. }) = meta {
+/// Extract a `lit` in `NormMeta::Lit(<lit>)`.
+fn extract_lit(meta: Meta) -> Option<Lit> {
+    if let NormMeta::Lit(lit) = normalize_meta(meta)? {
         Some(lit)
     } else {
         None
     }
 }
 
-fn get_nmw(meta: syn::NestedMeta) -> Option<syn::Ident> {
-    if let syn::NestedMeta::Meta(syn::Meta::Word(ident)) = meta {
-        Some(ident)
-    } else {
-        None
+/// Extract expression out of meta if possible.
+fn extract_lit_expr(meta: Meta) -> Option<Expr> {
+    match extract_lit(meta.clone()) {
+        Some(Lit::Str(lit)) => lit.parse().ok(),
+        Some(Lit::Int(lit)) => Some(
+            Expr::from(syn::ExprLit { attrs: vec![], lit: lit.into() })
+        ),
+        _ => None,
     }
 }
 
-fn get_nested_metas(meta: syn::Meta)
-    -> Option<syn::punctuated::Punctuated<syn::NestedMeta, Token![,]>>
-{
-    if let syn::Meta::List(syn::MetaList { nested, .. }) = meta {
-        Some(nested)
-    } else {
-        None
-    }
+/// Normalized `Meta` into all the forms we will possibly accept.
+#[derive(Debug)]
+enum NormMeta {
+    /// Accepts: `#[proptest(<word>)]`
+    Plain,
+    /// Accepts: `#[proptest(<word> = <lit>)]` and `#[proptest(<word>(<lit>))]`
+    Lit(Lit),
+    /// Accepts: `#[proptest(<word>(<word>))`.
+    Word(Ident)
 }
 
-/// Constructs a type out of an identifier.
-fn ident_to_type(ident: syn::Ident) -> syn::Type {
-    syn::Type::Path(syn::TypePath { qself: None, path: ident.into() })
+/// Normalize a `meta: Meta` into the forms accepted in `#[proptest(<meta>)]`.
+fn normalize_meta(meta: Meta) -> Option<NormMeta> {
+    Some(match meta {
+        Meta::Word(_) => NormMeta::Plain,
+        Meta::NameValue(nv) => NormMeta::Lit(nv.lit),
+        Meta::List(ml) => if let Some(nm) = util::match_singleton(ml.nested) {
+            match nm {
+                NestedMeta::Literal(lit) => NormMeta::Lit(lit),
+                NestedMeta::Meta(Meta::Word(word)) => NormMeta::Word(word),
+                _ => return None
+            }
+        } else {
+            return None
+        },
+    })
 }

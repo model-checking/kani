@@ -66,7 +66,8 @@ fn is_path_simple(path: &syn::Path) -> bool {
 
 /// Returns true iff lhs matches the rhs.
 fn eq_simple_pathseg(lhs: &str, rhs: &CommaPS) -> bool {
-    lhs.split("::").eq(rhs.iter().map(|ps| ps.ident.to_string()))
+    lhs.split("::").filter(|s| !s.trim().is_empty())
+       .eq(rhs.iter().map(|ps| ps.ident.to_string()))
 }
 
 /// Returns true iff lhs matches the given simple Path.
@@ -126,7 +127,8 @@ pub fn is_phantom_data(path: &syn::Path) -> bool {
 
 /// Extracts a simple non-global path of length 1.
 pub fn extract_simple_path<'a>(path: &'a syn::Path) -> Option<&'a syn::Ident> {
-    filter(match_singleton(&path.segments), |_| !path.global())
+    match_singleton(&path.segments)
+        .filter(|_| !path.global())
         .map(|f| &f.ident)
 }
 
@@ -140,12 +142,5 @@ where
     I: IntoIterator<Item = T>,
 {
     let mut it = it.into_iter();
-    filter(it.next(), |_| it.next().is_none())
-}
-
-/// A temporary solution until Option::filter is stabilized.
-/// TODO: replace once stabilized!
-fn filter<T, P: FnOnce(&T) -> bool>
-    (option: Option<T>, predicate: P) -> Option<T> {
-    option.and_then(|x| if predicate(&x) { Some(x) } else { None })
+    it.next().filter(|_| it.next().is_none())
 }

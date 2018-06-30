@@ -34,6 +34,7 @@ extern crate syn;
 extern crate quote;
 
 mod util;
+mod interp;
 mod void;
 mod error;
 mod use_tracking;
