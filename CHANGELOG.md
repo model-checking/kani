@@ -1,3 +1,11 @@
+## Unreleased
+
+### New Additions
+
+- Macros which previously accepted `pattern in strategy` syntax to specify
+  arguments now also accept `pattern: type` syntax as shorthand for
+  `pattern in any::<type>()`.
+
 ## 0.8.1
 
 ### New Additions
