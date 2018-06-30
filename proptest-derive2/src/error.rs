@@ -366,13 +366,13 @@ error!(continue set_again(meta: &syn::Meta), E0017,
 
 /// Happens when `<modifier>` in `#[proptest(<modifier>)]` is unknown to
 /// us but we can make an educated guess as to what the user meant.
-error!(did_you_mean(found: &str, expected: &str), E0018,
+error!(continue did_you_mean(found: &str, expected: &str), E0018,
     "Unknown attribute modifier `{}` inside #[proptest(..)] is not allowed. \
     Did you mean to use `{}` instead?",
     found, expected);
 
 /// Happens when `<modifier>` in `#[proptest(<modifier>)]` is unknown to us.
-error!(unkown_modifier(modifier: &str), E0018,
+error!(continue unkown_modifier(modifier: &str), E0018,
     "Unknown attribute modifier `{}` inside `#[proptest(..)]` is not allowed.",
     modifier);
 

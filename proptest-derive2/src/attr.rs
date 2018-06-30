@@ -244,28 +244,18 @@ fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> DeriveResult<PAll>
         let name = name.as_ref();
         match name {
             // Valid modifiers:
-            "skip"          => parse_skip,
-            "w" | "weight"  => parse_weight,
-            "no_params"     => parse_no_params,
-            "params"        => parse_params,
-            "strategy"      => parse_strategy,
-            "value"         => parse_value,
-            "no_bound"      => parse_no_bound,
+            "skip" => parse_skip,
+            "w" | "weight" => parse_weight,
+            "no_params" => parse_no_params,
+            "params" => parse_params,
+            "strategy" => parse_strategy,
+            "value" => parse_value,
+            "no_bound" => parse_no_bound,
             // Invalid modifiers:
-            "no_bounds"     => error::did_you_mean(ctx, name, "no_bound")?,
-            "weights" |
-            "weighted"      => error::did_you_mean(ctx, name, "weight")?,
-            "strat" |
-            "strategies"    => error::did_you_mean(ctx, name, "strategy")?,
-            "values" |
-            "valued" |
-            "fix" |
-            "fixed"         => error::did_you_mean(ctx, name, "value")?,
-            "param" |
-            "parameters"    => error::did_you_mean(ctx, name, "params")?,
-            "no_param" |
-            "no_parameters" => error::did_you_mean(ctx, name, "no_params")?,
-            modifier        => error::unkown_modifier(ctx, modifier)?,
+            name => {
+                dispatch_unknown_mod(ctx, name);
+                return Ok(acc);
+            },
         }
     };
 
@@ -273,6 +263,25 @@ fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> DeriveResult<PAll>
     parser(ctx, &mut acc, meta)?;
 
     Ok(acc)
+}
+
+fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
+    match name {
+        "no_bounds" =>
+            error::did_you_mean(ctx, name, "no_bound"),
+        "weights" | "weighted" =>
+            error::did_you_mean(ctx, name, "weight"),
+        "strat" | "strategies" =>
+            error::did_you_mean(ctx, name, "strategy"),
+        "values" | "valued" | "fix" | "fixed" =>
+            error::did_you_mean(ctx, name, "value"),
+        "param" | "parameters" =>
+            error::did_you_mean(ctx, name, "params"),
+        "no_param" | "no_parameters" =>
+            error::did_you_mean(ctx, name, "no_params"),
+        name =>
+            error::unkown_modifier(ctx, name),
+    }
 }
 
 //==============================================================================

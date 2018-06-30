@@ -63,9 +63,13 @@ enum T9 {
     V0(u8),
 }
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0018]
+// Show that E0018 is non-fatal.
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0018]
+                            //~| [proptest_derive, E0011]
 #[proptest(parameters = "u8")]
 enum T10 {
+    #[proptest(params = "u8")]
     V0(u8),
 }
 
