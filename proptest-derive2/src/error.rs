@@ -482,7 +482,7 @@ error!(params_on_unit_struct, E0030,
 
 /// Occurs when `#[proptest(no_bound)]` is specified
 /// on something that is not a type variable.
-error!(no_bound_set_on_non_tyvar, E0031,
+error!(continue no_bound_set_on_non_tyvar, E0031,
     "Setting `#[proptest(no_bound)]` on something that is not a type variable \
     has no effect and is redundant. Therefore it is not allowed.");
 

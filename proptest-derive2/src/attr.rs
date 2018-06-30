@@ -108,7 +108,7 @@ pub fn parse_attributes(ctx: Ctx, attrs: Vec<Attribute>)
 {
     let attrs = parse_attributes_base(ctx, attrs)?;
     if attrs.no_bound {
-        error::no_bound_set_on_non_tyvar(ctx)?;
+        error::no_bound_set_on_non_tyvar(ctx);
     }
     Ok(attrs)
 }
@@ -502,7 +502,7 @@ fn extract_lit(meta: Meta) -> Option<Lit> {
 
 /// Extract expression out of meta if possible.
 fn extract_lit_expr(meta: Meta) -> Option<Expr> {
-    match extract_lit(meta.clone()) {
+    match extract_lit(meta) {
         Some(Lit::Str(lit)) => lit.parse().ok(),
         Some(Lit::Int(lit)) => Some(
             Expr::from(syn::ExprLit { attrs: vec![], lit: lit.into() })

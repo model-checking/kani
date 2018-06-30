@@ -7,9 +7,12 @@ struct T0<T> {
     field: ::std::marker::PhantomData<T>,
 }
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0031]
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0031]
+                            //~| [proptest_derive, E0008]
 struct T1<T> {
     #[proptest(no_bound)]
+    #[proptest(skip)]
     field: ::std::marker::PhantomData<T>,
 }
 
