@@ -222,7 +222,7 @@ fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: Attribute) -> Vec<Meta> {
                 NestedMeta::Meta(mi) => Some(mi),
             }).collect();
         },
-        None => panic!("TODO"),
+        None => error::no_interp_meta(ctx),
     }
 
     vec![]

@@ -414,6 +414,10 @@ error!(param_malformed, E0023,
     format `#[proptest(params = \"<type>\")]` where `<type>` is a valid type \
     in Rust. An example: `#[proptest(params = \"ComplexType<Foo>\")]`.");
 
+/// Happens when syn can't interpret <tts> in `#[proptest <tts>]`.
+error!(continue no_interp_meta, E0024,
+    "The tokens `<tts>` in #[proptest <tts>] do not make for a valid attribute.");
+
 /// Happens when both `#[proptest(strategy..)]` and `#[proptest(value..)]`
 /// were specified. They are mutually exclusive choices. The user can resolve
 /// this by picking one.
