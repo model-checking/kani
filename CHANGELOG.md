@@ -6,6 +6,9 @@
   arguments now also accept `pattern: type` syntax as shorthand for
   `pattern in any::<type>()`.
 
+- Closure-style `proptest!` invocation no longer requires the body to use block
+  syntax.
+
 ## 0.8.1
 
 ### New Additions

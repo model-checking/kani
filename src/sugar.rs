@@ -46,7 +46,7 @@ use std_facade::fmt;
 /// ```
 ///
 /// You can also use the normal argument syntax `pattern: type` as in:
-/// 
+///
 /// ```rust
 /// #[macro_use] extern crate proptest;
 ///
@@ -126,7 +126,6 @@ use std_facade::fmt;
 ///   let big_struct = very_expensive_function();
 ///
 ///   // But now can run multiple tests without needing to build it every time.
-///   // Braces around the test body are currently required.
 ///   proptest!(|(x in 0u32..42u32, y in 1000u32..100000u32)| {
 ///     // Test stuff
 ///   });
@@ -190,25 +189,25 @@ macro_rules! proptest {
           fn $test_name($($arg)+) $body)*
     } };
 
-    (|($($parm:pat in $strategy:expr),+)| $body:block) => { {
+    (|($($parm:pat in $strategy:expr),+)| $body:expr) => { {
         let mut config = $crate::test_runner::Config::default();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body)
     } };
 
-    (move |($($parm:pat in $strategy:expr),+)| $body:block) => { {
+    (move |($($parm:pat in $strategy:expr),+)| $body:expr) => { {
         let mut config = $crate::test_runner::Config::default();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY config ($($parm in $strategy),+) [move] $body)
     } };
 
-    (|($($arg:tt)+)| $body:block) => { {
+    (|($($arg:tt)+)| $body:expr) => { {
         let mut config = $crate::test_runner::Config::default();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY2 config ($($arg)+) [] $body);
     } };
 
-    (move |($($arg:tt)+)| $body:block) => { {
+    (move |($($arg:tt)+)| $body:expr) => { {
         let mut config = $crate::test_runner::Config::default();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY2 config ($($arg)+) [move] $body);
@@ -453,7 +452,7 @@ macro_rules! prop_oneof {
 ///
 /// This form is simply sugar around making a tuple and then calling `prop_map`
 /// on it. You can also use `arg: type` as in `proptest! { .. }`:
-/// 
+///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
 /// # #[macro_use] extern crate proptest;
@@ -833,7 +832,7 @@ macro_rules! proptest_helper {
         (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
     };
     // build a property testing block that when executed, executes the full property test.
-    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) [$($mod:tt)*] $body:block) => {{
+    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) [$($mod:tt)*] $body:expr) => {{
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
         let names = proptest_helper!(@_WRAPSTR ($($parm),*));
@@ -853,7 +852,7 @@ macro_rules! proptest_helper {
         }
     }};
     // build a property testing block that when executed, executes the full property test.
-    (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:block) => {{
+    (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:expr) => {{
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
         let names = proptest_helper!(@_EXT _STR ($($arg)*));
@@ -1396,6 +1395,11 @@ mod closure_tests {
         proptest!(|(_ in 0..1)| {
             panic!()
         });
+    }
+
+    #[test]
+    fn accepts_unblocked_syntax() {
+        proptest!(|(x in 0u32..10, y in 10u32..20)| assert!(x < y));
     }
 }
 
