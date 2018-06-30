@@ -94,69 +94,70 @@ impl IsUninhabited for syn::Field {
 
 impl IsUninhabited for syn::Type {
     fn is_uninhabited(&self) -> bool {
-        struct Uninhabited(bool);
-        impl Uninhabited {
-            fn set(&mut self) { self.0 = true; }
-        }
-
-        // We are more strict than Rust is.
-        // Our notion of uninhabited is if the type is generatable or not.
-        // The second a type like *const ! is dereferenced you have UB.
-
-        impl<'ast> visit::Visit<'ast> for Uninhabited {
-            //------------------------------------------------------------------
-            // If we get to one of these we have a knowably uninhabited type:
-            //------------------------------------------------------------------
-
-            // The ! (never) type is obviously uninhabited:
-            fn visit_type_never(&mut self, _: &'ast syn::TypeNever) {
-                self.set();
-            }
-
-            // A path is uninhabited if we get one we know is uninhabited.
-            // Even if `T` in `<T as Trait>::Item` is uninhabited, the
-            // associated item may be inhabited, so we can't say for sure
-            // that it is uninhabited.
-            fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
-                const KNOWN_UNINHABITED: &[&str] = &[
-                    "std::string::ParseError",
-                    "::std::string::ParseError",
-                ];
-
-                if type_path.qself.is_none() &&
-                   util::match_pathsegs(&type_path.path, KNOWN_UNINHABITED) {
-                    self.set();
-                }
-            }
-
-            // An array is uninhabited iff:
-            // `[T; N]` where uninhabited(T) && N != 0
-            // We want to block decent if N == 0.
-            fn visit_type_array(&mut self, arr: &'ast syn::TypeArray) {
-                if let Some(len) = interp::eval_expr(&arr.len) {
-                    if len > 0 {
-                        self.visit_type(&arr.elem);
-                    }
-                }
-            }
-
-            //------------------------------------------------------------------
-            // These are here to block decent:
-            //------------------------------------------------------------------
-
-            // An fn(I) -> O is never uninhabited even if I or O are:
-            fn visit_type_bare_fn(&mut self, _: &'ast syn::TypeBareFn) {}
-
-            // A macro may transform the inner type in ways we can't predict:
-            fn visit_macro(&mut self, _: &'ast syn::Macro) {}
-
-            // Both of these could be, but type is anonymous:
-            fn visit_type_impl_trait(&mut self, _: &'ast syn::TypeImplTrait) {}
-            fn visit_type_trait_object(&mut self, _: &'ast syn::TypeTraitObject) {}
-        }
-
         let mut uninhabited = Uninhabited(false);
         visit::visit_type(&mut uninhabited, &self);
         uninhabited.0
     }
+}
+
+/// Tracks uninhabitedness.
+struct Uninhabited(bool);
+
+impl Uninhabited {
+    /// Set to uninhabited.
+    fn set(&mut self) { self.0 = true; }
+}
+
+// We are more strict than Rust is.
+// Our notion of uninhabited is if the type is generatable or not.
+// The second a type like *const ! is dereferenced you have UB.
+
+impl<'ast> visit::Visit<'ast> for Uninhabited {
+    //------------------------------------------------------------------
+    // If we get to one of these we have a knowably uninhabited type:
+    //------------------------------------------------------------------
+
+    // The ! (never) type is obviously uninhabited:
+    fn visit_type_never(&mut self, _: &'ast syn::TypeNever) {
+        self.set();
+    }
+
+    // A path is uninhabited if we get one we know is uninhabited.
+    // Even if `T` in `<T as Trait>::Item` is uninhabited, the associated item
+    // may be inhabited, so we can't say for sure that it is uninhabited.
+    fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
+        const KNOWN_UNINHABITED: &[&str] = &[
+            "std::string::ParseError",
+            "::std::string::ParseError",
+        ];
+
+        if type_path.qself.is_none() &&
+            util::match_pathsegs(&type_path.path, KNOWN_UNINHABITED) {
+            self.set();
+        }
+    }
+
+    // An array is uninhabited iff: `[T; N]` where uninhabited(T) && N != 0
+    // We want to block decent if N == 0.
+    fn visit_type_array(&mut self, arr: &'ast syn::TypeArray) {
+        if let Some(len) = interp::eval_expr(&arr.len) {
+            if len > 0 {
+                self.visit_type(&arr.elem);
+            }
+        }
+    }
+
+    //------------------------------------------------------------------
+    // These are here to block decent:
+    //------------------------------------------------------------------
+
+    // An fn(I) -> O is never uninhabited even if I or O are:
+    fn visit_type_bare_fn(&mut self, _: &'ast syn::TypeBareFn) {}
+
+    // A macro may transform the inner type in ways we can't predict:
+    fn visit_macro(&mut self, _: &'ast syn::Macro) {}
+
+    // Both of these could be, but type is anonymous:
+    fn visit_type_impl_trait(&mut self, _: &'ast syn::TypeImplTrait) {}
+    fn visit_type_trait_object(&mut self, _: &'ast syn::TypeTraitObject) {}
 }
