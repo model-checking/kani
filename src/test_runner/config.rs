@@ -308,6 +308,14 @@ impl Config {
     pub fn timeout(&self) -> u32 {
         0
     }
+
+    // Used by macros to force the config to be owned without depending on
+    // certain traits being `use`d.
+    #[allow(missing_docs)]
+    #[doc(hidden)]
+    pub fn __sugar_to_owned(&self) -> Self {
+        self.clone()
+    }
 }
 
 impl Default for Config {

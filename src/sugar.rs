@@ -100,15 +100,19 @@ use std_facade::fmt;
 /// ## Closure-Style Invocation
 ///
 /// As of proptest 0.8.1, an alternative, "closure-style" invocation is
-/// supported. These make it possible to run multiple tests that require some
-/// expensive setup process. Note that the "fork" and "timeout" features are
-/// _not_ supported in closure style. There is currently no way to specify a
-/// custom configuration for closure style.
+/// supported. In this form, `proptest!` is a function-like macro taking a
+/// closure-esque argument. This makes it possible to run multiple tests that
+/// require some expensive setup process. Note that the "fork" and "timeout"
+/// features are _not_ supported in closure style.
+///
+/// To use a custom configuration, pass the `Config` object as a first
+/// argument.
 ///
 /// ### Example
 ///
 /// ```
 /// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// #[derive(Debug)]
 /// struct BigStruct { /* Lots of fields ... */ }
@@ -126,6 +130,8 @@ use std_facade::fmt;
 ///   let big_struct = very_expensive_function();
 ///
 ///   // But now can run multiple tests without needing to build it every time.
+///   // Note the extra parentheses around the arguments are currently
+///   // required.
 ///   proptest!(|(x in 0u32..42u32, y in 1000u32..100000u32)| {
 ///     // Test stuff
 ///   });
@@ -133,6 +139,11 @@ use std_facade::fmt;
 ///   // `move` closures are also supported
 ///   proptest!(move |(x in 0u32..42u32)| {
 ///     // Test other stuff
+///   });
+///
+///   // You can pass a custom configuration as the first argument
+///   proptest!(ProptestConfig::with_cases(1000), |(x: i32)| {
+///     // Test more stuff
 ///   });
 /// }
 /// #
@@ -189,26 +200,50 @@ macro_rules! proptest {
           fn $test_name($($arg)+) $body)*
     } };
 
-    (|($($parm:pat in $strategy:expr),+)| $body:expr) => { {
-        let mut config = $crate::test_runner::Config::default();
+    (|($($parm:pat in $strategy:expr),+)| $body:expr) => {
+        proptest!(
+            $crate::test_runner::Config::default(),
+            |($($parm in $strategy),+)| $body)
+    };
+
+    (move |($($parm:pat in $strategy:expr),+)| $body:expr) => {
+        proptest!(
+            $crate::test_runner::Config::default(),
+            move |($($parm in $strategy),+)| $body)
+    };
+
+    (|($($arg:tt)+)| $body:expr) => {
+        proptest!(
+            $crate::test_runner::Config::default(),
+            |($($arg)+)| $body)
+    };
+
+    (move |($($arg:tt)+)| $body:expr) => {
+        proptest!(
+            $crate::test_runner::Config::default(),
+            move |($($arg)+)| $body)
+    };
+
+    ($config:expr, |($($parm:pat in $strategy:expr),+)| $body:expr) => { {
+        let mut config = $config.__sugar_to_owned();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body)
     } };
 
-    (move |($($parm:pat in $strategy:expr),+)| $body:expr) => { {
-        let mut config = $crate::test_runner::Config::default();
+    ($config:expr, move |($($parm:pat in $strategy:expr),+)| $body:expr) => { {
+        let mut config = $config.__sugar_to_owned();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY config ($($parm in $strategy),+) [move] $body)
     } };
 
-    (|($($arg:tt)+)| $body:expr) => { {
-        let mut config = $crate::test_runner::Config::default();
+    ($config:expr, |($($arg:tt)+)| $body:expr) => { {
+        let mut config = $config.__sugar_to_owned();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY2 config ($($arg)+) [] $body);
     } };
 
-    (move |($($arg:tt)+)| $body:expr) => { {
-        let mut config = $crate::test_runner::Config::default();
+    ($config:expr, move |($($arg:tt)+)| $body:expr) => { {
+        let mut config = $config.__sugar_to_owned();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY2 config ($($arg)+) [move] $body);
     } };
@@ -1400,6 +1435,17 @@ mod closure_tests {
     #[test]
     fn accepts_unblocked_syntax() {
         proptest!(|(x in 0u32..10, y in 10u32..20)| assert!(x < y));
+    }
+
+    #[test]
+    fn accepts_custom_config() {
+        let conf = ::test_runner::Config::default();
+
+        proptest!(conf, |(x in 0u32..10, y in 10u32..20)| assert!(x < y));
+        proptest!(&conf, |(x in 0u32..10, y in 10u32..20)| assert!(x < y));
+        proptest!(conf, move |(x in 0u32..10, y in 10u32..20)| assert!(x < y));
+        proptest!(conf, |(_x: u32, _y: u32)| { });
+        proptest!(conf, move |(_x: u32, _y: u32)| { });
     }
 }
 

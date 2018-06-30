@@ -9,6 +9,8 @@
 - Closure-style `proptest!` invocation no longer requires the body to use block
   syntax.
 
+- Closure-style `proptest!` invocation now accepts custom configurations.
+
 ## 0.8.1
 
 ### New Additions
