@@ -18,8 +18,7 @@ use std_facade::fmt;
 ///
 /// Each function will be wrapped in a function which sets up a `TestRunner`,
 /// and then invokes the function body with inputs generated according to the
-/// strategies. Note that the inputs are borrowed from the test runner, so if
-/// they are not `Copy`, you will need to use `ref` with each parameter name.
+/// strategies.
 ///
 /// ### Example
 ///
@@ -34,12 +33,10 @@ use std_facade::fmt;
 ///     prop_assert!(a + b <= 18);
 ///   }
 ///
-///   // Note the `ref a` and `ref b` --- `String` is not `Copy`,
-///   // so we can't take ownership implicitly.
 ///   # /*
 ///   #[test]
 ///   # */
-///   fn test_string_concat(ref a in ".*", ref b in ".*") {
+///   fn test_string_concat(a in ".*", b in ".*") {
 ///     let cat = format!("{}{}", a, b);
 ///     prop_assert_eq!(a.len() + b.len(), cat.len());
 ///   }
@@ -47,6 +44,35 @@ use std_facade::fmt;
 /// #
 /// # fn main() { test_addition(); test_string_concat(); }
 /// ```
+///
+/// You can also use the normal argument syntax `pattern: type` as in:
+/// 
+/// ```rust
+/// #[macro_use] extern crate proptest;
+///
+/// proptest! {
+///   # /*
+///   #[test]
+///   # */
+///   fn addition_is_commutative(a: u8, b: u8) {
+///     prop_assert_eq!(a as u16 + b as u16, b as u16 + a as u16);
+///   }
+///
+///   # /*
+///   #[test]
+///   # */
+///   fn test_string_concat(a in ".*", b: String) {
+///     let cat = format!("{}{}", a, b);
+///     prop_assert_eq!(a.len() + b.len(), cat.len());
+///   }
+/// }
+/// #
+/// # fn main() { addition_is_commutative(); test_string_concat(); }
+/// ```
+///
+/// As you can see, you can mix `pattern: type` and `pattern in expr`.
+/// Due to limitations in `macro_rules!`, `pattern: type` does not work in
+/// all circumstances. In such a case, use `(pattern): type` instead.
 ///
 /// To override the default configuration, you can start the `proptest!` block
 /// with `#![proptest_config(expr)]`, where `expr` is an expression that
@@ -130,6 +156,21 @@ macro_rules! proptest {
             }
         )*
     };
+    (#![proptest_config($config:expr)]
+     $(
+        $(#[$meta:meta])*
+        fn $test_name:ident($($arg:tt)+) $body:block
+    )*) => {
+        $(
+            $(#[$meta])*
+            fn $test_name() {
+                let mut config = $config.clone();
+                config.test_name = Some(
+                    concat!(module_path!(), "::", stringify!($test_name)));
+                proptest_helper!(@_BODY2 config ($($arg)+) [] $body);
+            }
+        )*
+    };
 
     ($(
         $(#[$meta:meta])*
@@ -138,6 +179,15 @@ macro_rules! proptest {
         #![proptest_config($crate::test_runner::Config::default())]
         $($(#[$meta])*
           fn $test_name($($parm in $strategy),+) $body)*
+    } };
+
+    ($(
+        $(#[$meta:meta])*
+        fn $test_name:ident($($arg:tt)+) $body:block
+    )*) => { proptest! {
+        #![proptest_config($crate::test_runner::Config::default())]
+        $($(#[$meta])*
+          fn $test_name($($arg)+) $body)*
     } };
 
     (|($($parm:pat in $strategy:expr),+)| $body:block) => { {
@@ -150,6 +200,18 @@ macro_rules! proptest {
         let mut config = $crate::test_runner::Config::default();
         $crate::sugar::force_no_fork(&mut config);
         proptest_helper!(@_BODY config ($($parm in $strategy),+) [move] $body)
+    } };
+
+    (|($($arg:tt)+)| $body:block) => { {
+        let mut config = $crate::test_runner::Config::default();
+        $crate::sugar::force_no_fork(&mut config);
+        proptest_helper!(@_BODY2 config ($($arg)+) [] $body);
+    } };
+
+    (move |($($arg:tt)+)| $body:block) => { {
+        let mut config = $crate::test_runner::Config::default();
+        $crate::sugar::force_no_fork(&mut config);
+        proptest_helper!(@_BODY2 config ($($arg)+) [move] $body);
     } };
 }
 
@@ -390,7 +452,28 @@ macro_rules! prop_oneof {
 /// ```
 ///
 /// This form is simply sugar around making a tuple and then calling `prop_map`
-/// on it.
+/// on it. You can also use `arg: type` as in `proptest! { .. }`:
+/// 
+/// ```rust,no_run
+/// # #![allow(dead_code)]
+/// # #[macro_use] extern crate proptest;
+///
+/// # #[derive(Clone, Debug)]
+/// # struct MyStruct {
+/// #  integer: u32,
+/// #  string: String,
+/// # }
+///
+/// prop_compose! {
+///   fn my_struct_strategy(max_integer: u32)
+///                        (integer in 0..max_integer, string: String)
+///                        -> MyStruct {
+///     MyStruct { integer, string }
+///   }
+/// }
+/// #
+/// # fn main() { }
+/// ```
 ///
 /// The second form is mostly the same, except that it takes _three_ argument
 /// lists. The third argument list can see all values in both prior, which
@@ -500,6 +583,41 @@ macro_rules! prop_compose {
                 proptest_helper!(@_WRAP ($($strategy2)*)));
             $crate::strategy::Strategy::prop_map(strat,
                 |proptest_helper!(@_WRAPPAT ($($var2),*))| $body)
+        }
+    };
+
+    ($(#[$meta:meta])*
+     $([$($vis:tt)*])* fn $name:ident $params:tt
+     ($($arg:tt)+)
+       -> $return_type:ty $body:block) =>
+    {
+        #[must_use = "strategies do nothing unless used"]
+        $(#[$meta])*
+        $($($vis)*)* fn $name $params
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
+            let strat = proptest_helper!(@_EXT _STRAT ($($arg)+));
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_EXT _PAT ($($arg)+))| $body)
+        }
+    };
+
+    ($(#[$meta:meta])*
+     $([$($vis:tt)*])* fn $name:ident $params:tt
+     ($($arg:tt)+ $(,)*)
+     ($($arg2:tt)+ $(,)*)
+       -> $return_type:ty $body:block) =>
+    {
+        #[must_use = "strategies do nothing unless used"]
+        $(#[$meta])*
+        $($($vis)*)* fn $name $params
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
+            let strat = proptest_helper!(@_WRAP ($($strategy)*));
+            let strat = $crate::strategy::Strategy::prop_flat_map(
+                strat,
+                |proptest_helper!(@_EXT _PAT ($($arg)+))|
+                proptest_helper!(@_EXT _STRAT ($($arg2)*)));
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_EXT _PAT ($($arg2)*))| $body)
         }
     };
 }
@@ -734,6 +852,92 @@ macro_rules! proptest_helper {
             Err(e) => panic!("{}\n{}", e, runner),
         }
     }};
+    // build a property testing block that when executed, executes the full property test.
+    (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:block) => {{
+        $config.source_file = Some(file!());
+        let mut runner = $crate::test_runner::TestRunner::new($config);
+        let names = proptest_helper!(@_EXT _STR ($($arg)*));
+        match runner.run(
+            &$crate::strategy::Strategy::prop_map(
+                proptest_helper!(@_EXT _STRAT ($($arg)*)),
+                |values| $crate::sugar::NamedArguments(names, values)),
+            $($mod)* |$crate::sugar::NamedArguments(
+                _, proptest_helper!(@_EXT _PAT ($($arg)*)))|
+            {
+                $body;
+                Ok(())
+            })
+        {
+            Ok(_) => (),
+            Err(e) => panic!("{}\n{}", e, runner),
+        }
+    }};
+
+    // The logic below helps support `pat: type` in the proptest! macro.
+
+    // These matchers define the actual logic:
+    (@_STRAT [$s:ty] [$p:pat]) => { $crate::arbitrary::any::<$s>()  };
+    (@_PAT [$s:ty] [$p:pat]) => { $p };
+    (@_STR [$s:ty] [$p:pat]) => { stringify!($p) };
+    (@_STRAT in [$s:expr] [$p:pat]) => { $s };
+    (@_PAT in [$s:expr] [$p:pat]) => { $p };
+    (@_STR in [$s:expr] [$p:pat]) => { stringify!($p) };
+
+    // These matchers rewrite into the above extractors.
+    // We have to do this because `:` can't FOLLOW(pat).
+    // Note that this is not the full `pat` grammar...
+    // See https://docs.rs/syn/0.14.2/syn/enum.Pat.html for that.
+    (@_EXT $cmd:ident ($p:pat in $s:expr $(,)*)) => {
+        proptest_helper!(@$cmd in [$s] [$p])
+    };
+    (@_EXT $cmd:ident (($p:pat) : $s:ty $(,)*)) => {
+        // Users can wrap in parens as a last resort.
+        proptest_helper!(@$cmd [$s] [$p])
+    };
+    (@_EXT $cmd:ident (_ : $s:ty $(,)*)) => {
+        proptest_helper!(@$cmd [$s] [_])
+    };
+    (@_EXT $cmd:ident (ref mut $p:ident : $s:ty $(,)*)) => {
+        proptest_helper!(@$cmd [$s] [ref mut $p])
+    };
+    (@_EXT $cmd:ident (ref $p:ident : $s:ty $(,)*)) => {
+        proptest_helper!(@$cmd [$s] [ref $p])
+    };
+    (@_EXT $cmd:ident (mut $p:ident : $s:ty $(,)*)) => {
+        proptest_helper!(@$cmd [$s] [mut $p])
+    };
+    (@_EXT $cmd:ident ($p:ident : $s:ty $(,)*)) => {
+        proptest_helper!(@$cmd [$s] [$p])
+    };
+    (@_EXT $cmd:ident ([$($p:tt)*] : $s:ty $(,)*)) => {
+        proptest_helper!(@$cmd [$s] [[$($p)*]])
+    };
+
+    // Rewrite, Inductive case:
+    (@_EXT $cmd:ident ($p:pat in $s:expr, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd in [$s] [$p]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident (($p:pat) : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [$p]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident (_ : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [_]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident (ref mut $p:ident : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [ref mut $p]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident (ref $p:ident : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [ref $p]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident (mut $p:ident : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [mut $p]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident ($p:ident : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [$p]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
+    (@_EXT $cmd:ident ([$($p:tt)*] : $s:ty, $($r:tt)*)) => {
+        (proptest_helper!(@$cmd [$s] [[$($p)*]]), proptest_helper!(@_EXT $cmd ($($r)*)))
+    };
 }
 
 #[doc(hidden)]
@@ -1158,6 +1362,10 @@ mod closure_tests {
     fn test_simple() {
         let x = 420;
 
+        proptest!(|(y: i32)| {
+            assert!(x != y);
+        });
+
         proptest!(|(y in 0..100)| {
             println!("{}", y);
             assert!(x != y);
@@ -1172,6 +1380,11 @@ mod closure_tests {
             assert!(x + y > 0, "foo: {:?}", foo);
         });
 
+        let foo = Foo;
+        proptest!(move |(x: (), y: ())| {
+            assert!(x == y, "foo: {:?}", foo);
+        });
+
         #[derive(Debug)]
         struct Foo;
     }
@@ -1183,5 +1396,50 @@ mod closure_tests {
         proptest!(|(_ in 0..1)| {
             panic!()
         });
+    }
+}
+
+#[cfg(test)]
+mod any_tests {
+    proptest! {
+        #[test]
+        fn test_something
+            (
+                a: bool,
+                b in 25u8..,
+                c in 25u8..,
+                _d: (),
+                mut _e: (),
+                ref _f: (),
+                ref mut _g: (),
+                [_, _]: [(); 2],
+            ) {
+            if a {} // Assert bool.
+            assert!(b as usize + c as usize >= 50);
+        }
+    }
+
+    // Test that the macro accepts some of the inputs we expect it to:
+    #[test]
+    fn proptest_ext_test() {
+        struct Y(pub u8);
+
+        let _ = proptest_helper!(@_EXT _STRAT( _ : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( x : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( ref x : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( mut x : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( ref mut x : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( [_, _] : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( (&mut &Y(ref x)) : u8 ));
+        let _ = proptest_helper!(@_EXT _STRAT( x in 1..2 ));
+
+        let proptest_helper!(@_EXT _PAT( _ : u8 )) = 1;
+        let proptest_helper!(@_EXT _PAT( _x : u8 )) = 1;
+        let proptest_helper!(@_EXT _PAT( mut _x : u8 )) = 1;
+        let proptest_helper!(@_EXT _PAT( ref _x : u8 )) = 1;
+        let proptest_helper!(@_EXT _PAT( ref mut _x : u8 )) = 1;
+        let proptest_helper!(@_EXT _PAT( [_, _] : u8 )) = [1, 2];
+        let proptest_helper!(@_EXT _PAT( (&mut &Y(ref _x)) : u8 )) = &mut &Y(1);
+        let proptest_helper!(@_EXT _PAT( _x in 1..2 )) = 1;
     }
 }
