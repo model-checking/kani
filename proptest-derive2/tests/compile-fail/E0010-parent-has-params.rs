@@ -43,7 +43,6 @@ struct T5(
     String
 );
 
-// TODO: THIS IS A PROBLEM!
 #[derive(Debug, Arbitrary)] // ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
 enum T6 {

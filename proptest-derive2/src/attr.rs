@@ -311,7 +311,7 @@ fn parse_skip(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// The `<integer>` must also fit within an `u32` and be unsigned.
 fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     use std::u32;
-    error_if_set(ctx, &loc.1, &meta)?;
+    error_if_set(ctx, &loc.1, &meta);
 
     // Convert to value if possible:
     let value = extract_lit_expr(meta.clone())
@@ -363,7 +363,7 @@ fn parse_strategy(ctx: Ctx, set: &mut PAll, meta: Meta) -> DeriveResult<()> {
 fn parse_strategy_base(ctx: Ctx, loc: &mut PStrategy, meta: Meta)
     -> DeriveResult<()>
 {
-    error_if_set(ctx, &loc, &meta)?;
+    error_if_set(ctx, &loc, &meta);
     if let Some(expr) = extract_lit_expr(meta.clone()) {
         ok_set(loc, expr)
     } else {
@@ -412,7 +412,7 @@ fn parse_params_mode(ctx: Ctx, no_params: PNoParams, ty_params: PTyParams)
 /// The latter form is required for more complex types.
 fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     let loc = &mut loc.3;
-    error_if_set(ctx, &loc, &meta)?;
+    error_if_set(ctx, &loc, &meta);
 
     let typ = match normalize_meta(meta) {
         // Form is: `#[proptest(params(<type>)]`.
@@ -449,7 +449,8 @@ fn parse_bare_modifier
      malformed: fn(Ctx) -> DeriveResult<()>)
     -> DeriveResult<()>
 {
-    error_if_set(ctx, loc, &meta)?;
+    error_if_set(ctx, loc, &meta);
+
     if let Some(NormMeta::Plain) = normalize_meta(meta) {
         ok_set(loc, ())
     } else {
@@ -463,11 +464,10 @@ fn ok_set<T>(set: &mut Option<T>, value: T) -> DeriveResult<()> {
 }
 
 /// Emits a "set again" error iff the given option `.is_some()`.
-fn error_if_set<T>(ctx: Ctx, set: &Option<T>, meta: &Meta)
-    -> DeriveResult<()>
-{
-    if set.is_some() { error::set_again(ctx, meta)?; }
-    Ok(())
+fn error_if_set<T>(ctx: Ctx, loc: &Option<T>, meta: &Meta) {
+    if loc.is_some() {
+        error::set_again(ctx, meta)
+    }
 }
 
 /// Constructs a type out of an identifier.

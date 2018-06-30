@@ -359,7 +359,7 @@ error!(immediate_literals, E0016,
 
 /// Happens when `<modifier>` in `#[proptest(<modifier>)]` is set more than
 /// once.
-error!(set_again(meta: &syn::Meta), E0017,
+error!(continue set_again(meta: &syn::Meta), E0017,
     "The attribute modifier `{}` inside `#[proptest(..)]` has already been \
     set. To fix the error, please remove at least one such modifier.",
     meta.name());

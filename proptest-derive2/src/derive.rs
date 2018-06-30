@@ -29,10 +29,10 @@ pub fn impl_proptest_arbitrary(ast: syn::DeriveInput) -> TokenStream {
     let result = derive_proptest_arbitrary(&mut ctx, ast);
     match (result, ctx.check()) {
         (Ok(derive), Ok(())) => derive,
-        (Err(_), Err(err)) => err,
-        (result, check) =>
+        (_, Err(err)) => err,
+        (Err(result), Ok(())) =>
             panic!("[proptest_derive]: internal error, this is a bug! \
-                    result: {:?}, check: {:?}", result, check),
+                    result: {:?}", result),
     }
 }
 

@@ -1,17 +1,23 @@
 #[macro_use]
 extern crate proptest_derive;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0030]
 #[proptest(no_params)]
 #[proptest(no_params)]
 struct T0;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0030]
 #[proptest(no_params)]
 #[proptest(no_params)]
 struct T1();
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0030]
 #[proptest(no_params)]
 #[proptest(no_params)]
 struct T2 {}
@@ -37,7 +43,9 @@ enum T5 {
     V0,
 }
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0029]
 enum T6 {
     #[proptest(no_params)]
     #[proptest(no_params)]
@@ -72,15 +80,21 @@ enum T10 {
     V0 { bar: bool },
 }
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0030]
 #[proptest(no_params, no_params)]
 struct T11;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0030]
 #[proptest(no_params, no_params)]
 struct T12();
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0030]
 #[proptest(no_params, no_params)]
 struct T13 {}
 
@@ -102,7 +116,9 @@ enum T16 {
     V0,
 }
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0029]
 enum T17 {
     #[proptest(no_params, no_params)]
     V0,
@@ -173,7 +189,9 @@ struct T27 {
     field: u8,
 }
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
+#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
+                            //~| # [proptest_derive, E0017]
+                            //~| # [proptest_derive, E0031]
 #[proptest(no_bound, no_bound)]
 struct T28<T> {
     field: T,
