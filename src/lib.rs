@@ -327,13 +327,13 @@
 //! The `proptest!` macro has some additional syntax, including for setting
 //! configuration for things like the number of test cases to generate. See its
 //! [documentation](macro.proptest.html) <!-- NOREADME
-//! [documentation](https://altsysrq.github.io/rustdoc/proptest/0.8.0/proptest/macro.proptest.html)
+//! [documentation](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/macro.proptest.html)
 //! NOREADME -->
 //! for more details.
 //!
 //! There is a more in-depth tutorial
 //! [further down](#in-depth-tutorial). <!-- NOREADME
-//! [in the crate documentation](https://altsysrq.github.io/rustdoc/proptest/0.8.0/proptest/#in-depth-tutorial).
+//! [in the crate documentation](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/#in-depth-tutorial).
 //! NOREADME -->
 //!
 //! ## Differences between QuickCheck and Proptest
