@@ -9,3 +9,7 @@ persistence-test.txt
 
 # IntelliJ
 .idea
+
+# Script used to build the rustdocs on altsysrq.github.io
+# Not checked in since it references absolute paths.
+gen-docs.sh
