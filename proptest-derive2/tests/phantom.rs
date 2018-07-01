@@ -15,31 +15,31 @@ use std::marker;
 use std::marker::PhantomData;
 
 #[derive(Debug)]
-struct T0;
+struct NotArbitrary;
 
 #[derive(Debug, Arbitrary)]
 struct T1<T>(::std::marker::PhantomData<T>);
 
 #[derive(Debug, Arbitrary)]
-struct T2(T1<T0>);
+struct T2(T1<NotArbitrary>);
 
 #[derive(Debug, Arbitrary)]
 struct T3<T>(marker::PhantomData<T>);
 
 #[derive(Debug, Arbitrary)]
-struct T4(T3<T0>);
+struct T4(T3<NotArbitrary>);
 
 #[derive(Debug, Arbitrary)]
 struct T5<T>(PhantomData<T>);
 
 #[derive(Debug, Arbitrary)]
-struct T6(T5<T0>);
+struct T6(T5<NotArbitrary>);
 
 #[derive(Debug, Arbitrary)]
 struct T7<T>(std::marker::PhantomData<T>);
 
 #[derive(Debug, Arbitrary)]
-struct T8(T7<T0>);
+struct T8(T7<NotArbitrary>);
 
 #[derive(Debug, Arbitrary)]
 struct T9<A, B, C> {
@@ -48,9 +48,17 @@ struct T9<A, B, C> {
     c: PhantomData<C>,
 }
 
-fn assert_arbitrary<T: Arbitrary>() {}
-
 #[test]
-fn asserting_t9_arbitrary() {
-    assert_arbitrary::<T9<u8, usize, T0>>();
+fn asserting_arbitrary() {
+    fn assert_arbitrary<T: Arbitrary>() {}
+
+    assert_arbitrary::<T1<NotArbitrary>>();
+    assert_arbitrary::<T2>();
+    assert_arbitrary::<T3<NotArbitrary>>();
+    assert_arbitrary::<T4>();
+    assert_arbitrary::<T5<NotArbitrary>>();
+    assert_arbitrary::<T6>();
+    assert_arbitrary::<T7<NotArbitrary>>();
+    assert_arbitrary::<T8>();
+    assert_arbitrary::<T9<u8, usize, NotArbitrary>>();
 }

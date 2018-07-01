@@ -12,7 +12,7 @@
 extern crate proptest_derive;
 #[macro_use]
 extern crate proptest;
-use proptest::prelude::any_with;
+use proptest::prelude::{any_with, Arbitrary};
 
 struct ComplexType {
     max: u64,
@@ -108,4 +108,16 @@ proptest! {
         prop_assert!(inner.int < 3);
         prop_assert!(inner.string.chars().next().unwrap().is_digit(10));
     }
+}
+
+#[test]
+fn asserting_arbitrary() {
+    fn assert_arbitrary<T: Arbitrary>() {}
+
+    assert_arbitrary::<TopHasParams>();
+    assert_arbitrary::<TopNoParams>();
+    assert_arbitrary::<InnerNoParams>();
+    assert_arbitrary::<TPIS>();
+    assert_arbitrary::<Parallel>();
+    assert_arbitrary::<Parallel2>();
 }

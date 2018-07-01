@@ -8,12 +8,11 @@
 
 #![feature(attr_literals)]
 
-#![allow(dead_code, unused_variables, unused_imports)]
-
 #[macro_use]
 extern crate proptest_derive;
 #[macro_use]
 extern crate proptest;
+use proptest::prelude::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
 struct T0 {
@@ -128,4 +127,17 @@ proptest! {
         prop_assert_eq!(v.alpha, "alpha".to_string());
         prop_assert!(v.beta < 100);
     }
+}
+
+#[test]
+fn asserting_arbitrary() {
+    fn assert_arbitrary<T: Arbitrary>() {}
+
+    assert_arbitrary::<T0>();
+    assert_arbitrary::<T1>();
+    assert_arbitrary::<T2>();
+    assert_arbitrary::<T3>();
+    assert_arbitrary::<T4>();
+    assert_arbitrary::<T5>();
+    assert_arbitrary::<T6>();
 }

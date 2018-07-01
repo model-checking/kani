@@ -3,9 +3,9 @@
 
 #[macro_use]
 extern crate proptest_derive;
-
 #[macro_use]
 extern crate proptest;
+use proptest::prelude::Arbitrary;
 
 // Various arithmetic and basic things.
 #[derive(Debug, Arbitrary, PartialEq)]
@@ -78,8 +78,20 @@ enum UsePrj1 {
     V0(<(!, usize, !) as Fun>::Prj)
 }
 
+#[test]
+fn asserting_arbitrary() {
+    fn assert_arbitrary<T: Arbitrary>() {}
+
+    assert_arbitrary::<Ty1>();
+    assert_arbitrary::<TyMac0>();
+    assert_arbitrary::<TyMac1>();
+    assert_arbitrary::<UsePrj0>();
+    assert_arbitrary::<UsePrj1>();
+}
 
 /*
+// TODO: Decide what to do with this:
+
 #[derive(Debug, Arbitrary)]
 struct Ty5(Result<!, u8>);
 

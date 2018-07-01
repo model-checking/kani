@@ -12,6 +12,7 @@
 extern crate proptest_derive;
 extern crate proptest;
 use proptest::strategy::Just;
+use proptest::prelude::Arbitrary;
 
 // An idea.
 /*
@@ -67,4 +68,14 @@ enum Quux {
         #[proptest(strategy = "10usize..20usize")]
         foo: usize
     }
+}
+
+#[test]
+fn asserting_arbitrary() {
+    fn assert_arbitrary<T: Arbitrary>() {}
+
+    assert_arbitrary::<Foo>();
+    assert_arbitrary::<A>();
+    assert_arbitrary::<Bobby>();
+    assert_arbitrary::<Quux>();
 }

@@ -6,10 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(dead_code, unused_variables, unused_imports)]
-
 #[macro_use]
 extern crate proptest_derive;
+extern crate proptest;
+use proptest::prelude::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
 struct T0;
@@ -28,3 +28,15 @@ enum T4 { V1(), }
 
 #[derive(Debug, Arbitrary)]
 enum T5 { V2 {}, }
+
+#[test]
+fn asserting_arbitrary() {
+    fn assert_arbitrary<T: Arbitrary>() {}
+
+    assert_arbitrary::<T0>();
+    assert_arbitrary::<T1>();
+    assert_arbitrary::<T2>();
+    assert_arbitrary::<T3>();
+    assert_arbitrary::<T4>();
+    assert_arbitrary::<T5>();
+}
