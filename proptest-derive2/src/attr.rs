@@ -27,7 +27,7 @@ pub struct ParsedAttributes {
     pub skip: bool,
     /// The potential weight assigned to an enum variant.
     /// This must be `None` for things that are not enum variants.
-    pub weight: PWeight,
+    pub weight: Option<u32>,
     /// The mode for `Parameters` to use. See that type for more.
     pub params: ParamsMode,
     /// The mode for `Strategy` to use. See that type for more.
@@ -128,50 +128,41 @@ pub fn has_no_bound(ctx: Ctx, attrs: Vec<Attribute>) -> DeriveResult<bool> {
 fn parse_attributes_base(ctx: Ctx, attrs: Vec<Attribute>)
     -> DeriveResult<ParsedAttributes>
 {
-    let (skip, weight, no_params, ty_params, strategy, value, no_bound)
-      = parse_accumulate(ctx, attrs);
+    let acc = parse_accumulate(ctx, attrs);
 
-    // Process params and no_params together to see which one to use.
-    let params = parse_params_mode(ctx, no_params, ty_params)?;
-
-    // Process strategy and value together to see which one to use.
-    let strategy = parse_strat_mode(ctx, strategy, value)?;
-
-    // Was skip set?
-    let skip = skip.is_some();
-
-    let no_bound = no_bound.is_some();
-
-    // We're done.
-    Ok(ParsedAttributes { skip, weight, params, strategy, no_bound })
+    Ok(ParsedAttributes {
+        skip: acc.skip.is_some(),
+        weight: acc.weight,
+        // Process params and no_params together to see which one to use.
+        params: parse_params_mode(ctx, acc.no_params, acc.params)?,
+        // Process strategy and value together to see which one to use.
+        strategy: parse_strat_mode(ctx, acc.strategy, acc.value)?,
+        no_bound: acc.no_bound.is_some()
+    })
 }
 
 //==============================================================================
 // Internals: Initialization
 //==============================================================================
 
-type PBare = Option<()>;
-
-type PSkip     = PBare;
-type PWeight   = Option<u32>;
-type PNoParams = PBare;
-type PTyParams = Option<Type>;
-type PStrategy = Option<Expr>;
-type PNoBound  = PBare;
-type PAll      = (PSkip, PWeight,
-                  PNoParams, PTyParams,
-                  PStrategy, PStrategy,
-                  PNoBound);
-
-/// The initial state in the accumulator inside `parse_attributes`.
-fn init_parse_state() -> PAll { (None, None, None, None, None, None, None) }
+#[derive(Default)]
+struct ParseAcc {
+    skip: Option<()>,
+    weight: Option<u32>,
+    no_params: Option<()>,
+    params: Option<Type>,
+    strategy: Option<Expr>,
+    value: Option<Expr>,
+    no_bound: Option<()>,
+}
 
 //==============================================================================
 // Internals: Extraction & Filtering
 //==============================================================================
 
-fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>) -> PAll {
-    let mut state = init_parse_state();
+fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>) -> ParseAcc {
+    let mut state = ParseAcc::default();
+
     // Get rid of attributes we don't care about:
     for attr in attrs.into_iter().filter(is_proptest_attr) {
         // Flatten attributes so we deal with them uniformly.
@@ -179,6 +170,7 @@ fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>) -> PAll {
             // Accumulate attributes into a form for final processing.
             .fold(state, |state, meta| dispatch_attribute(ctx, state, meta))
     }
+
     state
 }
 
@@ -234,7 +226,7 @@ fn is_outer_attr(attr: &Attribute) -> bool {
 
 /// Dispatches an attribute modifier to handlers and
 /// let's them add stuff into our accumulartor.
-fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> PAll {
+fn dispatch_attribute(ctx: Ctx, mut acc: ParseAcc, meta: Meta) -> ParseAcc {
     // TODO: revisit when we have NLL.
 
     // Dispatch table for attributes:
@@ -292,8 +284,8 @@ fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
 /// Parse a no_bound attribute.
 /// Valid forms are:
 /// + `#[proptest(no_bound)]`
-fn parse_no_bound(ctx: Ctx, loc: &mut PAll, meta: Meta) {
-    parse_bare_modifier(ctx, &mut loc.6, meta, error::no_bound_malformed)
+fn parse_no_bound(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+    parse_bare_modifier(ctx, &mut acc.no_bound, meta, error::no_bound_malformed)
 }
 
 //==============================================================================
@@ -303,8 +295,8 @@ fn parse_no_bound(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 /// Parse a skip attribute.
 /// Valid forms are:
 /// + `#[proptest(skip)]`
-fn parse_skip(ctx: Ctx, loc: &mut PAll, meta: Meta) {
-    parse_bare_modifier(ctx, &mut loc.0, meta, error::skip_malformed)
+fn parse_skip(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+    parse_bare_modifier(ctx, &mut acc.skip, meta, error::skip_malformed)
 }
 
 //==============================================================================
@@ -319,9 +311,9 @@ fn parse_skip(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 /// + `#[proptest(weight("<expr>""))]`
 ///
 /// The `<integer>` must also fit within an `u32` and be unsigned.
-fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) {
+fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
     use std::u32;
-    error_if_set(ctx, &loc.1, &meta);
+    error_if_set(ctx, &acc.weight, &meta);
 
     // Convert to value if possible:
     let value = extract_lit_expr(meta.clone())
@@ -332,7 +324,7 @@ fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) {
         .map(|value| value as u32);
 
     if let Some(value) = value {
-        loc.1 = Some(value);
+        acc.weight = Some(value);
     } else {
         error::weight_malformed(ctx, &meta)
     }
@@ -350,8 +342,8 @@ fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 /// + `#[proptest(value = "<expr>")]`
 /// + `#[proptest(value("<expr>")]`
 /// + `#[proptest(value(<literal>)]`
-fn parse_value(ctx: Ctx, loc: &mut PAll, meta: Meta) {
-    parse_strategy_base(ctx, &mut loc.5, meta)
+fn parse_value(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+    parse_strategy_base(ctx, &mut acc.value, meta)
 }
 
 /// Parses an explicit strategy.
@@ -360,8 +352,8 @@ fn parse_value(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 /// + `#[proptest(strategy = "<expr>")]`
 /// + `#[proptest(strategy("<expr>")]`
 /// + `#[proptest(strategy(<literal>)]`
-fn parse_strategy(ctx: Ctx, loc: &mut PAll, meta: Meta) {
-    parse_strategy_base(ctx, &mut loc.4, meta)
+fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+    parse_strategy_base(ctx, &mut acc.strategy, meta)
 }
 
 /// Parses an explicit strategy. This is a helper.
@@ -370,7 +362,7 @@ fn parse_strategy(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 /// + `#[proptest(<meta.name()> = "<expr>")]`
 /// + `#[proptest(<meta.name()>("<expr>")]`
 /// + `#[proptest(<meta.name()>(<literal>)]`
-fn parse_strategy_base(ctx: Ctx, loc: &mut PStrategy, meta: Meta) {
+fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: Meta) {
     error_if_set(ctx, &loc, &meta);
     if let Some(expr) = extract_lit_expr(meta.clone()) {
         *loc = Some(expr);
@@ -382,7 +374,7 @@ fn parse_strategy_base(ctx: Ctx, loc: &mut PStrategy, meta: Meta) {
 /// Combines any parsed explicit strategy and value into a single value
 /// and fails if both an explicit strategy and value was set.
 /// Only one of them can be set, or none.
-fn parse_strat_mode(ctx: Ctx, strat: PStrategy, value: PStrategy)
+fn parse_strat_mode(ctx: Ctx, strat: Option<Expr>, value: Option<Expr>)
     -> DeriveResult<StratMode> 
 {
     Ok(match (strat, value) {
@@ -399,7 +391,7 @@ fn parse_strat_mode(ctx: Ctx, strat: PStrategy, value: PStrategy)
 
 /// Combines a potentially set `params` and `no_params` into a single value
 /// and fails if both have been set. Only one of them can be set, or none.
-fn parse_params_mode(ctx: Ctx, no_params: PNoParams, ty_params: PTyParams)
+fn parse_params_mode(ctx: Ctx, no_params: Option<()>, ty_params: Option<Type>)
     -> DeriveResult<ParamsMode>
 {
     Ok(match (no_params, ty_params) {
@@ -418,9 +410,8 @@ fn parse_params_mode(ctx: Ctx, no_params: PNoParams, ty_params: PTyParams)
 /// + `#[proptest(params = "<type>"]`
 ///
 /// The latter form is required for more complex types.
-fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
-    let loc = &mut loc.3;
-    error_if_set(ctx, &loc, &meta);
+fn parse_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+    error_if_set(ctx, &acc.params, &meta);
 
     let typ = match normalize_meta(meta) {
         // Form is: `#[proptest(params(<type>)]`.
@@ -432,7 +423,7 @@ fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     };
 
     if let Some(typ) = typ {
-        *loc = Some(typ);
+        acc.params = Some(typ);
     } else {
         error::param_malformed(ctx)
     }
@@ -441,8 +432,8 @@ fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 /// Parses an order to use the default Parameters type and value.
 /// Valid forms are:
 /// + `#[proptest(no_params)]`
-fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
-    parse_bare_modifier(ctx, &mut loc.2, meta, error::no_params_malformed)
+fn parse_no_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+    parse_bare_modifier(ctx, &mut acc.no_params, meta, error::no_params_malformed)
 }
 
 //==============================================================================
@@ -450,7 +441,9 @@ fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
 //==============================================================================
 
 /// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `loc`.
-fn parse_bare_modifier(ctx: Ctx, loc: &mut PBare, meta: Meta, malformed: fn(Ctx)) {
+fn parse_bare_modifier
+    (ctx: Ctx, loc: &mut Option<()>, meta: Meta, malformed: fn(Ctx))
+{
     error_if_set(ctx, loc, &meta);
 
     if let Some(NormMeta::Plain) = normalize_meta(meta) {
