@@ -88,19 +88,3 @@ fn asserting_arbitrary() {
     assert_arbitrary::<UsePrj0>();
     assert_arbitrary::<UsePrj1>();
 }
-
-/*
-// TODO: Decide what to do with this:
-
-#[derive(Debug, Arbitrary)]
-struct Ty5(Result<!, u8>);
-
-
-type Foo<T> = T;
-
-#[derive(Debug, Arbitrary)] //~ error[E0277]
-struct Ty4 {
-    x: [Foo<!>; 1]
-}
-
-*/
