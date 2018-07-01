@@ -12,8 +12,7 @@ use syn::{self, Meta, NestedMeta, Lit, Ident, Attribute, Expr, Type};
 
 use util;
 use interp;
-use error;
-use error::{Ctx, DeriveResult};
+use error::{self, Ctx, DeriveResult};
 
 //==============================================================================
 // Public API
