@@ -1,6 +1,14 @@
 #[macro_use]
 extern crate proptest_derive;
 
+// Show non-fatal:
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0026]
+                            //~| [proptest_derive, E0008]
+#[proptest(strategy)]
+#[proptest(skip)]
+struct NonFatal;
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T1 {
     V1 {

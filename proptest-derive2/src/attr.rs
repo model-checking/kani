@@ -179,7 +179,8 @@ fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>)
         // Flatten attributes so we deal with them uniformly.
         for meta in extract_modifiers(ctx, attr) {
             // Accumulate attributes into a form for final processing.
-            state = dispatch_attribute(ctx, state, meta)?;
+            state = dispatch_attribute(ctx, state, meta);
+            // TODO: refactor ^
         }
     }
     Ok(state)
@@ -241,7 +242,7 @@ pub fn is_outer_attr(attr: &Attribute) -> bool {
 
 /// Dispatches an attribute modifier to handlers and
 /// let's them add stuff into our accumulartor.
-fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> DeriveResult<PAll> {
+fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> PAll {
     // TODO: revisit when we have NLL.
 
     // Dispatch table for attributes:
@@ -263,15 +264,14 @@ fn dispatch_attribute(ctx: Ctx, mut acc: PAll, meta: Meta) -> DeriveResult<PAll>
             // Invalid modifiers:
             name => {
                 dispatch_unknown_mod(ctx, name);
-                return Ok(acc);
+                return acc;
             },
         }
     };
 
     // We now have a parser that we can dispatch to.
-    parser(ctx, &mut acc, meta)?;
-
-    Ok(acc)
+    parser(ctx, &mut acc, meta);
+    acc
 }
 
 fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
@@ -300,7 +300,7 @@ fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
 /// Parse a no_bound attribute.
 /// Valid forms are:
 /// + `#[proptest(no_bound)]`
-fn parse_no_bound(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_no_bound(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     parse_bare_modifier(ctx, &mut loc.6, meta, error::no_bound_malformed)
 }
 
@@ -311,7 +311,7 @@ fn parse_no_bound(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// Parse a skip attribute.
 /// Valid forms are:
 /// + `#[proptest(skip)]`
-fn parse_skip(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_skip(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     parse_bare_modifier(ctx, &mut loc.0, meta, error::skip_malformed)
 }
 
@@ -327,7 +327,7 @@ fn parse_skip(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// + `#[proptest(weight("<expr>""))]`
 ///
 /// The `<integer>` must also fit within an `u32` and be unsigned.
-fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     use std::u32;
     error_if_set(ctx, &loc.1, &meta);
 
@@ -344,7 +344,6 @@ fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     } else {
         error::weight_malformed(ctx, &meta)
     }
-    Ok(())
 }
 
 //==============================================================================
@@ -359,7 +358,7 @@ fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// + `#[proptest(value = "<expr>")]`
 /// + `#[proptest(value("<expr>")]`
 /// + `#[proptest(value(<literal>)]`
-fn parse_value(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_value(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     parse_strategy_base(ctx, &mut loc.5, meta)
 }
 
@@ -369,7 +368,7 @@ fn parse_value(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// + `#[proptest(strategy = "<expr>")]`
 /// + `#[proptest(strategy("<expr>")]`
 /// + `#[proptest(strategy(<literal>)]`
-fn parse_strategy(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_strategy(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     parse_strategy_base(ctx, &mut loc.4, meta)
 }
 
@@ -379,12 +378,10 @@ fn parse_strategy(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 /// + `#[proptest(<meta.name()> = "<expr>")]`
 /// + `#[proptest(<meta.name()>("<expr>")]`
 /// + `#[proptest(<meta.name()>(<literal>)]`
-fn parse_strategy_base(ctx: Ctx, loc: &mut PStrategy, meta: Meta)
-    -> DeriveResult<()>
-{
+fn parse_strategy_base(ctx: Ctx, loc: &mut PStrategy, meta: Meta) {
     error_if_set(ctx, &loc, &meta);
     if let Some(expr) = extract_lit_expr(meta.clone()) {
-        ok_set(loc, expr)
+        *loc = Some(expr);
     } else {
         error::strategy_malformed(ctx, &meta)
     }
@@ -429,7 +426,7 @@ fn parse_params_mode(ctx: Ctx, no_params: PNoParams, ty_params: PTyParams)
 /// + `#[proptest(params = "<type>"]`
 ///
 /// The latter form is required for more complex types.
-fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     let loc = &mut loc.3;
     error_if_set(ctx, &loc, &meta);
 
@@ -447,13 +444,12 @@ fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     } else {
         error::param_malformed(ctx)
     }
-    Ok(())
 }
 
 /// Parses an order to use the default Parameters type and value.
 /// Valid forms are:
 /// + `#[proptest(no_params)]`
-fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
+fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta) {
     parse_bare_modifier(ctx, &mut loc.2, meta, error::no_params_malformed)
 }
 
@@ -462,9 +458,7 @@ fn parse_no_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
 //==============================================================================
 
 /// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `loc`.
-fn parse_bare_modifier(ctx: Ctx, loc: &mut PBare, meta: Meta, malformed: fn(Ctx))
-    -> DeriveResult<()>
-{
+fn parse_bare_modifier(ctx: Ctx, loc: &mut PBare, meta: Meta, malformed: fn(Ctx)) {
     error_if_set(ctx, loc, &meta);
 
     if let Some(NormMeta::Plain) = normalize_meta(meta) {
@@ -472,13 +466,6 @@ fn parse_bare_modifier(ctx: Ctx, loc: &mut PBare, meta: Meta, malformed: fn(Ctx)
     } else {
         malformed(ctx);
     }
-
-    Ok(())
-}
-
-fn ok_set<T>(loc: &mut Option<T>, value: T) -> DeriveResult<()> {    
-    *loc = Some(value);
-    Ok(())
 }
 
 /// Emits a "set again" error iff the given option `.is_some()`.

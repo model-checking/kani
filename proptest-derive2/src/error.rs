@@ -422,7 +422,7 @@ error!(overspecified_strat, E0025,
 /// malformed. For example, `<expr>` inside `#[proptest(strategy = "<expr>")]`
 /// or `#[proptest(value = "<expr>")]` is malformed. In other words, `<expr>`
 /// is not a valid Rust expression.
-error!(strategy_malformed(meta: &syn::Meta), E0026,
+error!(continue strategy_malformed(meta: &syn::Meta), E0026,
     "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
     format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
     expression.",
