@@ -433,7 +433,7 @@ error!(skipped_variant_has_weight(item: &str), E0028,
 
 /// Any attributes on a skipped variant has no effect - so we emit this error
 /// to the user so that they are aware.
-error!(skipped_variant_has_param(item: &str), E0028,
+error!(continue skipped_variant_has_param(item: &str), E0028,
     "A variant has been skipped. Setting `#[proptest(no_param)]` or \
     `#[proptest(params(<type>))]` on the {} is meaningless and is not allowed.",
     item);

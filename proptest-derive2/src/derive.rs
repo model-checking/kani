@@ -520,7 +520,7 @@ fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
     if attrs.params.is_set() {
-        error::skipped_variant_has_param(ctx, item)?;
+        error::skipped_variant_has_param(ctx, item);
     }
     if attrs.strategy.is_set() {
         error::skipped_variant_has_strat(ctx, item);
