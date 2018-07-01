@@ -129,7 +129,7 @@ fn parse_attributes_base(ctx: Ctx, attrs: Vec<Attribute>)
     -> DeriveResult<ParsedAttributes>
 {
     let (skip, weight, no_params, ty_params, strategy, value, no_bound)
-      = parse_accumulate(ctx, attrs)?;
+      = parse_accumulate(ctx, attrs);
 
     // Process params and no_params together to see which one to use.
     let params = parse_params_mode(ctx, no_params, ty_params)?;
@@ -170,27 +170,16 @@ fn init_parse_state() -> PAll { (None, None, None, None, None, None, None) }
 // Internals: Extraction & Filtering
 //==============================================================================
 
-fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>)
-    -> DeriveResult<PAll>
-{
+fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>) -> PAll {
     let mut state = init_parse_state();
     // Get rid of attributes we don't care about:
     for attr in attrs.into_iter().filter(is_proptest_attr) {
         // Flatten attributes so we deal with them uniformly.
-        for meta in extract_modifiers(ctx, attr) {
+        state = extract_modifiers(ctx, attr).into_iter()
             // Accumulate attributes into a form for final processing.
-            state = dispatch_attribute(ctx, state, meta);
-            // TODO: refactor ^
-        }
+            .fold(state, |state, meta| dispatch_attribute(ctx, state, meta))
     }
-    Ok(state)
-
-    /*
-      = attrs.into_iter()
-             .filter(is_proptest_attr)
-             .flat_map(extract_modifiers)
-             .try_fold(init_parse_state(), dispatch_attribute)?;
-    */
+    state
 }
 
 /// Returns `true` iff the attribute has to do with proptest.
@@ -204,35 +193,38 @@ fn is_proptest_attr(attr: &Attribute) -> bool {
 /// We do this to treat all pieces uniformly whether a single
 /// `#[proptest(..)]` was used or many. This simplifies the
 /// logic somewhat.
-fn extract_modifiers<'a>(ctx: Ctx<'a>, attr: Attribute) -> Vec<Meta> {
+fn extract_modifiers(ctx: Ctx, attr: Attribute) -> Vec<Meta> {
     // Ensure we've been given an outer attribute form.
     if !is_outer_attr(&attr) {
         error::inner_attr(ctx);
     }
 
     match attr.interpret_meta() {
+        Some(Meta::List(list)) => return list.nested.into_iter()
+            .filter_map(|nm| extract_metas(ctx, nm)).collect(),
         Some(Meta::Word(_)) => error::bare_proptest_attr(ctx),
         Some(Meta::NameValue(_)) => error::literal_set_proptest(ctx),
-        Some(Meta::List(list)) => {
-            return list.nested.into_iter().filter_map(|nmi| match nmi {
-                NestedMeta::Literal(_) => {
-                    error::immediate_literals(ctx);
-                    None
-                },
-                // This is the only valid form.
-                NestedMeta::Meta(mi) => Some(mi),
-            }).collect();
-        },
         None => error::no_interp_meta(ctx),
     }
 
     vec![]
 }
 
+fn extract_metas(ctx: Ctx, nested: NestedMeta) -> Option<Meta> {
+    match nested {
+        NestedMeta::Literal(_) => {
+            error::immediate_literals(ctx);
+            None
+        },
+        // This is the only valid form.
+        NestedMeta::Meta(meta) => Some(meta),
+    }
+}
+
 /// Returns true iff the given attribute is an outer one, i.e: `#[<attr>]`.
 /// An inner attribute is the other possibility and has the syntax `#![<attr>]`.
 /// Note that `<attr>` is a meta-variable for the contents inside.
-pub fn is_outer_attr(attr: &Attribute) -> bool {
+fn is_outer_attr(attr: &Attribute) -> bool {
     syn::AttrStyle::Outer == attr.style
 }
 
