@@ -22,7 +22,7 @@ use use_tracking;
 
 /// Simplified version of `DeriveInput` from syn letting us be generic over
 /// the body.
-pub struct DeriveInput<B> {
+pub struct DeriveData<B> {
     pub ident: syn::Ident,
     pub attrs: Vec<syn::Attribute>,
     pub tracker: use_tracking::UseTracker,
@@ -90,10 +90,10 @@ pub fn match_pathsegs(path: &syn::Path, against: &[&str]) -> bool {
 
 /// Returns true iff the given `PathArguments` is one that has one type
 /// applied to it.
-pub fn pseg_has_single_tyvar(pp: &syn::PathSegment) -> bool {
+fn pseg_has_single_tyvar(pp: &syn::PathSegment) -> bool {
     use syn::GenericArgument::Type;
     use syn::PathArguments::AngleBracketed;
-    if let AngleBracketed(ref ab) = pp.arguments {
+    if let AngleBracketed(ab) = &pp.arguments {
         if let Some(Type(_)) = match_singleton(ab.args.iter()) {
             return true;
         }
@@ -137,10 +137,7 @@ pub fn extract_simple_path<'a>(path: &'a syn::Path) -> Option<&'a syn::Ident> {
 //==============================================================================
 
 /// Returns `Some(x)` iff the iterable is singleton and otherwise None.
-pub fn match_singleton<T, I>(it: I) -> Option<T>
-where
-    I: IntoIterator<Item = T>,
-{
+pub fn match_singleton<T>(it: impl IntoIterator<Item = T>) -> Option<T> {
     let mut it = it.into_iter();
     it.next().filter(|_| it.next().is_none())
 }

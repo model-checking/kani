@@ -9,9 +9,9 @@
 //! Provides actual deriving logic for the crate.
 
 use proc_macro2::TokenStream;
-use syn;
+use syn::{Type, Path, Field, Ident, Variant, DeriveInput};
 
-use util::{is_unit_type, self_ty, DeriveInput, fields_to_vec};//, variant_data_to_fields};
+use util::{is_unit_type, self_ty, DeriveData, fields_to_vec};
 use void::IsUninhabited;
 use error::{self, Ctx, Context, DeriveResult};
 use attr::{parse_attributes, ParamsMode, ParsedAttributes, StratMode};
@@ -24,7 +24,7 @@ use ast::*;
 // API
 //==============================================================================
 
-pub fn impl_proptest_arbitrary(ast: syn::DeriveInput) -> TokenStream {
+pub fn impl_proptest_arbitrary(ast: DeriveInput) -> TokenStream {
     let mut ctx = Context::new();
     let result = derive_proptest_arbitrary(&mut ctx, ast);
     match (result, ctx.check()) {
@@ -37,7 +37,7 @@ pub fn impl_proptest_arbitrary(ast: syn::DeriveInput) -> TokenStream {
 }
 
 /// Entry point for deriving `Arbitrary`.
-pub fn derive_proptest_arbitrary(ctx: Ctx, ast: syn::DeriveInput)
+pub fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
     -> DeriveResult<TokenStream>
 {
     use syn::Data::*;
@@ -50,14 +50,14 @@ pub fn derive_proptest_arbitrary(ctx: Ctx, ast: syn::DeriveInput)
     // Compile into our own high level IR for the impl:
     let the_impl = match ast.data {
         // Deal with structs:
-        Struct(data) => derive_struct(ctx, DeriveInput {
+        Struct(data) => derive_struct(ctx, DeriveData {
             tracker,
             ident: ast.ident,
             attrs: ast.attrs,
             body: fields_to_vec(data.fields),
         }),
         // Deal with enums:
-        Enum(data) => derive_enum(ctx, DeriveInput {
+        Enum(data) => derive_enum(ctx, DeriveData {
             tracker,
             ident: ast.ident,
             attrs: ast.attrs,
@@ -82,7 +82,7 @@ pub fn derive_proptest_arbitrary(ctx: Ctx, ast: syn::DeriveInput)
 //==============================================================================
 
 /// Entry point for deriving `Arbitrary` for `struct`s.
-fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResult<Impl> {
+fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl> {
     let t_attrs = parse_attributes(ctx, ast.attrs)?;
 
     // Deny attributes that are only for enum variants:
@@ -135,9 +135,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResul
 /// Determine the `Parameters` part. We've already handled everything else.
 /// After this, we have all parts needed for an impl. If `None` is given,
 /// then the unit type `()` will be used for `Parameters`.
-fn add_top_params(param_ty: Option<syn::Type>, (strat, ctor): StratPair)
-    -> ImplParts
-{
+fn add_top_params(param_ty: Option<Type>, (strat, ctor): StratPair) -> ImplParts {
     let params = Params::empty();
     if let Some(params_ty) = param_ty {
         // We need to add `let params = _top;`.
@@ -150,8 +148,8 @@ fn add_top_params(param_ty: Option<syn::Type>, (strat, ctor): StratPair)
 /// Deriving for a list of fields (product type) on
 /// which `params` or `no_params` was set directly.
 fn derive_product_has_params(
-    ctx: Ctx,
-    ut: &mut UseTracker, item: &str, closure: MapClosure, fields: Vec<syn::Field>)
+    ctx: Ctx, ut: &mut UseTracker,
+    item: &str, closure: MapClosure, fields: Vec<Field>)
     -> DeriveResult<StratPair>
 {
     // Fold into an accumulator of the strategy types and the expressions
@@ -175,7 +173,7 @@ fn derive_product_has_params(
 
 /// Determine strategy using "Default" semantics  for a product.
 fn product_handle_default_params
-    (ut: &mut UseTracker, ty: syn::Type, strategy: StratMode) -> StratPair {
+    (ut: &mut UseTracker, ty: Type, strategy: StratMode) -> StratPair {
     match strategy {
         // Specific strategy - use the given expr and erase the type
         // (since we don't know about it):
@@ -190,7 +188,7 @@ fn product_handle_default_params
 /// Deriving for a list of fields (product type) on
 /// which `params` or `no_params` was NOT set directly.
 fn derive_product_no_params
-    (ctx: Ctx, ut: &mut UseTracker, fields: Vec<syn::Field>, item: &str)
+    (ctx: Ctx, ut: &mut UseTracker, fields: Vec<Field>, item: &str)
     -> DeriveResult<PartsAcc<Ctor>>
 {
     // Fold into an accumulator of the strategy types and the expressions
@@ -246,7 +244,7 @@ fn derive_product_no_params
 /// Wrap the given constructor with a let binding
 /// moving `param_<x>` into `params`.
 fn extract_nparam<C>
-    (acc: &mut PartsAcc<C>, params_ty: syn::Type, (strat, ctor): StratPair)
+    (acc: &mut PartsAcc<C>, params_ty: Type, (strat, ctor): StratPair)
     -> StratPair
 {
     (strat, extract_api(ctor, FromReg::Num(acc.add_param(params_ty))))
@@ -257,7 +255,7 @@ fn extract_nparam<C>
 //==============================================================================
 
 /// Entry point for deriving `Arbitrary` for `enum`s.
-fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResult<Impl> {
+fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl> {
     use void::IsUninhabited;
 
     let t_attrs = parse_attributes(ctx, ast.attrs)?;
@@ -297,8 +295,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResul
 
 /// Deriving for a enum on which `params` or `no_params` was NOT set directly.
 fn derive_enum_no_params(
-    ctx: Ctx,
-    ut: &mut UseTracker, _self: &syn::Ident, variants: Vec<syn::Variant>)
+    ctx: Ctx, ut: &mut UseTracker, _self: &Ident, variants: Vec<Variant>)
     -> DeriveResult<ImplParts>
 {
     // Initialize the accumulator:
@@ -350,9 +347,8 @@ fn ensure_union_has_strategies<C>(ctx: Ctx, strats: &StratAcc<C>) {
 /// Derive for a variant which has fields and where the
 /// variant or its fields may specify `params` or `no_params`.
 fn derive_variant_with_fields<C>
-    (ctx: Ctx,
-     ut: &mut UseTracker, v_path: syn::Path, attrs: ParsedAttributes,
-     fields: Vec<syn::Field>, acc: &mut PartsAcc<C>)
+    (ctx: Ctx, ut: &mut UseTracker, v_path: Path, attrs: ParsedAttributes,
+     fields: Vec<Field>, acc: &mut PartsAcc<C>)
     -> DeriveResult<StratPair>
 {
     let r = match attrs.params {
@@ -416,9 +412,8 @@ fn derive_variant_with_fields<C>
 
 /// Determine strategy using "Default" semantics for a variant.
 fn variant_handle_default_params(
-    ctx: Ctx,
-    ut: &mut UseTracker, v_path: syn::Path, attrs: ParsedAttributes,
-    fields: Vec<syn::Field>)
+    ctx: Ctx, ut: &mut UseTracker,
+    v_path: Path, attrs: ParsedAttributes, fields: Vec<Field>)
     -> DeriveResult<StratPair> {
     let r = match attrs.strategy {
         // Specific strategy - use the given expr and erase the type:
@@ -441,7 +436,7 @@ fn variant_handle_default_params(
 }
 
 /// Ensures that there are no proptest attributes on any of the fields.
-fn deny_all_attrs_on_fields(ctx: Ctx, fields: Vec<syn::Field>) -> DeriveResult<()> {
+fn deny_all_attrs_on_fields(ctx: Ctx, fields: Vec<Field>) -> DeriveResult<()> {
     fields.into_iter().try_for_each(|field| {
         let f_attr = parse_attributes(ctx, field.attrs)?;
         error::if_anything_specified(ctx, &f_attr, error::ENUM_VARIANT_FIELD)
@@ -451,9 +446,8 @@ fn deny_all_attrs_on_fields(ctx: Ctx, fields: Vec<syn::Field>) -> DeriveResult<(
 /// Derive for a variant which has fields and where the
 /// variant or its fields may NOT specify `params` or `no_params`.
 fn derive_enum_has_params(
-    ctx: Ctx,
-    ut: &mut UseTracker, _self: &syn::Ident, variants: Vec<syn::Variant>,
-    sty: Option<syn::Type>)
+    ctx: Ctx, ut: &mut UseTracker, _self: &Ident, variants: Vec<Variant>,
+    sty: Option<Type>)
     -> DeriveResult<ImplParts>
 {
     /*
@@ -488,8 +482,8 @@ fn derive_enum_has_params(
 }
 
 /// Filters out uninhabited and variants that we've been ordered to skip.
-fn keep_inhabited_variant(ctx: Ctx, _self: &syn::Ident, variant: syn::Variant)
-    -> DeriveResult<Option<(u32, syn::Ident, Vec<syn::Field>, ParsedAttributes)>>
+fn keep_inhabited_variant(ctx: Ctx, _self: &Ident, variant: Variant)
+    -> DeriveResult<Option<(u32, Ident, Vec<Field>, ParsedAttributes)>>
 {
     use void::IsUninhabited;
 
@@ -535,7 +529,7 @@ fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str) {
 }
 
 /// Deal with a unit variant.
-fn pair_unit_variant(ctx: Ctx, attrs: &ParsedAttributes, v_path: syn::Path)
+fn pair_unit_variant(ctx: Ctx, attrs: &ParsedAttributes, v_path: Path)
     -> StratPair
 {
     error::if_strategy_present_on_unit_variant(ctx, attrs);
@@ -575,7 +569,7 @@ impl<C> PartsAcc<C> {
 
     /// Adds a parameter type to the accumulator and returns how many types
     /// there were before adding.
-    fn add_param(&mut self, ty: syn::Type) -> usize {
+    fn add_param(&mut self, ty: Type) -> usize {
         self.params.add(ty)
     }
 }
@@ -619,7 +613,7 @@ impl ParamAcc {
     }
 
     /// Adds a type to the accumulator and returns the type count before adding.
-    fn add(&mut self, ty: syn::Type) -> usize {
+    fn add(&mut self, ty: Type) -> usize {
         let var = self.types.len();
         self.types += ty;
         var
