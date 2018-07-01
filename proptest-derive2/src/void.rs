@@ -17,8 +17,7 @@
 //! That is, if we state that a type is uninhabited, it is so for sure.
 //! But we can't state thta all uninhabited types are uninhabited.
 
-use syn;
-use syn::visit;
+use syn::{self, visit};
 
 use util;
 use interp;

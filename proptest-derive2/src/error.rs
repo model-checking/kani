@@ -8,8 +8,6 @@
 
 //! Provides error messages and some checkers
 
-#![warn(missing_docs)]
-
 use proc_macro2::TokenStream;
 
 use syn;

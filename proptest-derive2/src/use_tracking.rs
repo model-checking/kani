@@ -21,9 +21,7 @@ use syn;
 
 use attr;
 use util;
-
-use error::DeriveResult;
-use error::Ctx;
+use error::{DeriveResult, Ctx};
 
 //==============================================================================
 // API: Type variable use tracking

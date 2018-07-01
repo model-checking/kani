@@ -10,17 +10,15 @@
 //!
 //! We compile to this AST and then linearise that to Rust code.
 
+use std::ops::{Add, AddAssign};
+
 use syn;
 use proc_macro2::{TokenStream, Span};
-use quote::{ToTokens};
-use quote::TokenStreamExt;
+use quote::{ToTokens, TokenStreamExt};
 
-use util::*;
-use use_tracking::*;
-use error::Ctx;
-use error::DeriveResult;
-
-use std::ops::{Add, AddAssign};
+use util::self_ty;
+use use_tracking::UseTracker;
+use error::{Ctx, DeriveResult};
 
 //==============================================================================
 // Config

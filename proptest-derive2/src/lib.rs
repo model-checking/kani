@@ -23,8 +23,6 @@
 //! we can remove the `T: Debug` bound on Arbitrary, we can not support arrays
 //! sized over 32.
 
-#![recursion_limit="128"]
-
 extern crate proc_macro as pm;
 extern crate proc_macro2;
 
