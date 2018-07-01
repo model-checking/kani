@@ -91,7 +91,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResul
     let t_attrs = parse_attributes(ctx, ast.attrs)?;
 
     // Deny attributes that are only for enum variants:
-    error::if_enum_attrs_present(ctx, &t_attrs, error::STRUCT)?;
+    error::if_enum_attrs_present(ctx, &t_attrs, error::STRUCT);
 
     // Deny an explicit strategy directly on the struct.
     error::if_strategy_present(ctx, &t_attrs, error::STRUCT)?;
@@ -158,7 +158,7 @@ fn derive_product_has_params(
         let attrs = parse_attributes(ctx, field.attrs)?;
 
         // Deny attributes that are only for enum variants:
-        error::if_enum_attrs_present(ctx, &attrs, item)?;
+        error::if_enum_attrs_present(ctx, &attrs, item);
 
         // Deny setting parameters on the field since it has been set on parent:
         error::if_specified_params(ctx, &attrs, item)?;
@@ -197,7 +197,7 @@ fn derive_product_no_params
         let attrs = parse_attributes(ctx, field.attrs)?;
 
         // Deny attributes that are only for enum variants:
-        error::if_enum_attrs_present(ctx, &attrs, item)?;
+        error::if_enum_attrs_present(ctx, &attrs, item);
 
         let ty = field.ty;
         let strat = match attrs.params {
@@ -275,7 +275,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResul
     error::if_strategy_present(ctx, &t_attrs, error::ENUM)?;
 
     // TODO: how to handle this?
-    error::if_weight_present(ctx, &t_attrs, error::ENUM)?;
+    error::if_weight_present(ctx, &t_attrs, error::ENUM);
 
     // The complexity of the logic depends mostly now on whether
     // parameters were set directly on the type or not.

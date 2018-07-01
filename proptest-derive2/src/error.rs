@@ -54,7 +54,7 @@ pub fn if_has_lifetimes(ctx: Ctx, ast: &syn::DeriveInput) -> DeriveResult<()> {
 pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
-    if_enum_attrs_present(ctx, attrs, item)?;
+    if_enum_attrs_present(ctx, attrs, item);
     if_strategy_present(ctx, attrs, item)?;
     if_specified_params(ctx, attrs, item)?;
     Ok(())
@@ -62,12 +62,9 @@ pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
 
 /// Ensures that things only allowed on an enum variant is not present on
 /// `item` which is not an enum variant.
-pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
+pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     if_skip_present(ctx, attrs, item);
-    if_weight_present(ctx, attrs, item)?;
-    Ok(())
+    if_weight_present(ctx, attrs, item);
 }
 
 /// Ensures that parameters is not present on `item`.
@@ -126,11 +123,10 @@ pub fn if_skip_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 }
 
 /// Ensures that a weight is not present on `item`.
-pub fn if_weight_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
-    if attrs.weight.is_some() { illegal_weight(ctx, item)?; }
-    Ok(())
+pub fn if_weight_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
+    if attrs.weight.is_some() {
+        illegal_weight(ctx, item)
+    }
 }
 
 //==============================================================================
@@ -293,7 +289,7 @@ error!(continue illegal_skip(item: &str), E0008,
 
 /// Happens when `#[proptest(weight = <integer>)]` is specified on an
 /// `item` that does not support weighting.
-error!(illegal_weight(item: &str), E0009,
+error!(continue illegal_weight(item: &str), E0009,
     // TODO: determine if the form should be allowed on the enum itself.
     "`#[proptest(weight = <integer>)]` is not allowed on {} as it is \
     meaningless. Only enum variants can be assigned weights.",
