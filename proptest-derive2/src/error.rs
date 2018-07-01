@@ -441,7 +441,7 @@ error!(skipped_variant_has_param(item: &str), E0028,
 /// Any attributes on a skipped variant has no effect - so we emit this error
 /// to the user so that they are aware. Unfortunately, there's no way to
 /// emit a warning to the user, so we emit an error instead.
-error!(skipped_variant_has_strat(item: &str), E0028,
+error!(continue skipped_variant_has_strat(item: &str), E0028,
     "A variant has been skipped. Setting `#[proptest(value = \"<expr>\")]` or \
     `#[proptest(strategy = \"<expr>\")]` on the {} is meaningless and is not \
     allowed.",

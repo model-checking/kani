@@ -515,7 +515,7 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &syn::Ident, variant: syn::Variant)
     Ok(Some((weight, variant.ident, fields, attrs)))
 }
 
-/// Ensures that no attributes than skip are present.
+/// Ensures that no other attributes than skip are present.
 fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
@@ -523,7 +523,7 @@ fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str)
         error::skipped_variant_has_param(ctx, item)?;
     }
     if attrs.strategy.is_set() {
-        error::skipped_variant_has_strat(ctx, item)?;
+        error::skipped_variant_has_strat(ctx, item);
     }
     if attrs.weight.is_some() {
         error::skipped_variant_has_weight(ctx, item)?;
