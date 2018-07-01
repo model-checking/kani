@@ -83,11 +83,6 @@ pub fn derive_proptest_arbitrary(ctx: Ctx, ast: syn::DeriveInput)
 
 /// Entry point for deriving `Arbitrary` for `struct`s.
 fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResult<Impl> {
-    // Ensures that the fields of the given struct has fields which are all
-    // inhabited. If one field is uninhabited, the entire product type is
-    // uninhabited.
-    if (&*ast.body).is_uninhabited() { error::uninhabited_struct(ctx)? }
-
     let t_attrs = parse_attributes(ctx, ast.attrs)?;
 
     // Deny attributes that are only for enum variants:
@@ -104,6 +99,15 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResul
         (Params::empty(), strat, ctor)
     } else {
         // Not a unit struct.
+
+        // Ensures that the fields of the given struct has fields which are all
+        // inhabited. If one field is uninhabited, the entire product type is
+        // uninhabited.
+        //
+        // A unit struct in the other branch is by definition always inhabited.
+        if (&*ast.body).is_uninhabited() {
+            error::uninhabited_struct(ctx);
+        }
 
         // Construct the closure for `.prop_map`:
         let closure = map_closure(v_path, &ast.body);

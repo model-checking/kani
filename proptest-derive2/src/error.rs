@@ -236,7 +236,7 @@ error!(not_struct_or_enum, E0002,
 
 /// Happens when a struct has at least one field that is uninhabited.
 /// There must at least exist one variant that we can construct.
-error!(uninhabited_struct, E0003,
+error!(continue uninhabited_struct, E0003,
     "The struct you are deriving `Arbitrary` for is uninhabited since one of \
     its fields is uninhabited. An uninhabited type is by definition impossible \
     to generate.");
@@ -244,7 +244,7 @@ error!(uninhabited_struct, E0003,
 /// Happens when an enum has zero variants. Such an enum is obviously
 /// uninhabited and can not be constructed. There must at least exist
 /// one variant that we can construct.
-error!(uninhabited_enum_with_no_variants, E0004,
+error!(uninhabited_enum_with_no_variants, E0004, // TODO: intentionally fatal.
     "The enum you are deriving `Arbitrary` for is uninhabited since it has no \
     variants. An example of such an `enum` is: `enum Void {}`. \
     An uninhabited type is by definition impossible to generate.");
@@ -253,7 +253,7 @@ error!(uninhabited_enum_with_no_variants, E0004,
 /// uninhabited (why has the user given us such a weird enum?..
 /// Nonetheless, we do our best to ensure soundness).
 /// There must at least exist one variant that we can construct.
-error!(uninhabited_enum_variants_uninhabited, E0005,
+error!(uninhabited_enum_variants_uninhabited, E0005, // TODO: intentionally fatal.
     "The enum you are deriving `Arbitrary` for is uninhabited since all its \
     variants are uninhabited. \
     An uninhabited type is by definition impossible to generate.");

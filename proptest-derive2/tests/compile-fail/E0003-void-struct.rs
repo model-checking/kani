@@ -3,6 +3,14 @@
 #[macro_use]
 extern crate proptest_derive;
 
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0003]
+                            //~| [proptest_derive, E0008]
+struct NonFatal {
+    #[proptest(skip)]
+    x: !,
+}
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0003]
 struct Ty0 { x: ! }
 
