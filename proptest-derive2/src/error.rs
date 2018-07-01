@@ -18,22 +18,22 @@ use attr::ParsedAttributes;
 //==============================================================================
 
 /// Item name of structs.
-pub const STRUCT: &'static str = "struct";
+pub const STRUCT: &str = "struct";
 
 /// Item name of struct fields.
-pub const STRUCT_FIELD: &'static str = "struct field";
+pub const STRUCT_FIELD: &str = "struct field";
 
 /// Item name of enums.
-pub const ENUM: &'static str = "enum";
+pub const ENUM: &str = "enum";
 
 /// Item name of enum variants.
-pub const ENUM_VARIANT: &'static str = "enum variant";
+pub const ENUM_VARIANT: &str = "enum variant";
 
 /// Item name of enum variant fields.
-pub const ENUM_VARIANT_FIELD: &'static str = "enum variant field";
+pub const ENUM_VARIANT_FIELD: &str = "enum variant field";
 
 /// Item name for a type variable.
-pub const TY_VAR: &'static str = "a type variable";
+pub const TY_VAR: &str = "a type variable";
 
 //==============================================================================
 // Checkers
@@ -138,7 +138,6 @@ impl Context {
     pub fn new() -> Self {
         Self {
             errors: Vec::new(),
-            //RefCell::new(Some(Vec::new())),
         }
     }
 
@@ -152,7 +151,7 @@ impl Context {
     }
 
     pub fn check(mut self) -> Result<(), TokenStream> {
-        fn compile_error(msg: String) -> TokenStream {
+        fn compile_error(msg: &str) -> TokenStream {
             quote! {
                 compile_error!(#msg);
             }
@@ -160,14 +159,14 @@ impl Context {
 
         match self.errors.len() {
             0 => Ok(()),
-            1 => Err(compile_error(self.errors.pop().unwrap())),
+            1 => Err(compile_error(&self.errors.pop().unwrap())),
             n => {
                 let mut msg = format!("{} errors:", n);
                 for err in self.errors {
                     msg.push_str("\n\t# ");
                     msg.push_str(&err);
                 }
-                Err(compile_error(msg))
+                Err(compile_error(&msg))
             }
         }
     }

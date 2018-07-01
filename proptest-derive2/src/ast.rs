@@ -33,13 +33,13 @@ const UNION_CHUNK_SIZE: usize = 9;
 /// The name of the top parameter variable name given in `arbitrary_with`.
 /// Changing this is not a breaking change because a user is expected not
 /// to rely on this (and the user shouldn't be able to..).
-const TOP_PARAM_NAME: &'static str = "_top";
+const TOP_PARAM_NAME: &str = "_top";
 
 /// The name of the variable name used for user facing parameter types
 /// specified in a `#[proptest(params = "<type>"]` attribute.
 ///
 /// Changing the value of this constant constitutes a breaking change!
-const API_PARAM_NAME: &'static str = "params";
+const API_PARAM_NAME: &str = "params";
 
 //==============================================================================
 // AST Root
@@ -70,7 +70,7 @@ impl Impl {
 
     /// Linearises the impl into a sequence of tokens.
     /// This produces the actual Rust code for the impl.
-    pub fn to_tokens(self, ctx: Ctx) -> DeriveResult<TokenStream> {
+    pub fn into_tokens(self, ctx: Ctx) -> DeriveResult<TokenStream> {
         let Impl { typ, mut tracker, parts: (params, strategy, ctor) } = self;
 
         /// A `Debug` bound on a type variable.
@@ -84,14 +84,15 @@ impl Impl {
         }
 
         // Add bounds and get generics for the impl.
-        tracker.add_bounds(ctx, arbitrary_bound(), Some(debug_bound()))?;
+        tracker.add_bounds(ctx, &arbitrary_bound(), Some(debug_bound()))?;
         let generics = tracker.consume();
         let (impl_generics, ty_generics, where_clause)
           = generics.split_for_impl();
 
         let _top = call_site_ident(TOP_PARAM_NAME);
 
-        let _const = const_ident(typ.clone());
+        let _const = call_site_ident(
+            &format!("_IMPL_PROPTEST_ARBITRARY_FOR_{}", typ));
 
         // Linearise everything. We're done after this.
         let q = quote! {
@@ -116,10 +117,6 @@ impl Impl {
     }
 }
 
-fn const_ident(typ: syn::Ident) -> syn::Ident {
-    call_site_ident(&format!("_IMPL_PROPTEST_ARBITRARY_FOR_{}", typ))
-}
-
 //==============================================================================
 // Smart construcors, StratPair
 //==============================================================================
@@ -139,19 +136,19 @@ pub fn pair_any_with(ty: syn::Type, var: usize) -> StratPair {
     (Strategy::Arbitrary(ty), q)
 }
 
-/// The type and constructor for a specific strategy value
-/// constructed by the given expression. Currently, the type
-/// is erased and a `BoxedStrategy<Type>` is given back instead.
+/// The type and constructor for a specific strategy value constructed by the
+/// given expression. Currently, the type is erased and a `BoxedStrategy<Type>`
+/// is given back instead.
 ///
-/// This is a temporary restriction. Once `impl Trait` is
-/// stabilized, the boxing and dynamic dispatch can be replaced
-/// with a statically dispatched anonymous type instead.
+/// This is a temporary restriction. Once `impl Trait` is stabilized,
+/// the boxing and dynamic dispatch can be replaced with a statically
+/// dispatched anonymous type instead.
 pub fn pair_existential(ty: syn::Type, strat: syn::Expr) -> StratPair {
     (Strategy::Existential(ty), Ctor::Existential(strat))
 }
 
-/// The type and constructor for a strategy that always returns
-/// the value provided in the expression `val`.
+/// The type and constructor for a strategy that always returns the value
+/// provided in the expression `val`.
 /// This is statically dispatched since no erasure is needed or used.
 pub fn pair_value(ty: syn::Type, val: syn::Expr) -> StratPair {
     (Strategy::Value(ty), Ctor::Value(val))
@@ -168,7 +165,7 @@ pub fn pair_value_self(val: syn::Expr) -> StratPair {
 }
 
 /// Same as `pair_value` but for a unit variant or unit struct.
-pub fn pair_unit_self(path: syn::Path) -> StratPair {
+pub fn pair_unit_self(path: &syn::Path) -> StratPair {
     pair_value_self(parse_quote!( #path {} ))
 }
 
@@ -181,9 +178,9 @@ pub fn pair_map((strats, ctors): (Vec<Strategy>, Vec<Ctor>), closure: MapClosure
     (Strategy::Map(strats.into()), Ctor::Map(ctors.into(), closure))
 }
 
-/// The type and constructor for a union of strategies which produces
-/// a new strategy that used the given strategies with probabilities
-/// based on the assigned relative weights for each strategy.
+/// The type and constructor for a union of strategies which produces a new
+/// strategy that used the given strategies with probabilities based on the
+/// assigned relative weights for each strategy.
 pub fn pair_oneof((strats, ctors): (Vec<Strategy>, Vec<(u32, Ctor)>))
     -> StratPair
 {
@@ -240,7 +237,7 @@ impl ToTokens for Params {
 
 /// Returns for a given type `ty` the associated item `Parameters` of the
 /// type's `Arbitrary` implementation.
-pub fn arbitrary_param(ty: syn::Type) -> syn::Type {
+pub fn arbitrary_param(ty: &syn::Type) -> syn::Type {
     parse_quote!(<#ty as crate_proptest::arbitrary::Arbitrary>::Parameters)
 }
 
@@ -250,28 +247,26 @@ pub fn arbitrary_param(ty: syn::Type) -> syn::Type {
 
 /// The type of a given `Strategy`.
 pub enum Strategy {
-    /// Assuming the metavariable `$ty` for a given type, this models
-    /// the strategy type `<$ty as Arbitrary>::Strategy`.
+    /// Assuming the metavariable `$ty` for a given type, this models the
+    /// strategy type `<$ty as Arbitrary>::Strategy`.
     Arbitrary(syn::Type),
-    /// Assuming the metavariable `$ty` for a given type, this models
-    /// the strategy type `BoxedStrategy<$ty>`, i.e: an existentially
-    /// typed strategy.
+    /// Assuming the metavariable `$ty` for a given type, this models the
+    /// strategy type `BoxedStrategy<$ty>`, i.e: an existentially typed strategy.
     ///
-    /// The dynamic dispatch used here is an implementation
-    /// detail that may be changed. Such a change does not count as
-    /// a breakage semver wise.
+    /// The dynamic dispatch used here is an implementation detail that may be
+    /// changed. Such a change does not count as a breakage semver wise.
     Existential(syn::Type),
-    /// Assuming the metavariable `$ty` for a given type, this models
-    /// a non-shrinking strategy that simply always returns a value
-    /// of the given type.
+    /// Assuming the metavariable `$ty` for a given type, this models a
+    /// non-shrinking strategy that simply always returns a value of the
+    /// given type.
     Value(syn::Type),
-    /// Assuming a sequence of strategies, this models a mapping from
-    /// that sequence to `Self`.
+    /// Assuming a sequence of strategies, this models a mapping from that
+    /// sequence to `Self`.
     Map(Box<[Strategy]>),
-    /// Assuming a sequence of relative-weighted strategies, this
-    /// models a weighted choice of those strategies. The resultant
-    /// strategy will in other words randomly pick one strategy with
-    /// probabilities based on the specified weights.
+    /// Assuming a sequence of relative-weighted strategies, this models a
+    /// weighted choice of those strategies. The resultant strategy will in
+    /// other words randomly pick one strategy with probabilities based on the
+    /// specified weights.
     Union(Box<[Strategy]>),
 }
 
@@ -283,8 +278,8 @@ macro_rules! quote_append {
 
 impl ToTokens for Strategy {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // The logic of each of these are pretty straight forward
-        // save for union which is described separately.
+        // The logic of each of these are pretty straight forward save for
+        // union which is described separately.
         use self::Strategy::*;
         match self {
             Arbitrary(ty) => quote_append!(tokens,
@@ -314,60 +309,57 @@ impl ToTokens for Strategy {
 
 /// The right hand side (RHS) of a let binding of parameters.
 pub enum FromReg {
-    /// Denotes a move from the top parameter given in
-    /// the arguments of `arbitrary_with`.
+    /// Denotes a move from the top parameter given in the arguments of
+    /// `arbitrary_with`.
     Top,
-    /// Denotes a move from a variable `params_<x>`
-    /// where `<x>` is the given number.
+    /// Denotes a move from a variable `params_<x>` where `<x>` is the given
+    /// number.
     Num(usize),
 }
 
 /// The left hand side (LHS) of a let binding of parameters.
 pub enum ToReg {
-    /// Denotes a move and declaration to a sequence
-    /// of variables from `params_0` to `params_x`.
+    /// Denotes a move and declaration to a sequence of variables from
+    /// `params_0` to `params_x`.
     Range(usize),
-    /// Denotes a move and declaration of a special variable `params`
-    /// that is user facing and is ALWAYS named `params`.
+    /// Denotes a move and declaration of a special variable `params` that is
+    /// user facing and is ALWAYS named `params`.
     ///
-    /// To change the name this linearises to is considered
-    /// a breaking change wrt. semver.
+    /// To change the name this linearises to is considered a breaking change
+    /// wrt. semver.
     API,
 }
 
 /// Models an expression that generates a proptest `Strategy`.
 pub enum Ctor {
-    /// A strategy generated by using the `Arbitrary` impl
-    /// for the given `Ty´. If `Some(idx)` is specified, then
-    /// a parameter at `params_<idx>` is used and provided
-    /// to `any_with::<Ty>(params_<idx>)`.
+    /// A strategy generated by using the `Arbitrary` impl for the given `Ty´.
+    /// If `Some(idx)` is specified, then a parameter at `params_<idx>` is used
+    /// and provided to `any_with::<Ty>(params_<idx>)`.
     Arbitrary(syn::Type, Option<usize>),
     /// An exact strategy value given by the expression.
     Existential(syn::Expr),
     /// A strategy that always produces the given expression.
     Value(syn::Expr),
-    /// A strategy that maps from a sequence of strategies
-    /// into `Self`.
+    /// A strategy that maps from a sequence of strategies into `Self`.
     Map(Box<[Ctor]>, MapClosure),
-    /// A strategy that randomly selects one of the given
-    /// relative-weighted strategies.
+    /// A strategy that randomly selects one of the given relative-weighted
+    /// strategies.
     Union(Box<[(u32, Ctor)]>),
-    /// A let binding that moves to and declares the ToReg
-    /// from the FromReg as well as the strategy that uses
-    /// the `ToReg`.
+    /// A let binding that moves to and declares the `ToReg` from the `FromReg`
+    /// as well as the strategy that uses the `ToReg`.
     Extract(Box<Ctor>, ToReg, FromReg),
 }
 
-/// Wraps the given strategy producing expression with a move
-/// into `params_<to>` from `FromReg`. This is used when the
-/// given `c` expects `params_<to>` to be there.
+/// Wraps the given strategy producing expression with a move into
+/// `params_<to>` from `FromReg`. This is used when the given `c` expects
+/// `params_<to>` to be there.
 pub fn extract_all(c: Ctor, to: usize, from: FromReg) -> Ctor {
     extract(c, ToReg::Range(to), from)
 }
 
-/// Wraps the given strategy producing expression with a move
-/// into `params` (literally named like that) from `FromReg`.
-/// This is used when the given `c` expects `params` to be there.
+/// Wraps the given strategy producing expression with a move into `params`
+/// (literally named like that) from `FromReg`. This is used when the given
+/// `c` expects `params` to be there.
 pub fn extract_api(c: Ctor, from: FromReg) -> Ctor {
     extract(c, ToReg::API, from)
 }
@@ -393,8 +385,8 @@ impl ToTokens for ToReg {
 
 impl ToTokens for Ctor {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // The logic of each of these are pretty straight forward
-        // save for union which is described separately.
+        // The logic of each of these are pretty straight forward save for
+        // union which is described separately.
         use self::Ctor::*;
         match self {
             Extract(ctor, to, from) => quote_append!(tokens, {
@@ -424,13 +416,13 @@ impl ToTokens for Ctor {
 
 /// Tokenizes a weighted list of `Ctor`.
 ///
-/// The logic is that the output should be as linear as possible while
-/// still supporting enums with an unbounded number of variants without
-/// any boxing (erasure) or dynamic dispatch.
+/// The logic is that the output should be as linear as possible while still
+/// supporting enums with an unbounded number of variants without any boxing
+/// (erasure) or dynamic dispatch.
 ///
-/// As `TupleUnion` is (currently) limited to 10 summands in the coproduct
-/// we can't just emit the entire thing linearly as this will fail on the
-/// 11:th variant.
+/// As `TupleUnion` is (currently) limited to 10 summands in the coproduct we
+/// can't just emit the entire thing linearly as this will fail on the 11:th
+/// variant.
 ///
 /// A naive approach to solve might be to simply use a cons-list like so:
 ///
@@ -569,7 +561,7 @@ fn param<'a>(fv: usize) -> FreshVar<'a> {
 //==============================================================================
 
 /// Constructs a `MapClosure` for the given `path` and a list of fields.
-pub fn map_closure(path: syn::Path, fs: &Vec<syn::Field>) -> MapClosure {
+pub fn map_closure(path: syn::Path, fs: &[syn::Field]) -> MapClosure {
     let ids = fs.iter().filter_map(|field| field.ident.as_ref())
                 .cloned().collect::<Vec<_>>();
 
@@ -683,17 +675,17 @@ impl ToTokens for VariantPath {
 // FreshVar
 //==============================================================================
 
+/// Construct a `FreshVar` with the given `prefix` and the number it has in the
+/// count of temporaries for that prefix.
+fn fresh_var(prefix: &str, count: usize) -> FreshVar {
+    FreshVar { prefix, count }
+}
+
 /// A `FreshVar` is an internal implementation detail and models a temporary
 /// variable on the stack.
 struct FreshVar<'a> {
     prefix: &'a str,
     count: usize
-}
-
-/// Construct a `FreshVar` with the given `prefix` and the number it has in the
-/// count of temporaries for that prefix.
-fn fresh_var(prefix: &str, count: usize) -> FreshVar {
-    FreshVar { prefix, count }
 }
 
 impl<'a> ToTokens for FreshVar<'a> {

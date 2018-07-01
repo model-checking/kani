@@ -83,7 +83,7 @@ impl ParamsMode {
     /// Converts the mode to an `Option` of an `Option` of a type
     /// where the outer `Option` is `None` iff the mode wasn't set
     /// and the inner `Option` is `None` iff the mode was `Default`.
-    pub fn to_option(self) -> Option<Option<Type>> {
+    pub fn into_option(self) -> Option<Option<Type>> {
         use self::ParamsMode::*;
         match self {
             Passthrough => None,
@@ -102,7 +102,7 @@ impl StratMode {
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-pub fn parse_attributes(ctx: Ctx, attrs: Vec<Attribute>)
+pub fn parse_attributes(ctx: Ctx, attrs: &[Attribute])
     -> DeriveResult<ParsedAttributes>
 {
     let attrs = parse_attributes_base(ctx, attrs)?;
@@ -113,7 +113,7 @@ pub fn parse_attributes(ctx: Ctx, attrs: Vec<Attribute>)
 }
 
 /// Parse the attributes specified on a type definition...
-pub fn parse_top_attributes(ctx: Ctx, attrs: Vec<Attribute>)
+pub fn parse_top_attributes(ctx: Ctx, attrs: &[Attribute])
     -> DeriveResult<ParsedAttributes>
 {
     parse_attributes_base(ctx, attrs)
@@ -123,7 +123,7 @@ pub fn parse_top_attributes(ctx: Ctx, attrs: Vec<Attribute>)
 /// and returns true if we've been ordered to not set an `Arbitrary`
 /// bound on the given type variable the attributes are from,
 /// no matter what.
-pub fn has_no_bound(ctx: Ctx, attrs: Vec<Attribute>) -> DeriveResult<bool> {
+pub fn has_no_bound(ctx: Ctx, attrs: &[Attribute]) -> DeriveResult<bool> {
     let attrs = parse_attributes_base(ctx, attrs)?;
     error::if_anything_specified(ctx, &attrs, error::TY_VAR)?;
     Ok(attrs.no_bound)
@@ -131,7 +131,7 @@ pub fn has_no_bound(ctx: Ctx, attrs: Vec<Attribute>) -> DeriveResult<bool> {
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-fn parse_attributes_base(ctx: Ctx, attrs: Vec<Attribute>)
+fn parse_attributes_base(ctx: Ctx, attrs: &[Attribute])
     -> DeriveResult<ParsedAttributes>
 {
     let acc = parse_accumulate(ctx, attrs);
@@ -166,15 +166,17 @@ struct ParseAcc {
 // Internals: Extraction & Filtering
 //==============================================================================
 
-fn parse_accumulate(ctx: Ctx, attrs: Vec<Attribute>) -> ParseAcc {
+fn parse_accumulate(ctx: Ctx, attrs: &[Attribute]) -> ParseAcc {
     let mut state = ParseAcc::default();
 
     // Get rid of attributes we don't care about:
-    for attr in attrs.into_iter().filter(is_proptest_attr) {
-        // Flatten attributes so we deal with them uniformly.
-        state = extract_modifiers(ctx, attr).into_iter()
-            // Accumulate attributes into a form for final processing.
-            .fold(state, |state, meta| dispatch_attribute(ctx, state, meta))
+    for attr in attrs {
+        if is_proptest_attr(&attr) {
+            // Flatten attributes so we deal with them uniformly.
+            state = extract_modifiers(ctx, &attr).into_iter()
+                // Accumulate attributes into a form for final processing.
+                .fold(state, |state, meta| dispatch_attribute(ctx, state, meta))
+        }
     }
 
     state
@@ -191,7 +193,7 @@ fn is_proptest_attr(attr: &Attribute) -> bool {
 /// We do this to treat all pieces uniformly whether a single
 /// `#[proptest(..)]` was used or many. This simplifies the
 /// logic somewhat.
-fn extract_modifiers(ctx: Ctx, attr: Attribute) -> Vec<Meta> {
+fn extract_modifiers(ctx: Ctx, attr: &Attribute) -> Vec<Meta> {
     // Ensure we've been given an outer attribute form.
     if !is_outer_attr(&attr) {
         error::inner_attr(ctx);
@@ -239,11 +241,11 @@ fn dispatch_attribute(ctx: Ctx, mut acc: ParseAcc, meta: Meta) -> ParseAcc {
     match name {
         // Valid modifiers:
         "skip" => parse_skip(ctx, &mut acc, meta),
-        "w" | "weight" => parse_weight(ctx, &mut acc, meta),
+        "w" | "weight" => parse_weight(ctx, &mut acc, &meta),
         "no_params" => parse_no_params(ctx, &mut acc, meta),
         "params" => parse_params(ctx, &mut acc, meta),
-        "strategy" => parse_strategy(ctx, &mut acc, meta),
-        "value" => parse_value(ctx, &mut acc, meta),
+        "strategy" => parse_strategy(ctx, &mut acc, &meta),
+        "value" => parse_value(ctx, &mut acc, &meta),
         "no_bound" => parse_no_bound(ctx, &mut acc, meta),
         // Invalid modifiers:
         name => dispatch_unknown_mod(ctx, name),
@@ -304,7 +306,7 @@ fn parse_skip(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 /// + `#[proptest(weight("<expr>""))]`
 ///
 /// The `<integer>` must also fit within an `u32` and be unsigned.
-fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     use std::u32;
     error_if_set(ctx, &acc.weight, &meta);
 
@@ -319,7 +321,7 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
     if let Some(value) = value {
         acc.weight = Some(value);
     } else {
-        error::weight_malformed(ctx, &meta)
+        error::weight_malformed(ctx, meta)
     }
 }
 
@@ -333,7 +335,7 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 /// + `#[proptest(value = "<expr>")]`
 /// + `#[proptest(value("<expr>")]`
 /// + `#[proptest(value(<literal>)]`
-fn parse_value(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+fn parse_value(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     parse_strategy_base(ctx, &mut acc.value, meta)
 }
 
@@ -343,7 +345,7 @@ fn parse_value(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 /// + `#[proptest(strategy = "<expr>")]`
 /// + `#[proptest(strategy("<expr>")]`
 /// + `#[proptest(strategy(<literal>)]`
-fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
+fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     parse_strategy_base(ctx, &mut acc.strategy, meta)
 }
 
@@ -353,12 +355,12 @@ fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 /// + `#[proptest(<meta.name()> = "<expr>")]`
 /// + `#[proptest(<meta.name()>("<expr>")]`
 /// + `#[proptest(<meta.name()>(<literal>)]`
-fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: Meta) {
+fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
     error_if_set(ctx, &loc, &meta);
     if let Some(expr) = extract_lit_expr(meta.clone()) {
         *loc = Some(expr);
     } else {
-        error::strategy_malformed(ctx, &meta)
+        error::strategy_malformed(ctx, meta)
     }
 }
 

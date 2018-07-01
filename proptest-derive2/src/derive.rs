@@ -55,7 +55,7 @@ fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
     error::if_has_lifetimes(ctx, &ast);
 
     // Parse top level attributes:
-    let attrs = attr::parse_top_attributes(ctx, ast.attrs)?;
+    let attrs = attr::parse_top_attributes(ctx, &ast.attrs)?;
 
     // Initialize tracker:
     let mut tracker = UseTracker::new(ast.generics);
@@ -80,7 +80,7 @@ fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
     }?;
 
     // Linearise the IR into Rust code:
-    let q = the_impl.to_tokens(ctx)?;
+    let q = the_impl.into_tokens(ctx)?;
 
     // TODO: remove! (perhaps keep it behind a feature flag...?):
     //println!("{}\n", q);
@@ -105,7 +105,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl
     let parts = if ast.body.is_empty() {
         // Deriving for a unit struct.
         error::if_params_present_on_unit_struct(ctx, &ast.attrs);
-        let (strat, ctor) = pair_unit_self(v_path);
+        let (strat, ctor) = pair_unit_self(&v_path);
         (Params::empty(), strat, ctor)
     } else {
         // Not a unit struct.
@@ -124,7 +124,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl
 
         // The complexity of the logic depends mostly now on whether
         // parameters were set directly on the type or not.
-        if let Some(param_ty) = ast.attrs.params.to_option() {
+        if let Some(param_ty) = ast.attrs.params.into_option() {
             // Parameters was set on the struct itself, the logic is simpler.
             add_top_params(param_ty,
                 derive_product_has_params(ctx, &mut ast.tracker,
@@ -167,7 +167,7 @@ fn derive_product_has_params(
     // a `.prop_map(..)` that produces the composite strategy.
     let len = fields.len();
     fields.into_iter().try_fold(StratAcc::new(len), |acc, field| {
-        let attrs = attr::parse_attributes(ctx, field.attrs)?;
+        let attrs = attr::parse_attributes(ctx, &field.attrs)?;
 
         // Deny attributes that are only for enum variants:
         error::if_enum_attrs_present(ctx, &attrs, item);
@@ -206,7 +206,7 @@ fn derive_product_no_params
     // and let the caller of this function determine what to do with it.
     let acc = PartsAcc::new(fields.len());
     fields.into_iter().try_fold(acc, |mut acc, field| {
-        let attrs = attr::parse_attributes(ctx, field.attrs)?;
+        let attrs = attr::parse_attributes(ctx, &field.attrs)?;
 
         // Deny attributes that are only for enum variants:
         error::if_enum_attrs_present(ctx, &attrs, item);
@@ -224,7 +224,7 @@ fn derive_product_no_params
                     ty.mark_uses(ut);
 
                     // We use the Parameters type of the field's type.
-                    let pref = acc.add_param(arbitrary_param(ty.clone()));
+                    let pref = acc.add_param(arbitrary_param(&ty));
                     pair_any_with(ty, pref)
                 },
             },
@@ -289,7 +289,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl
 
     // The complexity of the logic depends mostly now on whether
     // parameters were set directly on the type or not.
-    let parts = if let Some(sty) = ast.attrs.params.to_option() {
+    let parts = if let Some(sty) = ast.attrs.params.into_option() {
         // The logic is much simpler in this branch.
         derive_enum_has_params(ctx, &mut ast.tracker, &ast.ident, ast.body, sty)
     } else {
@@ -446,7 +446,7 @@ fn variant_handle_default_params(
 /// Ensures that there are no proptest attributes on any of the fields.
 fn deny_all_attrs_on_fields(ctx: Ctx, fields: Vec<Field>) -> DeriveResult<()> {
     fields.into_iter().try_for_each(|field| {
-        let f_attr = attr::parse_attributes(ctx, field.attrs)?;
+        let f_attr = attr::parse_attributes(ctx, &field.attrs)?;
         error::if_anything_specified(ctx, &f_attr, error::ENUM_VARIANT_FIELD)
     })
 }
@@ -495,17 +495,17 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &Ident, variant: Variant)
 {
     use void::IsUninhabited;
 
-    let attrs = attr::parse_attributes(ctx, variant.attrs)?;
+    let attrs = attr::parse_attributes(ctx, &variant.attrs)?;
     let fields = fields_to_vec(variant.fields);
 
     if attrs.skip {
         // We've been ordered to skip this variant!
         // Check that all other attributes are not set.
-        ensure_has_only_skip_attr(ctx, attrs, error::ENUM_VARIANT);
+        ensure_has_only_skip_attr(ctx, &attrs, error::ENUM_VARIANT);
         fields.into_iter().try_for_each(|field| {
-            let f_attrs = attr::parse_attributes(ctx, field.attrs)?;
+            let f_attrs = attr::parse_attributes(ctx, &field.attrs)?;
             error::if_skip_present(ctx, &f_attrs, error::ENUM_VARIANT_FIELD);
-            ensure_has_only_skip_attr(ctx, f_attrs, error::ENUM_VARIANT_FIELD);
+            ensure_has_only_skip_attr(ctx, &f_attrs, error::ENUM_VARIANT_FIELD);
             Ok(())
         })?;
 
@@ -522,7 +522,7 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &Ident, variant: Variant)
 }
 
 /// Ensures that no other attributes than skip are present.
-fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str) {
+fn ensure_has_only_skip_attr(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     if attrs.params.is_set() {
         error::skipped_variant_has_param(ctx, item);
     }
@@ -542,7 +542,7 @@ fn pair_unit_variant(ctx: Ctx, attrs: &ParsedAttributes, v_path: Path)
 {
     error::if_strategy_present_on_unit_variant(ctx, attrs);
     error::if_params_present_on_unit_variant(ctx, attrs);
-    pair_unit_self(v_path)
+    pair_unit_self(&v_path)
 }
 
 //==============================================================================

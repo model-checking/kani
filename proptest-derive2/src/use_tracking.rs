@@ -14,7 +14,6 @@
 // much more about the increased compile times incured by including ordermap.
 // We need to preserve insertion order in any case, so HashMap is not useful.
 use std::collections::BTreeMap;
-use std::mem;
 use std::borrow::Borrow;
 
 use syn;
@@ -70,26 +69,24 @@ impl UseTracker {
     /// a type variable and this call has no effect.
     pub fn mark_used(&mut self, ty_var: impl Borrow<syn::Ident>) {
         if self.track {
-            self.used_map
-                .get_mut(ty_var.borrow())
-                .map(|used| { *used = true; });
+            if let Some(used) = self.used_map.get_mut(ty_var.borrow()) {
+                *used = true;
+            }
         }
     }
 
     /// Adds the bound in `for_used` on used type variables and
     /// the bound in `for_not` (`if .is_some()`) on unused type variables.
     pub fn add_bounds(&mut self, ctx: Ctx,
-        for_used: syn::TypeParamBound, for_not: Option<syn::TypeParamBound>)
+        for_used: &syn::TypeParamBound, for_not: Option<syn::TypeParamBound>)
         -> DeriveResult<()>
     {
         let mut iter = self.used_map.values().zip(self.generics.type_params_mut());
         if let Some(for_not) = for_not {
             iter.try_for_each(|(&used, tv)| {
                 // Steal the attributes:
-                let attrs = mem::replace(&mut tv.attrs, vec![]);
-                let no_bound = attr::has_no_bound(ctx, attrs)?;
-
-                let bound = if used && !no_bound { &for_used } else { &for_not };
+                let no_bound = attr::has_no_bound(ctx, &tv.attrs)?;
+                let bound = if used && !no_bound { for_used } else { &for_not };
                 tv.bounds.push(bound.clone());
                 Ok(())
             })?;
