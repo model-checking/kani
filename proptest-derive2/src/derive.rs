@@ -496,11 +496,12 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &syn::Ident, variant: syn::Variant)
     if attrs.skip {
         // We've been ordered to skip this variant!
         // Check that all other attributes are not set.
-        ensure_has_only_skip_attr(ctx, attrs, error::ENUM_VARIANT)?;
+        ensure_has_only_skip_attr(ctx, attrs, error::ENUM_VARIANT);
         fields.into_iter().try_for_each(|field| {
             let f_attrs = parse_attributes(ctx, field.attrs)?;
             error::if_skip_present(ctx, &f_attrs, error::ENUM_VARIANT_FIELD);
-            ensure_has_only_skip_attr(ctx, f_attrs, error::ENUM_VARIANT_FIELD)
+            ensure_has_only_skip_attr(ctx, f_attrs, error::ENUM_VARIANT_FIELD);
+            Ok(())
         })?;
 
         return Ok(None)
@@ -516,19 +517,18 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &syn::Ident, variant: syn::Variant)
 }
 
 /// Ensures that no other attributes than skip are present.
-fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
+fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str) {
     if attrs.params.is_set() {
         error::skipped_variant_has_param(ctx, item);
     }
+
     if attrs.strategy.is_set() {
         error::skipped_variant_has_strat(ctx, item);
     }
+
     if attrs.weight.is_some() {
-        error::skipped_variant_has_weight(ctx, item)?;
+        error::skipped_variant_has_weight(ctx, item);
     }
-    Ok(())
 }
 
 /// Deal with a unit variant.
