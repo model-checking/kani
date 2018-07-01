@@ -314,7 +314,7 @@ fn derive_enum_no_params(
             let path = parse_quote!( #_self::#ident );
             let (strat, ctor) = if fields.is_empty() {
                 // Unit variant:
-                pair_unit_variant(ctx, &attrs, path)?
+                pair_unit_variant(ctx, &attrs, path)
             } else {
                 // Not a unit variant:
                 derive_variant_with_fields(ctx, ut, path, attrs, fields, &mut acc)?
@@ -470,7 +470,7 @@ fn derive_enum_has_params(
             let path = parse_quote!( #_self::#ident );
             let (strat, ctor) = if fields.is_empty() {
                 // Unit variant:
-                pair_unit_variant(ctx, &attrs, path)?
+                pair_unit_variant(ctx, &attrs, path)
             } else {
                 // Not a unit variant:
                 variant_handle_default_params(ctx, ut, path, attrs, fields)?
@@ -532,13 +532,12 @@ fn ensure_has_only_skip_attr(ctx: Ctx, attrs: ParsedAttributes, item: &str)
 }
 
 /// Deal with a unit variant.
-fn pair_unit_variant
-    (ctx: Ctx, attrs: &ParsedAttributes, v_path: syn::Path)
-    -> DeriveResult<StratPair>
+fn pair_unit_variant(ctx: Ctx, attrs: &ParsedAttributes, v_path: syn::Path)
+    -> StratPair
 {
-    error::if_strategy_present_on_unit_variant(ctx, attrs)?;
+    error::if_strategy_present_on_unit_variant(ctx, attrs);
     error::if_params_present_on_unit_variant(ctx, attrs);
-    Ok(pair_unit_self(v_path))
+    pair_unit_self(v_path)
 }
 
 //==============================================================================

@@ -86,16 +86,13 @@ pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 }
 
 /// Ensures that an explicit strategy or value is not present on a unit variant.
-pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes)
-    -> DeriveResult<()>
-{
+pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
     use attr::StratMode::*;
     match attrs.strategy {
         Arbitrary   => {},
-        Strategy(_) => strategy_on_unit_variant(ctx, "strategy")?,
-        Value(_)    => strategy_on_unit_variant(ctx, "value")?,
+        Strategy(_) => strategy_on_unit_variant(ctx, "strategy"),
+        Value(_)    => strategy_on_unit_variant(ctx, "value"),
     }
-    Ok(())
 }
 
 /// Ensures that parameters is not present on a unit variant.
@@ -453,7 +450,7 @@ error!(skipped_variant_has_strat(item: &str), E0028,
 /// There's only one way to produce a specific unit variant, so setting
 /// `#[proptest(strategy = "<expr>")]` or `#[proptest(value = "<expr>")]`
 /// would be pointless.
-error!(strategy_on_unit_variant(what: &str), E0029,
+error!(continue strategy_on_unit_variant(what: &str), E0029,
     "Setting `#[proptest({0} = \"<expr>\")]` on a unit variant has no effect \
     and is redundant because there is nothing to configure.",
     what);
