@@ -42,12 +42,10 @@ pub const TY_VAR: &'static str = "a type variable";
 //==============================================================================
 
 /// Ensures that the type is not parametric over lifetimes.
-pub fn if_has_lifetimes(ctx: Ctx, ast: &syn::DeriveInput) -> DeriveResult<()> {
+pub fn if_has_lifetimes(ctx: Ctx, ast: &syn::DeriveInput) {
     if ast.generics.lifetimes().count() > 0 {
-        has_lifetimes(ctx)?;
+        has_lifetimes(ctx);
     }
-
-    Ok(())
 }
 
 /// Ensures that no attributes were specified on `item`.
@@ -221,7 +219,7 @@ macro_rules! error {
 /// Happens when we've been asked to derive `Arbitrary` for a type
 /// that is parametric over lifetimes. Since proptest does not support
 /// such types (yet), neither can we.
-error!(has_lifetimes, E0001,
+error!(continue has_lifetimes, E0001,
     "Can't derive `Arbitrary` for types with generic lifetimes, such as: \
     `struct Foo<'a> { bar: &'a str }`. Currently, strategies for such types \
     are impossible to define.");

@@ -43,7 +43,7 @@ pub fn derive_proptest_arbitrary(ctx: Ctx, ast: syn::DeriveInput)
     use syn::Data::*;
 
     // Deny lifetimes on type.
-    error::if_has_lifetimes(ctx, &ast)?;
+    error::if_has_lifetimes(ctx, &ast);
 
     let tracker = UseTracker::new(ast.generics);
 
