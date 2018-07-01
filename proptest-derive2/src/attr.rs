@@ -340,10 +340,11 @@ fn parse_weight(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
         .map(|value| value as u32);
 
     if let Some(value) = value {
-        ok_set(&mut loc.1, value)
+        loc.1 = Some(value);
     } else {
         error::weight_malformed(ctx, &meta)
     }
+    Ok(())
 }
 
 //==============================================================================

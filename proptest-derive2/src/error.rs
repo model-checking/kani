@@ -381,7 +381,7 @@ error!(continue skip_malformed, E0020,
     `#[proptest(skip)]`.");
 
 /// Happens when `#[proptest(weight..)]` is malformed.
-error!(weight_malformed(meta: &syn::Meta), E0021,
+error!(continue weight_malformed(meta: &syn::Meta), E0021,
     "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
     format `#[proptest({0} = <integer>)]` where `<integer>` is an integer that \
     fits within a `u32`. An example: `#[proptest({0} = 2)]` to set a relative \
