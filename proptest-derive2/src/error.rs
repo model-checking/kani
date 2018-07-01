@@ -261,7 +261,7 @@ error!(uninhabited_enum_variants_uninhabited, E0005,
 /// Happens when an enum becomes effectively uninhabited due
 /// to all inhabited variants having been skipped. There must
 /// at least exist one variant that we can construct.
-error!(uninhabited_enum_because_of_skipped_variants, E0006,
+error!(continue uninhabited_enum_because_of_skipped_variants, E0006,
     "The enum you are deriving `Arbitrary` for is uninhabited for all intents \
     and purposes since you have `#[proptest(skip)]`ed all inhabited variants. \
     An uninhabited type is by definition impossible to generate.");

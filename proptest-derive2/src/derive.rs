@@ -328,20 +328,19 @@ fn derive_enum_no_params(
     })?;
     */
 
-    ensure_union_has_strategies(ctx, &acc.strats)?;
+    ensure_union_has_strategies(ctx, &acc.strats);
 
     // Package the strategies into a union.
     Ok(acc.finish())
 }
 
 /// Ensure that there's at least one generatable variant for a union.
-fn ensure_union_has_strategies<C>(ctx: Ctx, strats: &StratAcc<C>) -> DeriveResult<()> {
+fn ensure_union_has_strategies<C>(ctx: Ctx, strats: &StratAcc<C>) {
     if strats.is_empty() {
         // We didn't accumulate any strategies,
         // so we can't construct any variant.
-        error::uninhabited_enum_because_of_skipped_variants(ctx)?;
+        error::uninhabited_enum_because_of_skipped_variants(ctx);
     }
-    Ok(())
 }
 
 /// Derive for a variant which has fields and where the
@@ -479,7 +478,7 @@ fn derive_enum_has_params(
         }
     }
 
-    ensure_union_has_strategies(ctx, &acc)?;
+    ensure_union_has_strategies(ctx, &acc);
 
     Ok(add_top_params(sty, acc.finish()))
 }
