@@ -334,8 +334,6 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 // Internals: Strategy
 //==============================================================================
 
-// FIXME: make these parsers accept the formats below!
-
 /// Parses an explicit value as a strategy.
 /// Valid forms are:
 /// + `#[proptest(value = <literal>)]`
