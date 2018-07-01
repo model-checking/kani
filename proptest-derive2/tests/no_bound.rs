@@ -17,6 +17,7 @@ struct NotArbitrary;
 /// Ensure that we can't determine that this is PhantomData syntactically.
 type HidePH<T> = ::std::marker::PhantomData<T>;
 
+/*
 #[derive(Debug, Arbitrary)]
 struct T1<#[proptest(no_bound)] T>(HidePH<T>);
 
@@ -36,6 +37,7 @@ struct T3<
 
 #[derive(Debug, Arbitrary)]
 struct T4(T3<NotArbitrary, bool, NotArbitrary>);
+*/
 
 #[derive(Debug, Arbitrary)]
 #[proptest(no_bound)]
@@ -48,7 +50,9 @@ struct T6(T5<NotArbitrary, NotArbitrary, NotArbitrary>);
 fn asserting_arbitrary() {
     fn assert_arbitrary<T: Arbitrary>() {}
 
+    /*
     assert_arbitrary::<T2>();
     assert_arbitrary::<T4>();
+    */
     assert_arbitrary::<T6>();
 }
