@@ -1,7 +1,10 @@
 #[macro_use]
 extern crate proptest_derive;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
+                            //~| [proptest_derive, E0007]
+                            //~| [proptest_derive, E0030]
+#[proptest(params = "u8")]
 #[proptest(strategy = "1u8..")]
 struct A {}
 

@@ -94,7 +94,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResul
     error::if_enum_attrs_present(ctx, &t_attrs, error::STRUCT);
 
     // Deny an explicit strategy directly on the struct.
-    error::if_strategy_present(ctx, &t_attrs, error::STRUCT)?;
+    error::if_strategy_present(ctx, &t_attrs, error::STRUCT);
 
     let v_path = ast.ident.clone().into();
     let parts = if ast.body.is_empty() {
@@ -272,7 +272,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResul
     error::if_skip_present(ctx, &t_attrs, error::ENUM);
 
     // We don't allow a strategy on the enum directly:
-    error::if_strategy_present(ctx, &t_attrs, error::ENUM)?;
+    error::if_strategy_present(ctx, &t_attrs, error::ENUM);
 
     // TODO: how to handle this?
     error::if_weight_present(ctx, &t_attrs, error::ENUM);

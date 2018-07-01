@@ -55,7 +55,7 @@ pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
     if_enum_attrs_present(ctx, attrs, item);
-    if_strategy_present(ctx, attrs, item)?;
+    if_strategy_present(ctx, attrs, item);
     if_specified_params(ctx, attrs, item)?;
     Ok(())
 }
@@ -76,12 +76,10 @@ pub fn if_specified_params(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
 }
 
 /// Ensures that an explicit strategy or value is not present on `item`.
-pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
+pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     use attr::StratMode::*;
     match attrs.strategy {
-        Arbitrary   => Ok(()),
+        Arbitrary   => {},
         Strategy(_) => illegal_strategy(ctx, "strategy", item),
         Value(_)    => illegal_strategy(ctx, "value", item),
     }
@@ -276,7 +274,7 @@ error!(uninhabited_enum_because_of_skipped_variants, E0006,
 /// `#[proptest(value = "<expr>")]` is specified on an `item`
 /// that does not support setting an explicit value or strategy.
 /// An enum or struct does not support that.
-error!(illegal_strategy(attr: &str, item: &str), E0007,
+error!(continue illegal_strategy(attr: &str, item: &str), E0007,
     "`#[proptest({0} = \"<expr>\")]` is not allowed on {1}. Only struct fields, \
     enum variants and fields inside those can use an explicit {0}.",
     attr, item);
