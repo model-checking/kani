@@ -99,11 +99,10 @@ pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes)
 }
 
 /// Ensures that parameters is not present on a unit variant.
-pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes)
-    -> DeriveResult<()>
-{
-    if attrs.params.is_set() { params_on_unit_variant(ctx)? }
-    Ok(())
+pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
+    if attrs.params.is_set() {
+        params_on_unit_variant(ctx)
+    }
 }
 
 /// Ensures that parameters is not present on a unit struct.
@@ -461,7 +460,7 @@ error!(strategy_on_unit_variant(what: &str), E0029,
 
 /// There's only one way to produce a specific unit variant, so setting
 /// `#[proptest(params = "<type>")]` would be pointless.
-error!(params_on_unit_variant, E0029,
+error!(continue params_on_unit_variant, E0029,
     "Setting `#[proptest(params = \"<type>\")]` on a unit variant has \
     no effect and is redundant because there is nothing to configure.");
 

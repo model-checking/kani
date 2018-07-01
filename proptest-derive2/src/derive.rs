@@ -537,7 +537,7 @@ fn pair_unit_variant
     -> DeriveResult<StratPair>
 {
     error::if_strategy_present_on_unit_variant(ctx, attrs)?;
-    error::if_params_present_on_unit_variant(ctx, attrs)?;
+    error::if_params_present_on_unit_variant(ctx, attrs);
     Ok(pair_unit_self(v_path))
 }
 
