@@ -113,6 +113,13 @@ pub fn parse_attributes(ctx: Ctx, attrs: Vec<Attribute>)
     Ok(attrs)
 }
 
+/// Parse the attributes specified on a type definition...
+pub fn parse_top_attributes(ctx: Ctx, attrs: Vec<Attribute>)
+    -> DeriveResult<ParsedAttributes>
+{
+    parse_attributes_base(ctx, attrs)
+}
+
 /// Parses the attributes specified on an item and parsed by syn
 /// and returns true if we've been ordered to not set an `Arbitrary`
 /// bound on the given type variable the attributes are from,

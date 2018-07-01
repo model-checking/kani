@@ -189,9 +189,7 @@ struct T27 {
     field: u8,
 }
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0031]
+#[derive(Debug, Arbitrary)] //~  ERROR: [proptest_derive, E0017]
 #[proptest(no_bound, no_bound)]
 struct T28<T> {
     field: T,

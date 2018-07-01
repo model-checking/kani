@@ -11,23 +11,10 @@
 use std::borrow::Borrow;
 
 use syn;
-use syn::punctuated::Punctuated;
-use syn::PathSegment;
-
-use use_tracking;
 
 //==============================================================================
 // General AST manipulation and types
 //==============================================================================
-
-/// Simplified version of `DeriveInput` from syn letting us be generic over
-/// the body.
-pub struct DeriveData<B> {
-    pub ident: syn::Ident,
-    pub attrs: Vec<syn::Attribute>,
-    pub tracker: use_tracking::UseTracker,
-    pub body: B
-}
 
 /// Extract the list of fields from a `Fields` from syn.
 /// We don't care about the style, we always and uniformly use {} in
@@ -56,7 +43,7 @@ pub fn self_ty() -> syn::Type {
 // Paths:
 //==============================================================================
 
-type CommaPS = Punctuated<PathSegment, Token![::]>;
+type CommaPS = syn::punctuated::Punctuated<syn::PathSegment, Token![::]>;
 
 /// Returns true iff the path is simple, i.e:
 /// just a :: separated list of identifiers.

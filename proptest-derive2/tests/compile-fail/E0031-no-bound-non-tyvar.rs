@@ -1,12 +1,6 @@
 #[macro_use]
 extern crate proptest_derive;
 
-#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0031]
-#[proptest(no_bound)] // TODO: SHOULD BE ALLOWED!
-struct T0<T> {
-    field: ::std::marker::PhantomData<T>,
-}
-
 #[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
                             //~| [proptest_derive, E0031]
                             //~| [proptest_derive, E0008]

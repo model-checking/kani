@@ -41,6 +41,8 @@ pub struct UseTracker {
     /// The generics that we are doing this for.
     /// This what we will modify later once we're done.
     generics: syn::Generics,
+    /// If set to `true`, then `mark_used` has no effect.
+    track: bool,
 }
 
 /// Models a thing that may have type variables in it that
@@ -57,20 +59,28 @@ impl UseTracker {
         let used_map = generics.type_params()
             .map(|v| (v.ident.clone(), false))
             .collect();
-        Self { generics, used_map }
+        Self { generics, used_map, track: true }
+    }
+
+    /// Stop tracking. `.mark_used` will have no effect.
+    pub fn no_track(&mut self) {
+        self.track = false;
     }
 
     /// Mark the _potential_ type variable `ty_var` as used.
     /// If the tracker does not know about the name, it is not
     /// a type variable and this call has no effect.
-    pub fn mark_used<S: Borrow<syn::Ident>>(&mut self, ty_var: S) {
-        self.used_map.get_mut(ty_var.borrow()).map(|used| { *used = true; });
+    pub fn mark_used(&mut self, ty_var: impl Borrow<syn::Ident>) {
+        if self.track {
+            self.used_map
+                .get_mut(ty_var.borrow())
+                .map(|used| { *used = true; });
+        }
     }
 
     /// Adds the bound in `for_used` on used type variables and
     /// the bound in `for_not` (`if .is_some()`) on unused type variables.
-    pub fn add_bounds(&mut self,
-        ctx: Ctx,
+    pub fn add_bounds(&mut self, ctx: Ctx,
         for_used: syn::TypeParamBound, for_not: Option<syn::TypeParamBound>)
         -> DeriveResult<()>
     {

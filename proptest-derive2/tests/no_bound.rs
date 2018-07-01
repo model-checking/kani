@@ -37,14 +37,12 @@ struct T3<
 #[derive(Debug, Arbitrary)]
 struct T4(T3<NotArbitrary, bool, NotArbitrary>);
 
-/*
-TODO:
-
 #[derive(Debug, Arbitrary)]
 #[proptest(no_bound)]
-struct Foo<A, B, C>(HidePH<(A, B, C)>);
+struct T5<A, B, C>(HidePH<(A, B, C)>);
 
-*/
+#[derive(Debug, Arbitrary)]
+struct T6(T5<NotArbitrary, NotArbitrary, NotArbitrary>);
 
 #[test]
 fn asserting_arbitrary() {
@@ -52,4 +50,5 @@ fn asserting_arbitrary() {
 
     assert_arbitrary::<T2>();
     assert_arbitrary::<T4>();
+    assert_arbitrary::<T6>();
 }

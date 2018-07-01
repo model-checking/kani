@@ -11,10 +11,10 @@
 use proc_macro2::TokenStream;
 use syn::{Type, Path, Field, Ident, Variant, DeriveInput};
 
-use util::{is_unit_type, self_ty, DeriveData, fields_to_vec};
+use util::{is_unit_type, self_ty, fields_to_vec};
 use void::IsUninhabited;
 use error::{self, Ctx, Context, DeriveResult};
-use attr::{parse_attributes, ParamsMode, ParsedAttributes, StratMode};
+use attr::{self, ParamsMode, ParsedAttributes, StratMode};
 use use_tracking::{UseMarkable, UseTracker};
 use ast::*;
 
@@ -36,8 +36,17 @@ pub fn impl_proptest_arbitrary(ast: DeriveInput) -> TokenStream {
     }
 }
 
+/// Simplified version of `DeriveInput` from syn letting us be generic over
+/// the body.
+struct DeriveData<B> {
+    ident: Ident,
+    attrs: ParsedAttributes,
+    tracker: UseTracker,
+    body: B
+}
+
 /// Entry point for deriving `Arbitrary`.
-pub fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
+fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
     -> DeriveResult<TokenStream>
 {
     use syn::Data::*;
@@ -45,22 +54,25 @@ pub fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
     // Deny lifetimes on type.
     error::if_has_lifetimes(ctx, &ast);
 
-    let tracker = UseTracker::new(ast.generics);
+    // Parse top level attributes:
+    let attrs = attr::parse_top_attributes(ctx, ast.attrs)?;
+
+    // Initialize tracker:
+    let mut tracker = UseTracker::new(ast.generics);
+    if attrs.no_bound {
+        tracker.no_track();
+    }
 
     // Compile into our own high level IR for the impl:
     let the_impl = match ast.data {
         // Deal with structs:
         Struct(data) => derive_struct(ctx, DeriveData {
-            tracker,
-            ident: ast.ident,
-            attrs: ast.attrs,
+            tracker, attrs, ident: ast.ident,
             body: fields_to_vec(data.fields),
         }),
         // Deal with enums:
         Enum(data) => derive_enum(ctx, DeriveData {
-            tracker,
-            ident: ast.ident,
-            attrs: ast.attrs,
+            tracker, attrs, ident: ast.ident,
             body: data.variants.into_iter().collect(),
         }),
         // Unions are not supported:
@@ -83,18 +95,16 @@ pub fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
 
 /// Entry point for deriving `Arbitrary` for `struct`s.
 fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl> {
-    let t_attrs = parse_attributes(ctx, ast.attrs)?;
-
     // Deny attributes that are only for enum variants:
-    error::if_enum_attrs_present(ctx, &t_attrs, error::STRUCT);
+    error::if_enum_attrs_present(ctx, &ast.attrs, error::STRUCT);
 
     // Deny an explicit strategy directly on the struct.
-    error::if_strategy_present(ctx, &t_attrs, error::STRUCT);
+    error::if_strategy_present(ctx, &ast.attrs, error::STRUCT);
 
     let v_path = ast.ident.clone().into();
     let parts = if ast.body.is_empty() {
         // Deriving for a unit struct.
-        error::if_params_present_on_unit_struct(ctx, &t_attrs);
+        error::if_params_present_on_unit_struct(ctx, &ast.attrs);
         let (strat, ctor) = pair_unit_self(v_path);
         (Params::empty(), strat, ctor)
     } else {
@@ -114,7 +124,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl
 
         // The complexity of the logic depends mostly now on whether
         // parameters were set directly on the type or not.
-        if let Some(param_ty) = t_attrs.params.to_option() {
+        if let Some(param_ty) = ast.attrs.params.to_option() {
             // Parameters was set on the struct itself, the logic is simpler.
             add_top_params(param_ty,
                 derive_product_has_params(ctx, &mut ast.tracker,
@@ -157,7 +167,7 @@ fn derive_product_has_params(
     // a `.prop_map(..)` that produces the composite strategy.
     let len = fields.len();
     fields.into_iter().try_fold(StratAcc::new(len), |acc, field| {
-        let attrs = parse_attributes(ctx, field.attrs)?;
+        let attrs = attr::parse_attributes(ctx, field.attrs)?;
 
         // Deny attributes that are only for enum variants:
         error::if_enum_attrs_present(ctx, &attrs, item);
@@ -196,7 +206,7 @@ fn derive_product_no_params
     // and let the caller of this function determine what to do with it.
     let acc = PartsAcc::new(fields.len());
     fields.into_iter().try_fold(acc, |mut acc, field| {
-        let attrs = parse_attributes(ctx, field.attrs)?;
+        let attrs = attr::parse_attributes(ctx, field.attrs)?;
 
         // Deny attributes that are only for enum variants:
         error::if_enum_attrs_present(ctx, &attrs, item);
@@ -258,16 +268,14 @@ fn extract_nparam<C>
 fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl> {
     use void::IsUninhabited;
 
-    let t_attrs = parse_attributes(ctx, ast.attrs)?;
-
     // An enum can't be skipped, ensure it hasn't been:
-    error::if_skip_present(ctx, &t_attrs, error::ENUM);
+    error::if_skip_present(ctx, &ast.attrs, error::ENUM);
 
     // We don't allow a strategy on the enum directly:
-    error::if_strategy_present(ctx, &t_attrs, error::ENUM);
+    error::if_strategy_present(ctx, &ast.attrs, error::ENUM);
 
     // TODO: how to handle this?
-    error::if_weight_present(ctx, &t_attrs, error::ENUM);
+    error::if_weight_present(ctx, &ast.attrs, error::ENUM);
 
     // Bail if there are no variants:
     if ast.body.is_empty() {
@@ -281,7 +289,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl
 
     // The complexity of the logic depends mostly now on whether
     // parameters were set directly on the type or not.
-    let parts = if let Some(sty) = t_attrs.params.to_option() {
+    let parts = if let Some(sty) = ast.attrs.params.to_option() {
         // The logic is much simpler in this branch.
         derive_enum_has_params(ctx, &mut ast.tracker, &ast.ident, ast.body, sty)
     } else {
@@ -438,7 +446,7 @@ fn variant_handle_default_params(
 /// Ensures that there are no proptest attributes on any of the fields.
 fn deny_all_attrs_on_fields(ctx: Ctx, fields: Vec<Field>) -> DeriveResult<()> {
     fields.into_iter().try_for_each(|field| {
-        let f_attr = parse_attributes(ctx, field.attrs)?;
+        let f_attr = attr::parse_attributes(ctx, field.attrs)?;
         error::if_anything_specified(ctx, &f_attr, error::ENUM_VARIANT_FIELD)
     })
 }
@@ -487,7 +495,7 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &Ident, variant: Variant)
 {
     use void::IsUninhabited;
 
-    let attrs = parse_attributes(ctx, variant.attrs)?;
+    let attrs = attr::parse_attributes(ctx, variant.attrs)?;
     let fields = fields_to_vec(variant.fields);
 
     if attrs.skip {
@@ -495,7 +503,7 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &Ident, variant: Variant)
         // Check that all other attributes are not set.
         ensure_has_only_skip_attr(ctx, attrs, error::ENUM_VARIANT);
         fields.into_iter().try_for_each(|field| {
-            let f_attrs = parse_attributes(ctx, field.attrs)?;
+            let f_attrs = attr::parse_attributes(ctx, field.attrs)?;
             error::if_skip_present(ctx, &f_attrs, error::ENUM_VARIANT_FIELD);
             ensure_has_only_skip_attr(ctx, f_attrs, error::ENUM_VARIANT_FIELD);
             Ok(())
