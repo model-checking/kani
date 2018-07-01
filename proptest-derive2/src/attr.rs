@@ -443,10 +443,11 @@ fn parse_params(ctx: Ctx, loc: &mut PAll, meta: Meta) -> DeriveResult<()> {
     };
 
     if let Some(typ) = typ {
-        ok_set(loc, typ)
+        *loc = Some(typ);
     } else {
         error::param_malformed(ctx)
     }
+    Ok(())
 }
 
 /// Parses an order to use the default Parameters type and value.

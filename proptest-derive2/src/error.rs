@@ -401,7 +401,7 @@ error!(overspecified_param, E0022,
 /// `<type>` inside `#[proptest(params = "<type>")]` or
 /// `#[proptest(params("<type>"))]` is malformed. In other words, `<type>` is
 /// not a valid Rust type. Note that `syn` may not cover all valid Rust types.
-error!(param_malformed, E0023,
+error!(continue param_malformed, E0023,
     "The attribute modifier `params` inside #[proptest(..)] must have the \
     format `#[proptest(params = \"<type>\")]` where `<type>` is a valid type \
     in Rust. An example: `#[proptest(params = \"ComplexType<Foo>\")]`.");
