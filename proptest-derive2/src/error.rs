@@ -13,7 +13,7 @@
 use proc_macro2::TokenStream;
 
 use syn;
-use attr;
+use attr::ParsedAttributes;
 
 //==============================================================================
 // Item descriptions
@@ -51,7 +51,7 @@ pub fn if_has_lifetimes(ctx: Ctx, ast: &syn::DeriveInput) -> DeriveResult<()> {
 }
 
 /// Ensures that no attributes were specified on `item`.
-pub fn if_anything_specified(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
     if_enum_attrs_present(ctx, attrs, item)?;
@@ -62,16 +62,16 @@ pub fn if_anything_specified(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &st
 
 /// Ensures that things only allowed on an enum variant is not present on
 /// `item` which is not an enum variant.
-pub fn if_enum_attrs_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
-    if_skip_present(ctx, attrs, item)?;
+    if_skip_present(ctx, attrs, item);
     if_weight_present(ctx, attrs, item)?;
     Ok(())
 }
 
 /// Ensures that parameters is not present on `item`.
-pub fn if_specified_params(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+pub fn if_specified_params(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
     if attrs.params.is_set() { parent_has_param(ctx, item)?; }
@@ -79,7 +79,7 @@ pub fn if_specified_params(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
 }
 
 /// Ensures that an explicit strategy or value is not present on `item`.
-pub fn if_strategy_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
     use attr::StratMode::*;
@@ -91,7 +91,7 @@ pub fn if_strategy_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
 }
 
 /// Ensures that an explicit strategy or value is not present on a unit variant.
-pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &attr::ParsedAttributes)
+pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes)
     -> DeriveResult<()>
 {
     use attr::StratMode::*;
@@ -104,7 +104,7 @@ pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &attr::ParsedAttribu
 }
 
 /// Ensures that parameters is not present on a unit variant.
-pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &attr::ParsedAttributes)
+pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes)
     -> DeriveResult<()>
 {
     if attrs.params.is_set() { params_on_unit_variant(ctx)? }
@@ -112,23 +112,21 @@ pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &attr::ParsedAttribute
 }
 
 /// Ensures that parameters is not present on a unit struct.
-pub fn if_params_present_on_unit_struct(ctx: Ctx, attrs: &attr::ParsedAttributes)
-    -> DeriveResult<()>
-{
-    if attrs.params.is_set() { params_on_unit_struct(ctx)? }
-    Ok(())
+pub fn if_params_present_on_unit_struct(ctx: Ctx, attrs: &ParsedAttributes) {
+    if attrs.params.is_set() {
+        params_on_unit_struct(ctx)
+    }
 }
 
 /// Ensures that skip is not present on `item`.
-pub fn if_skip_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
-    if attrs.skip { illegal_skip(ctx, item)? }
-    Ok(())
+pub fn if_skip_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
+    if attrs.skip {
+        illegal_skip(ctx, item)
+    }
 }
 
 /// Ensures that a weight is not present on `item`.
-pub fn if_weight_present(ctx: Ctx, attrs: &attr::ParsedAttributes, item: &str)
+pub fn if_weight_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
     -> DeriveResult<()>
 {
     if attrs.weight.is_some() { illegal_weight(ctx, item)?; }
@@ -289,7 +287,7 @@ error!(illegal_strategy(attr: &str, item: &str), E0007,
 
 /// Happens when `#[proptest(skip)]` is specified on an `item` that does
 /// not support skipping. Only enum variants support skipping.
-error!(illegal_skip(item: &str), E0008,
+error!(continue illegal_skip(item: &str), E0008,
     "A {} can't be `#[proptest(skip)]`ed, only enum variants can be skipped.",
     item);
 
@@ -476,7 +474,7 @@ error!(params_on_unit_variant, E0029,
 /// Occurs when `#[proptest(params = "<type>")]` is specified on a unit
 /// struct. There's only one way to produce a unit struct, so specifying
 /// `Parameters` would be pointless.
-error!(params_on_unit_struct, E0030,
+error!(continue params_on_unit_struct, E0030,
     "Setting `#[proptest(params = \"<type>\")]` on a unit struct has no effect \
     and is redundant because there is nothing to configure.");
 

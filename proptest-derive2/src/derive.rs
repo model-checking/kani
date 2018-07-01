@@ -99,7 +99,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Field>>) -> DeriveResul
     let v_path = ast.ident.clone().into();
     let parts = if ast.body.is_empty() {
         // Deriving for a unit struct.
-        error::if_params_present_on_unit_struct(ctx, &t_attrs)?;
+        error::if_params_present_on_unit_struct(ctx, &t_attrs);
         let (strat, ctor) = pair_unit_self(v_path);
         (Params::empty(), strat, ctor)
     } else {
@@ -269,7 +269,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResul
     let t_attrs = parse_attributes(ctx, ast.attrs)?;
 
     // An enum can't be skipped, ensure it hasn't been:
-    error::if_skip_present(ctx, &t_attrs, error::ENUM)?;
+    error::if_skip_present(ctx, &t_attrs, error::ENUM);
 
     // We don't allow a strategy on the enum directly:
     error::if_strategy_present(ctx, &t_attrs, error::ENUM)?;
@@ -499,7 +499,7 @@ fn keep_inhabited_variant(ctx: Ctx, _self: &syn::Ident, variant: syn::Variant)
         ensure_has_only_skip_attr(ctx, attrs, error::ENUM_VARIANT)?;
         fields.into_iter().try_for_each(|field| {
             let f_attrs = parse_attributes(ctx, field.attrs)?;
-            error::if_skip_present(ctx, &f_attrs, error::ENUM_VARIANT_FIELD)?;
+            error::if_skip_present(ctx, &f_attrs, error::ENUM_VARIANT_FIELD);
             ensure_has_only_skip_attr(ctx, f_attrs, error::ENUM_VARIANT_FIELD)
         })?;
 
