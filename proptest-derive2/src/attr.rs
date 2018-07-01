@@ -227,34 +227,21 @@ fn is_outer_attr(attr: &Attribute) -> bool {
 /// Dispatches an attribute modifier to handlers and
 /// let's them add stuff into our accumulartor.
 fn dispatch_attribute(ctx: Ctx, mut acc: ParseAcc, meta: Meta) -> ParseAcc {
-    // TODO: revisit when we have NLL.
-
     // Dispatch table for attributes:
-    //
-    // N.B: We use this trick to return function pointers to avoid cloning.
-    // Once we have NLL this might not be necessary.
-    let parser = {
-        let name = meta.name().to_string();
-        let name = name.as_ref();
-        match name {
-            // Valid modifiers:
-            "skip" => parse_skip,
-            "w" | "weight" => parse_weight,
-            "no_params" => parse_no_params,
-            "params" => parse_params,
-            "strategy" => parse_strategy,
-            "value" => parse_value,
-            "no_bound" => parse_no_bound,
-            // Invalid modifiers:
-            name => {
-                dispatch_unknown_mod(ctx, name);
-                return acc;
-            },
-        }
-    };
-
-    // We now have a parser that we can dispatch to.
-    parser(ctx, &mut acc, meta);
+    let name = meta.name().to_string();
+    let name = name.as_ref();
+    match name {
+        // Valid modifiers:
+        "skip" => parse_skip(ctx, &mut acc, meta),
+        "w" | "weight" => parse_weight(ctx, &mut acc, meta),
+        "no_params" => parse_no_params(ctx, &mut acc, meta),
+        "params" => parse_params(ctx, &mut acc, meta),
+        "strategy" => parse_strategy(ctx, &mut acc, meta),
+        "value" => parse_value(ctx, &mut acc, meta),
+        "no_bound" => parse_no_bound(ctx, &mut acc, meta),
+        // Invalid modifiers:
+        name => dispatch_unknown_mod(ctx, name),
+    }
     acc
 }
 
