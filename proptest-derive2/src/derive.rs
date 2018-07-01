@@ -256,16 +256,6 @@ fn extract_nparam<C>
 fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResult<Impl> {
     use void::IsUninhabited;
 
-    // Bail if there are no variants:
-    if ast.body.is_empty() {
-        error::uninhabited_enum_with_no_variants(ctx)?;
-    }
-
-    // Bail if all variants are uninhabited:
-    if (&*ast.body).is_uninhabited() {
-        error::uninhabited_enum_variants_uninhabited(ctx)?;
-    }
-
     let t_attrs = parse_attributes(ctx, ast.attrs)?;
 
     // An enum can't be skipped, ensure it hasn't been:
@@ -276,6 +266,16 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveInput<Vec<syn::Variant>>) -> DeriveResul
 
     // TODO: how to handle this?
     error::if_weight_present(ctx, &t_attrs, error::ENUM);
+
+    // Bail if there are no variants:
+    if ast.body.is_empty() {
+        error::uninhabited_enum_with_no_variants(ctx)?;
+    }
+
+    // Bail if all variants are uninhabited:
+    if (&*ast.body).is_uninhabited() {
+        error::uninhabited_enum_variants_uninhabited(ctx)?;
+    }
 
     // The complexity of the logic depends mostly now on whether
     // parameters were set directly on the type or not.
