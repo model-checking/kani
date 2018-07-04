@@ -214,7 +214,7 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
     fn next(&mut self) -> Option<Self::Item> {
         // A left-over node, process it first:
         if let Some(next) = self.next.take() {
-            return Some(bytes_regex_parsed(next))
+            return Some(bytes_regex_parsed(next));
         }
 
         // Accumulate a literal sequence as long as we can:
@@ -224,7 +224,7 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
                 Literal(Unicode(scalar)) => self.buf.extend(to_bytes(*scalar)),
                 Literal(Byte(byte)) => self.buf.push(*byte),
                 // Ecountered a non-literal.
-                _ => return if self.buf.is_empty() {
+                _ => return if !self.buf.is_empty() {
                     // We've accumulated a literal from before, flush it out.
                     // Store this node so we deal with it the next call.
                     self.next = Some(next);
@@ -237,10 +237,10 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
         }
 
         // Flush out any accumulated literal from before.
-        if self.buf.is_empty() {
-            None
-        } else {
+        if !self.buf.is_empty() {
             flush_lit_buf(self)
+        } else {
+            self.next.take().map(bytes_regex_parsed)
         }
     }
 }
@@ -406,10 +406,54 @@ mod test {
         do_test("(?s).", 200, 65536, 256);
     }
 
+    #[test]
+    fn test_backslash_d_plus() {
+        do_test("\\d+", 1, 65536, 256);
+    }
+
     fn assert_send_and_sync<T : Send + Sync>(_: T) { }
 
     #[test]
     fn regex_strategy_is_send_and_sync() {
         assert_send_and_sync(string_regex(".").unwrap());
     }
+
+    macro_rules! consistent {
+        ($name:ident, $value:expr) => {
+            #[test]
+            fn $name() {
+                test_generates_matching_strings($value);
+            }
+        }
+    }
+
+    fn test_generates_matching_strings(pattern: &str) {
+        use std::time;
+
+        let mut runner = TestRunner::default();
+        let start = time::Instant::now();
+
+        // If we don't support this regex, just move on quietly
+        if let Ok(strategy) = string_regex(pattern) {
+            let rx = Regex::new(pattern).unwrap();
+
+            for _ in 0..1000 {
+                let mut val = strategy.new_tree(&mut runner).unwrap();
+                // No more than 1000 simplify steps to keep test time down
+                for _ in 0..1000 {
+                    let s = val.current();
+                    assert!(rx.is_match(&s),
+                            "Produced string {:?}, which does not match {:?}",
+                            s, pattern);
+
+                    if !val.simplify() { break; }
+                }
+
+                // Quietly stop testing if we've run for >10 s
+                if start.elapsed().as_secs() > 10 { break; }
+            }
+        }
+    }
+
+    include!("regex-contrib/crates_regex.rs");
 }
