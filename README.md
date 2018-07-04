@@ -85,7 +85,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.8.2"
+proptest = "0.8.3"
 ```
 
 and at the top of `main.rs` or `lib.rs`:
