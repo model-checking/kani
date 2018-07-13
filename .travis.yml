@@ -18,7 +18,7 @@ script:
       travis-cargo build &&
       travis-cargo test &&
       travis-cargo --only stable build -- --no-default-features --features fork &&
-      travis-cargo --only nightly build -- --no-default-features --features "alloc nightly unstable" &&
+      # travis-cargo --only nightly build -- --no-default-features --features "alloc nightly unstable" &&
       (cd test-persistence-location && ./run-tests.sh)
 
 cache: cargo
