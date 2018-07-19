@@ -93,7 +93,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! proptest = "0.8.2"
+//! proptest = "0.8.3"
 //! ```
 //!
 //! and at the top of `main.rs` or `lib.rs`:
@@ -398,6 +398,8 @@
 //!     #[test]
 //!     # NOREADME */
 //!     fn i64_abs_is_never_negative(a in any::<i64>()) {
+//!         // This actually fails if a == i64::MIN, but randomly picking one
+//!         // specific value out of 2⁶⁴ is overwhelmingly unlikely.
 //!         assert!(a.abs() >= 0);
 //!     }
 //! }

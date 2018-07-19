@@ -1,3 +1,10 @@
+## 0.8.3
+
+### Bug Fixes
+
+- Fix that regex-based string generation could transpose the order of a literal
+  and a non-literal component.
+
 ## 0.8.2
 
 ### New Additions
