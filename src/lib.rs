@@ -853,7 +853,7 @@
 //! combine their values into one value that holds each input separately. There
 //! are several of these. The simplest is a tuple; a tuple of strategies is
 //! itself a strategy for tuples of the values those strategies produce. For
-//! example, `(0..10i32,100..1000i32)` is a strategy for pairs of integers
+//! example, `(0..100i32,100..1000i32)` is a strategy for pairs of integers
 //! where the first value is between 0 and 100 and the second is between 100
 //! and 1000.
 //!
