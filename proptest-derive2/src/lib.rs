@@ -45,7 +45,7 @@ mod derive;
 pub fn derive_proptest_arbitrary(input: pm::TokenStream) -> pm::TokenStream {
     // Bootstrap!
     // This function just delegates to impl_proptest_arbitrary.
-    derive::impl_proptest_arbitrary(syn::parse2(input.into()).unwrap()).into()
+    derive::impl_proptest_arbitrary(syn::parse(input).unwrap()).into()
 }
 
 #[cfg(test)] mod tests;
