@@ -80,7 +80,7 @@ impl Impl {
 
         /// An `Arbitrary` bound on a type variable.
         fn arbitrary_bound() -> syn::TypeParamBound {
-            parse_quote!( crate_proptest::arbitrary::Arbitrary )
+            parse_quote!( _proptest::arbitrary::Arbitrary )
         }
 
         // Add bounds and get generics for the impl.
@@ -92,15 +92,15 @@ impl Impl {
         let _top = call_site_ident(TOP_PARAM_NAME);
 
         let _const = call_site_ident(
-            &format!("_IMPL_PROPTEST_ARBITRARY_FOR_{}", typ));
+            &format!("_IMPL_ARBITRARY_FOR_{}", typ));
 
         // Linearise everything. We're done after this.
         let q = quote! {
             #[allow(non_upper_case_globals)]
             const #_const: () = {
-            extern crate proptest as crate_proptest;
+            extern crate proptest as _proptest;
 
-            impl #impl_generics crate_proptest::arbitrary::Arbitrary
+            impl #impl_generics _proptest::arbitrary::Arbitrary
             for #typ #ty_generics #where_clause {
                 type Parameters = #params;
 
@@ -113,6 +113,7 @@ impl Impl {
 
             };
         };
+
         Ok(q)
     }
 }
@@ -125,15 +126,15 @@ impl Impl {
 pub type StratPair = (Strategy, Ctor);
 
 /// The type and constructor for `any::<Type>()`.
-pub fn pair_any(ty: syn::Type) -> StratPair {
-    let q = Ctor::Arbitrary(ty.clone(), None);
-    (Strategy::Arbitrary(ty), q)
+pub fn pair_any(ty: syn::Type, span: Span) -> StratPair {
+    let q = Ctor::Arbitrary(ty.clone(), None, span);
+    (Strategy::Arbitrary(ty, span), q)
 }
 
 /// The type and constructor for `any_with::<Type>(parameters)`.
-pub fn pair_any_with(ty: syn::Type, var: usize) -> StratPair {
-    let q = Ctor::Arbitrary(ty.clone(), Some(var));
-    (Strategy::Arbitrary(ty), q)
+pub fn pair_any_with(ty: syn::Type, var: usize, span: Span) -> StratPair {
+    let q = Ctor::Arbitrary(ty.clone(), Some(var), span);
+    (Strategy::Arbitrary(ty, span), q)
 }
 
 /// The type and constructor for a specific strategy value constructed by the
@@ -238,7 +239,7 @@ impl ToTokens for Params {
 /// Returns for a given type `ty` the associated item `Parameters` of the
 /// type's `Arbitrary` implementation.
 pub fn arbitrary_param(ty: &syn::Type) -> syn::Type {
-    parse_quote!(<#ty as crate_proptest::arbitrary::Arbitrary>::Parameters)
+    parse_quote!(<#ty as _proptest::arbitrary::Arbitrary>::Parameters)
 }
 
 //==============================================================================
@@ -249,7 +250,7 @@ pub fn arbitrary_param(ty: &syn::Type) -> syn::Type {
 pub enum Strategy {
     /// Assuming the metavariable `$ty` for a given type, this models the
     /// strategy type `<$ty as Arbitrary>::Strategy`.
-    Arbitrary(syn::Type),
+    Arbitrary(syn::Type, Span),
     /// Assuming the metavariable `$ty` for a given type, this models the
     /// strategy type `BoxedStrategy<$ty>`, i.e: an existentially typed strategy.
     ///
@@ -276,27 +277,40 @@ macro_rules! quote_append {
     };
 }
 
+impl Strategy {
+    fn types(&self) -> Vec<syn::Type> {
+        use self::Strategy::*;
+        match self {
+            Arbitrary(ty, _) => vec![ty.clone()],
+            Existential(ty) => vec![ty.clone()],
+            Value(ty) => vec![ty.clone()],
+            Map(strats) => strats.iter().flat_map(|s| s.types()).collect(),
+            Union(strats) => strats.iter().flat_map(|s| s.types()).collect(),
+        }
+    }
+}
+
 impl ToTokens for Strategy {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         // The logic of each of these are pretty straight forward save for
         // union which is described separately.
         use self::Strategy::*;
         match self {
-            Arbitrary(ty) => quote_append!(tokens,
-                <#ty as crate_proptest::arbitrary::Arbitrary>::Strategy
-            ),
-            Existential(ty) => quote_append!(tokens,
-                crate_proptest::strategy::BoxedStrategy<#ty>
-            ),
-            Value(ty) => quote_append!(tokens, fn() -> #ty ),
+            Arbitrary(ty, span) => tokens.append_all(quote_spanned!(*span=>
+                <#ty as _proptest::arbitrary::Arbitrary>::Strategy
+            )),
+            Existential(ty) => tokens.append_all(quote!(
+                _proptest::strategy::BoxedStrategy<#ty>
+            )),
+            Value(ty) => tokens.append_all(quote!( fn() -> #ty )),
             Map(strats) => {
-                let tuple = Tuple(strats.iter());
-                quote_append!(tokens,
-                    crate_proptest::strategy::Map<#tuple,
-                        fn(<#tuple as crate_proptest::strategy::Strategy>::Value)
-                            -> Self
+                let field_tys = self.types();
+                let strats = strats.iter();
+                tokens.append_all(quote!(
+                    _proptest::strategy::Map< ( #(#strats,)* ),
+                        fn( ( #(#field_tys,)* ) ) -> Self
                     >
-                )
+                ))
             },
             Union(strats) => union_strat_to_tokens(tokens, strats),
         }
@@ -335,7 +349,7 @@ pub enum Ctor {
     /// A strategy generated by using the `Arbitrary` impl for the given `Ty´.
     /// If `Some(idx)` is specified, then a parameter at `params_<idx>` is used
     /// and provided to `any_with::<Ty>(params_<idx>)`.
-    Arbitrary(syn::Type, Option<usize>),
+    Arbitrary(syn::Type, Option<usize>, Span),
     /// An exact strategy value given by the expression.
     Existential(syn::Expr),
     /// A strategy that always produces the given expression.
@@ -392,21 +406,26 @@ impl ToTokens for Ctor {
             Extract(ctor, to, from) => quote_append!(tokens, {
                 let #to = #from; #ctor
             }),
-            Arbitrary(ty, fv) => if let Some(fv) = fv {
+            Arbitrary(ty, fv, span) => tokens.append_all(if let Some(fv) = fv {
                 let args = param(*fv);
-                quote_append!(tokens,
-                    crate_proptest::arbitrary::any_with::<#ty>(#args)
+                quote_spanned!(*span=>
+                    _proptest::arbitrary::any_with::<#ty>(#args)
                 )
             } else {
-                quote_append!(tokens, crate_proptest::arbitrary::any::<#ty>() )
-            },
+                quote_spanned!(*span=>
+                    _proptest::arbitrary::any::<#ty>()
+                )
+            }),
             Existential(expr) => quote_append!(tokens,
-                crate_proptest::strategy::Strategy::boxed( #expr ) ),
+                _proptest::strategy::Strategy::boxed( #expr ) ),
             Value(expr) => quote_append!(tokens, || #expr ),
             Map(ctors, closure) => {
-                let ctors = Tuple2(ctors.as_ref());
+                let ctors = ctors.iter();
                 quote_append!(tokens,
-                    crate_proptest::strategy::Strategy::prop_map(#ctors, #closure)
+                    _proptest::strategy::Strategy::prop_map(
+                        ( #(#ctors,)* ),
+                        #closure
+                    )
                 );
             },
             Union(ctors) => union_ctor_to_tokens(tokens, ctors),
@@ -468,7 +487,7 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
     let tail = Recurse(weight_sum(ctors) - weight_sum(chunk), chunks);
 
     quote_append!(tokens,
-        crate_proptest::strategy::TupleUnion::new(( #(#head,)* #tail ))
+        _proptest::strategy::TupleUnion::new(( #(#head,)* #tail ))
     );
 
     struct Recurse<'a>(u32, ::std::slice::Chunks<'a, (u32, Ctor)>);
@@ -485,7 +504,7 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
                     let head = chunk.iter().map(|(w, c)| quote!( (#w, #c) ));
                     let tail = Recurse(tweight - weight_sum(chunk), chunks);
                     quote_append!(tokens,
-                        (#tweight, crate_proptest::strategy::TupleUnion::new((
+                        (#tweight, _proptest::strategy::TupleUnion::new((
                             #(#head,)* #tail
                         )))
                     );
@@ -516,7 +535,7 @@ fn union_strat_to_tokens(tokens: &mut TokenStream, strats: &[Strategy]) {
     let tail = Recurse(chunks);
 
     quote_append!(tokens,
-        crate_proptest::strategy::TupleUnion<( #(#head,)* #tail )>
+        _proptest::strategy::TupleUnion<( #(#head,)* #tail )>
     );
 
     struct Recurse<'a>(::std::slice::Chunks<'a, Strategy>);
@@ -533,7 +552,7 @@ fn union_strat_to_tokens(tokens: &mut TokenStream, strats: &[Strategy]) {
                     let head = chunk.iter().map(|s| quote!( (u32, #s) ));
                     let tail = Recurse(chunks);
                     quote_append!(tokens,
-                        (u32, crate_proptest::strategy::TupleUnion<(
+                        (u32, _proptest::strategy::TupleUnion<(
                             #(#head,)* #tail
                         )>)
                     );
@@ -562,21 +581,14 @@ fn param<'a>(fv: usize) -> FreshVar<'a> {
 
 /// Constructs a `MapClosure` for the given `path` and a list of fields.
 pub fn map_closure(path: syn::Path, fs: &[syn::Field]) -> MapClosure {
-    let ids = fs.iter().filter_map(|field| field.ident.as_ref())
-                .cloned().collect::<Vec<_>>();
-
-    if ids.is_empty() {
-        MapClosure::Tuple(path, fs.len())
-    } else {
-        MapClosure::Named(path, ids)
-    }
+    MapClosure(path, fs.to_owned())
 }
+
+use syn::spanned::Spanned;
 
 /// A `MapClosure` models the closure part inside a `.prop_map(..)` call.
-pub enum MapClosure {
-    Tuple(syn::Path, usize),
-    Named(syn::Path, Vec<syn::Ident>),
-}
+#[derive(Debug)]
+pub struct MapClosure(syn::Path, Vec<syn::Field>);
 
 impl ToTokens for MapClosure {
     fn to_tokens(&self, tokens: &mut TokenStream) {
@@ -584,92 +596,21 @@ impl ToTokens for MapClosure {
             fresh_var("tmp", idx)
         }
 
-        fn map_closure_base<T, I>
-            (tokens: &mut TokenStream, path: &syn::Path, count: usize, iter: I)
-        where
-            T: ToTokens,
-            I: Iterator<Item = T>,
-        {
-            tokens.append_all(if count == 1 {
-                let tmp = tmp_var(0);
-                quote!(|#tmp|)
+        let MapClosure(path, fields) = self;
+        let count = fields.len();
+        let tmps = (0..count).map(tmp_var);
+        let inits = fields.iter().enumerate().map(|(idx, field)| {
+            let tv = tmp_var(idx);
+            if let Some(name) = &field.ident {
+                quote_spanned!(field.span()=> #name: #tv )
             } else {
-                let tmps = (0..count).map(tmp_var);
-                quote!(|(#(#tmps),*)|)
-            });
-
-            path.to_tokens(tokens);
-            syn::token::Brace::default().surround(tokens, |tokens|
-                tokens.append_terminated(iter, <Token![,]>::default())
-            );
-        }
-
-        struct FieldInit<T: ToTokens>((usize, T));
-
-        impl<T: ToTokens> ToTokens for FieldInit<T> {
-            fn to_tokens(&self, tokens: &mut TokenStream) {
-                let (count, ref name) = self.0;
-                name.to_tokens(tokens);
-                <Token![:]>::default().to_tokens(tokens);
-                tmp_var(count).to_tokens(tokens);
+                let name = syn::Member::Unnamed(syn::Index::from(idx));
+                quote_spanned!(field.span()=> #name: #tv )
             }
-        }
-
-        match self {
-            MapClosure::Tuple(path, count) =>
-                map_closure_base(tokens, path, *count,
-                    (0..*count).map(|idx| FieldInit((idx,
-                        syn::Member::Unnamed(syn::Index::from(idx))
-                    )))),
-            MapClosure::Named(path, ids) =>
-                map_closure_base(tokens, path, ids.len(),
-                    ids.iter().enumerate().map(FieldInit)),
-        }
+        });
+        tokens.append_all(quote!( |( #(#tmps,)* )| #path { #(#inits),* } ));
     }
 }
-
-/*
-//==============================================================================
-// VariantPath
-//==============================================================================
-
-/// A `VariantPath` models a path to a variant or just a normal identifier.
-#[derive(Clone, Debug)]
-pub struct VariantPath {
-    typ: syn::Ident,
-    var: Option<syn::Ident>,
-}
-
-impl From<VariantPath> for syn::Path {
-    fn from(path: VariantPath) -> Self {
-        let VariantPath { typ, var } = path;
-        if let Some(variant) = var {
-            parse_quote!(#typ::#variant)
-        } else {
-            typ.into()
-        }
-    }
-}
-
-impl<'a> From<&'a syn::Ident> for VariantPath {
-    fn from(typ: &'a syn::Ident) -> Self {
-        VariantPath { typ: typ.clone(), var: None }
-    }
-}
-
-impl<'a> From<(&'a syn::Ident, syn::Ident)> for VariantPath {
-    fn from((typ, var): (&'a syn::Ident, syn::Ident)) -> Self {
-        VariantPath { typ: typ.clone(), var: Some(var) }
-    }
-}
-
-impl ToTokens for VariantPath {
-    fn to_tokens(&self, tokens: &mut Tokens) {
-        let p: syn::Path = self.clone().into();
-        p.to_tokens(tokens);
-    }
-}
-*/
 
 //==============================================================================
 // FreshVar
@@ -722,7 +663,9 @@ struct Tuple<I>(I);
 
 impl<T: ToTokens, I: Clone + IntoIterator<Item = T>> ToTokens for Tuple<I> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        syn::token::Paren::default().surround(tokens, |tokens|
-            tokens.append_separated(self.0.clone(), <Token![,]>::default()))
+        let iter = self.0.clone();
+        tokens.append_all(quote!(
+            ( #(#iter),* )
+        ));
     }
 }

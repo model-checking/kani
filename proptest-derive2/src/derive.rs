@@ -8,8 +8,9 @@
 
 //! Provides actual deriving logic for the crate.
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Span};
 use syn::{Type, Path, Field, Ident, Variant, DeriveInput};
+use syn::spanned::Spanned;
 
 use util::{is_unit_type, self_ty, fields_to_vec};
 use void::IsUninhabited;
@@ -17,6 +18,7 @@ use error::{self, Ctx, Context, DeriveResult};
 use attr::{self, ParamsMode, ParsedAttributes, StratMode};
 use use_tracking::{UseMarkable, UseTracker};
 use ast::*;
+
 
 // TODO: Handle recursive types.
 
@@ -62,6 +64,7 @@ fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
     if attrs.no_bound {
         tracker.no_track();
     }
+
 
     // Compile into our own high level IR for the impl:
     let the_impl = match ast.data {
@@ -176,14 +179,15 @@ fn derive_product_has_params(
         error::if_specified_params(ctx, &attrs, item)?;
 
         // Determine the strategy for this field and add it to acc.
-        let r = acc.add(product_handle_default_params(ut, field.ty, attrs.strategy));
+        let span = field.span();
+        let r = acc.add(product_handle_default_params(ut, field.ty, span, attrs.strategy));
         Ok(r)
     }).map(|acc| acc.finish(closure))
 }
 
 /// Determine strategy using "Default" semantics  for a product.
 fn product_handle_default_params
-    (ut: &mut UseTracker, ty: Type, strategy: StratMode) -> StratPair {
+    (ut: &mut UseTracker, ty: Type, span: Span, strategy: StratMode) -> StratPair {
     match strategy {
         // Specific strategy - use the given expr and erase the type
         // (since we don't know about it):
@@ -191,7 +195,7 @@ fn product_handle_default_params
         // Specific value - use the given expr:
         StratMode::Value(value) => pair_value(ty, value),
         // Use Arbitrary for the given type and mark the type as used:
-        StratMode::Arbitrary => { ty.mark_uses(ut); pair_any(ty) },
+        StratMode::Arbitrary => { ty.mark_uses(ut); pair_any(ty, span) },
     }
 }
 
@@ -211,7 +215,9 @@ fn derive_product_no_params
         // Deny attributes that are only for enum variants:
         error::if_enum_attrs_present(ctx, &attrs, item);
 
+        let span = field.span();
         let ty = field.ty;
+
         let strat = match attrs.params {
             // Parameters were not set on the field:
             ParamsMode::Passthrough => match attrs.strategy {
@@ -225,12 +231,12 @@ fn derive_product_no_params
 
                     // We use the Parameters type of the field's type.
                     let pref = acc.add_param(arbitrary_param(&ty));
-                    pair_any_with(ty, pref)
+                    pair_any_with(ty, pref, span)
                 },
             },
             // no_params set on the field:
             ParamsMode::Default =>
-                product_handle_default_params(ut, ty, attrs.strategy),
+                product_handle_default_params(ut, ty, span, attrs.strategy),
             // params(<type>) set on the field:
             ParamsMode::Specified(params_ty) => match attrs.strategy {
                 // Specific strategy - use the given expr and erase the type:

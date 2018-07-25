@@ -1,6 +1,8 @@
 //! This module provides integration tests that test the expansion
 //! of the derive macro.
 
+/*
+*/
 extern crate proc_macro2;
 
 //==============================================================================
@@ -73,9 +75,9 @@ test! {
         struct MyUnitStruct;
     } expands to {
         #[allow(non_upper_case_globals)]
-        const _IMPL_PROPTEST_ARBITRARY_FOR_MyUnitStruct : () = {
-            extern crate proptest as crate_proptest;
-        impl crate_proptest::arbitrary::Arbitrary for MyUnitStruct {
+        const _IMPL_ARBITRARY_FOR_MyUnitStruct : () = {
+            extern crate proptest as _proptest;
+        impl _proptest::arbitrary::Arbitrary for MyUnitStruct {
             type Parameters = ();
             type Strategy = fn() -> Self;
 
@@ -93,9 +95,9 @@ test! {
         struct MyTupleUnitStruct();
     } expands to {
         #[allow(non_upper_case_globals)]
-        const _IMPL_PROPTEST_ARBITRARY_FOR_MyTupleUnitStruct : () = {
-            extern crate proptest as crate_proptest;
-        impl crate_proptest::arbitrary::Arbitrary for MyTupleUnitStruct {
+        const _IMPL_ARBITRARY_FOR_MyTupleUnitStruct : () = {
+            extern crate proptest as _proptest;
+        impl _proptest::arbitrary::Arbitrary for MyTupleUnitStruct {
             type Parameters = ();
             type Strategy = fn() -> Self;
 
@@ -113,9 +115,9 @@ test! {
         struct MyNamedUnitStruct {}
     } expands to {
         #[allow(non_upper_case_globals)]
-        const _IMPL_PROPTEST_ARBITRARY_FOR_MyNamedUnitStruct : () = {
-            extern crate proptest as crate_proptest;
-        impl crate_proptest::arbitrary::Arbitrary for MyNamedUnitStruct {
+        const _IMPL_ARBITRARY_FOR_MyNamedUnitStruct : () = {
+            extern crate proptest as _proptest;
+        impl _proptest::arbitrary::Arbitrary for MyNamedUnitStruct {
             type Parameters = ();
             type Strategy = fn() -> Self;
 
@@ -126,62 +128,3 @@ test! {
         };
     }
 }
-
-//==============================================================================
-// Struct, Has top param:
-//==============================================================================
-
-/*
-test! {
-    named_struct_has_top_param {
-        #[derive(Default)]
-        struct ComplexType {
-            int_max: i64,
-        }
-
-        #[derive(Debug)]
-        #[proptest(params(ComplexType))]
-        struct TopHasParams {
-            string: String,
-            #[proptest(strategy = "0..params.int_max")]
-            int: i64,
-        }
-    } expands to {
-        #[allow(non_upper_case_globals)]
-        const IMPL_PROPTEST_ARBITRARY_FOR_TopHasParams: () = {
-        extern crate proptest as crate_proptest;
-        impl crate_proptest::arbitrary::Arbitrary for TopHasParams {
-            type Parameters = ComplexType;
-            type Strategy = crate_proptest::strategy::Map<
-                (
-                    <String as crate_proptest::arbitrary::Arbitrary>::Strategy,
-                    crate_proptest::strategy::BoxedStrategy<i64>,
-                ),
-                fn(
-                    crate_proptest::strategy::ValueFor<(
-                        <String as crate_proptest::arbitrary::Arbitrary>::Strategy,
-                        crate_proptest::strategy::BoxedStrategy<i64>,
-                    ),>,
-                ) -> Self,
-            >;
-            fn arbitrary_with(_top: Self::Parameters) -> Self::Strategy {
-                {
-                    let params = _top;
-                    crate_proptest::strategy::Strategy::prop_map(
-                        (
-                            crate_proptest::arbitrary::any::<String>(),
-                            crate_proptest::strategy::Strategy::boxed(0..params.int_max),
-                        ),
-                        |(tmp_0, tmp_1)| TopHasParams {
-                            string: tmp_0,
-                            int: tmp_1,
-                        },
-                    )
-                }
-            }
-        }
-        };
-    }
-}
-
-*/
