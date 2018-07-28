@@ -441,6 +441,7 @@ mod test {
         assert_eq!(0xdeadbeef, accum);
     }
 
+    #[cfg(feature = "bit-set")]
     #[test]
     fn mask_bounds_for_bitset_correct() {
         let mut seen_0 = false;
@@ -451,11 +452,31 @@ mod test {
         mask.insert(2);
 
         let mut runner = TestRunner::default();
-        let input = varsize::masked(mask);
+        let input = bitset::masked(mask);
         for _ in 0..32 {
             let v = input.new_tree(&mut runner).unwrap().current();
             seen_0 |= v.contains(0);
             seen_2 |= v.contains(2);
+        }
+
+        assert!(seen_0);
+        assert!(seen_2);
+    }
+
+    #[test]
+    fn mask_bounds_for_vecbool_correct() {
+        let mut seen_0 = false;
+        let mut seen_2 = false;
+
+        let mask = vec![true, false, true, false];
+
+        let mut runner = TestRunner::default();
+        let input = bool_vec::masked(mask);
+        for _ in 0..32 {
+            let v = input.new_tree(&mut runner).unwrap().current();
+            assert_eq!(4, v.len());
+            seen_0 |= v[0];
+            seen_2 |= v[2];
         }
 
         assert!(seen_0);
