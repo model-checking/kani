@@ -38,15 +38,19 @@ arbitrary!(alloc::Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
 );
 
 arbitrary!(alloc::AllocErr, Just<Self>; Just(alloc::AllocErr));
-arbitrary!(alloc::CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
-           prop_oneof![Just(alloc::CollectionAllocErr::AllocErr),
-                       Just(alloc::CollectionAllocErr::CapacityOverflow)]);
+/* 2018-07-28 CollectionAllocErr is not currently available outside of using
+ * the `alloc` crate, which would require a different nightly feature. For now,
+ * disable.
+arbitrary!(alloc::collections::CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+           prop_oneof![Just(alloc::collections::CollectionAllocErr::AllocErr),
+                       Just(alloc::collections::CollectionAllocErr::CapacityOverflow)]);
+ */
 
 #[cfg(test)]
 mod test {
     no_panic_test!(
         layout => alloc::Layout,
-        alloc_err => alloc::AllocErr,
-        collection_alloc_err => alloc::CollectionAllocErr
+        alloc_err => alloc::AllocErr
+        //collection_alloc_err => alloc::collections::CollectionAllocErr
     );
 }

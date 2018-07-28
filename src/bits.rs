@@ -18,8 +18,9 @@
 
 use core::marker::PhantomData;
 use core::mem;
-use std_facade::fmt;
+use std_facade::{fmt, Vec};
 
+#[cfg(feature = "bit-set")]
 use bit_set::BitSet;
 use rand::{self, Rng};
 
@@ -89,6 +90,7 @@ int_bitset!(i32);
 int_bitset!(i64);
 int_bitset!(isize);
 
+#[cfg(feature = "bit-set")]
 impl BitSetLike for BitSet {
     fn new_bitset(max: usize) -> Self {
         BitSet::with_capacity(max)
@@ -112,6 +114,42 @@ impl BitSetLike for BitSet {
 
     fn count(&self) -> usize {
         self.len()
+    }
+}
+
+impl BitSetLike for Vec<bool> {
+    fn new_bitset(max: usize) -> Self {
+        vec![false; max]
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn test(&self, bit: usize) -> bool {
+        if bit >= self.len() {
+            false
+        } else {
+            self[bit]
+        }
+    }
+
+    fn set(&mut self, bit: usize) {
+        if bit >= self.len() {
+            self.resize(bit + 1, false);
+        }
+
+        self[bit] = true;
+    }
+
+    fn clear(&mut self, bit: usize) {
+        if bit < self.len() {
+            self[bit] = false;
+        }
+    }
+
+    fn count(&self) -> usize {
+        self.iter().filter(|&&b| b).count()
     }
 }
 
@@ -371,7 +409,92 @@ macro_rules! minimal_api {
 }
 minimal_api!(usize, usize);
 minimal_api!(isize, isize);
+#[cfg(feature = "bit-set")]
 minimal_api!(bitset, BitSet);
+minimal_api!(bool_vec, Vec<bool>);
+
+pub(crate) mod varsize {
+    use super::*;
+    use core::iter::FromIterator;
+
+    #[cfg(feature = "bit-set")]
+    type Inner = BitSet;
+    #[cfg(not(feature = "bit-set"))]
+    type Inner = Vec<bool>;
+
+    #[derive(Debug, Clone)]
+    pub(crate) struct VarBitSet(Inner);
+
+    impl VarBitSet {
+        pub(crate) fn saturated(len: usize) -> Self {
+            (0..len).collect::<VarBitSet>()
+        }
+
+        #[cfg(not(feature = "bit-set"))]
+        pub(crate) fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
+            (0..self.len()).into_iter().filter(move |&ix| self.test(ix))
+        }
+
+
+        #[cfg(feature = "bit-set")]
+        pub(crate) fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
+            self.0.iter()
+        }
+    }
+
+    impl BitSetLike for VarBitSet {
+        fn new_bitset(max: usize) -> Self {
+            VarBitSet(Inner::new_bitset(max))
+        }
+
+        fn len(&self) -> usize {
+            BitSetLike::len(&self.0)
+        }
+
+        fn test(&self, bit: usize) -> bool {
+            BitSetLike::test(&self.0, bit)
+        }
+
+        fn set(&mut self, bit: usize) {
+            BitSetLike::set(&mut self.0, bit);
+        }
+
+        fn clear(&mut self, bit: usize) {
+            BitSetLike::clear(&mut self.0, bit);
+        }
+
+        fn count(&self) -> usize {
+            BitSetLike::count(&self.0)
+        }
+    }
+
+    impl FromIterator<usize> for VarBitSet {
+        fn from_iter<T : IntoIterator<Item = usize>>(iter: T) -> Self {
+            let mut bits = VarBitSet::new_bitset(0);
+            for bit in iter {
+                bits.set(bit);
+            }
+            bits
+        }
+    }
+
+    /*
+    pub(crate) fn between(min: usize, max: usize) -> BitSetStrategy<VarBitSet> {
+        BitSetStrategy::new(min, max)
+    }
+
+    pub(crate) fn masked(mask: VarBitSet) -> BitSetStrategy<VarBitSet> {
+        BitSetStrategy::masked(mask)
+    }
+    */
+
+    pub(crate) fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
+                          -> SampledBitSetStrategy<VarBitSet> {
+        SampledBitSetStrategy::new(size, bits)
+    }
+}
+
+pub(crate) use self::varsize::VarBitSet;
 
 #[cfg(test)]
 mod test {
@@ -402,6 +525,7 @@ mod test {
         assert_eq!(0xdeadbeef, accum);
     }
 
+    #[cfg(feature = "bit-set")]
     #[test]
     fn mask_bounds_for_bitset_correct() {
         let mut seen_0 = false;
@@ -417,6 +541,26 @@ mod test {
             let v = input.new_tree(&mut runner).unwrap().current();
             seen_0 |= v.contains(0);
             seen_2 |= v.contains(2);
+        }
+
+        assert!(seen_0);
+        assert!(seen_2);
+    }
+
+    #[test]
+    fn mask_bounds_for_vecbool_correct() {
+        let mut seen_0 = false;
+        let mut seen_2 = false;
+
+        let mask = vec![true, false, true, false];
+
+        let mut runner = TestRunner::default();
+        let input = bool_vec::masked(mask);
+        for _ in 0..32 {
+            let v = input.new_tree(&mut runner).unwrap().current();
+            assert_eq!(4, v.len());
+            seen_0 |= v[0];
+            seen_2 |= v[2];
         }
 
         assert!(seen_0);

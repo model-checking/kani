@@ -17,9 +17,7 @@ use core::fmt;
 use core::ops::Range;
 use std_facade::{Cow, Vec, Arc};
 
-use bit_set::BitSet;
-
-use bits::{self, BitSetValueTree, SampledBitSetStrategy};
+use bits::{self, BitSetValueTree, SampledBitSetStrategy, VarBitSet};
 use num;
 use strategy::*;
 use test_runner::*;
@@ -58,7 +56,7 @@ pub fn subsequence<T : Clone + 'static>
             size.end(), len);
     Subsequence {
         values: Arc::new(values),
-        bit_strategy: bits::bitset::sampled(size, 0..len),
+        bit_strategy: bits::varsize::sampled(size, 0..len),
     }
 }
 
@@ -70,7 +68,7 @@ pub fn subsequence<T : Clone + 'static>
 #[must_use = "strategies do nothing unless used"]
 pub struct Subsequence<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
-    bit_strategy: SampledBitSetStrategy<BitSet>,
+    bit_strategy: SampledBitSetStrategy<VarBitSet>,
 }
 
 impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
@@ -89,15 +87,16 @@ impl<T : fmt::Debug + Clone + 'static> Strategy for Subsequence<T> {
 #[derive(Debug, Clone)]
 pub struct SubsequenceValueTree<T : Clone + 'static> {
     values: Arc<Cow<'static, [T]>>,
-    inner: BitSetValueTree<BitSet>,
+    inner: BitSetValueTree<VarBitSet>,
 }
 
 impl<T : fmt::Debug + Clone + 'static> ValueTree for SubsequenceValueTree<T> {
     type Value = Vec<T>;
 
     fn current(&self) -> Self::Value {
-        self.inner.current().into_iter().map(
-            |ix| self.values[ix].clone()).collect()
+        let inner = self.inner.current();
+        let ret = inner.iter().map(|ix| self.values[ix].clone()).collect();
+        ret
     }
 
     fn simplify(&mut self) -> bool {
