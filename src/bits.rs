@@ -415,7 +415,7 @@ minimal_api!(bool_vec, Vec<bool>);
 
 pub(crate) mod varsize {
     use super::*;
-    use std::iter::FromIterator;
+    use core::iter::FromIterator;
 
     #[cfg(feature = "bit-set")]
     type Inner = BitSet;
