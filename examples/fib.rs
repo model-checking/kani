@@ -40,9 +40,14 @@ mod fib {
             assert!(fib(n) >= n);
         }
     }
+
+    // This is just here so that main can call it
+    pub fn do_test_fib() {
+        test_fib();
+    }
 }
 
 fn main() {
     #[cfg(feature = "timeout")]
-    fib::test_fib();
+    fib::do_test_fib();
 }
