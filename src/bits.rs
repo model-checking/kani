@@ -18,8 +18,9 @@
 
 use core::marker::PhantomData;
 use core::mem;
-use std_facade::fmt;
+use std_facade::{fmt, Vec};
 
+#[cfg(feature = "bit-set")]
 use bit_set::BitSet;
 use rand::{self, Rng};
 
@@ -89,6 +90,7 @@ int_bitset!(i32);
 int_bitset!(i64);
 int_bitset!(isize);
 
+#[cfg(feature = "bit-set")]
 impl BitSetLike for BitSet {
     fn new_bitset(max: usize) -> Self {
         BitSet::with_capacity(max)
@@ -112,6 +114,32 @@ impl BitSetLike for BitSet {
 
     fn count(&self) -> usize {
         self.len()
+    }
+}
+
+impl BitSetLike for Vec<bool> {
+    fn new_bitset(max: usize) -> Self {
+        vec![false; max]
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn test(&self, bit: usize) -> bool {
+        self[bit]
+    }
+
+    fn set(&mut self, bit: usize) {
+        self[bit] = true;
+    }
+
+    fn clear(&mut self, bit: usize) {
+        self[bit] = false;
+    }
+
+    fn count(&self) -> usize {
+        self.iter().filter(|&&b| b).count()
     }
 }
 
@@ -371,7 +399,18 @@ macro_rules! minimal_api {
 }
 minimal_api!(usize, usize);
 minimal_api!(isize, isize);
+#[cfg(feature = "bit-set")]
 minimal_api!(bitset, BitSet);
+minimal_api!(bool_vec, Vec<bool>);
+
+#[cfg(feature = "bit-set")]
+pub(crate) use self::bitset as varsize;
+#[cfg(feature = "bit-set")]
+pub(crate) type VarBitSet = BitSet;
+#[cfg(not(feature = "bit-set"))]
+pub(crate) use self::bool_vec as varsize;
+#[cfg(not(feature = "bit-set"))]
+pub(crate) type VarBitSet = Vec<bool>;
 
 #[cfg(test)]
 mod test {
@@ -412,7 +451,7 @@ mod test {
         mask.insert(2);
 
         let mut runner = TestRunner::default();
-        let input = bitset::masked(mask);
+        let input = varsize::masked(mask);
         for _ in 0..32 {
             let v = input.new_tree(&mut runner).unwrap().current();
             seen_0 |= v.contains(0);

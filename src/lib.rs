@@ -1704,6 +1704,7 @@ mod product_tuple;
 
 #[macro_use]
 extern crate bitflags;
+#[cfg(feature = "bit-set")]
 extern crate bit_set;
 #[macro_use]
 extern crate lazy_static;

@@ -1,9 +1,21 @@
 ## Unreleased
 
+### Bug Fixes
+
+- Nightly and no_std support work against latest nightly once again.
+
+### New Additions
+
+- Added `bits::bool_vec` for generating `Vec<bool>` as a bit set.
+
 ### Nightly-only breakage
 
 - `impl Arbitrary for CollectionAllocErr` is temporarily removed pending it
   being available outside the `alloc` crate again.
+
+- `bits::bitset` is no longer available without the `bit-set` feature (enabled
+  by default), which is [not compatible with `#[no_std]`
+  environments](https://github.com/contain-rs/bit-vec/pull/51).
 
 ## 0.8.3
 

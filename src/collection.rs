@@ -19,8 +19,7 @@ use std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList}
 #[cfg(feature = "std")]
 use std_facade::{HashMap, HashSet};
 
-use bit_set::BitSet;
-
+use bits::VarBitSet;
 use num::sample_uniform_incl;
 use strategy::*;
 use tuple::TupleValueTree;
@@ -483,7 +482,7 @@ enum Shrink {
 #[derive(Clone, Debug)]
 pub struct VecValueTree<T : ValueTree> {
     elements: Vec<T>,
-    included_elements: BitSet,
+    included_elements: VarBitSet,
     min_size: usize,
     shrink: Shrink,
     prev_shrink: Option<Shrink>,
@@ -612,7 +611,7 @@ mod test {
             // Has correct length
             assert!(start.len() >= 5 && start.len() < 20);
             // Has at least 2 distinct values
-            assert!(start.iter().map(|&v| v).collect::<BitSet>().len() >= 2);
+            assert!(start.iter().map(|&v| v).collect::<VarBitSet>().len() >= 2);
 
             let result = runner.run_one(case, |v| {
                 prop_assert!(v.iter().map(|&v| v).sum::<usize>() < 9,
