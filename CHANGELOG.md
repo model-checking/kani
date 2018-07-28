@@ -1,3 +1,10 @@
+## Unreleased
+
+### Nightly-only breakage
+
+- `impl Arbitrary for CollectionAllocErr` is temporarily removed pending it
+  being available outside the `alloc` crate again.
+
 ## 0.8.3
 
 ### Bug Fixes
