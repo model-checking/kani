@@ -8,34 +8,41 @@
 // except according to those terms.
 
 #[macro_use] extern crate proptest;
-use proptest::prelude::*;
 
-// The worst possible way to calculate Fibonacci numbers
-fn fib(n: u64) -> u64 {
-    if n <= 1 {
-        n
-    } else {
-        fib(n - 1) + fib(n - 2)
+// This #[cfg] is only here so that CI can test building proptest with the
+// timeout feature disabled. You do not need it in your code.
+#[cfg(feature = "timeout")]
+mod fib {
+    use proptest::prelude::*;
+
+    // The worst possible way to calculate Fibonacci numbers
+    fn fib(n: u64) -> u64 {
+        if n <= 1 {
+            n
+        } else {
+            fib(n - 1) + fib(n - 2)
+        }
     }
-}
 
-proptest! {
-    #![proptest_config(ProptestConfig {
-        // Setting both fork and timeout is redundant since timeout implies
-        // fork, but both are shown for clarity.
-        fork: true,
-        timeout: 1000,
-        .. ProptestConfig::default()
-    })]
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            // Setting both fork and timeout is redundant since timeout implies
+            // fork, but both are shown for clarity.
+            fork: true,
+            timeout: 1000,
+            .. ProptestConfig::default()
+        })]
 
-    // NB We omit #[test] on the test function so that main() can call it.
-    fn test_fib(n in prop::num::u64::ANY) {
-        // For large n, this will variously run for an extremely long time,
-        // overflow the stack, or panic due to integer overflow.
-        assert!(fib(n) >= n);
+        // NB We omit #[test] on the test function so that main() can call it.
+        fn test_fib(n in prop::num::u64::ANY) {
+            // For large n, this will variously run for an extremely long time,
+            // overflow the stack, or panic due to integer overflow.
+            assert!(fib(n) >= n);
+        }
     }
 }
 
 fn main() {
-    test_fib();
+    #[cfg(feature = "timeout")]
+    fib::test_fib();
 }

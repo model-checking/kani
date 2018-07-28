@@ -94,8 +94,9 @@ impl<T : fmt::Debug + Clone + 'static> ValueTree for SubsequenceValueTree<T> {
     type Value = Vec<T>;
 
     fn current(&self) -> Self::Value {
-        self.inner.current().into_iter().map(
-            |ix| self.values[ix].clone()).collect()
+        let inner = self.inner.current();
+        let ret = inner.iter().map(|ix| self.values[ix].clone()).collect();
+        ret
     }
 
     fn simplify(&mut self) -> bool {

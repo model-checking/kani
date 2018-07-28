@@ -19,7 +19,7 @@ use std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList}
 #[cfg(feature = "std")]
 use std_facade::{HashMap, HashSet};
 
-use bits::VarBitSet;
+use bits::{BitSetLike, VarBitSet};
 use num::sample_uniform_incl;
 use strategy::*;
 use tuple::TupleValueTree;
@@ -502,7 +502,7 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
 
         Ok(VecValueTree {
             elements,
-            included_elements: (0..max_size).collect(),
+            included_elements: VarBitSet::saturated(max_size),
             min_size: start,
             shrink: Shrink::DeleteElement(0),
             prev_shrink: None,
@@ -515,7 +515,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
 
     fn current(&self) -> Vec<T::Value> {
         self.elements.iter().enumerate()
-            .filter(|&(ix, _)| self.included_elements.contains(ix))
+            .filter(|&(ix, _)| self.included_elements.test(ix))
             .map(|(_, element)| element.current())
             .collect()
     }
@@ -531,11 +531,11 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
             // Can't delete an element if beyond the end of the vec or if it
             // would put us under the minimum length.
             if ix >= self.elements.len() ||
-                self.included_elements.len() == self.min_size
+                self.included_elements.count() == self.min_size
             {
                 self.shrink = Shrink::ShrinkElement(0);
             } else {
-                self.included_elements.remove(ix);
+                self.included_elements.clear(ix);
                 self.prev_shrink = Some(self.shrink);
                 self.shrink = Shrink::DeleteElement(ix + 1);
                 return true;
@@ -548,7 +548,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
                 return false;
             }
 
-            if !self.included_elements.contains(ix) {
+            if !self.included_elements.test(ix) {
                 // No use shrinking something we're not including.
                 self.shrink = Shrink::ShrinkElement(ix + 1);
                 continue;
@@ -572,7 +572,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
             Some(Shrink::DeleteElement(ix)) => {
                 // Undo the last item we deleted. Can't complicate any further,
                 // so unset prev_shrink.
-                self.included_elements.insert(ix);
+                self.included_elements.set(ix);
                 self.prev_shrink = None;
                 true
             },

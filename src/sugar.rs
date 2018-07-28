@@ -1329,7 +1329,10 @@ mod test {
             J(10i32),
         ]));
     }
+}
 
+#[cfg(all(test, feature = "timeout"))]
+mod test_timeout {
     proptest! {
         #![proptest_config(::test_runner::Config {
             fork: true,

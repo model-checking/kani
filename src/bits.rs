@@ -127,15 +127,25 @@ impl BitSetLike for Vec<bool> {
     }
 
     fn test(&self, bit: usize) -> bool {
-        self[bit]
+        if bit >= self.len() {
+            false
+        } else {
+            self[bit]
+        }
     }
 
     fn set(&mut self, bit: usize) {
+        if bit >= self.len() {
+            self.resize(bit + 1, false);
+        }
+
         self[bit] = true;
     }
 
     fn clear(&mut self, bit: usize) {
-        self[bit] = false;
+        if bit < self.len() {
+            self[bit] = false;
+        }
     }
 
     fn count(&self) -> usize {
@@ -403,14 +413,88 @@ minimal_api!(isize, isize);
 minimal_api!(bitset, BitSet);
 minimal_api!(bool_vec, Vec<bool>);
 
-#[cfg(feature = "bit-set")]
-pub(crate) use self::bitset as varsize;
-#[cfg(feature = "bit-set")]
-pub(crate) type VarBitSet = BitSet;
-#[cfg(not(feature = "bit-set"))]
-pub(crate) use self::bool_vec as varsize;
-#[cfg(not(feature = "bit-set"))]
-pub(crate) type VarBitSet = Vec<bool>;
+pub(crate) mod varsize {
+    use super::*;
+    use std::iter::FromIterator;
+
+    #[cfg(feature = "bit-set")]
+    type Inner = BitSet;
+    #[cfg(not(feature = "bit-set"))]
+    type Inner = Vec<bool>;
+
+    #[derive(Debug, Clone)]
+    pub(crate) struct VarBitSet(Inner);
+
+    impl VarBitSet {
+        pub(crate) fn saturated(len: usize) -> Self {
+            (0..len).collect::<VarBitSet>()
+        }
+
+        #[cfg(not(feature = "bit-set"))]
+        pub(crate) fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
+            (0..self.len()).into_iter().filter(move |&ix| self.test(ix))
+        }
+
+
+        #[cfg(feature = "bit-set")]
+        pub(crate) fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
+            self.0.iter()
+        }
+    }
+
+    impl BitSetLike for VarBitSet {
+        fn new_bitset(max: usize) -> Self {
+            VarBitSet(Inner::new_bitset(max))
+        }
+
+        fn len(&self) -> usize {
+            BitSetLike::len(&self.0)
+        }
+
+        fn test(&self, bit: usize) -> bool {
+            BitSetLike::test(&self.0, bit)
+        }
+
+        fn set(&mut self, bit: usize) {
+            BitSetLike::set(&mut self.0, bit);
+        }
+
+        fn clear(&mut self, bit: usize) {
+            BitSetLike::clear(&mut self.0, bit);
+        }
+
+        fn count(&self) -> usize {
+            BitSetLike::count(&self.0)
+        }
+    }
+
+    impl FromIterator<usize> for VarBitSet {
+        fn from_iter<T : IntoIterator<Item = usize>>(iter: T) -> Self {
+            let mut bits = VarBitSet::new_bitset(0);
+            for bit in iter {
+                bits.set(bit);
+            }
+            bits
+        }
+    }
+
+    /*
+    pub(crate) fn between(min: usize, max: usize) -> BitSetStrategy<VarBitSet> {
+        BitSetStrategy::new(min, max)
+    }
+
+    pub(crate) fn masked(mask: VarBitSet) -> BitSetStrategy<VarBitSet> {
+        BitSetStrategy::masked(mask)
+    }
+    */
+
+    pub(crate) fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
+                          -> SampledBitSetStrategy<VarBitSet> {
+        SampledBitSetStrategy::new(size, bits)
+    }
+}
+
+pub(crate) use self::varsize::VarBitSet;
 
 #[cfg(test)]
 mod test {
