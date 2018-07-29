@@ -14,7 +14,7 @@ extern crate proptest;
 use proptest::strategy::Just;
 use proptest::prelude::Arbitrary;
 
-// An idea.
+// TODO: An idea.
 /*
 #[derive(Debug, Arbitrary)]
 #[proptest(with = "Foo::ctor(1337, :usize:.other_fn(:f64:, #0..7#))")]
