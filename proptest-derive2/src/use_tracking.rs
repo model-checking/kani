@@ -168,9 +168,6 @@ impl UseMarkable for syn::Type {
 
                 visit::visit_path(self, path);
             }
-
-            // TODO: Consider BareFnTy and ParenthesizedParameterData wrt.
-            // CoArbitrary.
         }
     }
 }
