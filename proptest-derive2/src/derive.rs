@@ -696,7 +696,6 @@ impl StratAcc<(u32, Ctor)> {
             .map(|&(w, _)| w)
             .try_fold(0u32, |acc, w| acc.checked_add(w))
             .is_none() {
-            println!("bp#1");
             error::weight_overflowing(ctx)
         }
 
