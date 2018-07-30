@@ -311,7 +311,9 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     error_if_set(ctx, &acc.weight, &meta);
 
     // Convert to value if possible:
-    let value = extract_lit_expr(meta.clone())
+    let value = normalize_meta(meta.clone())
+        .and_then(extract_lit)
+        .and_then(extract_expr)
         // Evaluate the expression into a value:
         .as_ref().and_then(interp::eval_expr)
         // Ensure that `val` fits within an `u32` as proptest requires that:
@@ -357,7 +359,14 @@ fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 /// + `#[proptest(<meta.name()>(<literal>)]`
 fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
     error_if_set(ctx, &loc, &meta);
-    if let Some(expr) = extract_lit_expr(meta.clone()) {
+
+    let norm_meta = normalize_meta(meta.clone());
+    let expr = match norm_meta {
+        Some(NormMeta::Lit(lit)) => extract_expr(lit),
+        Some(NormMeta::Word(fun)) => Some(parse_quote!( #fun() )),
+        _ => None,
+    };
+    if let Some(expr) = expr {
         *loc = Some(expr);
     } else {
         error::strategy_malformed(ctx, meta)
@@ -459,19 +468,19 @@ fn ident_to_type(ident: Ident) -> Type {
 }
 
 /// Extract a `lit` in `NormMeta::Lit(<lit>)`.
-fn extract_lit(meta: Meta) -> Option<Lit> {
-    if let NormMeta::Lit(lit) = normalize_meta(meta)? {
+fn extract_lit(meta: NormMeta) -> Option<Lit> {
+    if let NormMeta::Lit(lit) = meta {
         Some(lit)
     } else {
         None
     }
 }
 
-/// Extract expression out of meta if possible.
-fn extract_lit_expr(meta: Meta) -> Option<Expr> {
-    match extract_lit(meta) {
-        Some(Lit::Str(lit)) => lit.parse().ok(),
-        Some(Lit::Int(lit)) => Some(
+/// Extract expression out of literal if possible.
+fn extract_expr(lit: Lit) -> Option<Expr> {
+    match lit {
+        Lit::Str(lit) => lit.parse().ok(),
+        Lit::Int(lit) => Some(
             Expr::from(syn::ExprLit { attrs: vec![], lit: lit.into() })
         ),
         _ => None,

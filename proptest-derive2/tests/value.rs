@@ -78,6 +78,20 @@ struct T6 {
     beta: usize,
 }
 
+
+fn foo() -> usize {
+    42
+}
+
+#[derive(Debug, Arbitrary)]
+struct CallFun {
+    #[proptest(value = "foo()")]
+    foo: usize,
+    
+    #[proptest(value(foo))]
+    bar: usize,
+}
+
 proptest! {
     #[test]
     fn t0_fixed_fields(v: T0) {
@@ -127,6 +141,12 @@ proptest! {
         prop_assert_eq!(v.alpha, "alpha".to_string());
         prop_assert!(v.beta < 100);
     }
+
+    #[test]
+    fn call_fun_always_42(v: CallFun) {
+        assert_eq!(v.foo, 42);
+        assert_eq!(v.bar, 42);
+    }
 }
 
 #[test]
@@ -140,4 +160,5 @@ fn asserting_arbitrary() {
     assert_arbitrary::<T4>();
     assert_arbitrary::<T5>();
     assert_arbitrary::<T6>();
+    assert_arbitrary::<CallFun>();
 }
