@@ -240,8 +240,10 @@ fn derive_product_no_params
                     extract_nparam(&mut acc, params_ty,
                         pair_existential(ty, strat)),
                 // Specific value - can't handle this atm:
-                StratMode::Value(_) =>
-                    error::cant_set_param_and_value(ctx, item)?,
+                StratMode::Value(value) => {
+                    error::cant_set_param_and_value(ctx, error::ENUM_VARIANT);
+                    extract_nparam(&mut acc, params_ty, pair_value_self(value))
+                },
                 // Logic error by user. Pointless to specify params and not
                 // the strategy. Bail!
                 StratMode::Arbitrary =>
@@ -406,8 +408,11 @@ fn derive_variant_with_fields<C>
                 extract_nparam(acc, params_ty, pair_existential_self(strat))
             },
             // Specific value - not allowed yet.
-            StratMode::Value(_) =>
-                error::cant_set_param_and_value(ctx, error::ENUM_VARIANT)?,
+            StratMode::Value(value) => {
+                deny_all_attrs_on_fields(ctx, fields)?;
+                error::cant_set_param_and_value(ctx, error::ENUM_VARIANT);
+                extract_nparam(acc, params_ty, pair_value_self(value))
+            },
             // Logic error by user. Pointless to specify params and not
             // the strategy. Bail!
             StratMode::Arbitrary => {

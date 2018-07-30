@@ -313,7 +313,7 @@ fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
 /// move parameters into function items. Once we get
 /// `type Strategy = impl Trait;`, in stable it will be possible
 /// to use closures instead and this restriction can be lifted.
-fatal!(cant_set_param_and_value(item: &str), E0012,
+error!(cant_set_param_and_value(item: &str), E0012,
     "Can not set `#[proptest(params = <type>)]` on {0} and set a value via \
     `#[proptest(value = <expr>)]` since `move || <expr>` closures can not be \
     coerced into function pointers. This is most likely a temporary \
