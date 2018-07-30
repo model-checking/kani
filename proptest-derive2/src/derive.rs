@@ -275,7 +275,7 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl
     // We don't allow a strategy on the enum directly:
     error::if_strategy_present(ctx, &ast.attrs, error::ENUM);
 
-    // TODO: how to handle this?
+    // We don't allow weight on enums directly:
     error::if_weight_present(ctx, &ast.attrs, error::ENUM);
 
     // Bail if there are no variants:
