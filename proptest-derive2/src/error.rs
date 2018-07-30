@@ -283,7 +283,6 @@ error!(illegal_skip(item: &str), E0008,
 /// Happens when `#[proptest(weight = <integer>)]` is specified on an
 /// `item` that does not support weighting.
 error!(illegal_weight(item: &str), E0009,
-    // TODO: determine if the form should be allowed on the enum itself.
     "`#[proptest(weight = <integer>)]` is not allowed on {} as it is \
     meaningless. Only enum variants can be assigned weights.",
     item);

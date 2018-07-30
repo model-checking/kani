@@ -19,7 +19,6 @@ use attr::{self, ParamsMode, ParsedAttributes, StratMode};
 use use_tracking::{UseMarkable, UseTracker};
 use ast::*;
 
-
 // TODO: Handle recursive types.
 
 //==============================================================================
@@ -83,9 +82,6 @@ fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
 
     // Linearise the IR into Rust code:
     let q = the_impl.into_tokens(ctx)?;
-
-    // TODO: remove! (perhaps keep it behind a feature flag...?):
-    //println!("{}\n", q);
 
     // We're done!
     Ok(q)
