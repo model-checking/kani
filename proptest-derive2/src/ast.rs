@@ -514,7 +514,9 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
     }
 
     fn weight_sum(ctors: &[(u32, Ctor)]) -> u32 {
-        ctors.iter().map(|&(w, _)| w).sum()
+        use std::num::Wrapping;
+        let Wrapping(x) = ctors.iter().map(|&(w, _)| Wrapping(w)).sum();
+        x
     }
 }
 

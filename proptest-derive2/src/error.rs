@@ -477,3 +477,8 @@ error!(no_bound_malformed, E0032,
     "The attribute modifier `no_bound` inside `#[proptest(..)]` does not \
     support any further configuration and must be a plain modifier as in \
     `#[proptest(no_bound)]`.");
+
+/// Happens when the sum of weights on enum variants overflowing an u32.
+error!(weight_overflowing, E0033,
+    "The sum of the weights specified on variants of the enum you are \
+    deriving `Arbitrary` for overflows an `u32` which it can't do.");

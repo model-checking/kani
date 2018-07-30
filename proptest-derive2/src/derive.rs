@@ -341,7 +341,7 @@ fn derive_enum_no_params(
     ensure_union_has_strategies(ctx, &acc.strats);
 
     // Package the strategies into a union.
-    Ok(acc.finish())
+    Ok(acc.finish(ctx))
 }
 
 /// Ensure that there's at least one generatable variant for a union.
@@ -487,7 +487,7 @@ fn derive_enum_has_params(
 
     ensure_union_has_strategies(ctx, &acc);
 
-    Ok(add_top_params(sty, acc.finish()))
+    Ok(add_top_params(sty, acc.finish(ctx)))
 }
 
 /// Filters out uninhabited and variants that we've been ordered to skip.
@@ -598,9 +598,9 @@ impl PartsAcc<(u32, Ctor)> {
     /// Finishes off the accumulator by returning the parts needed for
     /// deriving. The resultant strategy is one that randomly picks
     /// one of the parts based on the relative weights in the `u32`.
-    fn finish(self) -> ImplParts {
+    fn finish(self, ctx: Ctx) -> ImplParts {
         let (params, count) = self.params.consume();
-        let (strat, ctor) = self.strats.finish();
+        let (strat, ctor) = self.strats.finish(ctx);
         (params, strat, extract_all(ctor, count, FromReg::Top))
     }
 }
@@ -690,7 +690,16 @@ impl StratAcc<(u32, Ctor)> {
     /// Finishes off the accumulator by returning a union of the
     /// strategies where the resultant strategy randomly picks
     /// one of the summands based on the relative weights provided.
-    fn finish(self) -> StratPair {
+    fn finish(self, ctx: Ctx) -> StratPair {
+        // Check that the weight sum <= u32::MAX
+        if self.ctors.iter()
+            .map(|&(w, _)| w)
+            .try_fold(0u32, |acc, w| acc.checked_add(w))
+            .is_none() {
+            println!("bp#1");
+            error::weight_overflowing(ctx)
+        }
+
         pair_oneof(self.consume())
     }
 }
