@@ -150,6 +150,13 @@ enum Alan {
     F(char)
 }
 
+#[derive(Clone, Debug, Arbitrary)]
+enum SameType {
+    A(usize),
+    B(usize),
+}
+
+
 #[test]
 fn asserting_arbitrary() {
     fn assert_arbitrary<T: Arbitrary>() {}
@@ -180,4 +187,5 @@ fn asserting_arbitrary() {
     assert_arbitrary::<T24>();
     assert_arbitrary::<T25>();
     assert_arbitrary::<Alan>();
+    assert_arbitrary::<SameType>();
 }
