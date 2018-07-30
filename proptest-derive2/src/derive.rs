@@ -65,7 +65,6 @@ fn derive_proptest_arbitrary(ctx: Ctx, ast: DeriveInput)
         tracker.no_track();
     }
 
-
     // Compile into our own high level IR for the impl:
     let the_impl = match ast.data {
         // Deal with structs:
