@@ -1,4 +1,4 @@
-// Copyright 2017 Serde Developers
+// Copyright 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,8 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-/*
-*/
 extern crate compiletest_rs as ct;
 
 use std::env;
@@ -28,9 +26,4 @@ fn run_mode(src: &'static str, mode: &'static str) {
 #[test]
 fn compile_test() {
     run_mode("compile-fail", "compile-fail");
-    //run_mode("run-pass");
-
-    //#[cfg(not(feature = "stable"))]
-    //run_mode("pretty", "ui");
-    //run_mode("pretty", "pretty");
 }

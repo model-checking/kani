@@ -1,4 +1,4 @@
-// Copyright 2018 Mazdak Farrokhzad
+// Copyright 2018 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -18,6 +18,8 @@ struct NotArbitrary;
 type HidePH<T> = ::std::marker::PhantomData<T>;
 
 /*
+// TODO handle this...
+
 #[derive(Debug, Arbitrary)]
 struct T1<#[proptest(no_bound)] T>(HidePH<T>);
 
