@@ -47,13 +47,10 @@ pub fn if_has_lifetimes(ctx: Ctx, ast: &syn::DeriveInput) {
 }
 
 /// Ensures that no attributes were specified on `item`.
-pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
+pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     if_enum_attrs_present(ctx, attrs, item);
     if_strategy_present(ctx, attrs, item);
-    if_specified_params(ctx, attrs, item)?;
-    Ok(())
+    if_specified_params(ctx, attrs, item);
 }
 
 /// Ensures that things only allowed on an enum variant is not present on
@@ -64,11 +61,8 @@ pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 }
 
 /// Ensures that parameters is not present on `item`.
-pub fn if_specified_params(ctx: Ctx, attrs: &ParsedAttributes, item: &str)
-    -> DeriveResult<()>
-{
-    if attrs.params.is_set() { parent_has_param(ctx, item)?; }
-    Ok(())
+pub fn if_specified_params(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
+    if attrs.params.is_set() { parent_has_param(ctx, item); }
 }
 
 /// Ensures that an explicit strategy or value is not present on `item`.
@@ -229,7 +223,6 @@ error!(has_lifetimes, E0001,
 /// that is neither an enum nor a struct. Most likely, we've been given
 /// a union type. This might be supported in the future, but not yet.
 fatal!(not_struct_or_enum, E0002,
-    // Overspecified atm, to catch future support in syn for unions.
     "Deriving is only possible for structs and enums. \
     It is currently not defined unions.");
 
@@ -243,7 +236,7 @@ error!(uninhabited_struct, E0003,
 /// Happens when an enum has zero variants. Such an enum is obviously
 /// uninhabited and can not be constructed. There must at least exist
 /// one variant that we can construct.
-fatal!(uninhabited_enum_with_no_variants, E0004, // TODO: intentionally fatal.
+fatal!(uninhabited_enum_with_no_variants, E0004,
     "The enum you are deriving `Arbitrary` for is uninhabited since it has no \
     variants. An example of such an `enum` is: `enum Void {}`. \
     An uninhabited type is by definition impossible to generate.");
@@ -252,7 +245,7 @@ fatal!(uninhabited_enum_with_no_variants, E0004, // TODO: intentionally fatal.
 /// uninhabited (why has the user given us such a weird enum?..
 /// Nonetheless, we do our best to ensure soundness).
 /// There must at least exist one variant that we can construct.
-fatal!(uninhabited_enum_variants_uninhabited, E0005, // TODO: intentionally fatal.
+fatal!(uninhabited_enum_variants_uninhabited, E0005,
     "The enum you are deriving `Arbitrary` for is uninhabited since all its \
     variants are uninhabited. \
     An uninhabited type is by definition impossible to generate.");
@@ -291,7 +284,7 @@ error!(illegal_weight(item: &str), E0009,
 /// but also on the parent of `item`. If the parent has set `params`
 /// then that applies, and the `params` on `item` would be meaningless
 /// wherefore it is forbidden.
-fatal!(parent_has_param(item: &str), E0010,
+error!(parent_has_param(item: &str), E0010,
     "Can not set the associated type `Parameters` of `Arbitrary` with either \
     `#[proptest(no_params)]` or `#[proptest(params(<type>)]` on {} since it \
     was set on the parent.",

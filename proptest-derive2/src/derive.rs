@@ -171,7 +171,7 @@ fn derive_product_has_params(
         error::if_enum_attrs_present(ctx, &attrs, item);
 
         // Deny setting parameters on the field since it has been set on parent:
-        error::if_specified_params(ctx, &attrs, item)?;
+        error::if_specified_params(ctx, &attrs, item);
 
         // Determine the strategy for this field and add it to acc.
         let span = field.span();
@@ -451,7 +451,8 @@ fn variant_handle_default_params(
 fn deny_all_attrs_on_fields(ctx: Ctx, fields: Vec<Field>) -> DeriveResult<()> {
     fields.into_iter().try_for_each(|field| {
         let f_attr = attr::parse_attributes(ctx, &field.attrs)?;
-        error::if_anything_specified(ctx, &f_attr, error::ENUM_VARIANT_FIELD)
+        error::if_anything_specified(ctx, &f_attr, error::ENUM_VARIANT_FIELD);
+        Ok(())
     })
 }
 

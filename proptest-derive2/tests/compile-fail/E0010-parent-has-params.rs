@@ -1,6 +1,17 @@
 #[macro_use]
 extern crate proptest_derive;
 
+// Show non-fatal:
+
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors
+                            //~| [proptest_derive, E0010]
+                            //~| [proptest_derive, E0008]
+#[proptest(no_params)]
+struct NonFatal<#[proptest(skip)] T> {
+    #[proptest(no_params)]
+    field: T
+}
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
 struct T0 {

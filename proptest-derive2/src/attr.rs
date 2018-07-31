@@ -125,7 +125,7 @@ pub fn parse_top_attributes(ctx: Ctx, attrs: &[Attribute])
 /// no matter what.
 pub fn has_no_bound(ctx: Ctx, attrs: &[Attribute]) -> DeriveResult<bool> {
     let attrs = parse_attributes_base(ctx, attrs)?;
-    error::if_anything_specified(ctx, &attrs, error::TY_VAR)?;
+    error::if_anything_specified(ctx, &attrs, error::TY_VAR);
     Ok(attrs.no_bound)
 }
 
