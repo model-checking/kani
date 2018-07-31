@@ -1,11 +1,11 @@
 [package]
 name          = "proptest-derive"
-version       = "0.0.1"
+version       = "0.1.0"
 authors       = ["Mazdak Farrokhzad <twingoow@gmail.com>"]
 license       = "MIT/Apache-2.0"
 readme        = "README.md"
 
-repository    = "https://github.com/Centril/proptest-derive"
+repository    = "https://github.com/AltSysrq/proptest"
 documentation = "https://docs.rs/proptest-derive"
 
 keywords      = ["derive", "arbitrary", "proptest", "testing", "quickcheck"]

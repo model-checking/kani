@@ -2,4 +2,4 @@
 
 Custom-derive for the Arbitrary trait of proptest.
 
-This is currently highly WIP.
+This is currently experimental.
