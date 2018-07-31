@@ -22,6 +22,10 @@
 // coherence. Therefore, until const generics lands in stable or when
 // we can remove the `T: Debug` bound on Arbitrary, we can not support arrays
 // sized over 32.
+//
+// # Recursive types
+//
+// We can't handle self-recursive or mutually recursive types at all right now.
 
 extern crate proc_macro as pm;
 extern crate proc_macro2;

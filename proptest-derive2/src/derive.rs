@@ -19,8 +19,6 @@ use attr::{self, ParamsMode, ParsedAttributes, StratMode};
 use use_tracking::{UseMarkable, UseTracker};
 use ast::*;
 
-// TODO: Handle recursive types.
-
 //==============================================================================
 // API
 //==============================================================================

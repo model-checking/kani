@@ -439,7 +439,6 @@ impl ToTokens for Ctor {
                 _proptest::strategy::Strategy::prop_filter(
                     #ctor, stringify!(#filter), #filter)
             ),
-            // TODO improve stringify with field and typename
             Extract(ctor, to, from) => quote_append!(tokens, {
                 let #to = #from; #ctor
             }),
@@ -652,7 +651,7 @@ impl ToTokens for MapClosure {
                 quote_spanned!(field.span()=> #name: #tv )
             }
         });
-        tokens.append_all(quote!( |( #(#tmps,)* )| #path { #(#inits),* } ));
+        quote_append!(tokens, |( #(#tmps,)* )| #path { #(#inits),* } );
     }
 }
 
@@ -708,8 +707,6 @@ struct Tuple<I>(I);
 impl<T: ToTokens, I: Clone + IntoIterator<Item = T>> ToTokens for Tuple<I> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let iter = self.0.clone();
-        tokens.append_all(quote!(
-            ( #(#iter),* )
-        ));
+        quote_append!(tokens, ( #(#iter),* ) );
     }
 }
