@@ -51,6 +51,7 @@ pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     if_enum_attrs_present(ctx, attrs, item);
     if_strategy_present(ctx, attrs, item);
     if_specified_params(ctx, attrs, item);
+    if_specified_filter(ctx, attrs, item);
 }
 
 /// Ensures that things only allowed on an enum variant is not present on
@@ -58,6 +59,11 @@ pub fn if_anything_specified(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     if_skip_present(ctx, attrs, item);
     if_weight_present(ctx, attrs, item);
+}
+
+/// Ensures that parameters is not present on `item`.
+pub fn if_specified_filter(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
+    if !attrs.filter.is_empty() { parent_has_filter(ctx, item); }
 }
 
 /// Ensures that parameters is not present on `item`.
@@ -75,27 +81,33 @@ pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     }
 }
 
-/// Ensures that an explicit strategy or value is not present on a unit variant.
-pub fn if_strategy_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
+/// Ensures that a strategy, value, params, filter is not present on a unit variant.
+pub fn if_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
+    /// Ensures that an explicit strategy or value is not present on a unit variant.
     use attr::StratMode::*;
     match attrs.strategy {
         Arbitrary   => {},
         Strategy(_) => strategy_on_unit_variant(ctx, "strategy"),
         Value(_)    => strategy_on_unit_variant(ctx, "value"),
     }
-}
 
-/// Ensures that parameters is not present on a unit variant.
-pub fn if_params_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
     if attrs.params.is_set() {
         params_on_unit_variant(ctx)
     }
+
+    if !attrs.filter.is_empty() {
+        filter_on_unit_variant(ctx)
+    }
 }
 
-/// Ensures that parameters is not present on a unit struct.
-pub fn if_params_present_on_unit_struct(ctx: Ctx, attrs: &ParsedAttributes) {
+/// Ensures that parameters or filter is not present on a unit struct.
+pub fn if_present_on_unit_struct(ctx: Ctx, attrs: &ParsedAttributes) {
     if attrs.params.is_set() {
         params_on_unit_struct(ctx)
+    }
+
+    if !attrs.filter.is_empty() {
+        filter_on_unit_struct(ctx)
     }
 }
 
@@ -299,6 +311,16 @@ fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
     may require a different type than the one provided in `<type>`.",
     item, quote! { #self_ty });
 
+/// Happens when `#[proptest(filter = "<expr>")]` is set on `item`
+/// but also on the parent of `item`. If the parent has set `filter`
+/// then that applies, and the `filter` on `item` would be meaningless
+/// wherefore it is forbidden.
+error!(parent_has_filter(item: &str), E0012, // TODO tests
+    "Can not set `#[proptest(filter(..)]` on {} since it is set on the variant
+    which it is inside of and because the variant specifies how to generate
+    itself.",
+    item);
+
 /// Happens when the form `#![proptest<..>]` is used. This will probably never
 /// happen - but just in case it does, we catch it and emit an error.
 error!(inner_attr, E0013,
@@ -399,6 +421,15 @@ error!(strategy_malformed(meta: &syn::Meta), E0026,
     expression.",
     meta.name());
 
+/// Happens when `#[proptest(filter..)]` is malformed.
+/// For example, `<expr>` inside `#[proptest(filter = "<expr>")]` or
+/// is malformed. In other words, `<expr>` is not a valid Rust expression.
+error!(filter_malformed(meta: &syn::Meta), E0027,
+    "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
+    format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
+    expression.",
+    meta.name());
+
 /// Any attributes on a skipped variant has no effect - so we emit this error
 /// to the user so that they are aware.
 error!(skipped_variant_has_weight(item: &str), E0028,
@@ -414,12 +445,19 @@ error!(skipped_variant_has_param(item: &str), E0028,
     item);
 
 /// Any attributes on a skipped variant has no effect - so we emit this error
-/// to the user so that they are aware. Unfortunately, there's no way to
-/// emit a warning to the user, so we emit an error instead.
+/// to the user so that they are aware.
 error!(skipped_variant_has_strat(item: &str), E0028,
     "A variant has been skipped. Setting `#[proptest(value = \"<expr>\")]` or \
     `#[proptest(strategy = \"<expr>\")]` on the {} is meaningless and is not \
     allowed.",
+    item);
+
+/// Any attributes on a skipped variant has no effect - so we emit this error
+/// to the user so that they are aware. Unfortunately, there's no way to
+/// emit a warning to the user, so we emit an error instead.
+error!(skipped_variant_has_filter(item: &str), E0028,
+    "A variant has been skipped. Setting `#[proptest(filter = \"<expr>\")]` or \
+    on the {} is meaningless and is not allowed.",
     item);
 
 /// There's only one way to produce a specific unit variant, so setting
@@ -436,12 +474,25 @@ error!(params_on_unit_variant, E0029,
     "Setting `#[proptest(params = \"<type>\")]` on a unit variant has \
     no effect and is redundant because there is nothing to configure.");
 
+/// There's only one way to produce a specific unit variant, so setting
+/// `#[proptest(filter = "<expr>")]` would be pointless.
+error!(filter_on_unit_variant, E0029,
+    "Setting `#[proptest(filter = \"<expr>\")]` on a unit variant has \
+    no effect and is redundant because there is nothing to further filter.");
+
 /// Occurs when `#[proptest(params = "<type>")]` is specified on a unit
 /// struct. There's only one way to produce a unit struct, so specifying
 /// `Parameters` would be pointless.
 error!(params_on_unit_struct, E0030,
     "Setting `#[proptest(params = \"<type>\")]` on a unit struct has no effect \
     and is redundant because there is nothing to configure.");
+
+/// Occurs when `#[proptest(filter = "<expr>")]` is specified on a unit
+/// struct. There's only one way to produce a unit struct, so filtering
+/// would be pointless.
+error!(filter_on_unit_struct, E0030,
+    "Setting `#[proptest(filter = \"<expr>\")]` on a unit struct has no effect \
+    and is redundant because there is nothing to filter.");
 
 /// Occurs when `#[proptest(no_bound)]` is specified
 /// on something that is not a type variable.

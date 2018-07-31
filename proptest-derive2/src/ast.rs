@@ -198,6 +198,16 @@ pub fn pair_oneof((strats, ctors): (Vec<Strategy>, Vec<(u32, Ctor)>))
     (Strategy::Union(strats.into()), Ctor::Union(ctors.into()))
 }
 
+/// Potentially apply a filter to a strategy type and its constructor.
+pub fn pair_filter(filter: Vec<syn::Expr>, ty: syn::Type, pair: StratPair)
+    -> StratPair
+{
+    filter.into_iter().fold(pair, |(strat, ctor), filter| (
+        Strategy::Filter(Box::new(strat), ty.clone()),
+        Ctor::Filter(Box::new(ctor), filter)
+    ))
+}
+
 //==============================================================================
 // Parameters
 //==============================================================================
@@ -279,6 +289,8 @@ pub enum Strategy {
     /// other words randomly pick one strategy with probabilities based on the
     /// specified weights.
     Union(Box<[Strategy]>),
+    /// A filtered strategy with `.prop_filter`.
+    Filter(Box<Strategy>, syn::Type),
 }
 
 macro_rules! quote_append {
@@ -296,6 +308,7 @@ impl Strategy {
             Value(ty) => vec![ty.clone()],
             Map(strats) => strats.iter().flat_map(|s| s.types()).collect(),
             Union(strats) => strats.iter().flat_map(|s| s.types()).collect(),
+            Filter(_, ty) => vec![ty.clone()],
         }
     }
 }
@@ -309,20 +322,25 @@ impl ToTokens for Strategy {
             Arbitrary(ty, span) => tokens.append_all(quote_spanned!(*span=>
                 <#ty as _proptest::arbitrary::Arbitrary>::Strategy
             )),
-            Existential(ty) => tokens.append_all(quote!(
+            Existential(ty) => quote_append!(tokens,
                 _proptest::strategy::BoxedStrategy<#ty>
-            )),
-            Value(ty) => tokens.append_all(quote!( fn() -> #ty )),
+            ),
+            Value(ty) => quote_append!(tokens, fn() -> #ty ),
             Map(strats) => {
                 let field_tys = self.types();
                 let strats = strats.iter();
-                tokens.append_all(quote!(
+                quote_append!(tokens,
                     _proptest::strategy::Map< ( #(#strats,)* ),
                         fn( ( #(#field_tys,)* ) ) -> Self
                     >
-                ))
+                )
             },
             Union(strats) => union_strat_to_tokens(tokens, strats),
+            Filter(strat, ty) => {
+                quote_append!(tokens,
+                    _proptest::strategy::Filter<#strat, fn(&#ty) -> bool>
+                )
+            },
         }
     }
 }
@@ -374,6 +392,8 @@ pub enum Ctor {
     /// A let binding that moves to and declares the `ToReg` from the `FromReg`
     /// as well as the strategy that uses the `ToReg`.
     Extract(Box<Ctor>, ToReg, FromReg),
+    /// A filtered strategy with `.prop_filter`.
+    Filter(Box<Ctor>, syn::Expr),
 }
 
 /// Wraps the given strategy producing expression with a move into
@@ -415,6 +435,11 @@ impl ToTokens for Ctor {
         // union which is described separately.
         use self::Ctor::*;
         match self {
+            Filter(ctor, filter) => quote_append!(tokens,
+                _proptest::strategy::Strategy::prop_filter(
+                    #ctor, stringify!(#filter), #filter)
+            ),
+            // TODO improve stringify with field and typename
             Extract(ctor, to, from) => quote_append!(tokens, {
                 let #to = #from; #ctor
             }),

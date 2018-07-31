@@ -9,7 +9,7 @@
 //! Provides actual deriving logic for the crate.
 
 use proc_macro2::{TokenStream, Span};
-use syn::{Type, Path, Field, Ident, Variant, DeriveInput};
+use syn::{Type, Path, Expr, Field, Ident, Variant, DeriveInput};
 use syn::spanned::Spanned;
 
 use util::{is_unit_type, self_ty, fields_to_vec};
@@ -102,7 +102,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl
     let v_path = ast.ident.clone().into();
     let parts = if ast.body.is_empty() {
         // Deriving for a unit struct.
-        error::if_params_present_on_unit_struct(ctx, &ast.attrs);
+        error::if_present_on_unit_struct(ctx, &ast.attrs);
         let (strat, ctor) = pair_unit_self(&v_path);
         (Params::empty(), strat, ctor)
     } else {
@@ -122,7 +122,7 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl
 
         // The complexity of the logic depends mostly now on whether
         // parameters were set directly on the type or not.
-        if let Some(param_ty) = ast.attrs.params.into_option() {
+        let parts = if let Some(param_ty) = ast.attrs.params.into_option() {
             // Parameters was set on the struct itself, the logic is simpler.
             add_top_params(param_ty,
                 derive_product_has_params(ctx, &mut ast.tracker,
@@ -133,11 +133,26 @@ fn derive_struct(ctx: Ctx, mut ast: DeriveData<Vec<Field>>) -> DeriveResult<Impl
                 ctx, &mut ast.tracker,
                 ast.body, error::STRUCT_FIELD
             )?.finish(closure)
-        }
+        };
+
+        // Possibly apply filter:
+        add_top_filter(ast.attrs.filter, parts)
     };
 
     // We're done!
     Ok(Impl::new(ast.ident, ast.tracker, parts))
+}
+
+/// Apply the filter at the top level if provided.
+fn add_top_filter(filter: Vec<Expr>, parts: ImplParts) -> ImplParts {
+    let (params, strat, ctor) = parts;
+    let (strat, ctor) = add_filter_self(filter, (strat, ctor));
+    (params, strat, ctor)
+}
+
+/// Apply a filter with `Self` as the input type to the predicate.
+fn add_filter_self(filter: Vec<Expr>, pair: StratPair) -> StratPair {
+    pair_filter(filter, self_ty(), pair)
 }
 
 /// Determine the `Parameters` part. We've already handled everything else.
@@ -175,8 +190,10 @@ fn derive_product_has_params(
 
         // Determine the strategy for this field and add it to acc.
         let span = field.span();
-        let r = acc.add(product_handle_default_params(ut, field.ty, span, attrs.strategy));
-        Ok(r)
+        let ty = field.ty.clone();
+        let pair = product_handle_default_params(ut, ty, span, attrs.strategy);
+        let pair = pair_filter(attrs.filter, field.ty, pair);
+        Ok(acc.add(pair))
     }).map(|acc| acc.finish(closure))
 }
 
@@ -213,7 +230,7 @@ fn derive_product_no_params
         let span = field.span();
         let ty = field.ty;
 
-        let strat = match attrs.params {
+        let strat = pair_filter(attrs.filter, ty.clone(), match attrs.params {
             // Parameters were not set on the field:
             ParamsMode::Passthrough => match attrs.strategy {
                 // Specific strategy - use the given expr and erase the type:
@@ -238,17 +255,17 @@ fn derive_product_no_params
                 StratMode::Strategy(strat) =>
                     // We need to extract the param as the binding `params`:
                     extract_nparam(&mut acc, params_ty,
-                        pair_existential(ty, strat)),
+                            pair_existential(ty, strat)),
                 // Specific value - use the given expr in a closure and erase:
                 StratMode::Value(value) =>
                     extract_nparam(&mut acc, params_ty,
-                        pair_value_exist(ty, value)),
+                            pair_value_exist(ty, value)),
                 // Logic error by user. Pointless to specify params and not
                 // the strategy. Bail!
                 StratMode::Arbitrary =>
                     error::cant_set_param_but_not_strat(ctx, &ty, item)?,
             },
-        };
+        });
         Ok(acc.add_strat(strat))
     })
 }
@@ -299,6 +316,8 @@ fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl
         derive_enum_no_params(ctx, &mut ast.tracker, &ast.ident, ast.body)
     }?;
 
+    let parts = add_top_filter(ast.attrs.filter, parts);
+
     // We're done!
     Ok(Impl::new(ast.ident, ast.tracker, parts))
 }
@@ -310,13 +329,6 @@ fn derive_enum_no_params(
 {
     // Initialize the accumulator:
     let mut acc = PartsAcc::new(variants.len());
-
-    /*
-    // Keep the inhabited variants:
-    let inhabited = variants.into_iter().filter_map(|var|
-        keep_inhabited_variant(_self, var)
-    );
-    */
 
     // Fold into the accumulator the strategies for each variant:
     for variant in variants {
@@ -333,11 +345,6 @@ fn derive_enum_no_params(
             acc = acc.add_strat((strat, (weight, ctor)));
         }
     }
-
-    /*
-    let acc = inhabited.try_fold(acc, |mut acc,| {
-    })?;
-    */
 
     ensure_union_has_strategies(ctx, &acc.strats);
 
@@ -361,8 +368,10 @@ fn derive_variant_with_fields<C>
      fields: Vec<Field>, acc: &mut PartsAcc<C>)
     -> DeriveResult<StratPair>
 {
-    let r = match attrs.params {
-        // Parameters were not set on the field:
+    let filter = attrs.filter.clone();
+
+    let pair = match attrs.params {
+        // Parameters were not set on the variant:
         ParamsMode::Passthrough => match attrs.strategy {
             // Specific strategy - use the given expr and erase the type:
             StratMode::Strategy(strat) => {
@@ -396,10 +405,10 @@ fn derive_variant_with_fields<C>
                 })
             },
         },
-        // no_params set on the field:
+        // no_params set on the variant:
         ParamsMode::Default =>
             variant_handle_default_params(ctx, ut, v_path, attrs, fields)?,
-        // params(<type>) set on the field:
+        // params(<type>) set on the variant:
         ParamsMode::Specified(params_ty) => match attrs.strategy {
             // Specific strategy - use the given expr and erase the type:
             StratMode::Strategy(strat) => {
@@ -419,7 +428,8 @@ fn derive_variant_with_fields<C>
             },
         },
     };
-    Ok(r)
+    let pair = add_filter_self(filter, pair);
+    Ok(pair)
 }
 
 /// Determine strategy using "Default" semantics for a variant.
@@ -427,7 +437,7 @@ fn variant_handle_default_params(
     ctx: Ctx, ut: &mut UseTracker,
     v_path: Path, attrs: ParsedAttributes, fields: Vec<Field>)
     -> DeriveResult<StratPair> {
-    let r = match attrs.strategy {
+    let pair = match attrs.strategy {
         // Specific strategy - use the given expr and erase the type:
         StratMode::Strategy(strat) => {
             deny_all_attrs_on_fields(ctx, fields)?;
@@ -444,7 +454,8 @@ fn variant_handle_default_params(
             derive_product_has_params(ctx, ut, error::ENUM_VARIANT_FIELD,
                 map_closure(v_path, &fields), fields)?,
     };
-    Ok(r)
+
+    Ok(pair)
 }
 
 /// Ensures that there are no proptest attributes on any of the fields.
@@ -463,13 +474,6 @@ fn derive_enum_has_params(
     sty: Option<Type>)
     -> DeriveResult<ImplParts>
 {
-    /*
-    // Keep the inhabited variants:
-    let inhabited = variants.into_iter().filter_map(|var|
-        keep_inhabited_variant(ctx, _self, var)?
-    );
-    */
-
     // Initialize the accumulator:
     let mut acc = StratAcc::new(variants.len());
 
@@ -483,7 +487,9 @@ fn derive_enum_has_params(
                 pair_unit_variant(ctx, &attrs, path)
             } else {
                 // Not a unit variant:
-                variant_handle_default_params(ctx, ut, path, attrs, fields)?
+                let filter = attrs.filter.clone();
+                add_filter_self(filter,
+                    variant_handle_default_params(ctx, ut, path, attrs, fields)?)
             };
             acc = acc.add((strat, (weight, ctor)));
         }
@@ -539,14 +545,17 @@ fn ensure_has_only_skip_attr(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     if attrs.weight.is_some() {
         error::skipped_variant_has_weight(ctx, item);
     }
+
+    if !attrs.filter.is_empty() {
+        error::skipped_variant_has_filter(ctx, item);
+    }
 }
 
 /// Deal with a unit variant.
 fn pair_unit_variant(ctx: Ctx, attrs: &ParsedAttributes, v_path: Path)
     -> StratPair
 {
-    error::if_strategy_present_on_unit_variant(ctx, attrs);
-    error::if_params_present_on_unit_variant(ctx, attrs);
+    error::if_present_on_unit_variant(ctx, attrs);
     pair_unit_self(&v_path)
 }
 

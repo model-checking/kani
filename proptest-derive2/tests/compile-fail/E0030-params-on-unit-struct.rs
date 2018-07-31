@@ -30,3 +30,15 @@ struct T4();
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0030]
 #[proptest(no_params)]
 struct T5();
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0030]
+#[proptest(filter(foo))]
+struct T6;
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0030]
+#[proptest(filter(foo))]
+struct T7();
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0030]
+#[proptest(filter(foo))]
+struct T8 {}

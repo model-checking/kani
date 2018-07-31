@@ -31,6 +31,8 @@ pub struct ParsedAttributes {
     pub params: ParamsMode,
     /// The mode for `Strategy` to use. See that type for more.
     pub strategy: StratMode,
+    /// Filter expressions if any.
+    pub filter: Vec<syn::Expr>,
     /// True if no_bound was specified.
     pub no_bound: bool,
 }
@@ -139,6 +141,7 @@ fn parse_attributes_base(ctx: Ctx, attrs: &[Attribute])
     Ok(ParsedAttributes {
         skip: acc.skip.is_some(),
         weight: acc.weight,
+        filter: acc.filter,
         // Process params and no_params together to see which one to use.
         params: parse_params_mode(ctx, acc.no_params, acc.params)?,
         // Process strategy and value together to see which one to use.
@@ -159,6 +162,7 @@ struct ParseAcc {
     params: Option<Type>,
     strategy: Option<Expr>,
     value: Option<Expr>,
+    filter: Vec<Expr>,
     no_bound: Option<()>,
 }
 
@@ -246,6 +250,7 @@ fn dispatch_attribute(ctx: Ctx, mut acc: ParseAcc, meta: Meta) -> ParseAcc {
         "params" => parse_params(ctx, &mut acc, meta),
         "strategy" => parse_strategy(ctx, &mut acc, &meta),
         "value" => parse_value(ctx, &mut acc, &meta),
+        "filter" => parse_filter(ctx, &mut acc, &meta),
         "no_bound" => parse_no_bound(ctx, &mut acc, meta),
         // Invalid modifiers:
         name => dispatch_unknown_mod(ctx, name),
@@ -269,6 +274,7 @@ fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
             error::did_you_mean(ctx, name, "no_params"),
         name =>
             error::unkown_modifier(ctx, name),
+        // TODO: consider levenshtein distance.
     }
 }
 
@@ -328,6 +334,27 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 }
 
 //==============================================================================
+// Internals: Filter
+//==============================================================================
+
+/// Parses an explicit value as a strategy.
+/// Valid forms are:
+/// + `#[proptest(filter(<ident>))]`
+/// + `#[proptest(filter = "<expr>")]`
+/// + `#[proptest(filter("<expr>")]`
+fn parse_filter(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
+    if let Some(filter) = match normalize_meta(meta.clone()) {
+        Some(NormMeta::Lit(Lit::Str(lit))) => lit.parse().ok(),
+        Some(NormMeta::Word(ident)) => Some(parse_quote!( #ident )),
+        _ => None,
+    } {
+        acc.filter.push(filter);
+    } else {
+        error::filter_malformed(ctx, meta)
+    }
+}
+
+//==============================================================================
 // Internals: Strategy
 //==============================================================================
 
@@ -337,6 +364,7 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 /// + `#[proptest(value = "<expr>")]`
 /// + `#[proptest(value("<expr>")]`
 /// + `#[proptest(value(<literal>)]`
+/// + `#[proptest(value(<ident>)]`
 fn parse_value(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     parse_strategy_base(ctx, &mut acc.value, meta)
 }
@@ -347,6 +375,7 @@ fn parse_value(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 /// + `#[proptest(strategy = "<expr>")]`
 /// + `#[proptest(strategy("<expr>")]`
 /// + `#[proptest(strategy(<literal>)]`
+/// + `#[proptest(strategy(<ident>)]`
 fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     parse_strategy_base(ctx, &mut acc.strategy, meta)
 }
@@ -357,16 +386,15 @@ fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 /// + `#[proptest(<meta.name()> = "<expr>")]`
 /// + `#[proptest(<meta.name()>("<expr>")]`
 /// + `#[proptest(<meta.name()>(<literal>)]`
+/// + `#[proptest(<meta.name()>(<ident>)]`
 fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
     error_if_set(ctx, &loc, &meta);
 
-    let norm_meta = normalize_meta(meta.clone());
-    let expr = match norm_meta {
+    if let Some(expr) = match normalize_meta(meta.clone()) {
         Some(NormMeta::Lit(lit)) => extract_expr(lit),
         Some(NormMeta::Word(fun)) => Some(parse_quote!( #fun() )),
         _ => None,
-    };
-    if let Some(expr) = expr {
+    } {
         *loc = Some(expr);
     } else {
         error::strategy_malformed(ctx, meta)
