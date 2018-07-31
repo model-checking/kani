@@ -306,22 +306,6 @@ fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
     may require a different type than the one provided in `<type>`.",
     item, quote! { #self_ty });
 
-/// Happens when `#[proptest(params = <type>)]` and
-/// `#[proptest(value = <type>)]` is set together on `item`.
-///
-/// This temporary restriction is due to the fact that we can't
-/// move parameters into function items. Once we get
-/// `type Strategy = impl Trait;`, in stable it will be possible
-/// to use closures instead and this restriction can be lifted.
-error!(cant_set_param_and_value(item: &str), E0012,
-    "Can not set `#[proptest(params = <type>)]` on {0} and set a value via \
-    `#[proptest(value = <expr>)]` since `move || <expr>` closures can not be \
-    coerced into function pointers. This is most likely a temporary \
-    restriction while `type Assoc = impl Trait;` is not yet stable.",
-    item);
-
-// TODO: OBSOLETE THIS ^^^ ERROR via BoxedStrategy!
-
 /// Happens when the form `#![proptest<..>]` is used. This will probably never
 /// happen - but just in case it does, we catch it and emit an error.
 error!(inner_attr, E0013,

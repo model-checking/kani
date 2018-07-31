@@ -49,9 +49,8 @@ enum Bobby {
     C(usize),
     #[proptest(no_params, strategy = "Just(Bobby::D(1))")]
     D(usize),
-    //#[proptest(params(Complex), value = "A::E(1)")]
-    //E(usize),
-    // ^--- TODO: make this work!
+    #[proptest(params(Complex), value = "Bobby::E(1)")]
+    E(usize),
     #[proptest(params(Complex), strategy = "Just(Bobby::F(1))")]
     F(usize),
 }

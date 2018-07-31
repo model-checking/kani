@@ -165,6 +165,16 @@ pub fn pair_value_self(val: syn::Expr) -> StratPair {
     pair_value(self_ty(), val)
 }
 
+/// Erased strategy for a fixed value.
+pub fn pair_value_exist(ty: syn::Type, strat: syn::Expr) -> StratPair {
+    (Strategy::Existential(ty), Ctor::ValueExistential(strat))
+}
+
+/// Erased strategy for a fixed value.
+pub fn pair_value_exist_self(strat: syn::Expr) -> StratPair {
+    pair_value_exist(self_ty(), strat)
+}
+
 /// Same as `pair_value` but for a unit variant or unit struct.
 pub fn pair_unit_self(path: &syn::Path) -> StratPair {
     pair_value_self(parse_quote!( #path {} ))
@@ -354,6 +364,8 @@ pub enum Ctor {
     Existential(syn::Expr),
     /// A strategy that always produces the given expression.
     Value(syn::Expr),
+    /// A strategy that always produces the given expression but which is erased.
+    ValueExistential(syn::Expr),
     /// A strategy that maps from a sequence of strategies into `Self`.
     Map(Box<[Ctor]>, MapClosure),
     /// A strategy that randomly selects one of the given relative-weighted
@@ -419,6 +431,11 @@ impl ToTokens for Ctor {
             Existential(expr) => quote_append!(tokens,
                 _proptest::strategy::Strategy::boxed( #expr ) ),
             Value(expr) => quote_append!(tokens, || #expr ),
+            ValueExistential(expr) => quote_append!(tokens,
+                _proptest::strategy::Strategy::boxed(
+                    _proptest::strategy::LazyJust::new(move || #expr)
+                )
+            ),
             Map(ctors, closure) => {
                 let ctors = ctors.iter();
                 quote_append!(tokens,
