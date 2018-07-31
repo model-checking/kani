@@ -315,7 +315,7 @@ fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
 /// but also on the parent of `item`. If the parent has set `filter`
 /// then that applies, and the `filter` on `item` would be meaningless
 /// wherefore it is forbidden.
-error!(parent_has_filter(item: &str), E0012, // TODO tests
+error!(parent_has_filter(item: &str), E0012,
     "Can not set `#[proptest(filter(..)]` on {} since it is set on the variant
     which it is inside of and because the variant specifies how to generate
     itself.",
