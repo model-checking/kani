@@ -321,7 +321,7 @@ const WEIGHT_BASE: u32 = 0x8000_0000;
 ///
 /// ## Panics
 ///
-/// Panics if `f` is negative, greater than 1.0, or NaN.
+/// Panics if `f` is not a real number between 0.0 and 1.0, both exclusive.
 pub fn float_to_weight(f: f64) -> (u32, u32) {
     assert!(f > 0.0 && f < 1.0, "Invalid probability: {}", f);
 
