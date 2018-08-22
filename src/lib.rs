@@ -1657,14 +1657,15 @@
     generator_trait,
     try_from,
     integer_atomics,
-    mpsc_select,
-    ip,
     never_type,
     try_reserve
 ))]
+#![cfg_attr(all(feature = "std", feature = "unstable"), feature(
+    mpsc_select,
+    ip
+))]
 #![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(
     alloc,
-    core_float,
     core_intrinsics
 ))]
 
