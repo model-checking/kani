@@ -1,3 +1,9 @@
+## 0.8.5
+
+### Bug Fixes
+
+- Fix build when nightly features are enabled.
+
 ## 0.8.4
 
 ### Bug Fixes

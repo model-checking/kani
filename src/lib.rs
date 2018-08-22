@@ -1653,15 +1653,12 @@
 ))]
 #![cfg_attr(feature = "unstable", feature(
     allocator_api,
-    thread_local_state,
     try_trait,
     generator_trait,
     try_from,
     integer_atomics,
     mpsc_select,
     ip,
-    iterator_step_by,
-    io,
     never_type,
     try_reserve
 ))]
