@@ -1,3 +1,10 @@
+## 0.8.6
+
+### New Additions
+
+- `Vec<S> where S: Strategy` is now itself a `Strategy` for producing
+  fixed-size `Vec`s whose values are derived from the respective strategies.
+
 ## 0.8.5
 
 ### Bug Fixes

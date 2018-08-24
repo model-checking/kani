@@ -885,9 +885,10 @@
 //! # fn main() { test_add(); }
 //! ```
 //!
-//! Other compound strategies include fixed-sizes arrays of strategies, as well
-//! as the various strategies provided in the [collection](collection/index.html)
-//! module.
+//! Other compound strategies include fixed-sizes arrays of strategies and
+//! `Vec`s of strategies (which produce arrays or `Vec`s of values parallel to
+//! the strategy collection), as well as the various strategies provided in the
+//! [collection](collection/index.html) module.
 //!
 //! ### Syntax Sugar: `proptest!`
 //!

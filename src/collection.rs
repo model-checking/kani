@@ -181,6 +181,9 @@ pub struct VecStrategy<T : Strategy> {
 
 /// Create a strategy to generate `Vec`s containing elements drawn from
 /// `element` and with a size range given by `size`.
+///
+/// To make a `Vec` with a fixed number of elements, each with its own
+/// strategy, you can instead make a `Vec` of strategies (boxed if necessary).
 pub fn vec<T: Strategy>(element: T, size: impl Into<SizeRange>)
                         -> VecStrategy<T> {
     VecStrategy { element, size: size.into() }
@@ -510,6 +513,25 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     }
 }
 
+impl<T : Strategy> Strategy for Vec<T> {
+    type Tree = VecValueTree<T::Tree>;
+    type Value = Vec<T::Value>;
+
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let len = self.len();
+        let elements = self.iter().map(
+            |t| t.new_tree(runner)).collect::<Result<Vec<_>, Reason>>()?;
+
+        Ok(VecValueTree {
+            elements,
+            included_elements: VarBitSet::saturated(len),
+            min_size: len,
+            shrink: Shrink::ShrinkElement(0),
+            prev_shrink: None,
+        })
+    }
+}
+
 impl<T : ValueTree> ValueTree for VecValueTree<T> {
     type Value = Vec<T::Value>;
 
@@ -599,6 +621,8 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
 mod test {
     use super::*;
 
+    use bits;
+
     #[test]
     fn test_vec() {
         let input = vec(1usize..20usize, 5..20);
@@ -641,9 +665,32 @@ mod test {
         check_strategy_sanity(vec(0i32..1000, 5..10), None);
     }
 
+    #[test]
+    fn test_parallel_vec() {
+        let input = vec![
+            (1u32..10).boxed(),
+            bits::u32::masked(0xF0u32).boxed(),
+        ];
+
+        for _ in 0..256 {
+            let mut runner = TestRunner::default();
+            let mut case = input.new_tree(&mut runner).unwrap();
+
+            loop {
+                let current = case.current();
+                assert_eq!(2, current.len());
+                assert!(current[0] >= 1 && current[0] <= 10);
+                assert_eq!(0, (current[1] & !0xF0));
+
+                if !case.simplify() {
+                    break;
+                }
+            }
+        }
+    }
+
     #[cfg(feature = "std")]
     #[test]
-    #[cfg(feature = "std")]
     fn test_map() {
         // Only 8 possible keys
         let input = hash_map("[ab]{3}", "a", 2..3);
@@ -657,7 +704,6 @@ mod test {
 
     #[cfg(feature = "std")]
     #[test]
-    #[cfg(feature = "std")]
     fn test_set() {
         // Only 8 possible values
         let input = hash_set("[ab]{3}", 2..3);
