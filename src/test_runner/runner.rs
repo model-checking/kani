@@ -138,7 +138,7 @@ impl ForkOutput {
 #[cfg(not(feature = "std"))]
 fn call_test<V, F, R>
     (case: V, test: &F, replay: &mut R, _timeout: u32,
-     cache: &mut dyn ResultCache, _: &mut ForkOutput) -> TestCaseResult
+     result_cache: &mut dyn ResultCache, _: &mut ForkOutput) -> TestCaseResult
 where
     V: fmt::Debug,
     F: Fn(V) -> TestCaseResult,
@@ -148,8 +148,8 @@ where
         return result;
     }
 
-    let cache_key = cache.key(&ResultCacheKey::new(&case));
-    if let Some(result) = cache.get(cache_key) {
+    let cache_key = result_cache.key(&ResultCacheKey::new(&case));
+    if let Some(result) = result_cache.get(cache_key) {
         return result.clone();
     }
 
