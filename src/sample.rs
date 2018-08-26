@@ -16,7 +16,10 @@
 use core::fmt;
 use core::mem;
 use core::ops::Range;
+use core::u64;
 use std_facade::{Cow, Vec, Arc};
+
+use rand::Rng;
 
 use bits::{self, BitSetValueTree, SampledBitSetStrategy, VarBitSet};
 use num;
@@ -251,18 +254,157 @@ opaque_strategy_wrapper! {
     /// Created via `any::<Index>()`.
     #[derive(Clone, Debug)]
     pub struct IndexStrategy[][](
-        statics::Map<::num::usize::Any, UsizeToIndex>)
+        statics::Map<num::usize::Any, UsizeToIndex>)
         -> IndexValueTree;
     /// `ValueTree` corresponding to `IndexStrategy`.
     #[derive(Clone, Debug)]
     pub struct IndexValueTree[][](
-        statics::Map<::num::usize::BinarySearch,UsizeToIndex>)
+        statics::Map<num::usize::BinarySearch,UsizeToIndex>)
         -> Index;
 }
 
 impl IndexStrategy {
     pub(crate) fn new() -> Self {
-        IndexStrategy(statics::Map::new(::num::usize::ANY, UsizeToIndex))
+        IndexStrategy(statics::Map::new(num::usize::ANY, UsizeToIndex))
+    }
+}
+
+/// A value for picking random values out of iterators.
+///
+/// This is, in a sense, a more flexible variant of
+/// [`Index`](struct.Index.html) in that it can operate on arbitrary
+/// `IntoIterator` values.
+///
+/// Initially, the selection is roughly uniform, with a very slight bias
+/// towards items earlier in the iterator.
+///
+/// Shrinking causes the selection to move toward items earlier in the
+/// iterator, ultimately settling on the very first, but this currently happens
+/// in a very haphazard way that may fail to find the earliest failing input.
+///
+/// ## Example
+///
+/// Generate a non-indexable collection and a value to pick out of it.
+///
+/// ```
+/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
+///
+/// proptest! {
+///     # /*
+///     #[test]
+///     # */
+///     fn my_test(
+///         names in prop::collection::hash_set("[a-z]+", 10..20),
+///         selector in any::<prop::sample::Selector>()
+///     ) {
+///         println!("Selected name: {}", selector.select(&names));
+///         // Test stuff...
+///     }
+/// }
+/// #
+/// # fn main() { my_test(); }
+/// ```
+#[derive(Clone, Debug)]
+pub struct Selector {
+    rng: TestRng,
+    bias_increment: u64,
+}
+
+/// Strategy to create `Selector`s.
+///
+/// Created via `any::<Selector>()`.
+#[derive(Debug)]
+pub struct SelectorStrategy {
+    _nonexhaustive: (),
+}
+
+/// `ValueTree` corresponding to `SelectorStrategy`.
+#[derive(Debug)]
+pub struct SelectorValueTree {
+    rng: TestRng,
+    reverse_bias_increment: num::u64::BinarySearch,
+}
+
+impl SelectorStrategy {
+    pub(crate) fn new() -> Self {
+        SelectorStrategy {
+            _nonexhaustive: (),
+        }
+    }
+}
+
+impl Strategy for SelectorStrategy {
+    type Tree = SelectorValueTree;
+    type Value = Selector;
+
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        Ok(SelectorValueTree {
+            rng: runner.new_rng(),
+            reverse_bias_increment: num::u64::BinarySearch::new(u64::MAX),
+        })
+    }
+}
+
+impl ValueTree for SelectorValueTree {
+    type Value = Selector;
+
+    fn current(&self) -> Selector {
+        Selector {
+            rng: self.rng.clone(),
+            bias_increment: u64::MAX - self.reverse_bias_increment.current(),
+        }
+    }
+
+    fn simplify(&mut self) -> bool {
+        self.reverse_bias_increment.simplify()
+    }
+
+    fn complicate(&mut self) -> bool {
+        self.reverse_bias_increment.complicate()
+    }
+}
+
+impl Selector {
+    /// Pick a random element from iterable `it`.
+    ///
+    /// The selection is unaffected by the elements themselves, and is
+    /// dependent only on the actual length of `it`.
+    ///
+    /// `it` is always iterated completely.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `it` has no elements.
+    pub fn select<T : IntoIterator>(&self, it: T) -> T::Item {
+        self.try_select(it).expect("select from empty iterator")
+    }
+
+    /// Pick a random element from iterable `it`.
+    ///
+    /// Returns `None` if `it` is empty.
+    ///
+    /// The selection is unaffected by the elements themselves, and is
+    /// dependent only on the actual length of `it`.
+    ///
+    /// `it` is always iterated completely.
+    pub fn try_select<T : IntoIterator>(&self, it: T) -> Option<T::Item> {
+        let mut bias = 0u64;
+        let mut min_score = 0;
+        let mut best = None;
+        let mut rng = self.rng.clone();
+
+        for item in it {
+            let score = bias.saturating_add(rng.gen());
+            if best.is_none() || score < min_score {
+                best = Some(item);
+                min_score = score;
+            }
+
+            bias = bias.saturating_add(self.bias_increment);
+        }
+
+        best
     }
 }
 
@@ -383,5 +525,24 @@ mod test {
         }
 
         assert_eq!(col.into_iter().collect::<BTreeSet<_>>(), seen);
+    }
+
+    #[test]
+    fn selector_works() {
+        let mut runner = TestRunner::default();
+        let input = any::<Selector>();
+        let col: BTreeSet<&str> = vec!["foo", "bar", "baz"].into_iter().collect();
+        let mut seen = BTreeSet::new();
+
+        for _ in 0..16 {
+            let mut tree = input.new_tree(&mut runner).unwrap();
+            seen.insert(*tree.current().select(&col));
+
+            while tree.simplify() { }
+
+            assert_eq!("bar", *tree.current().select(&col));
+        }
+
+        assert_eq!(col, seen);
     }
 }

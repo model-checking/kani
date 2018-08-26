@@ -8,8 +8,11 @@
 - It is now possible to configure the test runner to cache test results to
   avoid spending time running identical tests. See `Config.result_cache`.
 
-- Added `sample::Index`, a type for generating indices into runtime-sized
-  slices and vectors.
+- Add `sample::Index`, a type for generating indices into runtime-sized slices
+  and vectors.
+
+- Add `sample::Selector`, a type for picking items out of dynamically-created
+  iterables.
 
 ### Bug Fixes
 

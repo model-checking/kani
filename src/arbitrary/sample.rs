@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use sample::{Index, IndexStrategy};
+use sample::{Index, IndexStrategy, Selector, SelectorStrategy};
 use arbitrary::Arbitrary;
 
 impl Arbitrary for Index {
@@ -17,5 +17,15 @@ impl Arbitrary for Index {
 
     fn arbitrary_with(_: ()) -> IndexStrategy {
         IndexStrategy::new()
+    }
+}
+
+impl Arbitrary for Selector {
+    type Parameters = ();
+
+    type Strategy = SelectorStrategy;
+
+    fn arbitrary_with(_: ()) -> SelectorStrategy {
+        SelectorStrategy::new()
     }
 }
