@@ -14,6 +14,7 @@
 
 mod rng;
 mod failure_persistence;
+mod result_cache;
 mod config;
 mod reason;
 mod errors;
@@ -23,6 +24,7 @@ mod runner;
 
 pub use self::rng::*;
 pub use self::failure_persistence::*;
+pub use self::result_cache::*;
 pub use self::config::*;
 pub use self::reason::*;
 pub use self::errors::*;

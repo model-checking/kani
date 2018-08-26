@@ -29,6 +29,7 @@ use test_runner::{TestRng, Seed};
 use test_runner::errors::*;
 use test_runner::config::*;
 use test_runner::reason::*;
+use test_runner::result_cache::*;
 #[cfg(feature = "fork")]
 use test_runner::replay;
 use strategy::*;
@@ -136,9 +137,10 @@ impl ForkOutput {
 
 #[cfg(not(feature = "std"))]
 fn call_test<V, F, R>
-    (case: V, test: &F, replay: &mut R, _timeout: u32, _: &mut ForkOutput)
-    -> TestCaseResult
+    (case: V, test: &F, replay: &mut R, _timeout: u32,
+     cache: &mut dyn ResultCache, _: &mut ForkOutput) -> TestCaseResult
 where
+    V: fmt::Debug,
     F: Fn(V) -> TestCaseResult,
     R: Iterator<Item = TestCaseResult>,
 {
@@ -146,14 +148,23 @@ where
         return result;
     }
 
-    test(case)
+    let cache_key = cache.key(&ResultCacheKey::new(&case));
+    if let Some(result) = cache.get(cache_key) {
+        return result.clone();
+    }
+
+    let result = test(case);
+    result_cache.put(cache_key, &result);
+    result
 }
 
 #[cfg(feature = "std")]
 fn call_test<V, F, R>
-    (case: V, test: &F, replay: &mut R, timeout: u32, fork_output: &mut ForkOutput)
+    (case: V, test: &F, replay: &mut R, timeout: u32,
+     result_cache: &mut dyn ResultCache, fork_output: &mut ForkOutput)
     -> TestCaseResult
 where
+    V: fmt::Debug,
     F: Fn(V) -> TestCaseResult,
     R: Iterator<Item = TestCaseResult>,
 {
@@ -161,6 +172,11 @@ where
 
     if let Some(result) = replay.next() {
         return result;
+    }
+
+    let cache_key = result_cache.key(&ResultCacheKey::new(&case));
+    if let Some(result) = result_cache.get(cache_key) {
+        return result.clone();
     }
 
     let time_start = time::Instant::now();
@@ -188,6 +204,7 @@ where
         }
     }
 
+    result_cache.put(cache_key, &result);
     fork_output.append(&result);
 
     result
@@ -390,9 +407,12 @@ impl TestRunner {
                 .map(|f| f.load_persisted_failures(self.config.source_file))
                 .unwrap_or_default();
 
+        let mut result_cache = self.new_cache();
+
         for persisted_seed in persisted_failure_seeds {
             self.rng.set_seed(persisted_seed);
-            self.gen_and_run_case(strategy, &test, &mut replay, &mut fork_output)?;
+            self.gen_and_run_case(strategy, &test, &mut replay,
+                                  &mut *result_cache, &mut fork_output)?;
         }
         self.rng = old_rng;
 
@@ -401,7 +421,7 @@ impl TestRunner {
             // what seed to persist if this case fails.
             let seed = self.rng.gen_get_seed();
             let result = self.gen_and_run_case(
-                strategy, &test, &mut replay, &mut fork_output);
+                strategy, &test, &mut replay, &mut *result_cache, &mut fork_output);
             if let Err(TestError::Fail(_, ref value)) = result {
                 if let Some(ref mut failure_persistence) = self.config.failure_persistence {
                     let source_file = &self.config.source_file;
@@ -430,6 +450,7 @@ impl TestRunner {
         (&mut self, strategy: &S,
          f: &impl Fn (S::Value) -> TestCaseResult,
          replay: &mut impl Iterator<Item = TestCaseResult>,
+         result_cache: &mut dyn ResultCache,
          fork_output: &mut ForkOutput)
         -> TestRunResult<S>
     {
@@ -437,7 +458,7 @@ impl TestRunner {
             unwrap_or!(strategy.new_tree(self), msg =>
                 return Err(TestError::Abort(msg)));
 
-        if self.run_one_with_replay(case, f, replay, fork_output)? {
+        if self.run_one_with_replay(case, f, replay, result_cache, fork_output)? {
             self.successes += 1;
         }
         Ok(())
@@ -457,9 +478,11 @@ impl TestRunner {
          test: impl Fn (V::Value) -> TestCaseResult)
         -> Result<bool, TestError<V::Value>>
     {
+        let mut result_cache = self.new_cache();
         self.run_one_with_replay(
             case, test,
             &mut iter::empty::<TestCaseResult>().fuse(),
+            &mut *result_cache,
             &mut ForkOutput::empty())
     }
 
@@ -467,17 +490,20 @@ impl TestRunner {
         (&mut self, mut case: V,
          test: impl Fn (V::Value) -> TestCaseResult,
          replay: &mut impl Iterator<Item = TestCaseResult>,
+         result_cache: &mut dyn ResultCache,
          fork_output: &mut ForkOutput)
         -> Result<bool, TestError<V::Value>>
     {
         let result = call_test(
             case.current(), &test,
-            replay, self.config.timeout(), fork_output);
+            replay, self.config.timeout(),
+            result_cache, fork_output);
 
         match result {
             Ok(_) => Ok(true),
             Err(TestCaseError::Fail(why)) => {
-                let why = self.shrink(&mut case, test, replay, fork_output)
+                let why = self.shrink(&mut case, test, replay,
+                                      result_cache, fork_output)
                     .unwrap_or(why);
                 Err(TestError::Fail(why, case.current()))
             },
@@ -492,6 +518,7 @@ impl TestRunner {
         (&mut self, case: &mut V,
          test: impl Fn (V::Value) -> TestCaseResult,
          replay: &mut impl Iterator<Item = TestCaseResult>,
+         result_cache: &mut dyn ResultCache,
          fork_output: &mut ForkOutput)
         -> Option<Reason>
     {
@@ -501,7 +528,8 @@ impl TestRunner {
             loop {
                 let result = call_test(
                     case.current(), &test,
-                    replay, self.config.timeout(), fork_output);
+                    replay, self.config.timeout(),
+                    result_cache, fork_output);
 
                 match result {
                     // Rejections are effectively a pass here,
@@ -561,6 +589,10 @@ impl TestRunner {
     pub fn flat_map_regen(&self) -> bool {
         self.flat_map_regens.fetch_add(1, SeqCst) <
             self.config.max_flat_map_regens as usize
+    }
+
+    fn new_cache(&self) -> Box<dyn ResultCache> {
+        (self.config.result_cache)()
     }
 }
 
@@ -930,6 +962,42 @@ mod test {
         match failure {
             TestError::Fail(_, value) => assert_eq!(500, value),
             failure => panic!("Unexpected failure: {:?}", failure),
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn duplicate_tests_not_run_with_basic_result_cache() {
+        use std::cell::{Cell, RefCell};
+        use std::collections::HashSet;
+        use std::rc::Rc;
+
+        for _ in 0..256 {
+            let mut runner = TestRunner::new(Config {
+                failure_persistence: None,
+                result_cache: ::test_runner::result_cache::basic_result_cache,
+                .. Config::default()
+            });
+            let pass = Rc::new(Cell::new(true));
+            let seen = Rc::new(RefCell::new(HashSet::new()));
+            let result = runner.run(
+                &(0u32..65536u32).prop_map(|v| v % 10),
+                |val| {
+                    if !seen.borrow_mut().insert(val) {
+                        println!("Value {} seen more than once", val);
+                        pass.set(false);
+                    }
+
+                    prop_assert!(val <= 5);
+                    Ok(())
+                });
+
+            assert!(pass.get());
+            if let Err(TestError::Fail(_, val)) = result {
+                assert_eq!(6, val);
+            } else {
+                panic!("Incorrect result: {:?}", result);
+            }
         }
     }
 }

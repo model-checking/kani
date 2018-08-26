@@ -1,9 +1,12 @@
-## 0.8.6
+## Unreleased
 
 ### New Additions
 
 - `Vec<S> where S: Strategy` is now itself a `Strategy` for producing
   fixed-size `Vec`s whose values are derived from the respective strategies.
+
+- It is now possible to configure the test runner to cache test results to
+  avoid spending time running identical tests. See `Config.result_cache`.
 
 ## 0.8.5
 
