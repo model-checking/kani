@@ -8,6 +8,9 @@
 - It is now possible to configure the test runner to cache test results to
   avoid spending time running identical tests. See `Config.result_cache`.
 
+- Added `sample::Index`, a type for generating indices into runtime-sized
+  slices and vectors.
+
 ### Bug Fixes
 
 - Fix panic when using `sample::subsequence` with an empty vector.
