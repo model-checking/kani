@@ -50,10 +50,10 @@ pub fn subsequence<T : Clone + 'static>
     let len = values.len();
     let size = size.into();
 
-    assert!(size.start() != size.end_excl(), "Zero-length range passed to subsequence");
-    assert!(size.end() <= len,
+    size.assert_nonempty();
+    assert!(size.end_incl() <= len,
             "Maximum size of subsequence {} exceeds length of input {}",
-            size.end(), len);
+            size.end_incl(), len);
     Subsequence {
         values: Arc::new(values),
         bit_strategy: bits::varsize::sampled(size, 0..len),
@@ -235,5 +235,20 @@ mod test {
     #[test]
     fn test_select_sanity() {
         check_strategy_sanity(select(vec![0, 1, 2, 3, 4]), None);
+    }
+
+    #[test]
+    fn subseq_empty_vec_works() {
+        let mut runner = TestRunner::default();
+        let input = subsequence(Vec::<()>::new(), 0..1);
+        assert_eq!(Vec::<()>::new(), input.new_tree(&mut runner).unwrap().current());
+    }
+
+    #[test]
+    fn subseq_full_vec_works() {
+        let v = vec![1u32, 2u32, 3u32];
+        let mut runner = TestRunner::default();
+        let input = subsequence(v.clone(), 3);
+        assert_eq!(v, input.new_tree(&mut runner).unwrap().current());
     }
 }

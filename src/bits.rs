@@ -242,9 +242,10 @@ impl<T : BitSetLike> SampledBitSetStrategy<T> {
                -> Self {
         let size = size.into();
         let bits = bits.into();
+        size.assert_nonempty();
 
         let available_bits = bits.end_excl() - bits.start();
-        assert!(size.end_excl() < available_bits + 1,
+        assert!(size.end_excl() <= available_bits + 1,
                 "Illegal SampledBitSetStrategy: have {} bits available, \
                  but requested size is {}..{}",
                 available_bits, size.start(), size.end_excl());
@@ -261,7 +262,7 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end_excl());
         let count = sample_uniform_incl(
-            runner, self.size.start(), self.size.end());
+            runner, self.size.start(), self.size.end_incl());
         for bit in
             rand::seq::sample_iter(runner.rng(), self.bits.iter(), count)
             .expect("not enough bits to sample")

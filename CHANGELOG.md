@@ -8,6 +8,26 @@
 - It is now possible to configure the test runner to cache test results to
   avoid spending time running identical tests. See `Config.result_cache`.
 
+### Bug Fixes
+
+- Fix panic when using `sample::subsequence` with an empty vector.
+
+- Fix panic when using `sample::subsequence` with a size equal to the size of
+  the input vector.
+
+- Fix sampled bitset strategies on integers not allowing to generate exactly
+  the same number of bits as the integer is wide.
+
+### Other Notes
+
+- Passing empty size ranges to functions requiring a non-empty size range now
+  panic with an explicit message immediately rather than causing an arithmetic
+  error when generating input values.
+
+- There were a few cases where proptest would accept a `SizeRange` with an
+  inclusive maximum value of `usize::MAX`. Size ranges are now always clamped
+  to `usize::MAX - 1`.
+
 ## 0.8.5
 
 ### Bug Fixes
