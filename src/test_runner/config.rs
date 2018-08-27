@@ -21,6 +21,7 @@ use std::str::FromStr;
 use test_runner::FailurePersistence;
 #[cfg(feature = "std")]
 use test_runner::FileFailurePersistence;
+use test_runner::result_cache::{noop_result_cache, ResultCache};
 
 #[cfg(feature = "std")]
 const CASES: &str = "PROPTEST_CASES";
@@ -103,6 +104,7 @@ lazy_static! {
             fork: false,
             #[cfg(feature = "timeout")]
             timeout: 0,
+            result_cache: noop_result_cache,
             _non_exhaustive: (),
         };
 
@@ -207,6 +209,24 @@ pub struct Config {
     /// setting the `PROPTEST_TIMEOUT` environment variable.
     #[cfg(feature = "timeout")]
     pub timeout: u32,
+
+    /// A function to create new result caches.
+    ///
+    /// The default is to do no caching. The easiest way to enable caching is
+    /// to set this field to `basic_result_cache` (though that is currently
+    /// only available with the `std` feature).
+    ///
+    /// This is useful for strategies which have a tendency to produce
+    /// duplicate values, or for tests where shrinking can take a very long
+    /// time due to exploring the same output multiple times.
+    ///
+    /// When caching is enabled, generated values themselves are not stored, so
+    /// this does not pose a risk of memory exhaustion for large test inputs
+    /// unless using extraordinarily large test case counts.
+    ///
+    /// Caching incurs its own overhead, and may very well make your test run
+    /// more slowly.
+    pub result_cache: fn () -> Box<dyn ResultCache>,
 
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]

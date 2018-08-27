@@ -29,6 +29,16 @@ use test_runner::*;
 // SizeRange
 //==============================================================================
 
+/// The minimum and maximum range/bounds on the size of a collection.
+/// The interval must form a subset of `[0, std::usize::MAX)`.
+///
+/// A value like `0..=std::usize::MAX` will still be accepted but will silently
+/// truncate the maximum to `std::usize::MAX - 1`.
+///
+/// The `Default` is `0..100`.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct SizeRange(Range<usize>);
+
 /// Creates a `SizeRange` from some value that is convertible into it.
 pub fn size_range(from: impl Into<SizeRange>) -> SizeRange {
     from.into()
@@ -44,7 +54,7 @@ impl Default for SizeRange {
 impl SizeRange {
     /// Creates a `SizeBounds` from a `RangeInclusive<usize>`.
     pub fn new(range: RangeInclusive<usize>) -> Self {
-        SizeRange(range)
+        range.into()
     }
 
     // Don't rely on these existing internally:
@@ -65,28 +75,38 @@ impl SizeRange {
         self.with(Default::default())
     }
 
-    /// Extract the ends `[low, high]` of a `SizeRange`.
-    pub(crate) fn extract(&self) -> (usize, usize) {
-        (self.start(), self.end())
-    }
-
     pub(crate) fn start(&self) -> usize {
-        *self.0.start()
+        self.0.start
     }
 
-    pub(crate) fn end(&self) -> usize {
-        *self.0.end()
+    /// Extract the ends `[low, high]` of a `SizeRange`.
+    pub(crate) fn start_end_incl(&self) -> (usize, usize) {
+        (self.start(), self.end_incl())
+    }
+
+    pub(crate) fn end_incl(&self) -> usize {
+        self.0.end - 1
     }
 
     pub(crate) fn end_excl(&self) -> usize {
-        let end = self.end();
-        // Quietly clamp to usize::MAX to allow RangeFrom to still be used
-        // ergonomically in APIs that can't actually handle usize::MAX itself.
-        if usize::MAX == end { end } else { end + 1}
+        self.0.end
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = usize> {
         self.0.clone().into_iter()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.start() == self.end_excl()
+    }
+
+    pub(crate) fn assert_nonempty(&self) {
+        if self.is_empty() {
+            panic!("Invalid use of empty size range. (hint: did you \
+                    accidentally write {}..{} where you meant {}..={} \
+                    somewhere?)", self.start(), self.end_excl(),
+                   self.start(), self.end_excl());
+        }
     }
 }
 
@@ -108,12 +128,14 @@ impl From<RangeTo<usize>> for SizeRange {
 
 /// Given `low .. high`, then a size range `[low, high)` is the result.
 impl From<Range<usize>> for SizeRange {
-    fn from(r: Range<usize>) -> Self { size_range(r.start..=r.end - 1) }
+    fn from(r: Range<usize>) -> Self { SizeRange(r) }
 }
 
 /// Given `low ..= high`, then a size range `[low, high]` is the result.
 impl From<RangeInclusive<usize>> for SizeRange {
-    fn from(r: RangeInclusive<usize>) -> Self { Self::new(r) }
+    fn from(r: RangeInclusive<usize>) -> Self {
+        size_range(*r.start()..r.end().saturating_add(1))
+    }
 }
 
 /// Given `..=high`, then a size range `[0, high]` is the result.
@@ -121,18 +143,15 @@ impl From<RangeToInclusive<usize>> for SizeRange {
     fn from(high: RangeToInclusive<usize>) -> Self { size_range(0..=high.end) }
 }
 
-/// Given a size range `[low, high]`, then a range`low..(high + 1)` is returned.
-/// This will panic if `high == usize::MAX`.
 impl From<SizeRange> for Range<usize> {
     fn from(sr: SizeRange) -> Self {
-        let (start, end) = sr.extract();
-        start..end + 1
+        sr.start()..sr.end_excl()
     }
 }
 
 /// Given a size range `[low, high]`, then a range `low..=high` is returned.
 impl From<SizeRange> for RangeInclusive<usize> {
-    fn from(sr: SizeRange) -> Self { sr.0 }
+    fn from(sr: SizeRange) -> Self { sr.start()..=sr.end_incl() }
 }
 
 #[cfg(feature = "frunk")]
@@ -153,17 +172,10 @@ impl Add<usize> for SizeRange {
     type Output = SizeRange;
 
     fn add(self, rhs: usize) -> Self::Output {
-        let (start, end) = self.extract();
+        let (start, end) = self.start_end_incl();
         size_range((start + rhs)..=(end + rhs))
     }
 }
-
-/// The minimum and maximum range/bounds on the size of a collection.
-/// The interval must form a subset of `[0, std::usize::MAX]`.
-///
-/// The `Default` is `0..100`.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SizeRange(RangeInclusive<usize>);
 
 //==============================================================================
 // Strategies
@@ -181,9 +193,14 @@ pub struct VecStrategy<T : Strategy> {
 
 /// Create a strategy to generate `Vec`s containing elements drawn from
 /// `element` and with a size range given by `size`.
+///
+/// To make a `Vec` with a fixed number of elements, each with its own
+/// strategy, you can instead make a `Vec` of strategies (boxed if necessary).
 pub fn vec<T: Strategy>(element: T, size: impl Into<SizeRange>)
                         -> VecStrategy<T> {
-    VecStrategy { element, size: size.into() }
+    let size = size.into();
+    size.assert_nonempty();
+    VecStrategy { element, size }
 }
 
 mapfn! {
@@ -493,7 +510,7 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     type Value = Vec<T::Value>;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let (start, end) = self.size.extract();
+        let (start, end) = self.size.start_end_incl();
         let max_size = sample_uniform_incl(runner, start, end);
         let mut elements = Vec::with_capacity(max_size);
         while elements.len() < max_size {
@@ -505,6 +522,25 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
             included_elements: VarBitSet::saturated(max_size),
             min_size: start,
             shrink: Shrink::DeleteElement(0),
+            prev_shrink: None,
+        })
+    }
+}
+
+impl<T : Strategy> Strategy for Vec<T> {
+    type Tree = VecValueTree<T::Tree>;
+    type Value = Vec<T::Value>;
+
+    fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+        let len = self.len();
+        let elements = self.iter().map(
+            |t| t.new_tree(runner)).collect::<Result<Vec<_>, Reason>>()?;
+
+        Ok(VecValueTree {
+            elements,
+            included_elements: VarBitSet::saturated(len),
+            min_size: len,
+            shrink: Shrink::ShrinkElement(0),
             prev_shrink: None,
         })
     }
@@ -599,6 +635,8 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
 mod test {
     use super::*;
 
+    use bits;
+
     #[test]
     fn test_vec() {
         let input = vec(1usize..20usize, 5..20);
@@ -641,9 +679,32 @@ mod test {
         check_strategy_sanity(vec(0i32..1000, 5..10), None);
     }
 
+    #[test]
+    fn test_parallel_vec() {
+        let input = vec![
+            (1u32..10).boxed(),
+            bits::u32::masked(0xF0u32).boxed(),
+        ];
+
+        for _ in 0..256 {
+            let mut runner = TestRunner::default();
+            let mut case = input.new_tree(&mut runner).unwrap();
+
+            loop {
+                let current = case.current();
+                assert_eq!(2, current.len());
+                assert!(current[0] >= 1 && current[0] <= 10);
+                assert_eq!(0, (current[1] & !0xF0));
+
+                if !case.simplify() {
+                    break;
+                }
+            }
+        }
+    }
+
     #[cfg(feature = "std")]
     #[test]
-    #[cfg(feature = "std")]
     fn test_map() {
         // Only 8 possible keys
         let input = hash_map("[ab]{3}", "a", 2..3);
@@ -657,7 +718,6 @@ mod test {
 
     #[cfg(feature = "std")]
     #[test]
-    #[cfg(feature = "std")]
     fn test_set() {
         // Only 8 possible values
         let input = hash_set("[ab]{3}", 2..3);

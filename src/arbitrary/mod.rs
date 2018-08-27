@@ -28,6 +28,7 @@ mod traits;
 mod primitives;
 mod arrays;
 mod tuples;
+mod sample;
 
 mod _core;
 
