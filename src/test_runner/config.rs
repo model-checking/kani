@@ -223,6 +223,10 @@ pub struct Config {
     ///
     /// This requires the "timeout" feature, enabled by default.
     ///
+    /// Setting a timeout to less than the time it takes the process to start
+    /// up and initialise the first test case will cause the whole test to be
+    /// aborted.
+    ///
     /// The default is `0` (i.e., no timeout), which can be overridden by
     /// setting the `PROPTEST_TIMEOUT` environment variable.
     #[cfg(feature = "timeout")]

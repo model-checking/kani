@@ -35,9 +35,10 @@ const SENTINEL: &'static str = "proptest-forkfile";
 /// with a line just containing the text in `SENTINEL`, then 16 lines
 /// containing the values of `seed`, then an unterminated line consisting of
 /// `+`, `-`, and `!` characters to indicate test case passes/failures/rejects,
-/// or `.` to indicate termination of the test run. This format makes it easy
-/// for the child process to blindly append to the file without having to worry
-/// about the possibility of appends being non-atomic.
+/// `.` to indicate termination of the test run, or ` ` as a dummy "I'm alive"
+/// signal. This format makes it easy for the child process to blindly append
+/// to the file without having to worry about the possibility of appends being
+/// non-atomic.
 #[derive(Clone, Debug)]
 pub struct Replay {
     /// The seed of the RNG used to start running the test cases.
@@ -90,6 +91,11 @@ fn step_to_char(step: &TestCaseResult) -> char {
 pub fn append(mut file: impl Write, step: &TestCaseResult)
               -> io::Result<()> {
     write!(file, "{}", step_to_char(step))
+}
+
+/// Append a no-op step to the given output.
+pub fn ping(mut file: impl Write) -> io::Result<()> {
+    write!(file, " ")
 }
 
 /// Append a termination mark to the given output.
@@ -172,6 +178,7 @@ impl Replay {
                     "rejected in other process"))),
                 '.' => return Ok(ReplayFileStatus::Terminated(
                     Replay { seed, steps })),
+                ' ' => (),
                 _ => return Ok(ReplayFileStatus::Corrupt),
             }
         }

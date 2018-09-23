@@ -18,6 +18,12 @@
 - `any::<SystemTime>()` now generates random values centred on the UNIX epoch
   rather than always producing the current time.
 
+### Other Notes
+
+- When using forking, proptest will now detect conditions which cause the child
+  process to crash without running any tests, and will fail quickly instead of
+  respawning child processes.
+
 ## 0.8.6
 
 ### New Additions

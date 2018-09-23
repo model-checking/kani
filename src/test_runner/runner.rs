@@ -19,7 +19,7 @@ use std::fs;
 #[cfg(feature = "fork")]
 use std::env;
 #[cfg(feature = "fork")]
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 #[cfg(feature = "fork")]
 use rusty_fork;
 #[cfg(feature = "fork")]
@@ -131,6 +131,13 @@ impl ForkOutput {
         }
     }
 
+    fn ping(&mut self) {
+        if let Some(ref mut file) = self.file {
+            replay::ping(file)
+                .expect("Failed to append to replay file");
+        }
+    }
+
     fn terminate(&mut self) {
         if let Some(ref mut file) = self.file {
             replay::terminate(file)
@@ -154,6 +161,7 @@ struct ForkOutput;
 #[cfg(not(feature = "fork"))]
 impl ForkOutput {
     fn append(&mut self, _result: &TestCaseResult) { }
+    fn ping(&mut self) { }
     fn terminate(&mut self) { }
     fn empty() -> Self { ForkOutput }
     fn is_in_fork(&self) -> bool { false }
@@ -201,6 +209,11 @@ where
     if let Some(result) = replay.next() {
         return result;
     }
+
+    // Now that we're about to start a new test (as far as the replay system is
+    // concerned), ping the replay file so the parent process can determine
+    // that we made it this far.
+    fork_output.ping();
 
     verbose_message!(runner, TRACE, "Next test input: {:?}", case);
 
@@ -338,10 +351,17 @@ impl TestRunner {
                 "Must supply test_name when forking enabled"));
         let forkfile: RefCell<Option<tempfile::NamedTempFile>> =
             RefCell::new(None);
+        let init_forkfile_size = Cell::new(0u64);
         let seed = self.rng.new_rng_seed();
         let mut replay = replay::Replay { seed, steps: vec![] };
         let mut child_count = 0;
         let timeout = self.config.timeout();
+
+        fn forkfile_size(forkfile: &Option<tempfile::NamedTempFile>)
+                         -> u64 {
+            forkfile.as_ref().map_or(
+                0, |ff| ff.as_file().metadata().map(|md| md.len()).unwrap_or(0))
+        }
 
         loop {
             let (child_error, last_fork_file_len) = rusty_fork::fork(
@@ -357,6 +377,8 @@ impl TestRunner {
                             forkfile.as_mut().unwrap()).expect(
                             "Failed to initialise temporary file for fork");
                     }
+
+                    init_forkfile_size.set(forkfile_size(&forkfile));
 
                     cmd.env(ENV_FORK_FILE, forkfile.as_ref().unwrap().path());
                 },
@@ -385,6 +407,17 @@ impl TestRunner {
                     panic!("Child process corrupted replay file"),
             }
 
+            let curr_forkfile_size = forkfile_size(&forkfile.borrow());
+
+            // If the child failed to append *anything* to the forkfile, it
+            // crashed or timed out before starting even one test case, so
+            // bail.
+            if curr_forkfile_size == init_forkfile_size.get() {
+                return Err(TestError::Abort(
+                    "Child process crashed or timed out before the first test \
+                     started running; giving up.".into()));
+            }
+
             // The child only terminates early if it outright crashes or we
             // kill it due to timeout, so add a synthetic failure to the
             // output. But only do this if the length of the fork file is the
@@ -393,8 +426,7 @@ impl TestRunner {
             // something to the file after we gave up waiting for it but before
             // we were able to kill it).
             if last_fork_file_len.map_or(true, |last_fork_file_len| {
-                last_fork_file_len == forkfile.borrow().as_ref().unwrap()
-                    .as_file().metadata().map(|md| md.len()).unwrap_or(0)
+                last_fork_file_len == curr_forkfile_size
             }) {
                 let error = Err(child_error.unwrap_or(
                     TestCaseError::fail("Child process was terminated abruptly \
@@ -1124,6 +1156,26 @@ mod timeout_tests {
                 max_shrink_time: 1000,
                 .. Config::default()
             });
+        }
+
+        #[test]
+        fn detects_child_failure_to_start() {
+            let mut runner = TestRunner::new(Config {
+                timeout: 100,
+                test_name: Some(
+                    concat!(module_path!(),
+                            "::detects_child_failure_to_start")),
+                .. Config::default()
+            });
+            let result = runner.run(&Just(()).prop_map(|()| {
+                thread::sleep(Duration::from_millis(200))
+            }), Ok);
+
+            if let Err(TestError::Abort(_)) = result {
+                // OK
+            } else {
+                panic!("Unexpected result: {:?}", result);
+            }
         }
     }
 
