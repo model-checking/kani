@@ -40,6 +40,8 @@ const MAX_SHRINK_ITERS: &str = "PROPTEST_MAX_SHRINK_ITERS";
 const FORK: &str = "PROPTEST_FORK";
 #[cfg(feature = "timeout")]
 const TIMEOUT: &str = "PROPTEST_TIMEOUT";
+#[cfg(feature = "std")]
+const VERBOSE: &str = "PROPTEST_VERBOSE";
 
 #[cfg(feature = "std")]
 fn contextualize_config(mut result: Config) -> Config {
@@ -84,6 +86,8 @@ fn contextualize_config(mut result: Config) -> Config {
                 &value, &mut result.max_shrink_time, "u32", MAX_SHRINK_TIME),
             MAX_SHRINK_ITERS => parse_or_warn(
                 &value, &mut result.max_shrink_iters, "u32", MAX_SHRINK_ITERS),
+            VERBOSE => parse_or_warn(
+                &value, &mut result.verbose, "u32", VERBOSE),
 
             _ => if var.starts_with("PROPTEST_") {
                 eprintln!("proptest: Ignoring unknown env-var {}.", var);
@@ -117,6 +121,8 @@ lazy_static! {
             max_shrink_time: 0,
             max_shrink_iters: u32::MAX,
             result_cache: noop_result_cache,
+            #[cfg(feature = "std")]
+            verbose: 0,
             _non_exhaustive: (),
         };
 
@@ -261,6 +267,24 @@ pub struct Config {
     /// Caching incurs its own overhead, and may very well make your test run
     /// more slowly.
     pub result_cache: fn () -> Box<dyn ResultCache>,
+
+    /// Set to non-zero values to cause proptest to emit human-targeted
+    /// messages to stderr as it runs.
+    ///
+    /// Greater values cause greater amounts of logs to be emitted. The exact
+    /// meaning of certain levels other than 0 is subject to change.
+    ///
+    /// - 0: No extra output.
+    /// - 1: Log test failure messages.
+    /// - 2: Trace low-level details.
+    ///
+    /// This is only available with the `std` feature (enabled by default)
+    /// since on nostd proptest has no way to produce output.
+    ///
+    /// The default is `0`, which can be overridden by setting the
+    /// `PROPTEST_VERBOSE` environment variable.
+    #[cfg(feature = "std")]
+    pub verbose: u32,
 
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]

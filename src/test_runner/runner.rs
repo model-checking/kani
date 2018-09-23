@@ -37,6 +37,30 @@ use strategy::*;
 #[cfg(feature = "fork")]
 const ENV_FORK_FILE: &'static str = "_PROPTEST_FORKFILE";
 
+const ALWAYS: u32 = 0;
+const SHOW_FALURES: u32 = 1;
+const TRACE: u32 = 2;
+
+#[cfg(feature = "std")]
+macro_rules! verbose_message {
+    ($runner:expr, $level:expr, $fmt:tt $($arg:tt)*) => { {
+        #[allow(unused_comparisons)]
+        {
+            if $runner.config.verbose >= $level {
+                eprintln!(concat!("proptest: ", $fmt) $($arg)*);
+            }
+        };
+        ()
+    } }
+}
+
+#[cfg(not(feature = "std"))]
+macro_rules! verbose_message {
+    ($runner:expr, $level:expr, $fmt:tt $($arg:tt)*) => {
+        let _ = $level;
+    }
+}
+
 type RejectionDetail = BTreeMap<Reason, u32>;
 
 /// State used when running a proptest test.
@@ -137,7 +161,8 @@ impl ForkOutput {
 
 #[cfg(not(feature = "std"))]
 fn call_test<V, F, R>
-    (case: V, test: &F, replay: &mut R, _timeout: u32,
+    (_runner: &mut TestRunner,
+     case: V, test: &F, replay: &mut R,
      result_cache: &mut dyn ResultCache, _: &mut ForkOutput) -> TestCaseResult
 where
     V: fmt::Debug,
@@ -160,7 +185,8 @@ where
 
 #[cfg(feature = "std")]
 fn call_test<V, F, R>
-    (case: V, test: &F, replay: &mut R, timeout: u32,
+    (runner: &mut TestRunner,
+     case: V, test: &F, replay: &mut R,
      result_cache: &mut dyn ResultCache, fork_output: &mut ForkOutput)
     -> TestCaseResult
 where
@@ -170,12 +196,17 @@ where
 {
     use std::time;
 
+    let timeout = runner.config.timeout();
+
     if let Some(result) = replay.next() {
         return result;
     }
 
+    verbose_message!(runner, TRACE, "Next test input: {:?}", case);
+
     let cache_key = result_cache.key(&ResultCacheKey::new(&case));
     if let Some(result) = result_cache.get(cache_key) {
+        verbose_message!(runner, TRACE, "Test input hit cache, skipping execution");
         return result.clone();
     }
 
@@ -206,6 +237,14 @@ where
 
     result_cache.put(cache_key, &result);
     fork_output.append(&result);
+
+    match result {
+        Ok(()) => verbose_message!(runner, TRACE, "Test case passed"),
+        Err(TestCaseError::Reject(ref reason)) => verbose_message!(
+            runner, SHOW_FALURES, "Test case rejected: {}", reason),
+        Err(TestCaseError::Fail(ref reason)) => verbose_message!(
+            runner, SHOW_FALURES, "Test case failed: {}", reason),
+    }
 
     result
 }
@@ -495,9 +534,8 @@ impl TestRunner {
         -> Result<bool, TestError<V::Value>>
     {
         let result = call_test(
-            case.current(), &test,
-            replay, self.config.timeout(),
-            result_cache, fork_output);
+            self, case.current(), &test,
+            replay, result_cache, fork_output);
 
         match result {
             Ok(_) => Ok(true),
@@ -549,16 +587,14 @@ impl TestRunner {
                 let timed_out: Option<u64> = None;
 
                 let bail = if iterations >= self.config.max_shrink_iters {
-                    #[cfg(feature = "std")]
-                    eprintln!(
-                        "proptest: Aborting shrinking after {} iterations",
-                        iterations);
+                    verbose_message!(
+                        self, ALWAYS,
+                        "Aborting shrinking after {} iterations", iterations);
                     true
                 } else if let Some(ms) = timed_out {
-                    #[cfg(feature = "std")]
-                    eprintln!(
-                        "proptest: Aborting shrinking after taking too long: {}",
-                        ms);
+                    verbose_message!(
+                        self, ALWAYS,
+                        "Aborting shrinking after taking too long: {}", ms);
                     true
                 } else {
                     false
@@ -575,8 +611,9 @@ impl TestRunner {
                 iterations += 1;
 
                 let result = call_test(
+                    self,
                     case.current(), &test,
-                    replay, self.config.timeout(),
+                    replay,
                     result_cache, fork_output);
 
                 match result {
