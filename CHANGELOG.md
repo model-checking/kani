@@ -8,6 +8,11 @@
 - Add `verbose` option to make proptest give details about what is happening as
   the test executes.
 
+- When a failure is saved to the persistence file, the message now also
+  includes the seed that was saved so that it can manually be added to the
+  appropriate file should the test have run somewhere where the updated file is
+  not accessible (for example, on a CI system).
+
 ### Bug Fixes
 
 - `any::<SystemTime>()` now generates random values centred on the UNIX epoch

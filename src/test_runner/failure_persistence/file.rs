@@ -18,7 +18,7 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::vec::Vec;
-use std::string::String;
+use std::string::{String, ToString};
 
 use test_runner::{Seed, failure_persistence::FailurePersistence};
 use self::FileFailurePersistence::*;
@@ -142,9 +142,13 @@ impl FailurePersistence for FileFailurePersistence {
                 eprintln!("proptest: failed to append to {}: {}", path.display(), e);
             } else if is_new {
                 eprintln!(
-                    "proptest: Saving this and future failures in {}",
-                    path.display()
-                );
+                    "proptest: Saving this and future failures in {}\n\
+                     proptest: If this test was run on a CI system, you may \
+                     wish to add the following line to your copy of the file.{}\n\
+                     {}",
+                    path.display(),
+                    if is_new { " (You may need to create it.)" } else { "" },
+                    format_basic_seed_line(seed));
             }
         }
     }
@@ -284,16 +288,24 @@ fn convert_from_new_format(new_format: Seed) -> [u32; 4] {
     old_format
 }
 
-fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &dyn Debug)
-    -> io::Result<()>
-{
+fn format_basic_seed_line(seed: Seed) -> String {
     // Write line start:
-    write!(buf, "xs ")?;
+    let mut buf = "xs ".to_owned();
 
     // Write out each part of seed:
     for &s in &convert_from_new_format(seed) {
-        write!(buf, "{} ", s)?;
+        buf.push_str(&s.to_string());
+        buf.push(' ');
     }
+
+    buf
+}
+
+fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &dyn Debug)
+    -> io::Result<()>
+{
+    // Write the seed itself
+    write!(buf, "{}", format_basic_seed_line(seed));
 
     // Write out comment:
     let debug_start = buf.len();
