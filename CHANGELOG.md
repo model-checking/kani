@@ -5,6 +5,11 @@
 - Added `max_shrink_iters` and `max_shrink_time` options to test configuration
   to allow capping the resources expended on shrinking test cases.
 
+### Bug Fixes
+
+- `any::<SystemTime>()` now generates random values centred on the UNIX epoch
+  rather than always producing the current time.
+
 ## 0.8.6
 
 ### New Additions
