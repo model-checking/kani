@@ -33,11 +33,9 @@ arbitrary!(
     static_map((num::i32::ANY, 0..1_000_000_000u32),
                 |(sec, ns)| {
                     if sec >= 0 {
-                        SystemTime::UNIX_EPOCH + Duration::new(
-                            sec as u64, ns)
+                        UNIX_EPOCH + Duration::new(sec as u64, ns)
                     } else {
-                        SystemTime::UNIX_EPOCH - Duration::new(
-                            (-(sec as i64)) as u64, ns)
+                        UNIX_EPOCH - Duration::new((-(sec as i64)) as u64, ns)
                     }
                 })
 );
