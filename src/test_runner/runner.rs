@@ -522,10 +522,58 @@ impl TestRunner {
          fork_output: &mut ForkOutput)
         -> Option<Reason>
     {
+        #[cfg(feature = "std")]
+        use std::time;
+
         let mut last_failure = None;
+        let mut iterations = 0;
+        #[cfg(feature = "std")]
+        let start_time = time::Instant::now();
 
         if case.simplify() {
             loop {
+                #[cfg(feature = "std")]
+                let timed_out = if self.config.max_shrink_time > 0 {
+                    let elapsed = start_time.elapsed();
+                    let elapsed_ms = elapsed.as_secs().saturating_mul(1000)
+                        .saturating_add(elapsed.subsec_millis().into());
+                    if elapsed_ms > self.config.max_shrink_time as u64 {
+                        Some(elapsed_ms)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                #[cfg(not(feature = "std"))]
+                let timed_out: Option<u64> = None;
+
+                let bail = if iterations >= self.config.max_shrink_iters {
+                    #[cfg(feature = "std")]
+                    eprintln!(
+                        "proptest: Aborting shrinking after {} iterations",
+                        iterations);
+                    true
+                } else if let Some(ms) = timed_out {
+                    #[cfg(feature = "std")]
+                    eprintln!(
+                        "proptest: Aborting shrinking after taking too long: {}",
+                        ms);
+                    true
+                } else {
+                    false
+                };
+
+                if bail {
+                    // Move back to the most recent failing case
+                    while case.complicate() {
+                        fork_output.append(&Ok(()));
+                    }
+                    break;
+                }
+
+                iterations += 1;
+
                 let result = call_test(
                     case.current(), &test,
                     replay, self.config.timeout(),
@@ -998,6 +1046,63 @@ mod test {
             } else {
                 panic!("Incorrect result: {:?}", result);
             }
+        }
+    }
+}
+
+#[cfg(all(feature = "fork", feature = "timeout", test))]
+mod timeout_tests {
+    use core::u32;
+    use std::thread;
+    use std::time::Duration;
+
+    use super::*;
+
+    rusty_fork_test! {
+        #![rusty_fork(timeout_ms = 4_000)]
+
+        #[test]
+        fn max_shrink_iters_works() {
+            test_shrink_bail(Config {
+                max_shrink_iters: 5,
+                .. Config::default()
+            });
+        }
+
+        #[test]
+        fn max_shrink_time_works() {
+            test_shrink_bail(Config {
+                max_shrink_time: 1000,
+                .. Config::default()
+            });
+        }
+
+        #[test]
+        fn max_shrink_iters_works_with_forking() {
+            test_shrink_bail(Config {
+                fork: true,
+                test_name: Some(
+                    concat!(module_path!(),
+                            "::max_shrink_iters_works_with_forking")),
+                max_shrink_time: 1000,
+                .. Config::default()
+            });
+        }
+    }
+
+    fn test_shrink_bail(config: Config) {
+        let mut runner = TestRunner::new(config);
+        let result = runner.run(&::num::u64::ANY, |v| {
+            thread::sleep(Duration::from_millis(250));
+            prop_assert!(v <= u32::MAX as u64);
+            Ok(())
+        });
+
+        if let Err(TestError::Fail(_, value)) = result {
+            // Ensure the final value was in fact a failing case.
+            assert!(value > u32::MAX as u64);
+        } else {
+            panic!("Unexpected result: {:?}", result);
         }
     }
 }

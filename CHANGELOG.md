@@ -1,3 +1,10 @@
+## Unreleased
+
+### New Additions
+
+- Added `max_shrink_iters` and `max_shrink_time` options to test configuration
+  to allow capping the resources expended on shrinking test cases.
+
 ## 0.8.6
 
 ### New Additions

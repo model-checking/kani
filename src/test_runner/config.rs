@@ -8,6 +8,7 @@
 // except according to those terms.
 
 use std_facade::Box;
+use core::u32;
 
 #[cfg(feature = "std")]
 use std::env;
@@ -31,6 +32,10 @@ const MAX_LOCAL_REJECTS: &str = "PROPTEST_MAX_LOCAL_REJECTS";
 const MAX_GLOBAL_REJECTS: &str = "PROPTEST_MAX_GLOBAL_REJECTS";
 #[cfg(feature = "std")]
 const MAX_FLAT_MAP_REGENS: &str = "PROPTEST_MAX_FLAT_MAP_REGENS";
+#[cfg(feature = "std")]
+const MAX_SHRINK_TIME: &str = "PROPTEST_MAX_SHRINK_TIME";
+#[cfg(feature = "std")]
+const MAX_SHRINK_ITERS: &str = "PROPTEST_MAX_SHRINK_ITERS";
 #[cfg(feature = "fork")]
 const FORK: &str = "PROPTEST_FORK";
 #[cfg(feature = "timeout")]
@@ -75,6 +80,10 @@ fn contextualize_config(mut result: Config) -> Config {
             #[cfg(feature = "timeout")]
             TIMEOUT => parse_or_warn(
                 &value, &mut result.timeout, "timeout", TIMEOUT),
+            MAX_SHRINK_TIME => parse_or_warn(
+                &value, &mut result.max_shrink_time, "u32", MAX_SHRINK_TIME),
+            MAX_SHRINK_ITERS => parse_or_warn(
+                &value, &mut result.max_shrink_iters, "u32", MAX_SHRINK_ITERS),
 
             _ => if var.starts_with("PROPTEST_") {
                 eprintln!("proptest: Ignoring unknown env-var {}.", var);
@@ -104,6 +113,9 @@ lazy_static! {
             fork: false,
             #[cfg(feature = "timeout")]
             timeout: 0,
+            #[cfg(feature = "std")]
+            max_shrink_time: 0,
+            max_shrink_iters: u32::MAX,
             result_cache: noop_result_cache,
             _non_exhaustive: (),
         };
@@ -209,6 +221,28 @@ pub struct Config {
     /// setting the `PROPTEST_TIMEOUT` environment variable.
     #[cfg(feature = "timeout")]
     pub timeout: u32,
+
+    /// If non-zero, give up the shrinking process after this many milliseconds
+    /// have elapsed since the start of the shrinking process.
+    ///
+    /// This will not cause currently running test cases to be interrupted.
+    ///
+    /// This configuration is only available when the `std` feature is enabled
+    /// (which it is by default).
+    ///
+    /// The default is `0` (i.e., no limit), which can be overridden by setting
+    /// the `PROPTEST_MAX_SHRINK_TIME` environment variable.
+    #[cfg(feature = "std")]
+    pub max_shrink_time: u32,
+
+    /// Give up on shrinking if more than this number of iterations of the test
+    /// code are run.
+    ///
+    /// Setting this value to `0` disables shrinking altogether.
+    ///
+    /// The default is `std::u32::MAX`, which can be overridden by setting the
+    /// `PROPTEST_MAX_SHRINK_ITERS` environment variable.
+    pub max_shrink_iters: u32,
 
     /// A function to create new result caches.
     ///
