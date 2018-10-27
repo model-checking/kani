@@ -21,7 +21,7 @@ script:
       (cd proptest && travis-cargo --only stable build -- --lib --no-default-features --features std) &&
       (cd proptest && travis-cargo --only nightly build -- --no-default-features --features "alloc nightly unstable") &&
       (cd proptest/test-persistence-location && ./run-tests.sh) &&
-      (cd proptest-derive && travis-cargo build) &&
-      (cd proptest-derive && travis-cargo --only nightly test)
+      (cd proptest-derive && env TRAVIS_CARGO_NIGHTLY_FEATURE= travis-cargo build) &&
+      (cd proptest-derive && env TRAVIS_CARGO_NIGHTLY_FEATURE= travis-cargo --only nightly test)
 
 cache: cargo
