@@ -3,3 +3,5 @@ members = [
     "proptest",
     "proptest-derive",
 ]
+
+exclude = ["proptest/test-persistence-location/*"]

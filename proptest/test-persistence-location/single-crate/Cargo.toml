@@ -4,5 +4,7 @@ version = "0.0.0"
 license = "MIT/Apache-2.0"
 publish = false
 
+[workspace]
+
 [dependencies.proptest]
 path = "../.."
