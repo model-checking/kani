@@ -15,8 +15,8 @@ before_script:
 
 script:
   - |
-      travis-cargo build --all &&
-      travis-cargo test -p proptest &&
+      travis-cargo build -- --all &&
+      travis-cargo test -- -p proptest &&
       travis-cargo --only stable build -- -p proptest --no-default-features --features fork &&
       travis-cargo --only stable build -- -p proptest --lib --no-default-features --features std &&
       travis-cargo --only nightly build -- -p proptest --no-default-features --features "alloc nightly unstable" &&
