@@ -12,7 +12,7 @@ install:
   - rustc -vV
   - cargo -vV
 build_script:
-  - cargo build
+  - cargo build --all
 test_script:
-  - cargo test
-  - cd test-persistence-location & run-tests.bat
+  - cargo test -p proptest
+  - cd proptest\test-persistence-location & run-tests.bat

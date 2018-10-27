@@ -24,7 +24,7 @@ cd ~/p/misc/altsysrq.github.io/rustdoc/proptest
 rm latest
 sed -ri~ '/docblock/s?<p>Proptest is?<p><strong>This documentation is for an old version of proptest. <a href="../../latest/proptest">Click here</a> to see the latest version.</strong></p>\
 <p>Proptest is?' */proptest/index.html
-cp -a ~/p/rs/proptest/target/doc $version
+cp -a ~/p/rs/proptest/proptest/target/doc $version
 ln -s $version latest
 git add $version latest *.*.*/proptest/index.html
 git commit -qm "Add proptest $version docs."

@@ -33,7 +33,7 @@
 //! minor breaking changes here and there, particularly when "impl Trait"
 //! becomes stable and after the upcoming redesign of the `rand` crate.
 //! &NL
-//! See the [changelog](https://github.com/AltSysrq/proptest/blob/master/CHANGELOG.md)
+//! See the [changelog](https://github.com/AltSysrq/proptest/blob/master/proptest/CHANGELOG.md)
 //! for a full list of substantial historical changes, breaking and otherwise.
 //! NOREADME -->
 //!
