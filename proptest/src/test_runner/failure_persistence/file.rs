@@ -305,7 +305,7 @@ fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &dyn Debug)
     -> io::Result<()>
 {
     // Write the seed itself
-    write!(buf, "{}", format_basic_seed_line(seed));
+    write!(buf, "{}", format_basic_seed_line(seed))?;
 
     // Write out comment:
     let debug_start = buf.len();
