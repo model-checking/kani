@@ -17,10 +17,10 @@ script:
   - |
       travis-cargo build --all &&
       travis-cargo test -p proptest &&
-      travis-cargo --only stable build -p proptest -- --no-default-features --features fork &&
-      travis-cargo --only stable build -p proptest -- --lib --no-default-features --features std &&
-      travis-cargo --only nightly build -p proptest -- --no-default-features --features "alloc nightly unstable" &&
+      travis-cargo --only stable build -- -p proptest --no-default-features --features fork &&
+      travis-cargo --only stable build -- -p proptest --lib --no-default-features --features std &&
+      travis-cargo --only nightly build -- -p proptest --no-default-features --features "alloc nightly unstable" &&
       (cd proptest/test-persistence-location && ./run-tests.sh) &&
-      travis-cargo --only nightly test -p proptest-derive
+      travis-cargo --only nightly test -- -p proptest-derive
 
 cache: cargo
