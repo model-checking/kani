@@ -34,5 +34,5 @@ compiletest_rs = { version = "0.3.3", features = ["tmp"] }
 [dependencies]
 proc-macro2 = "0.4"
 
-syn = { version = "0.14.5", features = ["visit", "extra-traits", "full"] }
+syn = { version = "0.15.17", features = ["visit", "extra-traits", "full"] }
 quote = "0.6"
