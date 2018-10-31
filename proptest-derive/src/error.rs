@@ -188,7 +188,7 @@ macro_rules! mk_err_msg {
     }
 }
 
-/// A macro constructing errors that do not halt compilation immediately.
+/// A macro constructing errors that do halt compilation immediately.
 macro_rules! fatal {
     ($error: ident, $code: ident, $msg: expr) => {
         pub fn $error<T>(ctx: Ctx) -> DeriveResult<T> {
@@ -203,7 +203,7 @@ macro_rules! fatal {
     };
 }
 
-/// A macro constructing fatal errors that do halt compilation immediately.
+/// A macro constructing fatal errors that do not halt compilation immediately.
 macro_rules! error {
     ($error: ident, $code: ident, $msg: expr) => {
         pub fn $error(ctx: Ctx) {
