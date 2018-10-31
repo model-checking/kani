@@ -24,7 +24,7 @@ use ast::*;
 //==============================================================================
 
 pub fn impl_proptest_arbitrary(ast: DeriveInput) -> TokenStream {
-    let mut ctx = Context::new();
+    let mut ctx = Context::default();
     let result = derive_proptest_arbitrary(&mut ctx, ast);
     match (result, ctx.check()) {
         (Ok(derive), Ok(())) => derive,

@@ -136,17 +136,12 @@ pub struct Fatal;
 pub type DeriveResult<T> = Result<T, Fatal>;
 pub type Ctx<'ctx> = &'ctx mut Context;
 
+#[derive(Default)]
 pub struct Context {
     errors: Vec<String>,
 }
 
 impl Context {
-    pub fn new() -> Self {
-        Self {
-            errors: Vec::new(),
-        }
-    }
-
     pub fn error<T: Display>(&mut self, msg: T) {
         self.errors.push(msg.to_string());
     }
