@@ -195,7 +195,7 @@ fn derive_product_has_params(
     }).map(|acc| acc.finish(closure))
 }
 
-/// Determine strategy using "Default" semantics  for a product.
+/// Determine strategy using "Default" semantics for a product.
 fn product_handle_default_params
     (ut: &mut UseTracker, ty: Type, span: Span, strategy: StratMode) -> StratPair {
     match strategy {
@@ -204,6 +204,8 @@ fn product_handle_default_params
         StratMode::Strategy(strat) => pair_existential(ty, strat),
         // Specific value - use the given expr:
         StratMode::Value(value) => pair_value(ty, value),
+        // Specific regex - dispatch to `_regex` function based on `ty`:
+        StratMode::Regex(regex) => pair_regex(ty, regex),
         // Use Arbitrary for the given type and mark the type as used:
         StratMode::Arbitrary => { ty.mark_uses(ut); pair_any(ty, span) },
     }
@@ -235,6 +237,8 @@ fn derive_product_no_params
                 StratMode::Strategy(strat) => pair_existential(ty, strat),
                 // Specific value - use the given expr:
                 StratMode::Value(value) => pair_value(ty, value),
+                // Specific regex - dispatch to `_regex` function:
+                StratMode::Regex(regex) => pair_regex(ty, regex),
                 // Use Arbitrary for the given type and mark the type as used:
                 StratMode::Arbitrary => {
                     ty.mark_uses(ut);
@@ -258,6 +262,12 @@ fn derive_product_no_params
                 StratMode::Value(value) =>
                     extract_nparam(&mut acc, params_ty,
                             pair_value_exist(ty, value)),
+                // Logic error by user; Pointless to specify params and regex
+                // because the params can never be used in the regex.
+                StratMode::Regex(regex) => {
+                    error::cant_set_param_and_regex(ctx, item);
+                    pair_regex(ty, regex)
+                },
                 // Logic error by user. Pointless to specify params and not
                 // the strategy. Bail!
                 StratMode::Arbitrary =>
@@ -381,27 +391,13 @@ fn derive_variant_with_fields<C>
                 deny_all_attrs_on_fields(ctx, fields)?;
                 pair_value_self(value)
             },
-            // Use Arbitrary for the factors (fields) of variant:
-            StratMode::Arbitrary => {
-                // Compute parts for the inner product:
-                let closure = map_closure(v_path, &fields);
-                let fields_acc = derive_product_no_params(ctx, ut, fields,
-                                    error::ENUM_VARIANT_FIELD)?;
-                let (params, count) = fields_acc.params.consume();
-                let (strat, ctor) = fields_acc.strats.finish(closure);
-
-                // Add params types from inner derive as a single type
-                // in the outer params types.
-                let params_ty = params.into();
-                (strat, if is_unit_type(&params_ty) { ctor } else {
-                    let pref = acc.add_param(params_ty);
-                    if pref + 1 == count {
-                        ctor
-                    } else {
-                        extract_all(ctor, count, FromReg::Num(pref))
-                    }
-                })
+            StratMode::Regex(regex) => {
+                deny_all_attrs_on_fields(ctx, fields)?;
+                pair_regex_self(regex)
             },
+            // No explicit strategy, use strategies for variant fields instead:
+            StratMode::Arbitrary =>
+                variant_no_explicit_strategy(ctx, ut, v_path, fields, acc)?,
         },
         // no_params set on the variant:
         ParamsMode::Default =>
@@ -418,6 +414,13 @@ fn derive_variant_with_fields<C>
                 deny_all_attrs_on_fields(ctx, fields)?;
                 extract_nparam(acc, params_ty, pair_value_exist_self(value))
             },
+            // Logic error by user; Pointless to specify params and regex
+            // because the params can never be used in the regex.
+            StratMode::Regex(regex) => {
+                error::cant_set_param_and_regex(ctx, error::ENUM_VARIANT);
+                deny_all_attrs_on_fields(ctx, fields)?;
+                extract_nparam(acc, params_ty, pair_regex_self(regex))
+            },
             // Logic error by user. Pointless to specify params and not
             // the strategy. Bail!
             StratMode::Arbitrary => {
@@ -428,6 +431,33 @@ fn derive_variant_with_fields<C>
     };
     let pair = add_filter_self(filter, pair);
     Ok(pair)
+}
+
+/// Derive for a variant on which params were not set and on which no explicit
+/// strategy was set (or where it doesn't make sense...) and which has fields.
+fn variant_no_explicit_strategy<C>
+    (ctx: Ctx, ut: &mut UseTracker, v_path: Path,
+     fields: Vec<Field>, acc: &mut PartsAcc<C>)
+    -> DeriveResult<StratPair>
+{
+    // Compute parts for the inner product:
+    let closure = map_closure(v_path, &fields);
+    let fields_acc = derive_product_no_params(ctx, ut, fields,
+                        error::ENUM_VARIANT_FIELD)?;
+    let (params, count) = fields_acc.params.consume();
+    let (strat, ctor) = fields_acc.strats.finish(closure);
+
+    // Add params types from inner derive as a single type
+    // in the outer params types.
+    let params_ty = params.into();
+    Ok((strat, if is_unit_type(&params_ty) { ctor } else {
+        let pref = acc.add_param(params_ty);
+        if pref + 1 == count {
+            ctor
+        } else {
+            extract_all(ctor, count, FromReg::Num(pref))
+        }
+    }))
 }
 
 /// Determine strategy using "Default" semantics for a variant.
@@ -445,6 +475,10 @@ fn variant_handle_default_params(
         StratMode::Value(value) => {
             deny_all_attrs_on_fields(ctx, fields)?;
             pair_value_self(value)
+        },
+        StratMode::Regex(regex) => {
+            deny_all_attrs_on_fields(ctx, fields)?;
+            pair_regex_self(regex)
         },
         // Use Arbitrary for the factors (fields) of variant:
         StratMode::Arbitrary =>
