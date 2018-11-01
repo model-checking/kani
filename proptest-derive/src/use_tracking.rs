@@ -191,7 +191,7 @@ fn matches_prj_tyvar(ut: &mut UseTracker, tpath: &syn::TypePath) -> bool {
         false
     } else {
         // true => $tyvar :: $projection
-        return !path.global() && segs.len() == 2
+        return !util::path_is_global(path) && segs.len() == 2
             && ut.has_tyvar(&segs[0].ident)
             && segs[0].arguments.is_empty()
             && segs[1].arguments.is_empty();

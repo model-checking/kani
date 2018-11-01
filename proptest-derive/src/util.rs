@@ -115,9 +115,15 @@ pub fn is_phantom_data(path: &syn::Path) -> bool {
 /// Extracts a simple non-global path of length 1.
 pub fn extract_simple_path(path: &syn::Path) -> Option<&syn::Ident> {
     match_singleton(&path.segments)
-        .filter(|f| !path.global() && f.arguments.is_empty())
+        .filter(|f| !path_is_global(path) && f.arguments.is_empty())
         .map(|f| &f.ident)
 }
+
+/// Does the path have a leading `::`?
+pub fn path_is_global(path: &syn::Path) -> bool {
+    path.leading_colon.is_some()
+}
+
 //==============================================================================
 // General Rust utilities:
 //==============================================================================
