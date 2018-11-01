@@ -252,27 +252,24 @@ fn derive_product_no_params
             ParamsMode::Default =>
                 product_handle_default_params(ut, ty, span, attrs.strategy),
             // params(<type>) set on the field:
-            ParamsMode::Specified(params_ty) => match attrs.strategy {
-                // Specific strategy - use the given expr and erase the type:
-                StratMode::Strategy(strat) =>
-                    // We need to extract the param as the binding `params`:
-                    extract_nparam(&mut acc, params_ty,
-                            pair_existential(ty, strat)),
-                // Specific value - use the given expr in a closure and erase:
-                StratMode::Value(value) =>
-                    extract_nparam(&mut acc, params_ty,
-                            pair_value_exist(ty, value)),
-                // Logic error by user; Pointless to specify params and regex
-                // because the params can never be used in the regex.
-                StratMode::Regex(regex) => {
-                    error::cant_set_param_and_regex(ctx, item);
-                    pair_regex(ty, regex)
-                },
-                // Logic error by user. Pointless to specify params and not
-                // the strategy. Bail!
-                StratMode::Arbitrary =>
-                    error::cant_set_param_but_not_strat(ctx, &ty, item)?,
-            },
+            ParamsMode::Specified(params_ty) =>
+                // We need to extract the param as the binding `params`:
+                extract_nparam(&mut acc, params_ty, match attrs.strategy {
+                    // Specific strategy - use the given expr and erase the type:
+                    StratMode::Strategy(strat) => pair_existential(ty, strat),
+                    // Specific value - use the given expr in a closure and erase:
+                    StratMode::Value(value) => pair_value_exist(ty, value),
+                    // Logic error by user; Pointless to specify params and
+                    // regex because the params can never be used in the regex.
+                    StratMode::Regex(regex) => {
+                        error::cant_set_param_and_regex(ctx, item);
+                        pair_regex(ty, regex)
+                    },
+                    // Logic error by user.
+                    // Pointless to specify params and not the strategy. Bail!
+                    StratMode::Arbitrary =>
+                        error::cant_set_param_but_not_strat(ctx, &ty, item)?,
+                }),
         });
         Ok(acc.add_strat(strat))
     })
@@ -403,31 +400,32 @@ fn derive_variant_with_fields<C>
         ParamsMode::Default =>
             variant_handle_default_params(ctx, ut, v_path, attrs, fields)?,
         // params(<type>) set on the variant:
-        ParamsMode::Specified(params_ty) => match attrs.strategy {
-            // Specific strategy - use the given expr and erase the type:
-            StratMode::Strategy(strat) => {
-                deny_all_attrs_on_fields(ctx, fields)?;
-                extract_nparam(acc, params_ty, pair_existential_self(strat))
-            },
-            // Specific value - use the given expr in a closure and erase:
-            StratMode::Value(value) => {
-                deny_all_attrs_on_fields(ctx, fields)?;
-                extract_nparam(acc, params_ty, pair_value_exist_self(value))
-            },
-            // Logic error by user; Pointless to specify params and regex
-            // because the params can never be used in the regex.
-            StratMode::Regex(regex) => {
-                error::cant_set_param_and_regex(ctx, error::ENUM_VARIANT);
-                deny_all_attrs_on_fields(ctx, fields)?;
-                extract_nparam(acc, params_ty, pair_regex_self(regex))
-            },
-            // Logic error by user. Pointless to specify params and not
-            // the strategy. Bail!
-            StratMode::Arbitrary => {
-                let ty = self_ty();
-                error::cant_set_param_but_not_strat(ctx, &ty, error::ENUM_VARIANT)?
-            },
-        },
+        ParamsMode::Specified(params_ty) =>
+            extract_nparam(acc, params_ty, match attrs.strategy {
+                // Specific strategy - use the given expr and erase the type:
+                StratMode::Strategy(strat) => {
+                    deny_all_attrs_on_fields(ctx, fields)?;
+                    pair_existential_self(strat)
+                },
+                // Specific value - use the given expr in a closure and erase:
+                StratMode::Value(value) => {
+                    deny_all_attrs_on_fields(ctx, fields)?;
+                    pair_value_exist_self(value)
+                },
+                // Logic error by user; Pointless to specify params and regex
+                // because the params can never be used in the regex.
+                StratMode::Regex(regex) => {
+                    error::cant_set_param_and_regex(ctx, error::ENUM_VARIANT);
+                    deny_all_attrs_on_fields(ctx, fields)?;
+                    pair_regex_self(regex)
+                },
+                // Logic error by user. Pointless to specify params and not
+                // the strategy. Bail!
+                StratMode::Arbitrary => {
+                    let ty = self_ty();
+                    error::cant_set_param_but_not_strat(ctx, &ty, error::ENUM_VARIANT)?
+                },
+            }),
     };
     let pair = add_filter_self(filter, pair);
     Ok(pair)
