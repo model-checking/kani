@@ -472,8 +472,7 @@ impl ToTokens for Ctor {
                 )
             }),
             Regex(ty, regex) => quote_append!(tokens,
-                <#ty as _proptest::string::StrategyFromRegex>
-                    ::from_regex(#regex).unwrap()
+                <#ty as _proptest::string::StrategyFromRegex>::from_regex(#regex)
             ),
             Existential(expr) => quote_append!(tokens,
                 _proptest::strategy::Strategy::boxed( #expr ) ),

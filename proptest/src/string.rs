@@ -112,22 +112,22 @@ pub trait StrategyFromRegex: Sized + fmt::Debug {
     type Strategy: Strategy<Value = Self>;
 
     /// Produce a strategy for `Self` from the `regex`.
-    fn from_regex(regex: &str) -> Result<Self::Strategy, Error>;
+    fn from_regex(regex: &str) -> Self::Strategy;
 }
 
 impl StrategyFromRegex for String {
     type Strategy = RegexGeneratorStrategy<Self>;
 
-    fn from_regex(regex: &str) -> ParseResult<Self> {
-        string_regex(regex)
+    fn from_regex(regex: &str) -> Self::Strategy {
+        string_regex(regex).unwrap()
     }
 }
 
 impl StrategyFromRegex for Vec<u8> {
     type Strategy = RegexGeneratorStrategy<Self>;
 
-    fn from_regex(regex: &str) -> ParseResult<Self> {
-        bytes_regex(regex)
+    fn from_regex(regex: &str) -> Self::Strategy {
+        bytes_regex(regex).unwrap()
     }
 }
 
