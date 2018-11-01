@@ -58,6 +58,25 @@ struct T1(
     Vec<u8>,
 );
 
+#[derive(Debug, Arbitrary)]
+struct T1r(
+    #[proptest(regex = r"a+")]
+    String,
+    #[proptest(regex(r"b+"))]
+    String,
+    #[proptest(regex(mk_regex))]
+    String,
+    #[proptest(regex = r"(a|b)+")]
+    Vec<u8>,
+    #[proptest(
+        regex(r"[abc]+"),
+        filter("|c| c.len() < 4")
+    )]
+    Vec<u8>,
+    #[proptest(regex(mk_regex))]
+    Vec<u8>,
+);
+
 // enum:
 
 #[derive(Debug, Arbitrary)]
@@ -159,6 +178,12 @@ proptest! {
     #[test]
     fn t1_adhering_to_regex(v: T1) {
         let T1(x0, x1, x2, y0, y1, y2) = v;
+        assert_adherence(x0, x1, x2, y0, y1, y2);
+    }
+
+    #[test]
+    fn t1_r_adhering_to_regex(v: T1r) {
+        let T1r(x0, x1, x2, y0, y1, y2) = v;
         assert_adherence(x0, x1, x2, y0, y1, y2);
     }
 
