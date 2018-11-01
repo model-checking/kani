@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Provides error messages and some checkers
+//! Provides error messages and some checkers.
 
 use proc_macro2::TokenStream;
 
@@ -131,31 +131,44 @@ pub fn if_weight_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 
 use std::fmt::Display;
 
+/// Denotes that a fatal error happened in dealing somewhere in the
+/// procedural macro pipeline. A fatal error is different from a
+/// normal error in the sense that it halts progress in the macro
+/// immediately instead of allowing other errors to be accumulated.
 #[derive(Debug)]
 pub struct Fatal;
+
+/// The return type of a possibly fatal computation in the macro.
 pub type DeriveResult<T> = Result<T, Fatal>;
+
+/// A mutable view / shorthand for the context.
+/// Prefer this type over `Context` in functions.
 pub type Ctx<'ctx> = &'ctx mut Context;
 
+/// The context / environment that the macro is operating in.
+/// Right now, it simply tracks all the errors collected during
+/// the running of the macro.
+#[derive(Default)]
 pub struct Context {
     errors: Vec<String>,
 }
 
 impl Context {
-    pub fn new() -> Self {
-        Self {
-            errors: Vec::new(),
-        }
-    }
-
+    /// Add a non-fatal error to the context.
     pub fn error<T: Display>(&mut self, msg: T) {
         self.errors.push(msg.to_string());
     }
 
+    /// Add an error to the context and procuce and produce an erroring
+    /// computation that will halt the macro.
     pub fn fatal<T: Display, A>(&mut self, msg: T) -> DeriveResult<A> {
         self.error(msg);
         Err(Fatal)
     }
 
+    /// Consume the context and if there were any errors,
+    /// emit `compile_error!(..)` such that the crate using
+    /// `#[derive(Arbitrary)]` will fail to compile.
     pub fn check(mut self) -> Result<(), TokenStream> {
         fn compile_error(msg: &str) -> TokenStream {
             quote! {
@@ -182,6 +195,8 @@ impl Context {
 // Messages
 //==============================================================================
 
+/// Produce an error string with the error `$code` which corresponds
+/// to the given `$message`.
 macro_rules! mk_err_msg {
     ($code: ident, $msg: expr) => {
         concat!(
@@ -193,7 +208,7 @@ macro_rules! mk_err_msg {
     }
 }
 
-/// A macro constructing errors that do not halt compilation immediately.
+/// A macro constructing errors that do halt compilation immediately.
 macro_rules! fatal {
     ($error: ident, $code: ident, $msg: expr) => {
         pub fn $error<T>(ctx: Ctx) -> DeriveResult<T> {
@@ -208,7 +223,7 @@ macro_rules! fatal {
     };
 }
 
-/// A macro constructing fatal errors that do halt compilation immediately.
+/// A macro constructing fatal errors that do not halt compilation immediately.
 macro_rules! error {
     ($error: ident, $code: ident, $msg: expr) => {
         pub fn $error(ctx: Ctx) {
