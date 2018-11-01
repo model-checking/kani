@@ -100,6 +100,37 @@ impl Strategy for str {
 
 type ParseResult<T> = Result<RegexGeneratorStrategy<T>, Error>;
 
+#[doc(hidden)]
+/// A type which knows how to produce a `Strategy` from a regular expression
+/// generating the type.
+///
+/// This trait exists for the benefit of `#[proptest(regex = "...")]`.
+/// It is semver extempt, so use at your own risk.
+/// If you found a use for the trait beyond `Vec<u8>` and `String`,
+/// please file an issue at https://github.com/AltSysrq/proptest.
+pub trait StrategyFromRegex: Sized + fmt::Debug {
+    type Strategy: Strategy<Value = Self>;
+
+    /// Produce a strategy for `Self` from the `regex`.
+    fn from_regex(regex: &str) -> Result<Self::Strategy, Error>;
+}
+
+impl StrategyFromRegex for String {
+    type Strategy = RegexGeneratorStrategy<Self>;
+
+    fn from_regex(regex: &str) -> ParseResult<Self> {
+        string_regex(regex)
+    }
+}
+
+impl StrategyFromRegex for Vec<u8> {
+    type Strategy = RegexGeneratorStrategy<Self>;
+
+    fn from_regex(regex: &str) -> ParseResult<Self> {
+        bytes_regex(regex)
+    }
+}
+
 /// Creates a strategy which generates strings matching the given regular
 /// expression.
 ///
