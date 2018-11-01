@@ -15,7 +15,7 @@
 //!
 //! Any analysis we perform here is therefore incomplete but sound.
 //! That is, if we state that a type is uninhabited, it is so for sure.
-//! But we can't state thta all uninhabited types are uninhabited.
+//! But we can't state that all uninhabited types are uninhabited.
 
 use syn::{self, visit};
 
