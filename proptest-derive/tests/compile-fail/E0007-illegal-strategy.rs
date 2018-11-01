@@ -16,6 +16,8 @@ extern crate proptest_derive;
 #[proptest(strategy = "1u8..")]
 struct A {}
 
+// strategy:
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
 #[proptest(strategy = "1u8..")]
 struct B;
@@ -35,3 +37,47 @@ struct E(Vec<u8>);
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
 #[proptest(strategy = "1u8..")]
 enum F { V1, V2, }
+
+// value:
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(value = "1")]
+struct G;
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(value = "2")]
+struct H();
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(value = "1 + 2")]
+struct I { field: String }
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(value = "2 * 3")]
+struct J(Vec<u8>);
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(value = "1..2")]
+enum K { V1, V2, }
+
+// regex:
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(regex = "1")]
+struct L;
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(regex = "\\d\\d")]
+struct M();
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(regex = "3")]
+struct N { field: String }
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(regex = "a+")]
+struct O(Vec<u8>);
+
+#[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0007]
+#[proptest(regex = "b*")]
+enum P { V1, V2, }
