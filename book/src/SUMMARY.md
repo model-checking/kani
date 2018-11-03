@@ -6,3 +6,4 @@
   - [Reference documentation](proptest/reference-docs.md)
 
 - [proptest-derive](proptest-derive/index.md)
+  - [Error index](proptest-derive/errors.md)

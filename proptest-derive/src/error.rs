@@ -63,7 +63,7 @@ pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 
 /// Ensures that parameters is not present on `item`.
 pub fn if_specified_filter(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
-    if !attrs.filter.is_empty() { parent_has_filter(ctx, item); }
+    if !attrs.filter.is_empty() { meaningless_filter(ctx, item); }
 }
 
 /// Ensures that parameters is not present on `item`.
@@ -318,7 +318,7 @@ error!(parent_has_param(item: &str), E0010,
     item);
 
 /// Happens when `#[proptest(params = <type>)]` is set on `item`
-/// but not `#[proptest(strategy = <type>)]`.
+/// but not `#[proptest(strategy = <expr>)]`.
 /// This does not apply to the top level type declaration.
 fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
     "Can not set `#[proptest(params = <type>)]` on {0} while not providing a \
@@ -326,14 +326,14 @@ fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
     may require a different type than the one provided in `<type>`.",
     item, quote! { #self_ty });
 
-/// Happens when `#[proptest(filter = "<expr>")]` is set on `item`
-/// but also on the parent of `item`. If the parent has set `filter`
-/// then that applies, and the `filter` on `item` would be meaningless
-/// wherefore it is forbidden.
-error!(parent_has_filter(item: &str), E0012,
-    "Can not set `#[proptest(filter(..)]` on {} since it is set on the variant
-    which it is inside of and because the variant specifies how to generate
-    itself.",
+/// Happens when `#[proptest(filter = "<expr>")]` is set on `item`,
+/// but the parent of the `item` explicitly specifies a value or strategy,
+/// which would cause the value to be generated without consulting the
+/// `filter`.
+error!(meaningless_filter(item: &str), E0012,
+    "Can not set `#[proptest(filter = <expr>)]` on {} since it is set on the \
+     item which it is inside of that outer item specifies how to generate \
+     itself.",
     item);
 
 /// Happens when the form `#![proptest<..>]` is used. This will probably never
