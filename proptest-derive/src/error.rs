@@ -78,6 +78,7 @@ pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
         Arbitrary   => {},
         Strategy(_) => illegal_strategy(ctx, "strategy", item),
         Value(_)    => illegal_strategy(ctx, "value", item),
+        Regex(_)    => illegal_regex(ctx, item),
     }
 }
 
@@ -89,6 +90,7 @@ pub fn if_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
         Arbitrary   => {},
         Strategy(_) => strategy_on_unit_variant(ctx, "strategy"),
         Value(_)    => strategy_on_unit_variant(ctx, "value"),
+        Regex(_)    => regex_on_unit_variant(ctx),
     }
 
     if attrs.params.is_set() {
@@ -242,7 +244,7 @@ macro_rules! error {
 /// that is parametric over lifetimes. Since proptest does not support
 /// such types (yet), neither can we.
 error!(has_lifetimes, E0001,
-    "Can't derive `Arbitrary` for types with generic lifetimes, such as: \
+    "Cannot derive `Arbitrary` for types with generic lifetimes, such as: \
     `struct Foo<'a> { bar: &'a str }`. Currently, strategies for such types \
     are impossible to define.");
 
@@ -294,6 +296,14 @@ error!(illegal_strategy(attr: &str, item: &str), E0007,
     enum variants and fields inside those can use an explicit {0}.",
     attr, item);
 
+/// Happens when `#[proptest(regex = "<string>")]` is specified on an `item`
+/// that does not support setting an explicit value or strategy.
+/// See `illegal_strategy` for more.
+error!(illegal_regex(item: &str), E0007,
+    "`#[proptest(regex = \"<string>\")]` is not allowed on {0}. Only struct \
+    fields, enum variant fields can use an explicit regex.",
+    item);
+
 /// Happens when `#[proptest(skip)]` is specified on an `item` that does
 /// not support skipping. Only enum variants support skipping.
 error!(illegal_skip(item: &str), E0008,
@@ -312,7 +322,7 @@ error!(illegal_weight(item: &str), E0009,
 /// then that applies, and the `params` on `item` would be meaningless
 /// wherefore it is forbidden.
 error!(parent_has_param(item: &str), E0010,
-    "Can not set the associated type `Parameters` of `Arbitrary` with either \
+    "Cannot set the associated type `Parameters` of `Arbitrary` with either \
     `#[proptest(no_params)]` or `#[proptest(params(<type>)]` on {} since it \
     was set on the parent.",
     item);
@@ -321,7 +331,7 @@ error!(parent_has_param(item: &str), E0010,
 /// but not `#[proptest(strategy = <type>)]`.
 /// This does not apply to the top level type declaration.
 fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
-    "Can not set `#[proptest(params = <type>)]` on {0} while not providing a \
+    "Cannot set `#[proptest(params = <type>)]` on {0} while not providing a \
     strategy for the {0} to use it since `<{1} as Arbitrary<'a>>::Strategy` \
     may require a different type than the one provided in `<type>`.",
     item, quote! { #self_ty });
@@ -331,7 +341,7 @@ fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
 /// then that applies, and the `filter` on `item` would be meaningless
 /// wherefore it is forbidden.
 error!(parent_has_filter(item: &str), E0012,
-    "Can not set `#[proptest(filter(..)]` on {} since it is set on the variant
+    "Cannot set `#[proptest(filter(..)]` on {} since it is set on the variant
     which it is inside of and because the variant specifies how to generate
     itself.",
     item);
@@ -400,9 +410,9 @@ error!(weight_malformed(meta: &syn::Meta), E0021,
 /// `#[proptest(no_params)]` were specified. They are mutually
 /// exclusive choices. The user can resolve this by picking one.
 fatal!(overspecified_param, E0022,
-    "Can not set `#[proptest(no_params)]` as well as \
+    "Cannot set `#[proptest(no_params)]` as well as \
     `#[proptest(params(<type>))]` simultaneously. \
-    Please pick one of those attributes.");
+    Please pick one of these attributes.");
 
 /// This happens when `#[proptest(params..)]` is malformed.
 /// For example, `#[proptest(params)]` is malformed. Another example is when
@@ -418,13 +428,14 @@ error!(param_malformed, E0023,
 error!(no_interp_meta, E0024,
     "The tokens `<tts>` in #[proptest <tts>] do not make for a valid attribute.");
 
-/// Happens when both `#[proptest(strategy..)]` and `#[proptest(value..)]`
-/// were specified. They are mutually exclusive choices. The user can resolve
-/// this by picking one.
+/// Happens when more than one of `#[proptest(strategy..)]`,
+/// `#[proptest(value..)]`, or `#[proptest(regex..)]` were specified.
+/// They are mutually exclusive choices.
+/// The user can resolve this by picking one.
 fatal!(overspecified_strat, E0025,
-    "Can not set `#[proptest(value = \"<expr>\")]` as well as \
-    `#[proptest(params(strategy = \"<expr>\"))]` simultaneously. \
-    Please pick one of those attributes.");
+    "Cannot set more than one of `#[proptest(value = \"<expr>\")]`,
+    `#[proptest(strategy = \"<expr>\")]`, `#[proptest(regex = \"<string>\")]` \
+    simultaneously. Please pick one of these attributes.");
 
 /// Happens when `#[proptest(strategy..)]` or `#[proptest(value..)]` is
 /// malformed. For example, `<expr>` inside `#[proptest(strategy = "<expr>")]`
@@ -483,6 +494,11 @@ error!(strategy_on_unit_variant(what: &str), E0029,
     and is redundant because there is nothing to configure.",
     what);
 
+/// See `strategy_on_unit_variant`.
+error!(regex_on_unit_variant, E0029,
+    "Setting `#[proptest(regex = \"<string>\")]` on a unit variant has no effect \
+    and is redundant because there is nothing to configure.");
+
 /// There's only one way to produce a specific unit variant, so setting
 /// `#[proptest(params = "<type>")]` would be pointless.
 error!(params_on_unit_variant, E0029,
@@ -525,3 +541,20 @@ error!(no_bound_malformed, E0032,
 error!(weight_overflowing, E0033,
     "The sum of the weights specified on variants of the enum you are \
     deriving `Arbitrary` for overflows an `u32` which it can't do.");
+
+/// Happens when `#[proptest(regex..)]` is malformed.
+/// For example, `#[proptest(regex = 1)]` is not a valid form.
+error!(regex_malformed, E0034,
+    "The attribute modifier `regex` inside `#[proptest(..)]` must have the \
+    format `#[proptest(regex = \"<string>\")]` where `<string>` is a valid
+    regular expression embedded in a Rust string slice.");
+
+/// Happens when `#[proptest(params = <type>)]` is set on `item` and then
+/// `#[proptest(regex = "<string>")]` is also set. We reject this because
+/// the params can't be used. TODO: reduce this to a warning once we can
+/// emit warnings.
+error!(cant_set_param_and_regex(item: &str), E0035,
+    "Cannot set #[proptest(regex = \"<string>\")] and \
+    `#[proptest(params = <type>)]` on {0} because the latter is a logic bug \
+    since `params` cannot be used in `<string>`.",
+    item);
