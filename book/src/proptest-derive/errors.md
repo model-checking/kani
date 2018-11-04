@@ -65,18 +65,18 @@ A trivial example:
 ```rust
 #[derive(Debug, Arbitrary)]
 struct Uninhabited {
-    a: u32,
-    b: !,
+    inhabited: u32,
+    never: !,
 }
 ```
 
-Because there exist no values assignable to field `b`, it is also impossible to
-construct an instance of struct `Uninhabited`.
+Because there exist no values assignable to field `never`, it is also
+impossible to construct an instance of struct `Uninhabited`.
 
 Proptest's ability to identify uninhabited types is limited. If it does not
-recognise a particular type, it will attempt to use it like any other type and
-you will instead get an error about the type not implementing `Arbitrary`
-trait.
+recognise a particular type as uninhabited, the type will instead be assumed to
+be inhabited and you will instead get an error about the type not implementing
+`Arbitrary` trait.
 
 ## E0004
 
@@ -85,11 +85,11 @@ variants at all. For example:
 
 ```rust
 #[derive(Debug, Arbitrary)]
-enum Uninhabited { }
+enum Uninhabited {}
 ```
 
 Such an enum has no values at all, so it does not make sense to provide an
-`Arbitrary` implementation for it.
+`Arbitrary` implementation for it since no values can be generated.
 
 ## E0005
 
@@ -102,8 +102,8 @@ Example:
 ```rust
 #[derive(Debug, Arbitrary)]
 enum Uninhabited {
-    V1(!),
-    V2(!, !),
+    Never(!),
+    NeverEver(!, !),
 }
 ```
 
@@ -112,7 +112,7 @@ enum Uninhabited {
 This error occurs if `#[derive(Arbitrary)]` is used on an enum where all
 inhabited variants are marked with `#[proptest(skip)]`. In other words,
 proptest is forbidden from generating any of the enum's variants, and thus the
-enum itself is unconstructable.
+enum itself cannot be generated.
 
 Example:
 
@@ -123,12 +123,12 @@ enum MyEnum {
     // but both are forbidden, so in the end proptest isn't allowed to generate
     // anything at all.
     #[proptest(skip)]
-    V1,
+    UnitVariant,
     #[proptest(skip)]
-    V2(u32),
+    SimpleVariant(u32),
     // This variant is implicitly skipped because proptest knows it is
     // uninhabited.
-    V3(!),
+    Uninhabited(!),
 }
 ```
 
@@ -145,7 +145,7 @@ Example:
 struct MyStruct(u32);
 ```
 
-These attributes are only applicable to fields.
+These attributes are only applicable to fields and enum variants.
 
 ## E0008
 
@@ -184,15 +184,15 @@ where this does not make sense, such as a struct field. For example:
 
 ```rust
 #[derive(Debug, Arbitrary)]
-struct Foo {
-    a: u32,
+struct Point {
+    x: u32,
     #[proptest(weight = 42)]
-    b: u32,
+    y: u32,
 }
 ```
 
 The `weight` attribute only is sensible where proptest has a choice between
-multiple items, such as enum variants. In contrast, with struct fields proptest
+multiple items, i.e., enum variants. In contrast, with struct fields proptest
 must provide a value for _every_ field so there is no "this-or-that" choice.
 
 ## E0010
@@ -249,18 +249,18 @@ Example:
 ```rust
 #[derive(Debug, Arbitrary)]
 enum Foo {
-    #[proptest(value = "Foo::V1(42)")]
-    V1 {
+    #[proptest(value = "Foo::Bar(42)")]
+    Bar {
         #[proptest(filter = "is_even")]
-        field: u32,
+        even_number: u32,
     },
     // ...
 }
 ```
 
-In this example, the entire `V1` variant specifies how to generate itself
-wholesale. As a result, the `filter` clause on `field` has no opportunity to
-run.
+In this example, the entire `Bar` variant specifies how to generate itself
+wholesale. As a result, the `filter` clause on `even_number` has no opportunity
+to run.
 
 ## E0013
 
@@ -272,7 +272,8 @@ compiler will reject the attribute first.
 
 ## E0014
 
-This error occurs if a bare `#[proptest]` attribute is applied to anything.
+This error occurs if a bare `#[proptest]` attribute is applied to anything,
+since it has no meaningful content.
 
 Example:
 
@@ -368,9 +369,9 @@ Example:
 ```rust
 #[derive(Debug, Arbitrary)]
 enum Foo {
-    V1,
+    Small,
     #[proptest(skip = "yes")]
-    V2,
+    Huge(ExpensiveType),
 }
 ```
 
@@ -399,8 +400,8 @@ enclosed in quotation marks.
 
 ## E0022
 
-This error occurs if both `#[proptest(no_params)]` and `#[proptest(params = "type")]`
-are applied to the same item.
+This error occurs if more than one of `#[proptest(no_params)]` and
+`#[proptest(params = "type")]` are applied to the same item.
 
 Example:
 
@@ -432,12 +433,8 @@ There are a few different ways to get this error:
 - Pass something other than a string as the value. E.g.,
   `#[proptest(params = 42)]`.
 
-- Pass a malformed type in the string, as in the example above. Note that type
-  syntax is limited to what the `syn` crate can understand. If you encounter a
-  valid type that is rejected here, you can work around it by defining a type
-  alias (e.g., `type MyParams = TypeThatSynCantParse;`). In such a case, please
-  consider [filing an issue](https://github.com/altsysrq/proptest/issues) as
-  well.
+- Pass a malformed type in the string, as in the example above. (See also
+  [caveat on syntax](#valid-rust-syntax).)
 
 ## E0024
 
@@ -448,8 +445,9 @@ Exactly what conditions can produce this error vary by Rust version.
 
 ## E0025
 
-This error happens if both `#[proptest(strategy = "expr")]` and
-`#[proptest(value = "expr")]` are applied to the same item.
+This error happens if more than one of `#[proptest(strategy = "expr")]`,
+`#[proptest(value = "expr")]`, or `#[proptest(regex = "string")]` are applied
+to the same item.
 
 Example:
 
@@ -461,14 +459,14 @@ struct Foo {
 }
 ```
 
-Both of these modifiers completely describe how to generate the value, so they
+Each of these modifiers completely describe how to generate the value, so they
 cannot both be applied to the same thing. One or the other must be chosen
 depending on the desired effect.
 
 ## E0026
 
 This error happens if an invalid form of `#[proptest(strategy ..)]` or
-`#[proptest(value..)]` is used.
+`#[proptest(value ..)]` is used.
 
 Example:
 
@@ -487,7 +485,7 @@ There are a few different ways to get this error:
 - Use another illegal form. E.g., `#[proptest(value("a", "b"))]`.
 
 - Pass a string expression which is not valid Rust syntax, as in the above
-  example.
+  example. (See also [caveat on syntax](#valid-rust-syntax).)
 
 ## E0027
 
@@ -498,8 +496,8 @@ Example:
 ```rust
 #[derive(Debug, Arbitrary)]
 struct Foo {
-    #[proptest(filter = "> 3")] // String content does not name a function
-    g1: u128,
+    #[proptest(filter = "> 3")] // String content is not an expression
+    big_number: u128,
 }
 ```
 
@@ -510,7 +508,7 @@ There are a few different ways to get this error:
 - Use another illegal form. E.g., `#[proptest(filter("a", "b"))]`.
 
 - Pass a string expression which is not valid Rust syntax, as in the above
-  example.
+  example. (See also [caveat on syntax](#valid-rust-syntax).)
 
 ## E0028
 
@@ -543,7 +541,7 @@ Example:
 #[derive(Debug, Arbitrary)]
 enum Foo {
     #[proptest(value = "Foo::V1")]
-    V1,
+    UnitVariant,
     // ...
 }
 ```
@@ -562,7 +560,7 @@ Example:
 ```rust
 #[derive(Debug, Arbitrary)]
 #[proptest(params = "u8")]
-struct Foo;
+struct UnitStruct;
 ```
 
 Unit structs only have one possible value, so there is only one possible
@@ -620,12 +618,47 @@ Example:
 #[derive(Debug, Arbitrary)]
 enum Foo {
     #[proptest(weight = 3_000_000_000)]
-    V1,
+    ThreeFifths,
     #[proptest(weight = 2_000_000_000)]
-    V2,
+    TwoFifths,
 }
 ```
 
 The only solution is to reduce the magnitude of the weights so that their sum
 fits in a `u32`. Keep in mind that variants without a `weight` modifier still
 effectively have `#[proptest(weight = 1)]`.
+
+## "Valid Rust syntax"
+
+The definition of "valid Rust syntax" in various string modifiers is determined
+by the `syn` crate. If valid syntax is rejected, you can work around it in a
+couple ways depending on what the syntax is describing:
+
+For types, simply define a type alias for the type in question. For example,
+
+```rust
+type RetroBox = ~str; // N.B. "~str" is not valid Rust 1.30 syntax
+
+//...
+#[derive(Debug, Arbitrary)]
+#[proptest(params = "RetroBox")]
+struct MyStruct { /* ... */ }
+```
+
+For values, you can generally factor the code into a constant or function. For
+example,
+
+```rust
+// N.B. Rust 1.30 does not have an exponentiation operator.
+const PI_SQUARED: f64 = PI ** 2.0;
+
+//...
+#[derive(Debug, Arbitrary)]
+struct MyStruct {
+    #[proptest(value = "PI_SQUARED")]
+    factor: f64,
+}
+```
+
+If you need to implement such a work around, consider also [filing an
+issue](https://github.com/altsysrq/proptest/issues).
