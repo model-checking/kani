@@ -36,7 +36,7 @@ const UNION_CHUNK_SIZE: usize = 9;
 const TOP_PARAM_NAME: &str = "_top";
 
 /// The name of the variable name used for user facing parameter types
-/// specified in a `#[proptest(params = "<type>"]` attribute.
+/// specified in a `#[proptest(params = "<type>")]` attribute.
 ///
 /// Changing the value of this constant constitutes a breaking change!
 const API_PARAM_NAME: &str = "params";
@@ -50,7 +50,7 @@ const API_PARAM_NAME: &str = "params";
 pub struct Impl {
     /// Name of the type.
     typ: syn::Ident,
-    /// Tracker for uses of Arbitrary trait for a generic type. 
+    /// Tracker for uses of Arbitrary trait for a generic type.
     tracker: UseTracker,
     /// The three main parts, see description of `ImplParts` for details.
     parts: ImplParts,

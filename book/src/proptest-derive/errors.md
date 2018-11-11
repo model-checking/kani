@@ -110,7 +110,7 @@ enum Uninhabited {
 ## E0006
 
 This error occurs if `#[derive(Arbitrary)]` is used on an enum where all
-inhabited variants are marked with `#[proptest(skip)]`. In other words,
+inhabited variants are marked with [`#[proptest(skip)]`]. In other words,
 proptest is forbidden from generating any of the enum's variants, and thus the
 enum itself cannot be generated.
 
@@ -134,8 +134,9 @@ enum MyEnum {
 
 ## E0007
 
-This error happens if an attribute `#[proptest(strategy = "expr")]` or
-`#[proptest(value = "expr")]` is applied to an item such as an enum or struct.
+This error happens if an attribute [`#[proptest(strategy = "expr")]`] or
+[`#[proptest(value = "expr")]`] is applied to the same item that has
+`#[derive(Arbitrary)]`.
 
 Example:
 
@@ -145,11 +146,12 @@ Example:
 struct MyStruct(u32);
 ```
 
-These attributes are only applicable to fields and enum variants.
+This is rejected since nothing is being "derived" _per se_. A written out
+implementation of `Arbitrary` should be used instead.
 
 ## E0008
 
-This error happens if `#[proptest(skip)]` is applied to an unskippable item.
+This error happens if [`#[proptest(skip)]`] is applied to an unskippable item.
 For example, struct fields cannot be skipped because Rust requires every field
 of a struct to have a value.
 
@@ -165,7 +167,7 @@ struct WidgetContainer {
 ```
 
 In general, the appropriate way to request proptest to not generate a field
-value is to use `#[proptest(value = "expr")]` to provide a fixed value
+value is to use [`#[proptest(value = "expr")]`] to provide a fixed value
 yourself. For example, the above code could be properly written as follows:
 
 ```rust
@@ -179,7 +181,7 @@ struct WidgetContainer {
 
 ## E0009
 
-This error happens if `#[proptest(weight = <integer>)]` is applied to an item
+This error happens if [`#[proptest(weight = <integer>)]`] is applied to an item
 where this does not make sense, such as a struct field. For example:
 
 ```rust
@@ -197,8 +199,8 @@ must provide a value for _every_ field so there is no "this-or-that" choice.
 
 ## E0010
 
-This error occurs if `#[proptest(params = "type")]` and/or
-`#[proptest(no_params)]` are set on both an item and its parent.
+This error occurs if [`#[proptest(params = "type")]`] and/or
+[`#[proptest(no_params)]`] are set on both an item and its parent.
 
 Example:
 
@@ -217,9 +219,9 @@ must work with that and cannot specify their own parameters.
 
 ## E0011
 
-This error occurs if `#[proptest(params = "type")]` is set on a field but no
-explicit strategy is configured with `#[proptest(strategy = "expr")]`. For
-example:
+This error occurs if [`#[proptest(params = "type")]`] is set on a field but no
+explicit strategy is configured with [`#[proptest(strategy = "expr")]`] or
+another such modifier. For example:
 
 ```rust
 #[derive(Debug, Arbitrary)]
@@ -240,7 +242,7 @@ forbidden.
 
 ## E0012
 
-This error occurs if `#[proptest(filter = "expr")]` is set on an item, but the
+This error occurs if [`#[proptest(filter = "expr")]`] is set on an item, but the
 item containing it specifies a direct way to generate the whole value, which
 would thus occur without consulting the filter.
 
@@ -347,7 +349,7 @@ available.
 
 ## E0019
 
-This error happens if anything extra is passed to `#[proptest(no_params)]`.
+This error happens if anything extra is passed to [`#[proptest(no_params)]`].
 
 Example:
 
@@ -362,7 +364,7 @@ struct Foo(u32);
 
 ## E0020
 
-This error happens if anything extra is passed to `#[proptest(skip)]`.
+This error happens if anything extra is passed to [`#[proptest(skip)]`].
 
 Example:
 
@@ -379,7 +381,7 @@ enum Foo {
 
 ## E0021
 
-This error happens if `#[proptest(weight = <integer>)]` is passed an invalid
+This error happens if [`#[proptest(weight = <integer>)]`] is passed an invalid
 integer or passed nothing at all.
 
 Example:
@@ -400,8 +402,8 @@ enclosed in quotation marks.
 
 ## E0022
 
-This error occurs if more than one of `#[proptest(no_params)]` and
-`#[proptest(params = "type")]` are applied to the same item.
+This error occurs if more than one of [`#[proptest(no_params)]`] and
+[`#[proptest(params = "type")]`] are applied to the same item.
 
 Example:
 
@@ -415,7 +417,7 @@ One attribute or the other must be picked depending on desired effect.
 
 ## E0023
 
-This error happens if an invalid `#[proptest(params = "type")]` attribute is
+This error happens if an invalid [`#[proptest(params = "type")]`] attribute is
 applied to an item.
 
 Example:
@@ -445,8 +447,8 @@ Exactly what conditions can produce this error vary by Rust version.
 
 ## E0025
 
-This error happens if more than one of `#[proptest(strategy = "expr")]`,
-`#[proptest(value = "expr")]`, or `#[proptest(regex = "string")]` are applied
+This error happens if more than one of [`#[proptest(strategy = "expr")]`],
+[`#[proptest(value = "expr")]`], or [`#[proptest(regex = "string")]`] are applied
 to the same item.
 
 Example:
@@ -465,8 +467,8 @@ depending on the desired effect.
 
 ## E0026
 
-This error happens if an invalid form of `#[proptest(strategy ..)]` or
-`#[proptest(value ..)]` is used.
+This error happens if an invalid form of [`#[proptest(strategy = "expr")]`] or
+[`#[proptest(value = "expr")]`] is used.
 
 Example:
 
@@ -489,7 +491,8 @@ There are a few different ways to get this error:
 
 ## E0027
 
-This error happens if an invalid form of `#[proptest(filter..)]` is used.
+This error happens if an invalid form of [`#[proptest(filter = "expr")]`] is
+used.
 
 Example:
 
@@ -513,7 +516,7 @@ There are a few different ways to get this error:
 ## E0028
 
 This error occurs if a modifier which implies a value is to be generated is
-applied to an enum variant which is also marked `#[proptest(skip)]`.
+applied to an enum variant which is also marked [`#[proptest(skip)]`].
 
 Example:
 
@@ -526,9 +529,9 @@ enum Enum {
 }
 ```
 
-Here, the `#[proptest(value)]` modifier suggests the user intends some value to
-be generated for the enum variant, but at the same time `#[proptest(skip)]`
-indicates not to generate that variant.
+Here, the [`#[proptest(value = "expr")]`] modifier suggests the user intends
+some value to be generated for the enum variant, but at the same time
+[`#[proptest(skip)]`] indicates not to generate that variant.
 
 ## E0029
 
@@ -569,7 +572,7 @@ or to filter such structs.
 
 ## E0031
 
-This error occurs if `#[proptest(no_bound)]` is applied to something that is
+This error occurs if [`#[proptest(no_bound)]`] is applied to something that is
 not a type variable.
 
 Example:
@@ -594,7 +597,7 @@ struct Foo<#[proptest(no_bound)] T> {
 
 ## E0032
 
-This error happens if `#[proptest(no_bound)]` is passed anything.
+This error happens if [`#[proptest(no_bound)]`] is passed anything.
 
 Example:
 
@@ -662,3 +665,13 @@ struct MyStruct {
 
 If you need to implement such a work around, consider also [filing an
 issue](https://github.com/altsysrq/proptest/issues).
+
+[`#[proptest(filter = "expr")]`]: modifiers.md#filter
+[`#[proptest(no_bound)]`]: modifiers.md#no_bound
+[`#[proptest(no_params)]`]: modifiers.md#no_params
+[`#[proptest(params = "type")]`]: modifiers.md#params
+[`#[proptest(regex = "string")]`]: modifiers.md#regex
+[`#[proptest(skip)]`]: modifiers.md#skip
+[`#[proptest(strategy = "expr")]`]: modifiers.md#strategy
+[`#[proptest(value = "expr")]`]: modifiers.md#value
+[`#[proptest(weight = <integer>)]`]: modifiers.md#weight
