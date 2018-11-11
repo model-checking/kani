@@ -631,6 +631,22 @@ The only solution is to reduce the magnitude of the weights so that their sum
 fits in a `u32`. Keep in mind that variants without a `weight` modifier still
 effectively have `#[proptest(weight = 1)]`.
 
+## E0034
+
+This error occurs if [`#[proptest(regex = "string")]`] is used with invalid
+syntax.
+
+The most common forms are `#[proptest(regex = "string-regex")]` and
+`#[proptest(regex("string-regex"))]`.
+
+## E0035
+
+This error occurs if both [`#[proptest(regex = "string")]`] and
+[`#[proptest(params = "type")]`] are applied to the same item.
+
+Values generated via regular expression take no parameters so the `params`
+modifier would be meaningless.
+
 ## "Valid Rust syntax"
 
 The definition of "valid Rust syntax" in various string modifiers is determined

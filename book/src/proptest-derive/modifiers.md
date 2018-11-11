@@ -205,7 +205,9 @@ proptest! {
 ## `regex`
 
 Form: `#[proptest(regex = "string")]` or `#[proptest(regex("string"))]`, where
-`string` is a regular expression.
+`string` is a regular expression. May also be invoked as
+`#[proptest(regex(function_name))]`, where `function_name` is a no-argument
+function that returns an `&'static str`.
 
 Usable on: fields
 
