@@ -52,6 +52,10 @@ pub enum StratMode {
     /// This strategy will be used to generate whatever it
     /// is that the attribute was set on.
     Strategy(Expr),
+    /// This means that an explicit *regex* strategy has been provided.
+    /// We don't reuse `Strategy(..)` so that we can produce better and
+    /// more tailored error messages.
+    Regex(Expr),
 }
 
 /// The mode for the associated item `Parameters` to use.
@@ -145,7 +149,7 @@ fn parse_attributes_base(ctx: Ctx, attrs: &[Attribute])
         // Process params and no_params together to see which one to use.
         params: parse_params_mode(ctx, acc.no_params, acc.params)?,
         // Process strategy and value together to see which one to use.
-        strategy: parse_strat_mode(ctx, acc.strategy, acc.value)?,
+        strategy: parse_strat_mode(ctx, acc.strategy, acc.value, acc.regex)?,
         no_bound: acc.no_bound.is_some()
     })
 }
@@ -154,6 +158,7 @@ fn parse_attributes_base(ctx: Ctx, attrs: &[Attribute])
 // Internals: Initialization
 //==============================================================================
 
+/// The internal state of the attribute parser.
 #[derive(Default)]
 struct ParseAcc {
     skip: Option<()>,
@@ -162,6 +167,7 @@ struct ParseAcc {
     params: Option<Type>,
     strategy: Option<Expr>,
     value: Option<Expr>,
+    regex: Option<Expr>,
     filter: Vec<Expr>,
     no_bound: Option<()>,
 }
@@ -250,6 +256,7 @@ fn dispatch_attribute(ctx: Ctx, mut acc: ParseAcc, meta: Meta) -> ParseAcc {
         "params" => parse_params(ctx, &mut acc, meta),
         "strategy" => parse_strategy(ctx, &mut acc, &meta),
         "value" => parse_value(ctx, &mut acc, &meta),
+        "regex" => parse_regex(ctx, &mut acc, &meta),
         "filter" => parse_filter(ctx, &mut acc, &meta),
         "no_bound" => parse_no_bound(ctx, &mut acc, meta),
         // Invalid modifiers:
@@ -268,6 +275,8 @@ fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
             error::did_you_mean(ctx, name, "strategy"),
         "values" | "valued" | "fix" | "fixed" =>
             error::did_you_mean(ctx, name, "value"),
+        "regexes" | "regexp" | "re" =>
+            error::did_you_mean(ctx, name, "regex"),
         "param" | "parameters" =>
             error::did_you_mean(ctx, name, "params"),
         "no_param" | "no_parameters" =>
@@ -326,8 +335,8 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
         .filter(|&value| value <= u128::from(u32::MAX))
         .map(|value| value as u32);
 
-    if let Some(value) = value {
-        acc.weight = Some(value);
+    if let v@Some(_) = value {
+        acc.weight = v;
     } else {
         error::weight_malformed(ctx, meta)
     }
@@ -357,6 +366,25 @@ fn parse_filter(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 //==============================================================================
 // Internals: Strategy
 //==============================================================================
+
+/// Parses an explicit value as a strategy.
+/// Valid forms are:
+/// + `#[proptest(regex = "<string>")]`
+/// + `#[proptest(regex("<string>")]`
+/// + `#[proptest(regex(<ident>)]`
+fn parse_regex(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
+    error_if_set(ctx, &acc.regex, &meta);
+
+    if let expr@Some(_) = match normalize_meta(meta.clone()) {
+        Some(NormMeta::Word(fun)) => Some(function_call(fun)),
+        Some(NormMeta::Lit(lit@Lit::Str(_))) => Some(lit_to_expr(lit)),
+        _ => None,
+    } {
+        acc.regex = expr;
+    } else {
+        error::regex_malformed(ctx)
+    }
+}
 
 /// Parses an explicit value as a strategy.
 /// Valid forms are:
@@ -390,28 +418,30 @@ fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
     error_if_set(ctx, &loc, &meta);
 
-    if let Some(expr) = match normalize_meta(meta.clone()) {
+    if let expr@Some(_) = match normalize_meta(meta.clone()) {
+        Some(NormMeta::Word(fun)) => Some(function_call(fun)),
         Some(NormMeta::Lit(lit)) => extract_expr(lit),
-        Some(NormMeta::Word(fun)) => Some(parse_quote!( #fun() )),
         _ => None,
     } {
-        *loc = Some(expr);
+        *loc = expr;
     } else {
         error::strategy_malformed(ctx, meta)
     }
 }
 
-/// Combines any parsed explicit strategy and value into a single value
-/// and fails if both an explicit strategy and value was set.
+/// Combines any parsed explicit strategy, value, and regex into a single
+/// value and fails if both an explicit strategy / value / regex was set.
 /// Only one of them can be set, or none.
-fn parse_strat_mode(ctx: Ctx, strat: Option<Expr>, value: Option<Expr>)
+fn parse_strat_mode
+    (ctx: Ctx, strat: Option<Expr>, value: Option<Expr>, regex: Option<Expr>)
     -> DeriveResult<StratMode> 
 {
-    Ok(match (strat, value) {
-        (None,     None    ) => StratMode::Arbitrary,
-        (None,     Some(ty)) => StratMode::Value(ty),
-        (Some(ty), None    ) => StratMode::Strategy(ty),
-        (Some(_), Some(_) )  => error::overspecified_strat(ctx)?,
+    Ok(match (strat, value, regex) {
+        (None,     None,     None    ) => StratMode::Arbitrary,
+        (None,     None,     Some(re)) => StratMode::Regex(re),
+        (None,     Some(vl), None    ) => StratMode::Value(vl),
+        (Some(st), None,     None    ) => StratMode::Strategy(st),
+        _ => error::overspecified_strat(ctx)?,
     })
 }
 
@@ -452,8 +482,8 @@ fn parse_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
         _ => None,
     };
 
-    if let Some(typ) = typ {
-        acc.params = Some(typ);
+    if let typ@Some(_) = typ {
+        acc.params = typ;
     } else {
         error::param_malformed(ctx)
     }
@@ -508,11 +538,20 @@ fn extract_lit(meta: NormMeta) -> Option<Lit> {
 fn extract_expr(lit: Lit) -> Option<Expr> {
     match lit {
         Lit::Str(lit) => lit.parse().ok(),
-        Lit::Int(lit) => Some(
-            Expr::from(syn::ExprLit { attrs: vec![], lit: lit.into() })
-        ),
+        lit@Lit::Int(_) => Some(lit_to_expr(lit)),
+        // TODO(centril): generalize to other literals, e.g. floats
         _ => None,
     }
+}
+
+/// Construct an expression from a literal.
+fn lit_to_expr(lit: Lit) -> Expr {
+    syn::ExprLit { attrs: vec![], lit }.into()
+}
+
+/// Construct a function call expression for an identifier.
+fn function_call(fun: Ident) -> Expr {
+    parse_quote!( #fun() )
 }
 
 /// Normalized `Meta` into all the forms we will possibly accept.
