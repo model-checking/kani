@@ -1718,6 +1718,7 @@ extern crate quick_error;
 #[cfg(feature = "std")]
 extern crate regex_syntax;
 extern crate rand;
+extern crate rand_xorshift;
 
 #[cfg(feature = "fork")]
 #[macro_use]
