@@ -155,9 +155,9 @@ See the [`param` modifier](#param) for more information on how parameters work.
 
 ## `params`
 
-Form: `#[params = T]` or `#[params(T)]`, where `T` is either a bare identifier
-or Rust code inside a string. In either case, the value must name a concrete
-Rust type which implements `Default`.
+Form: `#[proptest(params = T)]` or `#[proptest(params(T))]`, where `T` is
+either a bare identifier or Rust code inside a string. In either case, the
+value must name a concrete Rust type which implements `Default`.
 
 Usable on: structs, enums, enum variants, fields
 
@@ -233,9 +233,9 @@ Example:
 ```rust
 #[derive(Debug, Arbitrary)]
 struct FileContent {
-    #[regex = "[a-z0-9.]+"]
+    #[proptest(regex = "[a-z0-9.]+")]
     name: String,
-    #[regex = "([0-9]+\n)*"]
+    #[proptest(regex = "([0-9]+\n)*")]
     content: Vec<u8>,
 }
 ```
