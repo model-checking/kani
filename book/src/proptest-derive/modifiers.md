@@ -84,8 +84,8 @@ Form: `#[proptest(no_bound)]`
 Usable on: generic type definitions and type parameters
 
 Normally, when `#[derive(Arbitrary)]` is applied to an item with generic type
-parameter, every type parameter is required to `impl Arbitrary`. For example,
-given a declaration like the following:
+parameter, every type parameter which is "used" (see below) is required to
+`impl Arbitrary`. For example, given a declaration like the following:
 
 ```rust
 #[derive(Arbitrary)]
@@ -123,37 +123,18 @@ struct MyStruct<
 > { /* ... */ }
 ```
 
-For `no_bound` to be useful, one of two things needs to be true:
+A type parameter is "used" if the following hold:
 
-- The nature of the item is such that no value with the generic type actually
-  comes into existence. This can happen if the only references are things such
-  as `PhantomData<T>` or if the item is an enum and all variants referencing
-  the type are marked `#[proptest(skip)]`.
+- The enum or struct definition references it at least once, and that reference
+  is not inside the type argument of a `PhantomData`.
 
-- Other modifiers (such as `value`) are added to things referencing the generic
-  type that remove proptest's responsibility for generating them.
+- The item referencing the type parameter does not have any proptest modifiers
+  which replace the usual use of `Arbitrary`, such as [`skip`](#skip) or
+  [`value`](#value).
 
-Example of the above:
-
-```rust
-#[derive(Debug, Arbitrary)]
-enum MyEnum<#[proptest(no_bound)] T> {
-    // OK -- no T needs to be constructed
-    Phantom(PhantomData<T>),
-
-    // OK -- we're manually taking responsibility for generating the value
-    #[proptest(value = "MyEnum::WithValue(None)")]
-    WithValue(Option<T>),
-
-    // OK -- we tell proptest not to generate this case
-    #[proptest(skip)]
-    Skipped(T),
-
-    // ERROR -- proptest would need to generate a T here, but cannot because
-    // we lack the `T: Arbitrary` bound due to having used `no_bound`.
-    Error(T),
-}
-```
+Due to the above, `#[proptest(no_bound)]` is generally only needed when the
+type parameter is used in another type which does not itself have an
+`Arbitrary` mound on the type.
 
 ## `no_params`
 
