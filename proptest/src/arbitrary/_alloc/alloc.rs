@@ -48,9 +48,11 @@ arbitrary!(alloc::collections::CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<
 
 #[cfg(test)]
 mod test {
+    multiplex_alloc!(::alloc::alloc, ::std::alloc);
+
     no_panic_test!(
-        layout => super::alloc::Layout,
-        alloc_err => super::alloc::AllocErr
+        layout => self::alloc::Layout,
+        alloc_err => self::alloc::AllocErr
         //collection_alloc_err => alloc::collections::CollectionAllocErr
     );
 }
