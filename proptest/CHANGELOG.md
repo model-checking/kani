@@ -4,6 +4,8 @@
 
 - The minimum Rust version has been increased to 1.32.0.
 
+- The version of the `rand` crate has been increased to 0.6.
+
 ### New Additions
 
 - Rust 2018 style macro imports are now supported.
