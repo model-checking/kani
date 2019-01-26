@@ -13,6 +13,17 @@
 - In a Rust 2018 crate, all the macros can be brought into scope with
   `import proptest::prelude::*;`.
 
+### Nightly-only breakage
+
+- The `nightly` feature, which was formerly required for using proptest with
+  `#[no_std]`, has been removed. References to the feature can simply be
+  deleted.
+
+### Other Notes
+
+- Generated strings are now much more likely to contain right-to-left override
+  characters.
+
 ## 0.8.7
 
 ### New Additions
