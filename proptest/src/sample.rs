@@ -187,7 +187,6 @@ pub fn select<T : Clone + fmt::Debug + 'static>
 /// call to `prop_flat_map()`.
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// proptest! {
@@ -290,7 +289,6 @@ impl IndexStrategy {
 /// Generate a non-indexable collection and a value to pick out of it.
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// proptest! {

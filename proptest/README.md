@@ -26,7 +26,7 @@ The API is unlikely to see drastic breaking changes, but there may still be
 minor breaking changes here and there, particularly when "impl Trait"
 becomes stable and after the upcoming redesign of the `rand` crate.
 
-See the [changelog](https://github.com/AltSysrq/proptest/blob/master/CHANGELOG.md)
+See the [changelog](https://github.com/AltSysrq/proptest/blob/master/proptest/CHANGELOG.md)
 for a full list of substantial historical changes, breaking and otherwise.
 
 ## Introduction
@@ -88,12 +88,6 @@ In `Cargo.toml`, add
 proptest = "0.8.7"
 ```
 
-and at the top of `main.rs` or `lib.rs`:
-
-```rust
-#[macro_use] extern crate proptest;
-```
-
 Now we can add some property tests to our date parser. But how do we test
 the date parser for arbitrary inputs, without making another date parser in
 the test to validate it? We won't need to as long as we choose our inputs
@@ -102,6 +96,9 @@ simpler property to test: _The function should not crash._ Let's start
 there.
 
 ```rust
+// Bring the macros and other important things into scope.
+use proptest::prelude::*;
+
 proptest! {
     #[test]
     fn doesnt_crash(s in "\\PC*") {
@@ -376,7 +373,6 @@ property testing is extremely unlikely to find single-value edge cases in a
 large space. For example, the following test will virtually always pass:
 
 ```rust
-#[macro_use] extern crate proptest;
 use proptest::prelude::*;
 
 proptest! {
@@ -460,7 +456,6 @@ the `Config`. (Setting `timeout` implies `fork`.)
 Here is a simple example of using both features:
 
 ```rust
-#[macro_use] extern crate proptest;
 use proptest::prelude::*;
 
 // The worst possible way to calculate Fibonacci numbers

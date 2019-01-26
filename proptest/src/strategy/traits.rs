@@ -107,7 +107,6 @@ pub trait Strategy : fmt::Debug {
     /// ## Example
     ///
     /// ```
-    /// #[macro_use] extern crate proptest;
     /// // The prelude also gets us the `Rng` trait.
     /// use proptest::prelude::*;
     ///
@@ -161,8 +160,6 @@ pub trait Strategy : fmt::Debug {
     /// without using filtering:
     ///
     /// ```
-    /// #[macro_use] extern crate proptest;
-    ///
     /// use proptest::prelude::*;
     ///
     /// proptest! {
@@ -366,7 +363,6 @@ pub trait Strategy : fmt::Debug {
     /// # #![allow(unused_variables)]
     /// use std::collections::HashMap;
     ///
-    /// #[macro_use] extern crate proptest;
     /// use proptest::prelude::*;
     ///
     /// /// Define our own JSON AST type
@@ -428,7 +424,6 @@ pub trait Strategy : fmt::Debug {
     /// ## Example
     ///
     /// ```
-    /// #[macro_use] extern crate proptest;
     /// use proptest::prelude::*;
     ///
     /// static VALUES: &'static [u32] = &[0, 1, 2, 3, 4];

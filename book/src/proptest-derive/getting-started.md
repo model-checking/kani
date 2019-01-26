@@ -30,6 +30,7 @@ struct or enum declaration.
 #[cfg(test)]
 mod test {
     use proptest::prelude::*;
+    use proptest_derive::Arbitrary;
 
     #[derive(Arbitrary, Debug)]
     struct MyStruct {
@@ -57,6 +58,8 @@ future](https://github.com/AltSysrq/proptest/pull/106).
 
 
 ```rust
+#[cfg(test)] use proptest_derive::Arbitrary;
+
 #[derive(Debug)]
 // derive(Arbitrary) is only available in tests
 #[cfg_attr(test, derive(Arbitrary))]

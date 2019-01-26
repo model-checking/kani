@@ -137,8 +137,7 @@ pub type ParamsFor<A> = <A as Arbitrary>::Parameters;
 /// The function can be used as:
 ///
 /// ```rust
-/// #[macro_use] extern crate proptest;
-/// use proptest::prelude::any;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
 ///     fn reverse_reverse_is_identity(ref vec in any::<Vec<u32>>()) {
@@ -179,8 +178,7 @@ pub fn any<A: Arbitrary>() -> StrategyFor<A> {
 /// The function can be used as:
 ///
 /// ```rust
-/// #[macro_use] extern crate proptest;
-/// use proptest::prelude::any_with;
+/// use proptest::prelude::*;
 /// use proptest::collection::size_range;
 ///
 /// proptest! {

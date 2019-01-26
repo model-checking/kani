@@ -23,7 +23,7 @@ use crate::std_facade::fmt;
 /// ### Example
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
 ///   # /*
@@ -48,7 +48,7 @@ use crate::std_facade::fmt;
 /// You can also use the normal argument syntax `pattern: type` as in:
 ///
 /// ```rust
-/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
 ///   # /*
@@ -79,7 +79,6 @@ use crate::std_facade::fmt;
 /// evaluates to a `proptest::test_runner::Config` (or a reference to one).
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// proptest! {
@@ -111,7 +110,6 @@ use crate::std_facade::fmt;
 /// ### Example
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// #[derive(Debug)]
@@ -298,7 +296,6 @@ macro_rules! prop_assume {
 /// ## Example
 ///
 /// ```rust,no_run
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// #[derive(Clone, Copy, Debug)]
@@ -466,7 +463,7 @@ macro_rules! prop_oneof {
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
-/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// #[derive(Clone, Debug)]
 /// struct MyStruct {
@@ -490,8 +487,8 @@ macro_rules! prop_oneof {
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
-/// # #[macro_use] extern crate proptest;
-///
+/// # use proptest::prelude::*;
+/// #
 /// # #[derive(Clone, Debug)]
 /// # struct MyStruct {
 /// #  integer: u32,
@@ -515,7 +512,7 @@ macro_rules! prop_oneof {
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
-/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// prop_compose! {
 ///   fn nearby_numbers()(centre in -1000..1000)
@@ -535,7 +532,6 @@ macro_rules! prop_oneof {
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// prop_compose! {
@@ -559,7 +555,6 @@ macro_rules! prop_oneof {
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// prop_compose! {
@@ -672,7 +667,6 @@ macro_rules! prop_compose {
 /// ## Example
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// proptest! {
@@ -724,7 +718,7 @@ macro_rules! prop_assert {
 /// ## Example
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
 ///   # /*
@@ -1055,7 +1049,7 @@ named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
 /// ## Example
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
+/// use proptest::prelude::*;
 ///
 /// proptest! {
 ///   # /*

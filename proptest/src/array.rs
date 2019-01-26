@@ -36,7 +36,6 @@ use crate::test_runner::*;
 /// ## Example
 ///
 /// ```
-/// #[macro_use] extern crate proptest;
 /// use proptest::prelude::*;
 ///
 /// proptest! {

@@ -104,6 +104,9 @@
 //! there.
 //!
 //! ```rust,ignore
+//! // Bring the macros and other important things into scope.
+//! use proptest::prelude::*;
+//!
 //! proptest! {
 //!     #[test]
 //!     fn doesnt_crash(s in "\\PC*") {
