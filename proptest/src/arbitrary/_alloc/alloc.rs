@@ -13,19 +13,19 @@ use core::cmp;
 use core::ops::Range;
 use core::usize;
 
-multiplex_alloc!(alloc::alloc, ::std::alloc);
+multiplex_alloc!(::alloc::alloc, ::std::alloc);
 
 use crate::strategy::*;
 use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
 
-arbitrary!(alloc::CannotReallocInPlace; alloc::CannotReallocInPlace);
-arbitrary!(alloc::Global; alloc::Global);
+arbitrary!(self::alloc::CannotReallocInPlace; self::alloc::CannotReallocInPlace);
+arbitrary!(self::alloc::Global; self::alloc::Global);
 
 // Not Debug.
 //lazy_just!(System, || System);
 
-arbitrary!(alloc::Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
+arbitrary!(self::alloc::Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
     // 1. align must be a power of two and <= (1 << 31):
     // 2. "when rounded up to the nearest multiple of align, must not overflow".
     static_map((0u8..32u8, any::<usize>()), |(align_power, size)| {
@@ -33,11 +33,11 @@ arbitrary!(alloc::Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>;
         let max_size = 0usize.wrapping_sub(align);
         // Not quite a uniform distribution due to clamping,
         // but probably good enough
-        alloc::Layout::from_size_align(cmp::min(max_size, size), align).unwrap()
+        self::alloc::Layout::from_size_align(cmp::min(max_size, size), align).unwrap()
     })
 );
 
-arbitrary!(alloc::AllocErr, Just<Self>; Just(alloc::AllocErr));
+arbitrary!(self::alloc::AllocErr, Just<Self>; Just(self::alloc::AllocErr));
 /* 2018-07-28 CollectionAllocErr is not currently available outside of using
  * the `alloc` crate, which would require a different nightly feature. For now,
  * disable.
@@ -49,8 +49,8 @@ arbitrary!(alloc::collections::CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<
 #[cfg(test)]
 mod test {
     no_panic_test!(
-        layout => alloc::Layout,
-        alloc_err => alloc::AllocErr
+        layout => super::alloc::Layout,
+        alloc_err => super::alloc::AllocErr
         //collection_alloc_err => alloc::collections::CollectionAllocErr
     );
 }
