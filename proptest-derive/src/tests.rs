@@ -9,8 +9,6 @@
 //! This module provides integration tests that test the expansion
 //! of the derive macro.
 
-extern crate proc_macro2;
-
 //==============================================================================
 // Macros:
 //==============================================================================
@@ -32,7 +30,7 @@ macro_rules! test_derive {
     ($name:path { $($i:tt)* } expands to { $($o:tt)* } no_build) => {
         {
             let expected = stringify!( $($o)* )
-                .parse::<$crate::tests::proc_macro2::TokenStream>()
+                .parse::<proc_macro2::TokenStream>()
                 .expect("output should be a valid TokenStream");
 
             let i = stringify!( $($i)* );

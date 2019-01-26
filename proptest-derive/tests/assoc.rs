@@ -8,11 +8,8 @@
 
 #![allow(unused_variables)]
 
-#[macro_use]
-extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
-use proptest::prelude::Arbitrary;
+use proptest_derive::Arbitrary;
+use proptest::prelude::{Arbitrary, proptest, prop_assert_eq};
 
 trait Func { type Out; }
 trait FuncA { type OutA: FuncB; }

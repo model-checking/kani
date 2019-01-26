@@ -9,11 +9,8 @@
 #![feature(never_type)]
 #![allow(dead_code, unreachable_code)]
 
-#[macro_use]
-extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
-use proptest::prelude::Arbitrary;
+use proptest::prelude::{Arbitrary, proptest, prop_assert_eq, prop_assert};
+use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary, PartialEq)]
 enum Ty1 {

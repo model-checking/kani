@@ -8,11 +8,9 @@
 
 #![allow(unused_variables)]
 
-#[macro_use]
-extern crate proptest_derive;
-extern crate proptest;
 use proptest::strategy::Just;
 use proptest::prelude::Arbitrary;
+use proptest_derive::Arbitrary;
 
 // TODO: An idea.
 /*

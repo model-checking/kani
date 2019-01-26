@@ -8,10 +8,12 @@
 
 //! Provides error messages and some checkers.
 
+use std::fmt::Display;
+
 use proc_macro2::TokenStream;
 
 use syn;
-use attr::ParsedAttributes;
+use crate::attr::ParsedAttributes;
 
 //==============================================================================
 // Item descriptions
@@ -73,7 +75,7 @@ pub fn if_specified_params(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 
 /// Ensures that an explicit strategy or value is not present on `item`.
 pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
-    use attr::StratMode::*;
+    use crate::attr::StratMode::*;
     match attrs.strategy {
         Arbitrary   => {},
         Strategy(_) => illegal_strategy(ctx, "strategy", item),
@@ -85,7 +87,7 @@ pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 /// Ensures that a strategy, value, params, filter is not present on a unit variant.
 pub fn if_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
     /// Ensures that an explicit strategy or value is not present on a unit variant.
-    use attr::StratMode::*;
+    use crate::attr::StratMode::*;
     match attrs.strategy {
         Arbitrary   => {},
         Strategy(_) => strategy_on_unit_variant(ctx, "strategy"),
@@ -130,8 +132,6 @@ pub fn if_weight_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 //==============================================================================
 // Messages
 //==============================================================================
-
-use std::fmt::Display;
 
 /// Denotes that a fatal error happened in dealing somewhere in the
 /// procedural macro pipeline. A fatal error is different from a

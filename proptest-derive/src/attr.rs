@@ -10,9 +10,9 @@
 
 use syn::{self, Meta, NestedMeta, Lit, Ident, Attribute, Expr, Type};
 
-use util;
-use interp;
-use error::{self, Ctx, DeriveResult};
+use crate::util;
+use crate::interp;
+use crate::error::{self, Ctx, DeriveResult};
 
 //==============================================================================
 // Public API
@@ -434,7 +434,7 @@ fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
 /// Only one of them can be set, or none.
 fn parse_strat_mode
     (ctx: Ctx, strat: Option<Expr>, value: Option<Expr>, regex: Option<Expr>)
-    -> DeriveResult<StratMode> 
+    -> DeriveResult<StratMode>
 {
     Ok(match (strat, value, regex) {
         (None,     None,     None    ) => StratMode::Arbitrary,

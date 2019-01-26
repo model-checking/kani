@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
 extern crate proptest_derive;
+use proptest_derive::Arbitrary;
 
 // Show non fatal:
 #[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:

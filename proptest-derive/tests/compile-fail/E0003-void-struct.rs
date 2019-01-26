@@ -8,8 +8,8 @@
 
 #![feature(never_type)]
 
-#[macro_use]
 extern crate proptest_derive;
+use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
                             //~| [proptest_derive, E0003]

@@ -7,11 +7,8 @@
 // except according to those terms.
 
 
-#[macro_use]
-extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
-use proptest::prelude::{Strategy, Arbitrary};
+use proptest::prelude::{Strategy, Arbitrary, proptest};
+use proptest_derive::Arbitrary;
 
 fn make_strategy(start: usize) -> impl Strategy<Value = usize> {
     (start..100).prop_map(|x| x * 2)
@@ -29,7 +26,7 @@ struct T0 {
     bar: usize,
     #[proptest(strategy(make_strategy2))]
     baz: usize,
-}   
+}
 
 #[derive(Debug, Arbitrary)]
 struct T1(

@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
 extern crate proptest_derive;
+use proptest_derive::Arbitrary;
 
 fn even(x: &u8) -> bool {
     x % 2 == 0

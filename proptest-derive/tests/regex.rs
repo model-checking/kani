@@ -6,13 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
-extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
-
-use proptest::prelude::{BoxedStrategy, Strategy, Arbitrary};
+use proptest::prelude::{BoxedStrategy, Strategy, Arbitrary, proptest};
 use proptest::string::StrategyFromRegex;
+use proptest_derive::Arbitrary;
 
 fn mk_regex() -> &'static str {
     "[0-9][0-9]"

@@ -8,8 +8,6 @@
 
 #[macro_use]
 extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
 use proptest::prelude::*;
 
 #[derive(Debug, Arbitrary)]

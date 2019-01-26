@@ -12,12 +12,12 @@ use proc_macro2::{TokenStream, Span};
 use syn::{Type, Path, Expr, Field, Ident, Variant, DeriveInput};
 use syn::spanned::Spanned;
 
-use util::{is_unit_type, self_ty, fields_to_vec};
-use void::IsUninhabited;
-use error::{self, Ctx, Context, DeriveResult};
-use attr::{self, ParamsMode, ParsedAttributes, StratMode};
-use use_tracking::{UseMarkable, UseTracker};
-use ast::*;
+use crate::util::{is_unit_type, self_ty, fields_to_vec};
+use crate::void::IsUninhabited;
+use crate::error::{self, Ctx, Context, DeriveResult};
+use crate::attr::{self, ParamsMode, ParsedAttributes, StratMode};
+use crate::use_tracking::{UseMarkable, UseTracker};
+use crate::ast::*;
 
 //==============================================================================
 // API
@@ -290,7 +290,7 @@ fn extract_nparam<C>
 
 /// Entry point for deriving `Arbitrary` for `enum`s.
 fn derive_enum(ctx: Ctx, mut ast: DeriveData<Vec<Variant>>) -> DeriveResult<Impl> {
-    use void::IsUninhabited;
+    use crate::void::IsUninhabited;
 
     // An enum can't be skipped, ensure it hasn't been:
     error::if_skip_present(ctx, &ast.attrs, error::ENUM);
@@ -534,7 +534,7 @@ fn derive_enum_has_params(
 fn keep_inhabited_variant(ctx: Ctx, _self: &Ident, variant: Variant)
     -> DeriveResult<Option<(u32, Ident, Vec<Field>, ParsedAttributes)>>
 {
-    use void::IsUninhabited;
+    use crate::void::IsUninhabited;
 
     let attrs = attr::parse_attributes(ctx, &variant.attrs)?;
     let fields = fields_to_vec(variant.fields);

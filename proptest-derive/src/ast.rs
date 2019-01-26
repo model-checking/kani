@@ -13,12 +13,13 @@
 use std::ops::{Add, AddAssign};
 
 use syn;
+use syn::spanned::Spanned;
 use proc_macro2::{TokenStream, Span};
 use quote::{ToTokens, TokenStreamExt};
 
-use util::self_ty;
-use use_tracking::UseTracker;
-use error::{Ctx, DeriveResult};
+use crate::util::self_ty;
+use crate::use_tracking::UseTracker;
+use crate::error::{Ctx, DeriveResult};
 
 //==============================================================================
 // Config
@@ -648,8 +649,6 @@ fn param<'a>(fv: usize) -> FreshVar<'a> {
 pub fn map_closure(path: syn::Path, fs: &[syn::Field]) -> MapClosure {
     MapClosure(path, fs.to_owned())
 }
-
-use syn::spanned::Spanned;
 
 /// A `MapClosure` models the closure part inside a `.prop_map(..)` call.
 #[derive(Debug)]

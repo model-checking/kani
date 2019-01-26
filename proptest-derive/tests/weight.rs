@@ -7,10 +7,8 @@
 // except according to those terms.
 
 
-#[macro_use]
-extern crate proptest_derive;
-extern crate proptest;
 use proptest::prelude::Arbitrary;
+use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
 enum T1 {

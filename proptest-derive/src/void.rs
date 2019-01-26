@@ -19,8 +19,8 @@
 
 use syn::{self, visit};
 
-use util;
-use interp;
+use crate::util;
+use crate::interp;
 
 //==============================================================================
 // Trait

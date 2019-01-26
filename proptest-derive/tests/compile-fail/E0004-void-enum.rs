@@ -8,8 +8,8 @@
 
 #![feature(never_type)]
 
-#[macro_use]
 extern crate proptest_derive;
+use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0004]
 enum Void {}

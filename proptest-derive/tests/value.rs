@@ -7,11 +7,8 @@
 // except according to those terms.
 
 
-#[macro_use]
-extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
-use proptest::prelude::Arbitrary;
+use proptest::prelude::{Arbitrary, proptest, prop_assert, prop_assert_eq};
+use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
 struct T0 {
@@ -27,7 +24,7 @@ struct T0 {
     wibble: usize,
     #[proptest(value("3 * 2 + 3usize / 3"))]
     wobble: usize,
-}   
+}
 
 #[derive(Debug, Arbitrary)]
 struct T1(
@@ -86,7 +83,7 @@ fn foo() -> usize {
 struct CallFun {
     #[proptest(value = "foo()")]
     foo: usize,
-    
+
     #[proptest(value(foo))]
     bar: usize,
 }

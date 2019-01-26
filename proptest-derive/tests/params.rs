@@ -7,11 +7,8 @@
 // except according to those terms.
 
 
-#[macro_use]
-extern crate proptest_derive;
-#[macro_use]
-extern crate proptest;
-use proptest::prelude::{any_with, Arbitrary};
+use proptest::prelude::{any_with, Arbitrary, proptest, prop_assert, prop_assert_eq};
+use proptest_derive::Arbitrary;
 
 struct ComplexType {
     max: u64,

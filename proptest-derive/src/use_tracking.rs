@@ -18,9 +18,9 @@ use std::borrow::Borrow;
 
 use syn;
 
-use attr;
-use util;
-use error::{DeriveResult, Ctx};
+use crate::attr;
+use crate::util;
+use crate::error::{DeriveResult, Ctx};
 
 //==============================================================================
 // API: Type variable use tracking
