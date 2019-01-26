@@ -1,3 +1,16 @@
+## Unreleased
+
+### Breaking Changes
+
+- The minimum Rust version has been increased to 1.32.0.
+
+### New Additions
+
+- Rust 2018 style macro imports are now supported.
+
+- In a Rust 2018 crate, all the macros can be brought into scope with
+  `import proptest::prelude::*;`.
+
 ## 0.8.7
 
 ### New Additions
