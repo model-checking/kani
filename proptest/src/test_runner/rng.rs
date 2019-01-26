@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use rand::{Error, RngCore, Rng, SeedableRng};
-use rand::prng::XorShiftRng;
+use rand_xorshift::XorShiftRng;
 
 /// Proptest's random number generator.
 ///
