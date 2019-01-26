@@ -29,11 +29,6 @@ default = ["std", "fork", "timeout", "bit-set"]
 # Enables unstable features of Rust.
 unstable = []
 
-# Required for no_std usage thanks to lazy_static's
-# dependency on the spin crate, which is nightly-only
-# for no_std.
-nightly = ["lazy_static/spin_no_std"]
-
 # Enables the use of standard-library dependent feature
 std = ["rand/std", "byteorder/std",
        "quick-error", "regex-syntax", "num-traits/std"]
@@ -60,8 +55,9 @@ bitflags = "1.0.1"
 # optional = true
 
 [dependencies.lazy_static]
-version = "1.0.0"
+version = "1.2"
 default-features = false
+features = ["spin_no_std"]
 
 [dependencies.num-traits]
 version = "0.2.2"
