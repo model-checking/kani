@@ -22,7 +22,7 @@ use crate::std_facade::{fmt, Vec};
 
 #[cfg(feature = "bit-set")]
 use bit_set::BitSet;
-use rand::{self, Rng};
+use rand::{self, Rng, seq::IteratorRandom};
 
 use crate::collection::SizeRange;
 use crate::num::sample_uniform_incl;
@@ -263,10 +263,11 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
         let mut bits = T::new_bitset(self.bits.end_excl());
         let count = sample_uniform_incl(
             runner, self.size.start(), self.size.end_incl());
-        for bit in
-            rand::seq::sample_iter(runner.rng(), self.bits.iter(), count)
-            .expect("not enough bits to sample")
-        {
+        if bits.len() < count {
+            panic!("not enough bits to sample");
+        }
+
+        for bit in self.bits.iter().choose_multiple(runner.rng(), count) {
             bits.set(bit);
         }
 
