@@ -27,7 +27,7 @@ service = "github"
 default = ["std", "fork", "timeout", "bit-set"]
 
 # Enables unstable features of Rust.
-unstable = ["rand/i128_support"]
+unstable = []
 
 # Required for no_std usage thanks to lazy_static's
 # dependency on the spin crate, which is nightly-only
