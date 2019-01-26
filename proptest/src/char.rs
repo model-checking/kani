@@ -47,8 +47,10 @@ pub const DEFAULT_SPECIAL_CHARS: &[char] = &[
     '¥',
     // No non-Unicode encoding has both ¥ and Ѩ
     'Ѩ',
-    // More Unicode edge-cases: BOM, replacement character, and non-BMP
-    '\u{FEFF}', '\u{FFFD}', '🕴',
+    // In UTF-8, Ⱥ increases in length from 2 to 3 bytes when lowercased
+    'Ⱥ',
+    // More Unicode edge-cases: BOM, replacement character, RTL override, and non-BMP
+    '\u{FEFF}', '\u{FFFD}', '\u{202E}', '🕴',
 ];
 
 /// A default sequence of ranges used preferentially when generating random
