@@ -8,6 +8,7 @@ repository = "https://github.com/altsysrq/proptest"
 documentation = "https://altsysrq.github.io/rustdoc/proptest/0.8.7/proptest/"
 keywords = ["property", "testing", "quickcheck", "fuzz", "hypothesis"]
 categories = ["development-tools::testing"]
+edition = "2018"
 
 description = """
 Hypothesis-like property-based testing and shrinking.

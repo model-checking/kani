@@ -11,7 +11,7 @@
 
 use core::hash::{BuildHasherDefault, Hasher};
 #[cfg(feature = "std")]
-use std_facade::hash_map::{DefaultHasher, RandomState};
+use crate::std_facade::hash_map::{DefaultHasher, RandomState};
 
 // NOTE: don't impl for std::hash::SipHasher.. since deprecated!
 

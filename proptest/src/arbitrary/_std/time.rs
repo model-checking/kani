@@ -12,9 +12,9 @@
 use std::time::*;
 use core::ops::Range;
 
-use strategy::statics::{self, static_map};
-use arbitrary::*;
-use num;
+use crate::strategy::statics::{self, static_map};
+use crate::arbitrary::*;
+use crate::num;
 
 arbitrary!(Duration, SMapped<(u64, u32), Self>;
     static_map(any::<(u64, u32)>(), |(a, b)| Duration::new(a, b))

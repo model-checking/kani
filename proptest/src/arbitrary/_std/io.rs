@@ -12,12 +12,12 @@
 use std::io::*;
 use std::io::ErrorKind::*;
 #[cfg(test)]
-use std_facade::Vec;
-use std_facade::String;
+use crate::std_facade::Vec;
+use crate::std_facade::String;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 // TODO: IntoInnerError
 // Consider: std::io::Initializer

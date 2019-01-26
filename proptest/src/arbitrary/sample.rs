@@ -7,8 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use sample::{Index, IndexStrategy, Selector, SelectorStrategy};
-use arbitrary::Arbitrary;
+use crate::sample::{Index, IndexStrategy, Selector, SelectorStrategy};
+use crate::arbitrary::Arbitrary;
 
 impl Arbitrary for Index {
     type Parameters = ();

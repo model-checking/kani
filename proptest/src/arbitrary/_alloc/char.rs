@@ -12,9 +12,9 @@
 use core::char::*;
 use core::iter::once;
 use core::ops::Range;
-use std_facade::Vec;
+use crate::std_facade::Vec;
 
-use collection::vec;
+use crate::collection::vec;
 
 multiplex_alloc! {
     core::char::DecodeUtf16, std::char::DecodeUtf16,
@@ -24,9 +24,9 @@ multiplex_alloc! {
 
 const VEC_MAX: usize = ::core::u16::MAX as usize;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 macro_rules! impl_wrap_char {
     ($type: ty, $mapper: expr) => {

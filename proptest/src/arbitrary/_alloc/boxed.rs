@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::boxed`.
 
-use std_facade::Box;
+use crate::std_facade::Box;
 
 wrap_from!(Box);
 

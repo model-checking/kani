@@ -11,12 +11,12 @@
 
 use core::option as opt;
 use core::ops::RangeInclusive;
-use std_facade::string;
+use crate::std_facade::string;
 
-use option::{weighted, OptionStrategy, Probability};
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::option::{weighted, OptionStrategy, Probability};
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 arbitrary!(Probability, MapInto<RangeInclusive<f64>, Self>;
     (0.0..=1.0).prop_map_into()

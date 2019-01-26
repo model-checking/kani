@@ -7,10 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::fmt;
+use crate::std_facade::fmt;
 
-use strategy::{Strategy, ValueTree, NewTree};
-use test_runner::TestRunner;
+use crate::strategy::{Strategy, ValueTree, NewTree};
+use crate::test_runner::TestRunner;
 
 macro_rules! noshrink {
     () => {

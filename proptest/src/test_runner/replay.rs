@@ -15,7 +15,7 @@ use std::path::Path;
 use std::string::String;
 use std::vec::Vec;
 
-use test_runner::{TestCaseError, TestCaseResult, Seed};
+use crate::test_runner::{TestCaseError, TestCaseResult, Seed};
 
 const SENTINEL: &'static str = "proptest-forkfile";
 

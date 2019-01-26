@@ -7,8 +7,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use] extern crate proptest;
-
 // This #[cfg] is only here so that CI can test building proptest with the
 // timeout feature disabled. You do not need it in your code.
 #[cfg(feature = "timeout")]

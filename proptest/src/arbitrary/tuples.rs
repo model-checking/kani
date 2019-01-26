@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for tuples.
 
-use arbitrary::{Arbitrary, any_with};
+use crate::arbitrary::{Arbitrary, any_with};
 
 macro_rules! impl_tuple {
     ($($typ: ident),*) => {

@@ -18,16 +18,16 @@
 
 use core::marker::PhantomData;
 use core::mem;
-use std_facade::{fmt, Vec};
+use crate::std_facade::{fmt, Vec};
 
 #[cfg(feature = "bit-set")]
 use bit_set::BitSet;
 use rand::{self, Rng};
 
-use collection::SizeRange;
-use num::sample_uniform_incl;
-use strategy::*;
-use test_runner::*;
+use crate::collection::SizeRange;
+use crate::num::sample_uniform_incl;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// Trait for types which can be handled with `BitSetStrategy`.
 #[cfg_attr(feature="cargo-clippy", allow(len_without_is_empty))]

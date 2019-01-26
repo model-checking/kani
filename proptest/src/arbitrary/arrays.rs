@@ -9,8 +9,8 @@
 
 //! Arbitrary implementations for arrays.
 
-use arbitrary::{Arbitrary, any_with};
-use array::UniformArrayStrategy;
+use crate::arbitrary::{Arbitrary, any_with};
+use crate::array::UniformArrayStrategy;
 
 macro_rules! array {
     ($($n: expr),*) => { $(

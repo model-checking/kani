@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use core::any::Any;
-use std_facade::{fmt, Box, Vec};
+use crate::std_facade::{fmt, Box, Vec};
 
 #[cfg(feature = "std")]
 mod file;
@@ -20,7 +20,7 @@ pub use self::file::*;
 pub use self::map::*;
 pub use self::noop::*;
 
-use test_runner::Seed;
+use crate::test_runner::Seed;
 
 /// Provides external persistence for historical test failures by storing seeds.
 pub trait FailurePersistence: Send + Sync + fmt::Debug  {

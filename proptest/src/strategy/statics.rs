@@ -24,10 +24,10 @@
 //! **This module is subject to removal at some point after the language
 //! features linked above become stable.**
 
-use std_facade::fmt;
+use crate::std_facade::fmt;
 
-use strategy::traits::*;
-use test_runner::*;
+use crate::strategy::traits::*;
+use crate::test_runner::*;
 
 //==============================================================================
 // Filter

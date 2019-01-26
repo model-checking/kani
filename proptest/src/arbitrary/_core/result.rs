@@ -11,12 +11,12 @@
 
 use core::fmt;
 use core::result::IntoIter;
-use std_facade::string;
+use crate::std_facade::string;
 
-use strategy::*;
-use strategy::statics::static_map;
-use result::*;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::result::*;
+use crate::arbitrary::*;
 
 // These are Result with uninhabited type in some variant:
 arbitrary!([A: Arbitrary] Result<A, string::ParseError>,

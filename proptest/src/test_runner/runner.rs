@@ -12,7 +12,7 @@ use core::{fmt, iter};
 use std::panic::{self, AssertUnwindSafe};
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::SeqCst;
-use std_facade::{Box, Arc, Vec, BTreeMap, String};
+use crate::std_facade::{Box, Arc, Vec, BTreeMap, String};
 
 #[cfg(feature = "fork")]
 use std::fs;
@@ -25,14 +25,14 @@ use rusty_fork;
 #[cfg(feature = "fork")]
 use tempfile;
 
-use test_runner::{TestRng, Seed};
-use test_runner::errors::*;
-use test_runner::config::*;
-use test_runner::reason::*;
-use test_runner::result_cache::*;
+use crate::test_runner::{TestRng, Seed};
+use crate::test_runner::errors::*;
+use crate::test_runner::config::*;
+use crate::test_runner::reason::*;
+use crate::test_runner::result_cache::*;
 #[cfg(feature = "fork")]
-use test_runner::replay;
-use strategy::*;
+use crate::test_runner::replay;
+use crate::strategy::*;
 
 #[cfg(feature = "fork")]
 const ENV_FORK_FILE: &'static str = "_PROPTEST_FORKFILE";
@@ -715,7 +715,7 @@ impl TestRunner {
 
 #[cfg(feature = "fork")]
 fn init_replay(rng: &mut TestRng) -> (Vec<TestCaseResult>, ForkOutput) {
-    use test_runner::replay::{open_file, Replay, ReplayFileStatus::*};
+    use crate::test_runner::replay::{open_file, Replay, ReplayFileStatus::*};
 
     if let Some(path) = env::var_os(ENV_FORK_FILE) {
         let mut file = open_file(&path).expect("Failed to open replay file");
@@ -814,8 +814,8 @@ mod test {
     use std::fs;
 
     use super::*;
-    use test_runner::FileFailurePersistence;
-    use strategy::Strategy;
+    use crate::test_runner::FileFailurePersistence;
+    use crate::strategy::Strategy;
 
     #[test]
     fn gives_up_after_too_many_rejections() {
@@ -1092,7 +1092,7 @@ mod test {
         for _ in 0..256 {
             let mut runner = TestRunner::new(Config {
                 failure_persistence: None,
-                result_cache: ::test_runner::result_cache::basic_result_cache,
+                result_cache: crate::test_runner::result_cache::basic_result_cache,
                 .. Config::default()
             });
             let pass = Rc::new(Cell::new(true));
@@ -1181,7 +1181,7 @@ mod timeout_tests {
 
     fn test_shrink_bail(config: Config) {
         let mut runner = TestRunner::new(config);
-        let result = runner.run(&::num::u64::ANY, |v| {
+        let result = runner.run(&crate::num::u64::ANY, |v| {
             thread::sleep(Duration::from_millis(250));
             prop_assert!(v <= u32::MAX as u64);
             Ok(())

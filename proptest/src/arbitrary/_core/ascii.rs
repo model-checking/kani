@@ -11,8 +11,8 @@
 
 use core::ascii::{EscapeDefault, escape_default};
 
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 arbitrary!(EscapeDefault, SMapped<u8, Self>;
     static_map(any::<u8>(), escape_default));

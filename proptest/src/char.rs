@@ -18,13 +18,13 @@
 //! inclusive ranges.
 
 use core::ops::RangeInclusive;
-use std_facade::Cow;
+use crate::std_facade::Cow;
 
 use rand::Rng;
 
-use num;
-use strategy::*;
-use test_runner::*;
+use crate::num;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// An inclusive char range from fst to snd.
 type CharRange = RangeInclusive<char>;
@@ -296,7 +296,7 @@ mod test {
     use std::vec::Vec;
 
     use super::*;
-    use collection;
+    use crate::collection;
 
     #[test]
     fn stays_in_range() {

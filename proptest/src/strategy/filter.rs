@@ -7,10 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::{fmt, Arc};
+use crate::std_facade::{fmt, Arc};
 
-use strategy::traits::*;
-use test_runner::*;
+use crate::strategy::traits::*;
+use crate::test_runner::*;
 
 /// `Strategy` and `ValueTree` filter adaptor.
 ///

@@ -7,8 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// Adaptor for `Strategy` and `ValueTree` which guards `simplify()` and
 /// `complicate()` to avoid contract violations.

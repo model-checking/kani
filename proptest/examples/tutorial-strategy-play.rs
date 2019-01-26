@@ -12,8 +12,6 @@
 // This is *not* how proptest is normally used; it is simply used to play
 // around with value generation.
 
-extern crate proptest;
-
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
 

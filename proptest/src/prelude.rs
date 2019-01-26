@@ -1,5 +1,5 @@
 //-
-// Copyright 2017, 2018 The proptest developers
+// Copyright 2017, 2018, 2019 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -20,10 +20,19 @@
 //! `rand` crate directly will not provide insulation from the upcoming
 //! revision to the `rand` crate.
 
-pub use strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
-pub use arbitrary::{Arbitrary, any, any_with};
-pub use test_runner::Config as ProptestConfig;
-pub use test_runner::TestCaseError;
+pub use crate::strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
+pub use crate::arbitrary::{Arbitrary, any, any_with};
+pub use crate::test_runner::Config as ProptestConfig;
+pub use crate::test_runner::TestCaseError;
+pub use crate::{
+    proptest,
+    prop_assert,
+    prop_assert_eq,
+    prop_assert_ne,
+    prop_assume,
+    prop_oneof,
+    prop_compose,
+};
 
 pub use rand::{RngCore, Rng};
 
@@ -31,19 +40,19 @@ pub use rand::{RngCore, Rng};
 /// allows simply writing, for example, `prop::num::i32::ANY` rather than
 /// `proptest::num::i32::ANY` plus a separate `use proptest;`.
 pub mod prop {
-    pub use test_runner;
-    pub use strategy;
-    pub use arbitrary;
-    pub use bool;
-    pub use num;
-    pub use bits;
-    pub use tuple;
-    pub use array;
-    pub use collection;
-    pub use char;
+    pub use crate::test_runner;
+    pub use crate::strategy;
+    pub use crate::arbitrary;
+    pub use crate::bool;
+    pub use crate::num;
+    pub use crate::bits;
+    pub use crate::tuple;
+    pub use crate::array;
+    pub use crate::collection;
+    pub use crate::char;
     #[cfg(feature = "std")]
-    pub use string;
-    pub use option;
-    pub use result;
-    pub use sample;
+    pub use crate::string;
+    pub use crate::option;
+    pub use crate::result;
+    pub use crate::sample;
 }

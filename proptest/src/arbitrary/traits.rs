@@ -9,7 +9,7 @@
 
 use core::fmt;
 
-use strategy::Strategy;
+use crate::strategy::Strategy;
 
 //==============================================================================
 // Arbitrary trait

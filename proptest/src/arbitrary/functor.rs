@@ -24,9 +24,9 @@
 //! For these reasons, the traits here are deliberatly
 //! not exported in a convenient way.
 
-use std_facade::fmt;
+use crate::std_facade::fmt;
 
-use strategy::{Strategy, BoxedStrategy};
+use crate::strategy::{Strategy, BoxedStrategy};
 
 /// `ArbitraryF1` lets you lift a [`Strategy`] to unary
 /// type constructors such as `Box`, `Vec`, and `Option`.

@@ -11,9 +11,9 @@
 
 use std::net::*;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 // TODO: Can we design a workable semantic for PBT wrt. actual networking
 // connections?

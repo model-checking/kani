@@ -8,10 +8,10 @@
 // except according to those terms.
 
 use core::cmp;
-use std_facade::{fmt, Box, Rc, Arc};
+use crate::std_facade::{fmt, Box, Rc, Arc};
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 //==============================================================================
 // Traits

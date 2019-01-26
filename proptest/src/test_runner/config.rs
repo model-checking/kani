@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::Box;
+use crate::std_facade::Box;
 use core::u32;
 
 #[cfg(feature = "std")]
@@ -19,10 +19,10 @@ use std::ffi::OsString;
 #[cfg(feature = "std")]
 use std::str::FromStr;
 
-use test_runner::FailurePersistence;
+use crate::test_runner::FailurePersistence;
 #[cfg(feature = "std")]
-use test_runner::FileFailurePersistence;
-use test_runner::result_cache::{noop_result_cache, ResultCache};
+use crate::test_runner::FileFailurePersistence;
+use crate::test_runner::result_cache::{noop_result_cache, ResultCache};
 
 #[cfg(feature = "std")]
 const CASES: &str = "PROPTEST_CASES";

@@ -14,7 +14,7 @@ use core::mem;
 use core::fmt;
 use core::ops::RangeInclusive;
 use core::u32;
-use std_facade::{Cow, Box, String, Vec, ToOwned};
+use crate::std_facade::{Cow, Box, String, Vec, ToOwned};
 
 use regex_syntax::{Parser, Error as ParseError};
 use regex_syntax::hir::{
@@ -22,11 +22,11 @@ use regex_syntax::hir::{
     RepetitionKind::{self, *}, RepetitionRange::*
 };
 
-use bool;
-use char;
-use collection::{vec, size_range, SizeRange};
-use strategy::*;
-use test_runner::*;
+use crate::bool;
+use crate::char;
+use crate::collection::{vec, size_range, SizeRange};
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// Wraps the regex that forms the `Strategy` for `String` so that a sensible
 /// `Default` can be given. The default is a string of non-control characters.

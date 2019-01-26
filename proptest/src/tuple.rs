@@ -12,8 +12,8 @@
 //! There is no explicit "tuple strategy"; simply make a tuple containing the
 //! strategy and that tuple is itself a strategy.
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// Common `ValueTree` implementation for all tuple strategies.
 #[derive(Clone, Copy, Debug)]
@@ -102,7 +102,7 @@ tuple!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J);
 
 #[cfg(test)]
 mod test {
-    use strategy::*;
+    use crate::strategy::*;
 
     use super::*;
 

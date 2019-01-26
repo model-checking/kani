@@ -13,9 +13,9 @@ use core::fmt;
 use core::iter::*;
 use core::iter::Fuse;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 // TODO: Filter, FilterMap, FlatMap, Map, Inspect, Scan, SkipWhile
 // Might be possible with CoArbitrary

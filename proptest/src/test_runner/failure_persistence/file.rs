@@ -20,7 +20,7 @@ use std::sync::RwLock;
 use std::vec::Vec;
 use std::string::{String, ToString};
 
-use test_runner::{Seed, failure_persistence::FailurePersistence};
+use crate::test_runner::{Seed, failure_persistence::FailurePersistence};
 use self::FileFailurePersistence::*;
 
 /// Describes how failing test cases are persisted.

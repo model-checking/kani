@@ -13,18 +13,18 @@ use std::iter;
 use std::slice;
 use std::rc::Rc;
 use std::sync::Arc;
-use std_facade::{Box, Vec, String};
+use crate::std_facade::{Box, Vec, String};
 
 multiplex_alloc! {
     alloc::string::FromUtf8Error, ::std::string::FromUtf8Error,
     alloc::string::FromUtf16Error, ::std::string::FromUtf16Error
 }
 
-use strategy::*;
-use strategy::statics::static_map;
-use collection;
-use arbitrary::*;
-use string::StringParam;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::collection;
+use crate::arbitrary::*;
+use crate::string::StringParam;
 
 impl Arbitrary for String {
     type Parameters = StringParam;

@@ -9,10 +9,12 @@
 
 //! Arbitrary implementations for primitive types.
 
-use bool;
-use char;
-use num::{isize, usize, f32, f64, i16, i32, i64, i8, u16, u32, u64, u8,
-          u128, i128};
+use crate::bool;
+use crate::char;
+use crate::num::{
+    isize, usize, f32, f64, i16, i32, i64, i8, u16, u32, u64, u8,
+    u128, i128
+};
 
 arbitrary!(
     bool,

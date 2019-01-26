@@ -11,12 +11,12 @@
 
 use std::ffi::*;
 use std::ops::RangeInclusive;
-use std_facade::{Box, Vec, String};
+use crate::std_facade::{Box, Vec, String};
 
-use strategy::*;
-use strategy::statics::static_map;
-use collection::*;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::collection::*;
+use crate::arbitrary::*;
 
 use super::string::not_utf8_bytes;
 

@@ -15,7 +15,7 @@
 use rand::distributions::{Distribution, Standard};
 use rand::distributions::uniform::{Uniform, SampleUniform};
 use core::ops::Range;
-use test_runner::TestRunner;
+use crate::test_runner::TestRunner;
 
 pub(crate) fn sample_uniform<X : SampleUniform>
     (run: &mut TestRunner, range: Range<X>) -> X {
@@ -123,8 +123,8 @@ macro_rules! signed_integer_bin_search {
         pub mod $typ {
             use rand::Rng;
 
-            use strategy::*;
-            use test_runner::TestRunner;
+            use crate::strategy::*;
+            use crate::test_runner::TestRunner;
 
             int_any!($typ);
 
@@ -225,8 +225,8 @@ macro_rules! unsigned_integer_bin_search {
         pub mod $typ {
             use rand::Rng;
 
-            use strategy::*;
-            use test_runner::TestRunner;
+            use crate::strategy::*;
+            use crate::test_runner::TestRunner;
 
             int_any!($typ);
 
@@ -642,8 +642,8 @@ macro_rules! float_bin_search {
 
             use rand::Rng;
 
-            use strategy::*;
-            use test_runner::TestRunner;
+            use crate::strategy::*;
+            use crate::test_runner::TestRunner;
             use super::{FloatTypes, FloatLayout};
 
             float_any!($typ);
@@ -816,8 +816,8 @@ float_bin_search!(f64);
 
 #[cfg(test)]
 mod test {
-    use strategy::*;
-    use test_runner::*;
+    use crate::strategy::*;
+    use crate::test_runner::*;
 
     use super::*;
 
@@ -988,7 +988,7 @@ mod test {
         macro_rules! contract_sanity {
             ($t:tt) => {
                 mod $t {
-                    use strategy::check_strategy_sanity;
+                    use crate::strategy::check_strategy_sanity;
 
                     const FOURTY_TWO: $t = 42 as $t;
                     const FIFTY_SIX: $t = 56 as $t;
@@ -1274,18 +1274,18 @@ mod test {
     }
 
     proptest! {
-        #![proptest_config(::test_runner::Config::with_cases(1024))]
+        #![proptest_config(crate::test_runner::Config::with_cases(1024))]
 
         #[test]
         fn f32_any_generates_desired_values(
-            strategy in ::bits::u32::ANY.prop_map(f32::Any::from_bits)
+            strategy in crate::bits::u32::ANY.prop_map(f32::Any::from_bits)
         ) {
             float_generation_test_body!(strategy, f32);
         }
 
         #[test]
         fn f32_any_sanity(
-            strategy in ::bits::u32::ANY.prop_map(f32::Any::from_bits)
+            strategy in crate::bits::u32::ANY.prop_map(f32::Any::from_bits)
         ) {
             check_strategy_sanity(strategy, Some(CheckStrategySanityOptions {
                 strict_complicate_after_simplify: false,
@@ -1295,14 +1295,14 @@ mod test {
 
         #[test]
         fn f64_any_generates_desired_values(
-            strategy in ::bits::u32::ANY.prop_map(f64::Any::from_bits)
+            strategy in crate::bits::u32::ANY.prop_map(f64::Any::from_bits)
         ) {
             float_generation_test_body!(strategy, f64);
         }
 
         #[test]
         fn f64_any_sanity(
-            strategy in ::bits::u32::ANY.prop_map(f64::Any::from_bits)
+            strategy in crate::bits::u32::ANY.prop_map(f64::Any::from_bits)
         ) {
             check_strategy_sanity(strategy, Some(CheckStrategySanityOptions {
                 strict_complicate_after_simplify: false,

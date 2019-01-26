@@ -11,11 +11,11 @@
 
 use core::iter::repeat;
 use core::str::{ParseBoolError, Utf8Error, from_utf8};
-use std_facade::Vec;
+use crate::std_facade::Vec;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 arbitrary!(ParseBoolError; "".parse::<bool>().unwrap_err());
 

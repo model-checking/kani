@@ -20,8 +20,8 @@
 
 use core::marker::PhantomData;
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// A `Strategy` which generates fixed-size arrays containing values drawn from
 /// an inner strategy.

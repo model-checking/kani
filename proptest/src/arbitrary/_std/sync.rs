@@ -15,9 +15,9 @@ use std::sync::mpsc::*;
 use std::thread;
 use std::time::Duration;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 // OnceState can not escape Once::call_once_force.
 // PoisonError depends implicitly on the lifetime on MutexGuard, etc.

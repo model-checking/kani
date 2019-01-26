@@ -14,16 +14,16 @@ use core::hash::Hash;
 use core::ops::{Add, Range, RangeTo, RangeInclusive, RangeToInclusive};
 use core::usize;
 
-use std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList};
+use crate::std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList};
 
 #[cfg(feature = "std")]
-use std_facade::{HashMap, HashSet};
+use crate::std_facade::{HashMap, HashSet};
 
-use bits::{BitSetLike, VarBitSet};
-use num::sample_uniform_incl;
-use strategy::*;
-use tuple::TupleValueTree;
-use test_runner::*;
+use crate::bits::{BitSetLike, VarBitSet};
+use crate::num::sample_uniform_incl;
+use crate::strategy::*;
+use crate::tuple::TupleValueTree;
+use crate::test_runner::*;
 
 //==============================================================================
 // SizeRange
@@ -635,7 +635,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
 mod test {
     use super::*;
 
-    use bits;
+    use crate::bits;
 
     #[test]
     fn test_vec() {

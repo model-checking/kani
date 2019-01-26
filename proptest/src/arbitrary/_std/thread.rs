@@ -10,11 +10,11 @@
 //! Arbitrary implementations for `std::thread`.
 
 use std::thread::*;
-use std_facade::String;
+use crate::std_facade::String;
 
-use strategy::statics::static_map;
-use option::prob;
-use arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::option::prob;
+use crate::arbitrary::*;
 
 arbitrary!(Builder, SMapped<(Option<usize>, Option<String>), Self>; {
     let prob = prob(0.7);
@@ -38,7 +38,7 @@ arbitrary!([A: 'static + Send + Arbitrary<'a>] JoinHandle<A>,
     args => {
         let prob  = prob(0.1);
         let args2 = product_pack![
-            args, 
+            args,
             product_pack![prob, default()],
             default()
         ];

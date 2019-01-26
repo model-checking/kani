@@ -17,18 +17,18 @@
 
 use core::ops::{RangeInclusive, Bound};
 use core::hash::Hash;
-use std_facade::{
+use crate::std_facade::{
     fmt, Box, Rc, Arc, Vec, vec, BTreeMap, BTreeSet, btree_map, btree_set,
     BinaryHeap, binary_heap, VecDeque, vec_deque, LinkedList, linked_list,
 };
 
 #[cfg(feature = "std")]
-use std_facade::{hash_map, HashMap, hash_set, HashSet};
+use crate::std_facade::{hash_map, HashMap, hash_set, HashSet};
 
-use strategy::*;
-use strategy::statics::static_map;
-use collection::*;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::collection::*;
+use crate::arbitrary::*;
 
 //==============================================================================
 // Macros:

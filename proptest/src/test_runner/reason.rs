@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::{fmt, Cow, String, Box};
+use crate::std_facade::{fmt, Cow, String, Box};
 
 /// The reason for why something, such as a generated value, was rejected.
 ///

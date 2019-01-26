@@ -7,13 +7,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::{Cell, VecDeque, Vec};
+use crate::std_facade::{Cell, VecDeque, Vec};
 
 use rand::Rng;
 
-use num;
-use strategy::traits::*;
-use test_runner::*;
+use crate::num;
+use crate::strategy::traits::*;
+use crate::test_runner::*;
 
 /// `Strategy` shuffle adaptor.
 ///
@@ -204,8 +204,8 @@ mod test {
     use std::collections::HashSet;
     use std::i32;
 
-    use collection;
-    use strategy::just::Just;
+    use crate::collection;
+    use crate::strategy::just::Just;
     use super::*;
 
     static VALUES: &'static [i32] = &[

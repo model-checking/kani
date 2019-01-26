@@ -9,8 +9,8 @@
 
 //! Strategies for generating `bool` values.
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 use rand::Rng;
 

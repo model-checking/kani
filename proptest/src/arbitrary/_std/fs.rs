@@ -11,8 +11,8 @@
 
 use std::fs::{DirBuilder};
 
-use strategy::statics::static_map;
-use arbitrary::{any, SMapped};
+use crate::strategy::statics::static_map;
+use crate::arbitrary::{any, SMapped};
 
 // TODO: other parts (figure out workable semantics).
 

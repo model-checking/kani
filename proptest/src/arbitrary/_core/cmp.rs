@@ -11,7 +11,7 @@
 
 use core::cmp::{Reverse, Ordering};
 
-use strategy::{Just, TupleUnion, W};
+use crate::strategy::{Just, TupleUnion, W};
 
 wrap_ctor!(Reverse, Reverse);
 

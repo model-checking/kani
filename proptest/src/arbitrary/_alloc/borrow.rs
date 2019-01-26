@@ -10,11 +10,11 @@
 //! Arbitrary implementations for std::borrow.
 
 use core::borrow::Borrow;
-use std_facade::{ToOwned, Cow};
-use std_facade::fmt;
+use crate::std_facade::{ToOwned, Cow};
+use crate::std_facade::fmt;
 
-use strategy::statics::static_map;
-use arbitrary::{any_with, SMapped, Arbitrary};
+use crate::strategy::statics::static_map;
+use crate::arbitrary::{any_with, SMapped, Arbitrary};
 
 arbitrary!(
     [A: Arbitrary + Borrow<B>, B: ToOwned<Owned = A> + fmt::Debug]

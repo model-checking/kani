@@ -9,10 +9,10 @@
 
 use core::fmt;
 use core::marker::PhantomData;
-use std_facade::Arc;
+use crate::std_facade::Arc;
 
-use strategy::traits::*;
-use test_runner::*;
+use crate::strategy::traits::*;
+use crate::test_runner::*;
 
 //==============================================================================
 // Map
@@ -243,7 +243,7 @@ mod test {
 
     use rand::RngCore;
 
-    use strategy::just::Just;
+    use crate::strategy::just::Just;
     use super::*;
 
     #[test]

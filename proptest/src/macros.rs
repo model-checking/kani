@@ -19,7 +19,7 @@ macro_rules! mapfn {
         #[derive(Clone, Copy, Debug)]
         $($vis)* struct $name;
         $(#[$allmeta])*
-        impl $($gen)* ::strategy::statics::MapFn<$input> for $name {
+        impl $($gen)* $crate::strategy::statics::MapFn<$input> for $name {
             type Output = $output;
             fn apply(&self, $parm: $input) -> $output {
                 $($body)*

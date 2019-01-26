@@ -13,9 +13,9 @@ use std::env::*;
 use std::iter::once;
 use std::ffi::OsString;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 // FIXME: SplitPaths when lifetimes in strategies are possible.
 
@@ -87,7 +87,7 @@ fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
 #[cfg(not(target_os = "windows"))]
 fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
     use std::os::unix::ffi::OsStringExt;
-    use arbitrary::_std::string::not_utf8_bytes;
+    use crate::arbitrary::_std::string::not_utf8_bytes;
     static_map(not_utf8_bytes(true), OsString::from_vec)
 }
 
@@ -105,8 +105,8 @@ arbitrary!(VarError,
 #[cfg(test)]
 mod test {
     use super::*;
-    use num;
-    use test_runner::Config;
+    use crate::num;
+    use crate::test_runner::Config;
 
     no_panic_test!(
         args => Args,

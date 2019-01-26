@@ -7,11 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::Box;
-use std_facade::fmt;
+use crate::std_facade::Box;
+use crate::std_facade::fmt;
 #[cfg(feature = "std")] use std::collections::HashMap;
 
-use test_runner::errors::TestCaseResult;
+use crate::test_runner::errors::TestCaseResult;
 
 /// A key used for the result cache.
 ///

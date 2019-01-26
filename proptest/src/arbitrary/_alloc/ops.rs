@@ -10,11 +10,11 @@
 //! Arbitrary implementations for `std::ops`.
 
 use core::ops::*;
-use std_facade::Arc;
+use crate::std_facade::Arc;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 arbitrary!(RangeFull; ..);
 wrap_ctor!(RangeFrom, |a| a..);

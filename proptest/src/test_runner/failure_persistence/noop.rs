@@ -8,10 +8,10 @@
 // except according to those terms.
 
 use core::any::Any;
-use std_facade::{fmt, Box, Vec};
+use crate::std_facade::{fmt, Box, Vec};
 
-use test_runner::failure_persistence::FailurePersistence;
-use test_runner::Seed;
+use crate::test_runner::failure_persistence::FailurePersistence;
+use crate::test_runner::Seed;
 
 /// Failure persistence option that loads and saves nothing at all.
 #[derive(Debug, Default, PartialEq)]
@@ -43,7 +43,7 @@ impl FailurePersistence for NoopFailurePersistence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_runner::failure_persistence::tests::*;
+    use crate::test_runner::failure_persistence::tests::*;
 
     #[test]
     fn default_load_is_empty() {

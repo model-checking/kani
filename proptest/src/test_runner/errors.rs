@@ -7,12 +7,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::fmt;
+use crate::std_facade::fmt;
 
 #[cfg(feature = "std")]
 use std::string::ToString;
 
-use test_runner::Reason;
+use crate::test_runner::Reason;
 
 /// Errors which can be returned from test cases to indicate non-successful
 /// completion.

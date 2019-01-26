@@ -17,17 +17,17 @@ use core::fmt;
 use core::mem;
 use core::ops::Range;
 use core::u64;
-use std_facade::{Cow, Vec, Arc};
+use crate::std_facade::{Cow, Vec, Arc};
 
 use rand::Rng;
 
-use bits::{self, BitSetValueTree, SampledBitSetStrategy, VarBitSet};
-use num;
-use strategy::*;
-use test_runner::*;
+use crate::bits::{self, BitSetValueTree, SampledBitSetStrategy, VarBitSet};
+use crate::num;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 /// Re-exported to make usage more ergonomic.
-pub use collection::{SizeRange, size_range};
+pub use crate::collection::{SizeRange, size_range};
 
 /// Sample subsequences whose size are within `size` from the given collection
 /// `values`.
@@ -413,10 +413,10 @@ impl Selector {
 
 #[cfg(test)]
 mod test {
-    use std_facade::BTreeSet;
+    use crate::std_facade::BTreeSet;
 
     use super::*;
-    use arbitrary::any;
+    use crate::arbitrary::any;
 
     #[test]
     fn sample_slice() {

@@ -96,12 +96,6 @@
 //! proptest = "0.8.7"
 //! ```
 //!
-//! and at the top of `main.rs` or `lib.rs`:
-//!
-//! ```rust,ignore
-//! #[macro_use] extern crate proptest;
-//! ```
-//!
 //! Now we can add some property tests to our date parser. But how do we test
 //! the date parser for arbitrary inputs, without making another date parser in
 //! the test to validate it? We won't need to as long as we choose our inputs
@@ -390,7 +384,6 @@
 //! large space. For example, the following test will virtually always pass:
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! proptest! {
@@ -478,7 +471,6 @@
 //! Here is a simple example of using both features:
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! // The worst possible way to calculate Fibonacci numbers
@@ -574,8 +566,6 @@
 //! `tutoral-strategy-play.rs` example:
 //!
 //! ```rust
-//! extern crate proptest;
-//!
 //! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
@@ -603,8 +593,6 @@
 //! This knowledge is sufficient to build an extremely primitive fuzzing test.
 //!
 //! ```rust,no_run
-//! extern crate proptest;
-//!
 //! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
@@ -644,8 +632,6 @@
 //! and in characters used.
 //!
 //! ```rust
-//! extern crate proptest;
-//!
 //! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
@@ -725,8 +711,6 @@
 //! test to actually find the boundary condition.
 //!
 //! ```rust
-//! extern crate proptest;
-//!
 //! use proptest::test_runner::TestRunner;
 //! use proptest::strategy::{Strategy, ValueTree};
 //!
@@ -784,8 +768,6 @@
 //! rest.
 //!
 //! ```rust
-//! extern crate proptest;
-//!
 //! use proptest::test_runner::{Config, FileFailurePersistence,
 //!                             TestError, TestRunner};
 //!
@@ -897,7 +879,7 @@
 //! section can be rewritten using that macro like so:
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
 //!
 //! fn add(a: i32, b: i32) -> i32 {
 //!     a + b
@@ -935,7 +917,7 @@
 //! argument might be to use a regular expression, like so:
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
 //!
 //! fn do_stuff(v: String) {
 //!     let i: u32 = v.parse().unwrap();
@@ -970,8 +952,7 @@
 //! We need to ensure `Strategy` is in scope to use it.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
-//! // Grab `Strategy` and a shorter namespace prefix
+//! // Grab `Strategy`, shorter namespace prefix, and the macros
 //! use proptest::prelude::*;
 //!
 //! fn do_stuff(v: String) {
@@ -1004,7 +985,6 @@
 //!
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! #[derive(Clone, Debug)]
@@ -1044,7 +1024,6 @@
 //! are normal values, so we can extract it to a function.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! // snip
@@ -1099,7 +1078,6 @@
 //! unless you need the dynamic dispatch.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! // snip
@@ -1148,7 +1126,6 @@
 //! details, here's our code from above rewritten to use it.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! // snip
@@ -1216,7 +1193,6 @@
 //! Here is a simple example:
 //!
 //! ```rust,no_run
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! #[derive(Debug, Clone)]
@@ -1252,7 +1228,6 @@
 //! [`prop_compose!`](macro.prop_compose.html) can be of use.
 //!
 //! ```rust,no_run
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! #[derive(Debug, Clone)]
@@ -1298,7 +1273,7 @@
 //! example, to generate even integers, use something like
 //!
 //! ```rust,no_run
-//! # #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
 //! prop_compose! {
 //!     // Generate arbitrary integers up to half the maximum desired value,
 //!     // then multiply them by 2, thus producing only even integers in the
@@ -1328,7 +1303,6 @@
 //! rejection happened.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! proptest! {
@@ -1351,7 +1325,7 @@
 //! macro provides an easy way to do this.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
+//! use proptest::prelude::*;
 //!
 //! fn frob(a: i32, b: i32) -> (i32, i32) {
 //!     let d = (a - b).abs();
@@ -1411,8 +1385,6 @@
 //! we haven't seen yet but should be self-explanatory.
 //!
 //! ```rust,no_run
-//! #[macro_use] extern crate proptest;
-//!
 //! use std::collections::HashMap;
 //! use proptest::prelude::*;
 //!
@@ -1455,8 +1427,6 @@
 //! strategy.
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
-//!
 //! use std::collections::HashMap;
 //! use proptest::prelude::*;
 //!
@@ -1527,7 +1497,6 @@
 //! value. This is more easily understood by implementing our example:
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
 //! use proptest::prelude::*;
 //!
 //! fn some_function(stuff: Vec<String>, index: usize) {
@@ -1571,7 +1540,6 @@
 //! vector's positions are internally reversed due to borrowing limitations.
 //!
 //! ```rust,no_run
-//! # #[macro_use] extern crate proptest;
 //! # use proptest::prelude::*;
 //! prop_compose! {
 //!     fn vec_and_index()(vec in prop::collection::vec(".*", 1..100))
@@ -1613,14 +1581,13 @@
 //! write:
 //!
 //! ```rust
-//! #[macro_use] extern crate proptest;
-//! use proptest::test_runner::Config;
+//! use proptest::prelude::*;
 //!
 //! fn add(a: i32, b: i32) -> i32 { a + b }
 //!
 //! proptest! {
 //!     // The next line modifies the number of tests.
-//!     #![proptest_config(Config::with_cases(1000))]
+//!     #![proptest_config(ProptestConfig::with_cases(1000))]
 //!     # /*
 //!     #[test]
 //!     # */
@@ -1684,11 +1651,6 @@ extern crate std;
 #[macro_use]
 extern crate alloc;
 
-//#[cfg(all(feature = "alloc", not(feature = "std")))]
-//extern crate hashmap_core;
-
-extern crate byteorder;
-
 #[cfg(feature = "frunk")]
 #[macro_use]
 extern crate frunk_core;
@@ -1708,26 +1670,14 @@ extern crate bit_set;
 #[macro_use]
 extern crate lazy_static;
 
-extern crate num_traits;
-
 // Only required for the string module.
 #[cfg(feature = "std")]
 #[macro_use]
 extern crate quick_error;
-// Only required for the string module.
-#[cfg(feature = "std")]
-extern crate regex_syntax;
-extern crate rand;
 
 #[cfg(feature = "fork")]
 #[macro_use]
 extern crate rusty_fork;
-
-#[cfg(feature = "fork")]
-extern crate tempfile;
-
-#[cfg(test)]
-extern crate regex;
 
 #[macro_use]
 mod macros;

@@ -10,11 +10,11 @@
 //! Arbitrary implementations for `std::sync`.
 
 use core::sync::atomic::*;
-use std_facade::Arc;
+use crate::std_facade::Arc;
 
-use strategy::*;
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 wrap_from!(Arc);
 

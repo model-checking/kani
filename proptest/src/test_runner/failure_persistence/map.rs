@@ -8,10 +8,10 @@
 // except according to those terms.
 
 use core::any::Any;
-use std_facade::{fmt, Box, Vec, BTreeMap, BTreeSet};
+use crate::std_facade::{fmt, Box, Vec, BTreeMap, BTreeSet};
 
-use test_runner::failure_persistence::FailurePersistence;
-use test_runner::Seed;
+use crate::test_runner::failure_persistence::FailurePersistence;
+use crate::test_runner::Seed;
 
 /// Failure persistence option that loads and saves seeds in memory
 /// on the heap. This may be useful when accumulating test failures
@@ -60,7 +60,7 @@ impl FailurePersistence for MapFailurePersistence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_runner::failure_persistence::tests::*;
+    use crate::test_runner::failure_persistence::tests::*;
 
     #[test]
     fn initial_map_is_empty() {

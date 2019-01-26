@@ -12,8 +12,8 @@
 //!
 //! [`Arbitrary`]: trait.Arbitrary.html
 
-use strategy::{Map, Strategy};
-use strategy::statics;
+use crate::strategy::{Map, Strategy};
+use crate::strategy::statics;
 
 //==============================================================================
 // Trait and impls

@@ -11,7 +11,7 @@
 
 use core::num::*;
 
-use strategy::*;
+use crate::strategy::*;
 
 arbitrary!(ParseFloatError; "".parse::<f32>().unwrap_err());
 arbitrary!(ParseIntError; "".parse::<u32>().unwrap_err());

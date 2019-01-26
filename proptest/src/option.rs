@@ -14,8 +14,8 @@
 use core::fmt;
 use core::marker::PhantomData;
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 //==============================================================================
 // Probability

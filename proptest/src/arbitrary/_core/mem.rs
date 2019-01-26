@@ -11,8 +11,8 @@
 
 use core::mem::*;
 
-use strategy::statics::static_map;
-use arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::arbitrary::*;
 
 arbitrary!([A: Arbitrary] Discriminant<A>,
     SMapped<A, Self>, A::Parameters;

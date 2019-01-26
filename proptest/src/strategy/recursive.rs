@@ -7,11 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std_facade::{fmt, Arc, Box, Vec};
+use crate::std_facade::{fmt, Arc, Box, Vec};
 
-use strategy::traits::*;
-use strategy::unions::float_to_weight;
-use test_runner::*;
+use crate::strategy::traits::*;
+use crate::strategy::unions::float_to_weight;
+use crate::test_runner::*;
 
 /// Return type from `Strategy::prop_recursive()`.
 #[must_use = "strategies do nothing unless used"]
@@ -134,7 +134,7 @@ Strategy for Recursive<T, F> {
 mod test {
     use std::cmp::max;
 
-    use strategy::just::Just;
+    use crate::strategy::just::Just;
     use super::*;
 
     #[derive(Clone, Debug, PartialEq)]
@@ -168,7 +168,7 @@ mod test {
         let mut max_count = 0;
 
         let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
-            |element| ::collection::vec(element, 8..16).prop_map(Tree::Branch));
+            |element| crate::collection::vec(element, 8..16).prop_map(Tree::Branch));
 
         let mut runner = TestRunner::default();
         for _ in 0..65536 {
@@ -187,7 +187,7 @@ mod test {
     #[test]
     fn simplifies_to_non_recursive() {
         let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
-            |element| ::collection::vec(element, 8..16).prop_map(Tree::Branch));
+            |element| crate::collection::vec(element, 8..16).prop_map(Tree::Branch));
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {

@@ -31,11 +31,11 @@
 use core::fmt;
 use core::marker::PhantomData;
 
-use strategy::*;
-use test_runner::*;
+use crate::strategy::*;
+use crate::test_runner::*;
 
 // Re-export the type for easier usage.
-pub use option::{prob, Probability};
+pub use crate::option::{prob, Probability};
 
 struct WrapOk<T, E>(PhantomData<T>, PhantomData<E>);
 impl<T, E> Clone for WrapOk<T, E> {
