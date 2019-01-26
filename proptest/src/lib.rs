@@ -1637,9 +1637,6 @@
     core_intrinsics
 ))]
 
-// FIXME: remove this after refactoring!
-#![allow(renamed_and_removed_lints)]
-
 #[macro_use]
 mod std_facade;
 
