@@ -14,7 +14,7 @@ extern crate proptest;
 
 use proptest::prelude::*;
 
-#[derive(Arbitrary)]
+#[derive(Arbitrary, Debug)]
 struct T0 {
     #[no_params] //~ ERROR: [E0658]
     field: usize,
