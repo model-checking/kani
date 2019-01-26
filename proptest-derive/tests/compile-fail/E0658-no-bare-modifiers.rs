@@ -1,4 +1,4 @@
-// Copyright 2018 The proptest developers
+// Copyright 2019 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,17 +6,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 #[macro_use]
 extern crate proptest_derive;
+#[macro_use]
+extern crate proptest;
 
-// Show non-fatal:
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0033]
-                            //~| [proptest_derive, E0008]
-enum T0<#[proptest(skip)] T> {
-    #[proptest(weight = 4294967290)]
-    V0(T),
-    #[proptest(weight = 5)]
-    V1,
-    V2,
+use proptest::prelude::*;
+
+#[derive(Arbitrary)]
+struct T0 {
+    #[no_params] //~ ERROR: [E0658]
+    field: usize,
 }

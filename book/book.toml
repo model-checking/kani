@@ -1,0 +1,9 @@
+[book]
+authors = ["Jason Lingle", "Mazdak Farrokhzad"]
+multilingual = false
+src = "src"
+title = "Proptest"
+description = "Usage documentation for the proptest and proptest-derive crates"
+
+[output.html]
+curly-quotes = true
