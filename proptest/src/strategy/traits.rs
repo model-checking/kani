@@ -28,10 +28,6 @@ use crate::test_runner::*;
 /// [`Err`]: https://doc.rust-lang.org/nightly/std/result/enum.Result.html#variant.Err
 pub type NewTree<S> = Result<<S as Strategy>::Tree, Reason>;
 
-/// The value that functions under test use for a particular `Strategy`.
-#[deprecated(since = "0.8.0", note="please use `S::Value` instead")]
-pub type ValueFor<S> = <<S as Strategy>::Tree as ValueTree>::Value;
-
 /// A strategy for producing arbitrary values of a given type.
 ///
 /// `fmt::Debug` is a hard requirement for all strategies currently due to

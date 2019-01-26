@@ -6,6 +6,9 @@
 
 - The version of the `rand` crate has been increased to 0.6.
 
+- The `ValueFor` type alias (deprecated in 0.8.0) has been removed. Replace
+  `ValueFor<S>` with `S::Value` or `<S as Strategy>::Value` as necessary.
+
 ### New Additions
 
 - Rust 2018 style macro imports are now supported.
