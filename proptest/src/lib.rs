@@ -1435,7 +1435,7 @@
 //!         prop::collection::vec(arb_json(), 0..10).prop_map(Json::Array),
 //!         prop::collection::hash_map(
 //!           ".*", arb_json(), 0..10).prop_map(Json::Map),
-//!     ]
+//!     ].boxed()
 //! }
 //! # fn main() { }
 //! ```
