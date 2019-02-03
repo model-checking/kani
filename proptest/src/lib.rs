@@ -26,7 +26,6 @@
     try_trait,
     generator_trait,
     try_from,
-    integer_atomics,
     never_type,
     try_reserve
 ))]
