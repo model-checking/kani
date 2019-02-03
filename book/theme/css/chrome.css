@@ -34,7 +34,7 @@ a > .hljs {
     border-bottom-style: solid;
 }
 .js #menu-bar > #menu-bar-sticky-container {
-    transition: transform 0.3s;
+    transition: none;
 }
 #menu-bar.bordered > #menu-bar-sticky-container  {
     border-bottom-color: var(--table-border-color);
@@ -75,7 +75,7 @@ html:not(.sidebar-visible) #menu-bar:not(:hover).folded > #menu-bar-sticky-conta
     display: flex;
     margin: 0 5px;
 }
-.no-js .left-buttons { 
+.no-js .left-buttons {
     display: none;
 }
 
@@ -142,7 +142,7 @@ html:not(.sidebar-visible) #menu-bar:not(:hover).folded > #menu-bar-sticky-conta
     display: none;
 }
 
-.mobile-nav-chapters { 
+.mobile-nav-chapters {
     font-size: 2.5em;
     text-align: center;
     text-decoration: none;
@@ -242,7 +242,7 @@ mark.fade-out {
     width: 100%;
     margin: 5px auto 0px auto;
     padding: 10px 16px;
-    transition: box-shadow 300ms ease-in-out;
+    transition: none;
     border: 1px solid var(--searchbar-border-color);
     border-radius: 3px;
     background-color: var(--searchbar-bg);
@@ -308,7 +308,7 @@ ul#searchresults span.teaser em {
     color: var(--sidebar-fg);
 }
 .js .sidebar {
-    transition: transform 0.3s; /* Animation: slide away */
+    transition: none;
 }
 .sidebar code {
     line-height: 2em;
@@ -363,7 +363,7 @@ a:hover {
     background-color: var(--sidebar-spacer);
 }
 
-@media (-moz-touch-enabled: 1), (pointer: coarse) { 
+@media (-moz-touch-enabled: 1), (pointer: coarse) {
     .chapter li a { padding: 5px 0; }
     .spacer { margin: 10px 0; }
 }

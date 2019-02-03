@@ -52,7 +52,7 @@ a.header:target h4:before {
     box-sizing: border-box;
 }
 .js .page-wrapper {
-    transition: margin-left 0.3s ease, transform 0.3s ease; /* Animation: slide away */
+    transition: none;
 }
 
 .content {
