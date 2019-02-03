@@ -1,19 +1,4 @@
-# Proptest
-
-[![Build Status](https://travis-ci.org/AltSysrq/proptest.svg?branch=master)](https://travis-ci.org/AltSysrq/proptest)
-[![Build status](https://ci.appveyor.com/api/projects/status/ofe98xfthbx1m608/branch/master?svg=true)](https://ci.appveyor.com/project/AltSysrq/proptest/branch/master)
-[![](http://meritbadge.herokuapp.com/proptest)](https://crates.io/crates/proptest)
-
-## The `proptest` crate
-
-The `proptest` crate provides most of Proptest's functionality, including most
-strategies and the testing framework itself.
-
-This part of the book is dedicated to introductory material, such as tutorials,
-and general usage suggestions. It does _not_ contain reference documentation;
-for that, please see the [rustdoc
-documentation](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/).
-## Getting Started
+# Getting Started
 
 Let's say we want to make a function that parses dates of the form
 `YYYY-MM-DD`. We're not going to worry about _validating_ the date, any
@@ -123,6 +108,8 @@ In the interest of making the code changes as small as possible, we'll just
 check that the string is ASCII and reject anything that isn't.
 
 ```rust,no_run
+# use std::ascii::AsciiExt; //NOREADME
+# // NOREADME
 fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
     if 10 != s.len() { return None; }
 
@@ -286,88 +273,3 @@ The `proptest!` macro has some additional syntax, including for setting
 configuration for things like the number of test cases to generate. See its
 [documentation](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/macro.proptest.html)
 for more details.
-## Differences between QuickCheck and Proptest
-
-QuickCheck and Proptest are similar in many ways: both generate random
-inputs for a function to check certain properties, and automatically shrink
-inputs to minimal failing cases.
-
-The one big difference is that QuickCheck generates and shrinks values
-based on type alone, whereas Proptest uses explicit `Strategy` objects. The
-QuickCheck approach has a lot of disadvantages in comparison:
-
-- QuickCheck can only define one generator and shrinker per type. If you need a
-  custom generation strategy, you need to wrap it in a newtype and implement
-  traits on that by hand. In Proptest, you can define arbitrarily many
-  different strategies for the same type, and there are plenty built-in.
-
-- For the same reason, QuickCheck has a single "size" configuration that tries
-  to define the range of values generated. If you need an integer between 0 and
-  100 and another between 0 and 1000, you probably need to do another newtype.
-  In Proptest, you can directly just express that you want a `0..100` integer
-  and a `0..1000` integer.
-
-- Types in QuickCheck are not easily composable. Defining `Arbitrary` and
-  `Shrink` for a new struct which is simply produced by the composition of its
-  fields requires implementing both by hand, including a bidirectional mapping
-  between the struct and a tuple of its fields. In Proptest, you can make a
-  tuple of the desired components and then `prop_map` it into the desired form.
-  Shrinking happens automatically in terms of the input types.
-
-- Because constraints on values cannot be expressed in QuickCheck, generation
-  and shrinking may lead to a lot of input rejections. Strategies in Proptest
-  are aware of simple constraints and do not generate or shrink to values that
-  violate them.
-
-The author of Hypothesis also has an [article on this
-topic](http://hypothesis.works/articles/integrated-shrinking/).
-
-Of course, there's also some relative downsides that fall out of what
-Proptest does differently:
-
-- Generating complex values in Proptest can be up to an order of magnitude
-  slower than in QuickCheck. This is because QuickCheck performs stateless
-  shrinking based on the output value, whereas Proptest must hold on to all the
-  intermediate states and relationships in order for its richer shrinking model
-  to work.
-## Limitations of Property Testing
-
-Given infinite time, property testing will eventually explore the whole
-input space to a test. However, time is not infinite, so only a randomly
-sampled portion of the input space can be explored. This means that
-property testing is extremely unlikely to find single-value edge cases in a
-large space. For example, the following test will virtually always pass:
-
-```rust
-use proptest::prelude::*;
-
-proptest! {
-    #[test]
-    fn i64_abs_is_never_negative(a: i64) {
-        // This actually fails if a == i64::MIN, but randomly picking one
-        // specific value out of 2⁶⁴ is overwhelmingly unlikely.
-        assert!(a.abs() >= 0);
-    }
-}
-```
-
-Because of this, traditional unit testing with intelligently selected cases
-is still necessary for many kinds of problems.
-
-Similarly, in some cases it can be hard or impossible to define a strategy
-which actually produces useful inputs. A strategy of `.{1,4096}` may be
-great to fuzz a C parser, but is highly unlikely to produce anything that
-makes it to a code generator.
-
-# Acknowledgements
-
-This crate wouldn't have come into existence had it not been for the [Rust port
-of QuickCheck](https://github.com/burntsushi/quickcheck) and the
-[`regex_generate`](https://github.com/CryptArchy/regex_generate) crate which
-gave wonderful examples of what is possible.
-
-## Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
