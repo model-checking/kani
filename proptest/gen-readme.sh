@@ -3,7 +3,7 @@
 # Generate `README.md` from the crate documentation, plus some extra stuff.
 
 cat readme-prologue.md >README.md
-cat ../book/src/proptest/index.md \
+cat ../book/src/intro.md \
     ../book/src/proptest/getting-started.md \
     ../book/src/proptest/vs-quickcheck.md \
     ../book/src/proptest/limitations.md | \
