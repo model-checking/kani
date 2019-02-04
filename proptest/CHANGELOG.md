@@ -27,6 +27,9 @@
 - Generated strings are now much more likely to contain right-to-left override
   characters.
 
+- Most of the crate-level documentation has been relocated to the [Proptest
+  Book](https://altsysrq.github.io/proptest-book/proptest/index.html).
+
 ## 0.8.7
 
 ### New Additions
