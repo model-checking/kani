@@ -9,6 +9,10 @@
 - The `ValueFor` type alias (deprecated in 0.8.0) has been removed. Replace
   `ValueFor<S>` with `S::Value` or `<S as Strategy>::Value` as necessary.
 
+- `From<SizeRange>` implementations converting a `SizeRange` back to various
+  std types have been removed since they were of limited utility and had
+  unclear or incorrect conversion properties.
+
 ### New Additions
 
 - Rust 2018 style macro imports are now supported.

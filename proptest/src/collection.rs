@@ -143,17 +143,6 @@ impl From<RangeToInclusive<usize>> for SizeRange {
     fn from(high: RangeToInclusive<usize>) -> Self { size_range(0..=high.end) }
 }
 
-impl From<SizeRange> for Range<usize> {
-    fn from(sr: SizeRange) -> Self {
-        sr.start()..sr.end_excl()
-    }
-}
-
-/// Given a size range `[low, high]`, then a range `low..=high` is returned.
-impl From<SizeRange> for RangeInclusive<usize> {
-    fn from(sr: SizeRange) -> Self { sr.start()..=sr.end_incl() }
-}
-
 #[cfg(feature = "frunk")]
 impl Generic for SizeRange {
     type Repr = RangeInclusive<usize>;
