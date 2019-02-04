@@ -2,7 +2,7 @@ language: rust
 sudo: false
 dist: trusty
 rust:
-- 1.27.0
+- 1.32.0
 - stable
 - beta
 - nightly
@@ -15,11 +15,14 @@ before_script:
 
 script:
   - |
-      travis-cargo build &&
-      travis-cargo test &&
-      travis-cargo --only stable build -- --no-default-features --features fork &&
-      travis-cargo --only stable build -- --lib --no-default-features --features std &&
-      travis-cargo --only nightly build -- --no-default-features --features "alloc nightly unstable" &&
-      (cd test-persistence-location && ./run-tests.sh)
+      (cd proptest && travis-cargo build) &&
+      (cd proptest && travis-cargo test) &&
+      (cd proptest && travis-cargo --only stable build -- --no-default-features --features fork) &&
+      (cd proptest && travis-cargo --only stable build -- --lib --no-default-features --features std) &&
+      (cd proptest && travis-cargo --only nightly build -- --no-default-features --features "alloc unstable") &&
+      (cd proptest/test-persistence-location && ./run-tests.sh) &&
+      cargo clean &&
+      (cd proptest-derive && env TRAVIS_CARGO_NIGHTLY_FEATURE= travis-cargo build) &&
+      (cd proptest-derive && env TRAVIS_CARGO_NIGHTLY_FEATURE= travis-cargo --only nightly test)
 
 cache: cargo

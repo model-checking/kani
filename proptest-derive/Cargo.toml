@@ -1,0 +1,41 @@
+[package]
+name          = "proptest-derive"
+version       = "0.1.0"
+authors       = ["Mazdak Farrokhzad <twingoow@gmail.com>"]
+license       = "MIT/Apache-2.0"
+readme        = "README.md"
+
+repository    = "https://github.com/AltSysrq/proptest"
+documentation = "https://altsysrq.github.io/proptest-book/proptest-derive/index.html"
+
+keywords      = ["derive", "arbitrary", "proptest", "testing", "quickcheck"]
+categories    = ["development-tools::testing"]
+
+description = """
+Custom-derive for the Arbitrary trait of proptest.
+"""
+
+homepage = "https://altsysrq.github.io/proptest-book/proptest-derive/index.html"
+edition = "2018"
+
+[badges]
+maintenance = { status = "experimental" }
+travis-ci = { repository = "AltSysrq/proptest" }
+
+[badges.appveyor]
+repository = "AltSysrq/proptest"
+branch = "master"
+service = "github"
+
+[lib]
+proc-macro = true
+
+[dev-dependencies]
+proptest = { version = "0.9.0", path = "../proptest" }
+compiletest_rs = { version = "0.3.3", features = ["tmp"] }
+
+[dependencies]
+proc-macro2 = "0.4"
+
+syn = { version = "0.15.17", features = ["visit", "extra-traits", "full"] }
+quote = "0.6"
