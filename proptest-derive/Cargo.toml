@@ -31,7 +31,7 @@ service = "github"
 proc-macro = true
 
 [dev-dependencies]
-proptest = { version = "0.8.7", path = "../proptest" }
+proptest = { version = "0.9.0", path = "../proptest" }
 compiletest_rs = { version = "0.3.3", features = ["tmp"] }
 
 [dependencies]

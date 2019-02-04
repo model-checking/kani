@@ -56,7 +56,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.8.7"
+proptest = "0.9.0"
 ```
 
 Now we can add some property tests to our date parser. But how do we test
