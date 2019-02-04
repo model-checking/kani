@@ -6,7 +6,7 @@ license       = "MIT/Apache-2.0"
 readme        = "README.md"
 
 repository    = "https://github.com/AltSysrq/proptest"
-documentation = "https://docs.rs/proptest-derive"
+documentation = "https://altsysrq.github.io/proptest-book/proptest-derive/index.html"
 
 keywords      = ["derive", "arbitrary", "proptest", "testing", "quickcheck"]
 categories    = ["development-tools::testing"]
@@ -15,6 +15,7 @@ description = """
 Custom-derive for the Arbitrary trait of proptest.
 """
 
+homepage = "https://altsysrq.github.io/proptest-book/proptest-derive/index.html"
 edition = "2018"
 
 [badges]
