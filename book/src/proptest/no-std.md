@@ -22,3 +22,8 @@ Some APIs are not available in the `no_std` build. This includes functionality
 which necessarily needs `std` such as failure persistence and forking, as well
 as features depending on other crates which do not support `no_std` usage, such
 as regex support.
+
+To see an accurate representation of what APIs are available in a `no_std`
+environment, refer to [the rustdocs for the `no_std`
+build](https://altsysrq.github.io/rustdoc/proptest-nostd/latest/proptest/)
+instead of the usual reference.
