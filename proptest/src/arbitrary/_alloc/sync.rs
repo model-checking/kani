@@ -30,8 +30,11 @@ macro_rules! atomic {
 atomic!(AtomicBool, bool; AtomicIsize, isize; AtomicUsize, usize);
 
 #[cfg(feature = "unstable")]
-atomic!(AtomicI8, i8; AtomicI16, i16; AtomicI32, i32; AtomicI64, i64;
-        AtomicU8, u8; AtomicU16, u16; AtomicU32, u32; AtomicU64, u64);
+atomic!(AtomicI8, i8; AtomicI16, i16; AtomicI32, i32;
+        AtomicU8, u8; AtomicU16, u16; AtomicU32, u32);
+
+#[cfg(all(feature = "unstable", feature = "atomic64bit"))]
+atomic!(AtomicI64, i64; AtomicU64, u64);
 
 arbitrary!(Ordering,
     TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>,
@@ -60,10 +63,14 @@ mod test {
         atomic_i8  => AtomicI8,
         atomic_i16 => AtomicI16,
         atomic_i32 => AtomicI32,
-        atomic_i64 => AtomicI64,
         atomic_u8  => AtomicU8,
         atomic_u16 => AtomicU16,
-        atomic_u32 => AtomicU32,
+        atomic_u32 => AtomicU32
+    );
+
+    #[cfg(all(feature = "unstable", feature = "atomic64bit"))]
+    no_panic_test!(
+        atomic_i64 => AtomicI64,
         atomic_u64 => AtomicU64
     );
 }

@@ -48,6 +48,11 @@ fork = ["std", "rusty-fork", "tempfile"]
 # Requires the "fork" feature.
 timeout = ["fork", "rusty-fork/timeout"]
 
+# Enables support for 64-bit atomic integers.
+# This is enabled by default. Some no_std environments do not support it and
+# need it excluded, however.
+atomic64bit = []
+
 [dependencies]
 bitflags = "1.0.1"
 

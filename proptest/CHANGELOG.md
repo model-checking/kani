@@ -40,6 +40,11 @@
   `#[no_std]`, has been removed. References to the feature can simply be
   deleted.
 
+- When using the `unstable` feature and setting `default-features = false`, the
+  `AtomicI64` and `AtomicU64` types are not supported unless the `atomic64bit`
+  feature is enabled. This supports `no_std` usage on platforms which do not
+  support atomic 64-bit operations.
+
 ### Other Notes
 
 - Generated strings are now much more likely to contain right-to-left override
