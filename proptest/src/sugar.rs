@@ -550,15 +550,15 @@ macro_rules! prop_oneof {
 /// The second form is sugar around making a strategy tuple, calling
 /// `prop_flat_map()`, then `prop_map()`.
 ///
-/// To give the function a visibility or unsafe modifier, put it in brackets
-/// before the `fn` token.
+/// To give the function any modifier which isn't a visibility modifier, put it
+/// in brackets before the `fn` token but after any visibility modifier.
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
 /// use proptest::prelude::*;
 ///
 /// prop_compose! {
-///   [pub(crate) unsafe] fn pointer()(v in prop::num::usize::ANY)
+///   pub(crate) [unsafe] fn pointer()(v in prop::num::usize::ANY)
 ///                                 -> *const () {
 ///     v as *const ()
 ///   }
@@ -581,12 +581,14 @@ macro_rules! prop_oneof {
 #[macro_export]
 macro_rules! prop_compose {
     ($(#[$meta:meta])*
+     $vis:vis
      $([$($modi:tt)*])? fn $name:ident $params:tt
      ($($var:pat in $strategy:expr),+ $(,)?)
        -> $return_type:ty $body:block) =>
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
+        $vis
         $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
@@ -596,6 +598,7 @@ macro_rules! prop_compose {
     };
 
     ($(#[$meta:meta])*
+     $vis:vis
      $([$($modi:tt)*])? fn $name:ident $params:tt
      ($($var:pat in $strategy:expr),+ $(,)?)
      ($($var2:pat in $strategy2:expr),+ $(,)?)
@@ -603,6 +606,7 @@ macro_rules! prop_compose {
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
+        $vis
         $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
@@ -616,12 +620,14 @@ macro_rules! prop_compose {
     };
 
     ($(#[$meta:meta])*
+     $vis:vis
      $([$($modi:tt)*])? fn $name:ident $params:tt
      ($($arg:tt)+)
        -> $return_type:ty $body:block) =>
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
+        $vis
         $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_EXT _STRAT ($($arg)+));
@@ -631,6 +637,7 @@ macro_rules! prop_compose {
     };
 
     ($(#[$meta:meta])*
+     $vis:vis
      $([$($modi:tt)*])? fn $name:ident $params:tt
      ($($arg:tt)+ $(,)?)
      ($($arg2:tt)+ $(,)?)
@@ -638,6 +645,7 @@ macro_rules! prop_compose {
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
+        $vis
         $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
@@ -1121,9 +1129,32 @@ mod test {
     prop_compose! {
         /// These are docs!
         #[allow(dead_code)]
-        [pub] fn two_ints_pub(relative: i32)(a in 0..relative, b in relative..)
-                             -> (i32, i32) {
+        pub fn two_ints_pub(relative: i32)(a in 0..relative, b in relative..)
+                           -> (i32, i32) {
             (a, b)
+        }
+    }
+
+    prop_compose! {
+        /// These are docs!
+        #[allow(dead_code)]
+        pub [extern "C"] fn two_ints_pub_with_attrs
+            (relative: i32)(a in 0..relative, b in relative..)
+            -> (i32, i32)
+        {
+            (a, b)
+        }
+    }
+
+    prop_compose! {
+        // The only modifier we can usefully put here is "unsafe", but we want
+        // to keep this crate unsafe-free, even nominally. "const" may
+        // eventually work, but is not allowed right now since the generated
+        // code contains local variables. `extern "C"` is accepted, even though
+        // the result is useless since the return type isn't C-compatible.
+        #[allow(dead_code)]
+        [extern "C"] fn with_modifier(relative: i32)(a in 0..relative) -> i32 {
+            a
         }
     }
 
@@ -1350,6 +1381,7 @@ mod another_test {
     #[allow(dead_code)]
     fn can_access_pub_compose() {
         let _ = sugar::test::two_ints_pub(42);
+        let _ = sugar::test::two_ints_pub_with_attrs(42);
     }
 }
 

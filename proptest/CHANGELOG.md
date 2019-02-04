@@ -17,6 +17,10 @@
   modifiers) in certain macros could be specified more than once. The macros
   now accept at most one occurrence.
 
+- Visibility modifiers inside `prop_compose` must no longer be enclosed in
+  brackets. Unless other modifiers (e.g., `unsafe`) are also in use, simply
+  removing the brackets is sufficient.
+
 ### New Additions
 
 - Rust 2018 style macro imports are now supported.
@@ -25,6 +29,10 @@
   `import proptest::prelude::*;`.
 
 - The proptest macros now accept trailing commas in more locations.
+
+- Visibility modifiers can now be passed to `prop_compose!` without enclosing
+  them in brackets. Unfortunately, the old way could not continue to be
+  supported due to the way the `vis` macro matcher works.
 
 ### Nightly-only breakage
 
