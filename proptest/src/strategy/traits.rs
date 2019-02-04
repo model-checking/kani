@@ -65,6 +65,12 @@ pub trait Strategy : fmt::Debug {
     /// There is no need (or possibility, for that matter) to define how the
     /// output is to be shrunken. Shrinking continues to take place in terms of
     /// the source value.
+    ///
+    /// `fun` should be a deterministic function. That is, for a given input
+    /// value, it should produce an equivalent output value on every call.
+    /// Proptest assumes that it can call the function as many times as needed
+    /// to generate as many identical values as needed. For this reason, `F` is
+    /// `Fn` rather than `FnMut`.
     fn prop_map<O : fmt::Debug,
                 F : Fn (Self::Value) -> O>
         (self, fun: F) -> Map<Self, F>
