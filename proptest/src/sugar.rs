@@ -152,7 +152,7 @@ macro_rules! proptest {
     (#![proptest_config($config:expr)]
      $(
         $(#[$meta:meta])*
-        fn $test_name:ident($($parm:pat in $strategy:expr),+) $body:block
+       fn $test_name:ident($($parm:pat in $strategy:expr),+ $(,)?) $body:block
     )*) => {
         $(
             $(#[$meta])*
@@ -182,7 +182,7 @@ macro_rules! proptest {
 
     ($(
         $(#[$meta:meta])*
-        fn $test_name:ident($($parm:pat in $strategy:expr),+) $body:block
+        fn $test_name:ident($($parm:pat in $strategy:expr),+ $(,)?) $body:block
     )*) => { $crate::proptest! {
         #![proptest_config($crate::test_runner::Config::default())]
         $($(#[$meta])*
@@ -198,13 +198,13 @@ macro_rules! proptest {
           fn $test_name($($arg)+) $body)*
     } };
 
-    (|($($parm:pat in $strategy:expr),+)| $body:expr) => {
+    (|($($parm:pat in $strategy:expr),+ $(,)?)| $body:expr) => {
         $crate::proptest!(
             $crate::test_runner::Config::default(),
             |($($parm in $strategy),+)| $body)
     };
 
-    (move |($($parm:pat in $strategy:expr),+)| $body:expr) => {
+    (move |($($parm:pat in $strategy:expr),+ $(,)?)| $body:expr) => {
         $crate::proptest!(
             $crate::test_runner::Config::default(),
             move |($($parm in $strategy),+)| $body)
@@ -222,13 +222,13 @@ macro_rules! proptest {
             move |($($arg)+)| $body)
     };
 
-    ($config:expr, |($($parm:pat in $strategy:expr),+)| $body:expr) => { {
+    ($config:expr, |($($parm:pat in $strategy:expr),+ $(,)?)| $body:expr) => { {
         let mut config = $config.__sugar_to_owned();
         $crate::sugar::force_no_fork(&mut config);
         $crate::proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body)
     } };
 
-    ($config:expr, move |($($parm:pat in $strategy:expr),+)| $body:expr) => { {
+    ($config:expr, move |($($parm:pat in $strategy:expr),+ $(,)?)| $body:expr) => { {
         let mut config = $config.__sugar_to_owned();
         $crate::sugar::force_no_fork(&mut config);
         $crate::proptest_helper!(@_BODY config ($($parm in $strategy),+) [move] $body)
@@ -263,7 +263,7 @@ macro_rules! prop_assume {
         $crate::prop_assume!($expr, "{}", stringify!($expr))
     };
 
-    ($expr:expr, $fmt:tt $(, $fmt_arg:expr),*) => {
+    ($expr:expr, $fmt:tt $(, $fmt_arg:expr),* $(,)?) => {
         if !$expr {
             return ::std::result::Result::Err(
                 $crate::test_runner::TestCaseError::reject(
@@ -325,23 +325,23 @@ macro_rules! prop_assume {
 /// ```
 #[macro_export]
 macro_rules! prop_oneof {
-    ($($item:expr),+ $(,)*) => {
+    ($($item:expr),+ $(,)?) => {
         $crate::prop_oneof![
             $(1 => $item),*
         ]
     };
 
-    ($_weight0:expr => $item0:expr $(,)*) => { $item0 };
+    ($_weight0:expr => $item0:expr $(,)?) => { $item0 };
 
     ($weight0:expr => $item0:expr,
-     $weight1:expr => $item1:expr $(,)*) => {
+     $weight1:expr => $item1:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1)))
     };
 
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr,
-     $weight2:expr => $item2:expr $(,)*) => {
+     $weight2:expr => $item2:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2)))
@@ -350,7 +350,7 @@ macro_rules! prop_oneof {
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr,
      $weight2:expr => $item2:expr,
-     $weight3:expr => $item3:expr $(,)*) => {
+     $weight3:expr => $item3:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3)))
@@ -360,7 +360,7 @@ macro_rules! prop_oneof {
      $weight1:expr => $item1:expr,
      $weight2:expr => $item2:expr,
      $weight3:expr => $item3:expr,
-     $weight4:expr => $item4:expr $(,)*) => {
+     $weight4:expr => $item4:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3),
@@ -372,7 +372,7 @@ macro_rules! prop_oneof {
      $weight2:expr => $item2:expr,
      $weight3:expr => $item3:expr,
      $weight4:expr => $item4:expr,
-     $weight5:expr => $item5:expr $(,)*) => {
+     $weight5:expr => $item5:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3),
@@ -385,7 +385,7 @@ macro_rules! prop_oneof {
      $weight3:expr => $item3:expr,
      $weight4:expr => $item4:expr,
      $weight5:expr => $item5:expr,
-     $weight6:expr => $item6:expr $(,)*) => {
+     $weight6:expr => $item6:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3),
@@ -400,7 +400,7 @@ macro_rules! prop_oneof {
      $weight4:expr => $item4:expr,
      $weight5:expr => $item5:expr,
      $weight6:expr => $item6:expr,
-     $weight7:expr => $item7:expr $(,)*) => {
+     $weight7:expr => $item7:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3),
@@ -416,7 +416,7 @@ macro_rules! prop_oneof {
      $weight5:expr => $item5:expr,
      $weight6:expr => $item6:expr,
      $weight7:expr => $item7:expr,
-     $weight8:expr => $item8:expr $(,)*) => {
+     $weight8:expr => $item8:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3),
@@ -434,7 +434,7 @@ macro_rules! prop_oneof {
      $weight6:expr => $item6:expr,
      $weight7:expr => $item7:expr,
      $weight8:expr => $item8:expr,
-     $weight9:expr => $item9:expr $(,)*) => {
+     $weight9:expr => $item9:expr $(,)?) => {
         $crate::strategy::TupleUnion::new(
             (($weight0, $item0), ($weight1, $item1),
              ($weight2, $item2), ($weight3, $item3),
@@ -443,7 +443,7 @@ macro_rules! prop_oneof {
              ($weight8, $item8), ($weight9, $item9)))
     };
 
-    ($($weight:expr => $item:expr),+ $(,)*) => {
+    ($($weight:expr => $item:expr),+ $(,)?) => {
         $crate::strategy::Union::new_weighted(vec![
             $(($weight, $crate::strategy::Strategy::boxed($item))),*
         ])
@@ -581,13 +581,13 @@ macro_rules! prop_oneof {
 #[macro_export]
 macro_rules! prop_compose {
     ($(#[$meta:meta])*
-     $([$($vis:tt)*])* fn $name:ident $params:tt
-     ($($var:pat in $strategy:expr),+ $(,)*)
+     $([$($modi:tt)*])? fn $name:ident $params:tt
+     ($($var:pat in $strategy:expr),+ $(,)?)
        -> $return_type:ty $body:block) =>
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
-        $($($vis)*)* fn $name $params
+        $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
             $crate::strategy::Strategy::prop_map(strat,
@@ -596,14 +596,14 @@ macro_rules! prop_compose {
     };
 
     ($(#[$meta:meta])*
-     $([$($vis:tt)*])* fn $name:ident $params:tt
-     ($($var:pat in $strategy:expr),+ $(,)*)
-     ($($var2:pat in $strategy2:expr),+ $(,)*)
+     $([$($modi:tt)*])? fn $name:ident $params:tt
+     ($($var:pat in $strategy:expr),+ $(,)?)
+     ($($var2:pat in $strategy2:expr),+ $(,)?)
        -> $return_type:ty $body:block) =>
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
-        $($($vis)*)* fn $name $params
+        $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
@@ -616,13 +616,13 @@ macro_rules! prop_compose {
     };
 
     ($(#[$meta:meta])*
-     $([$($vis:tt)*])* fn $name:ident $params:tt
+     $([$($modi:tt)*])? fn $name:ident $params:tt
      ($($arg:tt)+)
        -> $return_type:ty $body:block) =>
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
-        $($($vis)*)* fn $name $params
+        $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_EXT _STRAT ($($arg)+));
             $crate::strategy::Strategy::prop_map(strat,
@@ -631,14 +631,14 @@ macro_rules! prop_compose {
     };
 
     ($(#[$meta:meta])*
-     $([$($vis:tt)*])* fn $name:ident $params:tt
-     ($($arg:tt)+ $(,)*)
-     ($($arg2:tt)+ $(,)*)
+     $([$($modi:tt)*])? fn $name:ident $params:tt
+     ($($arg:tt)+ $(,)?)
+     ($($arg2:tt)+ $(,)?)
        -> $return_type:ty $body:block) =>
     {
         #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
-        $($($vis)*)* fn $name $params
+        $($($modi)*)? fn $name $params
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
@@ -917,29 +917,29 @@ macro_rules! proptest_helper {
     // We have to do this because `:` can't FOLLOW(pat).
     // Note that this is not the full `pat` grammar...
     // See https://docs.rs/syn/0.14.2/syn/enum.Pat.html for that.
-    (@_EXT $cmd:ident ($p:pat in $s:expr $(,)*)) => {
+    (@_EXT $cmd:ident ($p:pat in $s:expr $(,)?)) => {
         $crate::proptest_helper!(@$cmd in [$s] [$p])
     };
-    (@_EXT $cmd:ident (($p:pat) : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident (($p:pat) : $s:ty $(,)?)) => {
         // Users can wrap in parens as a last resort.
         $crate::proptest_helper!(@$cmd [$s] [$p])
     };
-    (@_EXT $cmd:ident (_ : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident (_ : $s:ty $(,)?)) => {
         $crate::proptest_helper!(@$cmd [$s] [_])
     };
-    (@_EXT $cmd:ident (ref mut $p:ident : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident (ref mut $p:ident : $s:ty $(,)?)) => {
         $crate::proptest_helper!(@$cmd [$s] [ref mut $p])
     };
-    (@_EXT $cmd:ident (ref $p:ident : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident (ref $p:ident : $s:ty $(,)?)) => {
         $crate::proptest_helper!(@$cmd [$s] [ref $p])
     };
-    (@_EXT $cmd:ident (mut $p:ident : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident (mut $p:ident : $s:ty $(,)?)) => {
         $crate::proptest_helper!(@$cmd [$s] [mut $p])
     };
-    (@_EXT $cmd:ident ($p:ident : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident ($p:ident : $s:ty $(,)?)) => {
         $crate::proptest_helper!(@$cmd [$s] [$p])
     };
-    (@_EXT $cmd:ident ([$($p:tt)*] : $s:ty $(,)*)) => {
+    (@_EXT $cmd:ident ([$($p:tt)*] : $s:ty $(,)?)) => {
         $crate::proptest_helper!(@$cmd [$s] [[$($p)*]])
     };
 
@@ -1403,6 +1403,15 @@ mod closure_tests {
             println!("{}", y);
             assert!(x != y);
         });
+
+        proptest!(|(y: i32,)| {
+            assert!(x != y);
+        });
+
+        proptest!(|(y in 0..100,)| {
+            println!("{}", y);
+            assert!(x != y);
+        });
     }
 
     #[test]
@@ -1434,6 +1443,7 @@ mod closure_tests {
     #[test]
     fn accepts_unblocked_syntax() {
         proptest!(|(x in 0u32..10, y in 10u32..20)| assert!(x < y));
+        proptest!(|(x in 0u32..10, y in 10u32..20,)| assert!(x < y));
     }
 
     #[test]
@@ -1445,6 +1455,13 @@ mod closure_tests {
         proptest!(conf, move |(x in 0u32..10, y in 10u32..20)| assert!(x < y));
         proptest!(conf, |(_x: u32, _y: u32)| { });
         proptest!(conf, move |(_x: u32, _y: u32)| { });
+
+        // Same as above, but with extra trailing comma
+        proptest!(conf, |(x in 0u32..10, y in 10u32..20,)| assert!(x < y));
+        proptest!(&conf, |(x in 0u32..10, y in 10u32..20,)| assert!(x < y));
+        proptest!(conf, move |(x in 0u32..10, y in 10u32..20,)| assert!(x < y));
+        proptest!(conf, |(_x: u32, _y: u32,)| { });
+        proptest!(conf, move |(_x: u32, _y: u32,)| { });
     }
 }
 

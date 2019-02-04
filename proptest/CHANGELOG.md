@@ -13,12 +13,18 @@
   std types have been removed since they were of limited utility and had
   unclear or incorrect conversion properties.
 
+- Many optional elements (such as trailing commas or function visibility
+  modifiers) in certain macros could be specified more than once. The macros
+  now accept at most one occurrence.
+
 ### New Additions
 
 - Rust 2018 style macro imports are now supported.
 
 - In a Rust 2018 crate, all the macros can be brought into scope with
   `import proptest::prelude::*;`.
+
+- The proptest macros now accept trailing commas in more locations.
 
 ### Nightly-only breakage
 
