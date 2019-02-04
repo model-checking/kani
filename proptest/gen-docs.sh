@@ -30,6 +30,7 @@ fi
 
 $cargo clean
 $cargo doc --no-deps $cargoflags
+mkdir -p ~/p/misc/altsysrq.github.io/rustdoc/$crate
 cd ~/p/misc/altsysrq.github.io/rustdoc/$crate
 if test -e latest; then
     rm latest
