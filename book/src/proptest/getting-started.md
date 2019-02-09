@@ -250,7 +250,7 @@ $ git add proptest-regressions
 ```rust,ignore
 #[test]
 fn test_october_first() {
-    assert_eq!(Some(0, 10, 1), parse_date("0000-10-01"));
+    assert_eq!(Some((0, 10, 1)), parse_date("0000-10-01"));
 }
 ```
 
