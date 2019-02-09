@@ -22,7 +22,7 @@ to the `new_tree()` method of the `Strategy`; this returns a `ValueTree`,
 which we'll look at in more detail momentarily. Calling the `current()`
 method on the `ValueTree` produces the actual value. Knowing that, we can
 put the pieces together and generate values. The below is the
-`tutoral-strategy-play.rs` example:
+`tutorial-strategy-play.rs` example:
 
 ```rust
 use proptest::test_runner::TestRunner;
