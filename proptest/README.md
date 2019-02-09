@@ -103,7 +103,7 @@ use proptest::prelude::*;
 proptest! {
     #[test]
     fn doesnt_crash(s in "\\PC*") {
-        parse_date(s);
+        parse_date(&s);
     }
 }
 ```
@@ -184,7 +184,7 @@ proptest! {
 
     #[test]
     fn parses_all_valid_dates(s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
-        parse_date(s).unwrap();
+        parse_date(&s).unwrap();
     }
 }
 ```

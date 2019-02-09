@@ -37,12 +37,12 @@ fn parse_date(s: &str) -> Option<(u32, u32, u32)> {
 
 // NB We omit #[test] on these functions so that main() can call them.
 proptest! {
-    fn doesnt_crash(ref s in "\\PC*") {
-        parse_date(s);
+    fn doesnt_crash(s in "\\PC*") {
+        parse_date(&s);
     }
 
-    fn parses_all_valid_dates(ref s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
-        parse_date(s).unwrap();
+    fn parses_all_valid_dates(s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
+        parse_date(&s).unwrap();
     }
 
     fn parses_date_back_to_original(y in 0u32..10_000,
