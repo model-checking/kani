@@ -1,3 +1,29 @@
+## Unreleased
+
+### New RNG Algorithm
+
+Starting in this version, the default RNG algorithm has been changed from
+XorShift to ChaCha since it produces higher-quality randomness. This may make
+test case generation a bit slower but it avoids certain pathological cases that
+the old generator had.
+
+The old algorithm is still supported, and is used automatically when reading
+old failure persistence files.
+
+Note that this change also affects the internal representation of RNG seeds,
+which affects the `FailurePersistence` trait which previously only supported
+the seed representation for XorShift. This release maintains source
+compatibility with 0.9.0 by providing defaults for the new methods which
+delegate (when possible) to the old ones, but be aware that custom failure
+persistence implementations using the old API will not function when using an
+RNG other than XorShift.
+
+### Deprecations
+
+- The `load_persisted_failures` and `save_persisted_failure` methods on the
+  `FailurePersistence` trait have been deprecated and will be removed in
+  0.10.0.
+
 ## 0.9.0
 
 ### Breaking Changes

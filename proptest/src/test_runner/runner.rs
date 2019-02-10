@@ -1,5 +1,5 @@
 //-
-// Copyright 2017, 2018 The proptest developers
+// Copyright 2017, 2018, 2019 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -25,11 +25,12 @@ use rusty_fork;
 #[cfg(feature = "fork")]
 use tempfile;
 
-use crate::test_runner::{TestRng, Seed};
+use crate::test_runner::rng::TestRng;
 use crate::test_runner::errors::*;
 use crate::test_runner::config::*;
 use crate::test_runner::reason::*;
 use crate::test_runner::result_cache::*;
+use crate::test_runner::failure_persistence::PersistedSeed;
 #[cfg(feature = "fork")]
 use crate::test_runner::replay;
 use crate::strategy::*;
@@ -472,15 +473,15 @@ impl TestRunner {
     {
         let old_rng = self.rng.clone();
 
-        let persisted_failure_seeds: Vec<Seed> =
+        let persisted_failure_seeds: Vec<PersistedSeed> =
             self.config.failure_persistence
                 .as_ref()
-                .map(|f| f.load_persisted_failures(self.config.source_file))
+                .map(|f| f.load_persisted_failures2(self.config.source_file))
                 .unwrap_or_default();
 
         let mut result_cache = self.new_cache();
 
-        for persisted_seed in persisted_failure_seeds {
+        for PersistedSeed(persisted_seed) in persisted_failure_seeds {
             self.rng.set_seed(persisted_seed);
             self.gen_and_run_case(strategy, &test, &mut replay,
                                   &mut *result_cache, &mut fork_output)?;
@@ -501,8 +502,8 @@ impl TestRunner {
                     // process. The parent relies on it remaining consistent
                     // and will take care of updating it itself.
                     if !fork_output.is_in_fork() {
-                        failure_persistence.save_persisted_failure(
-                            *source_file, seed, value);
+                        failure_persistence.save_persisted_failure2(
+                            *source_file, PersistedSeed(seed), value);
                     }
                 }
             }
@@ -941,8 +942,8 @@ mod test {
     fn new_rng_makes_separate_rng() {
         use rand::Rng;
         let mut runner = TestRunner::default();
-        let from_1 = runner.new_rng().gen::<Seed>();
-        let from_2 = runner.rng().gen::<Seed>();
+        let from_1 = runner.new_rng().gen::<[u8;16]>();
+        let from_2 = runner.rng().gen::<[u8;16]>();
         assert_ne!(from_1, from_2);
     }
 

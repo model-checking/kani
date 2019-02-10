@@ -10,21 +10,20 @@
 use core::any::Any;
 use crate::std_facade::{fmt, Box, Vec};
 
-use crate::test_runner::failure_persistence::FailurePersistence;
-use crate::test_runner::Seed;
+use crate::test_runner::failure_persistence::{FailurePersistence, PersistedSeed};
 
 /// Failure persistence option that loads and saves nothing at all.
 #[derive(Debug, Default, PartialEq)]
 struct NoopFailurePersistence;
 
 impl FailurePersistence for NoopFailurePersistence {
-    fn load_persisted_failures(&self, _source_file: Option<&'static str>) -> Vec<Seed> {
+    fn load_persisted_failures2(&self, _source_file: Option<&'static str>) -> Vec<PersistedSeed> {
         Vec::new()
     }
 
-    fn save_persisted_failure(&mut self,
+    fn save_persisted_failure2(&mut self,
         _source_file: Option<&'static str>,
-        _seed: Seed,
+        _seed: PersistedSeed,
         _shrunken_value: &dyn fmt::Debug,
     ) {
     }
@@ -48,17 +47,17 @@ mod tests {
     #[test]
     fn default_load_is_empty() {
         assert!(NoopFailurePersistence::default()
-                    .load_persisted_failures(None).is_empty());
+                    .load_persisted_failures2(None).is_empty());
         assert!(NoopFailurePersistence::default()
-                    .load_persisted_failures(HI_PATH).is_empty());
+                    .load_persisted_failures2(HI_PATH).is_empty());
     }
 
     #[test]
     fn seeds_not_recoverable() {
         let mut p = NoopFailurePersistence::default();
-        p.save_persisted_failure(HI_PATH, INC_SEED, &"");
-        assert!(p.load_persisted_failures(HI_PATH).is_empty());
-        assert!(p.load_persisted_failures(None).is_empty());
-        assert!(p.load_persisted_failures(UNREL_PATH).is_empty());
+        p.save_persisted_failure2(HI_PATH, INC_SEED, &"");
+        assert!(p.load_persisted_failures2(HI_PATH).is_empty());
+        assert!(p.load_persisted_failures2(None).is_empty());
+        assert!(p.load_persisted_failures2(UNREL_PATH).is_empty());
     }
 }

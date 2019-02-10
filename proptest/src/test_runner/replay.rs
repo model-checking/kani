@@ -40,12 +40,12 @@ const SENTINEL: &'static str = "proptest-forkfile";
 /// to the file without having to worry about the possibility of appends being
 /// non-atomic.
 #[derive(Clone, Debug)]
-pub struct Replay {
+pub(crate) struct Replay {
     /// The seed of the RNG used to start running the test cases.
-    pub seed: Seed,
+    pub(crate) seed: Seed,
     /// A log of whether certain test cases passed or failed. The runner will
     /// assume the same results occur without actually running the test cases.
-    pub steps: Vec<TestCaseResult>,
+    pub(crate) steps: Vec<TestCaseResult>,
 }
 
 impl Replay {
@@ -60,7 +60,7 @@ impl Replay {
 
 /// Result of loading a replay file.
 #[derive(Clone, Debug)]
-pub enum ReplayFileStatus {
+pub(crate) enum ReplayFileStatus {
     /// The file is valid and represents a currently-in-progress test.
     InProgress(Replay),
     /// The file is valid, but indicates that all testing has completed.
@@ -70,7 +70,7 @@ pub enum ReplayFileStatus {
 }
 
 /// Open the file in the usual read+append+create mode.
-pub fn open_file(path: impl AsRef<Path>) -> io::Result<fs::File> {
+pub(crate) fn open_file(path: impl AsRef<Path>) -> io::Result<fs::File> {
     fs::OpenOptions::new()
         .read(true)
         .append(true)
@@ -88,18 +88,18 @@ fn step_to_char(step: &TestCaseResult) -> char {
 }
 
 /// Append the given step to the given output.
-pub fn append(mut file: impl Write, step: &TestCaseResult)
+pub(crate) fn append(mut file: impl Write, step: &TestCaseResult)
               -> io::Result<()> {
     write!(file, "{}", step_to_char(step))
 }
 
 /// Append a no-op step to the given output.
-pub fn ping(mut file: impl Write) -> io::Result<()> {
+pub(crate) fn ping(mut file: impl Write) -> io::Result<()> {
     write!(file, " ")
 }
 
 /// Append a termination mark to the given output.
-pub fn terminate(mut file: impl Write) -> io::Result<()> {
+pub(crate) fn terminate(mut file: impl Write) -> io::Result<()> {
     write!(file, ".")
 }
 
@@ -107,10 +107,7 @@ impl Replay {
     /// Write the full state of this `Replay` to the given output.
     pub fn init_file(&self, mut file: impl Write) -> io::Result<()> {
         writeln!(file, "{}", SENTINEL)?;
-
-        for word in &self.seed {
-            writeln!(file, "{}", word)?;
-        }
+        writeln!(file, "{}", self.seed.to_persistence())?;
 
         let mut step_data = Vec::<u8>::new();
         for step in &self.steps {
@@ -154,16 +151,12 @@ impl Replay {
             return Ok(ReplayFileStatus::Corrupt);
         }
 
-        let mut seed: Seed = [0; 16];
-        for word in &mut seed {
-            line.clear();
-            reader.read_line(&mut line)?;
-
-            match line.trim().parse::<u8>() {
-                Ok(w) => *word = w,
-                Err(_) => return Ok(ReplayFileStatus::Corrupt),
-            }
-        }
+        line.clear();
+        reader.read_line(&mut line)?;
+        let seed = match Seed::from_persistence(&line) {
+            Some(seed) => seed,
+            None => return Ok(ReplayFileStatus::Corrupt),
+        };
 
         line.clear();
         reader.read_line(&mut line)?;

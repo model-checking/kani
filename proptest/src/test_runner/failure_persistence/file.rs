@@ -1,5 +1,5 @@
 //-
-// Copyright 2017, 2018 The proptest developers
+// Copyright 2017, 2018, 2019 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -9,7 +9,6 @@
 
 use core::any::Any;
 use core::fmt::Debug;
-use core::num::ParseIntError;
 use std::borrow::{Cow, ToOwned};
 use std::boxed::Box;
 use std::env;
@@ -20,7 +19,7 @@ use std::sync::RwLock;
 use std::vec::Vec;
 use std::string::{String, ToString};
 
-use crate::test_runner::{Seed, failure_persistence::FailurePersistence};
+use crate::test_runner::failure_persistence::{PersistedSeed, FailurePersistence};
 use self::FileFailurePersistence::*;
 
 /// Describes how failing test cases are persisted.
@@ -81,15 +80,15 @@ impl Default for FileFailurePersistence {
 }
 
 impl FailurePersistence for FileFailurePersistence {
-    fn load_persisted_failures(&self, source_file: Option<&'static str>)
-                               -> Vec<Seed> {
+    fn load_persisted_failures2(&self, source_file: Option<&'static str>)
+                                -> Vec<PersistedSeed> {
         let p = self.resolve(
             source_file.and_then(|s| absolutize_source_file(Path::new(s)))
                 .as_ref()
                 .map(|cow| &**cow));
 
         let path: Option<&PathBuf> = p.as_ref();
-        let result: io::Result<Vec<Seed>> = path.map_or_else(
+        let result: io::Result<Vec<PersistedSeed>> = path.map_or_else(
             || Ok(vec![]),
             |path| {
                 // .ok() instead of .unwrap() so we don't propagate panics here
@@ -117,10 +116,10 @@ impl FailurePersistence for FileFailurePersistence {
         })
     }
 
-    fn save_persisted_failure(
+    fn save_persisted_failure2(
         &mut self,
         source_file: Option<&'static str>,
-        seed: Seed,
+        seed: PersistedSeed,
         shrunken_value: &dyn Debug,
     ) {
         let path = self.resolve(source_file.map(Path::new));
@@ -135,7 +134,7 @@ impl FailurePersistence for FileFailurePersistence {
                     .expect("proptest: couldn't write header.");
             }
 
-            write_seed_line(&mut to_write, seed, shrunken_value)
+            write_seed_line(&mut to_write, &seed, shrunken_value)
                 .expect("proptest: couldn't write seed line.");
 
             if let Err(e) = write_seed_data_to_file(&path, &to_write) {
@@ -148,7 +147,7 @@ impl FailurePersistence for FileFailurePersistence {
                      {}",
                     path.display(),
                     if is_new { " (You may need to create it.)" } else { "" },
-                    format_basic_seed_line(seed));
+                    seed);
             }
         }
     }
@@ -235,81 +234,34 @@ fn absolutize_source_file_with_cwd<'a>(
 }
 
 fn parse_seed_line(mut line: String, path: &Path, lineno: usize)
-                   -> Option<Seed> {
+                   -> Option<PersistedSeed> {
     // Remove anything after and including '#':
     if let Some(comment_start) = line.find('#') {
         line.truncate(comment_start);
     }
 
     if line.len() > 0 {
-        // Split by whitespace and ignore empty lines:
-        let parts = line.trim().split(char::is_whitespace).collect::<Vec<_>>();
-        let len = parts.len();
-        // "xs" stands for "XorShift".
-        if parts[0] == "xs" && len == 5 {
-            // Parse using the chosen one:
-            if let Ok(seed) = parse_seed_old(&parts[1..]) {
-                return Some(seed);
-            } else {
-                eprintln!("proptest: {}:{}: unparsable line, ignoring",
-                            path.display(), lineno + 1);
-            }
-        } else {
-            eprintln!("proptest: {}:{}: unknown case type `{}` \
-                    (corrupt file or newer proptest version?)",
-                    &path.display(), lineno + 1, parts[0]);
+        let ret = line.parse::<PersistedSeed>().ok();
+        if !ret.is_some() {
+            eprintln!("proptest: {}:{}: unparsable line, ignoring",
+                      path.display(), lineno + 1);
         }
+        return ret;
     }
 
     None
 }
 
-fn parse_seed_old(parts: &[&str]) -> Result<Seed, ParseIntError> {
-    let mut ret = [0u32; 4];
-    for (src, dst) in parts.iter().zip(ret.iter_mut()) {
-        *dst = src.parse()?;
-    }
-
-    Ok(convert_to_new_format(ret))
-}
-
-fn convert_to_new_format(old_format: [u32; 4]) -> Seed {
-    use byteorder::{ByteOrder, LittleEndian};
-    let mut new_format = [0; 16];
-    // rand uses little endian for this conversion on all platforms
-    LittleEndian::write_u32_into(&old_format[..], &mut new_format);
-    new_format
-}
-
-fn convert_from_new_format(new_format: Seed) -> [u32; 4] {
-    use byteorder::{ByteOrder, LittleEndian};
-    let mut old_format = [0; 4];
-    LittleEndian::read_u32_into(&new_format[..], &mut old_format);
-    old_format
-}
-
-fn format_basic_seed_line(seed: Seed) -> String {
-    // Write line start:
-    let mut buf = "xs ".to_owned();
-
-    // Write out each part of seed:
-    for &s in &convert_from_new_format(seed) {
-        buf.push_str(&s.to_string());
-        buf.push(' ');
-    }
-
-    buf
-}
-
-fn write_seed_line(buf: &mut Vec<u8>, seed: Seed, shrunken_value: &dyn Debug)
+fn write_seed_line(buf: &mut Vec<u8>, seed: &PersistedSeed,
+                   shrunken_value: &dyn Debug)
     -> io::Result<()>
 {
     // Write the seed itself
-    write!(buf, "{}", format_basic_seed_line(seed))?;
+    write!(buf, "{}", seed.to_string())?;
 
     // Write out comment:
     let debug_start = buf.len();
-    write!(buf, "# shrinks to {:?}", shrunken_value)?;
+    write!(buf, " # shrinks to {:?}", shrunken_value)?;
 
     // Ensure there are no newlines in the debug output
     for byte in &mut buf[debug_start..] {

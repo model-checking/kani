@@ -93,6 +93,9 @@ features = ["alloc", "i128_support"]
 [dependencies.rand_xorshift]
 version = "0.1"
 
+[dependencies.rand_chacha]
+version = "0.1"
+
 [dependencies.byteorder]
 version = "1.2.3"
 default-features = false
