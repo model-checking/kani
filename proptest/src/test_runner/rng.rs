@@ -394,7 +394,7 @@ mod test {
 
     use rand::{Rng, RngCore};
 
-    use super::{Seed, TestRng};
+    use super::{RngAlgorithm, Seed, TestRng};
     use crate::arbitrary::any;
     use crate::strategy::*;
 
@@ -448,5 +448,23 @@ mod test {
                 assert_ne!(c, d);
             }
         }
+    }
+
+    #[test]
+    fn passthrough_rng_behaves_properly() {
+        let mut rng = TestRng::from_seed(
+            RngAlgorithm::PassThrough,
+            &[0xDE, 0xC0, 0x12, 0x34,
+              0x56, 0x78, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE,
+              0x01, 0x02, 0x03]);
+
+        assert_eq!(0x3412C0DE, rng.next_u32());
+        assert_eq!(0xDEADBEEFCAFE7856, rng.next_u64());
+
+        let mut buf = [0u8; 4];
+        assert!(rng.try_fill_bytes(&mut buf[0..4]).is_err());
+        rng.fill_bytes(&mut buf[0..2]);
+        rng.fill_bytes(&mut buf[2..3]);
+        assert_eq!([1, 2, 3, 0], buf);
     }
 }
