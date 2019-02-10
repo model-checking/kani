@@ -291,6 +291,19 @@ impl Seed {
 }
 
 impl TestRng {
+    /// Create a new RNG with the given algorithm and seed.
+    ///
+    /// Any RNG created with the same algorithm-seed pair will produce the same
+    /// sequence of values on all systems and all supporting versions of
+    /// proptest.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `seed` is not an appropriate length for `algorithm`.
+    pub fn from_seed(algorithm: RngAlgorithm, seed: &[u8]) -> Self {
+        TestRng::from_seed_internal(Seed::from_bytes(algorithm, seed))
+    }
+
     /// Construct a default TestRng from entropy.
     pub(crate) fn default_rng() -> Self {
         #[cfg(feature = "std")]
@@ -299,7 +312,7 @@ impl TestRng {
             Self { rng: TestRngImpl::ChaCha(ChaChaRng::from_entropy()) }
         }
         #[cfg(not(feature = "std"))]
-        Self::from_seed(Seed::XorShift([
+        Self::from_seed_internal(Seed::XorShift([
             0x19, 0x3a, 0x67, 0x54, // x
             0x69, 0xd4, 0xa7, 0xa8, // y
             0x05, 0x0e, 0x83, 0x97, // z
@@ -310,12 +323,12 @@ impl TestRng {
     /// Construct a TestRng by the perturbed randomized seed
     /// from an existing TestRng.
     pub(crate) fn gen_rng(&mut self) -> Self {
-        Self::from_seed(self.new_rng_seed())
+        Self::from_seed_internal(self.new_rng_seed())
     }
 
     /// Overwrite the given TestRng with the provided seed.
     pub(crate) fn set_seed(&mut self, seed: Seed) {
-        *self = Self::from_seed(seed);
+        *self = Self::from_seed_internal(seed);
     }
 
     /// Generate a new randomized seed, set it to this TestRng,
@@ -359,7 +372,7 @@ impl TestRng {
     }
 
     /// Construct a TestRng from a given seed.
-    fn from_seed(seed: Seed) -> Self {
+    fn from_seed_internal(seed: Seed) -> Self {
         Self { rng: match seed {
             Seed::XorShift(seed) =>
                 TestRngImpl::XorShift(XorShiftRng::from_seed(seed)),
@@ -410,7 +423,7 @@ mod test {
             ])
         {
             type Value = [u8;32];
-            let orig = TestRng::from_seed(seed);
+            let orig = TestRng::from_seed_internal(seed);
 
             {
                 let mut rng1 = orig.clone();

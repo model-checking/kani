@@ -18,6 +18,12 @@ delegate (when possible) to the old ones, but be aware that custom failure
 persistence implementations using the old API will not function when using an
 RNG other than XorShift.
 
+### New Additions
+
+- `TestRng` instances can be created with the `from_seed` function.
+
+- `TestRunner` instances can be created with user-provided `TestRng`s.
+
 ### Deprecations
 
 - The `load_persisted_failures` and `save_persisted_failure` methods on the

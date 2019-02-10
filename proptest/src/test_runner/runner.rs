@@ -267,13 +267,21 @@ type TestRunResult<S> = Result<(), TestError<<S as Strategy>::Value>>;
 
 impl TestRunner {
     /// Create a fresh `TestRunner` with the given configuration.
+    ///
+    /// The runner will use an RNG with a generated seed and the default
+    /// algorithm.
     pub fn new(config: Config) -> Self {
+        TestRunner::new_with_rng(config, TestRng::default_rng())
+    }
+
+    /// Create a fresh `TestRunner` with the given configuration and RNG.
+    pub fn new_with_rng(config: Config, rng: TestRng) -> Self {
         TestRunner {
             config: config,
             successes: 0,
             local_rejects: 0,
             global_rejects: 0,
-            rng: TestRng::default_rng(),
+            rng: rng,
             flat_map_regens: Arc::new(AtomicUsize::new(0)),
             local_reject_detail: BTreeMap::new(),
             global_reject_detail: BTreeMap::new(),
