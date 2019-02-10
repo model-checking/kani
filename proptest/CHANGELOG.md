@@ -18,6 +18,9 @@ delegate (when possible) to the old ones, but be aware that custom failure
 persistence implementations using the old API will not function when using an
 RNG other than XorShift.
 
+Besides ChaCha, this version also adds a `PassThrough` RNG "algorithm" which
+makes it possible to use an external source of entropy with Proptest.
+
 ### New Additions
 
 - `TestRng` instances can be created with the `from_seed` function.
