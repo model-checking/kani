@@ -270,6 +270,10 @@ impl TestRunner {
     ///
     /// The runner will use an RNG with a generated seed and the default
     /// algorithm.
+    ///
+    /// In `no_std` environments, every `TestRunner` will use the same
+    /// hard-coded seed. This seed is not contractually guaranteed and may be
+    /// changed between releases without notice.
     pub fn new(config: Config) -> Self {
         TestRunner::new_with_rng(config, TestRng::default_rng())
     }
