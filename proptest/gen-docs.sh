@@ -34,8 +34,9 @@ mkdir -p ~/p/misc/altsysrq.github.io/rustdoc/$crate
 cd ~/p/misc/altsysrq.github.io/rustdoc/$crate
 if test -e latest; then
     rm latest
-    sed -ri~ '/docblock/s?<p>Proptest is?<p><strong>This documentation is for an old version of proptest. <a href="../../latest/proptest">Click here</a> to see the latest version.</strong></p>\
-<p>Proptest is?' */$crate/index.html
+    sed -ri~ '/docblock.*>Proptest Reference Documentation/a\
+<p><strong>This documentation is for an old version of proptest. <a href="../../latest/proptest">Click here</a> to see the latest version.</strong></p>
+//s/>Proptest/>Outdated Proptest/' */proptest/index.html
 fi
 cp -a ~/p/rs/proptest/target/doc $version
 ln -s $version latest
