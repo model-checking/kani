@@ -823,7 +823,7 @@ mod test {
 
     #[test]
     fn u8_inclusive_end_included() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let mut ok = 0;
         for _ in 0..20 {
             let tree = (0..=1).new_tree(&mut runner).unwrap();
@@ -840,7 +840,7 @@ mod test {
 
     #[test]
     fn u8_inclusive_to_end_included() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let mut ok = 0;
         for _ in 0..20 {
             let tree = (..=1u8).new_tree(&mut runner).unwrap();
@@ -1150,7 +1150,7 @@ mod test {
             let mut seen_infinite = 0;
             let mut seen_quiet_nan = 0;
             let mut seen_signaling_nan = 0;
-            let mut runner = TestRunner::default();
+            let mut runner = TestRunner::deterministic();
 
             // Check whether this version of Rust honours the NaN payload in
             // from_bits

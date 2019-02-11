@@ -25,7 +25,9 @@ service = "github"
 
 [features]
 
-default = ["std", "fork", "timeout", "bit-set"]
+default = ["std", "fork", "timeout", "bit-set", "break-dead-code"]
+# Everything in `default` that doesn't break code coverage builds
+default-code-coverage = ["std", "fork", "timeout", "bit-set"]
 
 # Enables unstable features of Rust.
 unstable = []
@@ -52,6 +54,10 @@ timeout = ["fork", "rusty-fork/timeout"]
 # This is enabled by default. Some no_std environments do not support it and
 # need it excluded, however.
 atomic64bit = []
+
+# Include features which break the Rust compiler when `-C link-dead-code` is
+# passed (see https://github.com/AltSysrq/proptest/issues/124).
+break-dead-code = []
 
 [dependencies]
 bitflags = "1.0.1"
@@ -91,6 +97,9 @@ default-features = false
 features = ["alloc", "i128_support"]
 
 [dependencies.rand_xorshift]
+version = "0.1"
+
+[dependencies.rand_chacha]
 version = "0.1"
 
 [dependencies.byteorder]

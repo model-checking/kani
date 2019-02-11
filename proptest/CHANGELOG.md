@@ -1,3 +1,50 @@
+## Unreleased
+
+### New RNG Algorithm
+
+Starting in this version, the default RNG algorithm has been changed from
+XorShift to ChaCha since it produces higher-quality randomness. This may make
+test case generation a bit slower but it avoids certain pathological cases that
+the old generator had.
+
+The old algorithm is still supported, and is used automatically when reading
+old failure persistence files.
+
+Note that this change also affects the internal representation of RNG seeds,
+which affects the `FailurePersistence` trait which previously only supported
+the seed representation for XorShift. This release maintains source
+compatibility with 0.9.0 by providing defaults for the new methods which
+delegate (when possible) to the old ones, but be aware that custom failure
+persistence implementations using the old API will not function when using an
+RNG other than XorShift.
+
+To keep using the old algorithm, you can set the environment variable
+`PROPTEST_RNG_ALGORITHM` to `xs` or set `Config.rng_algorithm` to
+`RngAlgorithm::XorShift` in code.
+
+Besides ChaCha, this version also adds a `PassThrough` RNG "algorithm" which
+makes it possible to use an external source of entropy with Proptest.
+
+### New Additions
+
+- `TestRng` instances can be created with the `from_seed` function.
+
+- `TestRunner` instances can be created with user-provided `TestRng`s.
+
+- `TestRunner` now has a `deterministic()` constructor which uses the same RNG
+  every time, to facilitate doing statistical tests on strategy outputs.
+
+- There is now a work-around for a [compiler
+  bug](https://github.com/rust-lang/rust/issues/52478) which prevents building
+  with `-C link-dead-code`. Please see this issue for details:
+  https://github.com/AltSysrq/proptest/issues/124
+
+### Deprecations
+
+- The `load_persisted_failures` and `save_persisted_failure` methods on the
+  `FailurePersistence` trait have been deprecated and will be removed in
+  0.10.0.
+
 ## 0.9.0
 
 ### Breaking Changes

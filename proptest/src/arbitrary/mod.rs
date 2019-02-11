@@ -7,8 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Defines the [`Arbitrary`] trait and related free functions
-//! and type aliases. See the trait for more information.
+//! Defines the `Arbitrary` trait and related free functions
+//! and type aliases.
+//!
+//! See the [`Arbitrary`] trait for more information.
 //!
 //! [`Arbitrary`]: trait.Arbitrary.html
 

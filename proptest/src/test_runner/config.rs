@@ -22,6 +22,7 @@ use std::str::FromStr;
 use crate::test_runner::FailurePersistence;
 #[cfg(feature = "std")]
 use crate::test_runner::FileFailurePersistence;
+use crate::test_runner::rng::RngAlgorithm;
 use crate::test_runner::result_cache::{noop_result_cache, ResultCache};
 
 #[cfg(feature = "std")]
@@ -42,6 +43,7 @@ const FORK: &str = "PROPTEST_FORK";
 const TIMEOUT: &str = "PROPTEST_TIMEOUT";
 #[cfg(feature = "std")]
 const VERBOSE: &str = "PROPTEST_VERBOSE";
+const RNG_ALGORITHM: &str = "PROPTEST_RNG_ALGORITHM";
 
 #[cfg(feature = "std")]
 fn contextualize_config(mut result: Config) -> Config {
@@ -88,6 +90,8 @@ fn contextualize_config(mut result: Config) -> Config {
                 &value, &mut result.max_shrink_iters, "u32", MAX_SHRINK_ITERS),
             VERBOSE => parse_or_warn(
                 &value, &mut result.verbose, "u32", VERBOSE),
+            RNG_ALGORITHM => parse_or_warn(
+                &value, &mut result.rng_algorithm, "RngAlgorithm", RNG_ALGORITHM),
 
             _ => if var.starts_with("PROPTEST_") {
                 eprintln!("proptest: Ignoring unknown env-var {}.", var);
@@ -123,6 +127,7 @@ lazy_static! {
             result_cache: noop_result_cache,
             #[cfg(feature = "std")]
             verbose: 0,
+            rng_algorithm: RngAlgorithm::default(),
             _non_exhaustive: (),
         };
 
@@ -289,6 +294,15 @@ pub struct Config {
     /// `PROPTEST_VERBOSE` environment variable.
     #[cfg(feature = "std")]
     pub verbose: u32,
+
+    /// The RNG algorithm to use when not using a user-provided RNG.
+    ///
+    /// The default is `RngAlgorithm::default()`, which can be overridden by
+    /// setting the `PROPTEST_RNG_ALGORITHM` environment variable to one of the following:
+    ///
+    /// - `xs` — `RngAlgorithm::XorShift`
+    /// - `cc` — `RngAlgorithm::ChaCha`
+    pub rng_algorithm: RngAlgorithm,
 
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]

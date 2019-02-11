@@ -170,7 +170,7 @@ mod test {
         let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
             |element| crate::collection::vec(element, 8..16).prop_map(Tree::Branch));
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         for _ in 0..65536 {
             let tree = strat.new_tree(&mut runner).unwrap().current();
             let (depth, count) = tree.stats();
@@ -189,7 +189,7 @@ mod test {
         let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
             |element| crate::collection::vec(element, 8..16).prop_map(Tree::Branch));
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         for _ in 0..256 {
             let mut value = strat.new_tree(&mut runner).unwrap();
             while value.simplify() { }

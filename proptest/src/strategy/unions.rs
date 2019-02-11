@@ -353,8 +353,8 @@ mod test {
         let mut passed = 0;
         let mut converged_low = 0;
         let mut converged_high = 0;
+        let mut runner = TestRunner::deterministic();
         for _ in 0..256 {
-            let mut runner = TestRunner::default();
             let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
@@ -386,7 +386,7 @@ mod test {
         ]);
 
         let mut counts = [0, 0, 0];
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         for _ in 0..65536 {
             counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
@@ -421,8 +421,8 @@ mod test {
         let mut passed = 0;
         let mut converged_low = 0;
         let mut converged_high = 0;
+        let mut runner = TestRunner::deterministic();
         for _ in 0..256 {
-            let mut runner = TestRunner::default();
             let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |v| {
                 prop_assert!(v < 15);
@@ -454,7 +454,7 @@ mod test {
         ));
 
         let mut counts = [0, 0, 0];
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         for _ in 0..65536 {
             counts[input.new_tree(&mut runner).unwrap().current()] += 1;
         }
@@ -468,7 +468,7 @@ mod test {
 
     #[test]
     fn test_tuple_union_all_sizes() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let r = 1i32..10;
 
         macro_rules! test {

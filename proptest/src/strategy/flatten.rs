@@ -250,8 +250,8 @@ mod test {
             |a| (Just(a), (a-5..a+5)));
 
         let mut failures = 0;
+        let mut runner = TestRunner::deterministic();
         for _ in 0..1000 {
-            let mut runner = TestRunner::default();
             let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |(a, b)| {
                 if a <= 10000 || b <= a {

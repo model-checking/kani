@@ -103,7 +103,7 @@ use proptest::prelude::*;
 proptest! {
     #[test]
     fn doesnt_crash(s in "\\PC*") {
-        parse_date(s);
+        parse_date(&s);
     }
 }
 ```
@@ -184,7 +184,7 @@ proptest! {
 
     #[test]
     fn parses_all_valid_dates(s in "[0-9]{4}-[0-9]{2}-[0-9]{2}") {
-        parse_date(s).unwrap();
+        parse_date(&s).unwrap();
     }
 }
 ```
@@ -293,7 +293,7 @@ $ git add proptest-regressions
 ```rust,ignore
 #[test]
 fn test_october_first() {
-    assert_eq!(Some(0, 10, 1), parse_date("0000-10-01"));
+    assert_eq!(Some((0, 10, 1)), parse_date("0000-10-01"));
 }
 ```
 
