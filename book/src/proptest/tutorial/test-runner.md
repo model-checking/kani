@@ -1,9 +1,9 @@
 # Using the Test Runner
 
-The above is quite a bit of code though, and it can't handle things like
-panics. Fortunately, proptest's
+Rather than manually shrinking, proptest's
 [`TestRunner`](test_runner/struct.TestRunner.html) provides this
-functionality for us. The method we're interested in is `run`. We simply
+functionality for us and additionally handles things like panics. The
+method we're interested in is `run`. We simply
 give it the strategy and a function to test inputs and it takes care of the
 rest.
 
