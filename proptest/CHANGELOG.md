@@ -1,4 +1,4 @@
-## Unreleased
+## 0.9.1
 
 ### New RNG Algorithm
 
