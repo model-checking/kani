@@ -43,6 +43,7 @@ impl_wrap_char!(ToLowercase, char::to_lowercase);
 #[cfg(feature = "unstable")]
 impl_wrap_char!(ToUppercase, char::to_uppercase);
 
+#[cfg(feature = "break-dead-code")]
 arbitrary!(DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
     SMapped<Vec<u16>, Self>;
     static_map(vec(any::<u16>(), ..VEC_MAX), decode_utf16)
@@ -71,8 +72,12 @@ mod test {
         escape_default => EscapeDefault,
         escape_unicode => EscapeUnicode,
         parse_char_error => ParseCharError,
-        decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>,
         decode_utf16_error => DecodeUtf16Error
+    );
+
+    #[cfg(feature = "break-dead-code")]
+    no_panic_test!(
+        decode_utf16 => DecodeUtf16<<Vec<u16> as IntoIterator>::IntoIter>
     );
 
     #[cfg(feature = "unstable")]

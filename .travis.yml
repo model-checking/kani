@@ -17,6 +17,7 @@ script:
   - |
       (cd proptest && travis-cargo build) &&
       (cd proptest && travis-cargo test) &&
+      (cd proptest && env RUST_FLAGS='-C link-dead-code' travis-cargo --only stable build -- --no-default-features --features default-code-coverage) &&
       (cd proptest && travis-cargo --only stable build -- --no-default-features --features fork) &&
       (cd proptest && travis-cargo --only stable build -- --lib --no-default-features --features std) &&
       (cd proptest && travis-cargo --only nightly build -- --no-default-features --features "alloc unstable") &&

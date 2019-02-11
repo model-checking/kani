@@ -30,6 +30,11 @@ makes it possible to use an external source of entropy with Proptest.
 - `TestRunner` now has a `deterministic()` constructor which uses the same RNG
   every time, to facilitate doing statistical tests on strategy outputs.
 
+- There is now a work-around for a [compiler
+  bug](https://github.com/rust-lang/rust/issues/52478) which prevents building
+  with `-C link-dead-code`. Please see this issue for details:
+  https://github.com/AltSysrq/proptest/issues/124
+
 ### Deprecations
 
 - The `load_persisted_failures` and `save_persisted_failure` methods on the
