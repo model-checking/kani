@@ -18,6 +18,10 @@ delegate (when possible) to the old ones, but be aware that custom failure
 persistence implementations using the old API will not function when using an
 RNG other than XorShift.
 
+To keep using the old algorithm, you can set the environment variable
+`PROPTEST_RNG_ALGORITHM` to `xs` or set `Config.rng_algorithm` to
+`RngAlgorithm::XorShift` in code.
+
 Besides ChaCha, this version also adds a `PassThrough` RNG "algorithm" which
 makes it possible to use an external source of entropy with Proptest.
 

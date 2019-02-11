@@ -7,7 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::{u8, str};
+use core::{u8, fmt, str};
+use core::result::Result;
 use crate::std_facade::{Arc, String, Vec, ToOwned};
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -78,6 +79,20 @@ impl RngAlgorithm {
             "pt" => Some(RngAlgorithm::PassThrough),
             _ => None,
         }
+    }
+}
+
+// These two are only used for parsing the environment variable
+// PROPTEST_RNG_ALGORITHM.
+impl str::FromStr for RngAlgorithm {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        RngAlgorithm::from_persistence_key(s).ok_or(())
+    }
+}
+impl fmt::Display for RngAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.persistence_key())
     }
 }
 
@@ -305,20 +320,28 @@ impl TestRng {
     }
 
     /// Construct a default TestRng from entropy.
-    pub(crate) fn default_rng() -> Self {
+    pub(crate) fn default_rng(algorithm: RngAlgorithm) -> Self {
         #[cfg(feature = "std")]
         {
             use rand::FromEntropy;
-            Self { rng: TestRngImpl::ChaCha(ChaChaRng::from_entropy()) }
+            Self { rng: match algorithm {
+                RngAlgorithm::XorShift =>
+                    TestRngImpl::XorShift(XorShiftRng::from_entropy()),
+                RngAlgorithm::ChaCha =>
+                    TestRngImpl::ChaCha(ChaChaRng::from_entropy()),
+                RngAlgorithm::PassThrough =>
+                    panic!("cannot create default instance of PassThrough"),
+                RngAlgorithm::_NonExhaustive => unreachable!(),
+            } }
         }
         #[cfg(not(feature = "std"))]
-        Self::deterministic_rng()
+        Self::deterministic_rng(algorithm)
     }
 
     /// Returns a `TestRng` with a particular hard-coded seed.
     ///
     /// The seed value will always be the same for a particular version of
-    /// Proptest, but may change across releases.
+    /// Proptest and algorithm, but may change across releases.
     ///
     /// This is useful for testing things like strategy implementations without
     /// risking getting "unlucky" RNGs which deviate from average behaviour
@@ -329,13 +352,22 @@ impl TestRng {
     /// spurious test failures when the RNG happens to produce a very skewed
     /// distribution. Using this or `TestRunner::deterministic()` avoids such
     /// issues.
-    pub fn deterministic_rng() -> Self {
-        Self::from_seed_internal(Seed::ChaCha([
-            0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac,
-            0x72, 0x20, 0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d,
-            0xca, 0x9f, 0x76, 0xaf, 0x1b, 0x09, 0x73, 0xa0,
-            0x59, 0x22, 0x6d, 0xc5, 0x46, 0x39, 0x1c, 0x4a,
-        ]))
+    pub fn deterministic_rng(algorithm: RngAlgorithm) -> Self {
+        Self::from_seed_internal(match algorithm {
+            RngAlgorithm::XorShift => Seed::XorShift([
+                0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac,
+                0x72, 0x20, 0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d,
+            ]),
+            RngAlgorithm::ChaCha => Seed::ChaCha([
+                0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac,
+                0x72, 0x20, 0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d,
+                0xca, 0x9f, 0x76, 0xaf, 0x1b, 0x09, 0x73, 0xa0,
+                0x59, 0x22, 0x6d, 0xc5, 0x46, 0x39, 0x1c, 0x4a,
+            ]),
+            RngAlgorithm::PassThrough =>
+                panic!("deterministic RNG not available for PassThrough"),
+            RngAlgorithm::_NonExhaustive => unreachable!(),
+        })
     }
 
     /// Construct a TestRng by the perturbed randomized seed

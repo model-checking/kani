@@ -275,17 +275,30 @@ impl TestRunner {
     /// hard-coded seed. This seed is not contractually guaranteed and may be
     /// changed between releases without notice.
     pub fn new(config: Config) -> Self {
-        TestRunner::new_with_rng(config, TestRng::default_rng())
+        let algorithm = config.rng_algorithm;
+        TestRunner::new_with_rng(config, TestRng::default_rng(algorithm))
     }
 
     /// Create a fresh `TestRunner` with the standard deterministic RNG.
     ///
-    /// This is sugar for `TestRunner::new_with_rng(Config::default(),
-    /// TestRng::deterministic_rng())`. Refer to `TestRng::deterministic_rng()`
-    /// for more information on the properties of the RNG used here.
+    /// This is sugar for the following:
+    ///
+    /// ```rust
+    /// # use proptest::test_runner::*;
+    /// let config = Config::default();
+    /// let algorithm = config.rng_algorithm;
+    /// TestRunner::new_with_rng(
+    ///     config,
+    ///     TestRng::deterministic_rng(algorithm));
+    /// ```
+    ///
+    /// Refer to `TestRng::deterministic_rng()` for more information on the
+    /// properties of the RNG used here.
     pub fn deterministic() -> Self {
+        let config = Config::default();
+        let algorithm = config.rng_algorithm;
         TestRunner::new_with_rng(
-            Config::default(), TestRng::deterministic_rng())
+            config, TestRng::deterministic_rng(algorithm))
     }
 
     /// Create a fresh `TestRunner` with the given configuration and RNG.
