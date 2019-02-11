@@ -202,7 +202,7 @@ mod test {
     use super::*;
 
     fn count_some_of_1000(s: OptionStrategy<Just<i32>>) -> u32 {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let mut count = 0;
         for _ in 0..1000 {
             count += s.new_tree(&mut runner).unwrap()

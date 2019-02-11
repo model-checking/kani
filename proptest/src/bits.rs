@@ -518,7 +518,7 @@ mod test {
     fn generates_values_in_mask() {
         let mut accum = 0;
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = u32::masked(0xdeadbeef);
         for _ in 0..1024 {
             accum |= input.new_tree(&mut runner).unwrap().current();
@@ -537,7 +537,7 @@ mod test {
         mask.insert(0);
         mask.insert(2);
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = bitset::masked(mask);
         for _ in 0..32 {
             let v = input.new_tree(&mut runner).unwrap().current();
@@ -556,7 +556,7 @@ mod test {
 
         let mask = vec![true, false, true, false];
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = bool_vec::masked(mask);
         for _ in 0..32 {
             let v = input.new_tree(&mut runner).unwrap().current();
@@ -609,7 +609,7 @@ mod test {
         let mut seen_counts = [0; 32];
         let mut seen_bits = [0; 32];
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         for _ in 0..2048 {
             let value = input.new_tree(&mut runner).unwrap().current();
             let count = value.count_ones() as usize;

@@ -422,7 +422,7 @@ mod test {
         let mut size_counts = [0; 8];
         let mut value_counts = [0; 8];
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = subsequence(VALUES, 3..7);
 
         for _ in 0..2048 {
@@ -460,7 +460,7 @@ mod test {
         // Just test that the types work out
         let values = vec![0, 1, 2, 3, 4];
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = subsequence(values, 1..3);
 
         let _ = input.new_tree(&mut runner).unwrap().current();
@@ -471,7 +471,7 @@ mod test {
         let values = vec![0, 1, 2, 3, 4, 5, 6, 7];
         let mut counts = [0; 8];
 
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = select(values);
 
         for _ in 0..1024 {
@@ -496,7 +496,7 @@ mod test {
 
     #[test]
     fn subseq_empty_vec_works() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = subsequence(Vec::<()>::new(), 0..1);
         assert_eq!(Vec::<()>::new(), input.new_tree(&mut runner).unwrap().current());
     }
@@ -504,14 +504,14 @@ mod test {
     #[test]
     fn subseq_full_vec_works() {
         let v = vec![1u32, 2u32, 3u32];
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = subsequence(v.clone(), 3);
         assert_eq!(v, input.new_tree(&mut runner).unwrap().current());
     }
 
     #[test]
     fn index_works() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = any::<Index>();
         let col = vec!["foo", "bar", "baz"];
         let mut seen = BTreeSet::new();
@@ -530,7 +530,7 @@ mod test {
 
     #[test]
     fn selector_works() {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let input = any::<Selector>();
         let col: BTreeSet<&str> = vec!["foo", "bar", "baz"].into_iter().collect();
         let mut seen = BTreeSet::new();

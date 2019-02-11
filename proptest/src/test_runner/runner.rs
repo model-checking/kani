@@ -278,6 +278,16 @@ impl TestRunner {
         TestRunner::new_with_rng(config, TestRng::default_rng())
     }
 
+    /// Create a fresh `TestRunner` with the standard deterministic RNG.
+    ///
+    /// This is sugar for `TestRunner::new_with_rng(Config::default(),
+    /// TestRng::deterministic_rng())`. Refer to `TestRng::deterministic_rng()`
+    /// for more information on the properties of the RNG used here.
+    pub fn deterministic() -> Self {
+        TestRunner::new_with_rng(
+            Config::default(), TestRng::deterministic_rng())
+    }
+
     /// Create a fresh `TestRunner` with the given configuration and RNG.
     pub fn new_with_rng(config: Config, rng: TestRng) -> Self {
         TestRunner {

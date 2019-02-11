@@ -27,6 +27,9 @@ makes it possible to use an external source of entropy with Proptest.
 
 - `TestRunner` instances can be created with user-provided `TestRng`s.
 
+- `TestRunner` now has a `deterministic()` constructor which uses the same RNG
+  every time, to facilitate doing statistical tests on strategy outputs.
+
 ### Deprecations
 
 - The `load_persisted_failures` and `save_persisted_failure` methods on the

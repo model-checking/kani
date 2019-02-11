@@ -256,7 +256,7 @@ mod test {
         }
 
         let input = [0..32, 0..32];
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
 
         let mut cases_tested = 0;
         for _ in 0..256 {

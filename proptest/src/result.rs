@@ -186,7 +186,7 @@ mod test {
     use super::*;
 
     fn count_ok_of_1000(s: impl Strategy<Value = Result<(), ()>>) -> u32 {
-        let mut runner = TestRunner::default();
+        let mut runner = TestRunner::deterministic();
         let mut count = 0;
         for _ in 0..1000 {
             count += s.new_tree(&mut runner).unwrap()

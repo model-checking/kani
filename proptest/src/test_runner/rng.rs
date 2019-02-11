@@ -312,6 +312,24 @@ impl TestRng {
             Self { rng: TestRngImpl::ChaCha(ChaChaRng::from_entropy()) }
         }
         #[cfg(not(feature = "std"))]
+        Self::deterministic_rng()
+    }
+
+    /// Returns a `TestRng` with a particular hard-coded seed.
+    ///
+    /// The seed value will always be the same for a particular version of
+    /// Proptest, but may change across releases.
+    ///
+    /// This is useful for testing things like strategy implementations without
+    /// risking getting "unlucky" RNGs which deviate from average behaviour
+    /// enough to cause spurious failures. For example, a strategy for `bool`
+    /// which is supposed to produce `true` 50% of the time might have a test
+    /// which checks that the distribution is "close enough" to 50%. If every
+    /// test run starts with a different RNG, occasionally there will be
+    /// spurious test failures when the RNG happens to produce a very skewed
+    /// distribution. Using this or `TestRunner::deterministic()` avoids such
+    /// issues.
+    pub fn deterministic_rng() -> Self {
         Self::from_seed_internal(Seed::ChaCha([
             0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac,
             0x72, 0x20, 0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d,
