@@ -31,6 +31,11 @@ use crate::util::self_ty;
 /// but for optimality this should follow what `proptest` supports.
 const UNION_CHUNK_SIZE: usize = 9;
 
+/// The `MAX - 1` tuple length `Arbitrary` is implemented for. After this number,
+/// tuples are expanded as nested tuples of up to `MAX` elements. The value should
+/// be kept in sync with the largest impl in `proptest/src/arbitrary/tuples.rs`.
+const NESTED_TUPLE_CHUNK_SIZE: usize = 9;
+
 /// The name of the top parameter variable name given in `arbitrary_with`.
 /// Changing this is not a breaking change because a user is expected not
 /// to rely on this (and the user shouldn't be able to..).
@@ -278,7 +283,7 @@ impl AddAssign<syn::Type> for Params {
 
 impl ToTokens for Params {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        Tuple2(self.0.as_slice()).to_tokens(tokens)
+        NestedTuple(self.0.as_slice()).to_tokens(tokens)
     }
 }
 
@@ -359,11 +364,12 @@ impl ToTokens for Strategy {
             ),
             Value(ty) => quote_append!(tokens, fn() -> #ty ),
             Map(strats) => {
-                let field_tys = self.types();
-                let strats = strats.iter();
+                let types = self.types();
+                let field_tys = NestedTuple(&types);
+                let strats = NestedTuple(&strats);
                 quote_append!(tokens,
-                    _proptest::strategy::Map< ( #(#strats,)* ),
-                        fn( ( #(#field_tys,)* ) ) -> Self
+                    _proptest::strategy::Map< ( #strats ),
+                        fn( #field_tys ) -> Self
                     >
                 )
             }
@@ -456,7 +462,10 @@ impl ToTokens for ToReg {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match *self {
             ToReg::Range(to) if to == 1 => param(0).to_tokens(tokens),
-            ToReg::Range(to) => Tuple((0..to).map(param)).to_tokens(tokens),
+            ToReg::Range(to) => {
+                let params: Vec<_> = (0..to).map(param).collect();
+                NestedTuple(&params).to_tokens(tokens)
+            },
             ToReg::API => call_site_ident(API_PARAM_NAME).to_tokens(tokens),
         }
     }
@@ -498,18 +507,55 @@ impl ToTokens for Ctor {
                     _proptest::strategy::LazyJust::new(move || #expr)
                 )
             ),
-            Map(ctors, closure) => {
-                let ctors = ctors.iter();
-                quote_append!(tokens,
-                    _proptest::strategy::Strategy::prop_map(
-                        ( #(#ctors,)* ),
-                        #closure
-                    )
-                );
-            }
+            Map(ctors, closure) => map_ctor_to_tokens(tokens, &ctors, closure),
             Union(ctors) => union_ctor_to_tokens(tokens, ctors),
         }
     }
+}
+
+struct NestedTuple<'a, T>(&'a [T]);
+
+impl<'a, T: ToTokens> ToTokens for NestedTuple<'a, T> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let NestedTuple(elems) = self;
+        if elems.is_empty() {
+            quote_append!(tokens, ());
+        }
+        else if let [x] = elems {
+            x.to_tokens(tokens);
+        } else {
+            let chunks = elems.chunks(NESTED_TUPLE_CHUNK_SIZE);
+            Recurse(&chunks).to_tokens(tokens);
+        }
+
+        struct Recurse<'a, T: ToTokens>(&'a ::std::slice::Chunks<'a, T>);
+
+        impl<'a, T: ToTokens> ToTokens for Recurse<'a, T> {
+            fn to_tokens(&self, tokens: &mut TokenStream) {
+                let mut chunks = self.0.clone();
+                if let Some(head) = chunks.next() {
+                    if let [c] = head {
+                        // Only one element left - no need to nest.
+                        quote_append!(tokens, #c);
+                    } else {
+                        let tail = Recurse(&chunks);
+                        quote_append!(tokens, (#(#head,)* #tail));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn map_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[Ctor], closure: &MapClosure) {
+    let ctors = NestedTuple(ctors);
+
+    quote_append!(tokens,
+        _proptest::strategy::Strategy::prop_map(
+            #ctors,
+            #closure
+        )
+    );
 }
 
 /// Tokenizes a weighted list of `Ctor`.
@@ -692,7 +738,7 @@ impl ToTokens for MapClosure {
 
         let MapClosure(path, fields) = self;
         let count = fields.len();
-        let tmps = (0..count).map(tmp_var);
+        let tmps: Vec<_> = (0..count).map(tmp_var).collect();
         let inits = fields.iter().enumerate().map(|(idx, field)| {
             let tv = tmp_var(idx);
             if let Some(name) = &field.ident {
@@ -702,7 +748,8 @@ impl ToTokens for MapClosure {
                 quote_spanned!(field.span()=> #name: #tv )
             }
         });
-        quote_append!(tokens, |( #(#tmps,)* )| #path { #(#inits),* } );
+        let tmps = NestedTuple(&tmps);
+        quote_append!(tokens, | #tmps | #path { #(#inits),* } );
     }
 }
 

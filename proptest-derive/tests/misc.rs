@@ -67,6 +67,7 @@ enum Quux {
     },
 }
 
+
 #[test]
 fn asserting_arbitrary() {
     fn assert_arbitrary<T: Arbitrary>() {}
