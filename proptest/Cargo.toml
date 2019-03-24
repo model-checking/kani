@@ -32,8 +32,8 @@ default-code-coverage = ["std", "fork", "timeout", "bit-set"]
 # Enables unstable features of Rust.
 unstable = []
 
-# Enables the use of standard-library dependent feature
-std = ["rand/std", "byteorder/std",
+# Enables the use of standard-library dependent features
+std = ["rand/std", "byteorder/std", "lazy_static",
        "quick-error", "regex-syntax", "num-traits/std"]
 
 # For use in no_std environments with access to an allocator
@@ -68,8 +68,7 @@ bitflags = "1.0.1"
 
 [dependencies.lazy_static]
 version = "1.2"
-default-features = false
-features = ["spin_no_std"]
+optional = true
 
 [dependencies.num-traits]
 version = "0.2.2"

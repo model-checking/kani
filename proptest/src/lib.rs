@@ -65,6 +65,8 @@ mod product_tuple;
 extern crate bitflags;
 #[cfg(feature = "bit-set")]
 extern crate bit_set;
+
+#[cfg(feature = "std")]
 #[macro_use]
 extern crate lazy_static;
 

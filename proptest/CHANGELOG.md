@@ -1,3 +1,13 @@
+## Unreleased
+
+### Other Notes
+
+- Using proptest with the default `std` feature enabled, the `spin` crate is no
+  longer brought in as a dependency.
+
+- Using proptest with the `std` feature disabled, neither `spin` nor
+  `lazy_static` are brought in as dependencies.
+
 ## 0.9.1
 
 ### New RNG Algorithm

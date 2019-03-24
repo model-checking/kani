@@ -105,33 +105,36 @@ fn contextualize_config(mut result: Config) -> Config {
 #[cfg(not(feature = "std"))]
 fn contextualize_config(result: Config) -> Config { result }
 
-/// The default config, computed by combining environment variables and
-/// defaults.
+fn default_default_config() -> Config {
+    Config {
+        cases: 256,
+        max_local_rejects: 65_536,
+        max_global_rejects: 1024,
+        max_flat_map_regens: 1_000_000,
+        failure_persistence: None,
+        source_file: None,
+        test_name: None,
+        #[cfg(feature = "fork")]
+        fork: false,
+        #[cfg(feature = "timeout")]
+        timeout: 0,
+        #[cfg(feature = "std")]
+        max_shrink_time: 0,
+        max_shrink_iters: u32::MAX,
+        result_cache: noop_result_cache,
+        #[cfg(feature = "std")]
+        verbose: 0,
+        rng_algorithm: RngAlgorithm::default(),
+        _non_exhaustive: (),
+    }
+}
+
+// The default config, computed by combining environment variables and
+// defaults.
+#[cfg(feature = "std")]
 lazy_static! {
     static ref DEFAULT_CONFIG: Config = {
-        let result = Config {
-            cases: 256,
-            max_local_rejects: 65_536,
-            max_global_rejects: 1024,
-            max_flat_map_regens: 1_000_000,
-            failure_persistence: None,
-            source_file: None,
-            test_name: None,
-            #[cfg(feature = "fork")]
-            fork: false,
-            #[cfg(feature = "timeout")]
-            timeout: 0,
-            #[cfg(feature = "std")]
-            max_shrink_time: 0,
-            max_shrink_iters: u32::MAX,
-            result_cache: noop_result_cache,
-            #[cfg(feature = "std")]
-            verbose: 0,
-            rng_algorithm: RngAlgorithm::default(),
-            _non_exhaustive: (),
-        };
-
-        contextualize_config(result)
+        contextualize_config(default_default_config())
     };
 }
 
@@ -414,8 +417,16 @@ impl Config {
     }
 }
 
+#[cfg(feature = "std")]
 impl Default for Config {
     fn default() -> Self {
         DEFAULT_CONFIG.clone()
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl Default for Config {
+    fn default() -> Self {
+        default_default_config()
     }
 }
