@@ -7,8 +7,8 @@
   closure with that macro.
 
 - There is now **highly experimental** support for building on Web Assembly.
-  Refer to (the Proptest
-  book)[https://altsysrq.github.io/proptest-book/proptest/wasm.html] for build
+  Refer to [the Proptest
+  book](https://altsysrq.github.io/proptest-book/proptest/wasm.html) for build
   instructions.
 
 ### Other Notes
