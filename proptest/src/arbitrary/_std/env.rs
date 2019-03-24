@@ -70,6 +70,8 @@ fn make_utf16_invalid(buf: &mut [u16], p: usize) {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod var_error {
+    use super::*;
+
     /// Generates the set of `WTF-16 \ UTF-16` and makes
     /// an `OsString` that is not a valid String from it.
     #[cfg(target_os = "windows")]
