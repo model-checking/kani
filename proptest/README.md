@@ -14,11 +14,6 @@ minimal test case to reproduce the problem. Unlike QuickCheck, generation
 and shrinking is defined on a per-value basis instead of per-type, which
 makes it more flexible and simplifies composition.
 
-If you have dependencies which provide QuickCheck `Arbitrary`
-implementations, see also the related
-[`proptest-quickcheck-interop`](https://crates.io/crates/proptest-quickcheck-interop)
-crates which enables reusing those implementations with proptest.
-
 ### Status of this crate
 
 The majority of the functionality offered by proptest is in active use and
@@ -86,7 +81,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.9.1"
+proptest = "0.9.2"
 ```
 
 Now we can add some property tests to our date parser. But how do we test

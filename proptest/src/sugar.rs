@@ -593,7 +593,7 @@ macro_rules! prop_compose {
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
             $crate::strategy::Strategy::prop_map(strat,
-                |$crate::proptest_helper!(@_WRAPPAT ($($var),*))| $body)
+                move |$crate::proptest_helper!(@_WRAPPAT ($($var),*))| $body)
         }
     };
 
@@ -612,10 +612,10 @@ macro_rules! prop_compose {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
                 strat,
-                |$crate::proptest_helper!(@_WRAPPAT ($($var),*))|
+                move |$crate::proptest_helper!(@_WRAPPAT ($($var),*))|
                 $crate::proptest_helper!(@_WRAP ($($strategy2)*)));
             $crate::strategy::Strategy::prop_map(strat,
-                |$crate::proptest_helper!(@_WRAPPAT ($($var2),*))| $body)
+                move |$crate::proptest_helper!(@_WRAPPAT ($($var2),*))| $body)
         }
     };
 
@@ -632,7 +632,7 @@ macro_rules! prop_compose {
                  -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = $crate::proptest_helper!(@_EXT _STRAT ($($arg)+));
             $crate::strategy::Strategy::prop_map(strat,
-                |$crate::proptest_helper!(@_EXT _PAT ($($arg)+))| $body)
+                move |$crate::proptest_helper!(@_EXT _PAT ($($arg)+))| $body)
         }
     };
 
@@ -651,10 +651,10 @@ macro_rules! prop_compose {
             let strat = $crate::proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
                 strat,
-                |$crate::proptest_helper!(@_EXT _PAT ($($arg)+))|
+                move |$crate::proptest_helper!(@_EXT _PAT ($($arg)+))|
                 $crate::proptest_helper!(@_EXT _STRAT ($($arg2)*)));
             $crate::strategy::Strategy::prop_map(strat,
-                |$crate::proptest_helper!(@_EXT _PAT ($($arg2)*))| $body)
+                move |$crate::proptest_helper!(@_EXT _PAT ($($arg2)*))| $body)
         }
     };
 }
@@ -1171,6 +1171,25 @@ mod test {
         fn test_something(a in 0u32..42u32, b in 1u32..10u32) {
             prop_assume!(a != 41 || b != 9);
             assert!(a + b < 50);
+        }
+    }
+
+    prop_compose! {
+        #[allow(dead_code)]
+        fn single_closure_is_move(base: u64)(off in 0..10u64) -> u64 {
+            base + off
+        }
+    }
+
+    prop_compose! {
+        #[allow(dead_code)]
+        fn double_closure_is_move
+            (base: u64)
+            (off1 in 0..10u64)
+            (off2 in off1..off1+10)
+            -> u64
+        {
+            base + off2
         }
     }
 

@@ -25,7 +25,6 @@
     allocator_api,
     try_trait,
     generator_trait,
-    try_from,
     never_type,
     try_reserve
 ))]
@@ -65,6 +64,8 @@ mod product_tuple;
 extern crate bitflags;
 #[cfg(feature = "bit-set")]
 extern crate bit_set;
+
+#[cfg(feature = "std")]
 #[macro_use]
 extern crate lazy_static;
 
