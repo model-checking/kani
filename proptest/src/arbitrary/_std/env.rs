@@ -68,39 +68,42 @@ fn make_utf16_invalid(buf: &mut [u16], p: usize) {
     buf[p] = (buf[p] & !force_bits_mask) | force_bits_value;
 }
 
-/// Generates the set of `WTF-16 \ UTF-16` and makes
-/// an `OsString` that is not a valid String from it.
-#[cfg(target_os = "windows")]
-fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
-    use std::os::windows::ffi::OsStringExt;
-    let size = 1..::std::u16::MAX as usize;
-    let vec_gen = crate::collection::vec(..::std::u16::MAX, size.clone());
-    (size, vec_gen).prop_map(|(p, mut sbuf)| {
-        // Not quite a uniform distribution due to clamping,
-        // but probably good enough
-        let p = ::std::cmp::min(p, sbuf.len() - 1);
-        make_utf16_invalid(&mut sbuf, p);
-        OsString::from_wide(sbuf.as_slice()).into_string().unwrap_err()
-    })
-}
+#[cfg(not(target_arch = "wasm32"))]
+mod var_error {
+    /// Generates the set of `WTF-16 \ UTF-16` and makes
+    /// an `OsString` that is not a valid String from it.
+    #[cfg(target_os = "windows")]
+    fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
+        use std::os::windows::ffi::OsStringExt;
+        let size = 1..::std::u16::MAX as usize;
+        let vec_gen = crate::collection::vec(..::std::u16::MAX, size.clone());
+        (size, vec_gen).prop_map(|(p, mut sbuf)| {
+            // Not quite a uniform distribution due to clamping,
+            // but probably good enough
+            let p = ::std::cmp::min(p, sbuf.len() - 1);
+            make_utf16_invalid(&mut sbuf, p);
+            OsString::from_wide(sbuf.as_slice()).into_string().unwrap_err()
+        })
+    }
 
-#[cfg(not(target_os = "windows"))]
-fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
-    use std::os::unix::ffi::OsStringExt;
-    use crate::arbitrary::_std::string::not_utf8_bytes;
-    static_map(not_utf8_bytes(true), OsString::from_vec)
-}
+    #[cfg(not(target_os = "windows"))]
+    fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
+        use std::os::unix::ffi::OsStringExt;
+        use crate::arbitrary::_std::string::not_utf8_bytes;
+        static_map(not_utf8_bytes(true), OsString::from_vec)
+    }
 
-arbitrary!(VarError,
-    TupleUnion<(
-        W<Just<Self>>,
-        W<SFnPtrMap<BoxedStrategy<OsString>, Self>>
-    )>;
-    prop_oneof![
-        Just(VarError::NotPresent),
-        static_map(osstring_invalid_string().boxed(), VarError::NotUnicode)
-    ]
-);
+    arbitrary!(VarError,
+        TupleUnion<(
+            W<Just<Self>>,
+            W<SFnPtrMap<BoxedStrategy<OsString>, Self>>
+        )>;
+        prop_oneof![
+            Just(VarError::NotPresent),
+            static_map(osstring_invalid_string().boxed(), VarError::NotUnicode)
+        ]
+    );
+}
 
 #[cfg(test)]
 mod test {

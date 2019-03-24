@@ -21,6 +21,7 @@
   - [Failure Persistence](proptest/failure-persistence.md)
   - [Test Timeouts and Forking](proptest/forking.md)
   - [`no_std` Support](proptest/no-std.md)
+  - [Web Assembly Support](proptest/wasm.md)
   - [Limitations of Property Testing](proptest/limitations.md)
   - [Proptest vs Quickcheck](proptest/vs-quickcheck.md)
   - [Reference documentation](proptest/reference-docs.md)

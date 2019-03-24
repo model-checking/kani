@@ -307,12 +307,14 @@ signed_integer_bin_search!(i8);
 signed_integer_bin_search!(i16);
 signed_integer_bin_search!(i32);
 signed_integer_bin_search!(i64);
+#[cfg(not(target_arch = "wasm32"))]
 signed_integer_bin_search!(i128);
 signed_integer_bin_search!(isize);
 unsigned_integer_bin_search!(u8);
 unsigned_integer_bin_search!(u16);
 unsigned_integer_bin_search!(u32);
 unsigned_integer_bin_search!(u64);
+#[cfg(not(target_arch = "wasm32"))]
 unsigned_integer_bin_search!(u128);
 unsigned_integer_bin_search!(usize);
 

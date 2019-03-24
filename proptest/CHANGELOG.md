@@ -6,6 +6,10 @@
   cause any breakage since there is no way to successfully use a borrowing
   closure with that macro.
 
+- There is now **highly experimental** support for building on Web Assembly.
+  Refer to [https://altsysrq.github.io/proptest-book/proptest/wasm.html] for
+  build instructions.
+
 ### Other Notes
 
 - Using proptest with the default `std` feature enabled, the `spin` crate is no
