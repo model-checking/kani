@@ -25,7 +25,6 @@
     allocator_api,
     try_trait,
     generator_trait,
-    try_from,
     never_type,
     try_reserve
 ))]
