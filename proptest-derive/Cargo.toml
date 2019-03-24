@@ -32,7 +32,7 @@ proc-macro = true
 
 [dev-dependencies]
 proptest = { version = "0.9.1", path = "../proptest" }
-compiletest_rs = { version = "0.3.3", features = ["tmp"] }
+compiletest_rs = { version = "0.3.19", features = ["tmp"] }
 
 [dependencies]
 proc-macro2 = "0.4"
