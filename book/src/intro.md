@@ -8,11 +8,6 @@ minimal test case to reproduce the problem. Unlike QuickCheck, generation
 and shrinking is defined on a per-value basis instead of per-type, which
 makes it more flexible and simplifies composition.
 
-If you have dependencies which provide QuickCheck `Arbitrary`
-implementations, see also the related
-[`proptest-quickcheck-interop`](https://crates.io/crates/proptest-quickcheck-interop)
-crates which enables reusing those implementations with proptest.
-
 ## Status of this crate
 
 The majority of the functionality offered by proptest is in active use and
