@@ -10,6 +10,7 @@ documentation = "https://altsysrq.github.io/rustdoc/proptest/0.9.2/proptest/"
 keywords = ["property", "testing", "quickcheck", "fuzz", "hypothesis"]
 categories = ["development-tools::testing"]
 edition = "2018"
+exclude = ["/gen-*.sh", "/readme-*.md"]
 
 description = """
 Hypothesis-like property-based testing and shrinking.
