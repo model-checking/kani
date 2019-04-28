@@ -1,3 +1,9 @@
+## 0.9.3
+
+This is a minor release to correct some packaging errors. The licence files are
+now included in the files published to crates.io, and some unneeded files are
+now excluded.
+
 ## 0.9.2
 
 ### New Additions
