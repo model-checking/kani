@@ -40,7 +40,7 @@ arbitrary!(Barrier, SMapped<u16, Self>;  // usize would be extreme!
 );
 
 arbitrary!(BarrierWaitResult,
-    TupleUnion<(W<LazyJustFn<Self>>, W<LazyJustFn<Self>>)>;
+    LazyTupleUnion<(WA<LazyJustFn<Self>>, WA<LazyJustFn<Self>>)>;
     prop_oneof![LazyJust::new(bwr_true), LazyJust::new(bwr_false)]
 );
 
@@ -49,7 +49,7 @@ lazy_just!(
     Once, Once::new
 );
 
-arbitrary!(WaitTimeoutResult, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+arbitrary!(WaitTimeoutResult, LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
     prop_oneof![Just(wtr_true()), Just(wtr_false())]
 );
 
@@ -90,14 +90,14 @@ arbitrary!([T: Arbitrary] SendError<T>, SMapped<T, Self>, T::Parameters;
     args => static_map(any_with::<T>(args), SendError)
 );
 
-arbitrary!(RecvTimeoutError, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+arbitrary!(RecvTimeoutError, LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
     prop_oneof![
         Just(RecvTimeoutError::Disconnected),
         Just(RecvTimeoutError::Timeout)
     ]
 );
 
-arbitrary!(TryRecvError, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+arbitrary!(TryRecvError, LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
     prop_oneof![
         Just(TryRecvError::Disconnected),
         Just(TryRecvError::Empty)
@@ -106,7 +106,7 @@ arbitrary!(TryRecvError, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
 
 arbitrary!(
     [P: Clone + Default, T: Arbitrary<Parameters = P>] TrySendError<T>,
-    TupleUnion<(W<SMapped<T, Self>>, W<SMapped<T, Self>>)>, P;
+    LazyTupleUnion<(WA<SMapped<T, Self>>, WA<SMapped<T, Self>>)>, P;
     args => prop_oneof![
         static_map(any_with::<T>(args.clone()), TrySendError::Disconnected),
         static_map(any_with::<T>(args), TrySendError::Full),

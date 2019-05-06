@@ -121,10 +121,10 @@ arbitrary!(ErrorKind, Union<Just<Self>>;
 
 arbitrary!(
     SeekFrom,
-    TupleUnion<(
-        W<SMapped<u64, SeekFrom>>,
-        W<SMapped<i64, SeekFrom>>,
-        W<SMapped<i64, SeekFrom>>,
+    LazyTupleUnion<(
+        WA<SMapped<u64, SeekFrom>>,
+        WA<SMapped<i64, SeekFrom>>,
+        WA<SMapped<i64, SeekFrom>>,
     )>;
     prop_oneof![
         static_map(any::<u64>(), SeekFrom::Start),

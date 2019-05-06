@@ -25,8 +25,8 @@ arbitrary!(TryFromIntError; {
 wrap_ctor!(Wrapping, Wrapping);
 
 arbitrary!(FpCategory,
-    TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>,
-                W<Just<Self>>, W<Just<Self>>)>;
+    LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
+                    WA<Just<Self>>, WA<Just<Self>>)>;
     {
         use core::num::FpCategory::*;
         prop_oneof![

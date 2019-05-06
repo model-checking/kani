@@ -23,6 +23,7 @@ mod fuse;
 
 pub use self::traits::*;
 pub use self::just::*;
+pub use self::lazy::*;
 pub use self::map::*;
 pub use self::filter::*;
 pub use self::filter_map::*;

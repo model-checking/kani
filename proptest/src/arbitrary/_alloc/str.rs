@@ -19,8 +19,8 @@ use crate::arbitrary::*;
 
 arbitrary!(ParseBoolError; "".parse::<bool>().unwrap_err());
 
-type ELSeq  = W<Just<&'static [u8]>>;
-type ELSeqs = TupleUnion<(ELSeq, ELSeq, ELSeq, ELSeq)>;
+type ELSeq  = WA<Just<&'static [u8]>>;
+type ELSeqs = LazyTupleUnion<(ELSeq, ELSeq, ELSeq, ELSeq)>;
 
 fn gen_el_seqs() -> ELSeqs {
     prop_oneof![

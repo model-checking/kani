@@ -11,12 +11,12 @@
 
 use core::cmp::{Reverse, Ordering};
 
-use crate::strategy::{Just, TupleUnion, W};
+use crate::strategy::{Just, LazyTupleUnion, WA};
 
 wrap_ctor!(Reverse, Reverse);
 
-type WJO = W<Just<Ordering>>;
-arbitrary!(Ordering, TupleUnion<(WJO, WJO, WJO)>;
+type WAJO = WA<Just<Ordering>>;
+arbitrary!(Ordering, LazyTupleUnion<(WAJO, WAJO, WAJO)>;
     prop_oneof![
         Just(Ordering::Equal),
         Just(Ordering::Less),

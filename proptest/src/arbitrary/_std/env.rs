@@ -96,9 +96,9 @@ mod var_error {
     }
 
     arbitrary!(VarError,
-        TupleUnion<(
-            W<Just<Self>>,
-            W<SFnPtrMap<BoxedStrategy<OsString>, Self>>
+        LazyTupleUnion<(
+            WA<Just<Self>>,
+            WA<SFnPtrMap<BoxedStrategy<OsString>, Self>>
         )>;
         prop_oneof![
             Just(VarError::NotPresent),

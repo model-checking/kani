@@ -233,10 +233,10 @@ for btree_map::IntoIter<A, B> {
 //==============================================================================
 
 arbitrary!([A: Arbitrary] Bound<A>,
-    TupleUnion<(
-        W<SFnPtrMap<Arc<A::Strategy>, Self>>,
-        W<SFnPtrMap<Arc<A::Strategy>, Self>>,
-        W<LazyJustFn<Self>>
+    LazyTupleUnion<(
+        WA<SFnPtrMap<Arc<A::Strategy>, Self>>,
+        WA<SFnPtrMap<Arc<A::Strategy>, Self>>,
+        WA<LazyJustFn<Self>>
     )>,
     A::Parameters;
     args => {
