@@ -723,6 +723,10 @@ pub struct CheckStrategySanityOptions {
     /// designed in a way that this is expected to hold.
     pub strict_complicate_after_simplify: bool,
 
+    /// If true, cause local rejects to return an error instead of retrying.
+    /// Defaults to false. Useful for testing behaviors around error handling.
+    pub error_on_local_rejects: bool,
+
     // Needs to be public for FRU syntax.
     #[allow(missing_docs)]
     #[doc(hidden)]
@@ -733,6 +737,7 @@ impl Default for CheckStrategySanityOptions {
     fn default() -> Self {
         CheckStrategySanityOptions {
             strict_complicate_after_simplify: true,
+            error_on_local_rejects: false,
             _non_exhaustive: (),
         }
     }
@@ -768,7 +773,11 @@ where S::Tree : Clone + fmt::Debug, S::Value : cmp::PartialEq {
     }
 
     let options = options.unwrap_or_else(CheckStrategySanityOptions::default);
-    let mut runner = TestRunner::default();
+    let mut config = Config::default();
+    if options.error_on_local_rejects {
+        config.max_local_rejects = 0;
+    }
+    let mut runner = TestRunner::new(config);
 
     for _ in 0..1024 {
         let mut gen_tries = 0;

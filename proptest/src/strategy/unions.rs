@@ -508,4 +508,36 @@ mod test {
                              (1, 2000i32..3000i32))),
             None);
     }
+
+    /// Test that unions work even if local filtering causes errors.
+    #[test]
+    fn test_filter_union_sanity() {
+        let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
+        check_strategy_sanity(
+            Union::new(vec![filter_strategy; 8]),
+            Some(filter_sanity_options()));
+    }
+
+    /// Test that unions work even if local filtering causes errors.
+    #[test]
+    fn test_filter_tuple_union_sanity() {
+        let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
+        check_strategy_sanity(
+            TupleUnion::new(((1, filter_strategy.clone()),
+                             (1, filter_strategy.clone()),
+                             (1, filter_strategy.clone()),
+                             (1, filter_strategy.clone()))),
+            Some(filter_sanity_options()));
+    }
+
+    fn filter_sanity_options() -> CheckStrategySanityOptions {
+        CheckStrategySanityOptions {
+            // Due to internal rejection sampling, `simplify()` can
+            // converge back to what `complicate()` would do.
+            strict_complicate_after_simplify: false,
+            // Make failed filters return errors to test edge cases.
+            error_on_local_rejects: true,
+            .. CheckStrategySanityOptions::default()
+        }
+    }
 }
