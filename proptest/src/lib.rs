@@ -37,8 +37,10 @@
     core_intrinsics
 ))]
 
+// std_facade is used in a few macros, so it needs to be public.
 #[macro_use]
-mod std_facade;
+#[doc(hidden)]
+pub mod std_facade;
 
 #[cfg(any(feature = "std", test))]
 #[macro_use]
