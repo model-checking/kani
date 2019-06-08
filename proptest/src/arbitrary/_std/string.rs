@@ -190,9 +190,9 @@ fn gen_el_bytes(allow_null: bool) -> impl Strategy<Value = ELBytes> {
             Just(x),
             match x {
                 0xE0u8 => 0xA0u8..0xC0u8,
-                0xE1u8...0xECu8 => 0x80u8..0xC0u8,
+                0xE1u8..=0xECu8 => 0x80u8..0xC0u8,
                 0xEDu8 => 0x80u8..0xA0u8,
-                0xEEu8...0xEFu8 => 0x80u8..0xA0u8,
+                0xEEu8..=0xEFu8 => 0x80u8..0xA0u8,
                 _ => panic!(),
             },
         )
@@ -206,9 +206,9 @@ fn gen_el_bytes(allow_null: bool) -> impl Strategy<Value = ELBytes> {
             Just(x),
             match x {
                 0xE0u8 => prop_oneof![start_byte..0xA0u8, 0xC0u8..],
-                0xE1u8...0xECu8 => prop_oneof![start_byte..0x80u8, 0xC0u8..],
+                0xE1u8..=0xECu8 => prop_oneof![start_byte..0x80u8, 0xC0u8..],
                 0xEDu8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
-                0xEEu8...0xEFu8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
+                0xEEu8..=0xEFu8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
                 _ => panic!(),
             },
         )
@@ -222,7 +222,7 @@ fn gen_el_bytes(allow_null: bool) -> impl Strategy<Value = ELBytes> {
             Just(x),
             match x {
                 0xF0u8 => prop_oneof![start_byte..0x90u8, 0xA0u8..],
-                0xF1u8...0xF3u8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
+                0xF1u8..=0xF3u8 => prop_oneof![start_byte..0x80u8, 0xA0u8..],
                 0xF4u8 => prop_oneof![start_byte..0x80u8, 0x90u8..],
                 _ => panic!(),
             },
@@ -236,7 +236,7 @@ fn gen_el_bytes(allow_null: bool) -> impl Strategy<Value = ELBytes> {
             Just(x),
             match x {
                 0xF0u8 => 0x90u8..0xA0u8,
-                0xF1u8...0xF3u8 => 0x80u8..0xA0u8,
+                0xF1u8..=0xF3u8 => 0x80u8..0xA0u8,
                 0xF4u8 => 0x80u8..0x90u8,
                 _ => panic!(),
             },

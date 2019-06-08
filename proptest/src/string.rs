@@ -304,7 +304,7 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
                     } else {
                         // We didn't; just yield this node.
                         Some(bytes_regex_parsed(next))
-                    }
+                    };
                 }
             }
         }

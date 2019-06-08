@@ -31,10 +31,7 @@
         try_reserve
     )
 )]
-#![cfg_attr(
-    all(feature = "std", feature = "unstable"),
-    feature(ip)
-)]
+#![cfg_attr(all(feature = "std", feature = "unstable"), feature(ip))]
 #![cfg_attr(
     all(feature = "alloc", not(feature = "std")),
     feature(alloc, core_intrinsics)
