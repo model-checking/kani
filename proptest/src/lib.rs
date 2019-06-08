@@ -33,7 +33,7 @@
 )]
 #![cfg_attr(
     all(feature = "std", feature = "unstable"),
-    feature(mpsc_select, ip)
+    feature(ip)
 )]
 #![cfg_attr(
     all(feature = "alloc", not(feature = "std")),

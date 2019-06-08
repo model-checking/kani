@@ -1,15 +1,19 @@
 ## Unreleased
 
+### Bug Fixes
+
+- The `unstable` feature one again works against the latest nightly.
+
 ### Performance Improvements
 
 - Unions and the `prop_oneof!` combinator now generate value trees
   lazily.
-  
+
   In previous versions of `proptest`, if a value tree for a
   union variant was generated, so would value trees for earlier
   variants -- as a result, union value tree generation was linear in the
   number of variants.
-  
+
   In `proptest` 0.9.4 and above, value trees are only generated for
   union variants that are picked. Union value tree generation is now
   independent of the number of variants.
@@ -18,7 +22,7 @@
 
 - `TupleUnion` has been deprecated, and its implementation will be
   replaced by `LazyTupleUnion`'s in 0.10.0.
-  
+
 ### Other Notes
 
 - The return type of `prop_oneof!` has changed from `TupleUnion` to

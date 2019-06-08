@@ -119,9 +119,6 @@ arbitrary!(
     ]
 );
 
-#[cfg(feature = "unstable")]
-lazy_just!(Select, Select::new);
-
 // If only half of a pair is generated then you will get a hang-up.
 // Thus the only meaningful impls are in pairs.
 arbitrary!([A] (Sender<A>, Receiver<A>), LazyJustFn<Self>;
