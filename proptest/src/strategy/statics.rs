@@ -54,11 +54,15 @@ impl<S, F> Filter<S, F> {
     pub fn new(source: S, whence: Reason, filter: F) -> Self {
         // NOTE: We don't use universal quantification R: Into<Reason>
         // since the module is not conviniently exposed.
-        Filter { source, whence, fun: filter }
+        Filter {
+            source,
+            whence,
+            fun: filter,
+        }
     }
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for Filter<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Filter")
             .field("source", &self.source)
@@ -68,9 +72,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
     }
 }
 
-impl<S : Strategy,
-     F : FilterFn<S::Value> + Clone>
-Strategy for Filter<S, F> {
+impl<S: Strategy, F: FilterFn<S::Value> + Clone> Strategy for Filter<S, F> {
     type Tree = Filter<S::Tree, F>;
     type Value = S::Value;
 
@@ -84,24 +86,26 @@ Strategy for Filter<S, F> {
                     source: val,
                     whence: "unused".into(),
                     fun: self.fun.clone(),
-                })
+                });
             }
         }
     }
 }
 
-impl<S : ValueTree, F : FilterFn<S::Value>> Filter<S, F> {
+impl<S: ValueTree, F: FilterFn<S::Value>> Filter<S, F> {
     fn ensure_acceptable(&mut self) {
         while !self.fun.apply(&self.source.current()) {
             if !self.source.complicate() {
-                panic!("Unable to complicate filtered strategy \
-                        back into acceptable value");
+                panic!(
+                    "Unable to complicate filtered strategy \
+                     back into acceptable value"
+                );
             }
         }
     }
 }
 
-impl<S : ValueTree, F : FilterFn<S::Value>> ValueTree for Filter<S, F> {
+impl<S: ValueTree, F: FilterFn<S::Value>> ValueTree for Filter<S, F> {
     type Value = S::Value;
 
     fn current(&self) -> S::Value {
@@ -134,7 +138,7 @@ impl<S : ValueTree, F : FilterFn<S::Value>> ValueTree for Filter<S, F> {
 /// Essentially `Fn (T) -> Output`.
 pub trait MapFn<T> {
     #[allow(missing_docs)]
-    type Output : fmt::Debug;
+    type Output: fmt::Debug;
 
     /// Map `T` to `Output`.
     fn apply(&self, t: T) -> Self::Output;
@@ -155,7 +159,7 @@ impl<S, F> Map<S, F> {
     }
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for Map<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Map")
             .field("source", &self.source)
@@ -164,18 +168,19 @@ impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
     }
 }
 
-impl<S : Strategy, F : Clone + MapFn<S::Value>> Strategy for Map<S, F> {
+impl<S: Strategy, F: Clone + MapFn<S::Value>> Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
     type Value = F::Output;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_tree(runner).map(
-            |v| Map { source: v, fun: self.fun.clone() })
+        self.source.new_tree(runner).map(|v| Map {
+            source: v,
+            fun: self.fun.clone(),
+        })
     }
 }
 
-impl<S : ValueTree, F : MapFn<S::Value>>
-ValueTree for Map<S, F> {
+impl<S: ValueTree, F: MapFn<S::Value>> ValueTree for Map<S, F> {
     type Value = F::Output;
 
     fn current(&self) -> F::Output {
@@ -193,12 +198,15 @@ ValueTree for Map<S, F> {
 
 impl<I, O: fmt::Debug> MapFn<I> for fn(I) -> O {
     type Output = O;
-    fn apply(&self, x: I) -> Self::Output { self(x) }
+    fn apply(&self, x: I) -> Self::Output {
+        self(x)
+    }
 }
 
-pub(crate) fn static_map<S: Strategy, O: fmt::Debug>
-    (strat: S, fun: fn(S::Value) -> O)
-    -> Map<S, fn(S::Value) -> O> {
+pub(crate) fn static_map<S: Strategy, O: fmt::Debug>(
+    strat: S,
+    fun: fn(S::Value) -> O,
+) -> Map<S, fn(S::Value) -> O> {
     Map::new(strat, fun)
 }
 
@@ -215,7 +223,9 @@ mod test {
         #[derive(Clone, Copy, Debug)]
         struct MyFilter;
         impl FilterFn<i32> for MyFilter {
-            fn apply(&self, &v: &i32) -> bool { 0 == v % 3 }
+            fn apply(&self, &v: &i32) -> bool {
+                0 == v % 3
+            }
         }
 
         let input = Filter::new(0..256, "%3".into(), MyFilter);
@@ -239,7 +249,9 @@ mod test {
         struct MyMap;
         impl MapFn<i32> for MyMap {
             type Output = i32;
-            fn apply(&self, v: i32) -> i32 { v * 2 }
+            fn apply(&self, v: i32) -> i32 {
+                v * 2
+            }
         }
 
         let input = Map::new(0..10, MyMap);
@@ -248,6 +260,7 @@ mod test {
             .run(&input, |v| {
                 assert!(0 == v % 2);
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
     }
 }

@@ -8,8 +8,8 @@
 
 #![allow(unused_variables)]
 
-use proptest::strategy::Just;
 use proptest::prelude::Arbitrary;
+use proptest::strategy::Just;
 use proptest_derive::Arbitrary;
 
 // TODO: An idea.
@@ -36,7 +36,7 @@ enum Foo {
 enum A {
     B,
     #[proptest(strategy = "Just(A::C(1))")]
-    C(usize)
+    C(usize),
 }
 
 #[derive(Clone, Debug, Arbitrary)]
@@ -63,8 +63,8 @@ enum Quux {
     E(u32),
     F {
         #[proptest(strategy = "10usize..20usize")]
-        foo: usize
-    }
+        foo: usize,
+    },
 }
 
 #[test]

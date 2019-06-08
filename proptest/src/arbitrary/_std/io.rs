@@ -9,15 +9,15 @@
 
 //! Arbitrary implementations for `std::io`.
 
-use std::io::*;
-use std::io::ErrorKind::*;
+use crate::std_facade::String;
 #[cfg(test)]
 use crate::std_facade::Vec;
-use crate::std_facade::String;
+use std::io::ErrorKind::*;
+use std::io::*;
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 // TODO: IntoInnerError
 // Consider: std::io::Initializer
@@ -51,8 +51,8 @@ macro_rules! buffer {
     };
 }
 
-buffer!(BufReader,  Read);
-buffer!(BufWriter,  Write);
+buffer!(BufReader, Read);
+buffer!(BufWriter, Write);
 buffer!(LineWriter, Write);
 
 arbitrary!(

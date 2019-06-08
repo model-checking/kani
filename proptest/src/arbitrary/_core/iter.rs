@@ -10,12 +10,12 @@
 //! Arbitrary implementations for `std::iter`.
 
 use core::fmt;
-use core::iter::*;
 use core::iter::Fuse;
+use core::iter::*;
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 // TODO: Filter, FilterMap, FlatMap, Map, Inspect, Scan, SkipWhile
 // Might be possible with CoArbitrary
@@ -32,9 +32,12 @@ arbitrary!(['a, T: 'a + Clone, A: Arbitrary + Iterator<Item = &'a T>]
     Cloned<A>, SMapped<A, Self>, A::Parameters;
     args => static_map(any_with::<A>(args), Iterator::cloned));
 
-impl<'a, T: 'static + Clone, A: fmt::Debug + 'static + Iterator<Item = &'a T>>
-    functor::ArbitraryF1<A>
-for Cloned<A> {
+impl<
+        'a,
+        T: 'static + Clone,
+        A: fmt::Debug + 'static + Iterator<Item = &'a T>,
+    > functor::ArbitraryF1<A> for Cloned<A>
+{
     type Parameters = ();
 
     fn lift1_with<S>(base: S, _args: Self::Parameters) -> BoxedStrategy<Self>
@@ -63,12 +66,15 @@ lift1!(
 );
 
 impl<A: fmt::Debug + Iterator, B: fmt::Debug + Iterator>
-    functor::ArbitraryF2<A, B>
-for Zip<A, B> {
+    functor::ArbitraryF2<A, B> for Zip<A, B>
+{
     type Parameters = ();
 
-    fn lift2_with<AS, BS>(fst: AS, snd: BS, _args: Self::Parameters)
-        -> BoxedStrategy<Self>
+    fn lift2_with<AS, BS>(
+        fst: AS,
+        snd: BS,
+        _args: Self::Parameters,
+    ) -> BoxedStrategy<Self>
     where
         AS: Strategy<Value = A> + 'static,
         BS: Strategy<Value = B> + 'static,
@@ -95,13 +101,19 @@ lift1!([fmt::Debug + 'static + Iterator<Item = T>,
         (any_with::<B>(args), base).prop_map(|(b, a)| b.chain(a)).boxed()
 );
 
-impl<T, A: fmt::Debug + Iterator<Item = T>, B: fmt::Debug + Iterator<Item = T>>
-    functor::ArbitraryF2<A, B>
-for Chain<A, B> {
+impl<
+        T,
+        A: fmt::Debug + Iterator<Item = T>,
+        B: fmt::Debug + Iterator<Item = T>,
+    > functor::ArbitraryF2<A, B> for Chain<A, B>
+{
     type Parameters = ();
 
-    fn lift2_with<AS, BS>(fst: AS, snd: BS, _args: Self::Parameters)
-        -> BoxedStrategy<Self>
+    fn lift2_with<AS, BS>(
+        fst: AS,
+        snd: BS,
+        _args: Self::Parameters,
+    ) -> BoxedStrategy<Self>
     where
         AS: Strategy<Value = A> + 'static,
         BS: Strategy<Value = B> + 'static,

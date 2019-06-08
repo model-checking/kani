@@ -6,8 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
-use proptest::prelude::{any_with, Arbitrary, proptest, prop_assert, prop_assert_eq};
+use proptest::prelude::{
+    any_with, prop_assert, prop_assert_eq, proptest, Arbitrary,
+};
 use proptest_derive::Arbitrary;
 
 struct ComplexType {
@@ -15,7 +16,9 @@ struct ComplexType {
 }
 
 impl Default for ComplexType {
-    fn default() -> Self { Self { max: 10 } }
+    fn default() -> Self {
+        Self { max: 10 }
+    }
 }
 
 #[derive(Debug, Arbitrary)]
@@ -64,7 +67,7 @@ struct Parallel2 {
     int: i64,
 }
 
-const MAX: ComplexType = ComplexType { max: 5, };
+const MAX: ComplexType = ComplexType { max: 5 };
 
 proptest! {
     #[test]

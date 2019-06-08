@@ -7,11 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::std_facade::{fmt, Arc, Vec};
 use core::cmp::{max, min};
 use core::u32;
-use crate::std_facade::{Arc, Vec, fmt};
 
-#[cfg(not(feature="std"))]
+#[cfg(not(feature = "std"))]
 use num_traits::float::FloatCore;
 
 use crate::num::sample_uniform;
@@ -31,13 +31,13 @@ pub type WA<T> = (u32, Arc<T>);
 /// See `Strategy::prop_union()`.
 #[derive(Clone, Debug)]
 #[must_use = "strategies do nothing unless used"]
-pub struct Union<T : Strategy> {
+pub struct Union<T: Strategy> {
     // In principle T could be any `Strategy + Clone`, but that isn't possible
     // for BC reasons with the 0.9 series.
     options: Vec<WA<T>>,
 }
 
-impl<T : Strategy> Union<T> {
+impl<T: Strategy> Union<T> {
     /// Create a strategy which selects uniformly from the given delegate
     /// strategies.
     ///
@@ -49,15 +49,17 @@ impl<T : Strategy> Union<T> {
     ///
     /// Panics if `options` is empty.
     pub fn new(options: impl IntoIterator<Item = T>) -> Self {
-        let options: Vec<WA<T>> = options.into_iter()
-            .map(|v| (1, Arc::new(v))).collect();
+        let options: Vec<WA<T>> =
+            options.into_iter().map(|v| (1, Arc::new(v))).collect();
         assert!(!options.is_empty());
         Self { options }
     }
 
-    pub(crate) fn try_new<E>(it: impl Iterator<Item = Result<T, E>>)
-                             -> Result<Self, E> {
-        let options: Vec<WA<T>> = it.map(|r| r.map(|v| (1, Arc::new(v))))
+    pub(crate) fn try_new<E>(
+        it: impl Iterator<Item = Result<T, E>>,
+    ) -> Result<Self, E> {
+        let options: Vec<WA<T>> = it
+            .map(|r| r.map(|v| (1, Arc::new(v))))
             .collect::<Result<_, _>>()?;
 
         assert!(!options.is_empty());
@@ -78,12 +80,17 @@ impl<T : Strategy> Union<T> {
     /// Panics if the sum of the weights overflows a `u32`.
     pub fn new_weighted(options: Vec<W<T>>) -> Self {
         assert!(!options.is_empty());
-        assert!(!options.iter().any(|&(w, _)| 0 == w),
-                "Union option has a weight of 0");
-        assert!(options.iter().map(|&(w, _)| u64::from(w)).sum::<u64>() <=
-                u64::from(u32::MAX), "Union weights overflow u32");
-        let options = options.into_iter()
-            .map(|(w, v)| (w, Arc::new(v))).collect();
+        assert!(
+            !options.iter().any(|&(w, _)| 0 == w),
+            "Union option has a weight of 0"
+        );
+        assert!(
+            options.iter().map(|&(w, _)| u64::from(w)).sum::<u64>()
+                <= u64::from(u32::MAX),
+            "Union weights overflow u32"
+        );
+        let options =
+            options.into_iter().map(|(w, v)| (w, Arc::new(v))).collect();
         Self { options }
     }
 
@@ -94,27 +101,36 @@ impl<T : Strategy> Union<T> {
     }
 }
 
-fn pick_weighted<I : Iterator<Item = u32>>(runner: &mut TestRunner,
-                                           weights1: I, weights2: I) -> usize {
+fn pick_weighted<I: Iterator<Item = u32>>(
+    runner: &mut TestRunner,
+    weights1: I,
+    weights2: I,
+) -> usize {
     let sum = weights1.map(u64::from).sum();
     let weighted_pick = sample_uniform(runner, 0..sum);
-    weights2.scan(0u64, |state, w| {
-        *state += u64::from(w);
-        Some(*state)
-    }).filter(|&v| v <= weighted_pick).count()
+    weights2
+        .scan(0u64, |state, w| {
+            *state += u64::from(w);
+            Some(*state)
+        })
+        .filter(|&v| v <= weighted_pick)
+        .count()
 }
 
-impl<T : Strategy> Strategy for Union<T> {
+impl<T: Strategy> Strategy for Union<T> {
     type Tree = UnionValueTree<T>;
     type Value = T::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        fn extract_weight<V>(&(w, _): &WA<V>) -> u32 { w }
+        fn extract_weight<V>(&(w, _): &WA<V>) -> u32 {
+            w
+        }
 
         let pick = pick_weighted(
             runner,
             self.options.iter().map(extract_weight::<T>),
-            self.options.iter().map(extract_weight::<T>));
+            self.options.iter().map(extract_weight::<T>),
+        );
 
         let mut options = Vec::with_capacity(pick);
 
@@ -130,7 +146,12 @@ impl<T : Strategy> Strategy for Union<T> {
             self.options[pick].1.new_tree(runner)?,
         ));
 
-        Ok(UnionValueTree { options, pick, min_pick: 0, prev_pick: None })
+        Ok(UnionValueTree {
+            options,
+            pick,
+            min_pick: 0,
+            prev_pick: None,
+        })
     }
 }
 
@@ -178,7 +199,7 @@ macro_rules! union_value_tree_body {
 }
 
 /// `ValueTree corresponding to `Union`.
-pub struct UnionValueTree<T : Strategy> {
+pub struct UnionValueTree<T: Strategy> {
     options: Vec<LazyValueTree<T>>,
     // This struct maintains the invariant that between function calls,
     // `pick` and `prev_pick` (if Some) always point to initialized
@@ -270,11 +291,14 @@ macro_rules! lazy_union_value_tree_body {
     }
 }
 
-impl<T : Strategy> ValueTree for UnionValueTree<T> {
+impl<T: Strategy> ValueTree for UnionValueTree<T> {
     lazy_union_value_tree_body!(T::Value, access_vec);
 }
 
-impl<T : Strategy> Clone for UnionValueTree<T> where T::Tree : Clone {
+impl<T: Strategy> Clone for UnionValueTree<T>
+where
+    T::Tree: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             options: self.options.clone(),
@@ -285,8 +309,10 @@ impl<T : Strategy> Clone for UnionValueTree<T> where T::Tree : Clone {
     }
 }
 
-impl<T : Strategy> fmt::Debug for UnionValueTree<T>
-where T::Tree : fmt::Debug {
+impl<T: Strategy> fmt::Debug for UnionValueTree<T>
+where
+    T::Tree: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("UnionValueTree")
             .field("options", &self.options)
@@ -338,11 +364,11 @@ def_access_tuple!($ access_tuple9, 1 2 3 4 5 6 7 8);
 def_access_tuple!($ access_tupleA, 1 2 3 4 5 6 7 8 9);
 
 /// Similar to `Union`, but internally uses a tuple to hold the strategies.
-/// 
+///
 /// This allows better performance than vanilla `Union` since one does not need
 /// to resort to boxing and dynamic dispatch to handle heterogeneous
 /// strategies.
-/// 
+///
 /// Deprecated in 0.9.4 in favor of `LazyTupleUnion`, which the `prop_oneof!`
 /// macro now uses. `TupleUnion` is only kept around to avoid API breakage,
 /// and its implementation will be replaced with `LazyTupleUnion` in the next
@@ -368,11 +394,11 @@ impl<T> TupleUnion<T> {
 }
 
 /// Similar to `Union`, but internally uses a tuple to hold the strategies.
-/// 
+///
 /// This allows better performance than vanilla `Union` since one does not need
 /// to resort to boxing and dynamic dispatch to handle heterogeneous
 /// strategies.
-/// 
+///
 /// The difference between this and `TupleUnion` is that with this, value trees
 /// for variants that aren't picked at first are generated lazily.
 #[must_use = "strategies do nothing unless used"]
@@ -536,8 +562,10 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
     assert!(f > 0.0 && f < 1.0, "Invalid probability: {}", f);
 
     // Clamp to 1..WEIGHT_BASE-1 so that we never produce a weight of 0.
-    let pos = max(1, min(WEIGHT_BASE - 1,
-                         (f * f64::from(WEIGHT_BASE)).round() as u32));
+    let pos = max(
+        1,
+        min(WEIGHT_BASE - 1, (f * f64::from(WEIGHT_BASE)).round() as u32),
+    );
     let neg = WEIGHT_BASE - pos;
 
     (pos, neg)
@@ -545,8 +573,8 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
 
 #[cfg(test)]
 mod test {
-    use crate::strategy::just::Just;
     use super::*;
+    use crate::strategy::just::Just;
 
     // FIXME(2018-06-01): figure out a way to run this test on no_std.
     // The problem is that the default seed is fixed and does not produce
@@ -579,12 +607,17 @@ mod test {
             }
         }
 
-        assert!(passed >= 32 && passed <= 96,
-                "Bad passed count: {}", passed);
-        assert!(converged_low >= 32 && converged_low <= 160,
-                "Bad converged_low count: {}", converged_low);
-        assert!(converged_high >= 32 && converged_high <= 160,
-                "Bad converged_high count: {}", converged_high);
+        assert!(passed >= 32 && passed <= 96, "Bad passed count: {}", passed);
+        assert!(
+            converged_low >= 32 && converged_low <= 160,
+            "Bad converged_low count: {}",
+            converged_low
+        );
+        assert!(
+            converged_high >= 32 && converged_high <= 160,
+            "Bad converged_high count: {}",
+            converged_high
+        );
     }
 
     #[test]
@@ -604,26 +637,27 @@ mod test {
         println!("{:?}", counts);
         assert!(counts[0] > 0);
         assert!(counts[2] > 0);
-        assert!(counts[1] > counts[0] * 3/2);
-        assert!(counts[1] > counts[2] * 3/2);
+        assert!(counts[1] > counts[0] * 3 / 2);
+        assert!(counts[1] > counts[2] * 3 / 2);
     }
 
     #[test]
     fn test_union_sanity() {
-        check_strategy_sanity(Union::new_weighted(vec![
-            (1, 0i32..100),
-            (2, 200i32..300),
-            (1, 400i32..500),
-        ]), None);
+        check_strategy_sanity(
+            Union::new_weighted(vec![
+                (1, 0i32..100),
+                (2, 200i32..300),
+                (1, 400i32..500),
+            ]),
+            None,
+        );
     }
 
     // FIXME(2018-06-01): See note on `test_union`.
     #[cfg(feature = "std")]
     #[test]
     fn test_tuple_union() {
-        let input = TupleUnion::new(
-            ((1, 10u32..20u32),
-             (1, 30u32..40u32)));
+        let input = TupleUnion::new(((1, 10u32..20u32), (1, 30u32..40u32)));
         // Expect that 25% of cases pass (left input happens to be < 15, and
         // left is chosen as initial value). Of the 75% that fail, 50% should
         // converge to 15 and 50% to 30 (the latter because the left is beneath
@@ -647,12 +681,17 @@ mod test {
             }
         }
 
-        assert!(passed >= 32 && passed <= 96,
-                "Bad passed count: {}", passed);
-        assert!(converged_low >= 32 && converged_low <= 160,
-                "Bad converged_low count: {}", converged_low);
-        assert!(converged_high >= 32 && converged_high <= 160,
-                "Bad converged_high count: {}", converged_high);
+        assert!(passed >= 32 && passed <= 96, "Bad passed count: {}", passed);
+        assert!(
+            converged_low >= 32 && converged_low <= 160,
+            "Bad converged_low count: {}",
+            converged_low
+        );
+        assert!(
+            converged_high >= 32 && converged_high <= 160,
+            "Bad converged_high count: {}",
+            converged_high
+        );
     }
 
     #[test]
@@ -672,8 +711,8 @@ mod test {
         println!("{:?}", counts);
         assert!(counts[0] > 0);
         assert!(counts[2] > 0);
-        assert!(counts[1] > counts[0] * 3/2);
-        assert!(counts[1] > counts[2] * 3/2);
+        assert!(counts[1] > counts[0] * 3 / 2);
+        assert!(counts[1] > counts[2] * 3 / 2);
     }
 
     #[test]
@@ -714,17 +753,25 @@ mod test {
     #[test]
     fn test_tuple_union_sanity() {
         check_strategy_sanity(
-            TupleUnion::new(((1, 0i32..100i32), (1, 200i32..1000i32),
-                             (1, 2000i32..3000i32))),
-            None);
+            TupleUnion::new((
+                (1, 0i32..100i32),
+                (1, 200i32..1000i32),
+                (1, 2000i32..3000i32),
+            )),
+            None,
+        );
     }
 
     #[test]
     fn test_lazy_tuple_union_sanity() {
         check_strategy_sanity(
-            LazyTupleUnion::new(((1, Arc::new(0i32..100i32)), (1, Arc::new(200i32..1000i32)),
-                                 (1, Arc::new(2000i32..3000i32)))),
-            None);
+            LazyTupleUnion::new((
+                (1, Arc::new(0i32..100i32)),
+                (1, Arc::new(200i32..1000i32)),
+                (1, Arc::new(2000i32..3000i32)),
+            )),
+            None,
+        );
     }
 
     /// Test that unions work even if local filtering causes errors.
@@ -733,7 +780,8 @@ mod test {
         let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
         check_strategy_sanity(
             Union::new(vec![filter_strategy; 8]),
-            Some(filter_sanity_options()));
+            Some(filter_sanity_options()),
+        );
     }
 
     /// Test that unions work even if local filtering causes errors.
@@ -741,11 +789,14 @@ mod test {
     fn test_filter_tuple_union_sanity() {
         let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
         check_strategy_sanity(
-            TupleUnion::new(((1, filter_strategy.clone()),
-                             (1, filter_strategy.clone()),
-                             (1, filter_strategy.clone()),
-                             (1, filter_strategy.clone()))),
-            Some(filter_sanity_options()));
+            TupleUnion::new((
+                (1, filter_strategy.clone()),
+                (1, filter_strategy.clone()),
+                (1, filter_strategy.clone()),
+                (1, filter_strategy.clone()),
+            )),
+            Some(filter_sanity_options()),
+        );
     }
 
     /// Test that lazy tuple unions work even if local filtering causes errors.
@@ -753,12 +804,14 @@ mod test {
     fn test_filter_lazy_tuple_union_sanity() {
         let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
         check_strategy_sanity(
-            LazyTupleUnion::new(((1, Arc::new(filter_strategy.clone())),
-                                 (1, Arc::new(filter_strategy.clone())),
-                                 (1, Arc::new(filter_strategy.clone())),
-                                 (1, Arc::new(filter_strategy.clone())))),
-            Some(filter_sanity_options()));
-
+            LazyTupleUnion::new((
+                (1, Arc::new(filter_strategy.clone())),
+                (1, Arc::new(filter_strategy.clone())),
+                (1, Arc::new(filter_strategy.clone())),
+                (1, Arc::new(filter_strategy.clone())),
+            )),
+            Some(filter_sanity_options()),
+        );
     }
 
     fn filter_sanity_options() -> CheckStrategySanityOptions {
@@ -768,7 +821,7 @@ mod test {
             strict_complicate_after_simplify: false,
             // Make failed filters return errors to test edge cases.
             error_on_local_rejects: true,
-            .. CheckStrategySanityOptions::default()
+            ..CheckStrategySanityOptions::default()
         }
     }
 }

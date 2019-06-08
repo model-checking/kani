@@ -9,10 +9,10 @@
 
 //! Arbitrary implementations for `std::fs`.
 
-use std::fs::{DirBuilder};
+use std::fs::DirBuilder;
 
-use crate::strategy::statics::static_map;
 use crate::arbitrary::{any, SMapped};
+use crate::strategy::statics::static_map;
 
 // TODO: other parts (figure out workable semantics).
 

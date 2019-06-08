@@ -6,8 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
-use proptest::prelude::{Arbitrary, proptest, prop_assert, prop_assert_eq};
+use proptest::prelude::{prop_assert, prop_assert_eq, proptest, Arbitrary};
 use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
@@ -27,10 +26,7 @@ struct T0 {
 }
 
 #[derive(Debug, Arbitrary)]
-struct T1(
-    #[proptest(value = "24")]
-    usize,
-);
+struct T1(#[proptest(value = "24")] usize);
 
 #[derive(Debug, Arbitrary)]
 enum T2 {
@@ -60,10 +56,7 @@ enum T4 {
 #[derive(Debug, Arbitrary)]
 enum T5 {
     V0,
-    V1(
-        #[proptest(value = "9")]
-        usize
-    ),
+    V1(#[proptest(value = "9")] usize),
 }
 
 #[derive(Debug, Arbitrary)]
@@ -73,7 +66,6 @@ struct T6 {
     #[proptest(strategy = "0..100usize")]
     beta: usize,
 }
-
 
 fn foo() -> usize {
     42

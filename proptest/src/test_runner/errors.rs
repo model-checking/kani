@@ -59,16 +59,16 @@ impl TestCaseError {
 impl fmt::Display for TestCaseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TestCaseError::Reject(ref whence) =>
-                write!(f, "Input rejected at {}", whence),
-            TestCaseError::Fail(ref why) =>
-                write!(f, "Case failed: {}", why),
+            TestCaseError::Reject(ref whence) => {
+                write!(f, "Input rejected at {}", whence)
+            }
+            TestCaseError::Fail(ref why) => write!(f, "Case failed: {}", why),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl<E : ::std::error::Error> From<E> for TestCaseError {
+impl<E: ::std::error::Error> From<E> for TestCaseError {
     fn from(cause: E) -> Self {
         TestCaseError::fail(cause.to_string())
     }
@@ -86,20 +86,21 @@ pub enum TestError<T> {
     Fail(Reason, T),
 }
 
-impl<T : fmt::Debug> fmt::Display for TestError<T> {
+impl<T: fmt::Debug> fmt::Display for TestError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TestError::Abort(ref why) =>
-                write!(f, "Test aborted: {}", why),
-            TestError::Fail(ref why, ref what) =>
-                write!(f, "Test failed: {}; minimal failing input: {:?}",
-                       why, what),
+            TestError::Abort(ref why) => write!(f, "Test aborted: {}", why),
+            TestError::Fail(ref why, ref what) => write!(
+                f,
+                "Test failed: {}; minimal failing input: {:?}",
+                why, what
+            ),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl<T : fmt::Debug> ::std::error::Error for TestError<T> {
+impl<T: fmt::Debug> ::std::error::Error for TestError<T> {
     fn description(&self) -> &str {
         match *self {
             TestError::Abort(..) => "Abort",

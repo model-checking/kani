@@ -20,39 +20,34 @@
 //! `rand` crate directly will not provide insulation from the upcoming
 //! revision to the `rand` crate.
 
+pub use crate::arbitrary::{any, any_with, Arbitrary};
 pub use crate::strategy::{BoxedStrategy, Just, SBoxedStrategy, Strategy};
-pub use crate::arbitrary::{Arbitrary, any, any_with};
 pub use crate::test_runner::Config as ProptestConfig;
 pub use crate::test_runner::TestCaseError;
 pub use crate::{
-    proptest,
-    prop_assert,
-    prop_assert_eq,
-    prop_assert_ne,
-    prop_assume,
-    prop_oneof,
-    prop_compose,
+    prop_assert, prop_assert_eq, prop_assert_ne, prop_assume, prop_compose,
+    prop_oneof, proptest,
 };
 
-pub use rand::{RngCore, Rng};
+pub use rand::{Rng, RngCore};
 
 /// Re-exports the entire public API of proptest so that an import of `prelude`
 /// allows simply writing, for example, `prop::num::i32::ANY` rather than
 /// `proptest::num::i32::ANY` plus a separate `use proptest;`.
 pub mod prop {
-    pub use crate::test_runner;
-    pub use crate::strategy;
     pub use crate::arbitrary;
-    pub use crate::bool;
-    pub use crate::num;
-    pub use crate::bits;
-    pub use crate::tuple;
     pub use crate::array;
-    pub use crate::collection;
+    pub use crate::bits;
+    pub use crate::bool;
     pub use crate::char;
-    #[cfg(feature = "std")]
-    pub use crate::string;
+    pub use crate::collection;
+    pub use crate::num;
     pub use crate::option;
     pub use crate::result;
     pub use crate::sample;
+    pub use crate::strategy;
+    #[cfg(feature = "std")]
+    pub use crate::string;
+    pub use crate::test_runner;
+    pub use crate::tuple;
 }

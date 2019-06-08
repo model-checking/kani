@@ -21,21 +21,24 @@
     // We have a lot of these lints for associated types... And we don't care.
     type_complexity
 ))]
-#![cfg_attr(feature = "unstable", feature(
-    allocator_api,
-    try_trait,
-    generator_trait,
-    never_type,
-    try_reserve
-))]
-#![cfg_attr(all(feature = "std", feature = "unstable"), feature(
-    mpsc_select,
-    ip
-))]
-#![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(
-    alloc,
-    core_intrinsics
-))]
+#![cfg_attr(
+    feature = "unstable",
+    feature(
+        allocator_api,
+        try_trait,
+        generator_trait,
+        never_type,
+        try_reserve
+    )
+)]
+#![cfg_attr(
+    all(feature = "std", feature = "unstable"),
+    feature(mpsc_select, ip)
+)]
+#![cfg_attr(
+    all(feature = "alloc", not(feature = "std")),
+    feature(alloc, core_intrinsics)
+)]
 
 // std_facade is used in a few macros, so it needs to be public.
 #[macro_use]

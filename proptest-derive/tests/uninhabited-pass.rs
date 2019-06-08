@@ -9,7 +9,7 @@
 #![feature(never_type)]
 #![allow(dead_code, unreachable_code)]
 
-use proptest::prelude::{Arbitrary, proptest, prop_assert_eq};
+use proptest::prelude::{prop_assert_eq, proptest, Arbitrary};
 use proptest_derive::Arbitrary;
 
 // Various arithmetic and basic things.
@@ -42,7 +42,9 @@ proptest! {
 
 // Can't inspect type macros called as  mac!(uninhabited_type).
 macro_rules! tymac {
-    ($ignore: ty) => { u8 };
+    ($ignore: ty) => {
+        u8
+    };
 }
 
 #[derive(Debug, Arbitrary)]
@@ -57,7 +59,7 @@ struct TyMac1 {
 
 enum TyMac2 {
     #[deny(dead_code)]
-    V0(tymac!((u8, !, usize)))
+    V0(tymac!((u8, !, usize))),
 }
 
 // Can't inspect projections through associated types:
@@ -74,13 +76,13 @@ impl Fun for (!, usize, !) {
 #[derive(Debug, Arbitrary)]
 enum UsePrj0 {
     #[deny(dead_code)]
-    V0(<! as Fun>::Prj)
+    V0(<! as Fun>::Prj),
 }
 
 #[derive(Debug, Arbitrary)]
 enum UsePrj1 {
     #[deny(dead_code)]
-    V0(<(!, usize, !) as Fun>::Prj)
+    V0(<(!, usize, !) as Fun>::Prj),
 }
 
 #[test]

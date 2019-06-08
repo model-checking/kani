@@ -1005,10 +1005,9 @@ macro_rules! proptest_helper {
 
 #[doc(hidden)]
 #[derive(Clone, Copy)]
-pub struct NamedArguments<N, V>(
-    #[doc(hidden)] pub N, #[doc(hidden)] pub V);
+pub struct NamedArguments<N, V>(#[doc(hidden)] pub N, #[doc(hidden)] pub V);
 
-impl<V : fmt::Debug> fmt::Debug for NamedArguments<&'static str, V> {
+impl<V: fmt::Debug> fmt::Debug for NamedArguments<&'static str, V> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} = ", self.0)?;
         self.1.fmt(f)
@@ -1122,13 +1121,17 @@ macro_rules! prop_assert_ne {
 #[doc(hidden)]
 pub fn force_no_fork(config: &mut crate::test_runner::Config) {
     if config.fork() {
-        eprintln!("proptest: Forking/timeout not supported in closure-style \
-                   invocations; ignoring");
+        eprintln!(
+            "proptest: Forking/timeout not supported in closure-style \
+             invocations; ignoring"
+        );
 
-        #[cfg(feature = "fork")] {
+        #[cfg(feature = "fork")]
+        {
             config.fork = false;
         }
-        #[cfg(feature = "timeout")] {
+        #[cfg(feature = "timeout")]
+        {
             config.timeout = 0;
         }
         assert!(!config.fork());
@@ -1136,7 +1139,7 @@ pub fn force_no_fork(config: &mut crate::test_runner::Config) {
 }
 
 #[cfg(not(feature = "std"))]
-pub fn force_no_fork(_: &mut crate::test_runner::Config) { }
+pub fn force_no_fork(_: &mut crate::test_runner::Config) {}
 
 #[cfg(test)]
 mod test {
@@ -1274,32 +1277,59 @@ mod test {
 
         println!("{:?}", NamedArguments("foo", &"bar"));
         println!("{:?}", NamedArguments(("foo",), &(1,)));
-        println!("{:?}", NamedArguments(("foo","bar"), &(1,2)));
-        println!("{:?}", NamedArguments(("a","b","c"), &(1,2,3)));
-        println!("{:?}", NamedArguments(("a","b","c","d"), &(1,2,3,4)));
-        println!("{:?}", NamedArguments(("a","b","c","d","e"),
-                                        &(1,2,3,4,5)));
-        println!("{:?}", NamedArguments(("a","b","c","d","e","f"),
-                                        &(1,2,3,4,5,6)));
-        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g"),
-                                        &(1,2,3,4,5,6,7)));
-        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h"),
-                                        &(1,2,3,4,5,6,7,8)));
-        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h","i"),
-                                        &(1,2,3,4,5,6,7,8,9)));
-        println!("{:?}", NamedArguments(("a","b","c","d","e","f","g","h","i","j"),
-                                        &(1,2,3,4,5,6,7,8,9,10)));
-        println!("{:?}", NamedArguments((("a","b"),"c","d"), &((1,2),3,4)));
+        println!("{:?}", NamedArguments(("foo", "bar"), &(1, 2)));
+        println!("{:?}", NamedArguments(("a", "b", "c"), &(1, 2, 3)));
+        println!("{:?}", NamedArguments(("a", "b", "c", "d"), &(1, 2, 3, 4)));
+        println!(
+            "{:?}",
+            NamedArguments(("a", "b", "c", "d", "e"), &(1, 2, 3, 4, 5))
+        );
+        println!(
+            "{:?}",
+            NamedArguments(("a", "b", "c", "d", "e", "f"), &(1, 2, 3, 4, 5, 6))
+        );
+        println!(
+            "{:?}",
+            NamedArguments(
+                ("a", "b", "c", "d", "e", "f", "g"),
+                &(1, 2, 3, 4, 5, 6, 7)
+            )
+        );
+        println!(
+            "{:?}",
+            NamedArguments(
+                ("a", "b", "c", "d", "e", "f", "g", "h"),
+                &(1, 2, 3, 4, 5, 6, 7, 8)
+            )
+        );
+        println!(
+            "{:?}",
+            NamedArguments(
+                ("a", "b", "c", "d", "e", "f", "g", "h", "i"),
+                &(1, 2, 3, 4, 5, 6, 7, 8, 9)
+            )
+        );
+        println!(
+            "{:?}",
+            NamedArguments(
+                ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j"),
+                &(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+            )
+        );
+        println!(
+            "{:?}",
+            NamedArguments((("a", "b"), "c", "d"), &((1, 2), 3, 4))
+        );
     }
 
     #[test]
     fn oneof_all_counts() {
-        use crate::strategy::{Strategy, LazyTupleUnion, Union, Just as J};
+        use crate::strategy::{Just as J, LazyTupleUnion, Strategy, Union};
 
         fn expect_count(n: usize, s: impl Strategy<Value = i32>) {
-            use std::collections::HashSet;
             use crate::strategy::*;
             use crate::test_runner::*;
+            use std::collections::HashSet;
 
             let mut runner = TestRunner::default();
             let mut seen = HashSet::new();
@@ -1310,95 +1340,111 @@ mod test {
             assert_eq!(n, seen.len());
         }
 
-        fn assert_static<T>(v: LazyTupleUnion<T>) -> LazyTupleUnion<T> { v }
-        fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> { v }
+        fn assert_static<T>(v: LazyTupleUnion<T>) -> LazyTupleUnion<T> {
+            v
+        }
+        fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> {
+            v
+        }
 
         expect_count(1, prop_oneof![J(0i32)]);
-        expect_count(2, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-        ]));
-        expect_count(3, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-        ]));
-        expect_count(4, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-        ]));
-        expect_count(5, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-        ]));
-        expect_count(6, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-            J(5i32),
-        ]));
-        expect_count(7, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-            J(5i32),
-            J(6i32),
-        ]));
-        expect_count(8, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-            J(5i32),
-            J(6i32),
-            J(7i32),
-        ]));
-        expect_count(9, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-            J(5i32),
-            J(6i32),
-            J(7i32),
-            J(8i32),
-        ]));
-        expect_count(10, assert_static(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-            J(5i32),
-            J(6i32),
-            J(7i32),
-            J(8i32),
-            J(9i32),
-        ]));
-        expect_count(11, assert_dynamic(prop_oneof![
-            J(0i32),
-            J(1i32),
-            J(2i32),
-            J(3i32),
-            J(4i32),
-            J(5i32),
-            J(6i32),
-            J(7i32),
-            J(8i32),
-            J(9i32),
-            J(10i32),
-        ]));
+        expect_count(2, assert_static(prop_oneof![J(0i32), J(1i32),]));
+        expect_count(3, assert_static(prop_oneof![J(0i32), J(1i32), J(2i32),]));
+        expect_count(
+            4,
+            assert_static(prop_oneof![J(0i32), J(1i32), J(2i32), J(3i32),]),
+        );
+        expect_count(
+            5,
+            assert_static(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+            ]),
+        );
+        expect_count(
+            6,
+            assert_static(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+                J(5i32),
+            ]),
+        );
+        expect_count(
+            7,
+            assert_static(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+                J(5i32),
+                J(6i32),
+            ]),
+        );
+        expect_count(
+            8,
+            assert_static(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+                J(5i32),
+                J(6i32),
+                J(7i32),
+            ]),
+        );
+        expect_count(
+            9,
+            assert_static(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+                J(5i32),
+                J(6i32),
+                J(7i32),
+                J(8i32),
+            ]),
+        );
+        expect_count(
+            10,
+            assert_static(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+                J(5i32),
+                J(6i32),
+                J(7i32),
+                J(8i32),
+                J(9i32),
+            ]),
+        );
+        expect_count(
+            11,
+            assert_dynamic(prop_oneof![
+                J(0i32),
+                J(1i32),
+                J(2i32),
+                J(3i32),
+                J(4i32),
+                J(5i32),
+                J(6i32),
+                J(7i32),
+                J(8i32),
+                J(9i32),
+                J(10i32),
+            ]),
+        );
     }
 }
 

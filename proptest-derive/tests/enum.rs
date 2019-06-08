@@ -18,132 +18,422 @@ enum T1 {
 
 #[derive(Debug, Arbitrary)]
 enum T2 {
-    V1(), V2 {},
+    V1(),
+    V2 {},
 }
 
 #[derive(Debug, Arbitrary)]
 enum T3 {
-    V1(), V2 {}, V3,
+    V1(),
+    V2 {},
+    V3,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T4 {
-    V1, V2(), V3, V4 {},
+    V1,
+    V2(),
+    V3,
+    V4 {},
 }
 
 #[derive(Debug, Arbitrary)]
 enum T5 {
-    V1, V2, V3, V4 {}, V5(),
+    V1,
+    V2,
+    V3,
+    V4 {},
+    V5(),
 }
 
 #[derive(Debug, Arbitrary)]
 enum T6 {
-    V1(), V2, V3 {}, V4, V5, V6,
+    V1(),
+    V2,
+    V3 {},
+    V4,
+    V5,
+    V6,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T7 {
-    V1, V2, V3, V4 {}, V5, V6, V7(),
+    V1,
+    V2,
+    V3,
+    V4 {},
+    V5,
+    V6,
+    V7(),
 }
 
 #[derive(Debug, Arbitrary)]
 enum T8 {
-    V1, V2, V3(), V4, V5, V6{}, V7, V8,
+    V1,
+    V2,
+    V3(),
+    V4,
+    V5,
+    V6 {},
+    V7,
+    V8,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T9 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T10 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T11 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T12 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T13 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T14 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T15 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T16 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
     V16,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T17 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T18 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T19 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T20 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19, V20
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T21 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19, V20, V21,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T22 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19, V20, V21, V22,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
+    V22,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T23 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19, V20, V21, V22, V23,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
+    V22,
+    V23,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T24 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19, V20, V21, V22, V23, V24,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
+    V22,
+    V23,
+    V24,
 }
 
 #[derive(Debug, Arbitrary)]
 enum T25 {
-    V1, V2, V3, V4, V5 {}, V6(), V7, V8, V9, V10, V11, V12, V13, V14, V15,
-    V16, V17, V18, V19, V20, V21, V22, V23, V24, V25,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5 {},
+    V6(),
+    V7,
+    V8,
+    V9,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
+    V22,
+    V23,
+    V24,
+    V25,
 }
 
 #[derive(Clone, Debug, Arbitrary)]
@@ -153,7 +443,7 @@ enum Alan {
     C(()),
     D(u32),
     E(f64),
-    F(char)
+    F(char),
 }
 
 #[derive(Clone, Debug, Arbitrary)]
@@ -161,7 +451,6 @@ enum SameType {
     A(usize),
     B(usize),
 }
-
 
 #[test]
 fn asserting_arbitrary() {

@@ -10,14 +10,14 @@
 //! Arbitrary implementations for `std::sync`.
 
 use std::fmt;
-use std::sync::*;
 use std::sync::mpsc::*;
+use std::sync::*;
 use std::thread;
 use std::time::Duration;
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 // OnceState can not escape Once::call_once_force.
 // PoisonError depends implicitly on the lifetime on MutexGuard, etc.
@@ -60,16 +60,22 @@ fn bwr_true() -> BarrierWaitResult {
 fn bwr_false() -> BarrierWaitResult {
     let barrier = Arc::new(Barrier::new(2));
     let b2 = barrier.clone();
-    let jh = thread::spawn(move|| { b2.wait() });
+    let jh = thread::spawn(move || b2.wait());
     let bwr1 = barrier.wait();
     let bwr2 = jh.join().unwrap();
-    if bwr1.is_leader() { bwr2 } else { bwr1 }
+    if bwr1.is_leader() {
+        bwr2
+    } else {
+        bwr1
+    }
 }
 
 fn wtr_false() -> WaitTimeoutResult {
     let cvar = Arc::new(Condvar::new());
     let cvar2 = cvar.clone();
-    thread::spawn(move|| { cvar2.notify_one(); });
+    thread::spawn(move || {
+        cvar2.notify_one();
+    });
     let lock = Mutex::new(());
     let wt = cvar.wait_timeout(lock.lock().unwrap(), Duration::from_millis(1));
     let (_, wtr) = wt.unwrap();

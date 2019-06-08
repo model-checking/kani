@@ -60,14 +60,10 @@ struct T1 {
 #[derive(Debug, Arbitrary)]
 #[proptest(filter("|x| x.0 % 3 == 0"))]
 struct T2(
-    #[proptest(no_params, filter(even))]
-    usize,
-    #[proptest(filter("|x| x % 2 == 1"))]
-    usize,
-    #[proptest(strategy = "0..100usize", filter = "|x| x % 2 == 1")]
-    usize,
-    #[proptest(value = "42", filter(even))]
-    usize,
+    #[proptest(no_params, filter(even))] usize,
+    #[proptest(filter("|x| x % 2 == 1"))] usize,
+    #[proptest(strategy = "0..100usize", filter = "|x| x % 2 == 1")] usize,
+    #[proptest(value = "42", filter(even))] usize,
     #[proptest(params(Param), strategy("0..=params.0"), filter("|x| *x > 2"))]
     usize,
 );
@@ -75,20 +71,20 @@ struct T2(
 #[derive(Debug, Arbitrary)]
 #[proptest(filter("|x| x.0 % 3 == 0"))]
 struct T3(
-    #[proptest(no_params, filter(even))]
-    usize,
-    #[proptest(filter("|x| x % 2 == 1"))]
-    usize,
-    #[proptest(strategy = "0..100usize", filter = "|x| x % 2 == 1")]
-    usize,
-    #[proptest(value = "42", filter(even))]
-    usize,
+    #[proptest(no_params, filter(even))] usize,
+    #[proptest(filter("|x| x % 2 == 1"))] usize,
+    #[proptest(strategy = "0..100usize", filter = "|x| x % 2 == 1")] usize,
+    #[proptest(value = "42", filter(even))] usize,
     #[proptest(params(Param), strategy("0..=params.0"), filter("|x| *x > 2"))]
     usize,
 );
 
 fn is_v0(v: &T4) -> bool {
-    if let T4::V0 { .. } = v { true } else { false }
+    if let T4::V0 { .. } = v {
+        true
+    } else {
+        false
+    }
 }
 
 #[derive(Debug, Arbitrary)]
@@ -96,17 +92,25 @@ fn is_v0(v: &T4) -> bool {
 enum T4 {
     V0 {
         #[proptest(filter(even))]
-        field: usize
+        field: usize,
     },
-    V1
+    V1,
 }
 
 fn t5_v0_rem_3(v: &T5) -> bool {
-    if let T5::V0 { field } = v { rem3(&field) } else { false }
+    if let T5::V0 { field } = v {
+        rem3(&field)
+    } else {
+        false
+    }
 }
 
 fn t5_v1_rem_5(v: &T5) -> bool {
-    if let T5::V1(field) = v { field % 5 == 0 } else { false }
+    if let T5::V1(field) = v {
+        field % 5 == 0
+    } else {
+        false
+    }
 }
 
 #[derive(Debug, Arbitrary)]
@@ -124,11 +128,19 @@ enum T5 {
 }
 
 fn t6_v0_rem_3(v: &T6) -> bool {
-    if let T6::V0 { field } = v { rem3(&field) } else { false }
+    if let T6::V0 { field } = v {
+        rem3(&field)
+    } else {
+        false
+    }
 }
 
 fn t6_v1_rem_5(v: &T6) -> bool {
-    if let T6::V1(field) = v { field % 5 == 0 } else { false }
+    if let T6::V1(field) = v {
+        field % 5 == 0
+    } else {
+        false
+    }
 }
 
 #[derive(Debug, Arbitrary)]

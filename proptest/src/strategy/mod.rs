@@ -9,29 +9,29 @@
 
 //! Defines the core traits used by Proptest.
 
-mod traits;
-mod just;
-mod map;
 mod filter;
 mod filter_map;
 mod flatten;
+mod fuse;
+mod just;
 mod lazy;
-mod unions;
+mod map;
 mod recursive;
 mod shuffle;
-mod fuse;
+mod traits;
+mod unions;
 
-pub use self::traits::*;
-pub use self::just::*;
-pub use self::lazy::*;
-pub use self::map::*;
 pub use self::filter::*;
 pub use self::filter_map::*;
 pub use self::flatten::*;
+pub use self::fuse::*;
+pub use self::just::*;
 pub use self::lazy::*;
-pub use self::unions::*;
+pub use self::lazy::*;
+pub use self::map::*;
 pub use self::recursive::*;
 pub use self::shuffle::*;
-pub use self::fuse::*;
+pub use self::traits::*;
+pub use self::unions::*;
 
 pub mod statics;

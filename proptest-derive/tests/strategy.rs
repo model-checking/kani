@@ -6,8 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
-use proptest::prelude::{Strategy, Arbitrary, proptest};
+use proptest::prelude::{proptest, Arbitrary, Strategy};
 use proptest_derive::Arbitrary;
 
 fn make_strategy(start: usize) -> impl Strategy<Value = usize> {
@@ -30,39 +29,27 @@ struct T0 {
 
 #[derive(Debug, Arbitrary)]
 struct T1(
-    #[proptest(strategy = "make_strategy(22)")]
-    usize,
-    #[proptest(strategy("make_strategy(33)"))]
-    usize,
-    #[proptest(strategy(make_strategy2))]
-    usize,
+    #[proptest(strategy = "make_strategy(22)")] usize,
+    #[proptest(strategy("make_strategy(33)"))] usize,
+    #[proptest(strategy(make_strategy2))] usize,
 );
 
 #[derive(Debug, Arbitrary)]
 enum T2 {
-    V0(
-        #[proptest(strategy("make_strategy(44)"))]
-        usize
-    ),
+    V0(#[proptest(strategy("make_strategy(44)"))] usize),
     V1 {
         #[proptest(strategy = "make_strategy(55)")]
         field: usize,
     },
-    V2(
-        #[proptest(strategy = "make_strategy(66)")]
-        usize
-    ),
+    V2(#[proptest(strategy = "make_strategy(66)")] usize),
     V3 {
         #[proptest(strategy("make_strategy(77)"))]
         field: usize,
     },
-    V4(
-        #[proptest(strategy(make_strategy2))]
-        usize
-    ),
+    V4(#[proptest(strategy(make_strategy2))] usize),
     V5 {
         #[proptest(strategy(make_strategy2))]
-        field: usize
+        field: usize,
     },
 }
 

@@ -7,11 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::std_facade::{fmt, Box, Vec};
 use core::any::Any;
 use core::fmt::Display;
 use core::result::Result;
 use core::str::FromStr;
-use crate::std_facade::{fmt, Box, Vec};
 
 #[cfg(feature = "std")]
 mod file;
@@ -52,7 +52,7 @@ impl FromStr for PersistedSeed {
 /// `save_persisted_failures` is **deprecated** and these methods will be
 /// removed in proptest 0.10.0. Instead, implement `load_persisted_failures2`
 /// and `save_persisted_failures2`.
-pub trait FailurePersistence: Send + Sync + fmt::Debug  {
+pub trait FailurePersistence: Send + Sync + fmt::Debug {
     /// Supply seeds associated with the given `source_file` that may be used
     /// by a `TestRunner`'s random number generator in order to consistently
     /// recreate a previously-failing `Strategy`-provided value.
@@ -61,8 +61,10 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
     /// delegates to `load_persisted_failures` and converts the results into
     /// XorShift seeds.
     #[allow(deprecated)]
-    fn load_persisted_failures2(&self, source_file: Option<&'static str>)
-                                -> Vec<PersistedSeed> {
+    fn load_persisted_failures2(
+        &self,
+        source_file: Option<&'static str>,
+    ) -> Vec<PersistedSeed> {
         self.load_persisted_failures(source_file)
             .into_iter()
             .map(|seed| PersistedSeed(Seed::XorShift(seed)))
@@ -75,8 +77,10 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
     /// to Proptest 0.9.1 and only works with XorShift seeds.
     #[deprecated]
     #[allow(unused_variables)]
-    fn load_persisted_failures(&self, source_file: Option<&'static str>)
-                               -> Vec<[u8; 16]> {
+    fn load_persisted_failures(
+        &self,
+        source_file: Option<&'static str>,
+    ) -> Vec<[u8; 16]> {
         panic!("load_persisted_failures2 not implemented");
     }
 
@@ -89,11 +93,12 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
         &mut self,
         source_file: Option<&'static str>,
         seed: PersistedSeed,
-        shrunken_value: &dyn fmt::Debug)
-    {
+        shrunken_value: &dyn fmt::Debug,
+    ) {
         match seed.0 {
-            Seed::XorShift(seed) => self.save_persisted_failure(
-                source_file, seed, shrunken_value),
+            Seed::XorShift(seed) => {
+                self.save_persisted_failure(source_file, seed, shrunken_value)
+            }
             _ => (),
         }
     }
@@ -107,9 +112,9 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
     fn save_persisted_failure(
         &mut self,
         source_file: Option<&'static str>,
-        seed: [u8;16],
-        shrunken_value: &dyn fmt::Debug)
-    {
+        seed: [u8; 16],
+        shrunken_value: &dyn fmt::Debug,
+    ) {
         panic!("save_persisted_failure2 not implemented");
     }
 
@@ -124,7 +129,8 @@ pub trait FailurePersistence: Send + Sync + fmt::Debug  {
 }
 
 impl<'a, 'b> PartialEq<dyn FailurePersistence + 'b>
-for dyn FailurePersistence + 'a {
+    for dyn FailurePersistence + 'a
+{
     fn eq(&self, other: &(dyn FailurePersistence + 'b)) -> bool {
         FailurePersistence::eq(self, other)
     }
@@ -141,10 +147,9 @@ mod tests {
     use super::PersistedSeed;
     use crate::test_runner::rng::Seed;
 
-    pub const INC_SEED: PersistedSeed =
-        PersistedSeed(
-            Seed::XorShift(
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]));
+    pub const INC_SEED: PersistedSeed = PersistedSeed(Seed::XorShift([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    ]));
 
     pub const HI_PATH: Option<&str> = Some("hi");
     pub const UNREL_PATH: Option<&str> = Some("unrelated");

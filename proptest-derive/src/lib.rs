@@ -39,14 +39,14 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
-mod util;
-mod interp;
-mod void;
-mod error;
-mod use_tracking;
-mod attr;
 mod ast;
+mod attr;
 mod derive;
+mod error;
+mod interp;
+mod use_tracking;
+mod util;
+mod void;
 
 /// See module level documentation for more information.
 #[proc_macro_derive(Arbitrary, attributes(proptest))]
@@ -56,4 +56,5 @@ pub fn derive_proptest_arbitrary(input: pm::TokenStream) -> pm::TokenStream {
     derive::impl_proptest_arbitrary(syn::parse(input).unwrap()).into()
 }
 
-#[cfg(test)] mod tests;
+#[cfg(test)]
+mod tests;

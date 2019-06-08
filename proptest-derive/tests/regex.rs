@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use proptest::prelude::{BoxedStrategy, Strategy, Arbitrary, proptest};
+use proptest::prelude::{proptest, Arbitrary, BoxedStrategy, Strategy};
 use proptest::string::StrategyFromRegex;
 use proptest_derive::Arbitrary;
 
@@ -26,10 +26,7 @@ struct T0 {
     baz: String,
     #[proptest(regex = "(a|b)+")]
     quux: Vec<u8>,
-    #[proptest(
-        regex("[abc]+"),
-        filter("|c| c.len() < 4")
-    )]
+    #[proptest(regex("[abc]+"), filter("|c| c.len() < 4"))]
     wibble: Vec<u8>,
     #[proptest(regex(mk_regex))]
     wobble: Vec<u8>,
@@ -37,40 +34,22 @@ struct T0 {
 
 #[derive(Debug, Arbitrary)]
 struct T1(
-    #[proptest(regex = "a+")]
-    String,
-    #[proptest(regex("b+"))]
-    String,
-    #[proptest(regex(mk_regex))]
-    String,
-    #[proptest(regex = "(a|b)+")]
-    Vec<u8>,
-    #[proptest(
-        regex("[abc]+"),
-        filter("|c| c.len() < 4")
-    )]
-    Vec<u8>,
-    #[proptest(regex(mk_regex))]
-    Vec<u8>,
+    #[proptest(regex = "a+")] String,
+    #[proptest(regex("b+"))] String,
+    #[proptest(regex(mk_regex))] String,
+    #[proptest(regex = "(a|b)+")] Vec<u8>,
+    #[proptest(regex("[abc]+"), filter("|c| c.len() < 4"))] Vec<u8>,
+    #[proptest(regex(mk_regex))] Vec<u8>,
 );
 
 #[derive(Debug, Arbitrary)]
 struct T1r(
-    #[proptest(regex = r"a+")]
-    String,
-    #[proptest(regex(r"b+"))]
-    String,
-    #[proptest(regex(mk_regex))]
-    String,
-    #[proptest(regex = r"(a|b)+")]
-    Vec<u8>,
-    #[proptest(
-        regex(r"[abc]+"),
-        filter("|c| c.len() < 4")
-    )]
-    Vec<u8>,
-    #[proptest(regex(mk_regex))]
-    Vec<u8>,
+    #[proptest(regex = r"a+")] String,
+    #[proptest(regex(r"b+"))] String,
+    #[proptest(regex(mk_regex))] String,
+    #[proptest(regex = r"(a|b)+")] Vec<u8>,
+    #[proptest(regex(r"[abc]+"), filter("|c| c.len() < 4"))] Vec<u8>,
+    #[proptest(regex(mk_regex))] Vec<u8>,
 );
 
 // enum:
@@ -86,35 +65,23 @@ enum T2 {
         baz: String,
         #[proptest(regex = "(a|b)+")]
         quux: Vec<u8>,
-        #[proptest(
-            regex("[abc]+"),
-            filter("|c| c.len() < 4")
-        )]
+        #[proptest(regex("[abc]+"), filter("|c| c.len() < 4"))]
         wibble: Vec<u8>,
         #[proptest(regex(mk_regex))]
         wobble: Vec<u8>,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)]
 enum T3 {
     V0(
-        #[proptest(regex = "a+")]
-        String,
-        #[proptest(regex("b+"))]
-        String,
-        #[proptest(regex(mk_regex))]
-        String,
-        #[proptest(regex = "(a|b)+")]
-        Vec<u8>,
-        #[proptest(
-            regex("[abc]+"),
-            filter("|c| c.len() < 4")
-        )]
-        Vec<u8>,
-        #[proptest(regex(mk_regex))]
-        Vec<u8>,
-    )
+        #[proptest(regex = "a+")] String,
+        #[proptest(regex("b+"))] String,
+        #[proptest(regex(mk_regex))] String,
+        #[proptest(regex = "(a|b)+")] Vec<u8>,
+        #[proptest(regex("[abc]+"), filter("|c| c.len() < 4"))] Vec<u8>,
+        #[proptest(regex(mk_regex))] Vec<u8>,
+    ),
 }
 
 // Show that it works for new types and that `String` | `Vec<u8>` isn't
@@ -140,8 +107,12 @@ fn check_aplus(x0: String) {
 }
 
 fn assert_adherence(
-    x0: String, x1: String, x2: String,
-    y0: Vec<u8>, y1: Vec<u8>, y2: Vec<u8>,
+    x0: String,
+    x1: String,
+    x2: String,
+    y0: Vec<u8>,
+    y1: Vec<u8>,
+    y2: Vec<u8>,
 ) {
     check_aplus(x0);
 
@@ -157,7 +128,9 @@ fn assert_adherence(
     assert!(y1.iter().all(|c: &u8| [b'a', b'b', b'c'].contains(c)));
 
     assert!(y2.len() > 0);
-    let test = y2.iter().all(|c: &u8| if let b'0'..=b'9' = c { true } else { false });
+    let test = y2
+        .iter()
+        .all(|c: &u8| if let b'0'..=b'9' = c { true } else { false });
     assert!(test);
 }
 

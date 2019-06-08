@@ -7,8 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::std_facade::{fmt, Arc};
 use core::mem;
-use crate::std_facade::{Arc, fmt};
 
 use crate::strategy::traits::*;
 use crate::test_runner::*;
@@ -18,11 +18,11 @@ use crate::test_runner::*;
 ///
 /// This is used to defer potentially expensive generation to shrinking time. It
 /// is public only to allow APIs to expose it as an intermediate value.
-pub struct LazyValueTree<S : Strategy> {
+pub struct LazyValueTree<S: Strategy> {
     state: LazyValueTreeState<S>,
 }
 
-enum LazyValueTreeState<S : Strategy> {
+enum LazyValueTreeState<S: Strategy> {
     Initialized(S::Tree),
     Uninitialized {
         strategy: Arc<S>,
@@ -31,7 +31,7 @@ enum LazyValueTreeState<S : Strategy> {
     Failed,
 }
 
-impl<S : Strategy> LazyValueTree<S> {
+impl<S: Strategy> LazyValueTree<S> {
     /// Create a new value tree where initial generation is deferred until
     /// `maybe_init` is called.
     pub(crate) fn new(strategy: Arc<S>, runner: &mut TestRunner) -> Self {
@@ -43,7 +43,9 @@ impl<S : Strategy> LazyValueTree<S> {
 
     /// Create a new value tree that has already been initialized.
     pub(crate) fn new_initialized(value_tree: S::Tree) -> Self {
-        Self { state: LazyValueTreeState::Initialized(value_tree) }
+        Self {
+            state: LazyValueTreeState::Initialized(value_tree),
+        }
     }
 
     /// Returns a reference to the inner value tree if initialized.
@@ -72,14 +74,17 @@ impl<S : Strategy> LazyValueTree<S> {
 
         let state = mem::replace(&mut self.state, LazyValueTreeState::Failed);
         match state {
-            LazyValueTreeState::Uninitialized { strategy, mut runner } => {
+            LazyValueTreeState::Uninitialized {
+                strategy,
+                mut runner,
+            } => {
                 match strategy.new_tree(&mut runner) {
                     Ok(v) => {
                         mem::replace(
                             &mut self.state,
                             LazyValueTreeState::Initialized(v),
                         );
-                    },
+                    }
                     Err(_) => {
                         // self.state is set to Failed above. Keep it that way.
                     }
@@ -95,8 +100,9 @@ impl<S : Strategy> LazyValueTree<S> {
     pub(crate) fn is_uninitialized(&self) -> bool {
         match &self.state {
             LazyValueTreeState::Uninitialized { .. } => true,
-            LazyValueTreeState::Initialized(_)
-            | LazyValueTreeState::Failed => false,
+            LazyValueTreeState::Initialized(_) | LazyValueTreeState::Failed => {
+                false
+            }
         }
     }
 
@@ -110,7 +116,10 @@ impl<S : Strategy> LazyValueTree<S> {
     }
 }
 
-impl<S : Strategy> Clone for LazyValueTree<S> where S::Tree : Clone {
+impl<S: Strategy> Clone for LazyValueTree<S>
+where
+    S::Tree: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             state: self.state.clone(),
@@ -118,8 +127,10 @@ impl<S : Strategy> Clone for LazyValueTree<S> where S::Tree : Clone {
     }
 }
 
-impl<S : Strategy> fmt::Debug for LazyValueTree<S>
-where S::Tree : fmt::Debug {
+impl<S: Strategy> fmt::Debug for LazyValueTree<S>
+where
+    S::Tree: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("LazyValueTree")
             .field("state", &self.state)
@@ -127,7 +138,10 @@ where S::Tree : fmt::Debug {
     }
 }
 
-impl<S : Strategy> Clone for LazyValueTreeState<S> where S::Tree : Clone {
+impl<S: Strategy> Clone for LazyValueTreeState<S>
+where
+    S::Tree: Clone,
+{
     fn clone(&self) -> Self {
         use LazyValueTreeState::*;
 
@@ -142,21 +156,20 @@ impl<S : Strategy> Clone for LazyValueTreeState<S> where S::Tree : Clone {
     }
 }
 
-impl<S : Strategy> fmt::Debug for LazyValueTreeState<S>
-where S::Tree : fmt::Debug {
+impl<S: Strategy> fmt::Debug for LazyValueTreeState<S>
+where
+    S::Tree: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LazyValueTreeState::Initialized(value_tree) => {
                 f.debug_tuple("Initialized").field(value_tree).finish()
             }
-            LazyValueTreeState::Uninitialized { strategy, .. } => {
-                f.debug_struct("Uninitialized")
-                    .field("strategy", strategy)
-                    .finish()
-            }
-            LazyValueTreeState::Failed => {
-                write!(f, "Failed")
-            }
+            LazyValueTreeState::Uninitialized { strategy, .. } => f
+                .debug_struct("Uninitialized")
+                .field("strategy", strategy)
+                .finish(),
+            LazyValueTreeState::Failed => write!(f, "Failed"),
         }
     }
 }

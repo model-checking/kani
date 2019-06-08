@@ -12,14 +12,14 @@
 
 use std::ops::{Add, AddAssign};
 
+use proc_macro2::{Span, TokenStream};
+use quote::{ToTokens, TokenStreamExt};
 use syn;
 use syn::spanned::Spanned;
-use proc_macro2::{TokenStream, Span};
-use quote::{ToTokens, TokenStreamExt};
 
-use crate::util::self_ty;
-use crate::use_tracking::UseTracker;
 use crate::error::{Ctx, DeriveResult};
+use crate::use_tracking::UseTracker;
+use crate::util::self_ty;
 
 //==============================================================================
 // Config
@@ -66,34 +66,41 @@ pub type ImplParts = (Params, Strategy, Ctor);
 impl Impl {
     /// Constructs a new `Impl` from the parts as described on the type.
     pub fn new(typ: syn::Ident, tracker: UseTracker, parts: ImplParts) -> Self {
-        Self { typ, tracker, parts }
+        Self {
+            typ,
+            tracker,
+            parts,
+        }
     }
 
     /// Linearises the impl into a sequence of tokens.
     /// This produces the actual Rust code for the impl.
     pub fn into_tokens(self, ctx: Ctx) -> DeriveResult<TokenStream> {
-        let Impl { typ, mut tracker, parts: (params, strategy, ctor) } = self;
+        let Impl {
+            typ,
+            mut tracker,
+            parts: (params, strategy, ctor),
+        } = self;
 
         /// A `Debug` bound on a type variable.
         fn debug_bound() -> syn::TypeParamBound {
-            parse_quote!( ::std::fmt::Debug )
+            parse_quote!(::std::fmt::Debug)
         }
 
         /// An `Arbitrary` bound on a type variable.
         fn arbitrary_bound() -> syn::TypeParamBound {
-            parse_quote!( _proptest::arbitrary::Arbitrary )
+            parse_quote!(_proptest::arbitrary::Arbitrary)
         }
 
         // Add bounds and get generics for the impl.
         tracker.add_bounds(ctx, &arbitrary_bound(), Some(debug_bound()))?;
         let generics = tracker.consume();
-        let (impl_generics, ty_generics, where_clause)
-          = generics.split_for_impl();
+        let (impl_generics, ty_generics, where_clause) =
+            generics.split_for_impl();
 
         let _top = call_site_ident(TOP_PARAM_NAME);
 
-        let _const = call_site_ident(
-            &format!("_IMPL_ARBITRARY_FOR_{}", typ));
+        let _const = call_site_ident(&format!("_IMPL_ARBITRARY_FOR_{}", typ));
 
         // Linearise everything. We're done after this.
         let q = quote! {
@@ -194,29 +201,37 @@ pub fn pair_regex_self(regex: syn::Expr) -> StratPair {
 /// The type and constructor for .prop_map:ing a set of strategies
 /// into the type we are implementing for. The closure for the
 /// `.prop_map(<closure>)` must also be given.
-pub fn pair_map((strats, ctors): (Vec<Strategy>, Vec<Ctor>), closure: MapClosure)
-    -> StratPair
-{
-    (Strategy::Map(strats.into()), Ctor::Map(ctors.into(), closure))
+pub fn pair_map(
+    (strats, ctors): (Vec<Strategy>, Vec<Ctor>),
+    closure: MapClosure,
+) -> StratPair {
+    (
+        Strategy::Map(strats.into()),
+        Ctor::Map(ctors.into(), closure),
+    )
 }
 
 /// The type and constructor for a union of strategies which produces a new
 /// strategy that used the given strategies with probabilities based on the
 /// assigned relative weights for each strategy.
-pub fn pair_oneof((strats, ctors): (Vec<Strategy>, Vec<(u32, Ctor)>))
-    -> StratPair
-{
+pub fn pair_oneof(
+    (strats, ctors): (Vec<Strategy>, Vec<(u32, Ctor)>),
+) -> StratPair {
     (Strategy::Union(strats.into()), Ctor::Union(ctors.into()))
 }
 
 /// Potentially apply a filter to a strategy type and its constructor.
-pub fn pair_filter(filter: Vec<syn::Expr>, ty: syn::Type, pair: StratPair)
-    -> StratPair
-{
-    filter.into_iter().fold(pair, |(strat, ctor), filter| (
-        Strategy::Filter(Box::new(strat), ty.clone()),
-        Ctor::Filter(Box::new(ctor), filter)
-    ))
+pub fn pair_filter(
+    filter: Vec<syn::Expr>,
+    ty: syn::Type,
+    pair: StratPair,
+) -> StratPair {
+    filter.into_iter().fold(pair, |(strat, ctor), filter| {
+        (
+            Strategy::Filter(Box::new(strat), ty.clone()),
+            Ctor::Filter(Box::new(ctor), filter),
+        )
+    })
 }
 
 //==============================================================================
@@ -351,13 +366,11 @@ impl ToTokens for Strategy {
                         fn( ( #(#field_tys,)* ) ) -> Self
                     >
                 )
-            },
+            }
             Union(strats) => union_strat_to_tokens(tokens, strats),
-            Filter(strat, ty) => {
-                quote_append!(tokens,
-                    _proptest::strategy::Filter<#strat, fn(&#ty) -> bool>
-                )
-            },
+            Filter(strat, ty) => quote_append!(tokens,
+                _proptest::strategy::Filter<#strat, fn(&#ty) -> bool>
+            ),
         }
     }
 }
@@ -462,16 +475,18 @@ impl ToTokens for Ctor {
             Extract(ctor, to, from) => quote_append!(tokens, {
                 let #to = #from; #ctor
             }),
-            Arbitrary(ty, fv, span) => tokens.append_all(if let Some(fv) = fv {
-                let args = param(*fv);
-                quote_spanned!(*span=>
-                    _proptest::arbitrary::any_with::<#ty>(#args)
-                )
-            } else {
-                quote_spanned!(*span=>
-                    _proptest::arbitrary::any::<#ty>()
-                )
-            }),
+            Arbitrary(ty, fv, span) => {
+                tokens.append_all(if let Some(fv) = fv {
+                    let args = param(*fv);
+                    quote_spanned!(*span=>
+                        _proptest::arbitrary::any_with::<#ty>(#args)
+                    )
+                } else {
+                    quote_spanned!(*span=>
+                        _proptest::arbitrary::any::<#ty>()
+                    )
+                })
+            }
             Regex(ty, regex) => quote_append!(tokens,
                 <#ty as _proptest::string::StrategyFromRegex>::from_regex(#regex)
             ),
@@ -491,7 +506,7 @@ impl ToTokens for Ctor {
                         #closure
                     )
                 );
-            },
+            }
             Union(ctors) => union_ctor_to_tokens(tokens, ctors),
         }
     }
@@ -537,7 +552,9 @@ impl ToTokens for Ctor {
 ///         (19, ..)))
 /// ```
 fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
-    if ctors.is_empty() { return; }
+    if ctors.is_empty() {
+        return;
+    }
 
     if let [(_, ctor)] = ctors {
         // This is not a union at all - user provided an enum with one variant.
@@ -593,7 +610,9 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
 /// Tokenizes a weighted list of `Strategy`.
 /// For details, see `union_ctor_to_tokens`.
 fn union_strat_to_tokens(tokens: &mut TokenStream, strats: &[Strategy]) {
-    if strats.is_empty() { return; }
+    if strats.is_empty() {
+        return;
+    }
 
     if let [strat] = strats {
         // This is not a union at all - user provided an enum with one variant.
@@ -701,7 +720,7 @@ fn fresh_var(prefix: &str, count: usize) -> FreshVar {
 /// variable on the stack.
 struct FreshVar<'a> {
     prefix: &'a str,
-    count: usize
+    count: usize,
 }
 
 impl<'a> ToTokens for FreshVar<'a> {

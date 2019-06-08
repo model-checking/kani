@@ -23,12 +23,16 @@ pub struct Filter<S, F> {
 }
 
 impl<S, F> Filter<S, F> {
-    pub (super) fn new(source: S, whence: Reason, fun: F) -> Self {
-        Self { source, whence, fun: Arc::new(fun) }
+    pub(super) fn new(source: S, whence: Reason, fun: F) -> Self {
+        Self {
+            source,
+            whence,
+            fun: Arc::new(fun),
+        }
     }
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for Filter<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Filter")
             .field("source", &self.source)
@@ -38,7 +42,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Filter<S, F> {
     }
 }
 
-impl<S : Clone, F> Clone for Filter<S, F> {
+impl<S: Clone, F> Clone for Filter<S, F> {
     fn clone(&self) -> Self {
         Filter {
             source: self.source.clone(),
@@ -48,9 +52,7 @@ impl<S : Clone, F> Clone for Filter<S, F> {
     }
 }
 
-impl<S : Strategy,
-     F : Fn (&S::Value) -> bool>
-Strategy for Filter<S, F> {
+impl<S: Strategy, F: Fn(&S::Value) -> bool> Strategy for Filter<S, F> {
     type Tree = Filter<S::Tree, F>;
     type Value = S::Value;
 
@@ -64,26 +66,26 @@ Strategy for Filter<S, F> {
                     source: val,
                     whence: self.whence.clone(),
                     fun: Arc::clone(&self.fun),
-                })
+                });
             }
         }
     }
 }
 
-impl<S : ValueTree, F : Fn (&S::Value) -> bool>
-Filter<S, F> {
+impl<S: ValueTree, F: Fn(&S::Value) -> bool> Filter<S, F> {
     fn ensure_acceptable(&mut self) {
         while !(self.fun)(&self.source.current()) {
             if !self.source.complicate() {
-                panic!("Unable to complicate filtered strategy \
-                        back into acceptable value");
+                panic!(
+                    "Unable to complicate filtered strategy \
+                     back into acceptable value"
+                );
             }
         }
     }
 }
 
-impl<S : ValueTree, F : Fn (&S::Value) -> bool>
-ValueTree for Filter<S, F> {
+impl<S: ValueTree, F: Fn(&S::Value) -> bool> ValueTree for Filter<S, F> {
     type Value = S::Value;
 
     fn current(&self) -> S::Value {
@@ -138,7 +140,8 @@ mod test {
                 // Due to internal rejection sampling, `simplify()` can
                 // converge back to what `complicate()` would do.
                 strict_complicate_after_simplify: false,
-                .. CheckStrategySanityOptions::default()
-            }));
+                ..CheckStrategySanityOptions::default()
+            }),
+        );
     }
 }

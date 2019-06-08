@@ -19,13 +19,19 @@ struct T1 {}
 struct T2();
 
 #[derive(Debug, Arbitrary)]
-enum T3 { V0, }
+enum T3 {
+    V0,
+}
 
 #[derive(Debug, Arbitrary)]
-enum T4 { V1(), }
+enum T4 {
+    V1(),
+}
 
 #[derive(Debug, Arbitrary)]
-enum T5 { V2 {}, }
+enum T5 {
+    V2 {},
+}
 
 #[test]
 fn asserting_arbitrary() {

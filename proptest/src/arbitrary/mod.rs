@@ -14,8 +14,8 @@
 //!
 //! [`Arbitrary`]: trait.Arbitrary.html
 
-use crate::strategy::{Map, Strategy};
 use crate::strategy::statics;
+use crate::strategy::{Map, Strategy};
 
 //==============================================================================
 // Trait and impls
@@ -23,14 +23,16 @@ use crate::strategy::statics;
 
 mod traits;
 
-#[macro_use] pub mod functor;
+#[macro_use]
+pub mod functor;
 
-#[macro_use] mod macros;
+#[macro_use]
+mod macros;
 
-mod primitives;
 mod arrays;
-mod tuples;
+mod primitives;
 mod sample;
+mod tuples;
 
 mod _core;
 
@@ -46,7 +48,8 @@ pub use self::traits::*;
 // SMapped + Mapped aliases to make documentation clearer.
 //==============================================================================
 
-pub(crate) type SFnPtrMap<S, O> = statics::Map<S, fn(<S as Strategy>::Value) -> O>;
+pub(crate) type SFnPtrMap<S, O> =
+    statics::Map<S, fn(<S as Strategy>::Value) -> O>;
 
 /// A static map from a strategy of `I` to `O`.
 ///

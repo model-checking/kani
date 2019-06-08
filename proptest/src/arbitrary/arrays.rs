@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for arrays.
 
-use crate::arbitrary::{Arbitrary, any_with};
+use crate::arbitrary::{any_with, Arbitrary};
 use crate::array::UniformArrayStrategy;
 
 macro_rules! array {
@@ -25,8 +25,10 @@ macro_rules! array {
     )* };
 }
 
-array!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-       18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32);
+array!(
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+);
 
 #[cfg(test)]
 mod test {

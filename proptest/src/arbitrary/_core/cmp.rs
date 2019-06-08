@@ -9,7 +9,7 @@
 
 //! Arbitrary implementations for `std::cmp`.
 
-use core::cmp::{Reverse, Ordering};
+use core::cmp::{Ordering, Reverse};
 
 use crate::strategy::{Just, LazyTupleUnion, WA};
 

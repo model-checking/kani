@@ -9,14 +9,14 @@
 
 //! Arbitrary implementations for `std::option`.
 
-use core::option as opt;
-use core::ops::RangeInclusive;
 use crate::std_facade::string;
+use core::ops::RangeInclusive;
+use core::option as opt;
 
-use crate::option::{weighted, OptionStrategy, Probability};
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::option::{weighted, OptionStrategy, Probability};
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 arbitrary!(Probability, MapInto<RangeInclusive<f64>, Self>;
     (0.0..=1.0).prop_map_into()

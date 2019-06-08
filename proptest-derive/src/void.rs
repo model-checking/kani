@@ -19,8 +19,8 @@
 
 use syn::{self, visit};
 
-use crate::util;
 use crate::interp;
+use crate::util;
 
 //==============================================================================
 // Trait
@@ -104,7 +104,9 @@ struct Uninhabited(bool);
 
 impl Uninhabited {
     /// Set to uninhabited.
-    fn set(&mut self) { self.0 = true; }
+    fn set(&mut self) {
+        self.0 = true;
+    }
 }
 
 // We are more strict than Rust is.
@@ -125,13 +127,12 @@ impl<'ast> visit::Visit<'ast> for Uninhabited {
     // Even if `T` in `<T as Trait>::Item` is uninhabited, the associated item
     // may be inhabited, so we can't say for sure that it is uninhabited.
     fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
-        const KNOWN_UNINHABITED: &[&str] = &[
-            "std::string::ParseError",
-            "::std::string::ParseError",
-        ];
+        const KNOWN_UNINHABITED: &[&str] =
+            &["std::string::ParseError", "::std::string::ParseError"];
 
-        if type_path.qself.is_none() &&
-            util::match_pathsegs(&type_path.path, KNOWN_UNINHABITED) {
+        if type_path.qself.is_none()
+            && util::match_pathsegs(&type_path.path, KNOWN_UNINHABITED)
+        {
             self.set();
         }
     }

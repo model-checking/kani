@@ -24,7 +24,7 @@ pub fn fields_to_vec(fields: syn::Fields) -> Vec<syn::Field> {
     match fields {
         Named(fields) => fields.named.into_iter().collect(),
         Unnamed(fields) => fields.unnamed.into_iter().collect(),
-        Unit => vec![]
+        Unit => vec![],
     }
 }
 
@@ -53,16 +53,21 @@ fn is_path_simple(path: &syn::Path) -> bool {
 
 /// Returns true iff lhs matches the rhs.
 fn eq_simple_pathseg(lhs: &str, rhs: &CommaPS) -> bool {
-    lhs.split("::").filter(|s| !s.trim().is_empty())
-       .eq(rhs.iter().map(|ps| ps.ident.to_string()))
+    lhs.split("::")
+        .filter(|s| !s.trim().is_empty())
+        .eq(rhs.iter().map(|ps| ps.ident.to_string()))
 }
 
 /// Returns true iff lhs matches the given simple Path.
 pub fn eq_simple_path(mut lhs: &str, rhs: &syn::Path) -> bool {
-    if !is_path_simple(rhs) { return false }
+    if !is_path_simple(rhs) {
+        return false;
+    }
 
     if rhs.leading_colon.is_some() {
-        if !lhs.starts_with("::") { return false }
+        if !lhs.starts_with("::") {
+            return false;
+        }
         lhs = &lhs[2..];
     }
 
@@ -92,24 +97,29 @@ fn pseg_has_single_tyvar(pp: &syn::PathSegment) -> bool {
 /// `TY` can be substituted for any type, including type variables.
 pub fn is_phantom_data(path: &syn::Path) -> bool {
     let segs = &path.segments;
-    if segs.is_empty() { return false }
+    if segs.is_empty() {
+        return false;
+    }
 
     let mut path = path.clone();
     let lseg = path.segments.pop().unwrap().into_value();
 
-    &lseg.ident == "PhantomData" &&
-    pseg_has_single_tyvar(&lseg) &&
-    match_pathsegs(&path, &[
-        // We hedge a bet that user will never declare
-        // their own type named PhantomData.
-        // This may give errors, but is worth it usability-wise.
-        "",
-        "marker",
-        "std::marker",
-        "core::marker",
-        "::std::marker",
-        "::core::marker",
-    ])
+    &lseg.ident == "PhantomData"
+        && pseg_has_single_tyvar(&lseg)
+        && match_pathsegs(
+            &path,
+            &[
+                // We hedge a bet that user will never declare
+                // their own type named PhantomData.
+                // This may give errors, but is worth it usability-wise.
+                "",
+                "marker",
+                "std::marker",
+                "core::marker",
+                "::std::marker",
+                "::core::marker",
+            ],
+        )
 }
 
 /// Extracts a simple non-global path of length 1.

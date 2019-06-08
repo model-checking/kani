@@ -10,21 +10,24 @@
 //! Strategies for generating strings and byte strings from regular
 //! expressions.
 
-use core::mem;
+use crate::std_facade::{Box, Cow, String, ToOwned, Vec};
 use core::fmt;
+use core::mem;
 use core::ops::RangeInclusive;
 use core::u32;
-use crate::std_facade::{Cow, Box, String, Vec, ToOwned};
 
-use regex_syntax::{Parser, Error as ParseError};
 use regex_syntax::hir::{
-    self, Hir, HirKind::*, Literal::*,
-    RepetitionKind::{self, *}, RepetitionRange::*
+    self, Hir,
+    HirKind::*,
+    Literal::*,
+    RepetitionKind::{self, *},
+    RepetitionRange::*,
 };
+use regex_syntax::{Error as ParseError, Parser};
 
 use crate::bool;
 use crate::char;
-use crate::collection::{vec, size_range, SizeRange};
+use crate::collection::{size_range, vec, SizeRange};
 use crate::strategy::*;
 use crate::test_runner::*;
 
@@ -34,11 +37,15 @@ use crate::test_runner::*;
 pub struct StringParam(&'static str);
 
 impl From<StringParam> for &'static str {
-    fn from(x: StringParam) -> Self { x.0 }
+    fn from(x: StringParam) -> Self {
+        x.0
+    }
 }
 
 impl From<&'static str> for StringParam {
-    fn from(x: &'static str) -> Self { StringParam(x) }
+    fn from(x: &'static str) -> Self {
+        StringParam(x)
+    }
 }
 
 impl Default for StringParam {
@@ -142,9 +149,14 @@ pub fn string_regex(regex: &str) -> ParseResult<String> {
 
 /// Like `string_regex()`, but allows providing a pre-parsed expression.
 pub fn string_regex_parsed(expr: &Hir) -> ParseResult<String> {
-    bytes_regex_parsed(expr).map(
-        |v| v.prop_map(|bytes| String::from_utf8(bytes).expect(
-            "non-utf8 string")).sboxed()).map(RegexGeneratorStrategy)
+    bytes_regex_parsed(expr)
+        .map(|v| {
+            v.prop_map(|bytes| {
+                String::from_utf8(bytes).expect("non-utf8 string")
+            })
+            .sboxed()
+        })
+        .map(RegexGeneratorStrategy)
 }
 
 /// Creates a strategy which generates byte strings matching the given regular
@@ -161,50 +173,73 @@ pub fn bytes_regex_parsed(expr: &Hir) -> ParseResult<Vec<u8>> {
         Literal(lit) => Ok(Just(match lit {
             Unicode(scalar) => to_bytes(*scalar),
             Byte(byte) => vec![*byte],
-        }).sboxed()),
+        })
+        .sboxed()),
 
         Class(class) => Ok(match class {
-            hir::Class::Unicode(class) =>
-                unicode_class_strategy(class).prop_map(to_bytes).sboxed(),
+            hir::Class::Unicode(class) => {
+                unicode_class_strategy(class).prop_map(to_bytes).sboxed()
+            }
             hir::Class::Bytes(class) => {
-                let subs = class.iter().map(|r| r.start() ..= r.end());
+                let subs = class.iter().map(|r| r.start()..=r.end());
                 Union::new(subs).prop_map(|b| vec![b]).sboxed()
             }
         }),
 
-        Repetition(rep) => Ok(
-            vec(bytes_regex_parsed(&rep.hir)?, to_range(rep.kind.clone())?)
-                .prop_map(|parts| parts.into_iter().fold(
-                   vec![], |mut acc, child| { acc.extend(child); acc }))
-                .sboxed()
-        ),
+        Repetition(rep) => Ok(vec(
+            bytes_regex_parsed(&rep.hir)?,
+            to_range(rep.kind.clone())?,
+        )
+        .prop_map(|parts| {
+            parts.into_iter().fold(vec![], |mut acc, child| {
+                acc.extend(child);
+                acc
+            })
+        })
+        .sboxed()),
 
         Group(group) => bytes_regex_parsed(&group.hir).map(|v| v.0),
 
         Concat(subs) => {
-            let subs = ConcatIter { iter: subs.iter(), buf: vec![], next: None };
+            let subs = ConcatIter {
+                iter: subs.iter(),
+                buf: vec![],
+                next: None,
+            };
             let ext = |(mut lhs, rhs): (Vec<_>, _)| {
                 lhs.extend(rhs);
                 lhs
             };
-            Ok(subs.fold(Ok(None), |accum: Result<_, Error>, rhs| Ok(match accum? {
-                None => Some(rhs?.sboxed()),
-                Some(accum) => Some((accum, rhs?).prop_map(ext).sboxed()),
-            }))?.unwrap_or_else(|| Just(vec![]).sboxed()))
-        },
+            Ok(subs
+                .fold(Ok(None), |accum: Result<_, Error>, rhs| {
+                    Ok(match accum? {
+                        None => Some(rhs?.sboxed()),
+                        Some(accum) => {
+                            Some((accum, rhs?).prop_map(ext).sboxed())
+                        }
+                    })
+                })?
+                .unwrap_or_else(|| Just(vec![]).sboxed()))
+        }
 
-        Alternation(subs) =>
-            Ok(Union::try_new(subs.iter().map(bytes_regex_parsed))?.sboxed()),
+        Alternation(subs) => {
+            Ok(Union::try_new(subs.iter().map(bytes_regex_parsed))?.sboxed())
+        }
 
-        Anchor(_) =>
-            unsupported("line/text anchors not supported for string generation"),
+        Anchor(_) => {
+            unsupported("line/text anchors not supported for string generation")
+        }
 
-        WordBoundary(_) =>
-            unsupported("word boundary tests not supported for string generation"),
-    }.map(RegexGeneratorStrategy)
+        WordBoundary(_) => unsupported(
+            "word boundary tests not supported for string generation",
+        ),
+    }
+    .map(RegexGeneratorStrategy)
 }
 
-fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'static> {
+fn unicode_class_strategy(
+    class: &hir::ClassUnicode,
+) -> char::CharStrategy<'static> {
     static NONL_RANGES: &[RangeInclusive<char>] = &[
         '\x00'..='\x09',
         // Multiple instances of the latter range to partially make up
@@ -217,13 +252,16 @@ fn unicode_class_strategy(class: &hir::ClassUnicode) -> char::CharStrategy<'stat
         '\x0B'..=::core::char::MAX,
     ];
 
-    let dotnnl = |x: &hir::ClassUnicodeRange, y: &hir::ClassUnicodeRange|
-        x.start() == '\0' && x.end() == '\x09' &&
-        y.start() == '\x0B' && y.end() == '\u{10FFFF}';
+    let dotnnl = |x: &hir::ClassUnicodeRange, y: &hir::ClassUnicodeRange| {
+        x.start() == '\0'
+            && x.end() == '\x09'
+            && y.start() == '\x0B'
+            && y.end() == '\u{10FFFF}'
+    };
 
     char::ranges(match class.ranges() {
         [x, y] if dotnnl(x, y) || dotnnl(y, x) => Cow::Borrowed(NONL_RANGES),
-        _ => Cow::Owned(class.iter().map(|r| r.start() ..= r.end()).collect()),
+        _ => Cow::Owned(class.iter().map(|r| r.start()..=r.end()).collect()),
     })
 }
 
@@ -233,9 +271,11 @@ struct ConcatIter<'a, I> {
     next: Option<&'a Hir>,
 }
 
-fn flush_lit_buf<I>(it: &mut ConcatIter<'_, I>) -> Option<ParseResult<Vec<u8>>> {
+fn flush_lit_buf<I>(
+    it: &mut ConcatIter<'_, I>,
+) -> Option<ParseResult<Vec<u8>>> {
     Some(Ok(RegexGeneratorStrategy(
-        Just(mem::replace(&mut it.buf, vec![])).sboxed()
+        Just(mem::replace(&mut it.buf, vec![])).sboxed(),
     )))
 }
 
@@ -255,15 +295,17 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
                 Literal(Unicode(scalar)) => self.buf.extend(to_bytes(*scalar)),
                 Literal(Byte(byte)) => self.buf.push(*byte),
                 // Ecountered a non-literal.
-                _ => return if !self.buf.is_empty() {
-                    // We've accumulated a literal from before, flush it out.
-                    // Store this node so we deal with it the next call.
-                    self.next = Some(next);
-                    flush_lit_buf(self)
-                } else {
-                    // We didn't; just yield this node.
-                    Some(bytes_regex_parsed(next))
-                },
+                _ => {
+                    return if !self.buf.is_empty() {
+                        // We've accumulated a literal from before, flush it out.
+                        // Store this node so we deal with it the next call.
+                        self.next = Some(next);
+                        flush_lit_buf(self)
+                    } else {
+                        // We didn't; just yield this node.
+                        Some(bytes_regex_parsed(next))
+                    }
+                }
             }
         }
 
@@ -282,8 +324,11 @@ fn to_range(kind: RepetitionKind) -> Result<SizeRange, Error> {
         ZeroOrMore => size_range(0..=32),
         OneOrMore => size_range(1..=32),
         Range(range) => match range {
-            Exactly(count) if u32::MAX == count =>
-                return unsupported("Cannot have repetition of exactly u32::MAX"),
+            Exactly(count) if u32::MAX == count => {
+                return unsupported(
+                    "Cannot have repetition of exactly u32::MAX",
+                )
+            }
             Exactly(count) => size_range(count as usize),
             AtLeast(min) => {
                 let max = if min < u32::MAX as u32 / 2 {
@@ -292,12 +337,12 @@ fn to_range(kind: RepetitionKind) -> Result<SizeRange, Error> {
                     u32::MAX as usize
                 };
                 size_range((min as usize)..max)
-            },
-            Bounded(_, max) if u32::MAX == max =>
-                return unsupported("Cannot have repetition max of u32::MAX"),
-            Bounded(min, max) =>
-                size_range((min as usize)..(max as usize + 1))
-        }
+            }
+            Bounded(_, max) if u32::MAX == max => {
+                return unsupported("Cannot have repetition max of u32::MAX")
+            }
+            Bounded(min, max) => size_range((min as usize)..(max as usize + 1)),
+        },
     })
 }
 
@@ -322,18 +367,33 @@ mod test {
 
     use super::*;
 
-    fn do_test(pattern: &str, min_distinct: usize, max_distinct: usize,
-               iterations: usize) {
+    fn do_test(
+        pattern: &str,
+        min_distinct: usize,
+        max_distinct: usize,
+        iterations: usize,
+    ) {
         let generated = generate_values_matching_regex(pattern, iterations);
-        assert!(generated.len() >= min_distinct,
-                "Expected to generate at least {} strings, but only \
-                 generated {}", min_distinct, generated.len());
-        assert!(generated.len() <= max_distinct,
-                "Expected to generate at most {} strings, but \
-                 generated {}", max_distinct, generated.len());
+        assert!(
+            generated.len() >= min_distinct,
+            "Expected to generate at least {} strings, but only \
+             generated {}",
+            min_distinct,
+            generated.len()
+        );
+        assert!(
+            generated.len() <= max_distinct,
+            "Expected to generate at most {} strings, but \
+             generated {}",
+            max_distinct,
+            generated.len()
+        );
     }
 
-    fn generate_values_matching_regex(pattern: &str, iterations: usize) -> HashSet<String> {
+    fn generate_values_matching_regex(
+        pattern: &str,
+        iterations: usize,
+    ) -> HashSet<String> {
         let rx = Regex::new(pattern).unwrap();
         let mut generated = HashSet::new();
 
@@ -350,13 +410,17 @@ mod test {
                     false
                 };
                 if !ok {
-                    panic!("Generated string {:?} which does not match {:?}",
-                           s, pattern);
+                    panic!(
+                        "Generated string {:?} which does not match {:?}",
+                        s, pattern
+                    );
                 }
 
                 generated.insert(s);
 
-                if !value.simplify() { break; }
+                if !value.simplify() {
+                    break;
+                }
             }
         }
         generated
@@ -442,7 +506,7 @@ mod test {
         do_test("\\d+", 1, 65536, 256);
     }
 
-    fn assert_send_and_sync<T : Send + Sync>(_: T) { }
+    fn assert_send_and_sync<T: Send + Sync>(_: T) {}
 
     #[test]
     fn regex_strategy_is_send_and_sync() {
@@ -455,7 +519,7 @@ mod test {
             fn $name() {
                 test_generates_matching_strings($value);
             }
-        }
+        };
     }
 
     fn test_generates_matching_strings(pattern: &str) {
@@ -473,15 +537,22 @@ mod test {
                 // No more than 1000 simplify steps to keep test time down
                 for _ in 0..1000 {
                     let s = val.current();
-                    assert!(rx.is_match(&s),
-                            "Produced string {:?}, which does not match {:?}",
-                            s, pattern);
+                    assert!(
+                        rx.is_match(&s),
+                        "Produced string {:?}, which does not match {:?}",
+                        s,
+                        pattern
+                    );
 
-                    if !val.simplify() { break; }
+                    if !val.simplify() {
+                        break;
+                    }
                 }
 
                 // Quietly stop testing if we've run for >10 s
-                if start.elapsed().as_secs() > 10 { break; }
+                if start.elapsed().as_secs() > 10 {
+                    break;
+                }
             }
         }
     }

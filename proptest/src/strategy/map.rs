@@ -7,9 +7,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::std_facade::Arc;
 use core::fmt;
 use core::marker::PhantomData;
-use crate::std_facade::Arc;
 
 use crate::strategy::traits::*;
 use crate::test_runner::*;
@@ -27,7 +27,7 @@ pub struct Map<S, F> {
     pub(super) fun: Arc<F>,
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for Map<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Map")
             .field("source", &self.source)
@@ -36,7 +36,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Map<S, F> {
     }
 }
 
-impl<S : Clone, F> Clone for Map<S, F> {
+impl<S: Clone, F> Clone for Map<S, F> {
     fn clone(&self) -> Self {
         Map {
             source: self.source.clone(),
@@ -45,20 +45,21 @@ impl<S : Clone, F> Clone for Map<S, F> {
     }
 }
 
-impl<S : Strategy, O : fmt::Debug,
-     F : Fn (S::Value) -> O>
-Strategy for Map<S, F> {
+impl<S: Strategy, O: fmt::Debug, F: Fn(S::Value) -> O> Strategy for Map<S, F> {
     type Tree = Map<S::Tree, F>;
     type Value = O;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.source.new_tree(runner).map(
-            |v| Map { source: v, fun: Arc::clone(&self.fun) })
+        self.source.new_tree(runner).map(|v| Map {
+            source: v,
+            fun: Arc::clone(&self.fun),
+        })
     }
 }
 
-impl<S : ValueTree, O : fmt::Debug, F : Fn (S::Value) -> O>
-ValueTree for Map<S, F> {
+impl<S: ValueTree, O: fmt::Debug, F: Fn(S::Value) -> O> ValueTree
+    for Map<S, F>
+{
     type Value = O;
 
     fn current(&self) -> O {
@@ -94,25 +95,30 @@ impl<S, O> MapInto<S, O> {
     /// Construct a `MapInto` mapper from an `S` strategy into a strategy
     /// producing `O`s.
     pub(super) fn new(source: S) -> Self {
-        Self { source, output: PhantomData }
+        Self {
+            source,
+            output: PhantomData,
+        }
     }
 }
 
-impl<S : fmt::Debug, O> fmt::Debug for MapInto<S, O> {
+impl<S: fmt::Debug, O> fmt::Debug for MapInto<S, O> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MapInto").field("source", &self.source).finish()
+        f.debug_struct("MapInto")
+            .field("source", &self.source)
+            .finish()
     }
 }
 
-impl<S : Clone, O> Clone for MapInto<S, O> {
+impl<S: Clone, O> Clone for MapInto<S, O> {
     fn clone(&self) -> Self {
         Self::new(self.source.clone())
     }
 }
 
-impl<S : Strategy, O : fmt::Debug> Strategy for MapInto<S, O>
+impl<S: Strategy, O: fmt::Debug> Strategy for MapInto<S, O>
 where
-    S::Value : Into<O>
+    S::Value: Into<O>,
 {
     type Tree = MapInto<S::Tree, O>;
     type Value = O;
@@ -122,9 +128,9 @@ where
     }
 }
 
-impl<S : ValueTree, O : fmt::Debug> ValueTree for MapInto<S, O>
+impl<S: ValueTree, O: fmt::Debug> ValueTree for MapInto<S, O>
 where
-    S::Value: Into<O>
+    S::Value: Into<O>,
 {
     type Value = O;
 
@@ -154,7 +160,7 @@ pub struct Perturb<S, F> {
     pub(super) fun: Arc<F>,
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for Perturb<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for Perturb<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Perturb")
             .field("source", &self.source)
@@ -163,7 +169,7 @@ impl<S : fmt::Debug, F> fmt::Debug for Perturb<S, F> {
     }
 }
 
-impl<S : Clone, F> Clone for Perturb<S, F> {
+impl<S: Clone, F> Clone for Perturb<S, F> {
     fn clone(&self) -> Self {
         Perturb {
             source: self.source.clone(),
@@ -172,18 +178,20 @@ impl<S : Clone, F> Clone for Perturb<S, F> {
     }
 }
 
-impl<S : Strategy, O : fmt::Debug,
-     F : Fn (S::Value, TestRng) -> O>
-Strategy for Perturb<S, F> {
+impl<S: Strategy, O: fmt::Debug, F: Fn(S::Value, TestRng) -> O> Strategy
+    for Perturb<S, F>
+{
     type Tree = PerturbValueTree<S::Tree, F>;
     type Value = O;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let rng = runner.new_rng();
 
-        self.source.new_tree(runner).map(|source|
-            PerturbValueTree { source, rng, fun: Arc::clone(&self.fun) }
-        )
+        self.source.new_tree(runner).map(|source| PerturbValueTree {
+            source,
+            rng,
+            fun: Arc::clone(&self.fun),
+        })
     }
 }
 
@@ -196,7 +204,7 @@ pub struct PerturbValueTree<S, F> {
     rng: TestRng,
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for PerturbValueTree<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for PerturbValueTree<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PerturbValueTree")
             .field("source", &self.source)
@@ -206,7 +214,7 @@ impl<S : fmt::Debug, F> fmt::Debug for PerturbValueTree<S, F> {
     }
 }
 
-impl<S : Clone, F> Clone for PerturbValueTree<S, F> {
+impl<S: Clone, F> Clone for PerturbValueTree<S, F> {
     fn clone(&self) -> Self {
         PerturbValueTree {
             source: self.source.clone(),
@@ -216,8 +224,9 @@ impl<S : Clone, F> Clone for PerturbValueTree<S, F> {
     }
 }
 
-impl<S : ValueTree, O : fmt::Debug, F : Fn (S::Value, TestRng) -> O>
-ValueTree for PerturbValueTree<S, F> {
+impl<S: ValueTree, O: fmt::Debug, F: Fn(S::Value, TestRng) -> O> ValueTree
+    for PerturbValueTree<S, F>
+{
     type Value = O;
 
     fn current(&self) -> O {
@@ -243,8 +252,8 @@ mod test {
 
     use rand::RngCore;
 
-    use crate::strategy::just::Just;
     use super::*;
+    use crate::strategy::just::Just;
 
     #[test]
     fn test_map() {
@@ -252,7 +261,8 @@ mod test {
             .run(&(0..10).prop_map(|v| v * 2), |v| {
                 assert!(0 == v % 2);
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]
@@ -261,7 +271,8 @@ mod test {
             .run(&(0..10u8).prop_map_into::<usize>(), |v| {
                 assert!(v < 10);
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]

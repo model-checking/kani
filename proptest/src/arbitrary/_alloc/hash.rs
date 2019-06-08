@@ -9,9 +9,9 @@
 
 //! Arbitrary implementations for `std::hash`.
 
-use core::hash::{BuildHasherDefault, Hasher};
 #[cfg(feature = "std")]
 use crate::std_facade::hash_map::{DefaultHasher, RandomState};
+use core::hash::{BuildHasherDefault, Hasher};
 
 // NOTE: don't impl for std::hash::SipHasher.. since deprecated!
 
