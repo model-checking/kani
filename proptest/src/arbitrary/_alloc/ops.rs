@@ -49,7 +49,7 @@ lift1!([PartialOrd] Range<A>; base => {
 #[cfg(feature = "unstable")]
 arbitrary!(
     [Y: Arbitrary, R: Arbitrary] GeneratorState<Y, R>,
-    TupleUnion<(W<SMapped<Y, Self>>, W<SMapped<R, Self>>)>,
+    LazyTupleUnion<(WA<SMapped<Y, Self>>, WA<SMapped<R, Self>>)>,
     product_type![Y::Parameters, R::Parameters];
     args => {
         let product_unpack![y, r] = args;

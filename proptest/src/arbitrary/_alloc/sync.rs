@@ -37,8 +37,8 @@ atomic!(AtomicI8, i8; AtomicI16, i16; AtomicI32, i32;
 atomic!(AtomicI64, i64; AtomicU64, u64);
 
 arbitrary!(Ordering,
-    TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>,
-                W<Just<Self>>, W<Just<Self>>)>;
+    LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
+                    WA<Just<Self>>, WA<Just<Self>>)>;
     prop_oneof![
         Just(Ordering::Relaxed),
         Just(Ordering::Release),

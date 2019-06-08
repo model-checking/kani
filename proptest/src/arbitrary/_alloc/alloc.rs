@@ -41,7 +41,7 @@ arbitrary!(self::alloc::AllocErr, Just<Self>; Just(self::alloc::AllocErr));
 /* 2018-07-28 CollectionAllocErr is not currently available outside of using
  * the `alloc` crate, which would require a different nightly feature. For now,
  * disable.
-arbitrary!(alloc::collections::CollectionAllocErr, TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+arbitrary!(alloc::collections::CollectionAllocErr, LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
            prop_oneof![Just(alloc::collections::CollectionAllocErr::AllocErr),
                        Just(alloc::collections::CollectionAllocErr::CapacityOverflow)]);
  */

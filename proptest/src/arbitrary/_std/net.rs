@@ -21,10 +21,10 @@ use crate::arbitrary::*;
 arbitrary!(AddrParseError; "".parse::<Ipv4Addr>().unwrap_err());
 
 arbitrary!(Ipv4Addr,
-    TupleUnion<(
-        W<Just<Self>>,
-        W<Just<Self>>,
-        W<MapInto<StrategyFor<u32>, Self>>
+    LazyTupleUnion<(
+        WA<Just<Self>>,
+        WA<Just<Self>>,
+        WA<MapInto<StrategyFor<u32>, Self>>
     )>;
     prop_oneof![
         1  => Just(Self::new(0, 0, 0, 0)),
@@ -34,9 +34,9 @@ arbitrary!(Ipv4Addr,
 );
 
 arbitrary!(Ipv6Addr,
-    TupleUnion<(
-        W<SMapped<Ipv4Addr, Self>>,
-        W<MapInto<StrategyFor<[u16; 8]>, Self>>
+    LazyTupleUnion<(
+        WA<SMapped<Ipv4Addr, Self>>,
+        WA<MapInto<StrategyFor<[u16; 8]>, Self>>
     )>;
     prop_oneof![
         2 => static_map(any::<Ipv4Addr>(), |ip| ip.to_ipv6_mapped()),
@@ -54,8 +54,8 @@ arbitrary!(SocketAddrV6, SMapped<(Ipv6Addr, u16, u32, u32), Self>;
 );
 
 arbitrary!(IpAddr,
-    TupleUnion<(W<MapInto<StrategyFor<Ipv4Addr>, Self>>,
-                W<MapInto<StrategyFor<Ipv6Addr>, Self>>)>;
+    LazyTupleUnion<(WA<MapInto<StrategyFor<Ipv4Addr>, Self>>,
+                    WA<MapInto<StrategyFor<Ipv6Addr>, Self>>)>;
     prop_oneof![
         any::<Ipv4Addr>().prop_map_into(),
         any::<Ipv6Addr>().prop_map_into()
@@ -63,15 +63,15 @@ arbitrary!(IpAddr,
 );
 
 arbitrary!(Shutdown,
-    TupleUnion<(W<Just<Self>>, W<Just<Self>>, W<Just<Self>>)>;
+    LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>)>;
     {
         use std::net::Shutdown::*;
         prop_oneof![Just(Both), Just(Read), Just(Write)]
     }
 );
 arbitrary!(SocketAddr,
-    TupleUnion<(W<MapInto<StrategyFor<SocketAddrV4>, Self>>,
-                W<MapInto<StrategyFor<SocketAddrV6>, Self>>)>;
+    LazyTupleUnion<(WA<MapInto<StrategyFor<SocketAddrV4>, Self>>,
+                    WA<MapInto<StrategyFor<SocketAddrV6>, Self>>)>;
     prop_oneof![
         any::<SocketAddrV4>().prop_map_into(),
         any::<SocketAddrV6>().prop_map_into()
@@ -80,8 +80,9 @@ arbitrary!(SocketAddr,
 
 #[cfg(feature = "unstable")]
 arbitrary!(Ipv6MulticastScope,
-    TupleUnion<( W<Just<Self>>, W<Just<Self>>, W<Just<Self>>
-               , W<Just<Self>>, W<Just<Self>>, W<Just<Self>>, W<Just<Self>>)>;
+    LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
+                    WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
+                    WA<Just<Self>>)>;
     {
         use std::net::Ipv6MulticastScope::*;
         prop_oneof![

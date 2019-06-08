@@ -25,7 +25,7 @@ use crate::error::{Ctx, DeriveResult};
 // Config
 //==============================================================================
 
-/// The `MAX - 1` number of strategies that `TupleUnion` supports.
+/// The `MAX - 1` number of strategies that `LazyTupleUnion` supports.
 /// Increase this if the behaviour is changed in `proptest`.
 /// Keeping this lower than what `proptest` supports will also work
 /// but for optimality this should follow what `proptest` supports.
@@ -503,23 +503,23 @@ impl ToTokens for Ctor {
 /// supporting enums with an unbounded number of variants without any boxing
 /// (erasure) or dynamic dispatch.
 ///
-/// As `TupleUnion` is (currently) limited to 10 summands in the coproduct we
-/// can't just emit the entire thing linearly as this will fail on the 11:th
+/// As `LazyTupleUnion` is (currently) limited to 10 summands in the coproduct
+/// we can't just emit the entire thing linearly as this will fail on the 11:th
 /// variant.
 ///
 /// A naive approach to solve might be to simply use a cons-list like so:
 ///
 /// ```ignore
-/// TupleUnion::new(
+/// LazyTupleUnion::new(
 ///     (w_1, s_1),
 ///     (w_2 + w_3 + w_4 + w_5,
-///      TupleUnion::new(
+///      LazyTupleUnion::new(
 ///         (w_2, s_2),
 ///         (w_3 + w_4 + w_5,
-///          TupleUnion::new(
+///          LazyTupleUnion::new(
 ///             (w_3, s_3),
 ///             (w_4 + w_5,
-///              TupleUnion::new(
+///              LazyTupleUnion::new(
 ///                 (w_4, s_4),
 ///                 (w_5, s_5),
 ///             ))
@@ -547,11 +547,11 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
 
     let mut chunks = ctors.chunks(UNION_CHUNK_SIZE);
     let chunk = chunks.next().unwrap();
-    let head = chunk.iter().map(|(w, c)| quote!( (#w, #c) ));
+    let head = chunk.iter().map(wrap_arc);
     let tail = Recurse(weight_sum(ctors) - weight_sum(chunk), chunks);
 
     quote_append!(tokens,
-        _proptest::strategy::TupleUnion::new(( #(#head,)* #tail ))
+        _proptest::strategy::LazyTupleUnion::new(( #(#head,)* #tail ))
     );
 
     struct Recurse<'a>(u32, ::std::slice::Chunks<'a, (u32, Ctor)>);
@@ -563,14 +563,15 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
             if let Some(chunk) = chunks.next() {
                 if let [(w, c)] = chunk {
                     // Only one element left - no need to nest.
-                    quote_append!(tokens, (#w, #c) );
+                    quote_append!(tokens, (#w, ::std::sync::Arc::new(#c)) );
                 } else {
-                    let head = chunk.iter().map(|(w, c)| quote!( (#w, #c) ));
+                    let head = chunk.iter().map(wrap_arc);
                     let tail = Recurse(tweight - weight_sum(chunk), chunks);
                     quote_append!(tokens,
-                        (#tweight, _proptest::strategy::TupleUnion::new((
-                            #(#head,)* #tail
-                        )))
+                        (#tweight, ::std::sync::Arc::new(
+                            _proptest::strategy::LazyTupleUnion::new((
+                                #(#head,)* #tail
+                            ))))
                     );
                 }
             }
@@ -581,6 +582,11 @@ fn union_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[(u32, Ctor)]) {
         use std::num::Wrapping;
         let Wrapping(x) = ctors.iter().map(|&(w, _)| Wrapping(w)).sum();
         x
+    }
+
+    fn wrap_arc(arg: &(u32, Ctor)) -> TokenStream {
+        let (w, c) = arg;
+        quote!( (#w, ::std::sync::Arc::new(#c)) )
     }
 }
 
@@ -597,11 +603,11 @@ fn union_strat_to_tokens(tokens: &mut TokenStream, strats: &[Strategy]) {
 
     let mut chunks = strats.chunks(UNION_CHUNK_SIZE);
     let chunk = chunks.next().unwrap();
-    let head = chunk.iter().map(|s| quote!( (u32, #s) ));
+    let head = chunk.iter().map(wrap_arc);
     let tail = Recurse(chunks);
 
     quote_append!(tokens,
-        _proptest::strategy::TupleUnion<( #(#head,)* #tail )>
+        _proptest::strategy::LazyTupleUnion<( #(#head,)* #tail )>
     );
 
     struct Recurse<'a>(::std::slice::Chunks<'a, Strategy>);
@@ -613,18 +619,23 @@ fn union_strat_to_tokens(tokens: &mut TokenStream, strats: &[Strategy]) {
             if let Some(chunk) = chunks.next() {
                 if let [s] = chunk {
                     // Only one element left - no need to nest.
-                    quote_append!(tokens, (u32, #s) );
+                    quote_append!(tokens, (u32, ::std::sync::Arc<#s>) );
                 } else {
-                    let head = chunk.iter().map(|s| quote!( (u32, #s) ));
+                    let head = chunk.iter().map(wrap_arc);
                     let tail = Recurse(chunks);
                     quote_append!(tokens,
-                        (u32, _proptest::strategy::TupleUnion<(
-                            #(#head,)* #tail
-                        )>)
+                        (u32,
+                         ::std::sync::Arc<_proptest::strategy::LazyTupleUnion<(
+                             #(#head,)* #tail
+                         )>>)
                     );
                 }
             }
         }
+    }
+
+    fn wrap_arc(s: &Strategy) -> TokenStream {
+        quote!( (u32, ::std::sync::Arc<#s>) )
     }
 }
 

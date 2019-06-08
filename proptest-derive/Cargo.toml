@@ -37,9 +37,15 @@ proptest = { version = "0.9.3", path = "../proptest" }
 # https://github.com/laumann/compiletest-rs/issues/166, the default features of
 # compiletest-rs fail to compile, but the stable fallback works fine.
 compiletest_rs = { version = "0.3.19", features = ["tmp", "stable"] }
+# criterion is used for benchmarks.
+criterion = "0.2"
 
 [dependencies]
 proc-macro2 = "0.4"
 
 syn = { version = "0.15.17", features = ["visit", "extra-traits", "full"] }
 quote = "0.6"
+
+[[bench]]
+name = "large_enum"
+harness = false

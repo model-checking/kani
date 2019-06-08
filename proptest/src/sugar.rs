@@ -335,25 +335,29 @@ macro_rules! prop_oneof {
 
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1))))
     };
 
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr,
      $weight2:expr => $item2:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2))))
     };
 
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr,
      $weight2:expr => $item2:expr,
      $weight3:expr => $item3:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3))))
     };
 
     ($weight0:expr => $item0:expr,
@@ -361,10 +365,12 @@ macro_rules! prop_oneof {
      $weight2:expr => $item2:expr,
      $weight3:expr => $item3:expr,
      $weight4:expr => $item4:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3),
-             ($weight4, $item4)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3)),
+             ($weight4, $crate::std_facade::Arc::new($item4))))
     };
 
     ($weight0:expr => $item0:expr,
@@ -373,10 +379,13 @@ macro_rules! prop_oneof {
      $weight3:expr => $item3:expr,
      $weight4:expr => $item4:expr,
      $weight5:expr => $item5:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3),
-             ($weight4, $item4), ($weight5, $item5)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3)),
+             ($weight4, $crate::std_facade::Arc::new($item4)),
+             ($weight5, $crate::std_facade::Arc::new($item5))))
     };
 
     ($weight0:expr => $item0:expr,
@@ -386,11 +395,14 @@ macro_rules! prop_oneof {
      $weight4:expr => $item4:expr,
      $weight5:expr => $item5:expr,
      $weight6:expr => $item6:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3),
-             ($weight4, $item4), ($weight5, $item5),
-             ($weight6, $item6)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3)),
+             ($weight4, $crate::std_facade::Arc::new($item4)),
+             ($weight5, $crate::std_facade::Arc::new($item5)),
+             ($weight6, $crate::std_facade::Arc::new($item6))))
     };
 
     ($weight0:expr => $item0:expr,
@@ -401,11 +413,15 @@ macro_rules! prop_oneof {
      $weight5:expr => $item5:expr,
      $weight6:expr => $item6:expr,
      $weight7:expr => $item7:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3),
-             ($weight4, $item4), ($weight5, $item5),
-             ($weight6, $item6), ($weight7, $item7)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3)),
+             ($weight4, $crate::std_facade::Arc::new($item4)),
+             ($weight5, $crate::std_facade::Arc::new($item5)),
+             ($weight6, $crate::std_facade::Arc::new($item6)),
+             ($weight7, $crate::std_facade::Arc::new($item7))))
     };
 
     ($weight0:expr => $item0:expr,
@@ -417,12 +433,16 @@ macro_rules! prop_oneof {
      $weight6:expr => $item6:expr,
      $weight7:expr => $item7:expr,
      $weight8:expr => $item8:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3),
-             ($weight4, $item4), ($weight5, $item5),
-             ($weight6, $item6), ($weight7, $item7),
-             ($weight8, $item8)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3)),
+             ($weight4, $crate::std_facade::Arc::new($item4)),
+             ($weight5, $crate::std_facade::Arc::new($item5)),
+             ($weight6, $crate::std_facade::Arc::new($item6)),
+             ($weight7, $crate::std_facade::Arc::new($item7)),
+             ($weight8, $crate::std_facade::Arc::new($item8))))
     };
 
     ($weight0:expr => $item0:expr,
@@ -435,12 +455,17 @@ macro_rules! prop_oneof {
      $weight7:expr => $item7:expr,
      $weight8:expr => $item8:expr,
      $weight9:expr => $item9:expr $(,)?) => {
-        $crate::strategy::TupleUnion::new(
-            (($weight0, $item0), ($weight1, $item1),
-             ($weight2, $item2), ($weight3, $item3),
-             ($weight4, $item4), ($weight5, $item5),
-             ($weight6, $item6), ($weight7, $item7),
-             ($weight8, $item8), ($weight9, $item9)))
+        $crate::strategy::LazyTupleUnion::new(
+            (($weight0, $crate::std_facade::Arc::new($item0)),
+             ($weight1, $crate::std_facade::Arc::new($item1)),
+             ($weight2, $crate::std_facade::Arc::new($item2)),
+             ($weight3, $crate::std_facade::Arc::new($item3)),
+             ($weight4, $crate::std_facade::Arc::new($item4)),
+             ($weight5, $crate::std_facade::Arc::new($item5)),
+             ($weight6, $crate::std_facade::Arc::new($item6)),
+             ($weight7, $crate::std_facade::Arc::new($item7)),
+             ($weight8, $crate::std_facade::Arc::new($item8)),
+             ($weight9, $crate::std_facade::Arc::new($item9))))
     };
 
     ($($weight:expr => $item:expr),+ $(,)?) => {
@@ -1269,7 +1294,7 @@ mod test {
 
     #[test]
     fn oneof_all_counts() {
-        use crate::strategy::{Strategy, TupleUnion, Union, Just as J};
+        use crate::strategy::{Strategy, LazyTupleUnion, Union, Just as J};
 
         fn expect_count(n: usize, s: impl Strategy<Value = i32>) {
             use std::collections::HashSet;
@@ -1285,7 +1310,7 @@ mod test {
             assert_eq!(n, seen.len());
         }
 
-        fn assert_static<T>(v: TupleUnion<T>) -> TupleUnion<T> { v }
+        fn assert_static<T>(v: LazyTupleUnion<T>) -> LazyTupleUnion<T> { v }
         fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> { v }
 
         expect_count(1, prop_oneof![J(0i32)]);

@@ -13,9 +13,9 @@ macro_rules! multiplex_alloc {
     ($($alloc: path, $std: path),*) => {
         $(
             #[cfg(all(feature = "alloc", not(feature = "std")))]
-            pub(crate) use $alloc;
+            pub use $alloc;
             #[cfg(feature = "std")]
-            pub(crate) use $std;
+            pub use $std;
         )*
     };
 }
@@ -24,9 +24,9 @@ macro_rules! multiplex_core {
     ($($core: path, $std: path),*) => {
         $(
             #[cfg(not(feature = "std"))]
-            pub(crate) use $core;
+            pub use $core;
             #[cfg(feature = "std")]
-            pub(crate) use $std;
+            pub use $std;
         )*
     };
 }
@@ -62,11 +62,11 @@ multiplex_alloc! {
 //#[cfg(not(feature = "std"))]
 //pub(crate) use hashmap_core::map as hash_map;
 #[cfg(feature = "std")]
-pub(crate) use ::std::collections::hash_map;
+pub use ::std::collections::hash_map;
 //#[cfg(not(feature = "std"))]
 //pub(crate) use hashmap_core::set as hash_set;
 #[cfg(feature = "std")]
-pub(crate) use ::std::collections::hash_set;
+pub use ::std::collections::hash_set;
 
 multiplex_core! {
     core::fmt, ::std::fmt,
