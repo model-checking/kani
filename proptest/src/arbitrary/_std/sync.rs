@@ -163,9 +163,4 @@ mod test {
         syncrx_tx => (SyncSender<u8>, Receiver<u8>),
         syncrx_txiter => (SyncSender<u8>, IntoIter<u8>)
     );
-
-    #[cfg(feature = "unstable")]
-    no_panic_test!(
-        select => Select
-    );
 }
