@@ -260,7 +260,11 @@ impl<S: Strategy, R: Strategy, F: Fn(S::Value) -> R> Strategy
 #[cfg(test)]
 mod test {
     use super::*;
+
+    use std::u32;
+
     use crate::strategy::just::Just;
+    use crate::test_runner::Config;
 
     #[test]
     fn test_flat_map() {
@@ -270,7 +274,13 @@ mod test {
         let input = (0..65536).prop_flat_map(|a| (Just(a), (a - 5..a + 5)));
 
         let mut failures = 0;
-        let mut runner = TestRunner::deterministic();
+        let mut runner = TestRunner::new_with_rng(
+            Config {
+                max_shrink_iters: u32::MAX - 1,
+                ..Config::default()
+            },
+            TestRng::deterministic_rng(RngAlgorithm::default()),
+        );
         for _ in 0..1000 {
             let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |(a, b)| {

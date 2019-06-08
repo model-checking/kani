@@ -29,6 +29,9 @@
   `LazyTupleUnion`. `prop_oneof!`'s return type is documented to not be
   stable, and that continues to be the case.
 
+- Shrinking is now limited to four times as many iterations as configured
+  number of test cases by default.
+
 ## 0.9.3
 
 This is a minor release to correct some packaging errors. The licence files are

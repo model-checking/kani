@@ -740,20 +740,44 @@ impl TestRunner {
                 #[cfg(not(feature = "std"))]
                 let timed_out: Option<u64> = None;
 
-                let bail = if iterations >= self.config.max_shrink_iters {
+                let bail = if iterations >= self.config.max_shrink_iters() {
+                    #[cfg(feature = "std")]
+                    const CONTROLLER: &str =
+                        "the PROPTEST_MAX_SHRINK_ITERS environment \
+                         variable or ProptestConfig.max_shrink_iters";
+                    #[cfg(not(feature = "std"))]
+                    const CONTROLLER: &str = "ProptestConfig.max_shrink_iters";
                     verbose_message!(
                         self,
                         ALWAYS,
-                        "Aborting shrinking after {} iterations",
+                        "Aborting shrinking after {} iterations (set {} \
+                         to a large(r) value to shrink more; current \
+                         configuration: {} iterations)",
+                        CONTROLLER,
+                        self.config.max_shrink_iters(),
                         iterations
                     );
                     true
                 } else if let Some(ms) = timed_out {
+                    #[cfg(feature = "std")]
+                    const CONTROLLER: &str =
+                        "the PROPTEST_MAX_SHRINK_TIME environment \
+                         variable or ProptestConfig.max_shrink_time";
+                    #[cfg(feature = "std")]
+                    let current = self.config.max_shrink_time;
+                    #[cfg(not(feature = "std"))]
+                    const CONTROLLER: &str = "(not configurable in no_std)";
+                    #[cfg(not(feature = "std"))]
+                    let current = 0;
                     verbose_message!(
                         self,
                         ALWAYS,
-                        "Aborting shrinking after taking too long: {}",
-                        ms
+                        "Aborting shrinking after taking too long: {} ms \
+                         (set {} to a large(r) value to shrink more; current \
+                         configuration: {} ms)",
+                        ms,
+                        CONTROLLER,
+                        current
                     );
                     true
                 } else {
