@@ -792,6 +792,50 @@ macro_rules! prop_assert_eq {
     }};
 }
 
+/// Similar to `assert_ne!` from std, but returns a test failure instead of
+/// panicking if the condition fails.
+///
+/// See `prop_assert!` for a more in-depth discussion.
+///
+/// ## Example
+///
+/// ```
+/// use proptest::prelude::*;
+///
+/// proptest! {
+///   # /*
+///   #[test]
+///   # */
+///   fn test_addition(a in 0i32..100i32, b in 1i32..100i32) {
+///     // Use with default message
+///     prop_assert_ne!(a, a + b);
+///     // Can also provide custom message added after the common message
+///     prop_assert_ne!(a, a + b, "a = {}, b = {}", a, b);
+///   }
+/// }
+/// #
+/// # fn main() { test_addition(); }
+/// ```
+#[macro_export]
+macro_rules! prop_assert_ne {
+    ($left:expr, $right:expr) => {{
+        let left = $left;
+        let right = $right;
+        prop_assert!(left != right, "assertion failed: `(left != right)` \
+                                     (left: `{:?}`, right: `{:?}`)",
+                     left, right);
+    }};
+
+    ($left:expr, $right:expr, $fmt:tt $($args:tt)*) => {{
+        let left = $left;
+        let right = $right;
+        prop_assert!(left != right, concat!(
+            "assertion failed: `(left != right)` \
+             (left: `{:?}`, right: `{:?}`): ", $fmt),
+                     left, right $($args)*);
+    }};
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! proptest_helper {
@@ -1072,50 +1116,6 @@ named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
                        5 FN FV 6 GN GV 7 HN HV 8 IN IV);
 named_arguments_tuple!(0 AN AV 1 BN BV 2 CN CV 3 DN DV 4 EN EV
                        5 FN FV 6 GN GV 7 HN HV 8 IN IV 9 JN JV);
-
-/// Similar to `assert_ne!` from std, but returns a test failure instead of
-/// panicking if the condition fails.
-///
-/// See `prop_assert!` for a more in-depth discussion.
-///
-/// ## Example
-///
-/// ```
-/// use proptest::prelude::*;
-///
-/// proptest! {
-///   # /*
-///   #[test]
-///   # */
-///   fn test_addition(a in 0i32..100i32, b in 1i32..100i32) {
-///     // Use with default message
-///     prop_assert_ne!(a, a + b);
-///     // Can also provide custom message added after the common message
-///     prop_assert_ne!(a, a + b, "a = {}, b = {}", a, b);
-///   }
-/// }
-/// #
-/// # fn main() { test_addition(); }
-/// ```
-#[macro_export]
-macro_rules! prop_assert_ne {
-    ($left:expr, $right:expr) => {{
-        let left = $left;
-        let right = $right;
-        prop_assert!(left != right, "assertion failed: `(left != right)` \
-                                     (left: `{:?}`, right: `{:?}`)",
-                     left, right);
-    }};
-
-    ($left:expr, $right:expr, $fmt:tt $($args:tt)*) => {{
-        let left = $left;
-        let right = $right;
-        prop_assert!(left != right, concat!(
-            "assertion failed: `(left != right)` \
-             (left: `{:?}`, right: `{:?}`): ", $fmt),
-                     left, right $($args)*);
-    }};
-}
 
 #[cfg(feature = "std")]
 #[doc(hidden)]
