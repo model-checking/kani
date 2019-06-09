@@ -777,7 +777,8 @@ macro_rules! prop_assert_eq {
         let right = $right;
         $crate::prop_assert!(
             left == right,
-            "assertion failed: `(left == right)` (left: `{:?}`, right: `{:?}`)",
+            "assertion failed: `(left == right)` \
+             \n  left: `{:?}`,\n right: `{:?}`",
             left, right);
     }};
 
@@ -787,7 +788,8 @@ macro_rules! prop_assert_eq {
         $crate::prop_assert!(
             left == right,
             concat!(
-                "assertion failed: `(left == right)` (left: `{:?}`, right: `{:?}`): ", $fmt),
+                "assertion failed: `(left == right)` \
+                 \n  left: `{:?}`, \n right: `{:?}`: ", $fmt),
             left, right $($args)*);
     }};
 }
@@ -821,8 +823,10 @@ macro_rules! prop_assert_ne {
     ($left:expr, $right:expr) => {{
         let left = $left;
         let right = $right;
-        prop_assert!(left != right, "assertion failed: `(left != right)` \
-                                     (left: `{:?}`, right: `{:?}`)",
+        prop_assert!(
+            left != right,
+            "assertion failed: `(left != right)`\
+             \n  left: `{:?}`,\n right: `{:?}`",
                      left, right);
     }};
 
@@ -830,8 +834,8 @@ macro_rules! prop_assert_ne {
         let left = $left;
         let right = $right;
         prop_assert!(left != right, concat!(
-            "assertion failed: `(left != right)` \
-             (left: `{:?}`, right: `{:?}`): ", $fmt),
+            "assertion failed: `(left != right)`\
+             \n  left: `{:?}`,\n right: `{:?}`: ", $fmt),
                      left, right $($args)*);
     }};
 }

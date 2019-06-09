@@ -32,6 +32,10 @@
 - Shrinking is now limited to four times as many iterations as configured
   number of test cases by default.
 
+- `prop_assert_eq!` and `prop_assert_ne!` produce output more similar to the
+  `assert_eq!` and `assert_ne!` macros. This should also make it easier to
+  visually parse out the source location in the resulting messages.
+
 ## 0.9.3
 
 This is a minor release to correct some packaging errors. The licence files are
