@@ -9,12 +9,12 @@
 
 //! Arbitrary implementations for `std::time`.
 
-use std::time::*;
 use core::ops::Range;
+use std::time::*;
 
-use crate::strategy::statics::{self, static_map};
 use crate::arbitrary::*;
 use crate::num;
+use crate::strategy::statics::{self, static_map};
 
 arbitrary!(Duration, SMapped<(u64, u32), Self>;
     static_map(any::<(u64, u32)>(), |(a, b)| Duration::new(a, b))

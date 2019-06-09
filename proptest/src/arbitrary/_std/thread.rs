@@ -9,12 +9,12 @@
 
 //! Arbitrary implementations for `std::thread`.
 
-use std::thread::*;
 use crate::std_facade::String;
+use std::thread::*;
 
-use crate::strategy::statics::static_map;
-use crate::option::prob;
 use crate::arbitrary::*;
+use crate::option::prob;
+use crate::strategy::statics::static_map;
 
 arbitrary!(Builder, SMapped<(Option<usize>, Option<String>), Self>; {
     let prob = prob(0.7);

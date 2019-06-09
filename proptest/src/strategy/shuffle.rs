@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::std_facade::{Cell, VecDeque, Vec};
+use crate::std_facade::{Cell, Vec, VecDeque};
 
 use rand::Rng;
 
@@ -53,42 +53,44 @@ shuffleable!(Vec<T>);
 shuffleable!(VecDeque<T>);
 // Zero- and 1-length arrays aren't usefully shuffleable, but are included to
 // simplify external macros that may try to use them anyway.
-shuffleable!([T;0]);
-shuffleable!([T;1]);
-shuffleable!([T;2]);
-shuffleable!([T;3]);
-shuffleable!([T;4]);
-shuffleable!([T;5]);
-shuffleable!([T;6]);
-shuffleable!([T;7]);
-shuffleable!([T;8]);
-shuffleable!([T;9]);
-shuffleable!([T;10]);
-shuffleable!([T;11]);
-shuffleable!([T;12]);
-shuffleable!([T;13]);
-shuffleable!([T;14]);
-shuffleable!([T;15]);
-shuffleable!([T;16]);
-shuffleable!([T;17]);
-shuffleable!([T;18]);
-shuffleable!([T;19]);
-shuffleable!([T;20]);
-shuffleable!([T;21]);
-shuffleable!([T;22]);
-shuffleable!([T;23]);
-shuffleable!([T;24]);
-shuffleable!([T;25]);
-shuffleable!([T;26]);
-shuffleable!([T;27]);
-shuffleable!([T;28]);
-shuffleable!([T;29]);
-shuffleable!([T;30]);
-shuffleable!([T;31]);
-shuffleable!([T;32]);
+shuffleable!([T; 0]);
+shuffleable!([T; 1]);
+shuffleable!([T; 2]);
+shuffleable!([T; 3]);
+shuffleable!([T; 4]);
+shuffleable!([T; 5]);
+shuffleable!([T; 6]);
+shuffleable!([T; 7]);
+shuffleable!([T; 8]);
+shuffleable!([T; 9]);
+shuffleable!([T; 10]);
+shuffleable!([T; 11]);
+shuffleable!([T; 12]);
+shuffleable!([T; 13]);
+shuffleable!([T; 14]);
+shuffleable!([T; 15]);
+shuffleable!([T; 16]);
+shuffleable!([T; 17]);
+shuffleable!([T; 18]);
+shuffleable!([T; 19]);
+shuffleable!([T; 20]);
+shuffleable!([T; 21]);
+shuffleable!([T; 22]);
+shuffleable!([T; 23]);
+shuffleable!([T; 24]);
+shuffleable!([T; 25]);
+shuffleable!([T; 26]);
+shuffleable!([T; 27]);
+shuffleable!([T; 28]);
+shuffleable!([T; 29]);
+shuffleable!([T; 30]);
+shuffleable!([T; 31]);
+shuffleable!([T; 32]);
 
-impl<S : Strategy> Strategy for Shuffle<S>
-where S::Value : Shuffleable {
+impl<S: Strategy> Strategy for Shuffle<S>
+where
+    S::Value: Shuffleable,
+{
     type Tree = ShuffleValueTree<S::Tree>;
     type Value = S::Value;
 
@@ -96,7 +98,8 @@ where S::Value : Shuffleable {
         let rng = runner.new_rng();
 
         self.0.new_tree(runner).map(|inner| ShuffleValueTree {
-            inner, rng,
+            inner,
+            rng,
             dist: Cell::new(None),
             simplifying_inner: false,
         })
@@ -122,9 +125,10 @@ pub struct ShuffleValueTree<V> {
     simplifying_inner: bool,
 }
 
-
-impl<V : ValueTree> ShuffleValueTree<V>
-where V::Value : Shuffleable {
+impl<V: ValueTree> ShuffleValueTree<V>
+where
+    V::Value: Shuffleable,
+{
     fn init_dist(&self, dflt: usize) -> usize {
         if self.dist.get().is_none() {
             self.dist.set(Some(num::usize::BinarySearch::new(dflt)));
@@ -140,8 +144,10 @@ where V::Value : Shuffleable {
     }
 }
 
-impl<V : ValueTree> ValueTree for ShuffleValueTree<V>
-where V::Value : Shuffleable {
+impl<V: ValueTree> ValueTree for ShuffleValueTree<V>
+where
+    V::Value: Shuffleable,
+{
     type Value = V::Value;
 
     fn current(&self) -> V::Value {
@@ -154,7 +160,9 @@ where V::Value : Shuffleable {
 
         // If empty collection or all swaps will be filtered out, there's
         // nothing to shuffle.
-        if 0 == len || 0 == max_swap { return value; }
+        if 0 == len || 0 == max_swap {
+            return value;
+        }
 
         let mut rng = self.rng.clone();
 
@@ -204,13 +212,12 @@ mod test {
     use std::collections::HashSet;
     use std::i32;
 
+    use super::*;
     use crate::collection;
     use crate::strategy::just::Just;
-    use super::*;
 
     static VALUES: &'static [i32] = &[
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-        10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
     ];
 
     #[test]
@@ -223,8 +230,11 @@ mod test {
         for _ in 0..1024 {
             let mut value = input.new_tree(&mut runner).unwrap().current();
 
-            assert!(seen.insert(value.clone()),
-                    "Value {:?} generated more than once", value);
+            assert!(
+                seen.insert(value.clone()),
+                "Value {:?} generated more than once",
+                value
+            );
 
             value.sort();
             assert_eq!(VALUES, &value[..]);
@@ -249,12 +259,16 @@ mod test {
                     dist += (nominal - ix as i32).abs();
                 }
 
-                assert!(dist <= prev_dist,
-                        "dist = {}, prev_dist = {}", dist, prev_dist);
+                assert!(
+                    dist <= prev_dist,
+                    "dist = {}, prev_dist = {}",
+                    dist,
+                    prev_dist
+                );
 
                 prev_dist = dist;
                 if !value.simplify() {
-                    break
+                    break;
                 }
             }
 
@@ -266,6 +280,8 @@ mod test {
     #[test]
     fn simplify_complicate_contract_upheld() {
         check_strategy_sanity(
-            collection::vec(0i32..1000, 5..10).prop_shuffle(), None);
+            collection::vec(0i32..1000, 5..10).prop_shuffle(),
+            None,
+        );
     }
 }

@@ -39,15 +39,17 @@ pub use crate::option::{prob, Probability};
 
 struct WrapOk<T, E>(PhantomData<T>, PhantomData<E>);
 impl<T, E> Clone for WrapOk<T, E> {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
-impl<T, E> Copy for WrapOk<T, E> { }
+impl<T, E> Copy for WrapOk<T, E> {}
 impl<T, E> fmt::Debug for WrapOk<T, E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "WrapOk")
     }
 }
-impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<T> for WrapOk<T, E> {
+impl<T: fmt::Debug, E: fmt::Debug> statics::MapFn<T> for WrapOk<T, E> {
     type Output = Result<T, E>;
     fn apply(&self, t: T) -> Result<T, E> {
         Ok(t)
@@ -55,25 +57,27 @@ impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<T> for WrapOk<T, E> {
 }
 struct WrapErr<T, E>(PhantomData<T>, PhantomData<E>);
 impl<T, E> Clone for WrapErr<T, E> {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
-impl<T, E> Copy for WrapErr<T, E> { }
+impl<T, E> Copy for WrapErr<T, E> {}
 impl<T, E> fmt::Debug for WrapErr<T, E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "WrapErr")
     }
 }
-impl<T : fmt::Debug, E : fmt::Debug> statics::MapFn<E> for WrapErr<T, E> {
+impl<T: fmt::Debug, E: fmt::Debug> statics::MapFn<E> for WrapErr<T, E> {
     type Output = Result<T, E>;
     fn apply(&self, e: E) -> Result<T, E> {
         Err(e)
     }
 }
 
-type MapErr<T, E> = statics::Map<E, WrapErr<
-    <T as Strategy>::Value, <E as Strategy>::Value>>;
-type MapOk <T, E> = statics::Map<T, WrapOk<
-    <T as Strategy>::Value, <E as Strategy>::Value>>;
+type MapErr<T, E> =
+    statics::Map<E, WrapErr<<T as Strategy>::Value, <E as Strategy>::Value>>;
+type MapOk<T, E> =
+    statics::Map<T, WrapOk<<T as Strategy>::Value, <E as Strategy>::Value>>;
 
 opaque_strategy_wrapper! {
     /// Strategy which generates `Result`s using `Ok` and `Err` values from two
@@ -110,14 +114,16 @@ opaque_strategy_wrapper! {
 }
 
 // These need to exist for the same reason as the one on `OptionStrategy`
-impl<T : Strategy + fmt::Debug, E : Strategy + fmt::Debug> fmt::Debug
-for MaybeOk<T, E> {
+impl<T: Strategy + fmt::Debug, E: Strategy + fmt::Debug> fmt::Debug
+    for MaybeOk<T, E>
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "MaybeOk({:?})", self.0)
     }
 }
-impl<T : Strategy + fmt::Debug, E : Strategy + fmt::Debug> fmt::Debug
-for MaybeErr<T, E> {
+impl<T: Strategy + fmt::Debug, E: Strategy + fmt::Debug> fmt::Debug
+    for MaybeErr<T, E>
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "MaybeErr({:?})", self.0)
     }
@@ -129,7 +135,7 @@ for MaybeErr<T, E> {
 /// `Ok` and `Err` are chosen with equal probability.
 ///
 /// Generated values shrink to `Err`.
-pub fn maybe_ok<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeOk<T, E> {
+pub fn maybe_ok<T: Strategy, E: Strategy>(t: T, e: E) -> MaybeOk<T, E> {
     maybe_ok_weighted(0.5, t, e)
 }
 
@@ -140,15 +146,23 @@ pub fn maybe_ok<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeOk<T, E> {
 /// that `Ok` is initially chosen.
 ///
 /// Generated values shrink to `Err`.
-pub fn maybe_ok_weighted<T : Strategy, E : Strategy>(
-    probability_of_ok: impl Into<Probability>, t: T, e: E) -> MaybeOk<T, E>
-{
+pub fn maybe_ok_weighted<T: Strategy, E: Strategy>(
+    probability_of_ok: impl Into<Probability>,
+    t: T,
+    e: E,
+) -> MaybeOk<T, E> {
     let prob = probability_of_ok.into().into();
     let (ok_weight, err_weight) = float_to_weight(prob);
 
     MaybeOk(TupleUnion::new((
-        (err_weight, statics::Map::new(e, WrapErr(PhantomData, PhantomData))),
-        (ok_weight, statics::Map::new(t, WrapOk(PhantomData, PhantomData))),
+        (
+            err_weight,
+            statics::Map::new(e, WrapErr(PhantomData, PhantomData)),
+        ),
+        (
+            ok_weight,
+            statics::Map::new(t, WrapOk(PhantomData, PhantomData)),
+        ),
     )))
 }
 
@@ -158,7 +172,7 @@ pub fn maybe_ok_weighted<T : Strategy, E : Strategy>(
 /// `Ok` and `Err` are chosen with equal probability.
 ///
 /// Generated values shrink to `Ok`.
-pub fn maybe_err<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeErr<T, E> {
+pub fn maybe_err<T: Strategy, E: Strategy>(t: T, e: E) -> MaybeErr<T, E> {
     maybe_err_weighted(0.5, t, e)
 }
 
@@ -169,15 +183,23 @@ pub fn maybe_err<T : Strategy, E : Strategy>(t: T, e: E) -> MaybeErr<T, E> {
 /// that `Err` is initially chosen.
 ///
 /// Generated values shrink to `Ok`.
-pub fn maybe_err_weighted<T : Strategy, E : Strategy>(
-    probability_of_err: impl Into<Probability>, t: T, e: E) -> MaybeErr<T, E>
-{
+pub fn maybe_err_weighted<T: Strategy, E: Strategy>(
+    probability_of_err: impl Into<Probability>,
+    t: T,
+    e: E,
+) -> MaybeErr<T, E> {
     let prob = probability_of_err.into().into();
     let (err_weight, ok_weight) = float_to_weight(prob);
 
     MaybeErr(TupleUnion::new((
-        (ok_weight, statics::Map::new(t, WrapOk(PhantomData, PhantomData))),
-        (err_weight, statics::Map::new(e, WrapErr(PhantomData, PhantomData))),
+        (
+            ok_weight,
+            statics::Map::new(t, WrapOk(PhantomData, PhantomData)),
+        ),
+        (
+            err_weight,
+            statics::Map::new(e, WrapErr(PhantomData, PhantomData)),
+        ),
     )))
 }
 
@@ -189,8 +211,7 @@ mod test {
         let mut runner = TestRunner::deterministic();
         let mut count = 0;
         for _ in 0..1000 {
-            count += s.new_tree(&mut runner).unwrap()
-                .current().is_ok() as u32;
+            count += s.new_tree(&mut runner).unwrap().current().is_ok() as u32;
         }
 
         count
@@ -206,20 +227,20 @@ mod test {
 
     #[test]
     fn probability_handled_correctly() {
-        let count = count_ok_of_1000(maybe_err_weighted(
-            0.1, Just(()), Just(())));
+        let count =
+            count_ok_of_1000(maybe_err_weighted(0.1, Just(()), Just(())));
         assert!(count > 800 && count < 950);
 
-        let count = count_ok_of_1000(maybe_err_weighted(
-            0.9, Just(()), Just(())));
+        let count =
+            count_ok_of_1000(maybe_err_weighted(0.9, Just(()), Just(())));
         assert!(count > 50 && count < 150);
 
-        let count = count_ok_of_1000(maybe_ok_weighted(
-            0.9, Just(()), Just(())));
+        let count =
+            count_ok_of_1000(maybe_ok_weighted(0.9, Just(()), Just(())));
         assert!(count > 800 && count < 950);
 
-        let count = count_ok_of_1000(maybe_ok_weighted(
-            0.1, Just(()), Just(())));
+        let count =
+            count_ok_of_1000(maybe_ok_weighted(0.1, Just(()), Just(())));
         assert!(count > 50 && count < 150);
     }
 

@@ -2,9 +2,7 @@
 
 Randomly generating recursive data structures is trickier than it sounds. For
 example, the below is a naïve attempt at generating a JSON AST by using
-recursion. This also uses the
-[`prop_oneof!`](https://altsysrq.github.io/rustdoc/proptest/latest/proptest/macro.prop_oneof.html),
-which we haven't seen yet but should be self-explanatory.
+recursion.
 
 ```rust,no_run
 use std::collections::HashMap;

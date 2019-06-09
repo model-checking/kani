@@ -16,13 +16,13 @@
 //! others). For integers treated as numeric values, see the corresponding
 //! modules of the `num` module instead.
 
+use crate::std_facade::{fmt, Vec};
 use core::marker::PhantomData;
 use core::mem;
-use crate::std_facade::{fmt, Vec};
 
 #[cfg(feature = "bit-set")]
 use bit_set::BitSet;
-use rand::{self, Rng, seq::IteratorRandom};
+use rand::{self, seq::IteratorRandom, Rng};
 
 use crate::collection::SizeRange;
 use crate::num::sample_uniform_incl;
@@ -30,8 +30,8 @@ use crate::strategy::*;
 use crate::test_runner::*;
 
 /// Trait for types which can be handled with `BitSetStrategy`.
-#[cfg_attr(feature="cargo-clippy", allow(len_without_is_empty))]
-pub trait BitSetLike : Clone + fmt::Debug {
+#[cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+pub trait BitSetLike: Clone + fmt::Debug {
     /// Create a new value of `Self` with space for up to `max` bits, all
     /// initialised to zero.
     fn new_bitset(max: usize) -> Self;
@@ -62,8 +62,12 @@ pub trait BitSetLike : Clone + fmt::Debug {
 macro_rules! int_bitset {
     ($typ:ty) => {
         impl BitSetLike for $typ {
-            fn new_bitset(_: usize) -> Self { 0 }
-            fn len(&self) -> usize { mem::size_of::<$typ>()*8 }
+            fn new_bitset(_: usize) -> Self {
+                0
+            }
+            fn len(&self) -> usize {
+                mem::size_of::<$typ>() * 8
+            }
             fn test(&self, ix: usize) -> bool {
                 0 != (*self & ((1 as $typ) << ix))
             }
@@ -77,7 +81,7 @@ macro_rules! int_bitset {
                 self.count_ones() as usize
             }
         }
-    }
+    };
 }
 int_bitset!(u8);
 int_bitset!(u16);
@@ -159,13 +163,13 @@ impl BitSetLike for Vec<bool> {
 /// or 1 between the bounds. Shrinking iteratively clears bits.
 #[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
-pub struct BitSetStrategy<T : BitSetLike> {
+pub struct BitSetStrategy<T: BitSetLike> {
     min: usize,
     max: usize,
-    mask: Option<T>
+    mask: Option<T>,
 }
 
-impl<T : BitSetLike> BitSetStrategy<T> {
+impl<T: BitSetLike> BitSetStrategy<T> {
     /// Create a strategy which generates values where bits between `min`
     /// (inclusive) and `max` (exclusive) may be set.
     ///
@@ -173,7 +177,9 @@ impl<T : BitSetLike> BitSetStrategy<T> {
     /// preferable to calling this directly.
     pub fn new(min: usize, max: usize) -> Self {
         BitSetStrategy {
-            min, max, mask: None,
+            min,
+            max,
+            mask: None,
         }
     }
 
@@ -183,20 +189,20 @@ impl<T : BitSetLike> BitSetStrategy<T> {
         BitSetStrategy {
             min: 0,
             max: mask.len(),
-            mask: Some(mask)
+            mask: Some(mask),
         }
     }
 }
 
-impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
+impl<T: BitSetLike> Strategy for BitSetStrategy<T> {
     type Tree = BitSetValueTree<T>;
     type Value = T;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut inner = T::new_bitset(self.max);
         for bit in self.min..self.max {
-            if self.mask.as_ref().map_or(true, |mask| mask.test(bit)) &&
-                runner.rng().gen()
+            if self.mask.as_ref().map_or(true, |mask| mask.test(bit))
+                && runner.rng().gen()
             {
                 inner.set(bit);
             }
@@ -206,7 +212,7 @@ impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
             inner,
             shrink: self.min,
             prev_shrink: None,
-            min_count: 0
+            min_count: 0,
         })
     }
 }
@@ -220,13 +226,13 @@ impl<T : BitSetLike> Strategy for BitSetStrategy<T> {
 /// Shrinking happens as with [`BitSetStrategy`](struct.BitSetStrategy.html).
 #[derive(Clone, Debug)]
 #[must_use = "strategies do nothing unless used"]
-pub struct SampledBitSetStrategy<T : BitSetLike> {
+pub struct SampledBitSetStrategy<T: BitSetLike> {
     size: SizeRange,
     bits: SizeRange,
     _marker: PhantomData<T>,
 }
 
-impl<T : BitSetLike> SampledBitSetStrategy<T> {
+impl<T: BitSetLike> SampledBitSetStrategy<T> {
     /// Create a strategy which generates values where bits within the bounds
     /// given by `bits` may be set. The number of bits that are set is chosen
     /// to be in the range given by `size`.
@@ -238,31 +244,39 @@ impl<T : BitSetLike> SampledBitSetStrategy<T> {
     ///
     /// Panics if `size` includes a value that is greater than the number of
     /// bits in `bits`.
-    pub fn new(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
-               -> Self {
+    pub fn new(size: impl Into<SizeRange>, bits: impl Into<SizeRange>) -> Self {
         let size = size.into();
         let bits = bits.into();
         size.assert_nonempty();
 
         let available_bits = bits.end_excl() - bits.start();
-        assert!(size.end_excl() <= available_bits + 1,
-                "Illegal SampledBitSetStrategy: have {} bits available, \
-                 but requested size is {}..{}",
-                available_bits, size.start(), size.end_excl());
+        assert!(
+            size.end_excl() <= available_bits + 1,
+            "Illegal SampledBitSetStrategy: have {} bits available, \
+             but requested size is {}..{}",
+            available_bits,
+            size.start(),
+            size.end_excl()
+        );
         SampledBitSetStrategy {
-            size, bits, _marker: PhantomData
+            size,
+            bits,
+            _marker: PhantomData,
         }
     }
 }
 
-impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
+impl<T: BitSetLike> Strategy for SampledBitSetStrategy<T> {
     type Tree = BitSetValueTree<T>;
     type Value = T;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let mut bits = T::new_bitset(self.bits.end_excl());
         let count = sample_uniform_incl(
-            runner, self.size.start(), self.size.end_incl());
+            runner,
+            self.size.start(),
+            self.size.end_incl(),
+        );
         if bits.len() < count {
             panic!("not enough bits to sample");
         }
@@ -282,14 +296,14 @@ impl<T : BitSetLike> Strategy for SampledBitSetStrategy<T> {
 
 /// Value tree produced by `BitSetStrategy` and `SampledBitSetStrategy`.
 #[derive(Clone, Copy, Debug)]
-pub struct BitSetValueTree<T : BitSetLike> {
+pub struct BitSetValueTree<T: BitSetLike> {
     inner: T,
     shrink: usize,
     prev_shrink: Option<usize>,
     min_count: usize,
 }
 
-impl<T : BitSetLike> ValueTree for BitSetValueTree<T> {
+impl<T: BitSetLike> ValueTree for BitSetValueTree<T> {
     type Value = T;
 
     fn current(&self) -> T {
@@ -301,9 +315,9 @@ impl<T : BitSetLike> ValueTree for BitSetValueTree<T> {
             return false;
         }
 
-        while self.shrink < self.inner.len() &&
-            !self.inner.test(self.shrink)
-        { self.shrink += 1; }
+        while self.shrink < self.inner.len() && !self.inner.test(self.shrink) {
+            self.shrink += 1;
+        }
 
         if self.shrink >= self.inner.len() {
             self.prev_shrink = None;
@@ -359,12 +373,14 @@ macro_rules! int_api {
             ///
             /// Panics if `size` includes a value that is greater than the
             /// number of bits in `bits`.
-            pub fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
-                           -> SampledBitSetStrategy<$typ> {
+            pub fn sampled(
+                size: impl Into<SizeRange>,
+                bits: impl Into<SizeRange>,
+            ) -> SampledBitSetStrategy<$typ> {
                 SampledBitSetStrategy::new(size, bits)
             }
         }
-    }
+    };
 }
 
 int_api!(u8, 8);
@@ -402,12 +418,14 @@ macro_rules! minimal_api {
             ///
             /// Panics if `size` includes a value that is greater than the
             /// number of bits in `bits`.
-            pub fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
-                           -> SampledBitSetStrategy<$typ> {
+            pub fn sampled(
+                size: impl Into<SizeRange>,
+                bits: impl Into<SizeRange>,
+            ) -> SampledBitSetStrategy<$typ> {
                 SampledBitSetStrategy::new(size, bits)
             }
         }
-    }
+    };
 }
 minimal_api!(usize, usize);
 minimal_api!(isize, isize);
@@ -436,7 +454,6 @@ pub(crate) mod varsize {
         pub(crate) fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
             (0..self.len()).into_iter().filter(move |&ix| self.test(ix))
         }
-
 
         #[cfg(feature = "bit-set")]
         pub(crate) fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
@@ -471,7 +488,7 @@ pub(crate) mod varsize {
     }
 
     impl FromIterator<usize> for VarBitSet {
-        fn from_iter<T : IntoIterator<Item = usize>>(iter: T) -> Self {
+        fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
             let mut bits = VarBitSet::new_bitset(0);
             for bit in iter {
                 bits.set(bit);
@@ -490,8 +507,10 @@ pub(crate) mod varsize {
     }
     */
 
-    pub(crate) fn sampled(size: impl Into<SizeRange>, bits: impl Into<SizeRange>)
-                          -> SampledBitSetStrategy<VarBitSet> {
+    pub(crate) fn sampled(
+        size: impl Into<SizeRange>,
+        bits: impl Into<SizeRange>,
+    ) -> SampledBitSetStrategy<VarBitSet> {
         SampledBitSetStrategy::new(size, bits)
     }
 }
@@ -509,8 +528,7 @@ mod test {
         let mut runner = TestRunner::default();
         for _ in 0..256 {
             let value = input.new_tree(&mut runner).unwrap().current();
-            assert!(0 == value & !0xF0u32,
-                    "Generate value {}", value);
+            assert!(0 == value & !0xF0u32, "Generate value {}", value);
         }
     }
 
@@ -579,8 +597,12 @@ mod test {
             let mut prev = value.current();
             while value.simplify() {
                 let v = value.current();
-                assert!(1 == (prev & !v).count_ones(),
-                        "Shrank from {} to {}", prev, v);
+                assert!(
+                    1 == (prev & !v).count_ones(),
+                    "Shrank from {} to {}",
+                    prev,
+                    v
+                );
                 prev = v;
             }
 
@@ -642,7 +664,7 @@ mod test {
         let mut runner = TestRunner::default();
         for _ in 0..256 {
             let mut value = input.new_tree(&mut runner).unwrap();
-            while value.simplify() { }
+            while value.simplify() {}
 
             assert_eq!(4, value.current().count_ones());
         }

@@ -34,7 +34,9 @@ pub fn prob(from: impl Into<Probability>) -> Probability {
 
 impl Default for Probability {
     /// The default probability is 0.5, or 50% chance.
-    fn default() -> Self { prob(0.5) }
+    fn default() -> Self {
+        prob(0.5)
+    }
 }
 
 impl From<f64> for Probability {
@@ -86,18 +88,24 @@ impl Generic for Probability {
     type Repr = f64;
 
     /// Converts the `Probability` into an `f64`.
-    fn into(self) -> Self::Repr { self.0 }
+    fn into(self) -> Self::Repr {
+        self.0
+    }
 
     /// Creates a `Probability` from a `f64`.
     ///
     /// # Panics
     ///
     /// Panics if the probability is outside interval `[0.0, 1.0]`.
-    fn from(r: Self::Repr) -> Self { r.into() }
+    fn from(r: Self::Repr) -> Self {
+        r.into()
+    }
 }
 
 impl From<Probability> for f64 {
-    fn from(p: Probability) -> Self { p.0 }
+    fn from(p: Probability) -> Self {
+        p.0
+    }
 }
 
 /// A probability in the range `[0.0, 1.0]` with a default of `0.5`.
@@ -117,15 +125,17 @@ mapfn! {
 #[must_use = "strategies do nothing unless used"]
 struct NoneStrategy<T>(PhantomData<T>);
 impl<T> Clone for NoneStrategy<T> {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
-impl<T> Copy for NoneStrategy<T> { }
+impl<T> Copy for NoneStrategy<T> {}
 impl<T> fmt::Debug for NoneStrategy<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "NoneStrategy")
     }
 }
-impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
+impl<T: fmt::Debug> Strategy for NoneStrategy<T> {
     type Tree = Self;
     type Value = Option<T>;
 
@@ -133,12 +143,18 @@ impl<T : fmt::Debug> Strategy for NoneStrategy<T> {
         Ok(*self)
     }
 }
-impl<T : fmt::Debug> ValueTree for NoneStrategy<T> {
+impl<T: fmt::Debug> ValueTree for NoneStrategy<T> {
     type Value = Option<T>;
 
-    fn current(&self) -> Option<T> { None }
-    fn simplify(&mut self) -> bool { false }
-    fn complicate(&mut self) -> bool { false }
+    fn current(&self) -> Option<T> {
+        None
+    }
+    fn simplify(&mut self) -> bool {
+        false
+    }
+    fn complicate(&mut self) -> bool {
+        false
+    }
 }
 
 opaque_strategy_wrapper! {
@@ -162,7 +178,7 @@ opaque_strategy_wrapper! {
 // XXX Unclear why this is necessary; #[derive(Debug)] *should* generate
 // exactly this, but for some reason it adds a `T::Value : Debug` constraint as
 // well.
-impl<T : Strategy + fmt::Debug> fmt::Debug for OptionStrategy<T> {
+impl<T: Strategy + fmt::Debug> fmt::Debug for OptionStrategy<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "OptionStrategy({:?})", self.0)
     }
@@ -174,7 +190,7 @@ impl<T : Strategy + fmt::Debug> fmt::Debug for OptionStrategy<T> {
 /// `Some` values shrink to `None`.
 ///
 /// `Some` and `None` are each chosen with 50% probability.
-pub fn of<T : Strategy>(t: T) -> OptionStrategy<T> {
+pub fn of<T: Strategy>(t: T) -> OptionStrategy<T> {
     weighted(Probability::default(), t)
 }
 
@@ -185,9 +201,10 @@ pub fn of<T : Strategy>(t: T) -> OptionStrategy<T> {
 ///
 /// `Some` is chosen with a probability given by `probability_of_some`, which
 /// must be between 0.0 and 1.0, both exclusive.
-pub fn weighted<T : Strategy>
-    (probability_of_some: impl Into<Probability>, t: T) -> OptionStrategy<T>
-{
+pub fn weighted<T: Strategy>(
+    probability_of_some: impl Into<Probability>,
+    t: T,
+) -> OptionStrategy<T> {
     let prob = probability_of_some.into().into();
     let (weight_some, weight_none) = float_to_weight(prob);
 
@@ -205,8 +222,8 @@ mod test {
         let mut runner = TestRunner::deterministic();
         let mut count = 0;
         for _ in 0..1000 {
-            count += s.new_tree(&mut runner).unwrap()
-                .current().is_some() as u32;
+            count +=
+                s.new_tree(&mut runner).unwrap().current().is_some() as u32;
         }
 
         count

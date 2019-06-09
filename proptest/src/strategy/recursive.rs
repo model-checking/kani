@@ -47,28 +47,35 @@ impl<T, F> Clone for Recursive<T, F> {
     }
 }
 
-impl<T : fmt::Debug + 'static,
-     R : Strategy<Value = T> + 'static,
-     F : Fn (BoxedStrategy<T>) -> R>
-Recursive<T, F> {
-    pub(super) fn new
-        (base: impl Strategy<Value = T> + 'static,
-         depth: u32, desired_size: u32, expected_branch_size: u32,
-         recurse: F)
-         -> Self
-    {
+impl<
+        T: fmt::Debug + 'static,
+        R: Strategy<Value = T> + 'static,
+        F: Fn(BoxedStrategy<T>) -> R,
+    > Recursive<T, F>
+{
+    pub(super) fn new(
+        base: impl Strategy<Value = T> + 'static,
+        depth: u32,
+        desired_size: u32,
+        expected_branch_size: u32,
+        recurse: F,
+    ) -> Self {
         Self {
             base: base.boxed(),
             recurse: Arc::new(recurse),
-            depth, desired_size, expected_branch_size,
+            depth,
+            desired_size,
+            expected_branch_size,
         }
     }
 }
 
-impl<T : fmt::Debug + 'static,
-     R : Strategy<Value = T> + 'static,
-     F : Fn (BoxedStrategy<T>) -> R>
-Strategy for Recursive<T, F> {
+impl<
+        T: fmt::Debug + 'static,
+        R: Strategy<Value = T> + 'static,
+        F: Fn(BoxedStrategy<T>) -> R,
+    > Strategy for Recursive<T, F>
+{
     type Tree = Box<dyn ValueTree<Value = T>>;
     type Value = T;
 
@@ -134,8 +141,8 @@ Strategy for Recursive<T, F> {
 mod test {
     use std::cmp::max;
 
-    use crate::strategy::just::Just;
     use super::*;
+    use crate::strategy::just::Just;
 
     #[derive(Clone, Debug, PartialEq)]
     enum Tree {
@@ -167,8 +174,9 @@ mod test {
         let mut max_depth = 0;
         let mut max_count = 0;
 
-        let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
-            |element| crate::collection::vec(element, 8..16).prop_map(Tree::Branch));
+        let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16, |element| {
+            crate::collection::vec(element, 8..16).prop_map(Tree::Branch)
+        });
 
         let mut runner = TestRunner::deterministic();
         for _ in 0..65536 {
@@ -186,13 +194,14 @@ mod test {
 
     #[test]
     fn simplifies_to_non_recursive() {
-        let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16,
-            |element| crate::collection::vec(element, 8..16).prop_map(Tree::Branch));
+        let strat = Just(Tree::Leaf).prop_recursive(4, 64, 16, |element| {
+            crate::collection::vec(element, 8..16).prop_map(Tree::Branch)
+        });
 
         let mut runner = TestRunner::deterministic();
         for _ in 0..256 {
             let mut value = strat.new_tree(&mut runner).unwrap();
-            while value.simplify() { }
+            while value.simplify() {}
 
             assert_eq!(Tree::Leaf, value.current());
         }

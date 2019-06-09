@@ -7,8 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::mem;
 use crate::std_facade::{fmt, Arc};
+use core::mem;
 
 use crate::strategy::fuse::Fuse;
 use crate::strategy::traits::*;
@@ -23,15 +23,17 @@ pub struct Flatten<S> {
     source: S,
 }
 
-impl<S : Strategy> Flatten<S> {
+impl<S: Strategy> Flatten<S> {
     /// Wrap `source` to flatten it.
     pub fn new(source: S) -> Self {
         Flatten { source }
     }
 }
 
-impl<S : Strategy> Strategy for Flatten<S>
-where S::Value : Strategy {
+impl<S: Strategy> Strategy for Flatten<S>
+where
+    S::Value: Strategy,
+{
     type Tree = FlattenValueTree<S::Tree>;
     type Value = <S::Value as Strategy>::Value;
 
@@ -42,7 +44,10 @@ where S::Value : Strategy {
 }
 
 /// The `ValueTree` produced by `Flatten`.
-pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
+pub struct FlattenValueTree<S: ValueTree>
+where
+    S::Value: Strategy,
+{
     meta: Fuse<S>,
     current: Fuse<<S::Value as Strategy>::Tree>,
     // The final value to produce after successive calls to complicate() on the
@@ -62,10 +67,12 @@ pub struct FlattenValueTree<S : ValueTree> where S::Value : Strategy {
     complicate_regen_remaining: u32,
 }
 
-impl<S : ValueTree> Clone for FlattenValueTree<S>
-where S::Value : Strategy + Clone,
-      S : Clone,
-      <S::Value as Strategy>::Tree : Clone {
+impl<S: ValueTree> Clone for FlattenValueTree<S>
+where
+    S::Value: Strategy + Clone,
+    S: Clone,
+    <S::Value as Strategy>::Tree: Clone,
+{
     fn clone(&self) -> Self {
         FlattenValueTree {
             meta: self.meta.clone(),
@@ -77,21 +84,29 @@ where S::Value : Strategy + Clone,
     }
 }
 
-impl<S : ValueTree> fmt::Debug for FlattenValueTree<S>
-where S::Value : Strategy,
-      S : fmt::Debug, <S::Value as Strategy>::Tree : fmt::Debug {
+impl<S: ValueTree> fmt::Debug for FlattenValueTree<S>
+where
+    S::Value: Strategy,
+    S: fmt::Debug,
+    <S::Value as Strategy>::Tree: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("FlattenValueTree")
             .field("meta", &self.meta)
             .field("current", &self.current)
             .field("final_complication", &self.final_complication)
-            .field("complicate_regen_remaining",
-                   &self.complicate_regen_remaining)
+            .field(
+                "complicate_regen_remaining",
+                &self.complicate_regen_remaining,
+            )
             .finish()
     }
 }
 
-impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
+impl<S: ValueTree> FlattenValueTree<S>
+where
+    S::Value: Strategy,
+{
     fn new(runner: &mut TestRunner, meta: S) -> Result<Self, Reason> {
         let current = meta.current().new_tree(runner)?;
         Ok(FlattenValueTree {
@@ -99,13 +114,15 @@ impl<S : ValueTree> FlattenValueTree<S> where S::Value : Strategy {
             current: Fuse::new(current),
             final_complication: None,
             runner: runner.partial_clone(),
-            complicate_regen_remaining: 0
+            complicate_regen_remaining: 0,
         })
     }
 }
 
-impl<S : ValueTree> ValueTree for FlattenValueTree<S>
-where S::Value : Strategy {
+impl<S: ValueTree> ValueTree for FlattenValueTree<S>
+where
+    S::Value: Strategy,
+{
     type Value = <S::Value as Strategy>::Value;
 
     fn current(&self) -> Self::Value {
@@ -134,8 +151,10 @@ where S::Value : Strategy {
             // ourselves.
             self.current.disallow_complicate();
             self.final_complication = Some(Fuse::new(v));
-            mem::swap(self.final_complication.as_mut().unwrap(),
-                        &mut self.current);
+            mem::swap(
+                self.final_complication.as_mut().unwrap(),
+                &mut self.current,
+            );
             // Initially complicate by regenerating the chosen value.
             self.complicate_regen_remaining = self.runner.config().cases;
             true
@@ -183,8 +202,10 @@ where S::Value : Strategy {
 #[derive(Clone, Copy, Debug)]
 pub struct IndFlatten<S>(pub(super) S);
 
-impl<S : Strategy> Strategy for IndFlatten<S>
-where S::Value : Strategy {
+impl<S: Strategy> Strategy for IndFlatten<S>
+where
+    S::Value: Strategy,
+{
     type Tree = <S::Value as Strategy>::Tree;
     type Value = <S::Value as Strategy>::Value;
 
@@ -203,7 +224,7 @@ pub struct IndFlattenMap<S, F> {
     pub(super) fun: Arc<F>,
 }
 
-impl<S : fmt::Debug, F> fmt::Debug for IndFlattenMap<S, F> {
+impl<S: fmt::Debug, F> fmt::Debug for IndFlattenMap<S, F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("IndFlattenMap")
             .field("source", &self.source)
@@ -212,7 +233,7 @@ impl<S : fmt::Debug, F> fmt::Debug for IndFlattenMap<S, F> {
     }
 }
 
-impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
+impl<S: Clone, F> Clone for IndFlattenMap<S, F> {
     fn clone(&self) -> Self {
         IndFlattenMap {
             source: self.source.clone(),
@@ -221,9 +242,9 @@ impl<S : Clone, F> Clone for IndFlattenMap<S, F> {
     }
 }
 
-impl<S : Strategy, R : Strategy,
-     F : Fn(S::Value) -> R>
-Strategy for IndFlattenMap<S, F> {
+impl<S: Strategy, R: Strategy, F: Fn(S::Value) -> R> Strategy
+    for IndFlattenMap<S, F>
+{
     type Tree = crate::tuple::TupleValueTree<(S::Tree, R::Tree)>;
     type Value = (S::Value, R::Value);
 
@@ -238,19 +259,28 @@ Strategy for IndFlattenMap<S, F> {
 
 #[cfg(test)]
 mod test {
-    use crate::strategy::just::Just;
     use super::*;
+
+    use std::u32;
+
+    use crate::strategy::just::Just;
+    use crate::test_runner::Config;
 
     #[test]
     fn test_flat_map() {
         // Pick random integer A, then random integer B which is ±5 of A and
         // assert that B <= A if A > 10000. Shrinking should always converge to
         // A=10001, B=10002.
-        let input = (0..65536).prop_flat_map(
-            |a| (Just(a), (a-5..a+5)));
+        let input = (0..65536).prop_flat_map(|a| (Just(a), (a - 5..a + 5)));
 
         let mut failures = 0;
-        let mut runner = TestRunner::deterministic();
+        let mut runner = TestRunner::new_with_rng(
+            Config {
+                max_shrink_iters: u32::MAX - 1,
+                ..Config::default()
+            },
+            TestRng::deterministic_rng(RngAlgorithm::default()),
+        );
         for _ in 0..1000 {
             let case = input.new_tree(&mut runner).unwrap();
             let result = runner.run_one(case, |(a, b)| {
@@ -262,11 +292,11 @@ mod test {
             });
 
             match result {
-                Ok(_) => { },
+                Ok(_) => {}
                 Err(TestError::Fail(_, v)) => {
                     failures += 1;
                     assert_eq!((10001, 10002), v);
-                },
+                }
                 result => panic!("Unexpected result: {:?}", result),
             }
         }
@@ -277,8 +307,9 @@ mod test {
     #[test]
     fn test_flat_map_sanity() {
         check_strategy_sanity(
-            (0..65536).prop_flat_map(|a| (Just(a), (a-5..a+5))),
-            None);
+            (0..65536).prop_flat_map(|a| (Just(a), (a - 5..a + 5))),
+            None,
+        );
     }
 
     #[test]
@@ -300,7 +331,7 @@ mod test {
         let pass = AtomicBool::new(false);
         let mut runner = TestRunner::new(Config {
             max_flat_map_regens: 1000,
-            .. Config::default()
+            ..Config::default()
         });
         let case = input.new_tree(&mut runner).unwrap();
         let _ = runner.run_one(case, |_| {
@@ -313,14 +344,16 @@ mod test {
     #[test]
     fn test_ind_flat_map_sanity() {
         check_strategy_sanity(
-            (0..65536).prop_ind_flat_map(|a| (Just(a), (a-5..a+5))),
-            None);
+            (0..65536).prop_ind_flat_map(|a| (Just(a), (a - 5..a + 5))),
+            None,
+        );
     }
 
     #[test]
     fn test_ind_flat_map2_sanity() {
         check_strategy_sanity(
-            (0..65536).prop_ind_flat_map2(|a| a-5..a+5),
-            None);
+            (0..65536).prop_ind_flat_map2(|a| a - 5..a + 5),
+            None,
+        );
     }
 }

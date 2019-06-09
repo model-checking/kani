@@ -12,8 +12,8 @@ use std::fmt::Display;
 
 use proc_macro2::TokenStream;
 
-use syn;
 use crate::attr::ParsedAttributes;
+use syn;
 
 //==============================================================================
 // Item descriptions
@@ -65,22 +65,26 @@ pub fn if_enum_attrs_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
 
 /// Ensures that parameters is not present on `item`.
 pub fn if_specified_filter(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
-    if !attrs.filter.is_empty() { meaningless_filter(ctx, item); }
+    if !attrs.filter.is_empty() {
+        meaningless_filter(ctx, item);
+    }
 }
 
 /// Ensures that parameters is not present on `item`.
 pub fn if_specified_params(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
-    if attrs.params.is_set() { parent_has_param(ctx, item); }
+    if attrs.params.is_set() {
+        parent_has_param(ctx, item);
+    }
 }
 
 /// Ensures that an explicit strategy or value is not present on `item`.
 pub fn if_strategy_present(ctx: Ctx, attrs: &ParsedAttributes, item: &str) {
     use crate::attr::StratMode::*;
     match attrs.strategy {
-        Arbitrary   => {},
+        Arbitrary => {}
         Strategy(_) => illegal_strategy(ctx, "strategy", item),
-        Value(_)    => illegal_strategy(ctx, "value", item),
-        Regex(_)    => illegal_regex(ctx, item),
+        Value(_) => illegal_strategy(ctx, "value", item),
+        Regex(_) => illegal_regex(ctx, item),
     }
 }
 
@@ -89,10 +93,10 @@ pub fn if_present_on_unit_variant(ctx: Ctx, attrs: &ParsedAttributes) {
     /// Ensures that an explicit strategy or value is not present on a unit variant.
     use crate::attr::StratMode::*;
     match attrs.strategy {
-        Arbitrary   => {},
+        Arbitrary => {}
         Strategy(_) => strategy_on_unit_variant(ctx, "strategy"),
-        Value(_)    => strategy_on_unit_variant(ctx, "value"),
-        Regex(_)    => regex_on_unit_variant(ctx),
+        Value(_) => strategy_on_unit_variant(ctx, "value"),
+        Regex(_) => regex_on_unit_variant(ctx),
     }
 
     if attrs.params.is_set() {
@@ -202,12 +206,16 @@ impl Context {
 macro_rules! mk_err_msg {
     ($code: ident, $msg: expr) => {
         concat!(
-            "[proptest_derive, ", stringify!($code), "]",
+            "[proptest_derive, ",
+            stringify!($code),
+            "]",
             " during #[derive(Arbitrary)]:\n",
             $msg,
-            " Please see: https://PATH/TO/foo#", stringify!($code),
-            " for more information.")
-    }
+            " Please see: https://PATH/TO/foo#",
+            stringify!($code),
+            " for more information."
+        )
+    };
 }
 
 /// A macro constructing errors that do halt compilation immediately.
@@ -243,17 +251,23 @@ macro_rules! error {
 // Happens when we've been asked to derive `Arbitrary` for a type
 // that is parametric over lifetimes. Since proptest does not support
 // such types (yet), neither can we.
-error!(has_lifetimes, E0001,
+error!(
+    has_lifetimes,
+    E0001,
     "Cannot derive `Arbitrary` for types with generic lifetimes, such as: \
-    `struct Foo<'a> { bar: &'a str }`. Currently, strategies for such types \
-    are impossible to define.");
+     `struct Foo<'a> { bar: &'a str }`. Currently, strategies for such types \
+     are impossible to define."
+);
 
 // Happens when we've been asked to derive `Arbitrary` for something
 // that is neither an enum nor a struct. Most likely, we've been given
 // a union type. This might be supported in the future, but not yet.
-fatal!(not_struct_or_enum, E0002,
+fatal!(
+    not_struct_or_enum,
+    E0002,
     "Deriving is only possible for structs and enums. \
-    It is currently not defined unions.");
+     It is currently not defined unions."
+);
 
 // Happens when a struct has at least one field that is uninhabited.
 // There must at least exist one variant that we can construct.
@@ -265,27 +279,36 @@ error!(uninhabited_struct, E0003,
 // Happens when an enum has zero variants. Such an enum is obviously
 // uninhabited and can not be constructed. There must at least exist
 // one variant that we can construct.
-fatal!(uninhabited_enum_with_no_variants, E0004,
+fatal!(
+    uninhabited_enum_with_no_variants,
+    E0004,
     "The enum you are deriving `Arbitrary` for is uninhabited since it has no \
-    variants. An example of such an `enum` is: `enum Void {}`. \
-    An uninhabited type is by definition impossible to generate.");
+     variants. An example of such an `enum` is: `enum Void {}`. \
+     An uninhabited type is by definition impossible to generate."
+);
 
 // Happens when an enum is uninhabited due all its variants being
 // uninhabited (why has the user given us such a weird enum?..
 // Nonetheless, we do our best to ensure soundness).
 // There must at least exist one variant that we can construct.
-fatal!(uninhabited_enum_variants_uninhabited, E0005,
+fatal!(
+    uninhabited_enum_variants_uninhabited,
+    E0005,
     "The enum you are deriving `Arbitrary` for is uninhabited since all its \
-    variants are uninhabited. \
-    An uninhabited type is by definition impossible to generate.");
+     variants are uninhabited. \
+     An uninhabited type is by definition impossible to generate."
+);
 
 // Happens when an enum becomes effectively uninhabited due
 // to all inhabited variants having been skipped. There must
 // at least exist one variant that we can construct.
-error!(uninhabited_enum_because_of_skipped_variants, E0006,
+error!(
+    uninhabited_enum_because_of_skipped_variants,
+    E0006,
     "The enum you are deriving `Arbitrary` for is uninhabited for all intents \
-    and purposes since you have `#[proptest(skip)]`ed all inhabited variants. \
-    An uninhabited type is by definition impossible to generate.");
+     and purposes since you have `#[proptest(skip)]`ed all inhabited variants. \
+     An uninhabited type is by definition impossible to generate."
+);
 
 // Happens when `#[proptest(strategy = "<expr>")]` or
 // `#[proptest(value = "<expr>")]` is specified on an `item`
@@ -299,104 +322,148 @@ error!(illegal_strategy(attr: &str, item: &str), E0007,
 // Happens when `#[proptest(regex = "<string>")]` is specified on an `item`
 // that does not support setting an explicit value or strategy.
 // See `illegal_strategy` for more.
-error!(illegal_regex(item: &str), E0007,
+error!(
+    illegal_regex(item: &str),
+    E0007,
     "`#[proptest(regex = \"<string>\")]` is not allowed on {0}. Only struct \
-    fields, enum variant fields can use an explicit regex.",
-    item);
+     fields, enum variant fields can use an explicit regex.",
+    item
+);
 
 // Happens when `#[proptest(skip)]` is specified on an `item` that does
 // not support skipping. Only enum variants support skipping.
-error!(illegal_skip(item: &str), E0008,
+error!(
+    illegal_skip(item: &str),
+    E0008,
     "A {} can't be `#[proptest(skip)]`ed, only enum variants can be skipped.",
-    item);
+    item
+);
 
 // Happens when `#[proptest(weight = <integer>)]` is specified on an
 // `item` that does not support weighting.
-error!(illegal_weight(item: &str), E0009,
+error!(
+    illegal_weight(item: &str),
+    E0009,
     "`#[proptest(weight = <integer>)]` is not allowed on {} as it is \
-    meaningless. Only enum variants can be assigned weights.",
-    item);
+     meaningless. Only enum variants can be assigned weights.",
+    item
+);
 
 // Happens when `#[proptest(params = <type>)]` is set on `item`
 // but also on the parent of `item`. If the parent has set `params`
 // then that applies, and the `params` on `item` would be meaningless
 // wherefore it is forbidden.
-error!(parent_has_param(item: &str), E0010,
+error!(
+    parent_has_param(item: &str),
+    E0010,
     "Cannot set the associated type `Parameters` of `Arbitrary` with either \
-    `#[proptest(no_params)]` or `#[proptest(params(<type>)]` on {} since it \
-    was set on the parent.",
-    item);
+     `#[proptest(no_params)]` or `#[proptest(params(<type>)]` on {} since it \
+     was set on the parent.",
+    item
+);
 
 // Happens when `#[proptest(params = <type>)]` is set on `item`
 // but not `#[proptest(strategy = <expr>)]`.
 // This does not apply to the top level type declaration.
-fatal!(cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str), E0011,
+fatal!(
+    cant_set_param_but_not_strat(self_ty: &syn::Type, item: &str),
+    E0011,
     "Cannot set `#[proptest(params = <type>)]` on {0} while not providing a \
-    strategy for the {0} to use it since `<{1} as Arbitrary<'a>>::Strategy` \
-    may require a different type than the one provided in `<type>`.",
-    item, quote! { #self_ty });
+     strategy for the {0} to use it since `<{1} as Arbitrary<'a>>::Strategy` \
+     may require a different type than the one provided in `<type>`.",
+    item,
+    quote! { #self_ty }
+);
 
 // Happens when `#[proptest(filter = "<expr>")]` is set on `item`,
 // but the parent of the `item` explicitly specifies a value or strategy,
 // which would cause the value to be generated without consulting the
 // `filter`.
-error!(meaningless_filter(item: &str), E0012,
+error!(
+    meaningless_filter(item: &str),
+    E0012,
     "Cannot set `#[proptest(filter = <expr>)]` on {} since it is set on the \
      item which it is inside of that outer item specifies how to generate \
      itself.",
-    item);
+    item
+);
 
 // Happens when the form `#![proptest<..>]` is used. This will probably never
 // happen - but just in case it does, we catch it and emit an error.
-error!(inner_attr, E0013,
-    "Inner attributes `#![proptest(..)]` are not currently supported.");
+error!(
+    inner_attr,
+    E0013, "Inner attributes `#![proptest(..)]` are not currently supported."
+);
 
 // Happens when the form `#[proptest]` is used. The form contains no
 // information for us to process, so we disallow it.
-error!(bare_proptest_attr, E0014,
-    "Bare `#[proptest]` attributes are not allowed.");
+error!(
+    bare_proptest_attr,
+    E0014, "Bare `#[proptest]` attributes are not allowed."
+);
 
 // Happens when the form `#[proptest = <literal>)]` is used.
 // Only the form `#[proptest(<contents>)]` is supported.
-error!(literal_set_proptest, E0015,
-    "The attribute form `#[proptest = <literal>]` is not allowed.");
+error!(
+    literal_set_proptest,
+    E0015, "The attribute form `#[proptest = <literal>]` is not allowed."
+);
 
 // Happens when `<modifier>` in `#[proptest(<modifier>)]` is a literal and
 // not a real modifier.
-error!(immediate_literals, E0016,
+error!(
+    immediate_literals,
+    E0016,
     "Literals immediately inside `#[proptest(..)]` as in \
-    `#[proptest(<lit>, ..)]` are not allowed.");
+     `#[proptest(<lit>, ..)]` are not allowed."
+);
 
 // Happens when `<modifier>` in `#[proptest(<modifier>)]` is set more than
 // once.
-error!(set_again(meta: &syn::Meta), E0017,
+error!(
+    set_again(meta: &syn::Meta),
+    E0017,
     "The attribute modifier `{}` inside `#[proptest(..)]` has already been \
-    set. To fix the error, please remove at least one such modifier.",
-    meta.name());
+     set. To fix the error, please remove at least one such modifier.",
+    meta.name()
+);
 
 // Happens when `<modifier>` in `#[proptest(<modifier>)]` is unknown to
 // us but we can make an educated guess as to what the user meant.
-error!(did_you_mean(found: &str, expected: &str), E0018,
+error!(
+    did_you_mean(found: &str, expected: &str),
+    E0018,
     "Unknown attribute modifier `{}` inside #[proptest(..)] is not allowed. \
-    Did you mean to use `{}` instead?",
-    found, expected);
+     Did you mean to use `{}` instead?",
+    found,
+    expected
+);
 
 // Happens when `<modifier>` in `#[proptest(<modifier>)]` is unknown to us.
-error!(unkown_modifier(modifier: &str), E0018,
+error!(
+    unkown_modifier(modifier: &str),
+    E0018,
     "Unknown attribute modifier `{}` inside `#[proptest(..)]` is not allowed.",
-    modifier);
+    modifier
+);
 
 // Happens when `#[proptest(no_params)]` is malformed.
-error!(no_params_malformed, E0019,
+error!(
+    no_params_malformed,
+    E0019,
     "The attribute modifier `no_params` inside `#[proptest(..)]` does not \
-    support any further configuration and must be a plain modifier as in \
-    `#[proptest(no_params)]`.");
+     support any further configuration and must be a plain modifier as in \
+     `#[proptest(no_params)]`."
+);
 
 // Happens when `#[proptest(skip)]` is malformed.
-error!(skip_malformed, E0020,
+error!(
+    skip_malformed,
+    E0020,
     "The attribute modifier `skip` inside `#[proptest(..)]` does not support \
-    any further configuration and must be a plain modifier as in \
-    `#[proptest(skip)]`.");
+     any further configuration and must be a plain modifier as in \
+     `#[proptest(skip)]`."
+);
 
 // Happens when `#[proptest(weight..)]` is malformed.
 error!(weight_malformed(meta: &syn::Meta), E0021,
@@ -409,20 +476,26 @@ error!(weight_malformed(meta: &syn::Meta), E0021,
 // Happens when both `#[proptest(params = "<type>")]` and
 // `#[proptest(no_params)]` were specified. They are mutually
 // exclusive choices. The user can resolve this by picking one.
-fatal!(overspecified_param, E0022,
+fatal!(
+    overspecified_param,
+    E0022,
     "Cannot set `#[proptest(no_params)]` as well as \
-    `#[proptest(params(<type>))]` simultaneously. \
-    Please pick one of these attributes.");
+     `#[proptest(params(<type>))]` simultaneously. \
+     Please pick one of these attributes."
+);
 
 // This happens when `#[proptest(params..)]` is malformed.
 // For example, `#[proptest(params)]` is malformed. Another example is when
 // `<type>` inside `#[proptest(params = "<type>")]` or
 // `#[proptest(params("<type>"))]` is malformed. In other words, `<type>` is
 // not a valid Rust type. Note that `syn` may not cover all valid Rust types.
-error!(param_malformed, E0023,
+error!(
+    param_malformed,
+    E0023,
     "The attribute modifier `params` inside #[proptest(..)] must have the \
-    format `#[proptest(params = \"<type>\")]` where `<type>` is a valid type \
-    in Rust. An example: `#[proptest(params = \"ComplexType<Foo>\")]`.");
+     format `#[proptest(params = \"<type>\")]` where `<type>` is a valid type \
+     in Rust. An example: `#[proptest(params = \"ComplexType<Foo>\")]`."
+);
 
 // Happens when syn can't interpret <tts> in `#[proptest <tts>]`.
 error!(no_interp_meta, E0024,
@@ -432,36 +505,48 @@ error!(no_interp_meta, E0024,
 // `#[proptest(value..)]`, or `#[proptest(regex..)]` were specified.
 // They are mutually exclusive choices.
 // The user can resolve this by picking one.
-fatal!(overspecified_strat, E0025,
+fatal!(
+    overspecified_strat,
+    E0025,
     "Cannot set more than one of `#[proptest(value = \"<expr>\")]`,
     `#[proptest(strategy = \"<expr>\")]`, `#[proptest(regex = \"<string>\")]` \
-    simultaneously. Please pick one of these attributes.");
+    simultaneously. Please pick one of these attributes."
+);
 
 // Happens when `#[proptest(strategy..)]` or `#[proptest(value..)]` is
 // malformed. For example, `<expr>` inside `#[proptest(strategy = "<expr>")]`
 // or `#[proptest(value = "<expr>")]` is malformed. In other words, `<expr>`
 // is not a valid Rust expression.
-error!(strategy_malformed(meta: &syn::Meta), E0026,
+error!(
+    strategy_malformed(meta: &syn::Meta),
+    E0026,
     "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
-    format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
-    expression.",
-    meta.name());
+     format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
+     expression.",
+    meta.name()
+);
 
 // Happens when `#[proptest(filter..)]` is malformed.
 // For example, `<expr>` inside `#[proptest(filter = "<expr>")]` or
 // is malformed. In other words, `<expr>` is not a valid Rust expression.
-error!(filter_malformed(meta: &syn::Meta), E0027,
+error!(
+    filter_malformed(meta: &syn::Meta),
+    E0027,
     "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
-    format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
-    expression.",
-    meta.name());
+     format `#[proptest({0} = \"<expr>\")]` where `<expr>` is a valid Rust \
+     expression.",
+    meta.name()
+);
 
 // Any attributes on a skipped variant has no effect - so we emit this error
 // to the user so that they are aware.
-error!(skipped_variant_has_weight(item: &str), E0028,
+error!(
+    skipped_variant_has_weight(item: &str),
+    E0028,
     "A variant has been skipped. Setting `#[proptest(weight = <value>)]` on \
-    the {} is meaningless and is not allowed.",
-    item);
+     the {} is meaningless and is not allowed.",
+    item
+);
 
 // Any attributes on a skipped variant has no effect - so we emit this error
 // to the user so that they are aware.
@@ -472,11 +557,14 @@ error!(skipped_variant_has_param(item: &str), E0028,
 
 // Any attributes on a skipped variant has no effect - so we emit this error
 // to the user so that they are aware.
-error!(skipped_variant_has_strat(item: &str), E0028,
+error!(
+    skipped_variant_has_strat(item: &str),
+    E0028,
     "A variant has been skipped. Setting `#[proptest(value = \"<expr>\")]` or \
-    `#[proptest(strategy = \"<expr>\")]` on the {} is meaningless and is not \
-    allowed.",
-    item);
+     `#[proptest(strategy = \"<expr>\")]` on the {} is meaningless and is not \
+     allowed.",
+    item
+);
 
 // Any attributes on a skipped variant has no effect - so we emit this error
 // to the user so that they are aware. Unfortunately, there's no way to
@@ -489,10 +577,13 @@ error!(skipped_variant_has_filter(item: &str), E0028,
 // There's only one way to produce a specific unit variant, so setting
 // `#[proptest(strategy = "<expr>")]` or `#[proptest(value = "<expr>")]`
 // would be pointless.
-error!(strategy_on_unit_variant(what: &str), E0029,
+error!(
+    strategy_on_unit_variant(what: &str),
+    E0029,
     "Setting `#[proptest({0} = \"<expr>\")]` on a unit variant has no effect \
-    and is redundant because there is nothing to configure.",
-    what);
+     and is redundant because there is nothing to configure.",
+    what
+);
 
 // See `strategy_on_unit_variant`.
 error!(regex_on_unit_variant, E0029,
@@ -501,15 +592,21 @@ error!(regex_on_unit_variant, E0029,
 
 // There's only one way to produce a specific unit variant, so setting
 // `#[proptest(params = "<type>")]` would be pointless.
-error!(params_on_unit_variant, E0029,
+error!(
+    params_on_unit_variant,
+    E0029,
     "Setting `#[proptest(params = \"<type>\")]` on a unit variant has \
-    no effect and is redundant because there is nothing to configure.");
+     no effect and is redundant because there is nothing to configure."
+);
 
 // There's only one way to produce a specific unit variant, so setting
 // `#[proptest(filter = "<expr>")]` would be pointless.
-error!(filter_on_unit_variant, E0029,
+error!(
+    filter_on_unit_variant,
+    E0029,
     "Setting `#[proptest(filter = \"<expr>\")]` on a unit variant has \
-    no effect and is redundant because there is nothing to further filter.");
+     no effect and is redundant because there is nothing to further filter."
+);
 
 // Occurs when `#[proptest(params = "<type>")]` is specified on a unit
 // struct. There's only one way to produce a unit struct, so specifying
@@ -527,34 +624,49 @@ error!(filter_on_unit_struct, E0030,
 
 // Occurs when `#[proptest(no_bound)]` is specified
 // on something that is not a type variable.
-error!(no_bound_set_on_non_tyvar, E0031,
+error!(
+    no_bound_set_on_non_tyvar,
+    E0031,
     "Setting `#[proptest(no_bound)]` on something that is not a type variable \
-    has no effect and is redundant. Therefore it is not allowed.");
+     has no effect and is redundant. Therefore it is not allowed."
+);
 
 // Happens when `#[proptest(no_bound)]` is malformed.
-error!(no_bound_malformed, E0032,
+error!(
+    no_bound_malformed,
+    E0032,
     "The attribute modifier `no_bound` inside `#[proptest(..)]` does not \
-    support any further configuration and must be a plain modifier as in \
-    `#[proptest(no_bound)]`.");
+     support any further configuration and must be a plain modifier as in \
+     `#[proptest(no_bound)]`."
+);
 
 // Happens when the sum of weights on enum variants overflowing an u32.
-error!(weight_overflowing, E0033,
+error!(
+    weight_overflowing,
+    E0033,
     "The sum of the weights specified on variants of the enum you are \
-    deriving `Arbitrary` for overflows an `u32` which it can't do.");
+     deriving `Arbitrary` for overflows an `u32` which it can't do."
+);
 
 // Happens when `#[proptest(regex..)]` is malformed.
 // For example, `#[proptest(regex = 1)]` is not a valid form.
-error!(regex_malformed, E0034,
+error!(
+    regex_malformed,
+    E0034,
     "The attribute modifier `regex` inside `#[proptest(..)]` must have the \
     format `#[proptest(regex = \"<string>\")]` where `<string>` is a valid
-    regular expression embedded in a Rust string slice.");
+    regular expression embedded in a Rust string slice."
+);
 
 // Happens when `#[proptest(params = <type>)]` is set on `item` and then
 // `#[proptest(regex = "<string>")]` is also set. We reject this because
 // the params can't be used. TODO: reduce this to a warning once we can
 // emit warnings.
-error!(cant_set_param_and_regex(item: &str), E0035,
+error!(
+    cant_set_param_and_regex(item: &str),
+    E0035,
     "Cannot set #[proptest(regex = \"<string>\")] and \
-    `#[proptest(params = <type>)]` on {0} because the latter is a logic bug \
-    since `params` cannot be used in `<string>`.",
-    item);
+     `#[proptest(params = <type>)]` on {0} because the latter is a logic bug \
+     since `params` cannot be used in `<string>`.",
+    item
+);

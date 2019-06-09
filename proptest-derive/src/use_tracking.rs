@@ -13,14 +13,14 @@
 // Perhaps ordermap would be better, but our maps are so small that we care
 // much more about the increased compile times incured by including ordermap.
 // We need to preserve insertion order in any case, so HashMap is not useful.
-use std::collections::{BTreeMap, HashSet};
 use std::borrow::Borrow;
+use std::collections::{BTreeMap, HashSet};
 
 use syn;
 
 use crate::attr;
+use crate::error::{Ctx, DeriveResult};
 use crate::util;
-use crate::error::{DeriveResult, Ctx};
 
 //==============================================================================
 // API: Type variable use tracking
@@ -54,14 +54,15 @@ impl UseTracker {
     pub fn new(generics: syn::Generics) -> Self {
         // Construct the map by setting all type variables as being unused
         // initially. This is the only time we will allocate for the map.
-        let used_map = generics.type_params()
+        let used_map = generics
+            .type_params()
             .map(|v| (v.ident.clone(), false))
             .collect();
         Self {
             generics,
             used_map,
             where_types: HashSet::default(),
-            track: true
+            track: true,
         }
     }
 
@@ -93,36 +94,45 @@ impl UseTracker {
 
     /// Adds the bound in `for_used` on used type variables and
     /// the bound in `for_not` (`if .is_some()`) on unused type variables.
-    pub fn add_bounds(&mut self, ctx: Ctx,
-        for_used: &syn::TypeParamBound, for_not: Option<syn::TypeParamBound>)
-        -> DeriveResult<()>
-    {
+    pub fn add_bounds(
+        &mut self,
+        ctx: Ctx,
+        for_used: &syn::TypeParamBound,
+        for_not: Option<syn::TypeParamBound>,
+    ) -> DeriveResult<()> {
         {
-            let mut iter = self.used_map.values().zip(self.generics.type_params_mut());
+            let mut iter =
+                self.used_map.values().zip(self.generics.type_params_mut());
             if let Some(for_not) = for_not {
                 iter.try_for_each(|(&used, tv)| {
                     // Steal the attributes:
                     let no_bound = attr::has_no_bound(ctx, &tv.attrs)?;
-                    let bound = if used && !no_bound { for_used } else { &for_not };
+                    let bound = if used && !no_bound {
+                        for_used
+                    } else {
+                        &for_not
+                    };
                     tv.bounds.push(bound.clone());
                     Ok(())
                 })?;
             } else {
-                iter.for_each(|(&used, tv)|
-                    if used { tv.bounds.push(for_used.clone()) }
-                )
+                iter.for_each(|(&used, tv)| {
+                    if used {
+                        tv.bounds.push(for_used.clone())
+                    }
+                })
             }
         }
 
         self.generics.make_where_clause().predicates.extend(
-            self.where_types.iter().cloned().map(|ty|
+            self.where_types.iter().cloned().map(|ty| {
                 syn::WherePredicate::Type(syn::PredicateType {
                     lifetimes: None,
                     bounded_ty: ty,
                     colon_token: <Token![:]>::default(),
                     bounds: ::std::iter::once(for_used.clone()).collect(),
                 })
-            )
+            }),
         );
 
         Ok(())
@@ -160,7 +170,9 @@ impl UseMarkable for syn::Type {
 
             fn visit_path(&mut self, path: &syn::Path) {
                 // If path is PhantomData<T> do not mark innards.
-                if util::is_phantom_data(path) { return; }
+                if util::is_phantom_data(path) {
+                    return;
+                }
 
                 if let Some(ident) = util::extract_simple_path(path) {
                     self.0.use_tyvar(ident);
@@ -191,7 +203,8 @@ fn matches_prj_tyvar(ut: &mut UseTracker, tpath: &syn::TypePath) -> bool {
         false
     } else {
         // true => $tyvar :: $projection
-        return !util::path_is_global(path) && segs.len() == 2
+        return !util::path_is_global(path)
+            && segs.len() == 2
             && ut.has_tyvar(&segs[0].ident)
             && segs[0].arguments.is_empty()
             && segs[1].arguments.is_empty();
@@ -199,7 +212,9 @@ fn matches_prj_tyvar(ut: &mut UseTracker, tpath: &syn::TypePath) -> bool {
 }
 
 fn adjust_simple_prj(tpath: &syn::TypePath) -> syn::TypePath {
-    let segments = tpath.qself.as_ref()
+    let segments = tpath
+        .qself
+        .as_ref()
         .filter(|qp| qp.as_token.is_none())
         .and_then(|qp| extract_path(&*qp.ty))
         .filter(|tp| tp.qself.is_none())
@@ -214,8 +229,8 @@ fn adjust_simple_prj(tpath: &syn::TypePath) -> syn::TypePath {
             qself: None,
             path: syn::Path {
                 leading_colon: None,
-                segments
-            }
+                segments,
+            },
         }
     } else {
         tpath.clone()

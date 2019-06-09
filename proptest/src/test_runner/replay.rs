@@ -15,7 +15,7 @@ use std::path::Path;
 use std::string::String;
 use std::vec::Vec;
 
-use crate::test_runner::{TestCaseError, TestCaseResult, Seed};
+use crate::test_runner::{Seed, TestCaseError, TestCaseResult};
 
 const SENTINEL: &'static str = "proptest-forkfile";
 
@@ -88,8 +88,10 @@ fn step_to_char(step: &TestCaseResult) -> char {
 }
 
 /// Append the given step to the given output.
-pub(crate) fn append(mut file: impl Write, step: &TestCaseResult)
-              -> io::Result<()> {
+pub(crate) fn append(
+    mut file: impl Write,
+    step: &TestCaseResult,
+) -> io::Result<()> {
     write!(file, "{}", step_to_char(step))
 }
 
@@ -127,8 +129,9 @@ impl Replay {
     /// Parse a `Replay` out of the given file.
     ///
     /// The reader is implicitly seeked to the beginning before reading.
-    pub fn parse_from(mut file: impl Read + Seek)
-                      -> io::Result<ReplayFileStatus> {
+    pub fn parse_from(
+        mut file: impl Read + Seek,
+    ) -> io::Result<ReplayFileStatus> {
         file.seek(io::SeekFrom::Start(0))?;
 
         let mut reader = io::BufReader::new(&mut file);
@@ -165,12 +168,17 @@ impl Replay {
         for ch in line.chars() {
             match ch {
                 '+' => steps.push(Ok(())),
-                '-' => steps.push(Err(TestCaseError::fail(
-                    "failed in other process"))),
+                '-' => steps
+                    .push(Err(TestCaseError::fail("failed in other process"))),
                 '!' => steps.push(Err(TestCaseError::reject(
-                    "rejected in other process"))),
-                '.' => return Ok(ReplayFileStatus::Terminated(
-                    Replay { seed, steps })),
+                    "rejected in other process",
+                ))),
+                '.' => {
+                    return Ok(ReplayFileStatus::Terminated(Replay {
+                        seed,
+                        steps,
+                    }))
+                }
                 ' ' => (),
                 _ => return Ok(ReplayFileStatus::Corrupt),
             }

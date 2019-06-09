@@ -9,10 +9,10 @@
 
 //! Arbitrary implementations for `std::char`.
 
+use crate::std_facade::Vec;
 use core::char::*;
 use core::iter::once;
 use core::ops::Range;
-use crate::std_facade::Vec;
 
 use crate::collection::vec;
 
@@ -24,9 +24,9 @@ multiplex_alloc! {
 
 const VEC_MAX: usize = ::core::u16::MAX as usize;
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 macro_rules! impl_wrap_char {
     ($type: ty, $mapper: expr) => {

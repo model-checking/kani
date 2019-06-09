@@ -8,11 +8,11 @@
 
 //! Provides a parser from syn attributes to our logical model.
 
-use syn::{self, Meta, NestedMeta, Lit, Ident, Attribute, Expr, Type};
+use syn::{self, Attribute, Expr, Ident, Lit, Meta, NestedMeta, Type};
 
-use crate::util;
-use crate::interp;
 use crate::error::{self, Ctx, DeriveResult};
+use crate::interp;
+use crate::util;
 
 //==============================================================================
 // Public API
@@ -83,7 +83,11 @@ pub enum ParamsMode {
 impl ParamsMode {
     /// Returns `true` iff the mode was explicitly set.
     pub fn is_set(&self) -> bool {
-        if let ParamsMode::Passthrough = *self { false } else { true }
+        if let ParamsMode::Passthrough = *self {
+            false
+        } else {
+            true
+        }
     }
 
     /// Converts the mode to an `Option` of an `Option` of a type
@@ -102,15 +106,20 @@ impl ParamsMode {
 impl StratMode {
     /// Returns `true` iff the mode was explicitly set.
     pub fn is_set(&self) -> bool {
-        if let StratMode::Arbitrary = self { false } else { true }
+        if let StratMode::Arbitrary = self {
+            false
+        } else {
+            true
+        }
     }
 }
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-pub fn parse_attributes(ctx: Ctx, attrs: &[Attribute])
-    -> DeriveResult<ParsedAttributes>
-{
+pub fn parse_attributes(
+    ctx: Ctx,
+    attrs: &[Attribute],
+) -> DeriveResult<ParsedAttributes> {
     let attrs = parse_attributes_base(ctx, attrs)?;
     if attrs.no_bound {
         error::no_bound_set_on_non_tyvar(ctx);
@@ -119,9 +128,10 @@ pub fn parse_attributes(ctx: Ctx, attrs: &[Attribute])
 }
 
 /// Parse the attributes specified on a type definition...
-pub fn parse_top_attributes(ctx: Ctx, attrs: &[Attribute])
-    -> DeriveResult<ParsedAttributes>
-{
+pub fn parse_top_attributes(
+    ctx: Ctx,
+    attrs: &[Attribute],
+) -> DeriveResult<ParsedAttributes> {
     parse_attributes_base(ctx, attrs)
 }
 
@@ -137,9 +147,10 @@ pub fn has_no_bound(ctx: Ctx, attrs: &[Attribute]) -> DeriveResult<bool> {
 
 /// Parse the attributes specified on an item and parsed by syn
 /// into our logical model that we work with.
-fn parse_attributes_base(ctx: Ctx, attrs: &[Attribute])
-    -> DeriveResult<ParsedAttributes>
-{
+fn parse_attributes_base(
+    ctx: Ctx,
+    attrs: &[Attribute],
+) -> DeriveResult<ParsedAttributes> {
     let acc = parse_accumulate(ctx, attrs);
 
     Ok(ParsedAttributes {
@@ -150,7 +161,7 @@ fn parse_attributes_base(ctx: Ctx, attrs: &[Attribute])
         params: parse_params_mode(ctx, acc.no_params, acc.params)?,
         // Process strategy and value together to see which one to use.
         strategy: parse_strat_mode(ctx, acc.strategy, acc.value, acc.regex)?,
-        no_bound: acc.no_bound.is_some()
+        no_bound: acc.no_bound.is_some(),
     })
 }
 
@@ -183,7 +194,8 @@ fn parse_accumulate(ctx: Ctx, attrs: &[Attribute]) -> ParseAcc {
     for attr in attrs {
         if is_proptest_attr(&attr) {
             // Flatten attributes so we deal with them uniformly.
-            state = extract_modifiers(ctx, &attr).into_iter()
+            state = extract_modifiers(ctx, &attr)
+                .into_iter()
                 // Accumulate attributes into a form for final processing.
                 .fold(state, |state, meta| dispatch_attribute(ctx, state, meta))
         }
@@ -210,8 +222,13 @@ fn extract_modifiers(ctx: Ctx, attr: &Attribute) -> Vec<Meta> {
     }
 
     match attr.interpret_meta() {
-        Some(Meta::List(list)) => return list.nested.into_iter()
-            .filter_map(|nm| extract_metas(ctx, nm)).collect(),
+        Some(Meta::List(list)) => {
+            return list
+                .nested
+                .into_iter()
+                .filter_map(|nm| extract_metas(ctx, nm))
+                .collect()
+        }
         Some(Meta::Word(_)) => error::bare_proptest_attr(ctx),
         Some(Meta::NameValue(_)) => error::literal_set_proptest(ctx),
         None => error::no_interp_meta(ctx),
@@ -225,7 +242,7 @@ fn extract_metas(ctx: Ctx, nested: NestedMeta) -> Option<Meta> {
         NestedMeta::Literal(_) => {
             error::immediate_literals(ctx);
             None
-        },
+        }
         // This is the only valid form.
         NestedMeta::Meta(meta) => Some(meta),
     }
@@ -267,22 +284,18 @@ fn dispatch_attribute(ctx: Ctx, mut acc: ParseAcc, meta: Meta) -> ParseAcc {
 
 fn dispatch_unknown_mod(ctx: Ctx, name: &str) {
     match name {
-        "no_bounds" =>
-            error::did_you_mean(ctx, name, "no_bound"),
-        "weights" | "weighted" =>
-            error::did_you_mean(ctx, name, "weight"),
-        "strat" | "strategies" =>
-            error::did_you_mean(ctx, name, "strategy"),
-        "values" | "valued" | "fix" | "fixed" =>
-            error::did_you_mean(ctx, name, "value"),
-        "regexes" | "regexp" | "re" =>
-            error::did_you_mean(ctx, name, "regex"),
-        "param" | "parameters" =>
-            error::did_you_mean(ctx, name, "params"),
-        "no_param" | "no_parameters" =>
-            error::did_you_mean(ctx, name, "no_params"),
-        name =>
-            error::unkown_modifier(ctx, name),
+        "no_bounds" => error::did_you_mean(ctx, name, "no_bound"),
+        "weights" | "weighted" => error::did_you_mean(ctx, name, "weight"),
+        "strat" | "strategies" => error::did_you_mean(ctx, name, "strategy"),
+        "values" | "valued" | "fix" | "fixed" => {
+            error::did_you_mean(ctx, name, "value")
+        }
+        "regexes" | "regexp" | "re" => error::did_you_mean(ctx, name, "regex"),
+        "param" | "parameters" => error::did_you_mean(ctx, name, "params"),
+        "no_param" | "no_parameters" => {
+            error::did_you_mean(ctx, name, "no_params")
+        }
+        name => error::unkown_modifier(ctx, name),
         // TODO: consider levenshtein distance.
     }
 }
@@ -330,12 +343,13 @@ fn parse_weight(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
         .and_then(extract_lit)
         .and_then(extract_expr)
         // Evaluate the expression into a value:
-        .as_ref().and_then(interp::eval_expr)
+        .as_ref()
+        .and_then(interp::eval_expr)
         // Ensure that `val` fits within an `u32` as proptest requires that:
         .filter(|&value| value <= u128::from(u32::MAX))
         .map(|value| value as u32);
 
-    if let v@Some(_) = value {
+    if let v @ Some(_) = value {
         acc.weight = v;
     } else {
         error::weight_malformed(ctx, meta)
@@ -375,9 +389,9 @@ fn parse_filter(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 fn parse_regex(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
     error_if_set(ctx, &acc.regex, &meta);
 
-    if let expr@Some(_) = match normalize_meta(meta.clone()) {
+    if let expr @ Some(_) = match normalize_meta(meta.clone()) {
         Some(NormMeta::Word(fun)) => Some(function_call(fun)),
-        Some(NormMeta::Lit(lit@Lit::Str(_))) => Some(lit_to_expr(lit)),
+        Some(NormMeta::Lit(lit @ Lit::Str(_))) => Some(lit_to_expr(lit)),
         _ => None,
     } {
         acc.regex = expr;
@@ -418,7 +432,7 @@ fn parse_strategy(ctx: Ctx, acc: &mut ParseAcc, meta: &Meta) {
 fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
     error_if_set(ctx, &loc, &meta);
 
-    if let expr@Some(_) = match normalize_meta(meta.clone()) {
+    if let expr @ Some(_) = match normalize_meta(meta.clone()) {
         Some(NormMeta::Word(fun)) => Some(function_call(fun)),
         Some(NormMeta::Lit(lit)) => extract_expr(lit),
         _ => None,
@@ -432,15 +446,17 @@ fn parse_strategy_base(ctx: Ctx, loc: &mut Option<Expr>, meta: &Meta) {
 /// Combines any parsed explicit strategy, value, and regex into a single
 /// value and fails if both an explicit strategy / value / regex was set.
 /// Only one of them can be set, or none.
-fn parse_strat_mode
-    (ctx: Ctx, strat: Option<Expr>, value: Option<Expr>, regex: Option<Expr>)
-    -> DeriveResult<StratMode>
-{
+fn parse_strat_mode(
+    ctx: Ctx,
+    strat: Option<Expr>,
+    value: Option<Expr>,
+    regex: Option<Expr>,
+) -> DeriveResult<StratMode> {
     Ok(match (strat, value, regex) {
-        (None,     None,     None    ) => StratMode::Arbitrary,
-        (None,     None,     Some(re)) => StratMode::Regex(re),
-        (None,     Some(vl), None    ) => StratMode::Value(vl),
-        (Some(st), None,     None    ) => StratMode::Strategy(st),
+        (None, None, None) => StratMode::Arbitrary,
+        (None, None, Some(re)) => StratMode::Regex(re),
+        (None, Some(vl), None) => StratMode::Value(vl),
+        (Some(st), None, None) => StratMode::Strategy(st),
         _ => error::overspecified_strat(ctx)?,
     })
 }
@@ -451,14 +467,16 @@ fn parse_strat_mode
 
 /// Combines a potentially set `params` and `no_params` into a single value
 /// and fails if both have been set. Only one of them can be set, or none.
-fn parse_params_mode(ctx: Ctx, no_params: Option<()>, ty_params: Option<Type>)
-    -> DeriveResult<ParamsMode>
-{
+fn parse_params_mode(
+    ctx: Ctx,
+    no_params: Option<()>,
+    ty_params: Option<Type>,
+) -> DeriveResult<ParamsMode> {
     Ok(match (no_params, ty_params) {
-        (None,    None    ) => ParamsMode::Passthrough,
-        (None,    Some(ty)) => ParamsMode::Specified(ty),
-        (Some(_), None    ) => ParamsMode::Default,
-        (Some(_), Some(_) ) => error::overspecified_param(ctx)?,
+        (None, None) => ParamsMode::Passthrough,
+        (None, Some(ty)) => ParamsMode::Specified(ty),
+        (Some(_), None) => ParamsMode::Default,
+        (Some(_), Some(_)) => error::overspecified_param(ctx)?,
     })
 }
 
@@ -482,7 +500,7 @@ fn parse_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
         _ => None,
     };
 
-    if let typ@Some(_) = typ {
+    if let typ @ Some(_) = typ {
         acc.params = typ;
     } else {
         error::param_malformed(ctx)
@@ -493,7 +511,12 @@ fn parse_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 /// Valid forms are:
 /// + `#[proptest(no_params)]`
 fn parse_no_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
-    parse_bare_modifier(ctx, &mut acc.no_params, meta, error::no_params_malformed)
+    parse_bare_modifier(
+        ctx,
+        &mut acc.no_params,
+        meta,
+        error::no_params_malformed,
+    )
 }
 
 //==============================================================================
@@ -501,9 +524,12 @@ fn parse_no_params(ctx: Ctx, acc: &mut ParseAcc, meta: Meta) {
 //==============================================================================
 
 /// Parses a bare attribute of the form `#[proptest(<attr>)]` and sets `loc`.
-fn parse_bare_modifier
-    (ctx: Ctx, loc: &mut Option<()>, meta: Meta, malformed: fn(Ctx))
-{
+fn parse_bare_modifier(
+    ctx: Ctx,
+    loc: &mut Option<()>,
+    meta: Meta,
+    malformed: fn(Ctx),
+) {
     error_if_set(ctx, loc, &meta);
 
     if let Some(NormMeta::Plain) = normalize_meta(meta) {
@@ -522,7 +548,10 @@ fn error_if_set<T>(ctx: Ctx, loc: &Option<T>, meta: &Meta) {
 
 /// Constructs a type out of an identifier.
 fn ident_to_type(ident: Ident) -> Type {
-    Type::Path(syn::TypePath { qself: None, path: ident.into() })
+    Type::Path(syn::TypePath {
+        qself: None,
+        path: ident.into(),
+    })
 }
 
 /// Extract a `lit` in `NormMeta::Lit(<lit>)`.
@@ -538,7 +567,7 @@ fn extract_lit(meta: NormMeta) -> Option<Lit> {
 fn extract_expr(lit: Lit) -> Option<Expr> {
     match lit {
         Lit::Str(lit) => lit.parse().ok(),
-        lit@Lit::Int(_) => Some(lit_to_expr(lit)),
+        lit @ Lit::Int(_) => Some(lit_to_expr(lit)),
         // TODO(centril): generalize to other literals, e.g. floats
         _ => None,
     }
@@ -562,7 +591,7 @@ enum NormMeta {
     /// Accepts: `#[proptest(<word> = <lit>)]` and `#[proptest(<word>(<lit>))]`
     Lit(Lit),
     /// Accepts: `#[proptest(<word>(<word>))`.
-    Word(Ident)
+    Word(Ident),
 }
 
 /// Normalize a `meta: Meta` into the forms accepted in `#[proptest(<meta>)]`.
@@ -570,14 +599,16 @@ fn normalize_meta(meta: Meta) -> Option<NormMeta> {
     Some(match meta {
         Meta::Word(_) => NormMeta::Plain,
         Meta::NameValue(nv) => NormMeta::Lit(nv.lit),
-        Meta::List(ml) => if let Some(nm) = util::match_singleton(ml.nested) {
-            match nm {
-                NestedMeta::Literal(lit) => NormMeta::Lit(lit),
-                NestedMeta::Meta(Meta::Word(word)) => NormMeta::Word(word),
-                _ => return None
+        Meta::List(ml) => {
+            if let Some(nm) = util::match_singleton(ml.nested) {
+                match nm {
+                    NestedMeta::Literal(lit) => NormMeta::Lit(lit),
+                    NestedMeta::Meta(Meta::Word(word)) => NormMeta::Word(word),
+                    _ => return None,
+                }
+            } else {
+                return None;
             }
-        } else {
-            return None
-        },
+        }
     })
 }

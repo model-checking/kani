@@ -17,8 +17,8 @@
 //! characters, and `range()` and `ranges()` to select characters from
 //! inclusive ranges.
 
-use core::ops::RangeInclusive;
 use crate::std_facade::Cow;
+use core::ops::RangeInclusive;
 
 use rand::Rng;
 
@@ -44,8 +44,7 @@ pub const DEFAULT_SPECIAL_CHARS: &[char] = &[
     '\x00', '\t', '\r', '\n', '\x0B', '\x1B', '\x7F',
     // ¥ both to test simple Unicode handling and because it has interesting
     // properties on MS Shift-JIS systems.
-    '¥',
-    // No non-Unicode encoding has both ¥ and Ѩ
+    '¥', // No non-Unicode encoding has both ¥ and Ѩ
     'Ѩ',
     // In UTF-8, Ⱥ increases in length from 2 to 3 bytes when lowercased
     'Ⱥ',
@@ -57,7 +56,11 @@ pub const DEFAULT_SPECIAL_CHARS: &[char] = &[
 /// characters.
 pub const DEFAULT_PREFERRED_RANGES: &[CharRange] = &[
     // ASCII printable
-    ' '..='~', ' '..='~', ' '..='~', ' '..='~', ' '..='~',
+    ' '..='~',
+    ' '..='~',
+    ' '..='~',
+    ' '..='~',
+    ' '..='~',
     // Latin-1
     '\u{0040}'..='\u{00ff}',
 ];
@@ -87,43 +90,54 @@ pub const DEFAULT_PREFERRED_RANGES: &[CharRange] = &[
 /// particular characters anyway. `ranges` is usually derived from some
 /// external property, and the fact that a range is small often means it is
 /// more interesting.
-pub fn select_char(rnd: &mut impl Rng,
-                   special: &[char],
-                   preferred: &[CharRange],
-                   ranges: &[CharRange]) -> char {
+pub fn select_char(
+    rnd: &mut impl Rng,
+    special: &[char],
+    preferred: &[CharRange],
+    ranges: &[CharRange],
+) -> char {
     let (base, offset) = select_range_index(rnd, special, preferred, ranges);
     ::core::char::from_u32(base + offset).expect("bad character selected")
 }
 
-fn select_range_index(rnd: &mut impl Rng,
-                      special: &[char],
-                      preferred: &[CharRange],
-                      ranges: &[CharRange])
-                      -> (u32, u32) {
+fn select_range_index(
+    rnd: &mut impl Rng,
+    special: &[char],
+    preferred: &[CharRange],
+    ranges: &[CharRange],
+) -> (u32, u32) {
     fn in_range(ranges: &[CharRange], ch: char) -> Option<(u32, u32)> {
-        ranges.iter().find(|r| ch >= *r.start() && ch <= *r.end()).map(
-            |r| (*r.start() as u32, ch as u32 - *r.start() as u32))
+        ranges
+            .iter()
+            .find(|r| ch >= *r.start() && ch <= *r.end())
+            .map(|r| (*r.start() as u32, ch as u32 - *r.start() as u32))
     }
 
     if !special.is_empty() && rnd.gen() {
         let s = special[rnd.gen_range(0, special.len())];
-        if let Some(ret) = in_range(ranges, s) { return ret; }
+        if let Some(ret) = in_range(ranges, s) {
+            return ret;
+        }
     }
 
     if !preferred.is_empty() && rnd.gen() {
         let range = preferred[rnd.gen_range(0, preferred.len())].clone();
         if let Some(ch) = ::core::char::from_u32(
-            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1))
-        {
-            if let Some(ret) = in_range(ranges, ch) { return ret; }
+            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1),
+        ) {
+            if let Some(ret) = in_range(ranges, ch) {
+                return ret;
+            }
         }
     }
 
     for _ in 0..65_536 {
         let range = ranges[rnd.gen_range(0, ranges.len())].clone();
         if let Some(ch) = ::core::char::from_u32(
-            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1))
-        { return (*range.start() as u32, ch as u32 - *range.start() as u32); }
+            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1),
+        ) {
+            return (*range.start() as u32, ch as u32 - *range.start() as u32);
+        }
     }
 
     // Give up and return a character we at least know is valid.
@@ -167,16 +181,24 @@ impl<'a> CharStrategy<'a> {
     /// function underlying `select_char()`.
     ///
     /// All arguments as per `select_char()`.
-    pub fn new(special: Cow<'a, [char]>,
-               preferred: Cow<'a, [CharRange]>,
-               ranges: Cow<'a, [CharRange]>) -> Self {
-        CharStrategy { special, preferred, ranges }
+    pub fn new(
+        special: Cow<'a, [char]>,
+        preferred: Cow<'a, [CharRange]>,
+        ranges: Cow<'a, [CharRange]>,
+    ) -> Self {
+        CharStrategy {
+            special,
+            preferred,
+            ranges,
+        }
     }
 
     /// Same as `CharStrategy::new()` but using `Cow::Borrowed` for all parts.
-    pub fn new_borrowed(special: &'a [char],
-                        preferred: &'a [CharRange],
-                        ranges: &'a [CharRange]) -> Self {
+    pub fn new_borrowed(
+        special: &'a [char],
+        preferred: &'a [CharRange],
+        ranges: &'a [CharRange],
+    ) -> Self {
         CharStrategy::new(
             Cow::Borrowed(special),
             Cow::Borrowed(preferred),
@@ -185,9 +207,7 @@ impl<'a> CharStrategy<'a> {
     }
 }
 
-const WHOLE_RANGE: &[CharRange] = &[
-    '\x00' ..= ::core::char::MAX
-];
+const WHOLE_RANGE: &[CharRange] = &['\x00'..=::core::char::MAX];
 
 /// Creates a `CharStrategy` which picks from literally any character, with the
 /// default biases.
@@ -231,7 +251,11 @@ impl<'a> Strategy for CharStrategy<'a> {
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let (base, offset) = select_range_index(
-            runner.rng(), &self.special, &self.preferred, &self.ranges);
+            runner.rng(),
+            &self.special,
+            &self.preferred,
+            &self.ranges,
+        );
 
         // Select a minimum point more convenient than 0
         let start = base + offset;
@@ -250,7 +274,7 @@ impl<'a> Strategy for CharStrategy<'a> {
         };
 
         Ok(CharValueTree {
-            value: num::u32::BinarySearch::new_above(bottom, start)
+            value: num::u32::BinarySearch::new_above(bottom, start),
         })
     }
 }
@@ -269,8 +293,8 @@ impl ValueTree for CharValueTree {
     type Value = char;
 
     fn current(&self) -> char {
-        ::core::char::from_u32(self.value.current()).expect(
-            "Generated non-char value")
+        ::core::char::from_u32(self.value.current())
+            .expect("Generated non-char value")
     }
 
     fn simplify(&mut self) -> bool {
@@ -294,7 +318,7 @@ impl ValueTree for CharValueTree {
 
 #[cfg(test)]
 mod test {
-    use std::cmp::{min, max};
+    use std::cmp::{max, min};
     use std::vec::Vec;
 
     use super::*;
@@ -356,9 +380,11 @@ mod test {
         for _ in 0..256 {
             let mut value = any().new_tree(&mut runner).unwrap();
 
-            if value.current() <= ' ' { continue; }
+            if value.current() <= ' ' {
+                continue;
+            }
 
-            while value.simplify() { }
+            while value.simplify() {}
 
             assert!(value.current() >= ' ');
             accepted += 1;
@@ -369,12 +395,15 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        check_strategy_sanity(any(), Some(CheckStrategySanityOptions {
-            // `simplify()` can itself `complicate()` back to the starting
-            // position, so the overly strict complicate-after-simplify check
-            // must be disabled.
-            strict_complicate_after_simplify: false,
-            .. CheckStrategySanityOptions::default()
-        }));
+        check_strategy_sanity(
+            any(),
+            Some(CheckStrategySanityOptions {
+                // `simplify()` can itself `complicate()` back to the starting
+                // position, so the overly strict complicate-after-simplify check
+                // must be disabled.
+                strict_complicate_after_simplify: false,
+                ..CheckStrategySanityOptions::default()
+            }),
+        );
     }
 }

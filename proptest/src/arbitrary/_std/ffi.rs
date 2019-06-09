@@ -9,14 +9,14 @@
 
 //! Arbitrary implementations for `std::ffi`.
 
+use crate::std_facade::{Box, String, Vec};
 use std::ffi::*;
 use std::ops::RangeInclusive;
-use crate::std_facade::{Box, Vec, String};
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
-use crate::collection::*;
 use crate::arbitrary::*;
+use crate::collection::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 use super::string::not_utf8_bytes;
 

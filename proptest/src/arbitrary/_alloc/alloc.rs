@@ -15,9 +15,9 @@ use core::usize;
 
 multiplex_alloc!(::alloc::alloc, ::std::alloc);
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 arbitrary!(self::alloc::CannotReallocInPlace; self::alloc::CannotReallocInPlace);
 arbitrary!(self::alloc::Global; self::alloc::Global);

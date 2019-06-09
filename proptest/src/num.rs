@@ -12,19 +12,23 @@
 //!
 //! All strategies in this module shrink by binary searching towards 0.
 
-use rand::distributions::{Distribution, Standard};
-use rand::distributions::uniform::{Uniform, SampleUniform};
-use core::ops::Range;
 use crate::test_runner::TestRunner;
+use core::ops::Range;
+use rand::distributions::uniform::{SampleUniform, Uniform};
+use rand::distributions::{Distribution, Standard};
 
-pub(crate) fn sample_uniform<X : SampleUniform>
-    (run: &mut TestRunner, range: Range<X>) -> X {
+pub(crate) fn sample_uniform<X: SampleUniform>(
+    run: &mut TestRunner,
+    range: Range<X>,
+) -> X {
     Uniform::new(range.start, range.end).sample(run.rng())
 }
 
-pub(crate) fn sample_uniform_incl<X : SampleUniform>
-    (run: &mut TestRunner, start: X, end: X) -> X
-{
+pub(crate) fn sample_uniform_incl<X: SampleUniform>(
+    run: &mut TestRunner,
+    start: X,
+    end: X,
+) -> X {
     Uniform::new_inclusive(start, end).sample(run.rng())
 }
 
@@ -46,7 +50,7 @@ macro_rules! int_any {
                 Ok(BinarySearch::new(runner.rng().gen()))
             }
         }
-    }
+    };
 }
 
 macro_rules! numeric_api {
@@ -59,7 +63,8 @@ macro_rules! numeric_api {
                 Ok(BinarySearch::new_clamped(
                     self.start,
                     $crate::num::sample_uniform(runner, self.clone()),
-                    self.end - $epsilon))
+                    self.end - $epsilon,
+                ))
             }
         }
 
@@ -70,8 +75,13 @@ macro_rules! numeric_api {
             fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new_clamped(
                     *self.start(),
-                    $crate::num::sample_uniform_incl(runner, *self.start(), *self.end()),
-                    *self.end()))
+                    $crate::num::sample_uniform_incl(
+                        runner,
+                        *self.start(),
+                        *self.end(),
+                    ),
+                    *self.end(),
+                ))
             }
         }
 
@@ -83,8 +93,12 @@ macro_rules! numeric_api {
                 Ok(BinarySearch::new_clamped(
                     self.start,
                     $crate::num::sample_uniform_incl(
-                        runner, self.start, ::core::$typ::MAX),
-                    ::core::$typ::MAX))
+                        runner,
+                        self.start,
+                        ::core::$typ::MAX,
+                    ),
+                    ::core::$typ::MAX,
+                ))
             }
         }
 
@@ -96,8 +110,11 @@ macro_rules! numeric_api {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
                     $crate::num::sample_uniform(
-                        runner, ::core::$typ::MIN..self.end),
-                    self.end))
+                        runner,
+                        ::core::$typ::MIN..self.end,
+                    ),
+                    self.end,
+                ))
             }
         }
 
@@ -109,12 +126,15 @@ macro_rules! numeric_api {
                 Ok(BinarySearch::new_clamped(
                     ::core::$typ::MIN,
                     $crate::num::sample_uniform_incl(
-                        runner, ::core::$typ::MIN, self.end),
-                    self.end
+                        runner,
+                        ::core::$typ::MIN,
+                        self.end,
+                    ),
+                    self.end,
                 ))
             }
         }
-    }
+    };
 }
 
 macro_rules! signed_integer_bin_search {
@@ -150,10 +170,14 @@ macro_rules! signed_integer_bin_search {
                 /// on the other side of `lo` or `hi` from `start`. `lo` is
                 /// inclusive, `hi` is exclusive.
                 fn new_clamped(lo: $typ, start: $typ, hi: $typ) -> Self {
-                    use core::cmp::{min, max};
+                    use core::cmp::{max, min};
 
                     BinarySearch {
-                        lo: if start < 0 { min(0, hi-1) } else { max(0, lo) },
+                        lo: if start < 0 {
+                            min(0, hi - 1)
+                        } else {
+                            max(0, lo)
+                        },
                         hi: start,
                         curr: start,
                     }
@@ -163,7 +187,7 @@ macro_rules! signed_integer_bin_search {
                     // Won't ever overflow since lo starts at 0 and advances
                     // towards hi.
                     let interval = self.hi - self.lo;
-                    let new_mid = self.lo + interval/2;
+                    let new_mid = self.lo + interval / 2;
 
                     if new_mid == self.curr {
                         false
@@ -204,11 +228,7 @@ macro_rules! signed_integer_bin_search {
                         return false;
                     }
 
-                    self.lo = self.curr + if self.hi < 0 {
-                        -1
-                    } else {
-                        1
-                    };
+                    self.lo = self.curr + if self.hi < 0 { -1 } else { 1 };
 
                     self.reposition()
                 }
@@ -216,7 +236,7 @@ macro_rules! signed_integer_bin_search {
 
             numeric_api!($typ, 1);
         }
-    }
+    };
 }
 
 macro_rules! unsigned_integer_bin_search {
@@ -266,7 +286,7 @@ macro_rules! unsigned_integer_bin_search {
 
                 fn reposition(&mut self) -> bool {
                     let interval = self.hi - self.lo;
-                    let new_mid = self.lo + interval/2;
+                    let new_mid = self.lo + interval / 2;
 
                     if new_mid == self.curr {
                         false
@@ -284,14 +304,18 @@ macro_rules! unsigned_integer_bin_search {
                 }
 
                 fn simplify(&mut self) -> bool {
-                    if self.hi <= self.lo { return false; }
+                    if self.hi <= self.lo {
+                        return false;
+                    }
 
                     self.hi = self.curr;
                     self.reposition()
                 }
 
                 fn complicate(&mut self) -> bool {
-                    if self.hi <= self.lo { return false; }
+                    if self.hi <= self.lo {
+                        return false;
+                    }
 
                     self.lo = self.curr + 1;
                     self.reposition()
@@ -300,7 +324,7 @@ macro_rules! unsigned_integer_bin_search {
 
             numeric_api!($typ, 1);
         }
-    }
+    };
 }
 
 signed_integer_bin_search!(i8);
@@ -345,9 +369,14 @@ impl FloatTypes {
             self |= FloatTypes::POSITIVE;
         }
 
-        if !self.intersects(FloatTypes::NORMAL | FloatTypes::SUBNORMAL |
-                            FloatTypes::ZERO | FloatTypes::INFINITE |
-                            FloatTypes::QUIET_NAN | FloatTypes::SIGNALING_NAN) {
+        if !self.intersects(
+            FloatTypes::NORMAL
+                | FloatTypes::SUBNORMAL
+                | FloatTypes::ZERO
+                | FloatTypes::INFINITE
+                | FloatTypes::QUIET_NAN
+                | FloatTypes::SIGNALING_NAN,
+        ) {
             self |= FloatTypes::NORMAL;
         }
         self
@@ -369,19 +398,19 @@ where
 impl FloatLayout for f32 {
     type Bits = u32;
 
-    const SIGN_MASK: u32        = 0x8000_0000;
-    const EXP_MASK: u32         = 0x7F80_0000;
-    const EXP_ZERO: u32         = 0x3F80_0000;
-    const MANTISSA_MASK: u32    = 0x007F_FFFF;
+    const SIGN_MASK: u32 = 0x8000_0000;
+    const EXP_MASK: u32 = 0x7F80_0000;
+    const EXP_ZERO: u32 = 0x3F80_0000;
+    const MANTISSA_MASK: u32 = 0x007F_FFFF;
 }
 
 impl FloatLayout for f64 {
     type Bits = u64;
 
-    const SIGN_MASK: u64        = 0x8000_0000_0000_0000;
-    const EXP_MASK: u64         = 0x7FF0_0000_0000_0000;
-    const EXP_ZERO: u64         = 0x3FF0_0000_0000_0000;
-    const MANTISSA_MASK: u64    = 0x000F_FFFF_FFFF_FFFF;
+    const SIGN_MASK: u64 = 0x8000_0000_0000_0000;
+    const EXP_MASK: u64 = 0x7FF0_0000_0000_0000;
+    const EXP_ZERO: u64 = 0x3FF0_0000_0000_0000;
+    const MANTISSA_MASK: u64 = 0x000F_FFFF_FFFF_FFFF;
 }
 
 macro_rules! float_any {
@@ -644,9 +673,9 @@ macro_rules! float_bin_search {
 
             use rand::Rng;
 
+            use super::{FloatLayout, FloatTypes};
             use crate::strategy::*;
             use crate::test_runner::TestRunner;
-            use super::{FloatTypes, FloatLayout};
 
             float_any!($typ);
 
@@ -704,15 +733,21 @@ macro_rules! float_bin_search {
                     // Don't reposition if the new value is not allowed
                     let class_allowed = match self.curr.classify() {
                         Nan =>
-                            // We don't need to inspect whether the
-                            // signallingness of the NaN matches the allowed
-                            // set, as we never try to switch between them,
-                            // instead shrinking to 0.
-                            self.allowed.contains(FloatTypes::QUIET_NAN) ||
-                            self.allowed.contains(FloatTypes::SIGNALING_NAN),
+                        // We don't need to inspect whether the
+                        // signallingness of the NaN matches the allowed
+                        // set, as we never try to switch between them,
+                        // instead shrinking to 0.
+                        {
+                            self.allowed.contains(FloatTypes::QUIET_NAN)
+                                || self
+                                    .allowed
+                                    .contains(FloatTypes::SIGNALING_NAN)
+                        }
                         Infinite => self.allowed.contains(FloatTypes::INFINITE),
                         Zero => self.allowed.contains(FloatTypes::ZERO),
-                        Subnormal => self.allowed.contains(FloatTypes::SUBNORMAL),
+                        Subnormal => {
+                            self.allowed.contains(FloatTypes::SUBNORMAL)
+                        }
                         Normal => self.allowed.contains(FloatTypes::NORMAL),
                     };
                     let signum = self.curr.signum();
@@ -730,20 +765,19 @@ macro_rules! float_bin_search {
                 fn ensure_acceptable(&mut self) {
                     while !self.current_allowed() {
                         if !self.complicate_once() {
-                            panic!("Unable to complicate floating-point back \
-                                    to acceptable value");
+                            panic!(
+                                "Unable to complicate floating-point back \
+                                 to acceptable value"
+                            );
                         }
                     }
                 }
 
                 fn reposition(&mut self) -> bool {
                     let interval = self.hi - self.lo;
-                    let interval = if interval.is_finite() {
-                        interval
-                    } else {
-                        0.0
-                    };
-                    let new_mid = self.lo + interval/2.0;
+                    let interval =
+                        if interval.is_finite() { interval } else { 0.0 };
+                    let new_mid = self.lo + interval / 2.0;
 
                     let new_mid = if new_mid == self.curr || 0.0 == interval {
                         new_mid
@@ -810,7 +844,7 @@ macro_rules! float_bin_search {
 
             numeric_api!($typ, 0.0);
         }
-    }
+    };
 }
 
 float_bin_search!(f32);
@@ -859,7 +893,7 @@ mod test {
 
     #[test]
     fn i8_binary_search_always_converges() {
-        fn assert_converges<P : Fn (i32) -> bool>(start: i8, pass: P) {
+        fn assert_converges<P: Fn(i32) -> bool>(start: i8, pass: P) {
             let mut state = i8::BinarySearch::new(start);
             loop {
                 if !pass(state.current() as i32) {
@@ -874,12 +908,14 @@ mod test {
             }
 
             assert!(!pass(state.current() as i32));
-            assert!(pass(state.current() as i32 - 1) ||
-                    pass(state.current() as i32 + 1));
+            assert!(
+                pass(state.current() as i32 - 1)
+                    || pass(state.current() as i32 + 1)
+            );
         }
 
         for start in -128..0 {
-            for target in start+1..1 {
+            for target in start + 1..1 {
                 assert_converges(start as i8, |v| v > target);
             }
         }
@@ -893,7 +929,7 @@ mod test {
 
     #[test]
     fn u8_binary_search_always_converges() {
-        fn assert_converges<P : Fn (u32) -> bool>(start: u8, pass: P) {
+        fn assert_converges<P: Fn(u32) -> bool>(start: u8, pass: P) {
             let mut state = u8::BinarySearch::new(start);
             loop {
                 if !pass(state.current() as u32) {
@@ -944,8 +980,11 @@ mod test {
             assert!(init_value < -42);
 
             while state.simplify() {
-                assert!(state.current() < -42,
-                        "Violated bounds: {}", state.current());
+                assert!(
+                    state.current() < -42,
+                    "Violated bounds: {}",
+                    state.current()
+                );
             }
 
             assert_eq!(-43, state.current());
@@ -961,8 +1000,11 @@ mod test {
             assert!(init_value >= 42);
 
             while state.simplify() {
-                assert!(state.current() >= 42,
-                        "Violated bounds: {}", state.current());
+                assert!(
+                    state.current() >= 42,
+                    "Violated bounds: {}",
+                    state.current()
+                );
             }
 
             assert_eq!(42, state.current());
@@ -978,8 +1020,11 @@ mod test {
             assert!(init_value >= 42 && init_value < 56);
 
             while state.simplify() {
-                assert!(state.current() >= 42,
-                        "Violated bounds: {}", state.current());
+                assert!(
+                    state.current() >= 42,
+                    "Violated bounds: {}",
+                    state.current()
+                );
             }
 
             assert_eq!(42, state.current());
@@ -1020,7 +1065,7 @@ mod test {
                         check_strategy_sanity(FOURTY_TWO.., None);
                     }
                 }
-            }
+            };
         }
         contract_sanity!(u8);
         contract_sanity!(i8);
@@ -1053,7 +1098,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut value = (0.0f64..2.0).new_tree(&mut runner).unwrap();
 
-        while value.simplify() { }
+        while value.simplify() {}
 
         assert_eq!(0.0, value.current());
     }
@@ -1063,7 +1108,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut value = (1.0f64..2.0).new_tree(&mut runner).unwrap();
 
-        while value.simplify() { }
+        while value.simplify() {}
 
         assert_eq!(1.0, value.current());
     }
@@ -1073,7 +1118,7 @@ mod test {
         let mut runner = TestRunner::default();
         let mut value = (-2.0f64..0.0).new_tree(&mut runner).unwrap();
 
-        while value.simplify() { }
+        while value.simplify() {}
 
         assert_eq!(0.0, value.current());
     }
@@ -1085,7 +1130,7 @@ mod test {
         let orig = value.current();
 
         assert!(value.simplify());
-        while value.complicate() { }
+        while value.complicate() {}
 
         assert_eq!(orig, value.current());
     }
@@ -1130,9 +1175,10 @@ mod test {
     fn float_simplifies_to_smallest_normal() {
         let mut runner = TestRunner::default();
         let mut value = (::std::f64::MIN_POSITIVE..2.0)
-            .new_tree(&mut runner).unwrap();
+            .new_tree(&mut runner)
+            .unwrap();
 
-        while value.simplify() { }
+        while value.simplify() {}
 
         assert_eq!(::std::f64::MIN_POSITIVE, value.current());
     }
@@ -1171,7 +1217,8 @@ mod test {
                     if sign < 0.0 {
                         prop_assert!(bits.contains(FloatTypes::NEGATIVE));
                         seen_negative += increment;
-                    } else if sign > 0.0 { // i.e., not NaN
+                    } else if sign > 0.0 {
+                        // i.e., not NaN
                         prop_assert!(bits.contains(FloatTypes::POSITIVE));
                         seen_positive += increment;
                     }
@@ -1182,33 +1229,39 @@ mod test {
                             let is_negative = raw << 1 >> 1 != raw;
                             if is_negative {
                                 prop_assert!(
-                                    bits.contains(FloatTypes::NEGATIVE));
+                                    bits.contains(FloatTypes::NEGATIVE)
+                                );
                                 seen_negative += increment;
                             } else {
                                 prop_assert!(
-                                    bits.contains(FloatTypes::POSITIVE));
+                                    bits.contains(FloatTypes::POSITIVE)
+                                );
                                 seen_positive += increment;
                             }
 
-                            let is_quiet =
-                                raw & ($typ::EXP_MASK >> 1) ==
-                                ::std::$typ::NAN.to_bits() & ($typ::EXP_MASK >> 1);
+                            let is_quiet = raw & ($typ::EXP_MASK >> 1)
+                                == ::std::$typ::NAN.to_bits()
+                                    & ($typ::EXP_MASK >> 1);
                             if is_quiet {
                                 // x86/AMD64 turn signalling NaNs into quiet
                                 // NaNs quite aggressively depending on what
                                 // registers LLVM decides to use to pass the
                                 // value around, so accept either case here.
                                 prop_assert!(
-                                    bits.contains(FloatTypes::QUIET_NAN) ||
-                                    bits.contains(FloatTypes::SIGNALING_NAN));
+                                    bits.contains(FloatTypes::QUIET_NAN)
+                                        || bits.contains(
+                                            FloatTypes::SIGNALING_NAN
+                                        )
+                                );
                                 seen_quiet_nan += increment;
                                 seen_signaling_nan += increment;
                             } else {
                                 prop_assert!(
-                                    bits.contains(FloatTypes::SIGNALING_NAN));
+                                    bits.contains(FloatTypes::SIGNALING_NAN)
+                                );
                                 seen_signaling_nan += increment;
                             }
-                        },
+                        }
 
                         FpCategory::Nan => {
                             // Since safe Rust doesn't currently allow
@@ -1221,30 +1274,33 @@ mod test {
                             seen_quiet_nan += increment;
                             seen_signaling_nan += increment;
                             prop_assert!(
-                                bits.contains(FloatTypes::QUIET_NAN) ||
-                                bits.contains(FloatTypes::SIGNALING_NAN));
-                        },
+                                bits.contains(FloatTypes::QUIET_NAN)
+                                    || bits.contains(FloatTypes::SIGNALING_NAN)
+                            );
+                        }
                         FpCategory::Infinite => {
                             prop_assert!(bits.contains(FloatTypes::INFINITE));
                             seen_infinite += increment;
-                        },
+                        }
                         FpCategory::Zero => {
                             prop_assert!(bits.contains(FloatTypes::ZERO));
                             seen_zero += increment;
-                        },
+                        }
                         FpCategory::Subnormal => {
                             prop_assert!(bits.contains(FloatTypes::SUBNORMAL));
                             seen_subnormal += increment;
-                        },
+                        }
                         FpCategory::Normal => {
                             prop_assert!(bits.contains(FloatTypes::NORMAL));
                             seen_normal += increment;
-                        },
+                        }
                     }
 
                     // Don't count simplified values towards the counts
                     increment = 0;
-                    if !tree.simplify() { break; }
+                    if !tree.simplify() {
+                        break;
+                    }
                 }
             }
 
@@ -1272,7 +1328,7 @@ mod test {
             if bits.contains(FloatTypes::SIGNALING_NAN) {
                 prop_assert!(seen_signaling_nan > 0);
             }
-        }
+        };
     }
 
     proptest! {

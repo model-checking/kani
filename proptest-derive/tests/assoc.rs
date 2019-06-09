@@ -8,12 +8,18 @@
 
 #![allow(unused_variables)]
 
+use proptest::prelude::{prop_assert_eq, proptest, Arbitrary};
 use proptest_derive::Arbitrary;
-use proptest::prelude::{Arbitrary, proptest, prop_assert_eq};
 
-trait Func { type Out; }
-trait FuncA { type OutA: FuncB; }
-trait FuncB { type OutB; }
+trait Func {
+    type Out;
+}
+trait FuncA {
+    type OutA: FuncB;
+}
+trait FuncB {
+    type OutB;
+}
 
 #[derive(Debug)]
 struct TypeA;
@@ -27,9 +33,15 @@ struct OutTy {
     val: usize,
 }
 
-impl Func for TypeA { type Out = OutTy; }
-impl FuncA for TypeA { type OutA = TypeB; }
-impl FuncB for TypeB { type OutB = OutTy; }
+impl Func for TypeA {
+    type Out = OutTy;
+}
+impl FuncA for TypeA {
+    type OutA = TypeB;
+}
+impl FuncB for TypeB {
+    type OutB = OutTy;
+}
 
 #[derive(Debug, Arbitrary)]
 struct T0 {
@@ -114,15 +126,16 @@ struct T15<Tyvar: FuncA> {
 macro_rules! debug {
     ($trait: path, $ty: ident) => {
         impl<T: $trait> ::std::fmt::Debug for $ty<T> {
-            fn fmt(&self, fmt: &mut ::std::fmt::Formatter)
-                -> Result<(), ::std::fmt::Error>
-            {
+            fn fmt(
+                &self,
+                fmt: &mut ::std::fmt::Formatter,
+            ) -> Result<(), ::std::fmt::Error> {
                 fmt.debug_struct(stringify!($ty))
                     .field("field", &"<redacted>")
                     .finish()
             }
         }
-    }
+    };
 }
 
 debug!(FuncB, T5);

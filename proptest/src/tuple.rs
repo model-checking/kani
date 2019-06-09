@@ -119,13 +119,19 @@ mod test {
         for _ in 0..256 {
             // Find a failing test case
             let mut case = input.new_tree(&mut runner).unwrap();
-            if pass(case.current()) { continue; }
+            if pass(case.current()) {
+                continue;
+            }
 
             loop {
                 if pass(case.current()) {
-                    if !case.complicate() { break; }
+                    if !case.complicate() {
+                        break;
+                    }
                 } else {
-                    if !case.simplify() { break; }
+                    if !case.simplify() {
+                        break;
+                    }
                 }
             }
 

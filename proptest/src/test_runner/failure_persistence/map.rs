@@ -7,8 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::std_facade::{fmt, BTreeMap, BTreeSet, Box, Vec};
 use core::any::Any;
-use crate::std_facade::{fmt, Box, Vec, BTreeMap, BTreeSet};
 
 use crate::test_runner::failure_persistence::FailurePersistence;
 use crate::test_runner::failure_persistence::PersistedSeed;
@@ -20,12 +20,14 @@ use crate::test_runner::failure_persistence::PersistedSeed;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MapFailurePersistence {
     /// Backing map, keyed by source_file.
-    pub map: BTreeMap<&'static str, BTreeSet<PersistedSeed>>
+    pub map: BTreeMap<&'static str, BTreeSet<PersistedSeed>>,
 }
 
 impl FailurePersistence for MapFailurePersistence {
-    fn load_persisted_failures2(&self, source_file: Option<&'static str>)
-                                -> Vec<PersistedSeed> {
+    fn load_persisted_failures2(
+        &self,
+        source_file: Option<&'static str>,
+    ) -> Vec<PersistedSeed> {
         source_file
             .and_then(|source| self.map.get(source))
             .map(|seeds| seeds.iter().cloned().collect::<Vec<_>>())
@@ -40,7 +42,7 @@ impl FailurePersistence for MapFailurePersistence {
     ) {
         let s = match source_file {
             Some(sf) => sf,
-            None => return
+            None => return,
         };
         let set = self.map.entry(s).or_insert_with(BTreeSet::new);
         set.insert(seed);
@@ -51,10 +53,15 @@ impl FailurePersistence for MapFailurePersistence {
     }
 
     fn eq(&self, other: &dyn FailurePersistence) -> bool {
-        other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
+        other
+            .as_any()
+            .downcast_ref::<Self>()
+            .map_or(false, |x| x == self)
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[cfg(test)]
@@ -65,7 +72,8 @@ mod tests {
     #[test]
     fn initial_map_is_empty() {
         assert!(MapFailurePersistence::default()
-                    .load_persisted_failures2(HI_PATH).is_empty())
+            .load_persisted_failures2(HI_PATH)
+            .is_empty())
     }
 
     #[test]

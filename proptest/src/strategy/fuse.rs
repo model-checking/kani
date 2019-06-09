@@ -56,7 +56,7 @@ impl<T> Fuse<T> {
     }
 }
 
-impl<T : Strategy> Strategy for Fuse<T> {
+impl<T: Strategy> Strategy for Fuse<T> {
     type Tree = Fuse<T::Tree>;
     type Value = T::Value;
 
@@ -65,7 +65,7 @@ impl<T : Strategy> Strategy for Fuse<T> {
     }
 }
 
-impl<T : ValueTree> Fuse<T> {
+impl<T: ValueTree> Fuse<T> {
     /// Return whether a call to `simplify()` may be productive.
     ///
     /// Formally, this is true if one of the following holds:
@@ -108,7 +108,7 @@ impl<T : ValueTree> Fuse<T> {
     }
 }
 
-impl<T : ValueTree> ValueTree for Fuse<T> {
+impl<T: ValueTree> ValueTree for Fuse<T> {
     type Value = T::Value;
 
     fn current(&self) -> T::Value {

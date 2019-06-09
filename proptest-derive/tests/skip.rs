@@ -9,7 +9,7 @@
 #![feature(never_type)]
 #![allow(dead_code, unreachable_code)]
 
-use proptest::prelude::{Arbitrary, proptest, prop_assert_eq, prop_assert};
+use proptest::prelude::{prop_assert, prop_assert_eq, proptest, Arbitrary};
 use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary, PartialEq)]

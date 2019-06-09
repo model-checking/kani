@@ -14,7 +14,8 @@ fn run_mode(src: &'static str, mode: &'static str) {
     let mut config = ct::Config::default();
 
     config.mode = mode.parse().expect("invalid mode");
-    config.target_rustcflags = Some("-L ../target/debug/deps --edition=2018".to_owned());
+    config.target_rustcflags =
+        Some("-L ../target/debug/deps --edition=2018".to_owned());
     if let Ok(name) = env::var("TESTNAME") {
         config.filter = Some(name);
     }

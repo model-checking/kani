@@ -251,7 +251,7 @@ mod test {
 
     #[test]
     fn shrinks_fully_ltr() {
-        fn pass(a: [i32;2]) -> bool {
+        fn pass(a: [i32; 2]) -> bool {
             a[0] * a[1] <= 9
         }
 
@@ -262,13 +262,19 @@ mod test {
         for _ in 0..256 {
             // Find a failing test case
             let mut case = input.new_tree(&mut runner).unwrap();
-            if pass(case.current()) { continue; }
+            if pass(case.current()) {
+                continue;
+            }
 
             loop {
                 if pass(case.current()) {
-                    if !case.complicate() { break; }
+                    if !case.complicate() {
+                        break;
+                    }
                 } else {
-                    if !case.simplify() { break; }
+                    if !case.simplify() {
+                        break;
+                    }
                 }
             }
 
@@ -286,6 +292,6 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        check_strategy_sanity([(0i32..1000),(1i32..1000)], None);
+        check_strategy_sanity([(0i32..1000), (1i32..1000)], None);
     }
 }

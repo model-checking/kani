@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::{self, Expr as E, Lit as L, IntSuffix as IS, BinOp as B, UnOp as U};
+use syn::{self, BinOp as B, Expr as E, IntSuffix as IS, Lit as L, UnOp as U};
 
 /// Adapted from https://docs.rs/syn/0.14.2/src/syn/lit.rs.html#943 to accept
 /// u128.
@@ -35,7 +35,7 @@ fn parse_lit_int(mut s: &str) -> Option<u128> {
             s = &s[2..];
             2
         }
-        (b'0'...b'9', _) => 10,
+        (b'0'..=b'9', _) => 10,
         _ => unreachable!(),
     };
 
@@ -43,9 +43,9 @@ fn parse_lit_int(mut s: &str) -> Option<u128> {
     loop {
         let b = byte(s, 0);
         let digit = match b {
-            b'0'...b'9' => u128::from(b - b'0'),
-            b'a'...b'f' if base > 10 => 10 + u128::from(b - b'a'),
-            b'A'...b'F' if base > 10 => 10 + u128::from(b - b'A'),
+            b'0'..=b'9' => u128::from(b - b'0'),
+            b'a'..=b'f' if base > 10 => 10 + u128::from(b - b'a'),
+            b'A'..=b'F' if base > 10 => 10 + u128::from(b - b'A'),
             b'_' => {
                 s = &s[1..];
                 continue;
@@ -70,37 +70,39 @@ fn parse_lit_int(mut s: &str) -> Option<u128> {
 
 /// Parse a suffix of an integer literal.
 fn parse_suffix(lit: &str) -> IS {
-    [("i8", IS::I8),
-     ("i16", IS::I16),
-     ("i32", IS::I32),
-     ("i64", IS::I64),
-     ("i128", IS::I128),
-     ("isize", IS::Isize),
-     ("u8", IS::U8),
-     ("u16", IS::U16),
-     ("u32", IS::U32),
-     ("u64", IS::U64),
-     ("u128", IS::U128),
-     ("usize", IS::Usize)]
-        .iter()
-        .find(|&(s, _)| lit.ends_with(s))
-        .map(|(_, suffix)| suffix.clone())
-        .unwrap_or(IS::None)
+    [
+        ("i8", IS::I8),
+        ("i16", IS::I16),
+        ("i32", IS::I32),
+        ("i64", IS::I64),
+        ("i128", IS::I128),
+        ("isize", IS::Isize),
+        ("u8", IS::U8),
+        ("u16", IS::U16),
+        ("u32", IS::U32),
+        ("u64", IS::U64),
+        ("u128", IS::U128),
+        ("usize", IS::Usize),
+    ]
+    .iter()
+    .find(|&(s, _)| lit.ends_with(s))
+    .map(|(_, suffix)| suffix.clone())
+    .unwrap_or(IS::None)
 }
 
 /// Interprets an integer literal in a string.
 fn eval_str_int(lit: &str) -> Option<u128> {
-    use std::{u8, u16, u32, u64, i8, i16, i32, i64, i128};
+    use std::{i128, i16, i32, i64, i8, u16, u32, u64, u8};
     use syn::IntSuffix::*;
 
     let val = parse_lit_int(lit)?;
     Some(match parse_suffix(lit) {
         None => val,
-        I8  if val <= i8::MAX  as u128 => val,
+        I8 if val <= i8::MAX as u128 => val,
         I16 if val <= i16::MAX as u128 => val,
         I32 if val <= i32::MAX as u128 => val,
         I64 if val <= i64::MAX as u128 => val,
-        U8  if val <= u128::from(u8::MAX)  => val,
+        U8 if val <= u128::from(u8::MAX) => val,
         U16 if val <= u128::from(u16::MAX) => val,
         U32 if val <= u128::from(u32::MAX) => val,
         U64 if val <= u128::from(u64::MAX) => val,
@@ -132,7 +134,7 @@ fn eval_lit(lit: &syn::ExprLit) -> Option<u128> {
         L::Int(lit) => eval_lit_int(lit),
         L::Byte(lit) => Some(u128::from(lit.value())),
         L::Verbatim(lit) => eval_lit_verbatim(lit),
-        _ => None
+        _ => None,
     }
 }
 
@@ -151,10 +153,8 @@ fn eval_binary(bin: &syn::ExprBinary) -> Option<u128> {
         B::BitXor(_) => l ^ r,
         B::BitAnd(_) => l & r,
         B::BitOr(_) => l | r,
-        B::Shl(_) if r <= u128::from(u32::MAX)
-            => l.checked_shl(r as u32)?,
-        B::Shr(_) if r <= u128::from(u32::MAX)
-            => l.checked_shr(r as u32)?,
+        B::Shl(_) if r <= u128::from(u32::MAX) => l.checked_shl(r as u32)?,
+        B::Shr(_) if r <= u128::from(u32::MAX) => l.checked_shr(r as u32)?,
         _ => return None,
     })
 }

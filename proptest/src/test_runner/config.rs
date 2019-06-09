@@ -1,5 +1,5 @@
 //-
-// Copyright 2017, 2018 The proptest developers
+// Copyright 2017, 2018, 2019 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -13,17 +13,17 @@ use core::u32;
 #[cfg(feature = "std")]
 use std::env;
 #[cfg(feature = "std")]
-use std::fmt;
-#[cfg(feature = "std")]
 use std::ffi::OsString;
+#[cfg(feature = "std")]
+use std::fmt;
 #[cfg(feature = "std")]
 use std::str::FromStr;
 
+use crate::test_runner::result_cache::{noop_result_cache, ResultCache};
+use crate::test_runner::rng::RngAlgorithm;
 use crate::test_runner::FailurePersistence;
 #[cfg(feature = "std")]
 use crate::test_runner::FileFailurePersistence;
-use crate::test_runner::rng::RngAlgorithm;
-use crate::test_runner::result_cache::{noop_result_cache, ResultCache};
 
 #[cfg(feature = "std")]
 const CASES: &str = "PROPTEST_CASES";
@@ -47,8 +47,11 @@ const RNG_ALGORITHM: &str = "PROPTEST_RNG_ALGORITHM";
 
 #[cfg(feature = "std")]
 fn contextualize_config(mut result: Config) -> Config {
-    fn parse_or_warn<T : FromStr + fmt::Display>(
-        src: &OsString, dst: &mut T, typ: &str, var: &str
+    fn parse_or_warn<T: FromStr + fmt::Display>(
+        src: &OsString,
+        dst: &mut T,
+        typ: &str,
+        var: &str,
     ) {
         if let Some(src) = src.to_str() {
             if let Ok(value) = src.parse() {
@@ -56,46 +59,77 @@ fn contextualize_config(mut result: Config) -> Config {
             } else {
                 eprintln!(
                     "proptest: The env-var {}={} can't be parsed as {}, \
-                     using default of {}.", var, src, typ, *dst);
+                     using default of {}.",
+                    var, src, typ, *dst
+                );
             }
         } else {
             eprintln!(
                 "proptest: The env-var {} is not valid, using \
-                 default of {}.", var, *dst);
+                 default of {}.",
+                var, *dst
+            );
         }
     }
 
-    result.failure_persistence = Some(Box::new(FileFailurePersistence::default()));
-    for (var, value) in env::vars_os().filter_map(
-            |(k,v)| k.into_string().ok().map(|k| (k,v))) {
+    result.failure_persistence =
+        Some(Box::new(FileFailurePersistence::default()));
+    for (var, value) in
+        env::vars_os().filter_map(|(k, v)| k.into_string().ok().map(|k| (k, v)))
+    {
         match var.as_str() {
             CASES => parse_or_warn(&value, &mut result.cases, "u32", CASES),
             MAX_LOCAL_REJECTS => parse_or_warn(
-                &value, &mut result.max_local_rejects,
-                "u32", MAX_LOCAL_REJECTS),
+                &value,
+                &mut result.max_local_rejects,
+                "u32",
+                MAX_LOCAL_REJECTS,
+            ),
             MAX_GLOBAL_REJECTS => parse_or_warn(
-                &value, &mut result.max_global_rejects,
-                "u32", MAX_GLOBAL_REJECTS),
+                &value,
+                &mut result.max_global_rejects,
+                "u32",
+                MAX_GLOBAL_REJECTS,
+            ),
             MAX_FLAT_MAP_REGENS => parse_or_warn(
-                &value, &mut result.max_flat_map_regens,
-                "u32", MAX_FLAT_MAP_REGENS),
+                &value,
+                &mut result.max_flat_map_regens,
+                "u32",
+                MAX_FLAT_MAP_REGENS,
+            ),
             #[cfg(feature = "fork")]
             FORK => parse_or_warn(&value, &mut result.fork, "bool", FORK),
             #[cfg(feature = "timeout")]
-            TIMEOUT => parse_or_warn(
-                &value, &mut result.timeout, "timeout", TIMEOUT),
+            TIMEOUT => {
+                parse_or_warn(&value, &mut result.timeout, "timeout", TIMEOUT)
+            }
             MAX_SHRINK_TIME => parse_or_warn(
-                &value, &mut result.max_shrink_time, "u32", MAX_SHRINK_TIME),
+                &value,
+                &mut result.max_shrink_time,
+                "u32",
+                MAX_SHRINK_TIME,
+            ),
             MAX_SHRINK_ITERS => parse_or_warn(
-                &value, &mut result.max_shrink_iters, "u32", MAX_SHRINK_ITERS),
-            VERBOSE => parse_or_warn(
-                &value, &mut result.verbose, "u32", VERBOSE),
+                &value,
+                &mut result.max_shrink_iters,
+                "u32",
+                MAX_SHRINK_ITERS,
+            ),
+            VERBOSE => {
+                parse_or_warn(&value, &mut result.verbose, "u32", VERBOSE)
+            }
             RNG_ALGORITHM => parse_or_warn(
-                &value, &mut result.rng_algorithm, "RngAlgorithm", RNG_ALGORITHM),
+                &value,
+                &mut result.rng_algorithm,
+                "RngAlgorithm",
+                RNG_ALGORITHM,
+            ),
 
-            _ => if var.starts_with("PROPTEST_") {
-                eprintln!("proptest: Ignoring unknown env-var {}.", var);
-            },
+            _ => {
+                if var.starts_with("PROPTEST_") {
+                    eprintln!("proptest: Ignoring unknown env-var {}.", var);
+                }
+            }
         }
     }
 
@@ -103,7 +137,9 @@ fn contextualize_config(mut result: Config) -> Config {
 }
 
 #[cfg(not(feature = "std"))]
-fn contextualize_config(result: Config) -> Config { result }
+fn contextualize_config(result: Config) -> Config {
+    result
+}
 
 fn default_default_config() -> Config {
     Config {
@@ -133,9 +169,8 @@ fn default_default_config() -> Config {
 // defaults.
 #[cfg(feature = "std")]
 lazy_static! {
-    static ref DEFAULT_CONFIG: Config = {
-        contextualize_config(default_default_config())
-    };
+    static ref DEFAULT_CONFIG: Config =
+        { contextualize_config(default_default_config()) };
 }
 
 /// Configuration for how a proptest test should be run.
@@ -256,7 +291,13 @@ pub struct Config {
     /// Give up on shrinking if more than this number of iterations of the test
     /// code are run.
     ///
+    /// Setting this to `std::u32::MAX` causes the actual limit to be four
+    /// times the number of test cases.
+    ///
     /// Setting this value to `0` disables shrinking altogether.
+    ///
+    /// Note that the type of this field will change in a future version of
+    /// proptest to better accommodate its special values.
     ///
     /// The default is `std::u32::MAX`, which can be overridden by setting the
     /// `PROPTEST_MAX_SHRINK_ITERS` environment variable.
@@ -278,7 +319,7 @@ pub struct Config {
     ///
     /// Caching incurs its own overhead, and may very well make your test run
     /// more slowly.
-    pub result_cache: fn () -> Box<dyn ResultCache>,
+    pub result_cache: fn() -> Box<dyn ResultCache>,
 
     /// Set to non-zero values to cause proptest to emit human-targeted
     /// messages to stderr as it runs.
@@ -327,7 +368,10 @@ impl Config {
     /// );
     /// ```
     pub fn with_cases(cases: u32) -> Self {
-        Self { cases, .. Config::default() }
+        Self {
+            cases,
+            ..Config::default()
+        }
     }
 
     /// Constructs a `Config` only differing from the `default()` in the
@@ -344,7 +388,10 @@ impl Config {
     /// );
     /// ```
     pub fn with_source_file(source_file: &'static str) -> Self {
-        Self { source_file: Some(source_file), .. Config::default() }
+        Self {
+            source_file: Some(source_file),
+            ..Config::default()
+        }
     }
 
     /// Constructs a `Config` only differing from the provided Config instance, `self`,
@@ -406,6 +453,17 @@ impl Config {
     #[cfg(not(feature = "timeout"))]
     pub fn timeout(&self) -> u32 {
         0
+    }
+
+    /// Returns the configured limit on shrinking iterations.
+    ///
+    /// This takes into account the special "automatic" behaviour.
+    pub fn max_shrink_iters(&self) -> u32 {
+        if u32::MAX == self.max_shrink_iters {
+            self.cases.saturating_mul(4)
+        } else {
+            self.max_shrink_iters
+        }
     }
 
     // Used by macros to force the config to be owned without depending on

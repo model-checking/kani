@@ -9,14 +9,14 @@
 
 //! Arbitrary implementations for `std::result`.
 
+use crate::std_facade::string;
 use core::fmt;
 use core::result::IntoIter;
-use crate::std_facade::string;
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
-use crate::result::*;
 use crate::arbitrary::*;
+use crate::result::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 // These are Result with uninhabited type in some variant:
 arbitrary!([A: Arbitrary] Result<A, string::ParseError>,
@@ -57,7 +57,7 @@ arbitrary!([A: Arbitrary, B: Arbitrary] Result<A, B>,
 
 impl<A: fmt::Debug, E: Arbitrary> functor::ArbitraryF1<A> for Result<A, E>
 where
-    E::Strategy: 'static
+    E::Strategy: 'static,
 {
     type Parameters = product_type![Probability, E::Parameters];
 
@@ -71,12 +71,14 @@ where
     }
 }
 
-impl<A: fmt::Debug, B: fmt::Debug> functor::ArbitraryF2<A, B>
-for Result<A, B> {
+impl<A: fmt::Debug, B: fmt::Debug> functor::ArbitraryF2<A, B> for Result<A, B> {
     type Parameters = Probability;
 
-    fn lift2_with<AS, BS>(fst: AS, snd: BS, args: Self::Parameters)
-        -> BoxedStrategy<Self>
+    fn lift2_with<AS, BS>(
+        fst: AS,
+        snd: BS,
+        args: Self::Parameters,
+    ) -> BoxedStrategy<Self>
     where
         AS: Strategy<Value = A> + 'static,
         BS: Strategy<Value = B> + 'static,

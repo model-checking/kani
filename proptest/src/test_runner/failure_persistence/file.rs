@@ -15,12 +15,14 @@ use std::env;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
+use std::string::{String, ToString};
 use std::sync::RwLock;
 use std::vec::Vec;
-use std::string::{String, ToString};
 
-use crate::test_runner::failure_persistence::{PersistedSeed, FailurePersistence};
 use self::FileFailurePersistence::*;
+use crate::test_runner::failure_persistence::{
+    FailurePersistence, PersistedSeed,
+};
 
 /// Describes how failing test cases are persisted.
 ///
@@ -80,12 +82,16 @@ impl Default for FileFailurePersistence {
 }
 
 impl FailurePersistence for FileFailurePersistence {
-    fn load_persisted_failures2(&self, source_file: Option<&'static str>)
-                                -> Vec<PersistedSeed> {
+    fn load_persisted_failures2(
+        &self,
+        source_file: Option<&'static str>,
+    ) -> Vec<PersistedSeed> {
         let p = self.resolve(
-            source_file.and_then(|s| absolutize_source_file(Path::new(s)))
+            source_file
+                .and_then(|s| absolutize_source_file(Path::new(s)))
                 .as_ref()
-                .map(|cow| &**cow));
+                .map(|cow| &**cow),
+        );
 
         let path: Option<&PathBuf> = p.as_ref();
         let result: io::Result<Vec<PersistedSeed>> = path.map_or_else(
@@ -94,11 +100,13 @@ impl FailurePersistence for FileFailurePersistence {
                 // .ok() instead of .unwrap() so we don't propagate panics here
                 let _lock = PERSISTENCE_LOCK.read().ok();
                 io::BufReader::new(fs::File::open(path)?)
-                    .lines().enumerate()
+                    .lines()
+                    .enumerate()
                     .filter_map(|(lineno, line)| match line {
                         Err(err) => Some(Err(err)),
-                        Ok(line) => parse_seed_line(line, path, lineno).map(Ok)
-                    }).collect()
+                        Ok(line) => parse_seed_line(line, path, lineno).map(Ok),
+                    })
+                    .collect()
             },
         );
 
@@ -138,7 +146,11 @@ impl FailurePersistence for FileFailurePersistence {
                 .expect("proptest: couldn't write seed line.");
 
             if let Err(e) = write_seed_data_to_file(&path, &to_write) {
-                eprintln!("proptest: failed to append to {}: {}", path.display(), e);
+                eprintln!(
+                    "proptest: failed to append to {}: {}",
+                    path.display(),
+                    e
+                );
             } else if is_new {
                 eprintln!(
                     "proptest: Saving this and future failures in {}\n\
@@ -157,10 +169,15 @@ impl FailurePersistence for FileFailurePersistence {
     }
 
     fn eq(&self, other: &dyn FailurePersistence) -> bool {
-        other.as_any().downcast_ref::<Self>().map_or(false, |x| x == self)
+        other
+            .as_any()
+            .downcast_ref::<Self>()
+            .map_or(false, |x| x == self)
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// Ensure that the source file to use for resolving the location of the persisted
@@ -183,7 +200,7 @@ fn absolutize_source_file<'a>(source: &'a Path) -> Option<Cow<'a, Path>> {
 }
 
 fn absolutize_source_file_with_cwd<'a>(
-    getcwd: impl FnOnce () -> io::Result<PathBuf>,
+    getcwd: impl FnOnce() -> io::Result<PathBuf>,
     source: &'a Path,
 ) -> Option<Cow<'a, Path>> {
     if source.is_absolute() {
@@ -233,8 +250,11 @@ fn absolutize_source_file_with_cwd<'a>(
     }
 }
 
-fn parse_seed_line(mut line: String, path: &Path, lineno: usize)
-                   -> Option<PersistedSeed> {
+fn parse_seed_line(
+    mut line: String,
+    path: &Path,
+    lineno: usize,
+) -> Option<PersistedSeed> {
     // Remove anything after and including '#':
     if let Some(comment_start) = line.find('#') {
         line.truncate(comment_start);
@@ -243,8 +263,11 @@ fn parse_seed_line(mut line: String, path: &Path, lineno: usize)
     if line.len() > 0 {
         let ret = line.parse::<PersistedSeed>().ok();
         if !ret.is_some() {
-            eprintln!("proptest: {}:{}: unparsable line, ignoring",
-                      path.display(), lineno + 1);
+            eprintln!(
+                "proptest: {}:{}: unparsable line, ignoring",
+                path.display(),
+                lineno + 1
+            );
         }
         return ret;
     }
@@ -252,10 +275,11 @@ fn parse_seed_line(mut line: String, path: &Path, lineno: usize)
     None
 }
 
-fn write_seed_line(buf: &mut Vec<u8>, seed: &PersistedSeed,
-                   shrunken_value: &dyn Debug)
-    -> io::Result<()>
-{
+fn write_seed_line(
+    buf: &mut Vec<u8>,
+    seed: &PersistedSeed,
+    shrunken_value: &dyn Debug,
+) -> io::Result<()> {
     // Write the seed itself
     write!(buf, "{}", seed.to_string())?;
 
@@ -276,8 +300,9 @@ fn write_seed_line(buf: &mut Vec<u8>, seed: &PersistedSeed,
 }
 
 fn write_header(buf: &mut Vec<u8>) -> io::Result<()> {
-    writeln!(buf,
-"\
+    writeln!(
+        buf,
+        "\
 # Seeds for failure cases proptest has generated in the past. It is
 # automatically read and these particular cases re-run before any
 # novel cases are generated.
@@ -314,8 +339,8 @@ impl FileFailurePersistence {
                     let mut dir = Cow::into_owned(source_path.clone());
                     let mut found = false;
                     while dir.pop() {
-                        if dir.join("lib.rs").is_file() ||
-                            dir.join("main.rs").is_file()
+                        if dir.join("lib.rs").is_file()
+                            || dir.join("main.rs").is_file()
                         {
                             found = true;
                             break;
@@ -371,7 +396,9 @@ impl FileFailurePersistence {
 
             Direct(path) => Some(Path::new(path).to_owned()),
 
-            _NonExhaustive => panic!("FailurePersistence set to _NonExhaustive"),
+            _NonExhaustive => {
+                panic!("FailurePersistence set to _NonExhaustive")
+            }
         }
     }
 }
@@ -477,7 +504,8 @@ mod tests {
     fn relative_source_files_absolutified() {
         const TEST_RUNNER_PATH: &[&str] = &["src", "test_runner", "mod.rs"];
         lazy_static! {
-            static ref TEST_RUNNER_RELATIVE: PathBuf = TEST_RUNNER_PATH.iter().collect();
+            static ref TEST_RUNNER_RELATIVE: PathBuf =
+                TEST_RUNNER_PATH.iter().collect();
         }
         const CARGO_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -491,7 +519,8 @@ mod tests {
             absolutize_source_file_with_cwd(
                 || Ok(Path::new(CARGO_DIR).to_owned()),
                 &TEST_RUNNER_RELATIVE
-            ).unwrap()
+            )
+            .unwrap()
         );
 
         // Running from test subdirectory
@@ -500,7 +529,8 @@ mod tests {
             absolutize_source_file_with_cwd(
                 || Ok(Path::new(CARGO_DIR).join("target")),
                 &TEST_RUNNER_RELATIVE
-            ).unwrap()
+            )
+            .unwrap()
         );
     }
 }

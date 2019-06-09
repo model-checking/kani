@@ -11,10 +11,12 @@
 
 use core::cmp::Ord;
 use core::hash::Hash;
-use core::ops::{Add, Range, RangeTo, RangeInclusive, RangeToInclusive};
+use core::ops::{Add, Range, RangeInclusive, RangeTo, RangeToInclusive};
 use core::usize;
 
-use crate::std_facade::{fmt, Vec, VecDeque, BinaryHeap, BTreeMap, BTreeSet, LinkedList};
+use crate::std_facade::{
+    fmt, BTreeMap, BTreeSet, BinaryHeap, LinkedList, Vec, VecDeque,
+};
 
 #[cfg(feature = "std")]
 use crate::std_facade::{HashMap, HashSet};
@@ -22,8 +24,8 @@ use crate::std_facade::{HashMap, HashSet};
 use crate::bits::{BitSetLike, VarBitSet};
 use crate::num::sample_uniform_incl;
 use crate::strategy::*;
-use crate::tuple::TupleValueTree;
 use crate::test_runner::*;
+use crate::tuple::TupleValueTree;
 
 //==============================================================================
 // SizeRange
@@ -102,10 +104,15 @@ impl SizeRange {
 
     pub(crate) fn assert_nonempty(&self) {
         if self.is_empty() {
-            panic!("Invalid use of empty size range. (hint: did you \
-                    accidentally write {}..{} where you meant {}..={} \
-                    somewhere?)", self.start(), self.end_excl(),
-                   self.start(), self.end_excl());
+            panic!(
+                "Invalid use of empty size range. (hint: did you \
+                 accidentally write {}..{} where you meant {}..={} \
+                 somewhere?)",
+                self.start(),
+                self.end_excl(),
+                self.start(),
+                self.end_excl()
+            );
         }
     }
 }
@@ -113,22 +120,30 @@ impl SizeRange {
 /// Given `(low: usize, high: usize)`,
 /// then a size range of `[low..high)` is the result.
 impl From<(usize, usize)> for SizeRange {
-    fn from((low, high): (usize, usize)) -> Self { size_range(low..high) }
+    fn from((low, high): (usize, usize)) -> Self {
+        size_range(low..high)
+    }
 }
 
 /// Given `exact`, then a size range of `[exact, exact]` is the result.
 impl From<usize> for SizeRange {
-    fn from(exact: usize) -> Self { size_range(exact..=exact) }
+    fn from(exact: usize) -> Self {
+        size_range(exact..=exact)
+    }
 }
 
 /// Given `..high`, then a size range `[0, high)` is the result.
 impl From<RangeTo<usize>> for SizeRange {
-    fn from(high: RangeTo<usize>) -> Self { size_range(0..high.end) }
+    fn from(high: RangeTo<usize>) -> Self {
+        size_range(0..high.end)
+    }
 }
 
 /// Given `low .. high`, then a size range `[low, high)` is the result.
 impl From<Range<usize>> for SizeRange {
-    fn from(r: Range<usize>) -> Self { SizeRange(r) }
+    fn from(r: Range<usize>) -> Self {
+        SizeRange(r)
+    }
 }
 
 /// Given `low ..= high`, then a size range `[low, high]` is the result.
@@ -140,7 +155,9 @@ impl From<RangeInclusive<usize>> for SizeRange {
 
 /// Given `..=high`, then a size range `[0, high]` is the result.
 impl From<RangeToInclusive<usize>> for SizeRange {
-    fn from(high: RangeToInclusive<usize>) -> Self { size_range(0..=high.end) }
+    fn from(high: RangeToInclusive<usize>) -> Self {
+        size_range(0..=high.end)
+    }
 }
 
 #[cfg(feature = "frunk")]
@@ -148,10 +165,14 @@ impl Generic for SizeRange {
     type Repr = RangeInclusive<usize>;
 
     /// Converts the `SizeRange` into `Range<usize>`.
-    fn into(self) -> Self::Repr { self.0 }
+    fn into(self) -> Self::Repr {
+        self.0
+    }
 
     /// Converts `RangeInclusive<usize>` into `SizeRange`.
-    fn from(r: Self::Repr) -> Self { r.into() }
+    fn from(r: Self::Repr) -> Self {
+        r.into()
+    }
 }
 
 /// Adds `usize` to both start and end of the bounds.
@@ -175,7 +196,7 @@ impl Add<usize> for SizeRange {
 /// Created by the `vec()` function in the same module.
 #[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Debug)]
-pub struct VecStrategy<T : Strategy> {
+pub struct VecStrategy<T: Strategy> {
     element: T,
     size: SizeRange,
 }
@@ -185,8 +206,10 @@ pub struct VecStrategy<T : Strategy> {
 ///
 /// To make a `Vec` with a fixed number of elements, each with its own
 /// strategy, you can instead make a `Vec` of strategies (boxed if necessary).
-pub fn vec<T: Strategy>(element: T, size: impl Into<SizeRange>)
-                        -> VecStrategy<T> {
+pub fn vec<T: Strategy>(
+    element: T,
+    size: impl Into<SizeRange>,
+) -> VecStrategy<T> {
     let size = size.into();
     size.assert_nonempty();
     VecStrategy { element, size }
@@ -215,9 +238,10 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `VecDeque`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn vec_deque<T: Strategy>(element: T, size: impl Into<SizeRange>)
-    -> VecDequeStrategy<T>
-{
+pub fn vec_deque<T: Strategy>(
+    element: T,
+    size: impl Into<SizeRange>,
+) -> VecDequeStrategy<T> {
     VecDequeStrategy(statics::Map::new(vec(element, size), VecToDeque))
 }
 
@@ -244,9 +268,10 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `LinkedList`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn linked_list<T : Strategy>(element: T, size: impl Into<SizeRange>)
-     -> LinkedListStrategy<T>
-{
+pub fn linked_list<T: Strategy>(
+    element: T,
+    size: impl Into<SizeRange>,
+) -> LinkedListStrategy<T> {
     LinkedListStrategy(statics::Map::new(vec(element, size), VecToLl))
 }
 
@@ -273,9 +298,13 @@ opaque_strategy_wrapper! {
 
 /// Create a strategy to generate `BinaryHeap`s containing elements drawn from
 /// `element` and with a size range given by `size`.
-pub fn binary_heap<T : Strategy>(element: T, size: impl Into<SizeRange>)
-    -> BinaryHeapStrategy<T>
-where T::Value : Ord {
+pub fn binary_heap<T: Strategy>(
+    element: T,
+    size: impl Into<SizeRange>,
+) -> BinaryHeapStrategy<T>
+where
+    T::Value: Ord,
+{
     BinaryHeapStrategy(statics::Map::new(vec(element, size), VecToBinHeap))
 }
 
@@ -291,7 +320,7 @@ mapfn! {
 struct MinSize(usize);
 
 #[cfg(feature = "std")]
-impl<T : Eq + Hash> statics::FilterFn<HashSet<T>> for MinSize {
+impl<T: Eq + Hash> statics::FilterFn<HashSet<T>> for MinSize {
     fn apply(&self, set: &HashSet<T>) -> bool {
         set.len() >= self.0
     }
@@ -320,14 +349,19 @@ opaque_strategy_wrapper! {
 /// has at least the minimum number of elements, in case `element` should
 /// produce duplicate values.
 #[cfg(feature = "std")]
-pub fn hash_set<T : Strategy>(element: T, size: impl Into<SizeRange>)
-                              -> HashSetStrategy<T>
-where T::Value : Hash + Eq {
+pub fn hash_set<T: Strategy>(
+    element: T,
+    size: impl Into<SizeRange>,
+) -> HashSetStrategy<T>
+where
+    T::Value: Hash + Eq,
+{
     let size = size.into();
     HashSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size.clone()), VecToHashSet),
         "HashSet minimum size".into(),
-        MinSize(size.start())))
+        MinSize(size.start()),
+    ))
 }
 
 mapfn! {
@@ -337,7 +371,7 @@ mapfn! {
     }
 }
 
-impl<T : Ord> statics::FilterFn<BTreeSet<T>> for MinSize {
+impl<T: Ord> statics::FilterFn<BTreeSet<T>> for MinSize {
     fn apply(&self, set: &BTreeSet<T>) -> bool {
         set.len() >= self.0
     }
@@ -364,14 +398,19 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeSet` has at least the minimum number of elements, in case `element`
 /// should produce duplicate values.
-pub fn btree_set<T : Strategy>(element: T, size: impl Into<SizeRange>)
-                               -> BTreeSetStrategy<T>
-where T::Value : Ord {
+pub fn btree_set<T: Strategy>(
+    element: T,
+    size: impl Into<SizeRange>,
+) -> BTreeSetStrategy<T>
+where
+    T::Value: Ord,
+{
     let size = size.into();
     BTreeSetStrategy(statics::Filter::new(
         statics::Map::new(vec(element, size.clone()), VecToBTreeSet),
         "BTreeSet minimum size".into(),
-        MinSize(size.start())))
+        MinSize(size.start()),
+    ))
 }
 
 mapfn! {
@@ -384,7 +423,7 @@ mapfn! {
 }
 
 #[cfg(feature = "std")]
-impl<K : Hash + Eq, V> statics::FilterFn<HashMap<K, V>> for MinSize {
+impl<K: Hash + Eq, V> statics::FilterFn<HashMap<K, V>> for MinSize {
     fn apply(&self, map: &HashMap<K, V>) -> bool {
         map.len() >= self.0
     }
@@ -418,14 +457,20 @@ opaque_strategy_wrapper! {
 /// has at least the minimum number of elements, in case `key` should produce
 /// duplicate values.
 #[cfg(feature = "std")]
-pub fn hash_map<K : Strategy, V : Strategy>
-    (key: K, value: V, size: impl Into<SizeRange>) -> HashMapStrategy<K, V>
-where K::Value : Hash + Eq {
+pub fn hash_map<K: Strategy, V: Strategy>(
+    key: K,
+    value: V,
+    size: impl Into<SizeRange>,
+) -> HashMapStrategy<K, V>
+where
+    K::Value: Hash + Eq,
+{
     let size = size.into();
     HashMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToHashMap),
         "HashMap minimum size".into(),
-        MinSize(size.start())))
+        MinSize(size.start()),
+    ))
 }
 
 mapfn! {
@@ -436,7 +481,7 @@ mapfn! {
     }
 }
 
-impl<K : Ord, V> statics::FilterFn<BTreeMap<K, V>> for MinSize {
+impl<K: Ord, V> statics::FilterFn<BTreeMap<K, V>> for MinSize {
     fn apply(&self, map: &BTreeMap<K, V>) -> bool {
         map.len() >= self.0
     }
@@ -468,14 +513,20 @@ opaque_strategy_wrapper! {
 /// This strategy will implicitly do local rejects to ensure that the
 /// `BTreeMap` has at least the minimum number of elements, in case `key`
 /// should produce duplicate values.
-pub fn btree_map<K : Strategy, V : Strategy>
-    (key: K, value: V, size: impl Into<SizeRange>) -> BTreeMapStrategy<K, V>
-where K::Value : Ord {
+pub fn btree_map<K: Strategy, V: Strategy>(
+    key: K,
+    value: V,
+    size: impl Into<SizeRange>,
+) -> BTreeMapStrategy<K, V>
+where
+    K::Value: Ord,
+{
     let size = size.into();
     BTreeMapStrategy(statics::Filter::new(
         statics::Map::new(vec((key, value), size.clone()), VecToBTreeMap),
         "BTreeMap minimum size".into(),
-        MinSize(size.start())))
+        MinSize(size.start()),
+    ))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -486,7 +537,7 @@ enum Shrink {
 
 /// `ValueTree` corresponding to `VecStrategy`.
 #[derive(Clone, Debug)]
-pub struct VecValueTree<T : ValueTree> {
+pub struct VecValueTree<T: ValueTree> {
     elements: Vec<T>,
     included_elements: VarBitSet,
     min_size: usize,
@@ -494,7 +545,7 @@ pub struct VecValueTree<T : ValueTree> {
     prev_shrink: Option<Shrink>,
 }
 
-impl<T : Strategy> Strategy for VecStrategy<T> {
+impl<T: Strategy> Strategy for VecStrategy<T> {
     type Tree = VecValueTree<T::Tree>;
     type Value = Vec<T::Value>;
 
@@ -516,14 +567,16 @@ impl<T : Strategy> Strategy for VecStrategy<T> {
     }
 }
 
-impl<T : Strategy> Strategy for Vec<T> {
+impl<T: Strategy> Strategy for Vec<T> {
     type Tree = VecValueTree<T::Tree>;
     type Value = Vec<T::Value>;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let len = self.len();
-        let elements = self.iter().map(
-            |t| t.new_tree(runner)).collect::<Result<Vec<_>, Reason>>()?;
+        let elements = self
+            .iter()
+            .map(|t| t.new_tree(runner))
+            .collect::<Result<Vec<_>, Reason>>()?;
 
         Ok(VecValueTree {
             elements,
@@ -535,11 +588,13 @@ impl<T : Strategy> Strategy for Vec<T> {
     }
 }
 
-impl<T : ValueTree> ValueTree for VecValueTree<T> {
+impl<T: ValueTree> ValueTree for VecValueTree<T> {
     type Value = Vec<T::Value>;
 
     fn current(&self) -> Vec<T::Value> {
-        self.elements.iter().enumerate()
+        self.elements
+            .iter()
+            .enumerate()
             .filter(|&(ix, _)| self.included_elements.test(ix))
             .map(|(_, element)| element.current())
             .collect()
@@ -555,8 +610,8 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
         if let Shrink::DeleteElement(ix) = self.shrink {
             // Can't delete an element if beyond the end of the vec or if it
             // would put us under the minimum length.
-            if ix >= self.elements.len() ||
-                self.included_elements.count() == self.min_size
+            if ix >= self.elements.len()
+                || self.included_elements.count() == self.min_size
             {
                 self.shrink = Shrink::ShrinkElement(0);
             } else {
@@ -600,7 +655,7 @@ impl<T : ValueTree> ValueTree for VecValueTree<T> {
                 self.included_elements.set(ix);
                 self.prev_shrink = None;
                 true
-            },
+            }
             Some(Shrink::ShrinkElement(ix)) => {
                 if self.elements[ix].complicate() {
                     // Don't unset prev_shrink; we may be able to complicate
@@ -641,8 +696,10 @@ mod test {
             assert!(start.iter().map(|&v| v).collect::<VarBitSet>().len() >= 2);
 
             let result = runner.run_one(case, |v| {
-                prop_assert!(v.iter().map(|&v| v).sum::<usize>() < 9,
-                             "greater than 8");
+                prop_assert!(
+                    v.iter().map(|&v| v).sum::<usize>() < 9,
+                    "greater than 8"
+                );
                 Ok(())
             });
 
@@ -652,10 +709,14 @@ mod test {
                     // The minimal case always has between 5 (due to min
                     // length) and 9 (min element value = 1) elements, and
                     // always sums to exactly 9.
-                    assert!(value.len() >= 5 && value.len() <= 9 &&
-                            value.iter().map(|&v| v).sum::<usize>() == 9,
-                            "Unexpected minimal value: {:?}", value);
-                },
+                    assert!(
+                        value.len() >= 5
+                            && value.len() <= 9
+                            && value.iter().map(|&v| v).sum::<usize>() == 9,
+                        "Unexpected minimal value: {:?}",
+                        value
+                    );
+                }
                 e => panic!("Unexpected result: {:?}", e),
             }
         }
@@ -670,10 +731,8 @@ mod test {
 
     #[test]
     fn test_parallel_vec() {
-        let input = vec![
-            (1u32..10).boxed(),
-            bits::u32::masked(0xF0u32).boxed(),
-        ];
+        let input =
+            vec![(1u32..10).boxed(), bits::u32::masked(0xF0u32).boxed()];
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();

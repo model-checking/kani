@@ -9,25 +9,25 @@
 
 //! Arbitrary implementations for `std::str`.
 
-use core::iter::repeat;
-use core::str::{ParseBoolError, Utf8Error, from_utf8};
 use crate::std_facade::Vec;
+use core::iter::repeat;
+use core::str::{from_utf8, ParseBoolError, Utf8Error};
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 arbitrary!(ParseBoolError; "".parse::<bool>().unwrap_err());
 
-type ELSeq  = WA<Just<&'static [u8]>>;
+type ELSeq = WA<Just<&'static [u8]>>;
 type ELSeqs = LazyTupleUnion<(ELSeq, ELSeq, ELSeq, ELSeq)>;
 
 fn gen_el_seqs() -> ELSeqs {
     prop_oneof![
-        Just(&[0xC2]), // None
-        Just(&[0x80]), // Some(1)
-        Just(&[0xE0, 0xA0, 0x00]), // Some(2)
-        Just(&[0xF0, 0x90, 0x80, 0x00]) // Some(3)
+        Just(&[0xC2]),                   // None
+        Just(&[0x80]),                   // Some(1)
+        Just(&[0xE0, 0xA0, 0x00]),       // Some(2)
+        Just(&[0xF0, 0x90, 0x80, 0x00])  // Some(3)
     ]
 }
 

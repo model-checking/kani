@@ -63,32 +63,40 @@ pub struct BoolValueTree {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ShrinkState {
-    Untouched, Simplified, Final
+    Untouched,
+    Simplified,
+    Final,
 }
 
 impl BoolValueTree {
     fn new(current: bool) -> Self {
-        BoolValueTree { current, state: ShrinkState::Untouched }
+        BoolValueTree {
+            current,
+            state: ShrinkState::Untouched,
+        }
     }
 }
 
 impl ValueTree for BoolValueTree {
     type Value = bool;
 
-    fn current(&self) -> bool { self.current }
+    fn current(&self) -> bool {
+        self.current
+    }
     fn simplify(&mut self) -> bool {
         match self.state {
             ShrinkState::Untouched if self.current => {
                 self.current = false;
                 self.state = ShrinkState::Simplified;
                 true
-            },
+            }
 
-            ShrinkState::Untouched | ShrinkState::Simplified |
-            ShrinkState::Final => {
+            ShrinkState::Untouched
+            | ShrinkState::Simplified
+            | ShrinkState::Final => {
                 self.state = ShrinkState::Final;
                 false
-            },
+            }
         }
     }
     fn complicate(&mut self) -> bool {
@@ -96,7 +104,7 @@ impl ValueTree for BoolValueTree {
             ShrinkState::Untouched | ShrinkState::Final => {
                 self.state = ShrinkState::Final;
                 false
-            },
+            }
 
             ShrinkState::Simplified => {
                 self.current = true;

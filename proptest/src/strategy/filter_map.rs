@@ -23,8 +23,12 @@ pub struct FilterMap<S, F> {
 }
 
 impl<S, F> FilterMap<S, F> {
-    pub (super) fn new(source: S, whence: Reason, fun: F) -> Self {
-        Self { source, whence, fun: Arc::new(fun) }
+    pub(super) fn new(source: S, whence: Reason, fun: F) -> Self {
+        Self {
+            source,
+            whence,
+            fun: Arc::new(fun),
+        }
     }
 }
 
@@ -48,8 +52,9 @@ impl<S: Clone, F> Clone for FilterMap<S, F> {
     }
 }
 
-impl<S : Strategy, F : Fn (S::Value) -> Option<O>, O : fmt::Debug> Strategy
-for FilterMap<S, F> {
+impl<S: Strategy, F: Fn(S::Value) -> Option<O>, O: fmt::Debug> Strategy
+    for FilterMap<S, F>
+{
     type Tree = FilterMapValueTree<S::Tree, F, O>;
     type Value = O;
 
@@ -57,7 +62,7 @@ for FilterMap<S, F> {
         loop {
             let val = self.source.new_tree(runner)?;
             if let Some(current) = (self.fun)(val.current()) {
-                return Ok(FilterMapValueTree::new(val, &self.fun, current))
+                return Ok(FilterMapValueTree::new(val, &self.fun, current));
             } else {
                 runner.reject_local(self.whence.clone())?;
             }
@@ -72,8 +77,9 @@ pub struct FilterMapValueTree<V, F, O> {
     fun: Arc<F>,
 }
 
-impl<V : Clone + ValueTree, F : Fn (V::Value) -> Option<O>, O> Clone
-for FilterMapValueTree<V, F, O> {
+impl<V: Clone + ValueTree, F: Fn(V::Value) -> Option<O>, O> Clone
+    for FilterMapValueTree<V, F, O>
+{
     fn clone(&self) -> Self {
         Self::new(self.source.clone(), &self.fun, self.fresh_current())
     }
@@ -89,8 +95,9 @@ impl<V: fmt::Debug, F, O> fmt::Debug for FilterMapValueTree<V, F, O> {
     }
 }
 
-impl<V : ValueTree, F : Fn (V::Value) -> Option<O>, O>
-FilterMapValueTree<V, F, O> {
+impl<V: ValueTree, F: Fn(V::Value) -> Option<O>, O>
+    FilterMapValueTree<V, F, O>
+{
     fn new(source: V, fun: &Arc<F>, current: O) -> Self {
         Self {
             source,
@@ -111,15 +118,18 @@ FilterMapValueTree<V, F, O> {
                 self.current = Cell::new(Some(current));
                 break;
             } else if !self.source.complicate() {
-                panic!("Unable to complicate filtered strategy \
-                        back into acceptable value");
+                panic!(
+                    "Unable to complicate filtered strategy \
+                     back into acceptable value"
+                );
             }
         }
     }
 }
 
-impl<V : ValueTree, F : Fn (V::Value) -> Option<O>, O : fmt::Debug> ValueTree
-for FilterMapValueTree<V, F, O> {
+impl<V: ValueTree, F: Fn(V::Value) -> Option<O>, O: fmt::Debug> ValueTree
+    for FilterMapValueTree<V, F, O>
+{
     type Value = O;
 
     fn current(&self) -> O {
@@ -157,8 +167,13 @@ mod test {
 
     #[test]
     fn test_filter_map() {
-        let input = (0..256).prop_filter_map("%3 + 1",
-            |v| if 0 == v % 3 { Some(v + 1) } else { None });
+        let input = (0..256).prop_filter_map("%3 + 1", |v| {
+            if 0 == v % 3 {
+                Some(v + 1)
+            } else {
+                None
+            }
+        });
 
         for _ in 0..256 {
             let mut runner = TestRunner::default();
@@ -176,14 +191,19 @@ mod test {
     #[test]
     fn test_filter_map_sanity() {
         check_strategy_sanity(
-            (0..256).prop_filter_map("!%5 * 2",
-                |v| if 0 != v % 5 { Some(v * 2) } else { None }),
-
+            (0..256).prop_filter_map("!%5 * 2", |v| {
+                if 0 != v % 5 {
+                    Some(v * 2)
+                } else {
+                    None
+                }
+            }),
             Some(CheckStrategySanityOptions {
                 // Due to internal rejection sampling, `simplify()` can
                 // converge back to what `complicate()` would do.
                 strict_complicate_after_simplify: false,
-                .. CheckStrategySanityOptions::default()
-            }));
+                ..CheckStrategySanityOptions::default()
+            }),
+        );
     }
 }

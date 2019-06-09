@@ -7,9 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::std_facade::Box;
 use crate::std_facade::fmt;
-#[cfg(feature = "std")] use std::collections::HashMap;
+use crate::std_facade::Box;
+#[cfg(feature = "std")]
+use std::collections::HashMap;
 
 use crate::test_runner::errors::TestCaseResult;
 
@@ -63,8 +64,8 @@ struct BasicResultCache {
 impl ResultCache for BasicResultCache {
     fn key(&self, val: &ResultCacheKey) -> u64 {
         use std::collections::hash_map::DefaultHasher;
-        use std::io::{self, Write};
         use std::hash::Hasher;
+        use std::io::{self, Write};
 
         struct HashWriter(DefaultHasher);
         impl io::Write for HashWriter {
@@ -102,9 +103,13 @@ pub fn basic_result_cache() -> Box<dyn ResultCache> {
 
 pub(crate) struct NoOpResultCache;
 impl ResultCache for NoOpResultCache {
-    fn key(&self, _: &ResultCacheKey) -> u64 { 0 }
-    fn put(&mut self, _: u64, _: &TestCaseResult) { }
-    fn get(&self, _: u64) -> Option<&TestCaseResult> { None }
+    fn key(&self, _: &ResultCacheKey) -> u64 {
+        0
+    }
+    fn put(&mut self, _: u64, _: &TestCaseResult) {}
+    fn get(&self, _: u64) -> Option<&TestCaseResult> {
+        None
+    }
 }
 
 /// A result cache that does nothing.

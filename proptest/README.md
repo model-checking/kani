@@ -20,10 +20,9 @@ The majority of the functionality offered by proptest is in active use and
 is known to work well.
 
 The API is unlikely to see drastic breaking changes, but there may still be
-minor breaking changes here and there, particularly when "impl Trait"
-becomes stable and after the upcoming redesign of the `rand` crate.
+minor breaking changes here and there, though this is becoming less common.
 
-See the [changelog](https://github.com/AltSysrq/proptest/blob/master/CHANGELOG.md)
+See the [changelog](https://github.com/AltSysrq/proptest/blob/master/proptest/CHANGELOG.md)
 for a full list of substantial historical changes, breaking and otherwise.
 
 ### What is property testing?
@@ -81,7 +80,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.9.3"
+proptest = "0.9.4"
 ```
 
 Now we can add some property tests to our date parser. But how do we test

@@ -19,31 +19,26 @@ enum T0 {
 #[derive(Debug, Arbitrary)]
 enum T1 {
     #[proptest(params = "u8", value = "T1::V0 { field: params * 2 }")]
-    V0 {
-        field: u8
-    },
+    V0 { field: u8 },
 }
 
 #[derive(Debug, Arbitrary)]
 enum T2 {
-    V0(
-        #[proptest(params = "u8", value = "params.is_power_of_two()")]
-        bool
-    ),
+    V0(#[proptest(params = "u8", value = "params.is_power_of_two()")] bool),
 }
 
 #[derive(Debug, Arbitrary)]
 enum T3 {
     V0 {
         #[proptest(params = "u8", value = "params * params")]
-        field: u8
+        field: u8,
     },
 }
 
 #[derive(Debug, Arbitrary)]
 struct T4 {
     #[proptest(params = "u8", value = "params - 3")]
-    field: u8
+    field: u8,
 }
 
 fn add(x: u8) -> u8 {
@@ -51,10 +46,7 @@ fn add(x: u8) -> u8 {
 }
 
 #[derive(Debug, Arbitrary)]
-struct T5(
-    #[proptest(params = "u8", value = "add(params)")]
-    u8
-);
+struct T5(#[proptest(params = "u8", value = "add(params)")] u8);
 
 #[test]
 fn asserting_arbitrary() {

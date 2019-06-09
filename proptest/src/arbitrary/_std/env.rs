@@ -10,12 +10,12 @@
 //! Arbitrary implementations for `std::env`.
 
 use std::env::*;
-use std::iter::once;
 use std::ffi::OsString;
+use std::iter::once;
 
-use crate::strategy::*;
-use crate::strategy::statics::static_map;
 use crate::arbitrary::*;
+use crate::strategy::statics::static_map;
+use crate::strategy::*;
 
 // FIXME: SplitPaths when lifetimes in strategies are possible.
 
@@ -84,14 +84,16 @@ mod var_error {
             // but probably good enough
             let p = ::std::cmp::min(p, sbuf.len() - 1);
             make_utf16_invalid(&mut sbuf, p);
-            OsString::from_wide(sbuf.as_slice()).into_string().unwrap_err()
+            OsString::from_wide(sbuf.as_slice())
+                .into_string()
+                .unwrap_err()
         })
     }
 
     #[cfg(not(target_os = "windows"))]
     fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
-        use std::os::unix::ffi::OsStringExt;
         use crate::arbitrary::_std::string::not_utf8_bytes;
+        use std::os::unix::ffi::OsStringExt;
         static_map(not_utf8_bytes(true), OsString::from_vec)
     }
 
