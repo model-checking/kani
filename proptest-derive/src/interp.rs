@@ -35,7 +35,7 @@ fn parse_lit_int(mut s: &str) -> Option<u128> {
             s = &s[2..];
             2
         }
-        (b'0'...b'9', _) => 10,
+        (b'0'..=b'9', _) => 10,
         _ => unreachable!(),
     };
 
@@ -43,9 +43,9 @@ fn parse_lit_int(mut s: &str) -> Option<u128> {
     loop {
         let b = byte(s, 0);
         let digit = match b {
-            b'0'...b'9' => u128::from(b - b'0'),
-            b'a'...b'f' if base > 10 => 10 + u128::from(b - b'a'),
-            b'A'...b'F' if base > 10 => 10 + u128::from(b - b'A'),
+            b'0'..=b'9' => u128::from(b - b'0'),
+            b'a'..=b'f' if base > 10 => 10 + u128::from(b - b'a'),
+            b'A'..=b'F' if base > 10 => 10 + u128::from(b - b'A'),
             b'_' => {
                 s = &s[1..];
                 continue;

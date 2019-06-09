@@ -359,8 +359,6 @@ fn derive_enum(
     ctx: Ctx,
     mut ast: DeriveData<Vec<Variant>>,
 ) -> DeriveResult<Impl> {
-    use crate::void::IsUninhabited;
-
     // An enum can't be skipped, ensure it hasn't been:
     error::if_skip_present(ctx, &ast.attrs, error::ENUM);
 
@@ -645,8 +643,6 @@ fn keep_inhabited_variant(
     _self: &Ident,
     variant: Variant,
 ) -> DeriveResult<Option<(u32, Ident, Vec<Field>, ParsedAttributes)>> {
-    use crate::void::IsUninhabited;
-
     let attrs = attr::parse_attributes(ctx, &variant.attrs)?;
     let fields = fields_to_vec(variant.fields);
 
