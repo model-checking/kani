@@ -21,7 +21,7 @@
 //! inference such as using `proptest::collection::vec(..)`
 //! to achieve the same result.
 //!
-//! For these reasons, the traits here are deliberatly
+//! For these reasons, the traits here are deliberately
 //! not exported in a convenient way.
 
 use crate::std_facade::fmt;

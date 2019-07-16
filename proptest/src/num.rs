@@ -437,7 +437,7 @@ macro_rules! float_any {
         /// The various float classes are assigned fixed weights for generation
         /// which are believed to be reasonable for most applications. Roughly:
         ///
-        /// - If `POSITIE | NEGATIVE`, the sign is evenly distributed between
+        /// - If `POSITIVE | NEGATIVE`, the sign is evenly distributed between
         ///   both options.
         ///
         /// - Classes are weighted as follows, in descending order:
