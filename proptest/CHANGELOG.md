@@ -1,3 +1,10 @@
+## Unreleased
+
+### New Additions
+
+- Added missing `?Sized` bound to `B` on the implementation of
+  `Arbitrary` for `std::borrow::Cow<'_, B>`.
+
 ## 0.9.4
 
 ### Bug Fixes
