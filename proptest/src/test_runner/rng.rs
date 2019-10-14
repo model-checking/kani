@@ -115,6 +115,37 @@ enum TestRngImpl {
     },
 }
 
+/// Error indicating that the `PassThrough` RNG ran out of data.
+#[derive(Debug, Clone)]
+struct PassThroughExhaustedError;
+
+impl PassThroughExhaustedError {
+    /// Error code representing this error for `no_std` (instead of boxing the error).
+    #[allow(unused)]
+    pub const ERROR_CODE: u32 = rand::Error::CUSTOM_START + 0x35e43220;
+}
+
+impl fmt::Display for PassThroughExhaustedError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "out of PassThrough data")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for PassThroughExhaustedError {}
+
+impl From<PassThroughExhaustedError> for rand::Error {
+    fn from(err: PassThroughExhaustedError) -> rand::Error {
+        #[cfg(feature = "std")]
+        return rand::Error::new(err);
+        #[cfg(not(feature = "std"))]
+        return rand::Error::from(
+            core::num::NonZeroU32::new(PassThroughExhaustedError::ERROR_CODE)
+                .unwrap(),
+        );
+    }
+}
+
 impl RngCore for TestRng {
     fn next_u32(&mut self) -> u32 {
         match &mut self.rng {
@@ -174,10 +205,7 @@ impl RngCore for TestRng {
                 ref data,
             } => {
                 if *off + dest.len() > end {
-                    return Err(rand::Error::new(
-                        rand::ErrorKind::Unavailable,
-                        "out of PassThrough data",
-                    ));
+                    return Err(rand::Error::from(PassThroughExhaustedError));
                 }
 
                 dest.copy_from_slice(&data[*off..*off + dest.len()]);
@@ -345,7 +373,6 @@ impl TestRng {
     pub(crate) fn default_rng(algorithm: RngAlgorithm) -> Self {
         #[cfg(feature = "std")]
         {
-            use rand::FromEntropy;
             Self {
                 rng: match algorithm {
                     RngAlgorithm::XorShift => {

@@ -1,3 +1,9 @@
+## Unreleased
+
+### Breaking Changes
+
+- The version of the `rand` crate has been increased to 0.7.
+
 ## 0.9.5
 
 ### Bug Fixes
