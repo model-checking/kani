@@ -116,7 +116,7 @@ arbitrary!(ErrorKind, Union<Just<Self>>;
     , Other
     , UnexpectedEof
     // TODO: watch this type for variant-additions.
-    ].into_iter().cloned().map(Just))
+    ].iter().cloned().map(Just))
 );
 
 arbitrary!(
