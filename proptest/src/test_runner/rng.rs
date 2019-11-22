@@ -361,8 +361,62 @@ impl TestRng {
                 },
             }
         }
+        #[cfg(all(not(feature = "std"), any(target_arch = "x86", target_arch = "x86_64"), feature = "hardware-rng"))]
+        {
+            return Self::hardware_rng(algorithm);
+        }
         #[cfg(not(feature = "std"))]
-        Self::deterministic_rng(algorithm)
+        {
+            return Self::deterministic_rng(algorithm);
+        }
+    }
+
+    const SEED_FOR_XOR_SHIFT: [u8; 16] = [
+        0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac, 0x72, 0x20,
+        0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d,
+    ];
+
+    const SEED_FOR_CHA_CHA: [u8; 32] = [
+        0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac, 0x72, 0x20,
+        0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d, 0xca, 0x9f, 0x76, 0xaf,
+        0x1b, 0x09, 0x73, 0xa0, 0x59, 0x22, 0x6d, 0xc5, 0x46, 0x39,
+        0x1c, 0x4a,
+    ];
+
+    /// Returns a `TestRng` with a seed generated with the
+    /// RdRand instruction on x86 machines.
+    ///
+    /// This is useful in `no_std` scenarios on x86 where we don't
+    /// have a random number infrastructure but the `rdrand` instruction is
+    /// available.
+    #[cfg(all(not(feature = "std"), any(target_arch = "x86", target_arch = "x86_64"), feature = "hardware-rng"))]
+    pub fn hardware_rng(algorithm: RngAlgorithm) -> Self {
+        use x86::random::{rdrand_slice, RdRand};
+
+        Self::from_seed_internal(match algorithm {
+            RngAlgorithm::XorShift => {
+                // Initialize to a sane seed just in case
+                let mut seed: [u8; 16] = TestRng::SEED_FOR_XOR_SHIFT;
+                unsafe {
+                    let r = rdrand_slice(&mut seed);
+                    debug_assert!(r, "hardware_rng should only be called on machines with support for rdrand");
+                }
+                Seed::XorShift(seed)
+            },
+            RngAlgorithm::ChaCha => {
+                // Initialize to a sane seed just in case
+                let mut seed: [u8; 32] = TestRng::SEED_FOR_CHA_CHA;
+                unsafe {
+                    let r = rdrand_slice(&mut seed);
+                    debug_assert!(r, "hardware_rng should only be called on machines with support for rdrand");
+                }
+                Seed::ChaCha(seed)
+            },
+            RngAlgorithm::PassThrough => {
+                panic!("deterministic RNG not available for PassThrough")
+            }
+            RngAlgorithm::_NonExhaustive => unreachable!(),
+        })
     }
 
     /// Returns a `TestRng` with a particular hard-coded seed.
@@ -381,16 +435,8 @@ impl TestRng {
     /// issues.
     pub fn deterministic_rng(algorithm: RngAlgorithm) -> Self {
         Self::from_seed_internal(match algorithm {
-            RngAlgorithm::XorShift => Seed::XorShift([
-                0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac, 0x72, 0x20,
-                0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d,
-            ]),
-            RngAlgorithm::ChaCha => Seed::ChaCha([
-                0xf4, 0x16, 0x16, 0x48, 0xc3, 0xac, 0x77, 0xac, 0x72, 0x20,
-                0x0b, 0xea, 0x99, 0x67, 0x2d, 0x6d, 0xca, 0x9f, 0x76, 0xaf,
-                0x1b, 0x09, 0x73, 0xa0, 0x59, 0x22, 0x6d, 0xc5, 0x46, 0x39,
-                0x1c, 0x4a,
-            ]),
+            RngAlgorithm::XorShift => Seed::XorShift(TestRng::SEED_FOR_XOR_SHIFT),
+            RngAlgorithm::ChaCha => Seed::ChaCha(TestRng::SEED_FOR_CHA_CHA),
             RngAlgorithm::PassThrough => {
                 panic!("deterministic RNG not available for PassThrough")
             }

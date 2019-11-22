@@ -41,6 +41,9 @@ std = ["rand/std", "byteorder/std", "lazy_static",
 #alloc = ["hashmap_core"]
 alloc = []
 
+# Use a hardware random number generator (instead of static seed) for x86 no_std targets
+hardware-rng = ["x86"]
+
 # Enables use of the "fork" feature.
 #
 # Requires std.
@@ -113,6 +116,10 @@ default-features = false
 
 [dependencies.tempfile]
 version = "3.0"
+optional = true
+
+[dependencies.x86]
+version = "0.28.0"
 optional = true
 
 [dev-dependencies]
