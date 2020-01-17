@@ -1,3 +1,9 @@
+## 0.9.5
+
+### Bug Fixes
+
+- Fixed a Rust future-compatibility issue (https://github.com/rust-lang/rust/pull/65819).
+
 ## 0.9.4
 
 ### Bug Fixes

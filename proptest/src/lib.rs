@@ -14,6 +14,7 @@
 //! For documentation on how to get started with proptest and general usage
 //! advice, please refer to the [Proptest Book](https://altsysrq.github.io/proptest-book/intro.html).
 
+#![forbid(future_incompatible)]
 #![deny(missing_docs, bare_trait_objects)]
 #![no_std]
 #![cfg_attr(feature = "cargo-clippy", allow(
