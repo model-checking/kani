@@ -9,6 +9,8 @@
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
+fn main() {}
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0018]
 #[proptest(no_bounds)]
 struct T0<T>(T);

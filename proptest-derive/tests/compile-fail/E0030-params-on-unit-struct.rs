@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate proptest_derive;
 
+fn main() {}
+
 // It happens that no other error will follow E0030 so this is not as proper
 // a check that we wanted to ensure that E0030 is non-fatal.
 

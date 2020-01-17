@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate proptest_derive;
 
+fn main() {}
+
 // value + strategy:
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0025]

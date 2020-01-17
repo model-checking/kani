@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate proptest_derive;
 
+fn main() {}
+
 fn make_regex() -> &'static str {
     "a|b"
 }

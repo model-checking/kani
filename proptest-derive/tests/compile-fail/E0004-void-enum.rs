@@ -11,6 +11,8 @@
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
+fn main() {}
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0004]
 enum Void {}
 

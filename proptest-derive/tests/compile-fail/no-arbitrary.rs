@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate proptest_derive;
 
+fn main() {}
+
 struct T0;
 
 #[derive(Debug, Arbitrary)] //~ Arbitrary` is not satisfied [E0277]

@@ -9,6 +9,8 @@
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
+fn main() {}
+
 // Show non-fatal:
 #[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
                             //~| [proptest_derive, E0021]
