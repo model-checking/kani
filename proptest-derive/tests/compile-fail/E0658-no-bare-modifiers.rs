@@ -14,8 +14,10 @@ extern crate proptest;
 
 use proptest::prelude::*;
 
+fn main() {}
+
 #[derive(Arbitrary, Debug)]
 struct T0 {
-    #[no_params] //~ ERROR: [E0658]
+    #[no_params] //~ ERROR: cannot find attribute `no_params` in this scope
     field: usize,
 }

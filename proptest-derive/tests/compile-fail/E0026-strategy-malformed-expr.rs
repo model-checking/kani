@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate proptest_derive;
 
+fn main() {}
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T0 {
     V1 {

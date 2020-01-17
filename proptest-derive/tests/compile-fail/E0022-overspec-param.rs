@@ -9,6 +9,8 @@
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
+fn main() {}
+
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0022]
 #[proptest(no_params, params = "u8")]
 enum T0 {

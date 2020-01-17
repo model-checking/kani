@@ -9,6 +9,8 @@
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
+fn main() {}
+
 fn even(x: &u8) -> bool {
     x % 2 == 0
 }

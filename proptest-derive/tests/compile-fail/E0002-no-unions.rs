@@ -9,5 +9,7 @@
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
+fn main() {}
+
 #[derive(Arbitrary)] //~ ERROR: [proptest_derive, E0002]
 union Foo { x: usize }

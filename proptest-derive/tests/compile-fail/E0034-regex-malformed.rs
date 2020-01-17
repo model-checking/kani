@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate proptest_derive;
 
+fn main() {}
+
 // Show non-fatal:
 #[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
                             //~| [proptest_derive, E0034]
