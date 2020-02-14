@@ -92,15 +92,15 @@ version = "0.5.0"
 optional = true
 
 [dependencies.rand]
-version = "0.6"
+version = "0.7"
 default-features = false
-features = ["alloc", "i128_support"]
+features = ["alloc"]
 
 [dependencies.rand_xorshift]
-version = "0.1"
+version = "0.2"
 
 [dependencies.rand_chacha]
-version = "0.1"
+version = "0.2"
 
 [dependencies.byteorder]
 version = "1.2.3"
