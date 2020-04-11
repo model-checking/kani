@@ -33,9 +33,8 @@ arbitrary!(['a, T: 'a + Clone, A: Arbitrary + Iterator<Item = &'a T>]
     args => static_map(any_with::<A>(args), Iterator::cloned));
 
 impl<
-        'a,
         T: 'static + Clone,
-        A: fmt::Debug + 'static + Iterator<Item = &'a T>,
+        A: fmt::Debug + 'static + Iterator<Item = &'static T>,
     > functor::ArbitraryF1<A> for Cloned<A>
 {
     type Parameters = ();
