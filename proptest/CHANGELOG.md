@@ -1,5 +1,12 @@
 ## Unreleased
 
+### Breaking Changes
+
+- The version of the `rand` crate has been increased to 0.7.
+
+- The `proptest!` macro no longer accepts function bodies which implicitly
+  return a value (which would then be discarded).
+
 ### New Features
 
 - Enabling the `hardware-rng` optional depndency (disabled by default) allows
@@ -8,10 +15,6 @@
 
 - Added missing `?Sized` bound to `B` on the implementation of
   `Arbitrary` for `std::borrow::Cow<'_, B>`.
-
-### Breaking Changes
-
-- The version of the `rand` crate has been increased to 0.7.
 
 ### Bug Fixes
 
