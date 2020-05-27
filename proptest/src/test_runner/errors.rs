@@ -100,6 +100,7 @@ impl<T: fmt::Debug> fmt::Display for TestError<T> {
 }
 
 #[cfg(feature = "std")]
+#[allow(deprecated)] // description()
 impl<T: fmt::Debug> ::std::error::Error for TestError<T> {
     fn description(&self) -> &str {
         match *self {

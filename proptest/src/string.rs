@@ -55,8 +55,9 @@ impl Default for StringParam {
 }
 
 // quick_error! uses bare trait objects, so we enclose its invocation here in a
-// module so the lint can be disabled just for it.
-#[allow(bare_trait_objects)]
+// module so the lint can be disabled just for it. Also suppress deprecation
+// due to .description().
+#[allow(bare_trait_objects, deprecated)]
 mod error_container {
     use super::*;
 
