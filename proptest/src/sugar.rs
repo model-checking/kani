@@ -265,7 +265,7 @@ macro_rules! prop_assume {
 
     ($expr:expr, $fmt:tt $(, $fmt_arg:expr),* $(,)?) => {
         if !$expr {
-            return ::std::result::Result::Err(
+            return ::core::result::Result::Err(
                 $crate::test_runner::TestCaseError::reject(
                     format!(concat!("{}:{}:{}: ", $fmt),
                             file!(), line!(), column!()
@@ -737,7 +737,7 @@ macro_rules! prop_assert {
         if !$cond {
             let message = format!($($fmt)*);
             let message = format!("{} at {}:{}", message, file!(), line!());
-            return ::std::result::Result::Err(
+            return ::core::result::Result::Err(
                 $crate::test_runner::TestCaseError::fail(message));
         }
     };
