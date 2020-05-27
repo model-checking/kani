@@ -43,10 +43,7 @@ pub enum RngAlgorithm {
     /// This is useful when Proptest is being driven from some other entropy
     /// source, such as a fuzzer.
     ///
-    /// It is the user's responsibility to ensure that the seed is "big
-    /// enough". Proptest makes no guarantees about how much data is consumed
-    /// from the seed for any particular strategy. If the seed is exhausted,
-    /// the RNG panics.
+    /// If the seed is depleted, the RNG will return 0s forever.
     ///
     /// Note that in cases where a new RNG is to be derived from an existing
     /// one, *the data is split evenly between them*, regardless of how much
@@ -186,9 +183,21 @@ impl RngCore for TestRng {
                 end,
                 ref data,
             } => {
-                assert!(*off + dest.len() <= end, "out of PassThrough data");
-                dest.copy_from_slice(&data[*off..*off + dest.len()]);
-                *off += dest.len();
+                if *off >= end {
+                    for i in 0..dest.len() {
+                        dest[i] = 0;
+                    }
+                } else if end - *off > dest.len() {
+                    dest.copy_from_slice(&data[*off..*off + dest.len()]);
+                    *off += dest.len();
+                } else {
+                    let bytes_left = end - *off;
+                    dest[..bytes_left].copy_from_slice(&data[*off..*off + bytes_left]);
+                    *off += bytes_left;
+                    for i in bytes_left..dest.len() {
+                        dest[i] = 0;
+                    }
+                }                
             }
         }
     }
@@ -204,12 +213,21 @@ impl RngCore for TestRng {
                 end,
                 ref data,
             } => {
-                if *off + dest.len() > end {
-                    return Err(rand::Error::from(PassThroughExhaustedError));
+                if *off >= end {
+                    for i in 0..dest.len() {
+                        dest[i] = 0;
+                    }
+                } else if end - *off > dest.len() {
+                    dest.copy_from_slice(&data[*off..*off + dest.len()]);
+                    *off += dest.len();
+                } else {
+                    let bytes_left = end - *off;
+                    dest.copy_from_slice(&data[*off..*off + bytes_left]);
+                    *off += bytes_left;
+                    for i in bytes_left..dest.len() {
+                        dest[i] = 0;
+                    }
                 }
-
-                dest.copy_from_slice(&data[*off..*off + dest.len()]);
-                *off += dest.len();
                 Ok(())
             }
         }
@@ -583,9 +601,9 @@ mod test {
         assert_eq!(0xDEADBEEFCAFE7856, rng.next_u64());
 
         let mut buf = [0u8; 4];
-        assert!(rng.try_fill_bytes(&mut buf[0..4]).is_err());
-        rng.fill_bytes(&mut buf[0..2]);
-        rng.fill_bytes(&mut buf[2..3]);
+        rng.try_fill_bytes(&mut buf[0..4]).unwrap();
         assert_eq!([1, 2, 3, 0], buf);
+        rng.try_fill_bytes(&mut buf[0..4]).unwrap();
+        assert_eq!([0, 0, 0, 0], buf);
     }
 }
