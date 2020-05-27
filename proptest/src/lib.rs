@@ -35,7 +35,7 @@
 #![cfg_attr(all(feature = "std", feature = "unstable"), feature(ip))]
 #![cfg_attr(
     all(feature = "alloc", not(feature = "std")),
-    feature(alloc, core_intrinsics)
+    feature(core_intrinsics)
 )]
 
 // std_facade is used in a few macros, so it needs to be public.
