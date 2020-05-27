@@ -4,6 +4,11 @@
 
 - The version of the `rand` crate has been increased to 0.7.
 
+### Bug Fixes
+
+- `prop_assert!` and `prop_assume!` should now be usable in `no_std`
+  environments.
+
 ### Other Notes
 
 - `rusty_fork` has been bumped to 0.3.0, which adds support for a number of
