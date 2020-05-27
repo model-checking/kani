@@ -10,6 +10,9 @@
   [new test flags](https://github.com/AltSysrq/rusty-fork/blob/master/CHANGELOG.md#improvements)
   when running forked tests.
 
+- The `PassThrough` RNG algorithm now returns 0 instead of panicking when it
+  runs out of entropy.
+
 ## 0.9.6
 
 ### Bug Fixes
