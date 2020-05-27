@@ -80,7 +80,7 @@ impl<S: Strategy> LazyValueTree<S> {
             } => {
                 match strategy.new_tree(&mut runner) {
                     Ok(v) => {
-                        mem::replace(
+                        let _ = mem::replace(
                             &mut self.state,
                             LazyValueTreeState::Initialized(v),
                         );
