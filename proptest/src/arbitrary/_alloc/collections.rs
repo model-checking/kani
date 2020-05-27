@@ -113,12 +113,12 @@ into_iter_1!(hash_set, HashSet, Hash, Eq);
 
 #[cfg(feature = "std")]
 arbitrary!([A: Arbitrary + Hash + Eq, B: Arbitrary] HashMap<A, B>,
-    HashMapStrategy<A::Strategy, B::Strategy>,
-    RangedParams2<A::Parameters, B::Parameters>;
-    args => {
-        let product_unpack![range, a, b] = args;
-        hash_map(any_with::<A>(a), any_with::<B>(b), range)
-    });
+HashMapStrategy<A::Strategy, B::Strategy>,
+RangedParams2<A::Parameters, B::Parameters>;
+args => {
+    let product_unpack![range, a, b] = args;
+    hash_map(any_with::<A>(a), any_with::<B>(b), range)
+});
 
 #[cfg(feature = "std")]
 arbitrary!([A: Arbitrary + Hash + Eq, B: Arbitrary] hash_map::IntoIter<A, B>,
@@ -187,12 +187,12 @@ impl<A: fmt::Debug + Eq + Hash + 'static, B: fmt::Debug + 'static>
 //==============================================================================
 
 arbitrary!([A: Arbitrary + Ord, B: Arbitrary] BTreeMap<A, B>,
-    BTreeMapStrategy<A::Strategy, B::Strategy>,
-    RangedParams2<A::Parameters, B::Parameters>;
-    args => {
-        let product_unpack![range, a, b] = args;
-        btree_map(any_with::<A>(a), any_with::<B>(b), range)
-    });
+BTreeMapStrategy<A::Strategy, B::Strategy>,
+RangedParams2<A::Parameters, B::Parameters>;
+args => {
+    let product_unpack![range, a, b] = args;
+    btree_map(any_with::<A>(a), any_with::<B>(b), range)
+});
 
 lift1!([, K: Ord + Arbitrary + 'static] BTreeMap<K, A>,
     RangedParams1<K::Parameters>;
