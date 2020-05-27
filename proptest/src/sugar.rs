@@ -955,7 +955,7 @@ macro_rules! proptest_helper {
             $($mod)* |$crate::sugar::NamedArguments(
                 _, $crate::proptest_helper!(@_WRAPPAT ($($parm),*)))|
             {
-                $body;
+                let _: () = $body;
                 Ok(())
             })
         {
@@ -975,7 +975,7 @@ macro_rules! proptest_helper {
             $($mod)* |$crate::sugar::NamedArguments(
                 _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
             {
-                $body;
+                let _: () = $body;
                 Ok(())
             })
         {
