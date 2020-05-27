@@ -596,18 +596,18 @@ features.
   types in  `proptest_derive`. More on this later releases.
 
 - The strategies in `proptest::option` and `proptest::result` now accept a type
-  `Probability` which is a wrapper around `f64`. Convertions from types such as
+  `Probability` which is a wrapper around `f64`. Conversions from types such as
   `f64` are provided to make the interface ergonomic to use. Users may also use
   the `proptest::option::prob` function to explicitly construct the type.
 
 - The strategies in `proptest::collections` now accept a type `SizeRange`
-  which is a wrapper around `Range<usize>`. Convertions from types
+  which is a wrapper around `Range<usize>`. Conversions from types
   such as `usize` and `Range<usize>` are provided to make the interface
   ergonomic to use. Users may also use the `proptest::collections::size_bounds`
   function to explicitly construct the type.
 
 - A `.prop_map_into()` operation on all strategies that map
-  using `Into<OutputType>`. This is a clerarer and cheaper
+  using `Into<OutputType>`. This is a clearer and cheaper
   operation than using `.prop_map(OutputType::from)`.
 
 - A nonshrinking `LazyJust` strategy that can be used instead of `Just` when you

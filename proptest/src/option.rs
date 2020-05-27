@@ -64,7 +64,7 @@ impl Probability {
     // Don't rely on these existing internally:
 
     /// Merges self together with some other argument producing a product
-    /// type expected by some impelementations of `A: Arbitrary` in
+    /// type expected by some implementations of `A: Arbitrary` in
     /// `A::Parameters`. This can be more ergonomic to work with and may
     /// help type inference.
     pub fn with<X>(self, and: X) -> product_type![Self, X] {
@@ -73,7 +73,7 @@ impl Probability {
 
     /// Merges self together with some other argument generated with a
     /// default value producing a product type expected by some
-    /// impelementations of `A: Arbitrary` in `A::Parameters`.
+    /// implementations of `A: Arbitrary` in `A::Parameters`.
     /// This can be more ergonomic to work with and may help type inference.
     pub fn lift<X: Default>(self) -> product_type![Self, X] {
         self.with(Default::default())
