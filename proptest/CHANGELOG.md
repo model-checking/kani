@@ -6,6 +6,9 @@
   obtaining non-deterministic random seeds even in `no_std` environments
   provided the architecture is x86 or AMD64.
 
+- Added missing `?Sized` bound to `B` on the implementation of
+  `Arbitrary` for `std::borrow::Cow<'_, B>`.
+
 ### Breaking Changes
 
 - The version of the `rand` crate has been increased to 0.7.
@@ -36,6 +39,8 @@
 ### Bug Fixes
 
 - Fixed a Rust future-compatibility issue (https://github.com/rust-lang/rust/pull/65819).
+
+### New Additions
 
 ## 0.9.4
 

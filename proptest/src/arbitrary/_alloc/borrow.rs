@@ -17,11 +17,11 @@ use crate::arbitrary::{any_with, Arbitrary, SMapped};
 use crate::strategy::statics::static_map;
 
 arbitrary!(
-    [A: Arbitrary + Borrow<B>, B: ToOwned<Owned = A> + fmt::Debug]
+    [A: Arbitrary + Borrow<B>, B: ToOwned<Owned = A> + fmt::Debug + ?Sized]
     Cow<'static, B>, SMapped<A, Self>, A::Parameters;
     args => static_map(any_with::<A>(args), Cow::Owned)
 );
 
-lift1!([Borrow<B> + 'static, B: ToOwned<Owned = A> + fmt::Debug]
+lift1!([Borrow<B> + 'static, B: ToOwned<Owned = A> + fmt::Debug + ?Sized]
     Cow<'static, B>; base => static_map(base, Cow::Owned)
 );
