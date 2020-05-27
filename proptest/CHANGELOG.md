@@ -4,6 +4,12 @@
 
 - The version of the `rand` crate has been increased to 0.7.
 
+### Other Notes
+
+- `rusty_fork` has been bumped to 0.3.0, which adds support for a number of
+  [new test flags](https://github.com/AltSysrq/rusty-fork/blob/master/CHANGELOG.md#improvements)
+  when running forked tests.
+
 ## 0.9.6
 
 ### Bug Fixes
