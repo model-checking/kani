@@ -1,5 +1,11 @@
 ## Unreleased
 
+### New Features
+
+- Enabling the `hardware-rng` optional depndency (disabled by default) allows
+  obtaining non-deterministic random seeds even in `no_std` environments
+  provided the architecture is x86 or AMD64.
+
 ### Breaking Changes
 
 - The version of the `rand` crate has been increased to 0.7.
