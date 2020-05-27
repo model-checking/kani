@@ -1,5 +1,5 @@
 //-
-// Copyright 2017, 2018, 2019 The proptest developers
+// Copyright 2017, 2018, 2019, 2020 The proptest developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -183,21 +183,13 @@ impl RngCore for TestRng {
                 end,
                 ref data,
             } => {
-                if *off >= end {
-                    for i in 0..dest.len() {
-                        dest[i] = 0;
-                    }
-                } else if end - *off > dest.len() {
-                    dest.copy_from_slice(&data[*off..*off + dest.len()]);
-                    *off += dest.len();
-                } else {
-                    let bytes_left = end - *off;
-                    dest[..bytes_left].copy_from_slice(&data[*off..*off + bytes_left]);
-                    *off += bytes_left;
-                    for i in bytes_left..dest.len() {
-                        dest[i] = 0;
-                    }
-                }                
+                let bytes_to_copy = dest.len().min(end - *off);
+                dest[..bytes_to_copy].copy_from_slice(
+                    &data[*off..*off + bytes_to_copy]);
+                *off += bytes_to_copy;
+                for i in bytes_to_copy..dest.len() {
+                    dest[i] = 0;
+                }
             }
         }
     }
@@ -208,26 +200,8 @@ impl RngCore for TestRng {
 
             TestRngImpl::ChaCha(ref mut rng) => rng.try_fill_bytes(dest),
 
-            TestRngImpl::PassThrough {
-                ref mut off,
-                end,
-                ref data,
-            } => {
-                if *off >= end {
-                    for i in 0..dest.len() {
-                        dest[i] = 0;
-                    }
-                } else if end - *off > dest.len() {
-                    dest.copy_from_slice(&data[*off..*off + dest.len()]);
-                    *off += dest.len();
-                } else {
-                    let bytes_left = end - *off;
-                    dest.copy_from_slice(&data[*off..*off + bytes_left]);
-                    *off += bytes_left;
-                    for i in bytes_left..dest.len() {
-                        dest[i] = 0;
-                    }
-                }
+            TestRngImpl::PassThrough { ..  } => {
+                self.fill_bytes(dest);
                 Ok(())
             }
         }
