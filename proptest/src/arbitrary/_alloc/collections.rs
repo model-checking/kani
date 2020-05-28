@@ -247,7 +247,7 @@ impl<A: fmt::Debug + Ord + 'static, B: fmt::Debug + 'static>
 //==============================================================================
 
 arbitrary!([A: Arbitrary] Bound<A>,
-    LazyTupleUnion<(
+    TupleUnion<(
         WA<SFnPtrMap<Arc<A::Strategy>, Self>>,
         WA<SFnPtrMap<Arc<A::Strategy>, Self>>,
         WA<LazyJustFn<Self>>

@@ -162,42 +162,6 @@ macro_rules! access_vec {
     }}
 }
 
-macro_rules! union_value_tree_body {
-    ($typ:ty, $access:ident) => {
-        type Value = $typ;
-
-        fn current(&self) -> Self::Value {
-            $access!([] opt = self, self.pick, {
-                opt.current()
-            })
-        }
-
-        fn simplify(&mut self) -> bool {
-            if $access!([mut] opt = self, self.pick, { opt.simplify() }) {
-                self.prev_pick = None;
-                true
-            } else if self.pick > self.min_pick {
-                self.prev_pick = Some(self.pick);
-                self.pick -= 1;
-                true
-            } else {
-                false
-            }
-        }
-
-        fn complicate(&mut self) -> bool {
-            if let Some(pick) = self.prev_pick {
-                self.pick = pick;
-                self.min_pick = pick;
-                self.prev_pick = None;
-                true
-            } else {
-                $access!([mut] opt = self, self.pick, { opt.complicate() })
-            }
-        }
-    }
-}
-
 /// `ValueTree corresponding to `Union`.
 pub struct UnionValueTree<T: Strategy> {
     options: Vec<LazyValueTree<T>>,
@@ -369,43 +333,13 @@ def_access_tuple!($ access_tupleA, 1 2 3 4 5 6 7 8 9);
 /// to resort to boxing and dynamic dispatch to handle heterogeneous
 /// strategies.
 ///
-/// Deprecated in 0.9.4 in favor of `LazyTupleUnion`, which the `prop_oneof!`
-/// macro now uses. `TupleUnion` is only kept around to avoid API breakage,
-/// and its implementation will be replaced with `LazyTupleUnion` in the next
-/// major version.
+/// The difference between this and `TupleUnion` is that with this, value trees
+/// for variants that aren't picked at first are generated lazily.
 #[must_use = "strategies do nothing unless used"]
 #[derive(Clone, Copy, Debug)]
 pub struct TupleUnion<T>(T);
 
 impl<T> TupleUnion<T> {
-    /// Wrap `tuple` in a `TupleUnion`.
-    ///
-    /// The struct definition allows any `T` for `tuple`, but to be useful, it
-    /// must be a 2- to 10-tuple of `(u32, impl Strategy)` pairs where all
-    /// strategies ultimately produce the same value. Each `u32` indicates the
-    /// relative weight of its corresponding strategy.
-    /// You may use `W<S>` as an alias for `(u32, S)`.
-    ///
-    /// Using this constructor directly is discouraged; prefer to use
-    /// `prop_oneof!` since it is generally clearer.
-    pub fn new(tuple: T) -> Self {
-        TupleUnion(tuple)
-    }
-}
-
-/// Similar to `Union`, but internally uses a tuple to hold the strategies.
-///
-/// This allows better performance than vanilla `Union` since one does not need
-/// to resort to boxing and dynamic dispatch to handle heterogeneous
-/// strategies.
-///
-/// The difference between this and `TupleUnion` is that with this, value trees
-/// for variants that aren't picked at first are generated lazily.
-#[must_use = "strategies do nothing unless used"]
-#[derive(Clone, Copy, Debug)]
-pub struct LazyTupleUnion<T>(T);
-
-impl<T> LazyTupleUnion<T> {
     /// Wrap `tuple` in a `TupleUnion`.
     ///
     /// The struct definition allows any `T` for `tuple`, but to be useful, it
@@ -417,41 +351,15 @@ impl<T> LazyTupleUnion<T> {
     /// Using this constructor directly is discouraged; prefer to use
     /// `prop_oneof!` since it is generally clearer.
     pub fn new(tuple: T) -> Self {
-        LazyTupleUnion(tuple)
+        TupleUnion(tuple)
     }
 }
 
 macro_rules! tuple_union {
     ($($gen:ident $ix:tt)*) => {
         impl<A : Strategy, $($gen: Strategy<Value = A::Value>),*>
-        Strategy for TupleUnion<(W<A>, $(W<$gen>),*)> {
+        Strategy for TupleUnion<(WA<A>, $(WA<$gen>),*)> {
             type Tree = TupleUnionValueTree<
-                (A::Tree, $(Option<$gen::Tree>),*)>;
-            type Value = A::Value;
-
-            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-                let weights = [((self.0).0).0, $(((self.0).$ix).0),*];
-                let pick = pick_weighted(runner, weights.iter().cloned(),
-                                         weights.iter().cloned());
-
-                Ok(TupleUnionValueTree {
-                    options: (
-                        ((self.0).0).1.new_tree(runner)?,
-                        $(if $ix <= pick {
-                            Some(((self.0).$ix).1.new_tree(runner)?)
-                        } else {
-                            None
-                        }),*),
-                    pick: pick,
-                    min_pick: 0,
-                    prev_pick: None,
-                })
-            }
-        }
-
-        impl<A : Strategy, $($gen: Strategy<Value = A::Value>),*>
-        Strategy for LazyTupleUnion<(WA<A>, $(WA<$gen>),*)> {
-            type Tree = LazyTupleUnionValueTree<
                 (LazyValueTree<A>, $(Option<LazyValueTree<$gen>>),*)>;
             type Value = A::Value;
 
@@ -460,7 +368,7 @@ macro_rules! tuple_union {
                 let pick = pick_weighted(runner, weights.iter().cloned(),
                                          weights.iter().cloned());
 
-                Ok(LazyTupleUnionValueTree {
+                Ok(TupleUnionValueTree {
                     options: (
                         if 0 == pick {
                             LazyValueTree::new_initialized(
@@ -507,24 +415,10 @@ pub struct TupleUnionValueTree<T> {
     prev_pick: Option<usize>,
 }
 
-/// `ValueTree` type produced by `LazyTupleUnion`.
-#[derive(Clone, Copy, Debug)]
-pub struct LazyTupleUnionValueTree<T> {
-    options: T,
-    pick: usize,
-    min_pick: usize,
-    prev_pick: Option<usize>,
-}
-
 macro_rules! value_tree_tuple {
     ($access:ident, $($gen:ident)*) => {
-        impl<A : ValueTree, $($gen: ValueTree<Value = A::Value>),*> ValueTree
-        for TupleUnionValueTree<(A, $(Option<$gen>),*)> {
-            union_value_tree_body!(A::Value, $access);
-        }
-
         impl<A : Strategy, $($gen: Strategy<Value = A::Value>),*> ValueTree
-        for LazyTupleUnionValueTree<
+        for TupleUnionValueTree<
             (LazyValueTree<A>, $(Option<LazyValueTree<$gen>>),*)
         > {
             lazy_union_value_tree_body!(A::Value, $access);
@@ -657,7 +551,10 @@ mod test {
     #[cfg(feature = "std")]
     #[test]
     fn test_tuple_union() {
-        let input = TupleUnion::new(((1, 10u32..20u32), (1, 30u32..40u32)));
+        let input = TupleUnion::new((
+            (1, Arc::new(10u32..20u32)),
+            (1, Arc::new(30u32..40u32)),
+        ));
         // Expect that 25% of cases pass (left input happens to be < 15, and
         // left is chosen as initial value). Of the 75% that fail, 50% should
         // converge to 15 and 50% to 30 (the latter because the left is beneath
@@ -697,9 +594,9 @@ mod test {
     #[test]
     fn test_tuple_union_weighting() {
         let input = TupleUnion::new((
-            (1, Just(0usize)),
-            (2, Just(1usize)),
-            (1, Just(2usize)),
+            (1, Arc::new(Just(0usize))),
+            (2, Arc::new(Just(1usize))),
+            (1, Arc::new(Just(2usize))),
         ));
 
         let mut counts = [0, 0, 0];
@@ -718,13 +615,13 @@ mod test {
     #[test]
     fn test_tuple_union_all_sizes() {
         let mut runner = TestRunner::deterministic();
-        let r = 1i32..10;
+        let r = Arc::new(1i32..10);
 
         macro_rules! test {
             ($($part:expr),*) => {{
                 let input = TupleUnion::new((
                     $((1, $part.clone())),*,
-                    (1, Just(0i32))
+                    (1, Arc::new(Just(0i32)))
                 ));
 
                 let mut pass = false;
@@ -754,18 +651,6 @@ mod test {
     fn test_tuple_union_sanity() {
         check_strategy_sanity(
             TupleUnion::new((
-                (1, 0i32..100i32),
-                (1, 200i32..1000i32),
-                (1, 2000i32..3000i32),
-            )),
-            None,
-        );
-    }
-
-    #[test]
-    fn test_lazy_tuple_union_sanity() {
-        check_strategy_sanity(
-            LazyTupleUnion::new((
                 (1, Arc::new(0i32..100i32)),
                 (1, Arc::new(200i32..1000i32)),
                 (1, Arc::new(2000i32..3000i32)),
@@ -784,27 +669,12 @@ mod test {
         );
     }
 
-    /// Test that unions work even if local filtering causes errors.
+    /// Test that tuple unions work even if local filtering causes errors.
     #[test]
     fn test_filter_tuple_union_sanity() {
         let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
         check_strategy_sanity(
             TupleUnion::new((
-                (1, filter_strategy.clone()),
-                (1, filter_strategy.clone()),
-                (1, filter_strategy.clone()),
-                (1, filter_strategy.clone()),
-            )),
-            Some(filter_sanity_options()),
-        );
-    }
-
-    /// Test that lazy tuple unions work even if local filtering causes errors.
-    #[test]
-    fn test_filter_lazy_tuple_union_sanity() {
-        let filter_strategy = (0u32..256).prop_filter("!%5", |&v| 0 != v % 5);
-        check_strategy_sanity(
-            LazyTupleUnion::new((
                 (1, Arc::new(filter_strategy.clone())),
                 (1, Arc::new(filter_strategy.clone())),
                 (1, Arc::new(filter_strategy.clone())),

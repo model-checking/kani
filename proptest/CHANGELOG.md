@@ -7,6 +7,10 @@
 - The `proptest!` macro no longer accepts function bodies which implicitly
   return a value (which would then be discarded).
 
+- The `TupleUnion` implementation in `proptest` 0.9 has been removed and
+  replaced with `LazyTupleUnion`. `prop_oneof!` is unaffected and continues
+  to be the recommended way to build a union of strategies.
+
 ### New Features
 
 - Enabling the `hardware-rng` optional depndency (disabled by default) allows
