@@ -31,6 +31,7 @@
 use core::fmt;
 use core::marker::PhantomData;
 
+use crate::std_facade::Arc;
 use crate::strategy::*;
 use crate::test_runner::*;
 
@@ -86,13 +87,14 @@ opaque_strategy_wrapper! {
     /// Shrinks to `Err`.
     #[derive(Clone)]
     pub struct MaybeOk[<T, E>][where T : Strategy, E : Strategy]
-        (TupleUnion<(W<MapErr<T, E>>, W<MapOk<T, E>>)>)
-        -> MaybeOkValueTree<T::Tree, E::Tree>;
+        (TupleUnion<(WA<MapErr<T, E>>, WA<MapOk<T, E>>)>)
+        -> MaybeOkValueTree<T, E>;
     /// `ValueTree` type corresponding to `MaybeOk`.
-    #[derive(Clone, Debug)]
-    pub struct MaybeOkValueTree[<T, E>][where T : ValueTree, E : ValueTree]
-        (TupleUnionValueTree<(statics::Map<E, WrapErr<T::Value, E::Value>>,
-                              Option<statics::Map<T, WrapOk<T::Value, E::Value>>>)>)
+    pub struct MaybeOkValueTree[<T, E>][where T : Strategy, E : Strategy]
+        (TupleUnionValueTree<(
+            LazyValueTree<statics::Map<E, WrapErr<T::Value, E::Value>>>,
+            Option<LazyValueTree<statics::Map<T, WrapOk<T::Value, E::Value>>>>,
+        )>)
         -> Result<T::Value, E::Value>;
 }
 
@@ -103,13 +105,14 @@ opaque_strategy_wrapper! {
     /// Shrinks to `Ok`.
     #[derive(Clone)]
     pub struct MaybeErr[<T, E>][where T : Strategy, E : Strategy]
-        (TupleUnion<(W<MapOk<T, E>>, W<MapErr<T, E>>)>)
-        -> MaybeErrValueTree<T::Tree, E::Tree>;
+        (TupleUnion<(WA<MapOk<T, E>>, WA<MapErr<T, E>>)>)
+        -> MaybeErrValueTree<T, E>;
     /// `ValueTree` type corresponding to `MaybeErr`.
-    #[derive(Clone, Debug)]
-    pub struct MaybeErrValueTree[<T, E>][where T : ValueTree, E : ValueTree]
-        (TupleUnionValueTree<(statics::Map<T, WrapOk<T::Value, E::Value>>,
-                              Option<statics::Map<E, WrapErr<T::Value, E::Value>>>)>)
+    pub struct MaybeErrValueTree[<T, E>][where T : Strategy, E : Strategy]
+        (TupleUnionValueTree<(
+            LazyValueTree<statics::Map<T, WrapOk<T::Value, E::Value>>>,
+            Option<LazyValueTree<statics::Map<E, WrapErr<T::Value, E::Value>>>>,
+        )>)
         -> Result<T::Value, E::Value>;
 }
 
@@ -126,6 +129,46 @@ impl<T: Strategy + fmt::Debug, E: Strategy + fmt::Debug> fmt::Debug
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "MaybeErr({:?})", self.0)
+    }
+}
+
+impl<T: Strategy, E: Strategy> Clone for MaybeOkValueTree<T, E>
+where
+    T::Tree: Clone,
+    E::Tree: Clone,
+{
+    fn clone(&self) -> Self {
+        MaybeOkValueTree(self.0.clone())
+    }
+}
+
+impl<T: Strategy, E: Strategy> fmt::Debug for MaybeOkValueTree<T, E>
+where
+    T::Tree: fmt::Debug,
+    E::Tree: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MaybeOkValueTree({:?})", self.0)
+    }
+}
+
+impl<T: Strategy, E: Strategy> Clone for MaybeErrValueTree<T, E>
+    where
+        T::Tree: Clone,
+        E::Tree: Clone,
+{
+    fn clone(&self) -> Self {
+        MaybeErrValueTree(self.0.clone())
+    }
+}
+
+impl<T: Strategy, E: Strategy> fmt::Debug for MaybeErrValueTree<T, E>
+    where
+        T::Tree: fmt::Debug,
+        E::Tree: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MaybeErrValueTree({:?})", self.0)
     }
 }
 
@@ -157,11 +200,11 @@ pub fn maybe_ok_weighted<T: Strategy, E: Strategy>(
     MaybeOk(TupleUnion::new((
         (
             err_weight,
-            statics::Map::new(e, WrapErr(PhantomData, PhantomData)),
+            Arc::new(statics::Map::new(e, WrapErr(PhantomData, PhantomData))),
         ),
         (
             ok_weight,
-            statics::Map::new(t, WrapOk(PhantomData, PhantomData)),
+            Arc::new(statics::Map::new(t, WrapOk(PhantomData, PhantomData))),
         ),
     )))
 }
@@ -194,11 +237,11 @@ pub fn maybe_err_weighted<T: Strategy, E: Strategy>(
     MaybeErr(TupleUnion::new((
         (
             ok_weight,
-            statics::Map::new(t, WrapOk(PhantomData, PhantomData)),
+            Arc::new(statics::Map::new(t, WrapOk(PhantomData, PhantomData))),
         ),
         (
             err_weight,
-            statics::Map::new(e, WrapErr(PhantomData, PhantomData)),
+            Arc::new(statics::Map::new(e, WrapErr(PhantomData, PhantomData))),
         ),
     )))
 }

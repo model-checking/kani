@@ -14,6 +14,7 @@
 use core::fmt;
 use core::marker::PhantomData;
 
+use crate::std_facade::Arc;
 use crate::strategy::*;
 use crate::test_runner::*;
 
@@ -164,14 +165,15 @@ opaque_strategy_wrapper! {
     /// Constructed by other functions in this module.
     #[derive(Clone)]
     pub struct OptionStrategy[<T>][where T : Strategy]
-        (TupleUnion<(W<NoneStrategy<T::Value>>,
-                     W<statics::Map<T, WrapSome>>)>)
-        -> OptionValueTree<T::Tree>;
+        (TupleUnion<(WA<NoneStrategy<T::Value>>,
+                     WA<statics::Map<T, WrapSome>>)>)
+        -> OptionValueTree<T>;
     /// `ValueTree` type corresponding to `OptionStrategy`.
-    #[derive(Clone, Debug)]
-    pub struct OptionValueTree[<T>][where T : ValueTree]
-        (TupleUnionValueTree<(NoneStrategy<T::Value>,
-                              Option<statics::Map<T, WrapSome>>)>)
+    pub struct OptionValueTree[<T>][where T : Strategy]
+        (TupleUnionValueTree<(
+            LazyValueTree<NoneStrategy<T::Value>>,
+            Option<LazyValueTree<statics::Map<T, WrapSome>>>,
+        )>)
         -> Option<T::Value>;
 }
 
@@ -181,6 +183,24 @@ opaque_strategy_wrapper! {
 impl<T: Strategy + fmt::Debug> fmt::Debug for OptionStrategy<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "OptionStrategy({:?})", self.0)
+    }
+}
+
+impl<T: Strategy> Clone for OptionValueTree<T>
+where
+    T::Tree: Clone,
+{
+    fn clone(&self) -> Self {
+        OptionValueTree(self.0.clone())
+    }
+}
+
+impl<T: Strategy> fmt::Debug for OptionValueTree<T>
+where
+    T::Tree: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "OptionValueTree({:?})", self.0)
     }
 }
 
@@ -209,8 +229,8 @@ pub fn weighted<T: Strategy>(
     let (weight_some, weight_none) = float_to_weight(prob);
 
     OptionStrategy(TupleUnion::new((
-        (weight_none, NoneStrategy(PhantomData)),
-        (weight_some, statics::Map::new(t, WrapSome)),
+        (weight_none, Arc::new(NoneStrategy(PhantomData))),
+        (weight_some, Arc::new(statics::Map::new(t, WrapSome))),
     )))
 }
 

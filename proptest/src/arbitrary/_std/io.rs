@@ -121,7 +121,7 @@ arbitrary!(ErrorKind, Union<Just<Self>>;
 
 arbitrary!(
     SeekFrom,
-    LazyTupleUnion<(
+    TupleUnion<(
         WA<SMapped<u64, SeekFrom>>,
         WA<SMapped<i64, SeekFrom>>,
         WA<SMapped<i64, SeekFrom>>,
