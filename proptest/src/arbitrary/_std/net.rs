@@ -21,7 +21,7 @@ use crate::strategy::*;
 arbitrary!(AddrParseError; "".parse::<Ipv4Addr>().unwrap_err());
 
 arbitrary!(Ipv4Addr,
-    LazyTupleUnion<(
+    TupleUnion<(
         WA<Just<Self>>,
         WA<Just<Self>>,
         WA<MapInto<StrategyFor<u32>, Self>>
@@ -34,7 +34,7 @@ arbitrary!(Ipv4Addr,
 );
 
 arbitrary!(Ipv6Addr,
-    LazyTupleUnion<(
+    TupleUnion<(
         WA<SMapped<Ipv4Addr, Self>>,
         WA<MapInto<StrategyFor<[u16; 8]>, Self>>
     )>;
@@ -54,8 +54,8 @@ arbitrary!(SocketAddrV6, SMapped<(Ipv6Addr, u16, u32, u32), Self>;
 );
 
 arbitrary!(IpAddr,
-    LazyTupleUnion<(WA<MapInto<StrategyFor<Ipv4Addr>, Self>>,
-                    WA<MapInto<StrategyFor<Ipv6Addr>, Self>>)>;
+    TupleUnion<(WA<MapInto<StrategyFor<Ipv4Addr>, Self>>,
+                WA<MapInto<StrategyFor<Ipv6Addr>, Self>>)>;
     prop_oneof![
         any::<Ipv4Addr>().prop_map_into(),
         any::<Ipv6Addr>().prop_map_into()
@@ -63,15 +63,15 @@ arbitrary!(IpAddr,
 );
 
 arbitrary!(Shutdown,
-    LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>)>;
+    TupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>)>;
     {
         use std::net::Shutdown::*;
         prop_oneof![Just(Both), Just(Read), Just(Write)]
     }
 );
 arbitrary!(SocketAddr,
-    LazyTupleUnion<(WA<MapInto<StrategyFor<SocketAddrV4>, Self>>,
-                    WA<MapInto<StrategyFor<SocketAddrV6>, Self>>)>;
+    TupleUnion<(WA<MapInto<StrategyFor<SocketAddrV4>, Self>>,
+                WA<MapInto<StrategyFor<SocketAddrV6>, Self>>)>;
     prop_oneof![
         any::<SocketAddrV4>().prop_map_into(),
         any::<SocketAddrV6>().prop_map_into()
@@ -80,9 +80,9 @@ arbitrary!(SocketAddr,
 
 #[cfg(feature = "unstable")]
 arbitrary!(Ipv6MulticastScope,
-    LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
-                    WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
-                    WA<Just<Self>>)>;
+    TupleUnion<(WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
+                WA<Just<Self>>, WA<Just<Self>>, WA<Just<Self>>,
+                WA<Just<Self>>)>;
     {
         use std::net::Ipv6MulticastScope::*;
         prop_oneof![

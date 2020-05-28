@@ -403,7 +403,7 @@ pub trait Strategy: fmt::Debug {
     ///
     /// ## Example
     ///
-    /// ```rust,norun
+    /// ```rust,no_run
     /// # #![allow(unused_variables)]
     /// use std::collections::HashMap;
     ///

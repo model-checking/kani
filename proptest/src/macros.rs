@@ -41,7 +41,7 @@ macro_rules! delegate_vt_0 {
         fn complicate(&mut self) -> bool {
             self.0.complicate()
         }
-    }
+    };
 }
 
 macro_rules! opaque_strategy_wrapper {

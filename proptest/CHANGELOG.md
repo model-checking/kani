@@ -1,8 +1,38 @@
-## Unreleased
+## 0.10.0
 
 ### Breaking Changes
 
 - The version of the `rand` crate has been increased to 0.7.
+
+- The `proptest!` macro no longer accepts function bodies which implicitly
+  return a value (which would then be discarded).
+
+- The `TupleUnion` implementation in `proptest` 0.9 has been removed and
+  replaced with `LazyTupleUnion`. `prop_oneof!` is unaffected and continues
+  to be the recommended way to build a union of strategies.
+
+### New Features
+
+- Enabling the `hardware-rng` optional depndency (disabled by default) allows
+  obtaining non-deterministic random seeds even in `no_std` environments
+  provided the architecture is x86 or AMD64.
+
+- Added missing `?Sized` bound to `B` on the implementation of
+  `Arbitrary` for `std::borrow::Cow<'_, B>`.
+
+### Bug Fixes
+
+- `prop_assert!` and `prop_assume!` should now be usable in `no_std`
+  environments.
+
+### Other Notes
+
+- `rusty_fork` has been bumped to 0.3.0, which adds support for a number of
+  [new test flags](https://github.com/AltSysrq/rusty-fork/blob/master/CHANGELOG.md#improvements)
+  when running forked tests.
+
+- The `PassThrough` RNG algorithm now returns 0 instead of panicking when it
+  runs out of entropy.
 
 ## 0.9.6
 
@@ -16,6 +46,8 @@
 ### Bug Fixes
 
 - Fixed a Rust future-compatibility issue (https://github.com/rust-lang/rust/pull/65819).
+
+### New Additions
 
 ## 0.9.4
 
@@ -571,18 +603,18 @@ features.
   types in  `proptest_derive`. More on this later releases.
 
 - The strategies in `proptest::option` and `proptest::result` now accept a type
-  `Probability` which is a wrapper around `f64`. Convertions from types such as
+  `Probability` which is a wrapper around `f64`. Conversions from types such as
   `f64` are provided to make the interface ergonomic to use. Users may also use
   the `proptest::option::prob` function to explicitly construct the type.
 
 - The strategies in `proptest::collections` now accept a type `SizeRange`
-  which is a wrapper around `Range<usize>`. Convertions from types
+  which is a wrapper around `Range<usize>`. Conversions from types
   such as `usize` and `Range<usize>` are provided to make the interface
   ergonomic to use. Users may also use the `proptest::collections::size_bounds`
   function to explicitly construct the type.
 
 - A `.prop_map_into()` operation on all strategies that map
-  using `Into<OutputType>`. This is a clerarer and cheaper
+  using `Into<OutputType>`. This is a clearer and cheaper
   operation than using `.prop_map(OutputType::from)`.
 
 - A nonshrinking `LazyJust` strategy that can be used instead of `Just` when you

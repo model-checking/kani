@@ -265,7 +265,7 @@ macro_rules! prop_assume {
 
     ($expr:expr, $fmt:tt $(, $fmt_arg:expr),* $(,)?) => {
         if !$expr {
-            return ::std::result::Result::Err(
+            return ::core::result::Result::Err(
                 $crate::test_runner::TestCaseError::reject(
                     format!(concat!("{}:{}:{}: ", $fmt),
                             file!(), line!(), column!()
@@ -335,7 +335,7 @@ macro_rules! prop_oneof {
 
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1))))
     };
@@ -343,7 +343,7 @@ macro_rules! prop_oneof {
     ($weight0:expr => $item0:expr,
      $weight1:expr => $item1:expr,
      $weight2:expr => $item2:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2))))
@@ -353,7 +353,7 @@ macro_rules! prop_oneof {
      $weight1:expr => $item1:expr,
      $weight2:expr => $item2:expr,
      $weight3:expr => $item3:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -365,7 +365,7 @@ macro_rules! prop_oneof {
      $weight2:expr => $item2:expr,
      $weight3:expr => $item3:expr,
      $weight4:expr => $item4:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -379,7 +379,7 @@ macro_rules! prop_oneof {
      $weight3:expr => $item3:expr,
      $weight4:expr => $item4:expr,
      $weight5:expr => $item5:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -395,7 +395,7 @@ macro_rules! prop_oneof {
      $weight4:expr => $item4:expr,
      $weight5:expr => $item5:expr,
      $weight6:expr => $item6:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -413,7 +413,7 @@ macro_rules! prop_oneof {
      $weight5:expr => $item5:expr,
      $weight6:expr => $item6:expr,
      $weight7:expr => $item7:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -433,7 +433,7 @@ macro_rules! prop_oneof {
      $weight6:expr => $item6:expr,
      $weight7:expr => $item7:expr,
      $weight8:expr => $item8:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -455,7 +455,7 @@ macro_rules! prop_oneof {
      $weight7:expr => $item7:expr,
      $weight8:expr => $item8:expr,
      $weight9:expr => $item9:expr $(,)?) => {
-        $crate::strategy::LazyTupleUnion::new(
+        $crate::strategy::TupleUnion::new(
             (($weight0, $crate::std_facade::Arc::new($item0)),
              ($weight1, $crate::std_facade::Arc::new($item1)),
              ($weight2, $crate::std_facade::Arc::new($item2)),
@@ -737,7 +737,7 @@ macro_rules! prop_assert {
         if !$cond {
             let message = format!($($fmt)*);
             let message = format!("{} at {}:{}", message, file!(), line!());
-            return ::std::result::Result::Err(
+            return ::core::result::Result::Err(
                 $crate::test_runner::TestCaseError::fail(message));
         }
     };
@@ -955,7 +955,7 @@ macro_rules! proptest_helper {
             $($mod)* |$crate::sugar::NamedArguments(
                 _, $crate::proptest_helper!(@_WRAPPAT ($($parm),*)))|
             {
-                $body;
+                let _: () = $body;
                 Ok(())
             })
         {
@@ -975,7 +975,7 @@ macro_rules! proptest_helper {
             $($mod)* |$crate::sugar::NamedArguments(
                 _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
             {
-                $body;
+                let _: () = $body;
                 Ok(())
             })
         {
@@ -1328,7 +1328,7 @@ mod test {
 
     #[test]
     fn oneof_all_counts() {
-        use crate::strategy::{Just as J, LazyTupleUnion, Strategy, Union};
+        use crate::strategy::{Just as J, Strategy, TupleUnion, Union};
 
         fn expect_count(n: usize, s: impl Strategy<Value = i32>) {
             use crate::strategy::*;
@@ -1344,7 +1344,7 @@ mod test {
             assert_eq!(n, seen.len());
         }
 
-        fn assert_static<T>(v: LazyTupleUnion<T>) -> LazyTupleUnion<T> {
+        fn assert_static<T>(v: TupleUnion<T>) -> TupleUnion<T> {
             v
         }
         fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> {

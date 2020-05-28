@@ -53,7 +53,7 @@ impl<S, F> Filter<S, F> {
     /// using `whence` as the reported reason/location.
     pub fn new(source: S, whence: Reason, filter: F) -> Self {
         // NOTE: We don't use universal quantification R: Into<Reason>
-        // since the module is not conviniently exposed.
+        // since the module is not conveniently exposed.
         Filter {
             source,
             whence,

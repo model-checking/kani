@@ -169,7 +169,8 @@ fn default_default_config() -> Config {
 // defaults.
 #[cfg(feature = "std")]
 lazy_static! {
-    static ref DEFAULT_CONFIG: Config = contextualize_config(default_default_config());
+    static ref DEFAULT_CONFIG: Config =
+        contextualize_config(default_default_config());
 }
 
 /// Configuration for how a proptest test should be run.

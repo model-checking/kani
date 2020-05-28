@@ -14,8 +14,12 @@ use crate::test_runner::TestRunner;
 
 macro_rules! noshrink {
     () => {
-        fn simplify(&mut self) -> bool { false }
-        fn complicate(&mut self) -> bool { false }
+        fn simplify(&mut self) -> bool {
+            false
+        }
+        fn complicate(&mut self) -> bool {
+            false
+        }
     };
 }
 
