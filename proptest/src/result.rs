@@ -153,9 +153,9 @@ where
 }
 
 impl<T: Strategy, E: Strategy> Clone for MaybeErrValueTree<T, E>
-    where
-        T::Tree: Clone,
-        E::Tree: Clone,
+where
+    T::Tree: Clone,
+    E::Tree: Clone,
 {
     fn clone(&self) -> Self {
         MaybeErrValueTree(self.0.clone())
@@ -163,9 +163,9 @@ impl<T: Strategy, E: Strategy> Clone for MaybeErrValueTree<T, E>
 }
 
 impl<T: Strategy, E: Strategy> fmt::Debug for MaybeErrValueTree<T, E>
-    where
-        T::Tree: fmt::Debug,
-        E::Tree: fmt::Debug,
+where
+    T::Tree: fmt::Debug,
+    E::Tree: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "MaybeErrValueTree({:?})", self.0)

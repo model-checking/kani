@@ -271,10 +271,13 @@ fatal!(
 
 // Happens when a struct has at least one field that is uninhabited.
 // There must at least exist one variant that we can construct.
-error!(uninhabited_struct, E0003,
+error!(
+    uninhabited_struct,
+    E0003,
     "The struct you are deriving `Arbitrary` for is uninhabited since one of \
     its fields is uninhabited. An uninhabited type is by definition impossible \
-    to generate.");
+    to generate."
+);
 
 // Happens when an enum has zero variants. Such an enum is obviously
 // uninhabited and can not be constructed. There must at least exist
@@ -466,12 +469,15 @@ error!(
 );
 
 // Happens when `#[proptest(weight..)]` is malformed.
-error!(weight_malformed(meta: &syn::Meta), E0021,
+error!(
+    weight_malformed(meta: &syn::Meta),
+    E0021,
     "The attribute modifier `{0}` inside `#[proptest(..)]` must have the \
     format `#[proptest({0} = <integer>)]` where `<integer>` is an integer that \
     fits within a `u32`. An example: `#[proptest({0} = 2)]` to set a relative \
     weight of 2.",
-    meta.name());
+    meta.name()
+);
 
 // Happens when both `#[proptest(params = "<type>")]` and
 // `#[proptest(no_params)]` were specified. They are mutually
@@ -550,10 +556,13 @@ error!(
 
 // Any attributes on a skipped variant has no effect - so we emit this error
 // to the user so that they are aware.
-error!(skipped_variant_has_param(item: &str), E0028,
+error!(
+    skipped_variant_has_param(item: &str),
+    E0028,
     "A variant has been skipped. Setting `#[proptest(no_param)]` or \
     `#[proptest(params(<type>))]` on the {} is meaningless and is not allowed.",
-    item);
+    item
+);
 
 // Any attributes on a skipped variant has no effect - so we emit this error
 // to the user so that they are aware.
