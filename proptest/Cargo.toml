@@ -104,6 +104,7 @@ version = "0.2"
 
 [dependencies.rand_chacha]
 version = "0.2"
+default-features = false
 
 [dependencies.byteorder]
 version = "1.2.3"
