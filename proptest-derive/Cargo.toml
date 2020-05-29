@@ -1,6 +1,6 @@
 [package]
 name          = "proptest-derive"
-version       = "0.1.2"
+version       = "0.2.0"
 authors       = ["Mazdak Farrokhzad <twingoow@gmail.com>"]
 license       = "MIT/Apache-2.0"
 readme        = "README.md"

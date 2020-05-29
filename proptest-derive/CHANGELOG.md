@@ -1,3 +1,9 @@
+## 0.2.0
+
+### Breaking changes
+
+- Generated code now requires `proptest` 0.10.0.
+
 ## 0.1.2
 
 ### Other Notes
