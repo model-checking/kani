@@ -371,7 +371,12 @@ impl TestRunner {
         &self.config
     }
 
-    /// dump the bytes used to produce a value
+    /// Dumps the bytes obtained from the RNG so far (only works if the RNG is
+    /// set to `Recorder`).
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the RNG does not capture generated data.
     pub fn bytes_used(&self) -> Vec<u8> {
         self.rng.bytes_used()
     }

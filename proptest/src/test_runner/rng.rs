@@ -50,11 +50,14 @@ pub enum RngAlgorithm {
     /// entropy is actually needed. This means that combinators like
     /// `prop_perturb` and `prop_flat_map` can require extremely large inputs.
     PassThrough,
-    /// This is equivalent to the ChaCha Rng, with the addition that it records,
-    /// the bytes used to create a value.
+    /// This is equivalent to the `ChaCha` RNG, with the addition that it
+    /// records the bytes used to create a value.
     ///
-    /// This is useful when Proptest is used for fuzzing, and a corpus of initial
-    /// inputs need to be created.
+    /// This is useful when Proptest is used for fuzzing, and a corpus of
+    /// initial inputs need to be created. Note that in these cases, you need
+    /// to use the `TestRunner` API directly yourself instead of using the
+    /// `proptest!` macro, as otherwise there is no way to obtain the bytes
+    /// this captures.
     Recorder,
     #[allow(missing_docs)]
     #[doc(hidden)]
@@ -406,7 +409,12 @@ impl TestRng {
         TestRng::from_seed_internal(Seed::from_bytes(algorithm, seed))
     }
 
-    /// dumps the bytes obtained from the RNG so far (only works if the RNG is set to Recorder)
+    /// Dumps the bytes obtained from the RNG so far (only works if the RNG is
+    /// set to `Recorder`).
+    ///
+    /// ## Panics
+    ///
+    /// Panics if this RNG does not capture generated data.
     pub fn bytes_used(&self) -> Vec<u8> {
         match self.rng {
             TestRngImpl::Recorder { ref record, .. } => record.clone(),
