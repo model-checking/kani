@@ -371,6 +371,16 @@ impl TestRunner {
         &self.config
     }
 
+    /// Dumps the bytes obtained from the RNG so far (only works if the RNG is
+    /// set to `Recorder`).
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the RNG does not capture generated data.
+    pub fn bytes_used(&self) -> Vec<u8> {
+        self.rng.bytes_used()
+    }
+
     /// Run test cases against `f`, choosing inputs via `strategy`.
     ///
     /// If any failure cases occur, try to find a minimal failure case and
@@ -1001,7 +1011,7 @@ mod test {
 
     use super::*;
     use crate::strategy::Strategy;
-    use crate::test_runner::FileFailurePersistence;
+    use crate::test_runner::{FileFailurePersistence, RngAlgorithm, TestRng};
 
     #[test]
     fn gives_up_after_too_many_rejections() {
@@ -1140,6 +1150,30 @@ mod test {
         let from_1 = runner.new_rng().gen::<[u8; 16]>();
         let from_2 = runner.rng().gen::<[u8; 16]>();
         assert_ne!(from_1, from_2);
+    }
+
+    #[test]
+    fn record_rng_use() {
+        use rand::Rng;
+
+        // create value with recorder rng
+        let default_config = Config::default();
+        let recorder_rng = TestRng::default_rng(RngAlgorithm::Recorder);
+        let mut runner =
+            TestRunner::new_with_rng(default_config.clone(), recorder_rng);
+        let random_byte_array1 = runner.rng().gen::<[u8; 16]>();
+        let bytes_used = runner.bytes_used();
+        assert!(bytes_used.len() >= 16); // could use more bytes for some reason
+
+        // re-create value with pass-through rng
+        let passthrough_rng =
+            TestRng::from_seed(RngAlgorithm::PassThrough, &bytes_used);
+        let mut runner =
+            TestRunner::new_with_rng(default_config, passthrough_rng);
+        let random_byte_array2 = runner.rng().gen::<[u8; 16]>();
+
+        // make sure the same value was created
+        assert_eq!(random_byte_array1, random_byte_array2);
     }
 
     #[cfg(feature = "fork")]

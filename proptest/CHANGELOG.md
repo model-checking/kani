@@ -1,3 +1,10 @@
+## Unreleased
+
+### New Features
+
+- Added `RngAlgorithm::Recorder` and supporting APIs which allow capturing
+  random data generated as part of generating a value or running a test.
+
 ## 0.10.0
 
 ### Breaking Changes
