@@ -50,6 +50,12 @@ pub enum RngAlgorithm {
     /// entropy is actually needed. This means that combinators like
     /// `prop_perturb` and `prop_flat_map` can require extremely large inputs.
     PassThrough,
+    /// This is equivalent to the ChaCha Rng, with the addition that it records,
+    /// the bytes used to create a value.
+    ///
+    /// This is useful when Proptest is used for fuzzing, and a corpus of initial
+    /// inputs need to be created.
+    Recorder,
     #[allow(missing_docs)]
     #[doc(hidden)]
     _NonExhaustive,
@@ -67,6 +73,7 @@ impl RngAlgorithm {
             RngAlgorithm::XorShift => "xs",
             RngAlgorithm::ChaCha => "cc",
             RngAlgorithm::PassThrough => "pt",
+            RngAlgorithm::Recorder => "rc",
             RngAlgorithm::_NonExhaustive => unreachable!(),
         }
     }
@@ -76,6 +83,7 @@ impl RngAlgorithm {
             "xs" => Some(RngAlgorithm::XorShift),
             "cc" => Some(RngAlgorithm::ChaCha),
             "pt" => Some(RngAlgorithm::PassThrough),
+            "rc" => Some(RngAlgorithm::Recorder),
             _ => None,
         }
     }
@@ -110,6 +118,10 @@ enum TestRngImpl {
         end: usize,
         data: Arc<[u8]>,
     },
+    Recorder {
+        rng: ChaChaRng,
+        record: Vec<u8>,
+    },
 }
 
 impl RngCore for TestRng {
@@ -124,6 +136,15 @@ impl RngCore for TestRng {
                 self.fill_bytes(&mut buf[..]);
                 LittleEndian::read_u32(&buf[..])
             }
+
+            &mut TestRngImpl::Recorder {
+                ref mut rng,
+                ref mut record,
+            } => {
+                let read = rng.next_u32();
+                record.extend_from_slice(&read.to_le_bytes());
+                read
+            }
         }
     }
 
@@ -137,6 +158,15 @@ impl RngCore for TestRng {
                 let mut buf = [0; 8];
                 self.fill_bytes(&mut buf[..]);
                 LittleEndian::read_u64(&buf[..])
+            }
+
+            &mut TestRngImpl::Recorder {
+                ref mut rng,
+                ref mut record,
+            } => {
+                let read = rng.next_u64();
+                record.extend_from_slice(&read.to_le_bytes());
+                read
             }
         }
     }
@@ -160,6 +190,15 @@ impl RngCore for TestRng {
                     dest[i] = 0;
                 }
             }
+
+            &mut TestRngImpl::Recorder {
+                ref mut rng,
+                ref mut record,
+            } => {
+                let res = rng.fill_bytes(dest);
+                record.extend_from_slice(&dest);
+                res
+            }
         }
     }
 
@@ -173,6 +212,17 @@ impl RngCore for TestRng {
                 self.fill_bytes(dest);
                 Ok(())
             }
+
+            TestRngImpl::Recorder {
+                ref mut rng,
+                ref mut record,
+            } => {
+                let res = rng.try_fill_bytes(dest);
+                if res.is_ok() {
+                    record.extend_from_slice(&dest);
+                }
+                res
+            }
         }
     }
 }
@@ -182,6 +232,7 @@ pub(crate) enum Seed {
     XorShift([u8; 16]),
     ChaCha([u8; 32]),
     PassThrough(Option<(usize, usize)>, Arc<[u8]>),
+    Recorder([u8; 32]),
 }
 
 impl Seed {
@@ -202,6 +253,13 @@ impl Seed {
             }
 
             RngAlgorithm::PassThrough => Seed::PassThrough(None, seed.into()),
+
+            RngAlgorithm::Recorder => {
+                assert_eq!(32, seed.len(), "Recorder requires a 32-byte seed");
+                let mut buf = [0; 32];
+                buf.copy_from_slice(seed);
+                Seed::Recorder(buf)
+            }
 
             RngAlgorithm::_NonExhaustive => unreachable!(),
         }
@@ -269,6 +327,16 @@ impl Seed {
                     Some(Seed::PassThrough(None, seed.into()))
                 }
 
+                RngAlgorithm::Recorder => {
+                    if 2 != parts.len() {
+                        return None;
+                    }
+
+                    let mut seed = [0u8; 32];
+                    from_base16(&mut seed, &parts[1])?;
+                    Some(Seed::Recorder(seed))
+                }
+
                 RngAlgorithm::_NonExhaustive => unreachable!(),
             },
         )
@@ -312,6 +380,14 @@ impl Seed {
                 to_base16(&mut string, data);
                 string
             }
+
+            Seed::Recorder(ref seed) => {
+                let mut string =
+                    RngAlgorithm::Recorder.persistence_key().to_owned();
+                string.push(' ');
+                to_base16(&mut string, seed);
+                string
+            }
         }
     }
 }
@@ -330,6 +406,14 @@ impl TestRng {
         TestRng::from_seed_internal(Seed::from_bytes(algorithm, seed))
     }
 
+    /// dumps the bytes obtained from the RNG so far (only works if the RNG is set to Recorder)
+    pub fn bytes_used(&self) -> Vec<u8> {
+        match self.rng {
+            TestRngImpl::Recorder { ref record, .. } => record.clone(),
+            _ => unimplemented!(),
+        }
+    }
+
     /// Construct a default TestRng from entropy.
     pub(crate) fn default_rng(algorithm: RngAlgorithm) -> Self {
         #[cfg(feature = "std")]
@@ -345,6 +429,10 @@ impl TestRng {
                     RngAlgorithm::PassThrough => {
                         panic!("cannot create default instance of PassThrough")
                     }
+                    RngAlgorithm::Recorder => TestRngImpl::Recorder {
+                        rng: ChaChaRng::from_entropy(),
+                        record: Vec::new(),
+                    },
                     RngAlgorithm::_NonExhaustive => unreachable!(),
                 },
             }
@@ -410,6 +498,15 @@ impl TestRng {
             RngAlgorithm::PassThrough => {
                 panic!("deterministic RNG not available for PassThrough")
             }
+            RngAlgorithm::Recorder => {
+                // Initialize to a sane seed just in case
+                let mut seed: [u8; 32] = TestRng::SEED_FOR_CHA_CHA;
+                unsafe {
+                    let r = rdrand_slice(&mut seed);
+                    debug_assert!(r, "hardware_rng should only be called on machines with support for rdrand");
+                }
+                Seed::Recorder(seed)
+            }
             RngAlgorithm::_NonExhaustive => unreachable!(),
         })
     }
@@ -437,6 +534,7 @@ impl TestRng {
             RngAlgorithm::PassThrough => {
                 panic!("deterministic RNG not available for PassThrough")
             }
+            RngAlgorithm::Recorder => Seed::Recorder(TestRng::SEED_FOR_CHA_CHA),
             RngAlgorithm::_NonExhaustive => unreachable!(),
         })
     }
@@ -495,6 +593,10 @@ impl TestRng {
                     Arc::clone(data),
                 )
             }
+
+            TestRngImpl::Recorder { ref mut rng, .. } => {
+                Seed::Recorder(rng.gen())
+            }
         }
     }
 
@@ -518,6 +620,11 @@ impl TestRng {
                         data,
                     }
                 }
+
+                Seed::Recorder(seed) => TestRngImpl::Recorder {
+                    rng: ChaChaRng::from_seed(seed),
+                    record: Vec::new(),
+                },
             },
         }
     }
@@ -540,6 +647,7 @@ mod test {
                 any::<[u8;16]>().prop_map(Seed::XorShift),
                 any::<[u8;32]>().prop_map(Seed::ChaCha),
                 any::<Vec<u8>>().prop_map(|data| Seed::PassThrough(None, data.into())),
+                any::<[u8;32]>().prop_map(Seed::Recorder),
             ])
         {
             assert_eq!(seed, Seed::from_persistence(&seed.to_persistence()).unwrap());
@@ -555,6 +663,7 @@ mod test {
                     rng.fill_bytes(&mut buf);
                     Seed::PassThrough(None, buf.into())
                 }),
+                any::<[u8;32]>().prop_map(Seed::Recorder),
             ])
         {
             type Value = [u8;32];
