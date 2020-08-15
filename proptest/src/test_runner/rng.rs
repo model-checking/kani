@@ -418,7 +418,7 @@ impl TestRng {
     pub fn bytes_used(&self) -> Vec<u8> {
         match self.rng {
             TestRngImpl::Recorder { ref record, .. } => record.clone(),
-            _ => unimplemented!(),
+            _ => panic!("bytes_used() called on non-Recorder RNG"),
         }
     }
 
