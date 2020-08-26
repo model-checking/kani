@@ -55,9 +55,8 @@ impl Default for StringParam {
 }
 
 // quick_error! uses bare trait objects, so we enclose its invocation here in a
-// module so the lint can be disabled just for it. Also suppress deprecation
-// due to .description().
-#[allow(bare_trait_objects, deprecated)]
+// module so the lint can be disabled just for it.
+#[allow(bare_trait_objects)]
 mod error_container {
     use super::*;
 
@@ -69,14 +68,13 @@ mod error_container {
             /// The string passed as the regex was not syntactically valid.
             RegexSyntax(err: ParseError) {
                 from()
-                    cause(err)
-                    description(err.description())
+                    source(err)
                     display("{}", err)
             }
             /// The regex was syntactically valid, but contains elements not
             /// supported by proptest.
             UnsupportedRegex(message: &'static str) {
-                description(message)
+                display("{}", message)
             }
         }
     }
