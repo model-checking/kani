@@ -11,5 +11,5 @@ extern crate proptest_derive;
 
 fn main() {}
 
-#[derive(Arbitrary)] //~ `Foo` doesn't implement `std::fmt::Debug` [E0277]
+#[derive(Arbitrary)] //~ `Foo` doesn't implement `Debug` [E0277]
 struct Foo { x: usize }
