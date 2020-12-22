@@ -2,7 +2,7 @@ language: rust
 sudo: false
 dist: trusty
 rust:
-- 1.33.0
+- 1.36.0
 - stable
 - beta
 - nightly
