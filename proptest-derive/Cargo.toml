@@ -18,15 +18,6 @@ Custom-derive for the Arbitrary trait of proptest.
 homepage = "https://altsysrq.github.io/proptest-book/proptest-derive/index.html"
 edition = "2018"
 
-[badges]
-maintenance = { status = "experimental" }
-travis-ci = { repository = "AltSysrq/proptest" }
-
-[badges.appveyor]
-repository = "AltSysrq/proptest"
-branch = "master"
-service = "github"
-
 [lib]
 proc-macro = true
 

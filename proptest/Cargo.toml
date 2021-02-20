@@ -16,14 +16,6 @@ description = """
 Hypothesis-like property-based testing and shrinking.
 """
 
-[badges]
-travis-ci = { repository = "AltSysrq/proptest" }
-
-[badges.appveyor]
-repository = "AltSysrq/proptest"
-branch = "master"
-service = "github"
-
 [features]
 
 default = ["std", "fork", "timeout", "bit-set", "break-dead-code"]
