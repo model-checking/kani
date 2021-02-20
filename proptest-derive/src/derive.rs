@@ -540,11 +540,7 @@ fn variant_no_explicit_strategy<C>(
             ctor
         } else {
             let pref = acc.add_param(params_ty);
-            if pref + 1 == count {
-                ctor
-            } else {
-                extract_all(ctor, count, FromReg::Num(pref))
-            }
+            extract_all(ctor, count, FromReg::Num(pref))
         },
     ))
 }
