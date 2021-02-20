@@ -170,7 +170,7 @@ where
             // Determine the other index to be swapped, then skip the swap if
             // it is too far. This ordering is critical, as it ensures that we
             // generate the same sequence of random numbers every time.
-            let end_index = rng.gen_range(start_index + 1 .. len);
+            let end_index = rng.gen_range(start_index .. len);
             if end_index - start_index <= max_swap {
                 value.shuffle_swap(start_index, end_index);
             }
