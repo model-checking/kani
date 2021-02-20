@@ -36,7 +36,7 @@ arbitrary!(self::alloc::Layout, SFnPtrMap<(Range<u8>, StrategyFor<usize>), Self>
     })
 );
 
-arbitrary!(self::alloc::AllocErr, Just<Self>; Just(self::alloc::AllocErr));
+arbitrary!(self::alloc::AllocError, Just<Self>; Just(self::alloc::AllocError));
 /* 2018-07-28 CollectionAllocErr is not currently available outside of using
  * the `alloc` crate, which would require a different nightly feature. For now,
  * disable.
