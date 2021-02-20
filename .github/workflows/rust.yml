@@ -24,7 +24,7 @@ jobs:
         include:
         - build: pinned
           os: ubuntu-18.04
-          rust: 1.32.0
+          rust: 1.50.0
         - build: stable
           os: ubuntu-18.04
           rust: stable
@@ -49,7 +49,7 @@ jobs:
     - name: Run tests
       run: cd proptest && cargo test --verbose
     - name: Build coverage no-default-features
-      if: ${{ matrix.build == 'stable' }} 
+      if: ${{ matrix.build == 'stable' }}
       env:
         RUST_FLAGS: '-C link-dead-code'
       run: cd proptest && cargo build --no-default-features --features default-code-coverage
