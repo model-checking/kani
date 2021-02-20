@@ -1,3 +1,20 @@
+## Unreleased
+
+### Breaking Changes
+
+- The minimum supported Rust version has been increased to 1.50.0.
+
+- The version of the `rand` crate has been increased to 0.8.
+
+### Bug Fixes
+
+- `prop_shuffle()` can now produce all permutations.
+
+### New Features
+
+- Tuple strategies up to 12 elements are now supported, for parity with the
+  blanket implementations that `std` provides.
+
 ## 0.10.1
 
 ### New Features
