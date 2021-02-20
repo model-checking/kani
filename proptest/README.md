@@ -121,8 +121,8 @@ thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it 
 If we look at the top directory after the test fails, we'll see a new
 `proptest-regressions` directory, which contains some files corresponding
 to source files containing failing test cases. These are [_failure
-persistence_](#failure-persistence) files. The first thing we should do is
-add these to source control.
+persistence_](https://altsysrq.github.io/proptest-book/proptest/failure-persistence.html)
+files. The first thing we should do is add these to source control.
 
 ```text
 $ git add proptest-regressions
