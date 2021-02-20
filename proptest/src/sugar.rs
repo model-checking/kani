@@ -1169,7 +1169,7 @@ mod test {
 
     prop_compose! {
         /// These are docs!
-        #[allow(dead_code)]
+        #[allow(dead_code, improper_ctypes_definitions)]
         pub [extern "C"] fn two_ints_pub_with_attrs
             (relative: i32)(a in 0..relative, b in relative..)
             -> (i32, i32)
@@ -1184,7 +1184,7 @@ mod test {
         // eventually work, but is not allowed right now since the generated
         // code contains local variables. `extern "C"` is accepted, even though
         // the result is useless since the return type isn't C-compatible.
-        #[allow(dead_code)]
+        #[allow(dead_code, improper_ctypes_definitions)]
         [extern "C"] fn with_modifier(relative: i32)(a in 0..relative) -> i32 {
             a
         }
