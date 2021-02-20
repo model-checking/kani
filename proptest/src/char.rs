@@ -114,16 +114,16 @@ fn select_range_index(
     }
 
     if !special.is_empty() && rnd.gen() {
-        let s = special[rnd.gen_range(0, special.len())];
+        let s = special[rnd.gen_range(0..special.len())];
         if let Some(ret) = in_range(ranges, s) {
             return ret;
         }
     }
 
     if !preferred.is_empty() && rnd.gen() {
-        let range = preferred[rnd.gen_range(0, preferred.len())].clone();
+        let range = preferred[rnd.gen_range(0..preferred.len())].clone();
         if let Some(ch) = ::core::char::from_u32(
-            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1),
+            rnd.gen_range(*range.start() as u32 .. *range.end() as u32 + 1),
         ) {
             if let Some(ret) = in_range(ranges, ch) {
                 return ret;
@@ -132,9 +132,9 @@ fn select_range_index(
     }
 
     for _ in 0..65_536 {
-        let range = ranges[rnd.gen_range(0, ranges.len())].clone();
+        let range = ranges[rnd.gen_range(0..ranges.len())].clone();
         if let Some(ch) = ::core::char::from_u32(
-            rnd.gen_range(*range.start() as u32, *range.end() as u32 + 1),
+            rnd.gen_range(*range.start() as u32 .. *range.end() as u32 + 1),
         ) {
             return (*range.start() as u32, ch as u32 - *range.start() as u32);
         }
