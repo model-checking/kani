@@ -6,6 +6,11 @@
 
 - The version of the `rand` crate has been increased to 0.8.
 
+- Due to changes in the `getrandom` crate, if you wish to use proptest on the
+  `wasm32-unknown-unknown` target, you must manually add a dependency on that
+  crate and enable a feature that will allow it to work. Refer to the
+  `getrandom` crate documentation for more information.
+
 ### Bug Fixes
 
 - `prop_shuffle()` can now produce all permutations.
