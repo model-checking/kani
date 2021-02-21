@@ -1,12 +1,12 @@
 [package]
 name = "proptest"
-version = "0.10.1"
+version = "1.0.0"
 authors = ["Jason Lingle"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/altsysrq/proptest"
 homepage = "https://altsysrq.github.io/proptest-book/proptest/index.html"
-documentation = "https://altsysrq.github.io/rustdoc/proptest/0.10.1/proptest/"
+documentation = "https://altsysrq.github.io/rustdoc/proptest/1.0.0/proptest/"
 keywords = ["property", "testing", "quickcheck", "fuzz", "hypothesis"]
 categories = ["development-tools::testing"]
 edition = "2018"
@@ -15,14 +15,6 @@ exclude = ["/gen-*.sh", "/readme-*.md"]
 description = """
 Hypothesis-like property-based testing and shrinking.
 """
-
-[badges]
-travis-ci = { repository = "AltSysrq/proptest" }
-
-[badges.appveyor]
-repository = "AltSysrq/proptest"
-branch = "master"
-service = "github"
 
 [features]
 
@@ -79,7 +71,7 @@ version = "0.2.2"
 default-features = false
 
 [dependencies.quick-error]
-version = "1.2.1"
+version = "2.0.0"
 optional = true
 
 [dependencies.regex-syntax]
@@ -95,15 +87,15 @@ version = "0.5.0"
 optional = true
 
 [dependencies.rand]
-version = "0.7"
+version = "0.8"
 default-features = false
 features = ["alloc"]
 
 [dependencies.rand_xorshift]
-version = "0.2"
+version = "0.3"
 
 [dependencies.rand_chacha]
-version = "0.2"
+version = "0.3"
 default-features = false
 
 [dependencies.byteorder]

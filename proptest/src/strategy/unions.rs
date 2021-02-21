@@ -162,7 +162,7 @@ macro_rules! access_vec {
     }}
 }
 
-/// `ValueTree corresponding to `Union`.
+/// `ValueTree` corresponding to `Union`.
 pub struct UnionValueTree<T: Strategy> {
     options: Vec<LazyValueTree<T>>,
     // This struct maintains the invariant that between function calls,

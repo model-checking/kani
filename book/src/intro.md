@@ -10,11 +10,9 @@ makes it more flexible and simplifies composition.
 
 ## Status of this crate
 
-The majority of the functionality offered by proptest is in active use and
-is known to work well.
-
-The API is unlikely to see drastic breaking changes, but there may still be
-minor breaking changes here and there, though this is becoming less common.
+The crate is fairly close to being feature-complete and has not seen
+substantial architectural changes in quite some time. At this point, it mainly
+sees passive maintenance.
 
 See the [changelog](https://github.com/AltSysrq/proptest/blob/master/proptest/CHANGELOG.md)
 for a full list of substantial historical changes, breaking and otherwise.

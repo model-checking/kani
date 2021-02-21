@@ -3,7 +3,11 @@
 [![Build Status](https://github.com/AltSysrq/proptest/workflows/Rust/badge.svg?branch=master)](https://github.com/AltSysrq/proptest/actions)
 [![Build status](https://ci.appveyor.com/api/projects/status/ofe98xfthbx1m608/branch/master?svg=true)](https://ci.appveyor.com/project/AltSysrq/proptest/branch/master)
 [![](http://meritbadge.herokuapp.com/proptest)](https://crates.io/crates/proptest)
+[![](https://img.shields.io/website/https/altsysrq.github.io/proptest-book.svg)][book]
+[![](https://docs.rs/proptest/badge.svg)][api-docs]
 
+[book]: https://altsysrq.github.io/proptest-book/intro.html
+[api-docs]: https://altsysrq.github.io/rustdoc/proptest/latest/proptest/
 ## Introduction
 
 Proptest is a property testing framework (i.e., the QuickCheck family)
@@ -16,11 +20,9 @@ makes it more flexible and simplifies composition.
 
 ### Status of this crate
 
-The majority of the functionality offered by proptest is in active use and
-is known to work well.
-
-The API is unlikely to see drastic breaking changes, but there may still be
-minor breaking changes here and there, though this is becoming less common.
+The crate is fairly close to being feature-complete and has not seen
+substantial architectural changes in quite some time. At this point, it mainly
+sees passive maintenance.
 
 See the [changelog](https://github.com/AltSysrq/proptest/blob/master/proptest/CHANGELOG.md)
 for a full list of substantial historical changes, breaking and otherwise.
@@ -80,7 +82,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.10.1"
+proptest = "1.0.0"
 ```
 
 Now we can add some property tests to our date parser. But how do we test
@@ -119,10 +121,10 @@ thread 'main' panicked at 'Test failed: byte index 4 is not a char boundary; it 
 ```
 
 If we look at the top directory after the test fails, we'll see a new
-`proptest-regressions` directory, which contains some files corresponding
-to source files containing failing test cases. These are [_failure
-persistence_](#failure-persistence) files. The first thing we should do is
-add these to source control.
+`proptest-regressions` directory, which contains some files corresponding to
+source files containing failing test cases. These are [_failure
+persistence_](https://altsysrq.github.io/proptest-book/proptest/failure-persistence.html)
+files. The first thing we should do is add these to source control.
 
 ```text
 $ git add proptest-regressions

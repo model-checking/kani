@@ -14,7 +14,4 @@ set -eux
     cargo clean
     cargo +nightly build --target wasm32-unknown-emscripten \
           --no-default-features --features std
-    cargo clean
-    cargo +nightly build --target wasm32-unknown-unknown \
-          --no-default-features --features std
 )

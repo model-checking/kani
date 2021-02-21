@@ -452,6 +452,25 @@ enum SameType {
     B(usize),
 }
 
+#[derive(Arbitrary, Debug)]
+enum OneTwo {
+    One(u8),
+    Two(u8, u8),
+}
+
+#[derive(Arbitrary, Debug)]
+enum ZeroOneTwo {
+    Zero,
+    One(u8),
+    Two(u8, u8),
+}
+
+#[derive(Arbitrary, Debug)]
+enum Nested {
+    First(SameType),
+    Second(ZeroOneTwo, OneTwo)
+}
+
 #[test]
 fn asserting_arbitrary() {
     fn assert_arbitrary<T: Arbitrary>() {}
@@ -483,4 +502,7 @@ fn asserting_arbitrary() {
     assert_arbitrary::<T25>();
     assert_arbitrary::<Alan>();
     assert_arbitrary::<SameType>();
+    assert_arbitrary::<OneTwo>();
+    assert_arbitrary::<ZeroOneTwo>();
+    assert_arbitrary::<Nested>();
 }
