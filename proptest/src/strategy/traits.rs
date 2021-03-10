@@ -278,7 +278,7 @@ pub trait Strategy: fmt::Debug {
     /// generated from `self` in slot 0 and the derived strategy in slot 1.
     ///
     /// See `prop_flat_map()` for a more detailed explanation on how the
-    /// three flat-map combinators differ differ.
+    /// three flat-map combinators differ.
     fn prop_ind_flat_map2<S: Strategy, F: Fn(Self::Value) -> S>(
         self,
         fun: F,
