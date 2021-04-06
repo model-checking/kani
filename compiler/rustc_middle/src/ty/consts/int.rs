@@ -122,8 +122,8 @@ impl std::fmt::Debug for ConstInt {
 pub struct ScalarInt {
     /// The first `size` bytes of `data` are the value.
     /// Do not try to read less or more bytes than that. The remaining bytes must be 0.
-    data: u128,
-    size: u8,
+    pub data: u128,
+    pub size: u8,
 }
 
 // Cannot derive these, as the derives take references to the fields, and we
