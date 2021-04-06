@@ -1,0 +1,5 @@
+line 19 unreachable code: SUCCESS
+line 20 assertion failed: false: SUCCESS
+line 24 unreachable code: SUCCESS
+line 25 assertion failed: false: SUCCESS
+line 26 assertion failed: a == *b: SUCCESS
