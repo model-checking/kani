@@ -1,0 +1,5 @@
+assertion failed: false: SUCCESS
+assertion failed: false: SUCCESS
+line 20 unreachable code: SUCCESS
+line 21 assertion failed: false: SUCCESS
+line 26 assertion failed: x == 10: SUCCESS
