@@ -63,20 +63,20 @@ extern "C" {
         link_name = "__error"
     )]
     #[cfg_attr(target_os = "haiku", link_name = "_errnop")]
-    fn errno_location() -> *mut c_int;
+    fn errnone() -> *mut c_int;
 }
 
 /// Returns the platform-specific value of errno
 #[cfg(not(any(target_os = "dragonfly", target_os = "vxworks")))]
 pub fn errno() -> i32 {
-    unsafe { (*errno_location()) as i32 }
+    unsafe { (*errnone()) as i32 }
 }
 
 /// Sets the platform-specific value of errno
 #[cfg(all(not(target_os = "linux"), not(target_os = "dragonfly"), not(target_os = "vxworks")))] // needed for readdir and syscall!
 #[allow(dead_code)] // but not all target cfgs actually end up using it
 pub fn set_errno(e: i32) {
-    unsafe { *errno_location() = e as c_int }
+    unsafe { *errnone() = e as c_int }
 }
 
 #[cfg(target_os = "vxworks")]
