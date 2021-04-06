@@ -1,0 +1,7 @@
+empty-main/Cargo.lock
+empty-main/out.main
+empty-main/target/
+simple-lib/Cargo.lock
+simple-lib/out.test_one_plus_two
+simple-lib/out.test_sum
+simple-lib/target/

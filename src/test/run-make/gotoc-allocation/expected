@@ -1,0 +1,2 @@
+line 7 assertion failed: foo() == None: SUCCESS
+line 10 assertion failed: foo() == y: SUCCESS
