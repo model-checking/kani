@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+import argparse
+import os
+import sys
+import rmc
+import pathlib
+MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
+RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
+EXIT_CODE_SUCCESS = 0
+CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Verify a single Rust file")
+    parser.add_argument("input", help="Rust file to verify")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--quiet", "-q", action="store_true")
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--keep-temps", action="store_true")
+    parser.add_argument("--gen-c", action="store_true")
+    parser.add_argument("--gen-symbols", action="store_true")
+    parser.add_argument("--allow-cbmc-verification-failure", action="store_true")
+    parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
+                        default=[], help="Pass through directly to CBMC")
+    args = parser.parse_args()
+    if args.quiet:
+        args.verbose = False
+
+    if not rmc.dependencies_in_path():
+        return 1
+
+    base, ext = os.path.splitext(args.input)
+    if ext != ".rs":
+        print("ERROR: Expecting .rs input file")
+        return 1
+    json_filename = base + ".json"
+    goto_filename = base + ".goto"
+    c_filename = base + ".c"
+    symbols_filename = base + ".symbols"
+
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps):
+        return 1
+
+    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps):
+        return 1
+
+    if args.gen_c:
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose):
+            return 1
+
+    if args.gen_symbols:
+        if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(goto_filename, symbols_filename, args.verbose):
+            return 1
+
+    if "--function" not in args.cbmc_args:
+        args.cbmc_args.extend(["--function", "main"])
+    
+    args.cbmc_args.append(str(RMC_C_LIB))
+    retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet)
+    if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
+        retcode = EXIT_CODE_SUCCESS
+    return retcode
+
+
+if __name__ == "__main__":
+    sys.exit(main())

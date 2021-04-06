@@ -1,0 +1,3 @@
+memmove source region readable: SUCCESS
+memmove destination region writeable: SUCCESS
+assertion failed: *dst == expected_val: SUCCESS
