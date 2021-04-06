@@ -1,0 +1,12 @@
+line 24 assertion failed: foo().x == 12: SUCCESS
+line 25 assertion failed: foo().y == 12: FAILURE
+line 26 assertion failed: foo().x == 14: FAILURE
+line 27 assertion failed: foo().y == 14: SUCCESS
+line 30 assertion failed: foo().x == 1: SUCCESS
+line 31 assertion failed: foo().y == 1: FAILURE
+line 32 assertion failed: foo().x == 2: FAILURE
+line 33 assertion failed: foo().y == 2: SUCCESS
+line 36 assertion failed: foo().x == 1 << 62: SUCCESS
+line 37 assertion failed: foo().x == 1 << 31: FAILURE
+line 38 assertion failed: foo().y == 1 << 31: SUCCESS
+

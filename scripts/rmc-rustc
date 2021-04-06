@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+set -o errexit
+set -o pipefail
+set -o nounset
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+RUST_DIR=$SCRIPT_DIR/..
+RMC_RUSTC=`find $RUST_DIR/build -name "rustc" -print | grep stage1`
+$RMC_RUSTC "$@"
