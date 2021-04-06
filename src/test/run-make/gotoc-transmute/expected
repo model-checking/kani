@@ -1,0 +1,2 @@
+line 6 assertion failed: bitpattern == 0x3F800000: SUCCESS
+line 12 assertion failed: f == 1.0: SUCCESS
