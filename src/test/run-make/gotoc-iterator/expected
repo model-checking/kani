@@ -1,0 +1,3 @@
+line 4 unreachable code: SUCCESS
+line 5 attempt to compute `_1 * move _13`, which would overflow: SUCCESS
+line 7 assertion failed: z == 6: SUCCESS
