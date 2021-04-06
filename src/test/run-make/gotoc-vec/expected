@@ -1,0 +1,17 @@
+[malloc.assertion.1] line 26 max allocation size exceeded: SUCCESS
+[malloc.assertion.2] line 31 max allocation may fail: SUCCESS
+[realloc.precondition_instance.1] line 20 free argument must be NULL or valid pointer: SUCCESS
+[realloc.precondition_instance.2] line 20 free argument must be dynamic object: SUCCESS
+[realloc.precondition_instance.3] line 20 free argument has offset zero: SUCCESS
+[realloc.precondition_instance.4] line 20 double free: SUCCESS
+[realloc.precondition_instance.5] line 20 free called for new[] object: SUCCESS
+[realloc.precondition_instance.6] line 20 free called for stack-allocated object: SUCCESS
+[realloc.precondition_instance.7] line 30 free argument must be NULL or valid pointer: SUCCESS
+[realloc.precondition_instance.8] line 30 free argument must be dynamic object: SUCCESS
+[realloc.precondition_instance.9] line 30 free argument has offset zero: SUCCESS
+[realloc.precondition_instance.10] line 30 double free: SUCCESS
+[realloc.precondition_instance.11] line 30 free called for new[] object: SUCCESS
+[realloc.precondition_instance.12] line 30 free called for stack-allocated object: SUCCESS
+line 5 assertion failed: x[0] == 10: SUCCESS
+line 7 assertion failed: y == 10: SUCCESS
+line 8 assertion failed: y != 10: FAILURE
