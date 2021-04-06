@@ -1,0 +1,19 @@
+assertion failed: q.len() == 2: SUCCESS
+assertion failed: q.pop_front().unwrap() == x: SUCCESS
+assertion failed: q.pop_front().unwrap() == y: SUCCESS
+max allocation size exceeded: SUCCESS
+max allocation may fail: SUCCESS
+max allocation size exceeded: SUCCESS
+max allocation may fail: SUCCESS
+free argument must be NULL or valid pointer: SUCCESS
+free argument must be dynamic object: SUCCESS
+free argument has offset zero: SUCCESS
+double free: SUCCESS
+free called for new[] object: SUCCESS
+free called for stack-allocated object: SUCCESS
+free argument must be NULL or valid pointer: SUCCESS
+free argument must be dynamic object: SUCCESS
+free argument has offset zero: SUCCESS
+double free: SUCCESS
+free called for new[] object: SUCCESS
+free called for stack-allocated object: SUCCESS
