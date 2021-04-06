@@ -1,0 +1,7 @@
+resume instruction: SUCCESS
+line 20 attempt to compute `move _8 + move _9`, which would overflow: SUCCESS
+line 20 attempt to compute `move _5 + move _6`, which would overflow: SUCCESS
+line 20 attempt to compute `(*((*_1).0: &mut i32)) + move _4`, which would overflow: SUCCESS
+line 25 attempt to compute `move _18 + const 12_i32`, which would overflow: SUCCESS
+line 25 assertion failed: original_num + 12 == num: SUCCESS
+line 25 arithmetic overflow on signed + in var_18 + 12: SUCCESS
