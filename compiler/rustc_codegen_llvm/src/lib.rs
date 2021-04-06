@@ -75,6 +75,8 @@ mod type_of;
 mod va_arg;
 mod value;
 
+pub mod gotoc;
+
 #[derive(Clone)]
 pub struct LlvmCodegenBackend(());
 
