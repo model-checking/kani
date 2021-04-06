@@ -1,0 +1,14 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+SHELL=/bin/bash
+
+CBMC_ARGS=\
+    --object-bits 11 \
+    --signed-overflow-check \
+    --unsigned-overflow-check \
+    --bounds-check \
+    --pointer-check
+
+all:
+	rmc --allow-cbmc-verification-failure main.rs -- $(CBMC_ARGS) 2>&1 | tee $(TMPDIR)output; exit $${PIPESTATUS[0]}
+	../compare-output.sh expected $(TMPDIR)output
