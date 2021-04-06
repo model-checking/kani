@@ -14,6 +14,8 @@
 #![feature(iter_zip)]
 #![feature(nll)]
 #![recursion_limit = "256"]
+#![feature(destructuring_assignment)]
+#![feature(box_patterns)]
 
 use back::write::{create_informational_target_machine, create_target_machine};
 
@@ -274,27 +276,24 @@ impl CodegenBackend for LlvmCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         sess: &Session,
-    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
+    ) -> Result<(Box<dyn Any>, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
         let (codegen_results, work_products) = ongoing_codegen
             .downcast::<rustc_codegen_ssa::back::write::OngoingCodegen<LlvmCodegenBackend>>()
             .expect("Expected LlvmCodegenBackend's OngoingCodegen, found Box<Any>")
             .join(sess);
-
-        sess.time("llvm_dump_timing_file", || {
-            if sess.opts.debugging_opts.llvm_time_trace {
-                llvm_util::time_trace_profiler_finish("llvm_timings.json");
-            }
-        });
-
-        Ok((codegen_results, work_products))
+        Ok((Box::new(codegen_results), work_products))
     }
 
     fn link(
         &self,
         sess: &Session,
-        codegen_results: CodegenResults,
+        codegen_results: Box<dyn Any>,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
+        let codegen_results = codegen_results
+            .downcast::<CodegenResults>()
+            .expect("Expected CodegenResults, found Box<Any>");
+
         use crate::back::archive::LlvmArchiveBuilder;
         use rustc_codegen_ssa::back::link::link_binary;
 

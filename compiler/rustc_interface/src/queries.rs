@@ -402,6 +402,10 @@ impl Linker {
         }
 
         if sess.opts.debugging_opts.no_link {
+            use rustc_codegen_ssa::CodegenResults;
+            let codegen_results = codegen_results
+                .downcast::<CodegenResults>()
+                .expect("Expected CodegenResults, found Box<Any>");
             // FIXME: use a binary format to encode the `.rlink` file
             let rlink_data = json::encode(&codegen_results).map_err(|err| {
                 sess.fatal(&format!("failed to encode rlink: {}", err));
