@@ -1,11 +1,11 @@
-line 4 attempt to compute `move _6 + move _7`, which would overflow: SUCCESS
-line 4 attempt to compute `move _10 + move _11`, which would overflow: SUCCESS
-line 4 assertion failed: a + b == b + a: SUCCESS
-line 5 attempt to compute `move _16 + move _17`, which would overflow: SUCCESS
-line 5 attempt to compute `move _21 + move _22`, which would overflow: SUCCESS
-line 5 attempt to compute `move _20 + const 1_i32`, which would overflow: SUCCESS
-line 5 assertion failed: a + b != a + b + 1: SUCCESS
-line 10 attempt to compute `move _6 + move _7`, which would overflow: SUCCESS
-line 10 assertion failed: a + b > a: SUCCESS
-line 11 attempt to compute `move _13 - move _14`, which would overflow: SUCCESS
-line 11 assertion failed: a - b < a: SUCCESS
+line 5 attempt to compute `move _6 + move _7`, which would overflow: SUCCESS
+line 5 attempt to compute `move _10 + move _11`, which would overflow: SUCCESS
+line 5 assertion failed: a + b == b + a: SUCCESS
+line 6 attempt to compute `move _16 + move _17`, which would overflow: SUCCESS
+line 6 attempt to compute `move _21 + move _22`, which would overflow: SUCCESS
+line 6 attempt to compute `move _20 + const 1_i32`, which would overflow: SUCCESS
+line 6 assertion failed: a + b != a + b + 1: SUCCESS
+line 11 attempt to compute `move _6 + move _7`, which would overflow: SUCCESS
+line 11 assertion failed: a + b > a: SUCCESS
+line 12 attempt to compute `move _13 - move _14`, which would overflow: SUCCESS
+line 12 assertion failed: a - b < a: SUCCESS
