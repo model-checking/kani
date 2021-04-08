@@ -1,4 +1,4 @@
-line 4 assertion failed: div(4, 2) == 2: SUCCESS
-line 6 assertion failed: div(6, 2) == 2: FAILURE
-line 10 attempt to divide `_3` by zero: SUCCESS
-line 10 attempt to compute `_3 / _4`, which would overflow: SUCCESS
+line 5 assertion failed: div(4, 2) == 2: SUCCESS
+line 7 assertion failed: div(6, 2) == 2: FAILURE
+line 11 attempt to divide `_3` by zero: SUCCESS
+line 11 attempt to compute `_3 / _4`, which would overflow: SUCCESS

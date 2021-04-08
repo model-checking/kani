@@ -1,16 +1,16 @@
-line 22 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
-line 25 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
-line 25 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
-line 31 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
-line 34 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
-line 34 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
-line 51 assertion failed: rec.vol(3) == 150: SUCCESS
-line 52 assertion failed: impl_area(rec.clone()) == 50: SUCCESS
-line 55 assertion failed: vol == 100: SUCCESS
-line 58 assertion failed: square.vol(3) == 27: SUCCESS
-line 59 assertion failed: do_vol(&square, 2) == 18: SUCCESS
-line 60 assertion failed: impl_area(square.clone()) == 9: SUCCESS
-line 62 assertion failed: !square.compare_area(&square): SUCCESS
-line 63 assertion failed: !square.compare_area(&rec): SUCCESS
-line 64 assertion failed: rec.compare_area(&square): SUCCESS
-line 65 assertion failed: !rec.compare_area(&rec): SUCCESS
+line 23 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
+line 26 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
+line 26 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
+line 32 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
+line 35 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
+line 35 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
+line 52 assertion failed: rec.vol(3) == 150: SUCCESS
+line 53 assertion failed: impl_area(rec.clone()) == 50: SUCCESS
+line 56 assertion failed: vol == 100: SUCCESS
+line 59 assertion failed: square.vol(3) == 27: SUCCESS
+line 60 assertion failed: do_vol(&square, 2) == 18: SUCCESS
+line 61 assertion failed: impl_area(square.clone()) == 9: SUCCESS
+line 63 assertion failed: !square.compare_area(&square): SUCCESS
+line 64 assertion failed: !square.compare_area(&rec): SUCCESS
+line 65 assertion failed: rec.compare_area(&square): SUCCESS
+line 66 assertion failed: !rec.compare_area(&rec): SUCCESS
