@@ -1,2 +1,2 @@
-line 8 assertion failed: add2(1, 1) == 2.0: SUCCESS
-line 10 assertion failed: add2(2, 1) == 2.0: FAILURE
+line 9 assertion failed: add2(1, 1) == 2.0: SUCCESS
+line 11 assertion failed: add2(2, 1) == 2.0: FAILURE

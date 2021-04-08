@@ -1,9 +1,9 @@
-line 8 attempt to compute `_2 - const 1_i32`, which would overflow: SUCCESS
-line 13 assertion failed: a == 10.0 && i == 1: FAILURE
-line 15 assertion failed: a == 9.0 && i == 0: FAILURE
-line 17 assertion failed: a == 9.0 && i == 1: FAILURE
-line 19 assertion failed: a == 10.0 && i == 0: SUCCESS
-line 22 assertion failed: a == 9.0 || i == 0: SUCCESS
-line 24 assertion failed: a == 10.0 || i == 1: SUCCESS
-line 26 assertion failed: a == 9.0 || i == 1: FAILURE
-line 28 assertion failed: a == 10.0 || i == 0: SUCCESS
+line 9 attempt to compute `_2 - const 1_i32`, which would overflow: SUCCESS
+line 14 assertion failed: a == 10.0 && i == 1: FAILURE
+line 16 assertion failed: a == 9.0 && i == 0: FAILURE
+line 18 assertion failed: a == 9.0 && i == 1: FAILURE
+line 20 assertion failed: a == 10.0 && i == 0: SUCCESS
+line 23 assertion failed: a == 9.0 || i == 0: SUCCESS
+line 25 assertion failed: a == 10.0 || i == 1: SUCCESS
+line 27 assertion failed: a == 9.0 || i == 1: FAILURE
+line 29 assertion failed: a == 10.0 || i == 0: SUCCESS
