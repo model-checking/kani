@@ -1,4 +1,4 @@
-line 14 assertion failed: y.len() == 5: SUCCESS
-line 15 index out of bounds: the length is move _16 but the index is _15: SUCCESS
-line 15 assertion failed: y[1] == 2: SUCCESS
-line 16 assertion failed: z.len() == 3: SUCCESS
+line 15 assertion failed: y.len() == 5: SUCCESS
+line 16 index out of bounds: the length is move _16 but the index is _15: SUCCESS
+line 16 assertion failed: y[1] == 2: SUCCESS
+line 17 assertion failed: z.len() == 3: SUCCESS
