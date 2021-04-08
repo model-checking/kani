@@ -12,6 +12,6 @@
 [realloc.precondition_instance.10] line 30 double free: SUCCESS
 [realloc.precondition_instance.11] line 30 free called for new[] object: SUCCESS
 [realloc.precondition_instance.12] line 30 free called for stack-allocated object: SUCCESS
-line 5 assertion failed: x[0] == 10: SUCCESS
-line 7 assertion failed: y == 10: SUCCESS
-line 8 assertion failed: y != 10: FAILURE
+line 6 assertion failed: x[0] == 10: SUCCESS
+line 8 assertion failed: y == 10: SUCCESS
+line 9 assertion failed: y != 10: FAILURE

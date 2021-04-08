@@ -1,4 +1,4 @@
-line 4 attempt to compute `move _3 + move _4`, which would overflow: SUCCESS
-line 6 attempt to compute `move _3 + move _4`, which would overflow: SUCCESS
-line 7 assertion failed: z == 102: SUCCESS
-line 8 assertion failed: g(z) == 206: SUCCESS
+line 5 attempt to compute `move _3 + move _4`, which would overflow: SUCCESS
+line 7 attempt to compute `move _3 + move _4`, which would overflow: SUCCESS
+line 8 assertion failed: z == 102: SUCCESS
+line 9 assertion failed: g(z) == 206: SUCCESS

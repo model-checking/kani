@@ -1,4 +1,4 @@
-line 17 assertion failed: 10 == foo(): FAILURE
-line 18 assertion failed: 12 == foo(): SUCCESS
-line 20 assertion failed: 10 == foo(): SUCCESS
-line 21 assertion failed: 12 == foo(): FAILURE
+line 18 assertion failed: 10 == foo(): FAILURE
+line 19 assertion failed: 12 == foo(): SUCCESS
+line 21 assertion failed: 10 == foo(): SUCCESS
+line 22 assertion failed: 12 == foo(): FAILURE
