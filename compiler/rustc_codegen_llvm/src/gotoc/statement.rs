@@ -205,7 +205,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let tupe = fargs.remove(1);
                 for (i, t) in self.closure_params(substs).iter().enumerate() {
                     if !t.is_unit() {
-                        fargs.push(tupe.clone().member(&i.to_string(), &self.symbol_table));
+                        // Access the tupled parameters through the `member` operation
+                        let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
+                        fargs.push(index_param);
                     }
                 }
             }
@@ -470,7 +472,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let e = BuiltinFn::Memcpy.call(vec![dst, src, n], Location::none());
                 e.as_stmt()
             }
-            StatementKind::FakeRead(_, _)
+            StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType(_, _)
             | StatementKind::Nop
