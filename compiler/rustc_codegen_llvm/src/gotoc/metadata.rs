@@ -20,6 +20,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypeFoldable};
 use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
 use rustc_target::spec::Target;
+use std::iter;
 use std::path::Path;
 use tracing::debug;
 
@@ -327,18 +328,36 @@ impl<'tcx> GotocCtx<'tcx> {
         substs: ty::subst::SubstsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
         let sig = self.monomorphize(substs.as_closure().sig());
-        let env_ty = self.tcx.closure_env_ty(def_id, substs).unwrap();
-        let args = self.closure_params(substs);
-        let sig = sig.map_bound(|sig| {
+
+        // In addition to `def_id` and `substs`, we need to provide the kind of region `env_region`
+        // in `closure_env_ty`, which we can build from the bound variables as follows
+        let bound_vars = self.tcx.mk_bound_variable_kinds(
+            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
+        );
+        let br = ty::BoundRegion {
+            var: ty::BoundVar::from_usize(bound_vars.len() - 1),
+            kind: ty::BoundRegionKind::BrEnv,
+        };
+        let env_region = ty::ReLateBound(ty::INNERMOST, br);
+        let env_ty = self.tcx.closure_env_ty(def_id, substs, env_region).unwrap();
+
+        // The parameter types are tupled, but we want to have them in a vector
+        let params = self.closure_params(substs);
+        let sig = sig.skip_binder();
+
+        // We build a binder from `sig` where:
+        //  * `inputs` contains a sequence with the closure and parameter types
+        //  * the rest of attributes are obtained from `sig`
+        ty::Binder::bind_with_vars(
             self.tcx.mk_fn_sig(
-                core::iter::once(env_ty.skip_binder()).chain(args),
+                iter::once(env_ty).chain(params.iter().cloned()),
                 sig.output(),
                 sig.c_variadic,
                 sig.unsafety,
                 sig.abi,
-            )
-        });
-        sig
+            ),
+            bound_vars,
+        )
     }
 
     pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> ty::PolyFnSig<'tcx> {
