@@ -201,7 +201,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We solve this by normalizeing and removing the "&">::vol", but the inner type would be <&Rectangle as Vol>
     pub fn normalized_name_of_dynamic_object_type(
         &self,
-        trait_ref_t: Binder<TraitRef<'tcx>>,
+        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
     ) -> String {
         with_no_trimmed_paths(|| trait_ref_t.skip_binder().to_string().replace("&", ""))
     }
