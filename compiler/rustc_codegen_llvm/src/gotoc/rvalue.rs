@@ -787,34 +787,45 @@ impl<'tcx> GotocCtx<'tcx> {
         (vt_size, vt_align)
     }
 
-    fn codegen_vtable(&mut self, o: &Operand<'tcx>, t: Ty<'tcx>) -> &Symbol {
-        let (binder_t, underlying_dynamic_type) = match t.kind() {
-            ty::Ref(_region_t, ty::TyS { kind: ty::Dynamic(binder_t, _), .. }, _) => (binder_t, t),
-            // For `Box<dyn trait>` generate the vtable for `dyn trait` and not `t`
-            ty::Adt(adt_def, substs_ref) if adt_def.is_box() => {
-                let dyn_trait = substs_ref.first().unwrap().expect_ty();
-                match dyn_trait.kind() {
-                    ty::Dynamic(binder_t, _) => (binder_t, dyn_trait),
-                    _ => {
-                        unreachable!("Cannot codegen_vtable for type: Box<{:?}>", dyn_trait.kind())
-                    }
-                }
+    fn codegen_vtable(&mut self, operand: &Operand<'tcx>, dst_mir_type: Ty<'tcx>) -> &Symbol {
+        let src_mir_type = self.monomorphize(self.operand_ty(operand));
+        return self.codegen_vtable_from_types(src_mir_type, dst_mir_type);
+    }
+
+    fn codegen_vtable_from_types(
+        &mut self,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> &Symbol {
+        let trait_type = match dst_mir_type.kind() {
+            // dst is pointer type
+            ty::Ref(_, pointee_type, ..) => pointee_type,
+            // dst is box type
+            ty::Adt(adt_def, adt_subst) if adt_def.is_box() => {
+                adt_subst.first().unwrap().expect_ty()
             }
-            _ => unimplemented!("Cannot codegen_vtable for type {:?}", t.kind()),
+            // dst is dynamic type
+            ty::Dynamic(..) => dst_mir_type,
+            _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
-        let operand_type = self.monomorphize(self.operand_ty(o));
-        let operand_name = self.ty_mangled_name(operand_type);
+        assert!(trait_type.is_trait(), "VTable trait type {} must be a trait type", trait_type);
+        let binders = match trait_type.kind() {
+            ty::Dynamic(binders, ..) => binders,
+            _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
+        };
+
+        let src_name = self.ty_mangled_name(src_mir_type);
         // name needs to be the same as inserted in typ.rs
-        let vtable_name = self.vtable_name(underlying_dynamic_type);
-        let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, operand_name);
+        let vtable_name = self.vtable_name(trait_type);
+        let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
 
         self.ensure(&vtable_impl_name, |ctx, _| {
             // Build the vtable
             let drop_irep = ctx.codegen_vtable_drop_in_place();
-            let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&operand_type);
+            let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
             let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
-            let trait_ref_t = binder_t.principal().unwrap().with_self_ty(ctx.tcx, operand_type);
-            let mut methods = ctx.codegen_vtable_methods(trait_ref_t, underlying_dynamic_type);
+            let concrete_type = binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
+            let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
             vtable_fields.append(&mut methods);
             let vtable = Expr::struct_expr_from_values(
                 Type::struct_tag(&vtable_name),
