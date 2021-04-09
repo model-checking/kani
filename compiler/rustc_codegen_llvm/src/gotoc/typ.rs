@@ -22,6 +22,7 @@ use rustc_target::abi::{
 use std::convert::TryInto;
 use std::fmt::Debug;
 use tracing::debug;
+use ty::layout::HasParamEnv;
 /// Map the unit type to an empty struct
 ///
 /// Mapping unit to `void` works for functions with no return type but not for variables with type
@@ -301,13 +302,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
-            ty::Array(et, _) => {
+            ty::Array(et, len) => {
+                let array_name = format!(
+                    "[{}; {}]",
+                    self.ty_mangled_name(et),
+                    len.try_eval_usize(self.tcx, self.param_env()).unwrap()
+                );
                 // wrap arrays into struct so that one can take advantage of struct copy in C
                 //
                 // struct [T; n] {
                 //   T _0[n];
                 // }
-                self.ensure_struct(&self.ty_mangled_name(ty), |ctx, name| {
+                self.ensure_struct(&array_name, |ctx, name| {
                     if et.is_unit() {
                         // we do not generate a struct with an array of units
                         vec![]
