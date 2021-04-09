@@ -682,7 +682,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         def_id: DefId,
         _substs: ty::subst::SubstsRef<'tcx>,
-        trait_ref_t: Binder<TraitRef<'tcx>>,
+        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
         t: Ty<'tcx>,
     ) -> Expr {
         let function_name = self.tcx.item_name(def_id).to_string();
@@ -745,7 +745,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_vtable_methods(
         &mut self,
-        trait_ref_t: Binder<TraitRef<'tcx>>,
+        trait_ref_t: Binder<'tcx, TraitRef<'tcx>>,
         t: Ty<'tcx>,
     ) -> Vec<Expr> {
         //DSN This assumes that we always get the methods back in the same order.
