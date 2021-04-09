@@ -8,8 +8,12 @@
 use super::cbmc::goto_program::{Expr, Type};
 use super::metadata::*;
 use super::typ::tuple_fld;
-use rustc_middle::mir::{Field, Local, Place, ProjectionElem};
+use rustc_ast::ast::Mutability;
 use rustc_middle::ty::{self, Ty, TyS, VariantDef};
+use rustc_middle::{
+    mir::{Field, Local, Place, ProjectionElem},
+    ty::layout::HasTyCtxt,
+};
 use rustc_target::abi::{LayoutOf, TagEncoding, Variants};
 use tracing::debug;
 
@@ -95,13 +99,18 @@ impl<'tcx> ProjectedPlace<'tcx> {
         }
         // TODO: these assertions fail on a few regressions. Figure out why.
         // I think it may have to do with boxed fat pointers.
-        // assert!(Self::check_expr_typ(&expr, &typ, ctx), "\n{:?}\n{:?}", &expr, &typ);
         // assert!(
-        //     Self::check_fat_ptr_typ(&fat_ptr, &fat_ptr_typ, ctx),
+        //     Self::check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx),
         //     "\n{:?}\n{:?}",
-        //     &fat_ptr,
-        //     &fat_ptr_typ
+        //     &goto_expr,
+        //     &mir_typ_or_variant
         // );
+        assert!(
+            Self::check_fat_ptr_typ(&fat_ptr_goto_expr, &fat_ptr_mir_typ, ctx),
+            "\n{:?}\n{:?}",
+            &fat_ptr_goto_expr,
+            &fat_ptr_mir_typ
+        );
         ProjectedPlace { goto_expr, mir_typ_or_variant, fat_ptr_goto_expr, fat_ptr_mir_typ }
     }
 }
@@ -219,12 +228,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     before.goto_expr
                 };
-                let inner_mir_typ = base_type.builtin_deref(true).unwrap().ty;
 
+                let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
                 let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
                     assert!(before.fat_ptr_mir_typ.is_none());
-                    //TODO, not sure this is correct
-                    Some(base_type.boxed_ty())
+                    // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
+                    Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
                 } else if self.is_ref_of_unsized(base_type) {
                     assert!(before.fat_ptr_mir_typ.is_none());
                     Some(before.mir_typ_or_variant.expect_type())
@@ -240,6 +249,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         before.fat_ptr_goto_expr
                     };
 
+                let inner_mir_typ = inner_mir_typ_and_mut.ty;
                 let expr = match inner_mir_typ.kind() {
                     ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
                         inner_goto_expr.member("data", &self.symbol_table)
