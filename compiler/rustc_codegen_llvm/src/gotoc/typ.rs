@@ -208,11 +208,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Gives the name for a trait.
     /// In some cases, we have &T, in other cases T, so normalize.
     pub fn normalized_trait_name(&self, t: Ty<'tcx>) -> String {
-        if let ty::Ref(_region, ty, _mutability) = t.kind() {
-            self.ty_mangled_name(ty).to_string()
-        } else {
-            self.ty_mangled_name(t).to_string()
-        }
+        assert!(t.is_trait(), "Type {} must be a trait type (a dynamic type)", t);
+        self.ty_mangled_name(t).to_string()
     }
 
     /// Gives the vtable name for a type.
