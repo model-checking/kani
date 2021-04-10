@@ -461,7 +461,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // Assign the initial value `val` to `var` via an intermediate `temp_var` to allow for
         // transmuting the allocation type to the global static variable type.
         let alloc_data = self.codegen_allocation_data(alloc);
-        let var = self.gen_global_variable(&name, false, typ.clone(), Location::none());
+        //TODO: refactor this to create the initilizer inside the closure.
+        let var = self
+            .ensure_global_var(&name, false, typ.clone(), Location::none(), |_, _| None)
+            .to_expr();
         let val = Expr::struct_expr_from_values(
             alloc_typ_ref.clone(),
             alloc_data
@@ -483,7 +486,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let temp_var = self.gen_function_local_variable(0, &fn_name, alloc_typ_ref).to_expr();
         let body = Stmt::block(vec![
             Stmt::decl(temp_var.clone(), Some(val), Location::none()),
-            var.to_expr().assign(temp_var.transmute_to(var.typ.clone(), &self.symbol_table)),
+            var.assign(temp_var.transmute_to(typ.clone(), &self.symbol_table)),
         ]);
         self.register_initializer(&name, body);
 

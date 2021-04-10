@@ -819,33 +819,28 @@ impl<'tcx> GotocCtx<'tcx> {
         let vtable_name = self.vtable_name(trait_type);
         let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
 
-        self.ensure(&vtable_impl_name, |ctx, _| {
-            // Build the vtable
-            let drop_irep = ctx.codegen_vtable_drop_in_place();
-            let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
-            let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
-            let concrete_type = binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
-            let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
-            vtable_fields.append(&mut methods);
-            let vtable = Expr::struct_expr_from_values(
-                Type::struct_tag(&vtable_name),
-                vtable_fields,
-                &ctx.symbol_table,
-            );
-
-            // Store vtable in a static variable (compare codegen_alloc_in_memory)
-            let vtable_var = ctx.gen_global_variable(
-                &vtable_impl_name,
-                true, // REVISIT: static-scope https://github.com/model-checking/rmc/issues/10
-                Type::struct_tag(&vtable_name),
-                Location::none(),
-            );
-
-            // Add the code initializing vtable variable
-            ctx.register_initializer(&vtable_impl_name, vtable_var.to_expr().assign(vtable));
-
-            // Return the vtable variable
-            vtable_var
-        })
+        self.ensure_global_var(
+            &vtable_impl_name,
+            true, // REVISIT: static-scope https://github.com/model-checking/rmc/issues/10
+            Type::struct_tag(&vtable_name),
+            Location::none(),
+            |ctx, var| {
+                // Build the vtable
+                let drop_irep = ctx.codegen_vtable_drop_in_place();
+                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
+                let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
+                let concrete_type =
+                    binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
+                let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
+                vtable_fields.append(&mut methods);
+                let vtable = Expr::struct_expr_from_values(
+                    Type::struct_tag(&vtable_name),
+                    vtable_fields,
+                    &ctx.symbol_table,
+                );
+                let body = var.assign(vtable);
+                Some(body)
+            },
+        )
     }
 }
