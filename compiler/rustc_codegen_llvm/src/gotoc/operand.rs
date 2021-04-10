@@ -462,9 +462,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // transmuting the allocation type to the global static variable type.
         let alloc_data = self.codegen_allocation_data(alloc);
         //TODO: refactor this to create the initilizer inside the closure.
-        let var = self
-            .ensure_global_var(&name, false, typ.clone(), Location::none(), |_, _| None)
-            .to_expr();
+        let var = self.ensure_global_var(&name, false, typ.clone(), Location::none(), |_, _| None);
         let val = Expr::struct_expr_from_values(
             alloc_typ_ref.clone(),
             alloc_data

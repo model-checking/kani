@@ -275,7 +275,7 @@ impl<'tcx> GotocCtx<'tcx> {
         t: Type,
         loc: Location,
         init_fn: F,
-    ) -> &Symbol {
+    ) -> Expr {
         if !self.symbol_table.contains(name) {
             let sym = Symbol::variable(name.to_string(), name.to_string(), t.clone(), loc)
                 .with_is_file_local(is_file_local)
@@ -287,7 +287,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.register_initializer(name, body);
             }
         }
-        self.symbol_table.lookup(name).unwrap()
+        self.symbol_table.lookup(name).unwrap().to_expr()
     }
 
     /// Ensures that the `name` appears in the Symbol table.

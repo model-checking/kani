@@ -643,7 +643,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                             // Casting to a Box<dyn Trait> from a Box<Adt>
                             (ty::Dynamic(..), ty::Adt(..)) => {
-                                let vtable = self.codegen_vtable(o, t).to_expr();
+                                let vtable = self.codegen_vtable(o, t);
                                 let codegened_operand = self.codegen_operand(o);
                                 let box_inner_data =
                                     self.deref_box(codegened_operand).cast_to(Type::void_pointer());
@@ -668,7 +668,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         dynamic_fat_ptr(
                             self.codegen_ty(t),
                             self.codegen_operand(o).cast_to(Type::void_pointer()),
-                            self.codegen_vtable(o, t).to_expr().address_of(),
+                            self.codegen_vtable(o, t).address_of(),
                             &self.symbol_table,
                         )
                     }
@@ -787,7 +787,7 @@ impl<'tcx> GotocCtx<'tcx> {
         (vt_size, vt_align)
     }
 
-    fn codegen_vtable(&mut self, operand: &Operand<'tcx>, dst_mir_type: Ty<'tcx>) -> &Symbol {
+    fn codegen_vtable(&mut self, operand: &Operand<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
         let src_mir_type = self.monomorphize(self.operand_ty(operand));
         return self.codegen_vtable_from_types(src_mir_type, dst_mir_type);
     }
@@ -796,7 +796,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
-    ) -> &Symbol {
+    ) -> Expr {
         let trait_type = match dst_mir_type.kind() {
             // dst is pointer type
             ty::Ref(_, pointee_type, ..) => pointee_type,

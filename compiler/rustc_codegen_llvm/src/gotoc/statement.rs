@@ -21,7 +21,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
         let var = self.ensure_global_var(name, is_file_local, ty, Location::none(), |_, _| None);
-        Stmt::ret(Some(var.to_expr()), Location::none())
+        Stmt::ret(Some(var), Location::none())
     }
 
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
