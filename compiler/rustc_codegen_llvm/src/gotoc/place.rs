@@ -8,11 +8,9 @@
 use super::cbmc::goto_program::{Expr, Type};
 use super::metadata::*;
 use super::typ::tuple_fld;
-use rustc_ast::ast::Mutability;
-use rustc_middle::ty::{self, Ty, TyS, VariantDef};
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
-    ty::layout::HasTyCtxt,
+    ty::{self, Ty, TyS, VariantDef},
 };
 use rustc_target::abi::{LayoutOf, TagEncoding, Variants};
 use tracing::debug;
