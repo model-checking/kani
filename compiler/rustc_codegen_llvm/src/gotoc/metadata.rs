@@ -266,8 +266,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Ensures that a global variable `name` appears in the Symbol table.
     /// If it doesn't, inserts it.
-    /// If `init_fn` returns `Some(body)`, creates an initilizer for the variable using `body`.
-    /// Otherwise, leaves the variable uninitilizd.
+    /// If `init_fn` returns `Some(body)`, creates an initializer for the variable using `body`.
+    /// Otherwise, leaves the variable uninitialized .
     pub fn ensure_global_var<F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Option<Stmt>>(
         &mut self,
         name: &str,
@@ -299,7 +299,6 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> &Symbol {
         if !self.symbol_table.contains(name) {
             let sym = f(self, name);
-            // TODO, using `insert` here causes regression failures.
             self.symbol_table.insert(sym);
         }
         self.symbol_table.lookup(name).unwrap()
