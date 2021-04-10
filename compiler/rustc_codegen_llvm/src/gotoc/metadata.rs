@@ -37,7 +37,7 @@ pub struct CurrentFnCtx<'tcx> {
     /// the codegen instance for the current function
     instance: Instance<'tcx>,
     /// the def id for the current instance
-    def_id: DefId,
+    _def_id: DefId,
     /// the mir for the current instance
     mir: &'tcx Body<'tcx>,
     /// the goto labels for all blocks
@@ -56,7 +56,7 @@ impl CurrentFnCtx<'tcx> {
         Self {
             instance,
             mir: tcx.instance_mir(instance.def),
-            def_id: instance.def_id(),
+            _def_id: instance.def_id(),
             labels: vec![],
             block: vec![],
             current_bb: None,
