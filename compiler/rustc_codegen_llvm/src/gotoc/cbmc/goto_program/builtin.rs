@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module lazily declares builtin functions in CBMC
 use self::BuiltinFn::*;
-use super::{Expr, Location, Symbol, SymbolTable, Type};
+use super::{Expr, Location, Symbol, Type};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinFn {
