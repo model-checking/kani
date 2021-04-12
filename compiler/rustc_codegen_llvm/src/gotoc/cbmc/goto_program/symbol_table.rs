@@ -48,11 +48,6 @@ impl SymbolTable {
         self.symbol_table.insert(symbol.name.to_string(), symbol);
     }
 
-    #[deprecated(note = "Instead, use the `insert()` function.")]
-    pub fn insert_unchecked(&mut self, symbol: Symbol) {
-        self.symbol_table.insert(symbol.name.to_string(), symbol);
-    }
-
     /// Validates the previous value of the symbol using the validator function, then replaces it.
     /// Useful to replace declarations with the actual definition.
     pub fn replace<F: FnOnce(Option<&Symbol>) -> bool>(
