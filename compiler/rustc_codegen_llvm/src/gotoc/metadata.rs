@@ -264,6 +264,32 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::union_tag(union_name)
     }
 
+    /// Ensures that a global variable `name` appears in the Symbol table.
+    /// If it doesn't, inserts it.
+    /// If `init_fn` returns `Some(body)`, creates an initializer for the variable using `body`.
+    /// Otherwise, leaves the variable uninitialized .
+    pub fn ensure_global_var<F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Option<Stmt>>(
+        &mut self,
+        name: &str,
+        is_file_local: bool,
+        t: Type,
+        loc: Location,
+        init_fn: F,
+    ) -> Expr {
+        if !self.symbol_table.contains(name) {
+            let sym = Symbol::variable(name.to_string(), name.to_string(), t.clone(), loc)
+                .with_is_file_local(is_file_local)
+                .with_is_thread_local(false)
+                .with_is_static_lifetime(true);
+            let var = sym.to_expr();
+            self.symbol_table.insert(sym);
+            if let Some(body) = init_fn(self, var) {
+                self.register_initializer(name, body);
+            }
+        }
+        self.symbol_table.lookup(name).unwrap().to_expr()
+    }
+
     /// Ensures that the `name` appears in the Symbol table.
     /// If it doesn't, inserts it using `f`.
     pub fn ensure<F: FnOnce(&mut GotocCtx<'tcx>, &str) -> Symbol>(
@@ -273,8 +299,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> &Symbol {
         if !self.symbol_table.contains(name) {
             let sym = f(self, name);
-            // TODO, using `insert` here causes regression failures.
-            self.symbol_table.insert_unchecked(sym);
+            self.symbol_table.insert(sym);
         }
         self.symbol_table.lookup(name).unwrap()
     }
@@ -398,32 +423,6 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn gen_temp_variable(&mut self, t: Type, loc: Location) -> Symbol {
         let c = self.current_fn_mut().get_and_incr_counter();
         self.gen_stack_variable(c, &self.fname(), "temp", t, loc)
-    }
-
-    /// Generate a global variable if it doens't already exist.
-    /// Otherwise, returns the existing variable.
-    ///
-    pub fn gen_global_variable(
-        &mut self,
-        name: &str,
-        is_file_local: bool,
-        t: Type,
-        loc: Location,
-    ) -> Symbol {
-        debug!(
-            "gen_global_variable\n\tname:\t{}\n\tis_file_local\t{}\n\tt\t{:?}\n\tloc\t{:?}",
-            name, is_file_local, t, loc
-        );
-
-        let sym = self.ensure(name, |_ctx, _name| {
-            Symbol::variable(name.to_string(), name.to_string(), t.clone(), loc)
-                .with_is_file_local(is_file_local)
-                .with_is_thread_local(false)
-                .with_is_static_lifetime(true)
-        });
-        debug!("{}\n{:?}\n{:?}\n", name, sym.typ, t);
-        assert!(sym.typ == t);
-        sym.to_owned()
     }
 
     pub fn find_function(&mut self, fname: &str) -> Option<Expr> {
