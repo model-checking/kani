@@ -439,29 +439,22 @@ impl<'tcx> GotocCtx<'tcx> {
                 .collect()
         });
 
-        // The type of the global static variable may not be in the symbol table if we are dealing
+        // The global static variable may not be in the symbol table if we are dealing
         // with a literal that can be statically allocated.
-        let typ = match self.symbol_table.lookup(&name) {
-            Some(x) => x.typ.clone(),
-            None => {
-                debug!(
-                    "Could not find {} in symbol_table; inserting alloc type ref {:?}",
-                    &name, alloc_typ_ref
-                );
-                self.symbol_table.insert(Symbol::variable(
-                    name.clone(),
-                    name.clone(),
-                    alloc_typ_ref.clone(),
-                    Location::none(),
-                ));
-                alloc_typ_ref.clone()
-            }
-        };
+        // We need to make a constructor whether it was in the table or not, so we can't use the
+        // closure argument to ensure_global_var to do that here.
+        let var = self.ensure_global_var(
+            &name,
+            false, //TODO is this correct?
+            alloc_typ_ref.clone(),
+            Location::none(),
+            |_, _| None,
+        );
+        let var_typ = var.typ().clone();
 
         // Assign the initial value `val` to `var` via an intermediate `temp_var` to allow for
         // transmuting the allocation type to the global static variable type.
         let alloc_data = self.codegen_allocation_data(alloc);
-        let var = self.gen_global_variable(&name, false, typ.clone(), Location::none());
         let val = Expr::struct_expr_from_values(
             alloc_typ_ref.clone(),
             alloc_data
@@ -483,7 +476,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let temp_var = self.gen_function_local_variable(0, &fn_name, alloc_typ_ref).to_expr();
         let body = Stmt::block(vec![
             Stmt::decl(temp_var.clone(), Some(val), Location::none()),
-            var.to_expr().assign(temp_var.transmute_to(var.typ.clone(), &self.symbol_table)),
+            var.assign(temp_var.transmute_to(var_typ, &self.symbol_table)),
         ]);
         self.register_initializer(&name, body);
 
