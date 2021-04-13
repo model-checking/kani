@@ -1,0 +1,36 @@
+name: RMC CI
+on: [push, pull_request]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RMC
+        uses: actions/checkout@v2
+
+      - name: Install Ubuntu dependencies
+        run: ./scripts/setup/install_ubuntu_deps.sh
+
+      - name: Install LLVM
+        run: ./scripts/setup/install_llvm.sh
+
+      - name: Install CBMC
+        run: ./scripts/setup/install_cbmc.sh
+
+      - name: Install Rust toolchain
+        run: ./scripts/setup/install_rustup.sh
+
+      - name: Prepare config.toml file
+        run: ./scripts/setup/prepare_config_toml.sh
+
+      - name: Update submodules
+        run: git submodule update --init
+
+      - name: Export backtrace flags
+        run: export RUST_BACKTRACE=1
+
+      - name: Build RMC
+        run: ./x.py build -i --stage 1 library/std
+
+      - name: Execute RMC regression
+        run: ./scripts/rmc-regression.sh
