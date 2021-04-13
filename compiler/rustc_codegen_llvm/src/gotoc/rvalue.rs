@@ -500,6 +500,13 @@ impl<'tcx> GotocCtx<'tcx> {
             return self.codegen_get_discriminant(operand, src_t, dst_t);
         }
 
+        // Cast between fat pointers
+        if self.is_ref_of_unsized(src_t) && self.is_ref_of_unsized(dst_t) {
+            let src_goto_expr = self.codegen_operand(src);
+            let dst_goto_typ = self.codegen_ty(dst_t);
+            todo!("This is failing here");
+        }
+
         // pointer casting. from a pointer / reference to another pointer / reference
         // notice that if fat pointer is involved, it cannot be the destination, which is t.
         match dst_t.kind() {
