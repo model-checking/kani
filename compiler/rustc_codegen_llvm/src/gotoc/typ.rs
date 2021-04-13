@@ -183,6 +183,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::datatype_component("align", Type::size_t()),
             ];
             vtable_base.append(&mut flds);
+            // TODO: this is a temporary RMC-only flag for Issue 30
+            // <https://github.com/model-checking/rmc/issues/30>
+            vtable_base.append(&mut vec![Type::datatype_component("is_well_formed", Type::bool())]);
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");
