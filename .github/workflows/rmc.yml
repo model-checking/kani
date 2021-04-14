@@ -1,0 +1,38 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: RMC CI
+on: [push, pull_request]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RMC
+        uses: actions/checkout@v2
+
+      - name: Install Ubuntu dependencies
+        run: ./scripts/setup/ubuntu-20.04/install_deps.sh
+
+      - name: Install LLVM
+        run: ./scripts/setup/ubuntu-20.04/install_llvm.sh 11
+
+      - name: Install CBMC
+        run: ./scripts/setup/ubuntu-20.04/install_cbmc.sh
+
+      - name: Install Rust toolchain
+        run: ./scripts/setup/install_rustup.sh
+
+      - name: Copy config.toml file (dev version)
+        run: cp scripts/setup/config-templates/config.toml.dev config.toml
+
+      - name: Update submodules
+        run: git submodule update --init
+
+      - name: Export backtrace flags
+        run: export RUST_BACKTRACE=1
+
+      - name: Build RMC
+        run: ./x.py build -i --stage 1 library/std
+
+      - name: Execute RMC regression
+        run: ./scripts/rmc-regression.sh
