@@ -301,7 +301,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     // TODO: this is a temporary RMC-only flag for issue 30
                     // <https://github.com/model-checking/rmc/issues/30>
-                    let is_well_formed = vtable.member(VTABLE_WF_FIELD, &self.symbol_table);
+                    let is_well_formed = vtable
+                        .member(VTABLE_IS_WELL_FORMED_FIELD, &self.symbol_table)
+                        .cast_to(Type::bool());
                     stmts.push(Stmt::assert(is_well_formed, "well formed vtable", loc.clone()));
                 }
 

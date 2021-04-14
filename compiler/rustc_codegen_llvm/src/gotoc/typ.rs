@@ -189,7 +189,10 @@ impl<'tcx> GotocCtx<'tcx> {
             vtable_base.append(&mut flds);
             // TODO: this is a temporary RMC-only flag for issue #30
             // <https://github.com/model-checking/rmc/issues/30>
-            vtable_base.append(&mut vec![Type::datatype_component(VTABLE_WF_FIELD, Type::bool())]);
+            vtable_base.append(&mut vec![Type::datatype_component(
+                VTABLE_IS_WELL_FORMED_FIELD,
+                Type::c_bool(),
+            )]);
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");
