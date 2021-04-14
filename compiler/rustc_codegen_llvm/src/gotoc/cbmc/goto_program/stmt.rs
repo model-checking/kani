@@ -150,22 +150,8 @@ macro_rules! stmt {
 impl Stmt {
     /// `lhs = rhs;`
     pub fn assign(lhs: Expr, rhs: Expr, loc: Location) -> Self {
-        // Codegen the assignment if types are equal and assert false if not
-        if lhs.typ() == rhs.typ() {
-            // TODO: Is there a more suitable notion of type equality?  We have seen
-            //   left: `StructTag("tag-&[libc::cmsghdr]")`,
-            //  right: `StructTag("tag-&[std::mem::MaybeUninit<libc::cmsghdr>]")
-            stmt!(Assign { lhs, rhs }, loc)
-        } else {
-            Stmt::assert_false(
-                &format!(
-                    "Types of lhs and rhs of the assignment are equal. lhs = {:?} rhs = {:?}",
-                    &lhs.typ(),
-                    &rhs.typ()
-                ),
-                loc.clone(),
-            )
-        }
+        assert_eq!(lhs.typ(), rhs.typ());
+        stmt!(Assign { lhs, rhs }, loc)
     }
 
     /// `__CPROVER_assert(cond, msg);`
