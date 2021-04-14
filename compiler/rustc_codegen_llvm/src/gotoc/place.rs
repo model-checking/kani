@@ -253,6 +253,20 @@ impl<'tcx> GotocCtx<'tcx> {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
                     ty::Adt(..) if self.is_unsized(inner_mir_typ) => {
+                        // in cbmc-reg/Strings/os_str_reduced.rs, we see
+                        // ```
+                        //  p.projection = [
+                        //     Deref,
+                        //     Field(
+                        //         field[0],
+                        //         [u8],
+                        //     ),
+                        // ]
+                        // ```
+                        // This implies that the result of a deref on an ADT fat pointer
+                        // should be the ADT itself. So we need the `.dereference()` here.
+                        // Note that this causes problems in `codegen_rvalue_ref()`.
+                        // See the comment there for more details.
                         inner_goto_expr.member("data", &self.symbol_table).dereference()
                     }
                     _ => inner_goto_expr.dereference(),
@@ -340,7 +354,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let initial_expr = self.codegen_local(p.local);
         let initial_typ = TypeOrVariant::Type(self.local_ty(p.local));
         let initial_projection = ProjectedPlace::new(initial_expr, initial_typ, None, None, self);
-
         p.projection
             .iter()
             .fold(initial_projection, |accum, proj| self.codegen_projection(accum, proj))
