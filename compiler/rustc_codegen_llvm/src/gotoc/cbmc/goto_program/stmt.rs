@@ -151,6 +151,7 @@ impl Stmt {
     /// `lhs = rhs;`
     pub fn assign(lhs: Expr, rhs: Expr, loc: Location) -> Self {
         // Codegen the assignment if types are equal and assert false if not
+        //assert_eq!(lhs.typ(), rhs.typ());
         if lhs.typ() == rhs.typ() {
             // TODO: Is there a more suitable notion of type equality?  We have seen
             //   left: `StructTag("tag-&[libc::cmsghdr]")`,
