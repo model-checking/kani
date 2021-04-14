@@ -641,6 +641,13 @@ impl Type {
     ///     f1.typ f1.data; ...
     /// }
     pub fn struct_type(name: &str, components: Vec<DatatypeComponent>) -> Self {
+        // TODO: turn this on after fixing issue #30
+        // <https://github.com/model-checking/rmc/issues/30>
+        //assert!(
+        //    Type::components_are_unique(&components),
+        //    "Components contain duplicates: {:?}",
+        //    components
+        //);
         Struct { tag: name.to_string(), components }
     }
 
@@ -653,6 +660,11 @@ impl Type {
     ///     f1.typ f1.data; ...
     /// }
     pub fn union_type(name: &str, components: Vec<DatatypeComponent>) -> Self {
+        assert!(
+            Type::components_are_unique(&components),
+            "Components contain duplicates: {:?}",
+            components
+        );
         Union { tag: name.to_string(), components }
     }
 
