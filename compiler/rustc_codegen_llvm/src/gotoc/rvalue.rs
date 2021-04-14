@@ -5,6 +5,7 @@ use super::cbmc::utils::aggr_name;
 use super::cbmc::MachineModel;
 use super::metadata::*;
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
+use crate::btree_string_map;
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
@@ -98,8 +99,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let pt = self.place_ty(p);
         let place = self.codegen_place(p);
         debug!("codegen_rvalue_ref||{:?}||{:?}||{:?}||{:?}", p, pt, pt.kind(), place);
+
         match pt.kind() {
-            ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
+            _ if self.is_unsized(pt) => {
                 let fat_ptr = place.fat_ptr_goto_expr.unwrap();
                 match place.fat_ptr_mir_typ.unwrap().kind() {
                     ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => {
@@ -109,9 +111,23 @@ impl<'tcx> GotocCtx<'tcx> {
                                 // A user defined DST type needs special handling
                                 // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                                 assert!(self.is_unsized(to));
+                                // In cbmc-reg/Strings/os_str_reduced.rs, we have a flexible array
+                                // which needs to be decayed to a pointer.
+                                // In cbmc-reg/Cast/path.rs, we have an ADT, where we need to
+                                // take its address to get the pointer
+                                // See the comment in `codegen_projection`.
+                                let data = if place.goto_expr.typ().is_pointer() {
+                                    place.goto_expr
+                                } else if place.goto_expr.typ().is_array_like() {
+                                    place.goto_expr.array_to_ptr()
+                                } else {
+                                    place.goto_expr.address_of()
+                                };
+                                // TODO: this assumes we have a slice. But it might be dynamic.
                                 slice_fat_ptr(
                                     self.codegen_ty(res_ty),
-                                    place.goto_expr.array_to_ptr(),
+                                    // place.goto_expr.decay_to_ptr(),
+                                    data,
                                     fat_ptr.member("len", &self.symbol_table),
                                     &self.symbol_table,
                                 )
@@ -153,6 +169,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // But I'm not sure that its actually correct for all the match arms.
                 place.goto_expr.address_of()
             }
+            ty::Slice(_) | ty::Str | ty::Dynamic(..) => unreachable!(),
         }
     }
 
@@ -477,6 +494,42 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    pub fn codegen_fat_ptr_to_fat_ptr_cast(
+        &mut self,
+        src: &Operand<'tcx>,
+        dst_t: Ty<'tcx>,
+    ) -> Expr {
+        debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
+        let src_goto_expr = self.codegen_operand(src);
+        let dst_goto_typ = self.codegen_ty(dst_t);
+        let dst_data_type =
+            self.symbol_table.lookup_field_type_in_type(&dst_goto_typ, "data").unwrap();
+        let dst_data_field = (
+            "data",
+            src_goto_expr.clone().member("data", &self.symbol_table).cast_to(dst_data_type.clone()),
+        );
+
+        let dst_metadata_field = if let Some(vtable_typ) =
+            self.symbol_table.lookup_field_type_in_type(&dst_goto_typ, "vtable")
+        {
+            (
+                "vtable",
+                src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_typ.clone()),
+            )
+        } else if let Some(len_typ) =
+            self.symbol_table.lookup_field_type_in_type(&dst_goto_typ, "len")
+        {
+            ("len", src_goto_expr.member("len", &self.symbol_table).cast_to(len_typ.clone()))
+        } else {
+            unreachable!("fat pointer with neither vtable nor len. {:?} {:?}", src, dst_t);
+        };
+        Expr::struct_expr(
+            dst_goto_typ,
+            btree_string_map![dst_data_field, dst_metadata_field],
+            &self.symbol_table,
+        )
+    }
+
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
         debug!(
@@ -498,6 +551,11 @@ impl<'tcx> GotocCtx<'tcx> {
         if src_t.is_enum() && dst_t.is_integral() {
             let operand = self.codegen_operand(src);
             return self.codegen_get_discriminant(operand, src_t, dst_t);
+        }
+
+        // Cast between fat pointers
+        if self.is_ref_of_unsized(src_t) && self.is_ref_of_unsized(dst_t) {
+            return self.codegen_fat_ptr_to_fat_ptr_cast(src, dst_t);
         }
 
         // pointer casting. from a pointer / reference to another pointer / reference
