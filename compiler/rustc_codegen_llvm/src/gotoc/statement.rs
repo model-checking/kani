@@ -275,6 +275,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // TODO is there a better way to do this without needing the mut?
                 let mut funce = self.codegen_operand(func);
 
+                let mut stmts: Vec<Stmt> = vec![];
                 if let InstanceDef::Virtual(def_id, size) = instance.def {
                     debug!(
                         "Codegen a call through a virtual function. def_id: {:?} size: {:?}",
@@ -292,18 +293,29 @@ impl<'tcx> GotocCtx<'tcx> {
                     // arg0.vtable->f(arg0.data,arg1);
                     let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
                     let vtable = vtable_ref.dereference();
-                    let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
+                    let fn_ptr = vtable.clone().member(&vtable_field_name, &self.symbol_table);
                     funce = fn_ptr.dereference();
 
                     //Update the argument from arg0 to arg0.data
                     fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+
+                    // TODO: this is a temporary RMC-only flag for issue 30
+                    // <https://github.com/model-checking/rmc/issues/30>
+                    let is_well_formed = vtable
+                        .clone()
+                        .member(VTABLE_IS_WELL_FORMED_FIELD, &self.symbol_table)
+                        .cast_to(Type::bool());
+                    let assert_msg = format!("well formed vtable for type {:?}", &vtable.typ());
+                    let assert = Stmt::assert(is_well_formed, &assert_msg, loc.clone());
+                    stmts.push(assert);
                 }
 
                 // Actually generate the function call, and store the return value, if any.
-                Stmt::block(vec![
+                stmts.append(&mut vec![
                     self.codegen_expr_to_place(&p, funce.call(fargs)).with_location(loc.clone()),
                     Stmt::goto(self.find_label(&target), loc),
-                ])
+                ]);
+                Stmt::block(stmts)
             }
             ty::FnPtr(_) => {
                 let (p, target) = destination.unwrap();
