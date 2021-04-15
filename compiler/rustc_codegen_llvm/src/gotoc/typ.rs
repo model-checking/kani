@@ -168,7 +168,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
     /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
-    /// `get_vtable`
+    /// `get_vtable`.
+    ///
+    /// Currently, we also add a well-formed flag field to the end of the struct.
     fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
         if let ty::Dynamic(binder, _region) = t.kind() {
             // the virtual methods on the trait ref
