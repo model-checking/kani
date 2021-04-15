@@ -884,6 +884,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Location::none(),
             |ctx, var| {
                 // Build the vtable
+                // See compiler/rustc_codegen_llvm/src/gotoc/typ.rs `trait_vtable_field_types` for field order
                 let drop_irep = ctx.codegen_vtable_drop_in_place();
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
                 let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
@@ -891,6 +892,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
                 let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
                 vtable_fields.append(&mut methods);
+                let fields = ctx
+                    .symbol_table
+                    .lookup_fields_in_type(&Type::struct_tag(&vtable_name))
+                    .unwrap();
+                // TODO: this is a temporary RMC-only flag for issue #30
+                // <https://github.com/model-checking/rmc/issues/30>
+                let is_well_formed = Expr::c_bool_constant(Type::components_are_unique(fields));
+                vtable_fields.push(is_well_formed);
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,
