@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::cbmc::goto_program::{DatatypeComponent, Expr, Symbol, SymbolTable, Type};
 use super::cbmc::utils::aggr_name;
-use super::metadata::GotocCtx;
+use super::metadata::{GotocCtx, VTABLE_IS_WELL_FORMED_FIELD};
 use crate::btree_map;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
@@ -138,6 +138,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      size_t align;
     ///      int (*f)(int) f1;
     ///      ...
+    ///      bool is_well_formed; //< TODO: this is a temporary RMC-only flag for issue #30
+    ///                           // <https://github.com/model-checking/rmc/issues/30>
     ///   }
     /// Ensures that the vtable is added to the symbol table.
     fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
@@ -162,7 +164,13 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Given a trait of type `t`, determine the fields of the struct that will implement it's vtable.
+    /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.
+    ///
+    /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
+    /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
+    /// `get_vtable`.
+    ///
+    /// Currently, we also add a well-formed flag field to the end of the struct.
     fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
         if let ty::Dynamic(binder, _region) = t.kind() {
             // the virtual methods on the trait ref
@@ -183,6 +191,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::datatype_component("align", Type::size_t()),
             ];
             vtable_base.append(&mut flds);
+            // TODO: this is a temporary RMC-only flag for issue #30
+            // <https://github.com/model-checking/rmc/issues/30>
+            vtable_base.push(Type::datatype_component(VTABLE_IS_WELL_FORMED_FIELD, Type::c_bool()));
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");
