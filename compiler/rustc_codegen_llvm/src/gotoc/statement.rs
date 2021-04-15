@@ -302,9 +302,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     // TODO: this is a temporary RMC-only flag for issue 30
                     // <https://github.com/model-checking/rmc/issues/30>
                     let is_well_formed = vtable
+                        .clone()
                         .member(VTABLE_IS_WELL_FORMED_FIELD, &self.symbol_table)
                         .cast_to(Type::bool());
-                    stmts.push(Stmt::assert(is_well_formed, "well formed vtable", loc.clone()));
+                    let assert_msg = format!("well formed vtable for type {:?}", &vtable.typ());
+                    let assert = Stmt::assert(is_well_formed, &assert_msg, loc.clone());
+                    stmts.push(assert);
                 }
 
                 // Actually generate the function call, and store the return value, if any.
