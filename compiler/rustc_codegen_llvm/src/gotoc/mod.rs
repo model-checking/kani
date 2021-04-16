@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{Stmt, Symbol, SymbolTable};
+use cbmc::goto_program::{Confidence, ConfidenceVisitor, Stmt, Symbol, SymbolTable};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -311,7 +311,9 @@ impl CodegenBackend for GotocCodegenBackend {
             .downcast::<GotocCodegenResult>()
             .expect("in link: codegen_results is not a GotocCodegenResult");
         let symtab = result.symtab;
-        let irep_symtab = symtab.to_irep();
+        let mut confidence_visitor = ConfidenceVisitor::new(&symtab, Confidence::High);
+        let transformed_symtab = confidence_visitor.visit_symbol_table(&symtab);
+        let irep_symtab = transformed_symtab.to_irep();
         let json = irep_symtab.to_json();
         let pretty_json = json.pretty();
 

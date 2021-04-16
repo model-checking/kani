@@ -3,14 +3,17 @@
 //! This module contains typesafe representations of CBMC's data structures
 
 mod builtin;
+mod confidence;
 mod expr;
 mod location;
 mod stmt;
 mod symbol;
 mod symbol_table;
 mod typ;
+mod visitor;
 
 pub use builtin::BuiltinFn;
+pub use confidence::{Confidence, ConfidenceVisitor};
 pub use expr::{
     ArithmeticOverflowResult, BinaryOperand, Expr, ExprValue, SelfOperand, UnaryOperand,
 };

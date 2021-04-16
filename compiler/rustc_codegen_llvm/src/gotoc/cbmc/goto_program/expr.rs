@@ -4,7 +4,9 @@ use self::BinaryOperand::*;
 use self::ExprValue::*;
 use self::UnaryOperand::*;
 use super::super::MachineModel;
-use super::{DatatypeComponent, Location, Parameter, Stmt, SwitchCase, SymbolTable, Type};
+use super::{
+    Confidence, DatatypeComponent, Location, Parameter, Stmt, SwitchCase, SymbolTable, Type,
+};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -36,6 +38,7 @@ pub struct Expr {
     value: Box<ExprValue>,
     typ: Type,
     location: Location,
+    confidence: Confidence,
 }
 
 /// The different kinds of values an expression can have.
@@ -234,6 +237,10 @@ pub struct ArithmeticOverflowResult {
 
 /// Getters
 impl Expr {
+    pub fn confidence(&self) -> Confidence {
+        self.confidence
+    }
+
     pub fn location(&self) -> &Location {
         &self.location
     }
@@ -328,6 +335,11 @@ impl Expr {
 
 /// Setters
 impl Expr {
+    pub fn with_confidence(mut self, confidence: Confidence) -> Self {
+        self.confidence = confidence;
+        self
+    }
+
     pub fn with_location(mut self, loc: Location) -> Self {
         self.location = loc;
         self
@@ -339,7 +351,7 @@ macro_rules! expr {
     ( $value:expr,  $typ:expr) => {{
         let typ = $typ;
         let value = Box::new($value);
-        Expr { value, typ, location: Location::none() }
+        Expr { value, typ, location: Location::none(), confidence: Confidence::Default }
     }};
 }
 
@@ -371,6 +383,11 @@ impl Expr {
             unreachable!("Can't make an array_val with non-array target type {:?}", typ);
         }
         expr!(Array { elems }, typ)
+    }
+
+    pub fn assign_expr(self, right: Expr) -> Expr {
+        assert_eq!(self.typ(), right.typ());
+        expr!(Assign { left: self, right }, right.typ().clone())
     }
 
     /// `(__CPROVER_bool) >>> true/false <<<`. True/False as a single bit boolean.
@@ -544,7 +561,7 @@ impl Expr {
     /// Internal helper function for Struct initalizer  
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
     /// ALL fields must be given, including padding
-    fn struct_expr_with_explicit_padding(
+    pub fn struct_expr_with_explicit_padding(
         typ: Type,
         fields: &Vec<DatatypeComponent>,
         values: Vec<Expr>,
@@ -789,7 +806,7 @@ impl Expr {
         }
     }
     /// self op right;
-    fn binop(self, op: BinaryOperand, rhs: Expr) -> Expr {
+    pub fn binop(self, op: BinaryOperand, rhs: Expr) -> Expr {
         assert!(
             Expr::typecheck_binop_args(op, &self, &rhs),
             "BinaryOperation Expression does not typecheck {:?} {:?} {:?}",
@@ -944,7 +961,7 @@ impl Expr {
 /// Constructors for self operations
 impl Expr {
     /// Private constructor for self operations
-    fn self_op(self, op: SelfOperand) -> Expr {
+    pub fn self_op(self, op: SelfOperand) -> Expr {
         assert!(self.typ.is_integer() || self.typ.is_pointer());
         expr!(SelfOp { op, e: self }, self.typ.clone())
     }
@@ -994,7 +1011,7 @@ impl Expr {
         }
     }
     /// Private helper function to make unary operators
-    fn unop(self, op: UnaryOperand) -> Expr {
+    pub fn unop(self, op: UnaryOperand) -> Expr {
         assert!(Expr::typecheck_unop_arg(op, &self));
         let typ = Expr::unop_return_type(op, &self);
         expr!(ExprValue::UnOp { op, e: self }, typ)

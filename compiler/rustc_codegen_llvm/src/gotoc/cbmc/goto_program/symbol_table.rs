@@ -14,6 +14,10 @@ pub struct SymbolTable {
 
 /// Constructors
 impl SymbolTable {
+    pub fn raw(machine_model: MachineModel) -> SymbolTable {
+        SymbolTable { machine_model, symbol_table: BTreeMap::new() }
+    }
+
     pub fn new(machine_model: MachineModel) -> SymbolTable {
         let mut symtab = SymbolTable { machine_model, symbol_table: BTreeMap::new() };
         env::machine_model_symbols(symtab.machine_model())
