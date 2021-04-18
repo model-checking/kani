@@ -1205,3 +1205,52 @@ impl Expr {
         SwitchCase::new(self, body)
     }
 }
+
+/// Use maps instead of lists to manage struct components.
+impl Expr {
+    /// A mapping from field names to field types (ignoring padding fields)
+    pub fn struct_field_types(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Type> {
+        let struct_type = self.typ();
+        assert!(struct_type.is_struct_tag());
+
+        let mut types: BTreeMap<String, Type> = BTreeMap::new();
+        let fields = symbol_table.lookup_fields_in_type(struct_type).unwrap();
+        for field in fields {
+            if field.is_padding() {
+                continue;
+            }
+            types.insert(field.name().to_string(), field.typ());
+        }
+        types
+    }
+
+    /// A mapping from field names to field exprs (ignoring padding fields)
+    pub fn struct_field_exprs(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Expr> {
+        let struct_type = self.typ();
+        assert!(struct_type.is_struct_tag());
+
+        let mut exprs: BTreeMap<String, Expr> = BTreeMap::new();
+        let fields = symbol_table.lookup_fields_in_type(struct_type).unwrap();
+        match self.struct_expr_values() {
+            Some(values) => {
+                assert!(fields.len() == values.len());
+                for i in 0..fields.len() {
+                    if fields[i].is_padding() {
+                        continue;
+                    }
+                    exprs.insert(fields[i].name().to_string(), values[i].clone());
+                }
+            }
+            None => {
+                for i in 0..fields.len() {
+                    if fields[i].is_padding() {
+                        continue;
+                    }
+                    let name = fields[i].name();
+                    exprs.insert(name.to_string(), self.clone().member(name, &symbol_table));
+                }
+            }
+        }
+        exprs
+    }
+}

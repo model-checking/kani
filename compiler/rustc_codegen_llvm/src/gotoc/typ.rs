@@ -19,10 +19,12 @@ use rustc_span::def_id::DefId;
 use rustc_target::abi::{
     Abi, FieldsShape, Integer, Layout, LayoutOf, Primitive, TagEncoding, VariantIdx, Variants,
 };
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use tracing::debug;
 use ty::layout::HasParamEnv;
+
 /// Map the unit type to an empty struct
 ///
 /// Mapping unit to `void` works for functions with no return type but not for variables with type
@@ -980,5 +982,33 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(_, _) => true, //DSN understand why
             _ => false,
         }
+    }
+}
+
+/// Use maps instead of lists to manage mir struct components.
+impl<'tcx> GotocCtx<'tcx> {
+    /// A mapping from mir field names to mir field types for a mir struct (for a single-variant adt)
+    pub fn mir_struct_field_types(&self, struct_type: Ty<'tcx>) -> BTreeMap<String, Ty<'tcx>> {
+        match struct_type.kind() {
+            ty::Adt(adt_def, adt_substs) if adt_def.variants.len() == 1 => {
+                let mut types: BTreeMap<String, Ty<'tcx>> = BTreeMap::new();
+                let fields = &adt_def.variants.get(VariantIdx::from_u32(0)).unwrap().fields;
+                for field in fields {
+                    types.insert(field.ident.name.to_string(), field.ty(self.tcx, adt_substs));
+                }
+                types
+            }
+            _ => unreachable!("Expected a single-variant ADT. Found {:?}", struct_type),
+        }
+    }
+}
+
+/// Extract from a mir pointer type the mir type of the value to which the
+/// pointer points.
+pub fn pointee_type(pointer_type: Ty<'tcx>) -> Ty<'tcx> {
+    match pointer_type.kind() {
+        ty::Ref(_, pointee_type, _) => pointee_type,
+        ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => pointee_type,
+        _ => panic!("Expected a pointer type."),
     }
 }
