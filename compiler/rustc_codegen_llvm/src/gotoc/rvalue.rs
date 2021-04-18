@@ -1,18 +1,16 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, SymbolTable, Type};
+use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use super::cbmc::utils::aggr_name;
 use super::cbmc::MachineModel;
 use super::metadata::*;
 use super::typ::pointee_type;
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
-use rustc_ast::ast::Mutability;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{self, Binder, IntTy, TraitRef, Ty, UintTy};
 use rustc_span::def_id::DefId;
-use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, VariantIdx, Variants};
-use std::collections::BTreeMap;
+use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -888,7 +886,6 @@ impl<'tcx> GotocCtx<'tcx> {
             self.nested_pair_of_concrete_and_trait_types(src_pointee_type, dst_pointee_type)
         {
             let dst_goto_type = self.codegen_ty(dst_mir_type);
-            let dst_pointee_goto_type = self.codegen_ty(dst_pointee_type);
             let dst_goto_expr = src_goto_expr.cast_to(Type::void_pointer());
             let vtable = self.codegen_vtable_from_types(concrete_type, trait_type).clone();
             let vtable_expr = vtable.to_expr().address_of();
