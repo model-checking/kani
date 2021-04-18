@@ -4,9 +4,9 @@ use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use super::cbmc::utils::aggr_name;
 use super::cbmc::MachineModel;
 use super::metadata::*;
+use super::typ::pointee_type;
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
-use rustc_ast::ast::Mutability;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{self, Binder, IntTy, TraitRef, Ty, UintTy};
@@ -637,101 +637,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             PointerCast::Unsize => {
-                let ot = self.operand_ty(o);
-
-                match (&t.kind(), &ot.kind()) {
-                    (t_kind, ot_kind) if t_kind == ot_kind => {
-                        debug!(
-                            "trying to cast two of the same kind {:?}, treating as a no-op.",
-                            t_kind
-                        );
-                        self.codegen_operand(o)
-                    }
-                    (
-                        ty::Ref(_, ty::TyS { kind: ty::Slice(_), .. }, _),
-                        ty::Ref(_, ty::TyS { kind: ty::Array(et, sz), .. }, _),
-                    ) => slice_fat_ptr(
-                        self.codegen_ty(t),
-                        self.codegen_operand(o).cast_to(self.codegen_ty(et).to_pointer()),
-                        self.codegen_const(sz, None),
-                        &self.symbol_table,
-                    ),
-                    (_, _) if t.is_box() && ot.is_box() => {
-                        let dst_boxed = t.boxed_ty();
-                        let src_boxed = ot.boxed_ty();
-                        match (&dst_boxed.kind(), &src_boxed.kind()) {
-                            (ty::Slice(_), ty::Array(et, sz)) => {
-                                let ref_dst = self.tcx.mk_ref(
-                                    &ty::RegionKind::ReErased,
-                                    ty::TypeAndMut { ty: dst_boxed, mutbl: Mutability::Not },
-                                );
-                                //TODO why generate the function instead of just doing the coerce?
-                                let fname =
-                                    format!("gen-ref_to_box<{}>", self.ty_mangled_name(ref_dst));
-                                self.ensure(&fname, |tcx, _| {
-                                    let paramt = tcx.codegen_ty(ref_dst);
-                                    let rett = tcx.codegen_ty(t);
-                                    let var = tcx.gen_function_local_variable(1, &fname, paramt);
-                                    let param = var.to_function_parameter();
-                                    let typ = Type::code(vec![param], rett.clone());
-                                    Symbol::function(
-                                        &fname,
-                                        typ,
-                                        Some(Stmt::block(vec![
-                                            var.to_expr()
-                                                .transmute_to(rett, &tcx.symbol_table)
-                                                .ret(),
-                                        ])),
-                                        Location::none(),
-                                    )
-                                });
-                                self.find_function(&fname).unwrap().call(vec![
-                                    Expr::struct_expr_from_values(
-                                        self.codegen_ty(ref_dst),
-                                        vec![
-                                            self.codegen_operand(o).transmute_to(
-                                                self.codegen_ty(et).to_pointer(),
-                                                &self.symbol_table,
-                                            ),
-                                            self.codegen_const(sz, None),
-                                        ],
-                                        &self.symbol_table,
-                                    ),
-                                ])
-                            }
-                            // Casting to a Box<dyn Trait> from a Box<Adt>
-                            (ty::Dynamic(..), ty::Adt(..)) => {
-                                let vtable = self.codegen_vtable(o, t);
-                                let codegened_operand = self.codegen_operand(o);
-                                let box_inner_data =
-                                    self.deref_box(codegened_operand).cast_to(Type::void_pointer());
-                                let box_inner = dynamic_fat_ptr(
-                                    self.codegen_ty(dst_boxed),
-                                    box_inner_data,
-                                    vtable.address_of(),
-                                    &self.symbol_table,
-                                );
-                                let box_ty = self.codegen_ty(t);
-                                self.box_value(box_inner, box_ty)
-                            }
-                            _ => unimplemented!("from {:?} to {:?}", ot, t),
-                        }
-                    }
-                    //(t.kind, ot.kind)
-                    (
-                        ty::Ref(_region_t, ty::TyS { kind: ty::Dynamic(_binder_t, _), .. }, _),
-                        ty::Ref(_region_ot, _typ_ot, _),
-                    ) => {
-                        //(struct Trait){ .data=(void *)trait_data, .vtable=&trait_vtable_impl_for_datatype };
-                        dynamic_fat_ptr(
-                            self.codegen_ty(t),
-                            self.codegen_operand(o).cast_to(Type::void_pointer()),
-                            self.codegen_vtable(o, t).address_of(),
-                            &self.symbol_table,
-                        )
-                    }
-                    _ => unimplemented!("from {:?} to {:?}", ot, t),
-                }
+                let src_goto_expr = self.codegen_operand(o);
+                let src_mir_type = self.operand_ty(o);
+                let dst_mir_type = t;
+                let dst_goto_expr = self.cast_sized_expr_to_unsized_expr(
+                    src_goto_expr.clone(),
+                    src_mir_type,
+                    dst_mir_type,
+                );
+                dst_goto_expr.unwrap_or(src_goto_expr)
             }
         }
     }
@@ -845,16 +759,7 @@ impl<'tcx> GotocCtx<'tcx> {
         (vt_size, vt_align)
     }
 
-    fn codegen_vtable(&mut self, operand: &Operand<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
-        let src_mir_type = self.monomorphize(self.operand_ty(operand));
-        return self.codegen_vtable_from_types(src_mir_type, dst_mir_type);
-    }
-
-    fn codegen_vtable_from_types(
-        &mut self,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Expr {
+    fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
         let trait_type = match dst_mir_type.kind() {
             // dst is pointer type
             ty::Ref(_, pointee_type, ..) => pointee_type,
@@ -909,5 +814,251 @@ impl<'tcx> GotocCtx<'tcx> {
                 Some(body)
             },
         )
+    }
+
+    /// Cast a sized object to an unsized object: the result of the cast will be
+    /// a fat pointer or an ADT with a nested fat pointer.  Return the result of
+    /// the cast as Some(expr) and return None if no cast was required.
+    fn cast_sized_expr_to_unsized_expr(
+        &mut self,
+        src_goto_expr: Expr,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        if src_mir_type.kind() == dst_mir_type.kind() {
+            return None; // no cast required, nothing to do
+        }
+
+        match (src_mir_type.kind(), dst_mir_type.kind()) {
+            (ty::Ref(..), ty::Ref(..)) => {
+                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
+            }
+            (ty::Ref(..), ty::RawPtr(..)) => {
+                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
+            }
+            (ty::RawPtr(..), ty::Ref(..)) => {
+                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
+            }
+            (ty::RawPtr(..), ty::RawPtr(..)) => {
+                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
+            }
+            (ty::Adt(..), ty::Adt(..)) => {
+                self.cast_sized_adt_to_unsized_adt(src_goto_expr, src_mir_type, dst_mir_type)
+            }
+            (src_kind, dst_kind) => {
+                assert!(src_kind == dst_kind);
+                None
+            }
+        }
+    }
+
+    /// Cast a pointer to a sized object to a fat pointer to an unsized object.
+    /// Return the result of the cast as Some(expr) and return None if no cast
+    /// was required.
+    fn cast_sized_pointer_to_fat_pointer(
+        &mut self,
+        src_goto_expr: Expr,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        // treat type equality as a no op
+        if src_mir_type.kind() == dst_mir_type.kind() {
+            return None;
+        };
+
+        // extract pointee types from pointer types, panic if type is not a
+        // pointer type.
+        let src_pointee_type = pointee_type(src_mir_type);
+        let dst_pointee_type = pointee_type(dst_mir_type);
+
+        let dst_pointee_metadata = dst_pointee_type.ptr_metadata_ty(self.tcx);
+        let unit = self.tcx.types.unit;
+        let usize = self.tcx.types.usize;
+
+        if dst_pointee_metadata == unit {
+            assert!(src_pointee_type == dst_pointee_type);
+            None
+        } else if dst_pointee_metadata == usize {
+            self.cast_sized_pointer_to_slice_fat_pointer(
+                src_goto_expr,
+                src_mir_type,
+                dst_mir_type,
+                src_pointee_type,
+                dst_pointee_type,
+            )
+        } else {
+            self.cast_sized_pointer_to_trait_fat_pointer(
+                src_goto_expr,
+                src_mir_type,
+                dst_mir_type,
+                src_pointee_type,
+                dst_pointee_type,
+            )
+        }
+    }
+
+    /// Cast a pointer to a sized object to a fat pointer to a slice. Return the
+    /// result of the cast as Some(expr) and return None if no cast was
+    /// required.
+    fn cast_sized_pointer_to_slice_fat_pointer(
+        &mut self,
+        src_goto_expr: Expr,
+        _src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+        src_pointee_type: Ty<'tcx>,
+        dst_pointee_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        match (src_pointee_type.kind(), dst_pointee_type.kind()) {
+            (ty::Array(src_elt_type, src_elt_count), ty::Slice(dst_elt_type)) => {
+                assert!(src_elt_type == dst_elt_type);
+                let dst_goto_type = self.codegen_ty(dst_mir_type);
+                let dst_goto_expr =
+                    src_goto_expr.cast_to(self.codegen_ty(src_elt_type).to_pointer());
+                let dst_goto_len = self.codegen_const(src_elt_count, None);
+                Some(slice_fat_ptr(dst_goto_type, dst_goto_expr, dst_goto_len, &self.symbol_table))
+            }
+            (src_kind, dst_kind) => panic!(
+                "Only an array can be cast to a slice.  Found types {:?} and {:?}",
+                src_kind, dst_kind
+            ),
+        }
+    }
+
+    /// Cast a pointer to a sized object to a fat pointer to a trait object.
+    /// Return the result of the cast as Some(expr) and return None if no cast
+    /// was required.
+    fn cast_sized_pointer_to_trait_fat_pointer(
+        &mut self,
+        src_goto_expr: Expr,
+        _src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+        src_pointee_type: Ty<'tcx>,
+        dst_pointee_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        if let Some((concrete_type, trait_type)) =
+            self.nested_pair_of_concrete_and_trait_types(src_pointee_type, dst_pointee_type)
+        {
+            let dst_goto_type = self.codegen_ty(dst_mir_type);
+            let dst_goto_expr = src_goto_expr.cast_to(Type::void_pointer());
+            let vtable = self.codegen_vtable(concrete_type, trait_type).clone();
+            let vtable_expr = vtable.address_of();
+            Some(dynamic_fat_ptr(dst_goto_type, dst_goto_expr, vtable_expr, &self.symbol_table))
+        } else {
+            None
+        }
+    }
+
+    /// Cast a sized ADT to an unsized ADT (an ADT with a nested fat pointer).
+    /// Return the result of the cast as Some(expr) and return None if no cast
+    /// was required.
+    fn cast_sized_adt_to_unsized_adt(
+        &mut self,
+        src_goto_expr: Expr,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        // Map field names to field values (goto expressions) and field types (mir types)
+        let mut src_goto_field_values = src_goto_expr.struct_field_exprs(&self.symbol_table);
+        let src_mir_field_types = self.mir_struct_field_types(src_mir_type);
+        let dst_mir_field_types = self.mir_struct_field_types(dst_mir_type);
+
+        // Assert that the struct expression and struct types have the same field names
+        assert!(src_goto_field_values.keys().eq(src_mir_field_types.keys()));
+        assert!(src_goto_field_values.keys().eq(dst_mir_field_types.keys()));
+
+        // Cast each field and collect the fields for which a cast was required
+        let mut cast_required: Vec<(String, Expr)> = vec![];
+        for field in src_goto_field_values.keys() {
+            if let Some(expr) = self.cast_sized_expr_to_unsized_expr(
+                src_goto_field_values.get(field).unwrap().clone(),
+                src_mir_field_types.get(field).unwrap(),
+                dst_mir_field_types.get(field).unwrap(),
+            ) {
+                cast_required.push((field.clone(), expr.clone()));
+            }
+        }
+        // Update the fields for which a cast was required and return the result.
+        let mut update_required = cast_required.len() > 0;
+
+        // A zero-sized type like PhantomData is a struct with no fields, and
+        // hence with no fields for which a cast was required.  But PhantomData
+        // takes a type as an generic parameter, and when casting a sized [u8; 4]
+        // to an unsized [u8], we have to change the type of PhantomData from
+        // PhantomData<[u8; 4]> to PhantomData<[u8]>.
+        update_required = update_required || dst_mir_field_types.is_empty();
+
+        if !update_required {
+            return None;
+        }
+
+        for (field, expr) in cast_required {
+            src_goto_field_values.insert(field.clone(), expr.clone());
+        }
+        let dst_goto_expr = Expr::struct_expr(
+            self.codegen_ty(dst_mir_type),
+            src_goto_field_values,
+            &self.symbol_table,
+        );
+        Some(dst_goto_expr)
+    }
+
+    /// Search for the pair of corresponding concrete and trait types nested
+    /// within a pair of ADTs being cast from a concrete object to a trait
+    /// object.
+    fn nested_pair_of_concrete_and_trait_types(
+        &self,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Option<(Ty<'tcx>, Ty<'tcx>)> {
+        match (src_mir_type.kind(), dst_mir_type.kind()) {
+            (ty::Adt(..), ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
+            (ty::Adt(..), ty::Adt(..)) => {
+                let src_fields = self.mir_struct_field_types(src_mir_type);
+                let dst_fields = self.mir_struct_field_types(dst_mir_type);
+                assert!(src_fields.keys().eq(dst_fields.keys()));
+
+                let mut matching_types: Vec<(Ty<'tcx>, Ty<'tcx>)> = vec![];
+                for field in src_fields.keys() {
+                    let pair = self.nested_pair_of_concrete_and_trait_types(
+                        src_fields.get(field).unwrap(),
+                        dst_fields.get(field).unwrap(),
+                    );
+                    if let Some((concrete, dynamic)) = pair {
+                        matching_types.push((concrete.clone(), dynamic.clone()))
+                    };
+                }
+                match matching_types.len() {
+                    0 => None,
+                    1 => {
+                        let (concrete, dynamic) = matching_types[0];
+                        Some((concrete, dynamic)) // type checking seems to require this explicit deconstruction
+                    }
+                    _ => panic!(
+                        "Searching for pairs of concrete and trait types found multiple pairs in {:?} and {:?}",
+                        src_mir_type, dst_mir_type
+                    ),
+                }
+            }
+            // In the context of
+            //    handling Result::<&i32, ()>::unwrap, std::result::Result::<T, E>::unwrap
+            //    let _1: std::result::Result<&i32, ()>
+            //    let _3: ()
+            //    let _6: &dyn std::fmt::Debug
+            //    let _7: &()
+            //    let _8: &()
+            //    _3 = move ((_1 as Err).0: E)
+            //    _8 = &_3
+            //    _7 = _8
+            //    _6 = move _7 as &dyn std::fmt::Debug (Pointer(Unsize))
+            // we find rustc trying to cast () to a trait type.
+            //
+            // (ty::Tuple(ref types), ty::Dynamic(..)) if types.is_empty() => {
+            //     Some((src_mir_type.clone(), dst_mir_type.clone()))
+            // }
+            _ => panic!(
+                "Searching for pairs of concrete and trait types found unexpected types in {:?} and {:?}",
+                src_mir_type, dst_mir_type
+            ),
+        }
     }
 }
