@@ -701,16 +701,7 @@ impl<'tcx> GotocCtx<'tcx> {
         (vt_size, vt_align)
     }
 
-    fn codegen_vtable(&mut self, operand: &Operand<'tcx>, dst_mir_type: Ty<'tcx>) -> &Symbol {
-        let src_mir_type = self.monomorphize(self.operand_ty(operand));
-        return self.codegen_vtable_from_types(src_mir_type, dst_mir_type);
-    }
-
-    fn codegen_vtable_from_types(
-        &mut self,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> &Symbol {
+    fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> &Symbol {
         let trait_type = match dst_mir_type.kind() {
             // dst is pointer type
             ty::Ref(_, pointee_type, ..) => pointee_type,
@@ -887,7 +878,7 @@ impl<'tcx> GotocCtx<'tcx> {
         {
             let dst_goto_type = self.codegen_ty(dst_mir_type);
             let dst_goto_expr = src_goto_expr.cast_to(Type::void_pointer());
-            let vtable = self.codegen_vtable_from_types(concrete_type, trait_type).clone();
+            let vtable = self.codegen_vtable(concrete_type, trait_type).clone();
             let vtable_expr = vtable.to_expr().address_of();
             Some(dynamic_fat_ptr(dst_goto_type, dst_goto_expr, vtable_expr, &self.symbol_table))
         } else {
