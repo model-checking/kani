@@ -1206,25 +1206,17 @@ impl Expr {
     }
 }
 
-/// Use maps instead of lists to manage struct components.
 impl Expr {
-    /// A mapping from field names to field types (ignoring padding fields)
-    pub fn struct_field_types(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Type> {
-        let struct_type = self.typ();
-        assert!(struct_type.is_struct_tag());
-
-        let mut types: BTreeMap<String, Type> = BTreeMap::new();
-        let fields = symbol_table.lookup_fields_in_type(struct_type).unwrap();
-        for field in fields {
-            if field.is_padding() {
-                continue;
-            }
-            types.insert(field.name().to_string(), field.typ());
-        }
-        types
-    }
-
-    /// A mapping from field names to field exprs (ignoring padding fields)
+    /// Given a struct value (Expr), construct a mapping from struct field names
+    /// (Strings) to struct field values (Exprs).
+    ///
+    /// The Struct variant of the Expr enum models the fields of a struct as a
+    /// list of pairs (data type components) consisting of a field name and a
+    /// field value.  A pair may represent an actual field in the struct or just
+    /// padding in the layout of the struct.  This function returns a mapping of
+    /// field names (ignoring the padding fields) to field values.  The result
+    /// is suitable for use in the struct_expr constructor.  This makes it
+    /// easier to look up or modify field values of a struct.
     pub fn struct_field_exprs(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Expr> {
         let struct_type = self.typ();
         assert!(struct_type.is_struct_tag());

@@ -829,6 +829,15 @@ impl<'tcx> GotocCtx<'tcx> {
             return None; // no cast required, nothing to do
         }
 
+        // The src type will be sized, but the dst type may not be unsized.  If
+        // the dst is an adt containing a pointer to a trait object nested
+        // within the adt, the trait object will be unsized and the pointer will
+        // be a fat pointer, but the adt (containing the fat pointer) will
+        // itself be sized.
+        assert!(
+            src_mir_type.is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
+        );
+
         match (src_mir_type.kind(), dst_mir_type.kind()) {
             (ty::Ref(..), ty::Ref(..)) => {
                 self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
@@ -846,8 +855,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.cast_sized_adt_to_unsized_adt(src_goto_expr, src_mir_type, dst_mir_type)
             }
             (src_kind, dst_kind) => {
-                assert!(src_kind == dst_kind);
-                None
+                unreachable!(
+                    "In this case, {:?} and {:?} should have the same type (a case already handled)",
+                    src_kind, dst_kind
+                )
             }
         }
     }
@@ -868,17 +879,17 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // extract pointee types from pointer types, panic if type is not a
         // pointer type.
-        let src_pointee_type = pointee_type(src_mir_type);
-        let dst_pointee_type = pointee_type(dst_mir_type);
+        let src_pointee_type = pointee_type(src_mir_type).unwrap();
+        let dst_pointee_type = pointee_type(dst_mir_type).unwrap();
 
-        let dst_pointee_metadata = dst_pointee_type.ptr_metadata_ty(self.tcx);
+        let dst_pointee_metadata_type = dst_pointee_type.ptr_metadata_ty(self.tcx);
         let unit = self.tcx.types.unit;
         let usize = self.tcx.types.usize;
 
-        if dst_pointee_metadata == unit {
-            assert!(src_pointee_type == dst_pointee_type);
+        if dst_pointee_metadata_type == unit {
+            assert_eq!(src_pointee_type, dst_pointee_type);
             None
-        } else if dst_pointee_metadata == usize {
+        } else if dst_pointee_metadata_type == usize {
             self.cast_sized_pointer_to_slice_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -887,6 +898,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 dst_pointee_type,
             )
         } else {
+            // dst_pointee_metadata_type == std::ptr::DynMetadata<dyn trait> (a vtable is required)
             self.cast_sized_pointer_to_trait_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -910,9 +922,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Option<Expr> {
         match (src_pointee_type.kind(), dst_pointee_type.kind()) {
             (ty::Array(src_elt_type, src_elt_count), ty::Slice(dst_elt_type)) => {
-                assert!(src_elt_type == dst_elt_type);
+                assert_eq!(src_elt_type, dst_elt_type);
                 let dst_goto_type = self.codegen_ty(dst_mir_type);
-                let dst_goto_expr =
+                let dst_goto_expr = // cast from an array type to a pointer type
                     src_goto_expr.cast_to(self.codegen_ty(src_elt_type).to_pointer());
                 let dst_goto_len = self.codegen_const(src_elt_count, None);
                 Some(slice_fat_ptr(dst_goto_type, dst_goto_expr, dst_goto_len, &self.symbol_table))
@@ -940,7 +952,7 @@ impl<'tcx> GotocCtx<'tcx> {
         {
             let dst_goto_type = self.codegen_ty(dst_mir_type);
             let dst_goto_expr = src_goto_expr.cast_to(Type::void_pointer());
-            let vtable = self.codegen_vtable(concrete_type, trait_type).clone();
+            let vtable = self.codegen_vtable(concrete_type, trait_type);
             let vtable_expr = vtable.address_of();
             Some(dynamic_fat_ptr(dst_goto_type, dst_goto_expr, vtable_expr, &self.symbol_table))
         } else {
@@ -974,24 +986,23 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_mir_field_types.get(field).unwrap(),
                 dst_mir_field_types.get(field).unwrap(),
             ) {
-                cast_required.push((field.clone(), expr.clone()));
+                cast_required.push((field.to_string(), expr));
             }
         }
-        // Update the fields for which a cast was required and return the result.
-        let mut update_required = cast_required.len() > 0;
-
-        // A zero-sized type like PhantomData is a struct with no fields, and
-        // hence with no fields for which a cast was required.  But PhantomData
-        // takes a type as an generic parameter, and when casting a sized [u8; 4]
-        // to an unsized [u8], we have to change the type of PhantomData from
+        // Return None for a struct with fields if none of the fields require a cast.
+        //
+        // Note that a struct with no fields may still require a cast.
+        // PhantomData is a zero-sized type that is a struct with no fields, and
+        // hence with no fields that require a cast.  But PhantomData takes a
+        // type as an generic parameter, and when casting a sized [u8; 4] to an
+        // unsized [u8], we have to change the type of PhantomData from
         // PhantomData<[u8; 4]> to PhantomData<[u8]>.
-        update_required = update_required || dst_mir_field_types.is_empty();
-
-        if !update_required {
+        if !dst_mir_field_types.is_empty() && cast_required.is_empty() {
             return None;
         }
 
         for (field, expr) in cast_required {
+            // Replace the field expression with the cast expression
             src_goto_field_values.insert(field.clone(), expr.clone());
         }
         let dst_goto_expr = Expr::struct_expr(
@@ -1002,9 +1013,14 @@ impl<'tcx> GotocCtx<'tcx> {
         Some(dst_goto_expr)
     }
 
-    /// Search for the pair of corresponding concrete and trait types nested
-    /// within a pair of ADTs being cast from a concrete object to a trait
-    /// object.
+    /// Find the trait type and corresponding concrete type in a pair of ADTs.
+    ///
+    /// Given two ADTs with types src and dst, the goal is to cast a thin
+    /// pointer to src to a fat pointer to dst.  Dst has nested within it a
+    /// trait type (a Dynamic).  Src has nested within it at the corresponding
+    /// position a concrete type. This function returns the pair (concrete type,
+    /// trait type) that we can use to build the vtable for the concrete type
+    /// implementation of the trait type.
     fn nested_pair_of_concrete_and_trait_types(
         &self,
         src_mir_type: Ty<'tcx>,
@@ -1017,27 +1033,23 @@ impl<'tcx> GotocCtx<'tcx> {
                 let dst_fields = self.mir_struct_field_types(dst_mir_type);
                 assert!(src_fields.keys().eq(dst_fields.keys()));
 
-                let mut matching_types: Vec<(Ty<'tcx>, Ty<'tcx>)> = vec![];
+                let mut matching_types: Option<(Ty<'tcx>, Ty<'tcx>)> = None;
                 for field in src_fields.keys() {
                     let pair = self.nested_pair_of_concrete_and_trait_types(
                         src_fields.get(field).unwrap(),
                         dst_fields.get(field).unwrap(),
                     );
-                    if let Some((concrete, dynamic)) = pair {
-                        matching_types.push((concrete.clone(), dynamic.clone()))
-                    };
-                }
-                match matching_types.len() {
-                    0 => None,
-                    1 => {
-                        let (concrete, dynamic) = matching_types[0];
-                        Some((concrete, dynamic)) // type checking seems to require this explicit deconstruction
+                    if pair.is_some() {
+                        assert!(
+                            matching_types.is_none(),
+                            "Searching for pairs of concrete and trait types, found multiple pairs in {:?} and {:?}",
+                            src_mir_type,
+                            dst_mir_type
+                        );
+                        matching_types = pair;
                     }
-                    _ => panic!(
-                        "Searching for pairs of concrete and trait types found multiple pairs in {:?} and {:?}",
-                        src_mir_type, dst_mir_type
-                    ),
                 }
+                matching_types
             }
             // In the context of
             //    handling Result::<&i32, ()>::unwrap, std::result::Result::<T, E>::unwrap
