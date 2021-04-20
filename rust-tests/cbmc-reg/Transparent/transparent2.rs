@@ -1,3 +1,6 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 #[derive(Clone, Copy)]
 struct Target {
     x: u32,
@@ -24,10 +27,10 @@ fn main() {
     let mut x: u32 = 4;
     let container = Container::new(&mut x);
     let _y = container.get();
-    assert!(_y == 4);
+    assert_eq!(_y, 4);
 
     let mut target: Target = Target { x: 3, y: 4 };
     let cont = Container::new(&mut target);
-    assert!((unsafe { *cont.ptr.as_ptr() }).x == 3);
-    assert!((unsafe { *cont.ptr.as_ptr() }).y == 4);
+    assert_eq!((unsafe { *cont.ptr.as_ptr() }).x, 3);
+    assert_eq!((unsafe { *cont.ptr.as_ptr() }).y, 4);
 }

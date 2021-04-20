@@ -1,8 +1,11 @@
-/// Cast a concrete ref to
-///   concrete raw pointer
-///   trait ref
-///   trait raw pointer
-/// Cast a trait ref to a trait raw pointer
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Cast a concrete ref to
+//   concrete raw pointer
+//   trait ref
+//   trait raw pointer
+// Cast a trait ref to a trait raw pointer
 
 pub trait Subscriber {
     fn process(&mut self);

@@ -1,3 +1,6 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 #[repr(transparent)]
 pub struct Pointer<T> {
     pointer: *const T,
@@ -15,8 +18,10 @@ fn main() {
     let my_container = Container { container: Pointer { pointer: &x } };
 
     let y: u32 = unsafe { *my_container.container.pointer };
-    assert!(y == 4);
+    assert_eq!(y, 4);
 
     let w: Wrapper<u32> = Wrapper(4);
-    // Wrapper is a struct with no fields, there is no way to access the 4
+
+    let Wrapper(c) = Wrapper(4);
+    assert_eq!(c, 4);
 }
