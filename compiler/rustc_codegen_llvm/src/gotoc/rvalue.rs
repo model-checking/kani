@@ -750,9 +750,9 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = match operand_type.kind() {
-            ty::Ref(_region, inner_type, _mutability) => self.layout_of(inner_type), //DSN was operand type
-            ty::Adt(..) => self.layout_of(operand_type),
-            _ => unreachable!("We got a vtable type that wasn't a ref or adt."),
+            ty::Ref(_, inner_type, ..) => self.layout_of(inner_type),
+            ty::RawPtr(ty::TypeAndMut { ty: inner_type, .. }) => self.layout_of(inner_type),
+            _ => self.layout_of(operand_type),
         };
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
@@ -1027,7 +1027,7 @@ impl<'tcx> GotocCtx<'tcx> {
         dst_mir_type: Ty<'tcx>,
     ) -> Option<(Ty<'tcx>, Ty<'tcx>)> {
         match (src_mir_type.kind(), dst_mir_type.kind()) {
-            (ty::Adt(..), ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
+            (_, ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
             (ty::Adt(..), ty::Adt(..)) => {
                 let src_fields = self.mir_struct_field_types(src_mir_type);
                 let dst_fields = self.mir_struct_field_types(dst_mir_type);
