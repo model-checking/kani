@@ -63,7 +63,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
 
 /// Constructor
 impl<'tcx> ProjectedPlace<'tcx> {
-    fn check_expr_typ(expr: &Expr, typ: &TypeOrVariant<'tcx>, ctx: &mut GotocCtx<'tcx>) -> bool {
+    fn _check_expr_typ(expr: &Expr, typ: &TypeOrVariant<'tcx>, ctx: &mut GotocCtx<'tcx>) -> bool {
         match typ {
             TypeOrVariant::Type(t) => &ctx.codegen_ty(t) == expr.typ(),
             TypeOrVariant::Variant(_) => true, //TODO, what to do here?
