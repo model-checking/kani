@@ -5,6 +5,7 @@ use self::Type::*;
 use super::super::utils::aggr_name;
 use super::super::MachineModel;
 use super::{Expr, SymbolTable};
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
 
@@ -780,5 +781,32 @@ impl Type {
         } else {
             unreachable!("Can't convert {:?} to a one value", self);
         }
+    }
+}
+
+impl Type {
+    /// Given a struct type, construct a mapping from struct field names
+    /// (Strings) to struct field types (Types).
+    ///
+    /// The Struct variant of the Type enum models the fields of a struct as a
+    /// list of pairs (data type components) consisting of a field name and a
+    /// field type.  A pair may represent an actual field in the struct or just
+    /// padding in the layout of the struct.  This function returns a mapping of
+    /// field names (ignoring the padding fields) to field types.  This makes it
+    /// easier to look up field types (and modestly easier to interate over
+    /// field types).
+    pub fn struct_field_types(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Type> {
+        // TODO: Accept a Struct type, too, and not just a StructTag assumed below.
+        assert!(self.is_struct_tag());
+
+        let mut types: BTreeMap<String, Type> = BTreeMap::new();
+        let fields = symbol_table.lookup_fields_in_type(self).unwrap();
+        for field in fields {
+            if field.is_padding() {
+                continue;
+            }
+            types.insert(field.name().to_string(), field.typ());
+        }
+        types
     }
 }
