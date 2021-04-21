@@ -5,5 +5,5 @@ fn main() {
     let mut x: u32 = 4;
     let pointer0: std::ptr::NonNull<u32> = std::ptr::NonNull::new(&mut x).unwrap();
     let y = unsafe { *pointer0.as_ptr() };
-    assert_eq!(y, 4);
+    assert!(y == 4);
 }

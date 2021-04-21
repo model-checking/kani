@@ -8,27 +8,38 @@
 // Cast a trait ref to a trait raw pointer
 
 pub trait Subscriber {
-    fn process(&mut self);
+    fn process(&self) -> u32;
 }
 
-struct DummySubscriber {}
+struct DummySubscriber {
+    val: u32,
+}
 
 impl DummySubscriber {
     fn new() -> Self {
-        DummySubscriber {}
+        DummySubscriber { val: 0 }
     }
 }
 
 impl Subscriber for DummySubscriber {
-    fn process(&mut self) {}
+    fn process(&self) -> u32 {
+        let DummySubscriber { val: v } = self;
+        *v + 1
+    }
 }
 
 fn main() {
-    let _d = DummySubscriber::new();
-    let _d1 = &_d as *const DummySubscriber;
+    let d = DummySubscriber::new();
 
-    let _s = &_d as &dyn Subscriber;
-    let _s1 = &_d as *const dyn Subscriber;
+    let d1 = &d as *const DummySubscriber;
+    assert!(unsafe { d1.as_ref().unwrap().process() } == 1);
 
-    let _x = _s as *const dyn Subscriber;
+    let s = &d as &dyn Subscriber;
+    assert!(s.process() == 1);
+
+    let s1 = &d as *const dyn Subscriber;
+    assert!(unsafe { s1.as_ref().unwrap().process() } == 1);
+
+    let x = s as *const dyn Subscriber;
+    assert!(unsafe { x.as_ref().unwrap().process() } == 1);
 }

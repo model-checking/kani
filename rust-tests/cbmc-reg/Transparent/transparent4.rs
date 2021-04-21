@@ -18,10 +18,10 @@ fn main() {
     let my_container = Container { container: Pointer { pointer: &x } };
 
     let y: u32 = unsafe { *my_container.container.pointer };
-    assert_eq!(y, 4);
+    assert!(y == 4);
 
     let w: Wrapper<u32> = Wrapper(4);
 
-    let Wrapper(c) = Wrapper(4);
-    assert_eq!(c, 4);
+    let Wrapper(c) = w;
+    assert!(c == 4);
 }

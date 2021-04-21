@@ -16,5 +16,5 @@ fn main() {
     let my_container = Container { container: my_pointer };
 
     let y: u32 = unsafe { *my_container.container.pointer };
-    assert_eq!(y, 4);
+    assert!(y == 4);
 }

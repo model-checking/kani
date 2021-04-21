@@ -27,5 +27,5 @@ impl Subscriber for DummySubscriber {
 fn main() {
     let _d = DummySubscriber::new();
     let _s = &_d as &dyn Subscriber;
-    assert_eq!(_s.process(), 1);
+    assert!(_s.process() == 1);
 }

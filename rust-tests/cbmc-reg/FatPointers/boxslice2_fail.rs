@@ -15,7 +15,7 @@ fn main() {
     // the binary runs without failures.
     match sparkle_heart_str {
         Ok(string) => match string.bytes().nth(0) {
-            Some(b) => assert_eq!(b, 240),
+            Some(b) => assert!(b == 240),
             _ => assert!(true),
         },
         _ => assert!(true),

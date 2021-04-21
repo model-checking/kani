@@ -27,5 +27,5 @@ impl Subscriber for DummySubscriber {
 fn main() {
     let _d = DummySubscriber::new();
     let _s = &_d as *const dyn Subscriber;
-    assert_eq!(unsafe { _s.as_ref().unwrap().process() }, 1);
+    assert!(unsafe { _s.as_ref().unwrap().process() } == 1);
 }

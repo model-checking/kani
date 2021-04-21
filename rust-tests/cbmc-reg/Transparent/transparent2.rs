@@ -31,6 +31,6 @@ fn main() {
 
     let mut target: Target = Target { x: 3, y: 4 };
     let cont = Container::new(&mut target);
-    assert_eq!((unsafe { *cont.ptr.as_ptr() }).x, 3);
-    assert_eq!((unsafe { *cont.ptr.as_ptr() }).y, 4);
+    assert!((unsafe { *cont.ptr.as_ptr() }).x == 3);
+    assert!((unsafe { *cont.ptr.as_ptr() }).y == 4);
 }
