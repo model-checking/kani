@@ -1205,3 +1205,44 @@ impl Expr {
         SwitchCase::new(self, body)
     }
 }
+
+impl Expr {
+    /// Given a struct value (Expr), construct a mapping from struct field names
+    /// (Strings) to struct field values (Exprs).
+    ///
+    /// The Struct variant of the Expr enum models the fields of a struct as a
+    /// list of pairs (data type components) consisting of a field name and a
+    /// field value.  A pair may represent an actual field in the struct or just
+    /// padding in the layout of the struct.  This function returns a mapping of
+    /// field names (ignoring the padding fields) to field values.  The result
+    /// is suitable for use in the struct_expr constructor.  This makes it
+    /// easier to look up or modify field values of a struct.
+    pub fn struct_field_exprs(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Expr> {
+        let struct_type = self.typ();
+        assert!(struct_type.is_struct_tag());
+
+        let mut exprs: BTreeMap<String, Expr> = BTreeMap::new();
+        let fields = symbol_table.lookup_fields_in_type(struct_type).unwrap();
+        match self.struct_expr_values() {
+            Some(values) => {
+                assert!(fields.len() == values.len());
+                for i in 0..fields.len() {
+                    if fields[i].is_padding() {
+                        continue;
+                    }
+                    exprs.insert(fields[i].name().to_string(), values[i].clone());
+                }
+            }
+            None => {
+                for i in 0..fields.len() {
+                    if fields[i].is_padding() {
+                        continue;
+                    }
+                    let name = fields[i].name();
+                    exprs.insert(name.to_string(), self.clone().member(name, &symbol_table));
+                }
+            }
+        }
+        exprs
+    }
+}
