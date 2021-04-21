@@ -6,7 +6,6 @@
 // This test still fails with a final coercion error for
 // DummySubscriber to dyn Subscriber.
 
-#![feature(layout_for_ptr)]
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -30,13 +29,5 @@ impl Subscriber for DummySubscriber {
 }
 
 fn main() {
-    let v = unsafe { mem::size_of_val_raw(&5i32) };
-    assert!(v == 4);
-
-    let x: [u8; 13] = [0; 13];
-    let y: &[u8] = &x;
-    let v = unsafe { mem::size_of_val_raw(y) };
-    assert!(v == 13);
-
     let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
 }
