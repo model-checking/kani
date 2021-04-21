@@ -1,0 +1,23 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: RMC CI
+on: pull_request
+
+jobs:
+  copyright-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RMC
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get paths for files added
+        id: git-diff
+        run: |
+          files=$(git diff --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | xargs)
+          echo "::set-output name=paths::$files"
+
+      - name: Execute copyright check
+        if: ${{ steps.git-diff.outputs.paths }}
+        run: ./scripts/ci/copyright_check.py ${{ steps.git-diff.outputs.paths }}
