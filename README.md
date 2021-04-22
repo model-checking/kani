@@ -27,7 +27,7 @@ If you encounter issues when using RMC we encourage you to
    ./configure \
       --debuginfo-level-rustc=2 \
       --enable-debug \
-      --set=llvm.download-ci-llvm=true\
+      --set=llvm.download-ci-llvm=true \
       --set=rust.debug-assertions-std=false \
       --set=rust.deny-warnings=false \
       --set=rust.incremental=true
