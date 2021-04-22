@@ -33,7 +33,7 @@ RMC is implemented as an additional codegen backend for the
 The `master` branch from the upstream compiler is mirrored as `upstream-master`.
 The RMC code itself is maintained as a set of rebased patches, 
     on branches named `main-<upstream-version>-yyyy-mm-dd`.
-These branches are updated on a weekly cadance.
+These branches are updated on a weekly cadence.
 The most recent of these branches is set as the `default` branch for the repository.
 This is the branch that you should build and use, and this is the branch that you should make PRs against.
 
