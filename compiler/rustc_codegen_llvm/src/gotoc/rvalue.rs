@@ -893,8 +893,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_pointee_type,
                 dst_pointee_type,
             )
-        } else {
-            // self.use_vtable_fat_pointer(dst_pointee_type)
+        } else if self.use_vtable_fat_pointer(dst_pointee_type) {
             self.cast_sized_pointer_to_trait_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -902,6 +901,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_pointee_type,
                 dst_pointee_type,
             )
+        } else {
+            unreachable!(
+                "A pointer is either a thin pointer, slice fat pointer, or vtable fat pointer."
+            );
         }
     }
 
