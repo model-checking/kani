@@ -41,6 +41,6 @@ This is the branch that you should build and use, and this is the branch that yo
 The `main-<upstream-version>-yyyy-mm-dd` branches have the following git structure:
 
 * The upstream `master` branch as of the date `yyyy-mm-dd`.
-* A commit which contains any API changes needed to the upstream code for RMC to link.
-* A commit which renames any upstream files that conflict with RMC files.
+* A source code patch that makes all changes to the upstream code needed for RMC to link.
+* A renaming patch that renames upstream files that conflict with RMC files.
 * A set of commits representing RMC feature code.

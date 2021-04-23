@@ -5,7 +5,7 @@ Describe RMC's current behavior and how your code changes that behavior. If ther
 
 ### Resolved issues:
 
- resolves #ISSUE-NUMBER
+Resolves #ISSUE-NUMBER
 
 
 ### Call-outs:

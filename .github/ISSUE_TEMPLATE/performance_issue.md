@@ -4,8 +4,8 @@ about: Create a performance issue for RMC
 labels: bug
 ---
 <!--
-If this is a security issue, please report it via our 
-[vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/).
+Please report security concerns to us on the
+[AWS vulnerability reporting](http://aws.amazon.com/security/vulnerability-reporting/) page.
 -->
 
 <!--
@@ -15,8 +15,9 @@ Please provide a short summary of the issue, along with the information necessar
 
 I tried this code:
 <!--
-If the code fits into a single file, please post it here.
-Otherwise please post a link to the repository and branch that exposes the issue
+If the reproducing code is small, please post it here.
+Otherwise, please attach the relevant files to this issue.
+Alternatively, post a link to the repository and branch that exposes the issue.
 -->
 ```rust
 <code>

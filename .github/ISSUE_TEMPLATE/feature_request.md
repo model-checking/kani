@@ -4,8 +4,8 @@ about: Create a feature request for RMC
 labels: 
 ---
 <!--
-If this is a security issue, please report it via our 
-[vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/).
+Please report security concerns to us on the
+[AWS vulnerability reporting](http://aws.amazon.com/security/vulnerability-reporting/) page.
 -->
 
 <!--
@@ -19,8 +19,8 @@ Is this a breaking change?
 
 Test case:
 <!--
-If the code fits into a single file, please post it here.
-Otherwise please post a link to the repository and branch that exposes the issue
+If the test-case is small, please post it here.
+Otherwise, please attach the relevant files to this issue.
 -->
 ```rust
 <code>
