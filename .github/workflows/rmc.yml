@@ -5,25 +5,32 @@ on: [push, pull_request]
 
 jobs:
   regression:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-10.15, ubuntu-20.04]
     steps:
       - name: Checkout RMC
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
-      - name: Install Ubuntu dependencies
-        run: ./scripts/setup/ubuntu-20.04/install_deps.sh
-
-      - name: Install LLVM
-        run: ./scripts/setup/ubuntu-20.04/install_llvm.sh 11
+      - name: Install dependencies
+        run: ./scripts/setup/${{ matrix.os }}/install_deps.sh
 
       - name: Install CBMC
-        run: ./scripts/setup/ubuntu-20.04/install_cbmc.sh
+        run: ./scripts/setup/${{ matrix.os }}/install_cbmc.sh
 
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
 
-      - name: Copy config.toml file (dev version)
-        run: cp scripts/setup/config-templates/config.toml.dev config.toml
+      - name: Set config.toml file
+        run: |
+          ./configure \
+            --enable-debug \
+            --set=llvm.download-ci-llvm=true \
+            --set=rust.debug-assertions-std=false \
+            --set=rust.deny-warnings=false
 
       - name: Update submodules
         run: git submodule update --init
