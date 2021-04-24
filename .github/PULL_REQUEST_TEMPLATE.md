@@ -1,21 +1,24 @@
 
-### Resolved issues:
-
- resolves #ISSUE-NUMBER
-
 ### Description of changes: 
 
 Describe RMC's current behavior and how your code changes that behavior. If there are no issues this PR is resolving, explain why this change is necessary.
 
+### Resolved issues:
+
+Resolves #ISSUE-NUMBER
+
+
 ### Call-outs:
 
-<!-- Address any potentially confusing code. Is there code added that needs to be cleaned up later? Is there code that is missing because it’s still in development? 
+<!-- 
+Address any potentially confusing code. Is there code added that needs to be cleaned up later? Is there code that is missing because it’s still in development? 
 -->
+
 ### Testing:
 
- How is this change tested?
+* How is this change tested?
 
- Is this a refactor change?
+* Is this a refactor change?
 
 ### Checklist
 - [ ] Each commit message has a non-empty body, explaining why the change was made
