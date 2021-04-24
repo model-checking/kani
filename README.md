@@ -3,7 +3,7 @@ The Rust Model Checker (RMC) aims to be a bit-precise model-checker for Rust.
 
 ## Project Status
 RMC is currently in the initial development phase.
-It **does not support all rust language features**.
+It **does not yet support all rust language features**.
 We are working to extend our support of language features.
 If you encounter issues when using RMC we encourage you to 
 [report them to us](https://github.com/model-checking/rmc/issues/new/choose).
