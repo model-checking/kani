@@ -96,6 +96,14 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
+    pub fn is_ref_of_sized(&self, t: &'tcx TyS<'_>) -> bool {
+        match t.kind() {
+            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => !self.is_unsized(to),
+            _ => false,
+        }
+    }
+
     /// Is the MIR type a box of an unsized type (i.e. one represented by a fat pointer?)
     pub fn is_box_of_unsized(&self, t: &'tcx TyS<'_>) -> bool {
         if t.is_box() {
@@ -519,65 +527,61 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    pub fn codegen_fat_ptr(&mut self, t: Ty<'tcx>) -> Type {
-        // implement "fat pointers", which are pointers with metadata.
-        // to my knowledge, there are three kinds of fat pointers:
-        // 1. references to slices
-        // 2. references to trait objects.
-        // 3. references to structs whose last field is a fat pointer
-        match t.kind() {
-            ty::Adt(..) if self.is_unsized(t) => {
-                // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
-                let fat_ptr_name = format!("&{}", self.ty_mangled_name(t));
-                self.ensure_struct(&fat_ptr_name, |ctx, _| {
-                    vec![
-                        Type::datatype_component("data", ctx.codegen_ty(t).to_pointer()),
-                        Type::datatype_component("len", Type::size_t()),
-                    ]
-                })
-            }
-            ty::Slice(e) => {
-                // a slice &[t] is translated to
-                // struct {
-                //   t *data;
-                //   usize len;
-                // }
-                // c.f. core::ptr::FatPtr<T>
-                let slice_name = self.ty_mangled_name(t);
-                self.ensure_struct(&slice_name, |ctx, _| {
-                    vec![
-                        Type::datatype_component("data", ctx.codegen_ty(e).to_pointer()),
-                        Type::datatype_component("len", Type::size_t()),
-                    ]
-                })
-            }
-            ty::Str => self.ensure_struct("str", |_, _| {
+    pub fn codegen_fat_ptr(&mut self, mir_type: Ty<'tcx>) -> Type {
+        assert!(
+            !self.use_thin_pointer(mir_type),
+            "Generating a fat pointer for a type requiring a thin pointer: {:?}",
+            mir_type.kind()
+        );
+        if self.use_slice_fat_pointer(mir_type) {
+            let pointer_name = match mir_type.kind() {
+                ty::Slice(..) => self.ty_mangled_name(mir_type),
+                ty::Str => "str".to_string(),
+                ty::Adt(..) => format!("&{}", self.ty_mangled_name(mir_type)),
+                kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+            };
+            let element_type = match mir_type.kind() {
+                ty::Slice(elt_type) => self.codegen_ty(elt_type),
+                ty::Str => Type::c_char(),
+                // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
+                ty::Adt(..) => self.codegen_ty(mir_type),
+                kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+            };
+            self.ensure_struct(&pointer_name, |_, _| {
                 vec![
-                    Type::datatype_component("data", Type::c_char().to_pointer()),
+                    Type::datatype_component("data", element_type.to_pointer()),
                     Type::datatype_component("len", Type::size_t()),
                 ]
-            }),
-            ty::Dynamic(binder, _region) => {
-                debug!("type codegen for dynamic with binder {:?} type {:?}", binder, t);
-                self.codegen_trait_vtable_type(t);
-                self.codegen_trait_fat_ptr_type(t)
-            }
-
-            _ => unreachable!(),
+            })
+        } else if self.use_vtable_fat_pointer(mir_type) {
+            let (_, trait_type) =
+                self.nested_pair_of_concrete_and_trait_types(mir_type, mir_type).unwrap();
+            self.codegen_trait_vtable_type(trait_type);
+            self.codegen_trait_fat_ptr_type(trait_type)
+        } else {
+            unreachable!(
+                "A pointer is either a thin pointer, slice fat pointer, or vtable fat pointer."
+            );
         }
     }
 
-    pub fn codegen_ty_ref(&mut self, t: Ty<'tcx>) -> Type {
-        // Normalize t to remove projection and opaque types
-        let t = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), t);
+    pub fn codegen_ty_ref(&mut self, pointee_type: Ty<'tcx>) -> Type {
+        // Normalize pointee_type to remove projection and opaque types
+        let pointee_type =
+            self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), pointee_type);
 
-        match t.kind() {
-            // These types go to fat pointers
-            ty::Dynamic(..) | ty::Slice(_) | ty::Str => self.codegen_fat_ptr(t),
-            ty::Adt(..) if self.is_unsized(t) => self.codegen_fat_ptr(t),
+        if !self.use_thin_pointer(pointee_type) {
+            return self.codegen_fat_ptr(pointee_type);
+        }
+
+        match pointee_type.kind() {
+            ty::Dynamic(..) | ty::Slice(_) | ty::Str => {
+                unreachable!("Should have generated a fat pointer")
+            }
             ty::Projection(_) | ty::Opaque(..) => {
                 unreachable!("Should have been removed by normalization")
             }
+
             // We have a "thin pointer", which is just a pointer
             ty::Adt(..)
             | ty::Array(..)
@@ -590,22 +594,22 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::RawPtr(_)
             | ty::Ref(..)
             | ty::Tuple(_)
-            | ty::Uint(_) => self.codegen_ty(t).to_pointer(),
+            | ty::Uint(_) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types were blocking firecracker. Doing the default thing to unblock.
             // TODO, determine if this is the right course of action
-            ty::FnDef(_, _) | ty::Never => self.codegen_ty(t).to_pointer(),
+            ty::FnDef(_, _) | ty::Never => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
             // For soundess, hold off on generating them till we have test-cases.
-            ty::Bound(_, _) => todo!("{:?} {:?}", t, t.kind()),
-            ty::Error(_) => todo!("{:?} {:?}", t, t.kind()),
-            ty::FnPtr(_) => todo!("{:?} {:?}", t, t.kind()),
-            ty::Generator(_, _, _) => todo!("{:?} {:?}", t, t.kind()),
-            ty::GeneratorWitness(_) => todo!("{:?} {:?}", t, t.kind()),
-            ty::Infer(_) => todo!("{:?} {:?}", t, t.kind()),
-            ty::Param(_) => todo!("{:?} {:?}", t, t.kind()),
-            ty::Placeholder(_) => todo!("{:?} {:?}", t, t.kind()),
+            ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::FnPtr(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::Generator(_, _, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
         }
     }
 
@@ -1006,6 +1010,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
+/// The mir type is a mir pointer type.
+pub fn is_pointer(mir_type: Ty<'tcx>) -> bool {
+    return matches!(mir_type.kind(), ty::Ref(..) | ty::RawPtr(..));
+}
+
 /// Extract from a mir pointer type the mir type of the value to which the
 /// pointer points.
 pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
@@ -1019,7 +1028,9 @@ pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
 impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        return mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.unit;
+        // ptr_metadata_ty is not defined on all types, the projection of an associated type
+        return !self.is_unsized(mir_type)
+            || mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.unit;
     }
     /// A pointer to the mir type should be a slice fat pointer.
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
