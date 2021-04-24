@@ -267,7 +267,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         // should be the ADT itself. So we need the `.dereference()` here.
                         // Note that this causes problems in `codegen_rvalue_ref()`.
                         // See the comment there for more details.
-                        inner_goto_expr.member("data", &self.symbol_table).dereference()
+                        inner_goto_expr
+                            .member("data", &self.symbol_table)
+                            // In the case of a vtable fat pointer, this data member is a void pointer,
+                            // so ensure the pointer has the correct type before dereferencing it.
+                            .cast_to(self.codegen_ty(inner_mir_typ).to_pointer())
+                            .dereference()
                     }
                     _ => inner_goto_expr.dereference(),
                 };
