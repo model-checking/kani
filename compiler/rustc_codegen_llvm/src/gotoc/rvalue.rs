@@ -4,7 +4,7 @@ use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use super::cbmc::utils::aggr_name;
 use super::cbmc::MachineModel;
 use super::metadata::*;
-use super::typ::pointee_type;
+use super::typ::{is_pointer, pointee_type};
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
@@ -530,6 +530,19 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
+    pub fn codegen_fat_ptr_to_thin_ptr_cast(
+        &mut self,
+        src: &Operand<'tcx>,
+        dst_t: Ty<'tcx>,
+    ) -> Expr {
+        debug!("codegen_fat_ptr_to_thin_ptr_cast |{:?}| |{:?}|", src, dst_t);
+        let src_goto_expr = self.codegen_operand(src);
+        let dst_goto_typ = self.codegen_ty(dst_t);
+        // In a vtable fat pointer, the data member is a void pointer,
+        // so ensure the pointer has the correct type before dereferencing it.
+        src_goto_expr.member("data", &self.symbol_table).cast_to(dst_goto_typ)
+    }
+
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
         debug!(
@@ -556,6 +569,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // Cast between fat pointers
         if self.is_ref_of_unsized(src_t) && self.is_ref_of_unsized(dst_t) {
             return self.codegen_fat_ptr_to_fat_ptr_cast(src, dst_t);
+        }
+
+        if self.is_ref_of_unsized(src_t) && self.is_ref_of_sized(dst_t) {
+            return self.codegen_fat_ptr_to_thin_ptr_cast(src, dst_t);
         }
 
         // pointer casting. from a pointer / reference to another pointer / reference
@@ -750,9 +767,9 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = match operand_type.kind() {
-            ty::Ref(_region, inner_type, _mutability) => self.layout_of(inner_type), //DSN was operand type
-            ty::Adt(..) => self.layout_of(operand_type),
-            _ => unreachable!("We got a vtable type that wasn't a ref or adt."),
+            ty::Ref(_, inner_type, ..) => self.layout_of(inner_type),
+            ty::RawPtr(ty::TypeAndMut { ty: inner_type, .. }) => self.layout_of(inner_type),
+            _ => self.layout_of(operand_type),
         };
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
@@ -882,14 +899,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_pointee_type = pointee_type(src_mir_type).unwrap();
         let dst_pointee_type = pointee_type(dst_mir_type).unwrap();
 
-        let dst_pointee_metadata_type = dst_pointee_type.ptr_metadata_ty(self.tcx);
-        let unit = self.tcx.types.unit;
-        let usize = self.tcx.types.usize;
-
-        if dst_pointee_metadata_type == unit {
+        if self.use_thin_pointer(dst_pointee_type) {
             assert_eq!(src_pointee_type, dst_pointee_type);
             None
-        } else if dst_pointee_metadata_type == usize {
+        } else if self.use_slice_fat_pointer(dst_pointee_type) {
             self.cast_sized_pointer_to_slice_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -897,8 +910,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_pointee_type,
                 dst_pointee_type,
             )
-        } else {
-            // dst_pointee_metadata_type == std::ptr::DynMetadata<dyn trait> (a vtable is required)
+        } else if self.use_vtable_fat_pointer(dst_pointee_type) {
             self.cast_sized_pointer_to_trait_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -906,6 +918,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_pointee_type,
                 dst_pointee_type,
             )
+        } else {
+            unreachable!(
+                "A pointer is either a thin pointer, slice fat pointer, or vtable fat pointer."
+            );
         }
     }
 
@@ -950,8 +966,8 @@ impl<'tcx> GotocCtx<'tcx> {
         if let Some((concrete_type, trait_type)) =
             self.nested_pair_of_concrete_and_trait_types(src_pointee_type, dst_pointee_type)
         {
-            let dst_goto_type = self.codegen_ty(dst_mir_type);
             let dst_goto_expr = src_goto_expr.cast_to(Type::void_pointer());
+            let dst_goto_type = self.codegen_ty(dst_mir_type);
             let vtable = self.codegen_vtable(concrete_type, trait_type);
             let vtable_expr = vtable.address_of();
             Some(dynamic_fat_ptr(dst_goto_type, dst_goto_expr, vtable_expr, &self.symbol_table))
@@ -1021,13 +1037,20 @@ impl<'tcx> GotocCtx<'tcx> {
     /// position a concrete type. This function returns the pair (concrete type,
     /// trait type) that we can use to build the vtable for the concrete type
     /// implementation of the trait type.
-    fn nested_pair_of_concrete_and_trait_types(
+    pub fn nested_pair_of_concrete_and_trait_types(
         &self,
         src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
     ) -> Option<(Ty<'tcx>, Ty<'tcx>)> {
+        // We are walking an ADT searching for a trait type in this ADT.  We can
+        // terminate a walk down a path when we hit a primitive type or which we hit
+        // a pointer type (that would take us out of this ADT and into another type).
+        if dst_mir_type.is_primitive() || is_pointer(dst_mir_type) {
+            return None;
+        }
+
         match (src_mir_type.kind(), dst_mir_type.kind()) {
-            (ty::Adt(..), ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
+            (_, ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
             (ty::Adt(..), ty::Adt(..)) => {
                 let src_fields = self.mir_struct_field_types(src_mir_type);
                 let dst_fields = self.mir_struct_field_types(dst_mir_type);
@@ -1068,7 +1091,7 @@ impl<'tcx> GotocCtx<'tcx> {
             //     Some((src_mir_type.clone(), dst_mir_type.clone()))
             // }
             _ => panic!(
-                "Searching for pairs of concrete and trait types found unexpected types in {:?} and {:?}",
+                "Found unexpected types while searching for pairs of concrete and trait types in {:?} and {:?}",
                 src_mir_type, dst_mir_type
             ),
         }
