@@ -3,18 +3,21 @@ name: Performance Issue
 about: Create a performance issue for RMC
 labels: bug
 ---
-<!--If you discover a potential security issue in RMC we ask that you notify
-AWS Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/).
-Please do **not** create a public github issue.
--->
 <!--
-Thank you for filing a performance issue! Please provide a short summary of the issue,
-along with any information you feel relevant to replicating the issue.
+Please report security concerns to us on the
+[AWS vulnerability reporting](http://aws.amazon.com/security/vulnerability-reporting/) page.
+-->
+
+<!--
+Thank you for filing a performance issue!
+Please provide a short summary of the issue, along with the information necessary to replicate.
 -->
 
 I tried this code:
-<!-- If the code fits into a single file, please post it here. Otherwise please
-post a link to the repository and branch that exposes the issue
+<!--
+If the reproducing code is small, please post it here.
+Otherwise, please attach the relevant files to this issue.
+Alternatively, post a link to the repository and branch that exposes the issue.
 -->
 ```rust
 <code>
