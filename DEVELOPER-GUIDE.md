@@ -40,11 +40,7 @@ This is the branch that you should build and use, and this is the branch that yo
 ### Patch structure
 The `main-<upstream-version>-yyyy-mm-dd` branches have the following git structure:
 
-* A set of commits representing RMC feature code.
-   These patches only affect RMC files.
-   Any API changes are contained in a single commit, described below.
-* A single patch which renames any upstream files that conflict with RMC files
-* A single patch that applies any API changes needed to the upstream code for RMC to link
 * The upstream `master` branch as of the date `yyyy-mm-dd`.
-
-
+* A source code patch that makes all changes to the upstream code needed for RMC to link.
+* A renaming patch that renames upstream files that conflict with RMC files.
+* A set of commits representing RMC feature code.
