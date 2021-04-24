@@ -1015,3 +1015,19 @@ pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
         _ => None,
     }
 }
+
+impl<'tcx> GotocCtx<'tcx> {
+    /// A pointer to the mir type should be a thin pointer.
+    pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
+        return mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.unit;
+    }
+    /// A pointer to the mir type should be a slice fat pointer.
+    pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
+        return mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.usize;
+    }
+    /// A pointer to the mir type should be a vtable fat pointer.
+    pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
+        let metadata = mir_type.ptr_metadata_ty(self.tcx);
+        return metadata != self.tcx.types.unit && metadata != self.tcx.types.usize;
+    }
+}
