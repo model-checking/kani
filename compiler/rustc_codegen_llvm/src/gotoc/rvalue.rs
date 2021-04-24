@@ -750,9 +750,9 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = match operand_type.kind() {
-            ty::Ref(_region, inner_type, _mutability) => self.layout_of(inner_type), //DSN was operand type
-            ty::Adt(..) => self.layout_of(operand_type),
-            _ => unreachable!("We got a vtable type that wasn't a ref or adt."),
+            ty::Ref(_, inner_type, ..) => self.layout_of(inner_type),
+            ty::RawPtr(ty::TypeAndMut { ty: inner_type, .. }) => self.layout_of(inner_type),
+            _ => self.layout_of(operand_type),
         };
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
@@ -882,14 +882,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_pointee_type = pointee_type(src_mir_type).unwrap();
         let dst_pointee_type = pointee_type(dst_mir_type).unwrap();
 
-        let dst_pointee_metadata_type = dst_pointee_type.ptr_metadata_ty(self.tcx);
-        let unit = self.tcx.types.unit;
-        let usize = self.tcx.types.usize;
-
-        if dst_pointee_metadata_type == unit {
+        if self.use_thin_pointer(dst_pointee_type) {
             assert_eq!(src_pointee_type, dst_pointee_type);
             None
-        } else if dst_pointee_metadata_type == usize {
+        } else if self.use_slice_fat_pointer(dst_pointee_type) {
             self.cast_sized_pointer_to_slice_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -897,8 +893,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_pointee_type,
                 dst_pointee_type,
             )
-        } else {
-            // dst_pointee_metadata_type == std::ptr::DynMetadata<dyn trait> (a vtable is required)
+        } else if self.use_vtable_fat_pointer(dst_pointee_type) {
             self.cast_sized_pointer_to_trait_fat_pointer(
                 src_goto_expr,
                 src_mir_type,
@@ -906,6 +901,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 src_pointee_type,
                 dst_pointee_type,
             )
+        } else {
+            unreachable!(
+                "A pointer is either a thin pointer, slice fat pointer, or vtable fat pointer."
+            );
         }
     }
 
@@ -1027,7 +1026,7 @@ impl<'tcx> GotocCtx<'tcx> {
         dst_mir_type: Ty<'tcx>,
     ) -> Option<(Ty<'tcx>, Ty<'tcx>)> {
         match (src_mir_type.kind(), dst_mir_type.kind()) {
-            (ty::Adt(..), ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
+            (_, ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
             (ty::Adt(..), ty::Adt(..)) => {
                 let src_fields = self.mir_struct_field_types(src_mir_type);
                 let dst_fields = self.mir_struct_field_types(dst_mir_type);
