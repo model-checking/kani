@@ -6,38 +6,28 @@
 // This test still fails with a final coercion error for
 // DummySubscriber to dyn Subscriber.
 
+use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 pub trait Subscriber {
-    fn process(&self);
-    fn increment(&mut self);
-    fn get(&self) -> u32;
+    fn process(&mut self);
+    fn interest_list(&self);
 }
 
-struct DummySubscriber {
-    val: u32,
-}
+struct DummySubscriber {}
 
 impl DummySubscriber {
     fn new() -> Self {
-        DummySubscriber { val: 0 }
+        DummySubscriber {}
     }
 }
 
 impl Subscriber for DummySubscriber {
-    fn process(&self) {}
-    fn increment(&mut self) {
-        self.val = self.val + 1;
-    }
-    fn get(&self) -> u32 {
-        self.val
-    }
+    fn process(&mut self) {}
+    fn interest_list(&self) {}
 }
 
 fn main() {
     let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
-    let mut data = s.lock().unwrap();
-    data.increment();
-    assert!(data.get() == 1);
 }
