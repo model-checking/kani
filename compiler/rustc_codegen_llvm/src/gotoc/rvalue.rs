@@ -115,12 +115,17 @@ impl<'tcx> GotocCtx<'tcx> {
         // The goto expr for the value of this place
         let place_goto_expr = projection.goto_expr;
 
-        // Construct a thin pointer to the value of this place
+        /*
+         * Construct a thin pointer to the value of this place
+         */
+
         if self.use_thin_pointer(place_mir_type) {
             return place_goto_expr.address_of();
         }
 
-        // Construct a fat pointer to the value of this place
+        /*
+         * Construct a fat pointer to the value of this place
+         */
 
         // In the sequence of projections leading to this place, we dereferenced
         // this fat pointer.
