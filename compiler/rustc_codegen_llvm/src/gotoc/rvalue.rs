@@ -94,82 +94,75 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_rvalue_ref(&mut self, p: &Place<'tcx>, res_ty: Ty<'tcx>) -> Expr {
-        // TODO: what is being handled here might not be super complete. I am not sure. watch out.
-        let pt = self.place_ty(p);
-        let place = self.codegen_place(p);
-        debug!("codegen_rvalue_ref||{:?}||{:?}||{:?}||{:?}", p, pt, pt.kind(), place);
+    /// Given a mir object denoted by a mir place, codegen a pointer to this object.
+    pub fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
+        let place_mir_type = self.place_ty(place);
+        let projection = self.codegen_place(place);
 
-        match pt.kind() {
-            _ if self.is_unsized(pt) => {
-                let fat_ptr = place.fat_ptr_goto_expr.unwrap();
-                match place.fat_ptr_mir_typ.unwrap().kind() {
-                    ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => {
-                        //TODO: Clean this up
-                        match to.kind() {
-                            ty::Adt(..) => {
-                                // A user defined DST type needs special handling
-                                // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
-                                assert!(self.is_unsized(to));
-                                // In cbmc-reg/Strings/os_str_reduced.rs, we have a flexible array
-                                // which needs to be decayed to a pointer.
-                                // In cbmc-reg/Cast/path.rs, we have an ADT, where we need to
-                                // take its address to get the pointer
-                                // See the comment in `codegen_projection`.
-                                let data = if place.goto_expr.typ().is_pointer() {
-                                    place.goto_expr
-                                } else if place.goto_expr.typ().is_array_like() {
-                                    place.goto_expr.array_to_ptr()
-                                } else {
-                                    place.goto_expr.address_of()
-                                };
-                                // TODO: this assumes we have a slice. But it might be dynamic.
-                                slice_fat_ptr(
-                                    self.codegen_ty(res_ty),
-                                    // place.goto_expr.decay_to_ptr(),
-                                    data,
-                                    fat_ptr.member("len", &self.symbol_table),
-                                    &self.symbol_table,
-                                )
-                            }
-                            ty::Slice(_) | ty::Str | ty::Dynamic(..) => fat_ptr,
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => {
-                        // TODO: fully understand this case.
-                        // It seems that the thing to do here is just return the fat pointer we got from the place.
-                        fat_ptr
-                    }
-                }
-            }
-            ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_) => {
-                place.goto_expr.address_of()
-            }
-            ty::Adt(_, _)
-            | ty::Foreign(_)
-            | ty::Array(_, _)
-            | ty::RawPtr(_)
-            | ty::Ref(_, _, _)
-            | ty::FnDef(_, _)
-            | ty::FnPtr(_)
-            | ty::Closure(_, _)
-            | ty::Generator(_, _, _)
-            | ty::GeneratorWitness(_)
-            | ty::Never
-            | ty::Tuple(_)
-            | ty::Projection(_)
-            | ty::Opaque(_, _)
-            | ty::Param(_)
-            | ty::Bound(_, _)
-            | ty::Placeholder(_)
-            | ty::Infer(_)
-            | ty::Error(_) => {
-                // TODO: This matches what we had here before.
-                // But I'm not sure that its actually correct for all the match arms.
-                place.goto_expr.address_of()
-            }
-            ty::Slice(_) | ty::Str | ty::Dynamic(..) => unreachable!(),
+        debug!("codegen_rvalue_ref: place: {:?}", place);
+        debug!("codegen_rvalue_ref: place type: {:?}", place_mir_type);
+        debug!("codegen_rvalue_ref: place kind: {:?}", place_mir_type.kind());
+        debug!("codegen_rvalue_ref: projection: {:?}", projection);
+
+        assert!(
+            is_pointer(result_mir_type),
+            "Constructing a pointer of the type {:?} to the value of the place {:?}",
+            result_mir_type,
+            place
+        );
+        let result_goto_type = self.codegen_ty(result_mir_type);
+
+        // The goto expr for the value of this place
+        let place_goto_expr = projection.goto_expr;
+
+        /*
+         * Construct a thin pointer to the value of this place
+         */
+
+        if self.use_thin_pointer(place_mir_type) {
+            return place_goto_expr.address_of();
+        }
+
+        /*
+         * Construct a fat pointer to the value of this place
+         */
+
+        // In the sequence of projections leading to this place, we dereferenced
+        // this fat pointer.
+        let intermediate_fat_pointer = projection.fat_ptr_goto_expr.unwrap();
+
+        // The thin pointer in the resulting fat pointer is a pointer to the value
+        let thin_pointer = if place_goto_expr.typ().is_pointer() {
+            // The value is itself a pointer (eg, a void pointer), just use this pointer
+            place_goto_expr
+        } else if place_goto_expr.typ().is_array_like() {
+            // The value is an array (eg, a flexible struct member), point to the first array element
+            place_goto_expr.array_to_ptr()
+        } else {
+            // The value is of any other type (eg, a struct), just point to it
+            place_goto_expr.address_of()
+        };
+
+        // The metadata in the resulting fat pointer comes from the intermediate fat pointer
+        let metadata = if self.use_slice_fat_pointer(place_mir_type) {
+            intermediate_fat_pointer.member("len", &self.symbol_table)
+        } else if self.use_vtable_fat_pointer(place_mir_type) {
+            intermediate_fat_pointer.member("vtable", &self.symbol_table)
+        } else {
+            unreachable!()
+        };
+
+        if self.use_slice_fat_pointer(place_mir_type) {
+            slice_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
+        } else if self.use_vtable_fat_pointer(place_mir_type) {
+            dynamic_fat_ptr(
+                result_goto_type,
+                thin_pointer.cast_to(Type::void_pointer()),
+                metadata,
+                &self.symbol_table,
+            )
+        } else {
+            unreachable!();
         }
     }
 
