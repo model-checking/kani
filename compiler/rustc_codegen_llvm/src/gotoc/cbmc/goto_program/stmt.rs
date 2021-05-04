@@ -3,6 +3,7 @@
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
 use std::fmt::Debug;
+use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// Datatypes
@@ -150,7 +151,27 @@ macro_rules! stmt {
 impl Stmt {
     /// `lhs = rhs;`
     pub fn assign(lhs: Expr, rhs: Expr, loc: Location) -> Self {
-        assert_eq!(lhs.typ(), rhs.typ());
+        //Temporarily work around https://github.com/model-checking/rmc/issues/95
+        //by disabling the assert and soundly assigning nondet
+        //assert_eq!(lhs.typ(), rhs.typ());
+        if lhs.typ() != rhs.typ() {
+            debug!(
+                "WARNING: assign statement with unequal types lhs {:?} rhs {:?}",
+                lhs.typ(),
+                rhs.typ()
+            );
+            let assert_stmt = Stmt::assert_false(
+                &format!(
+                    "Reached assignment statement with unequal types {:?} {:?}",
+                    lhs.typ(),
+                    rhs.typ()
+                ),
+                loc.clone(),
+            );
+            let nondet_value = lhs.typ().nondet();
+            let nondet_assign_stmt = stmt!(Assign { lhs, rhs: nondet_value }, loc.clone());
+            return Stmt::block(vec![assert_stmt, nondet_assign_stmt]);
+        }
         stmt!(Assign { lhs, rhs }, loc)
     }
 
