@@ -160,8 +160,14 @@ impl Stmt {
                 lhs.typ(),
                 rhs.typ()
             );
-            let assert_stmt =
-                Stmt::assert_false("Reached assignment statement with unequal types", loc.clone());
+            let assert_stmt = Stmt::assert_false(
+                &format!(
+                    "Reached assignment statement with unequal types {:?} {:?}",
+                    lhs.typ(),
+                    rhs.typ()
+                ),
+                loc.clone(),
+            );
             let nondet_value = lhs.typ().nondet();
             let nondet_assign_stmt = stmt!(Assign { lhs, rhs: nondet_value }, loc.clone());
             return Stmt::block(vec![assert_stmt, nondet_assign_stmt]);
