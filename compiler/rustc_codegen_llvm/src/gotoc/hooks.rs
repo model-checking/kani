@@ -48,6 +48,40 @@ fn sig_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> ty::FnS
     tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig)
 }
 
+struct Assume;
+impl<'tcx> GotocHook<'tcx> for Assume {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        let sig = sig_of_instance(tcx, instance);
+        let def_path = tcx.def_path(instance.def.def_id());
+        if let Some(data) = def_path.data.last() {
+            match data.data.name() {
+                DefPathDataName::Named(name) => {
+                    return name.to_string().starts_with("__VERIFIER_assume");
+                }
+                DefPathDataName::Anon { .. } => (),
+            }
+        }
+        false
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        _assign_to: Option<Place<'tcx>>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let target = target.unwrap();
+        let loc = tcx.codegen_span_option2(span);
+
+        Stmt::block(vec![Stmt::assume(cond, loc.clone()), Stmt::goto(tcx.find_label(&target), loc)])
+    }
+}
+
 struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
@@ -553,6 +587,7 @@ pub fn type_and_fn_hooks<'tcx>() -> (GotocTypeHooks<'tcx>, GotocHooks<'tcx>) {
         hooks: vec![
             Rc::new(Panic), //Must go first, so it overrides Nevers
             Rc::new(Nevers),
+            Rc::new(Assume),
             Rc::new(Nondet),
             Rc::new(MemReplace),
             Rc::new(MemSwap),
