@@ -627,7 +627,8 @@ impl RustcDefaultCalls {
                     json::decode(&rlink_data).unwrap_or_else(|err| {
                         sess.fatal(&format!("failed to decode rlink: {}", err));
                     });
-                let result = compiler.codegen_backend().link(&sess, codegen_results, &outputs);
+                let result =
+                    compiler.codegen_backend().link(&sess, Box::new(codegen_results), &outputs);
                 abort_on_err(result, sess);
             } else {
                 sess.fatal("rlink must be a file")
