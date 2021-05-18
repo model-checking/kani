@@ -10,7 +10,7 @@ use rustc_hir::{ForeignItem, ImplItem, Item, ItemKind, TraitItem};
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::subst::Subst;
 use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
-use rustc_span::def_id::{DefId, LOCAL_CRATE};
+use rustc_span::def_id::DefId;
 use std::cell::{Cell, RefMut};
 pub struct CbmcTypeVisitor<'tcx> {
     cbmc_type_name: String,
@@ -127,7 +127,7 @@ pub trait RustStubber<'tcx> {
     }
 
     fn find_cbmc_fn(&self, tcx: TyCtxt<'tcx>, stubbed_ty: Ty<'tcx>, name: &str) -> Option<DefId> {
-        for def_id in tcx.mir_keys(LOCAL_CRATE).iter().map(|def_id| def_id.to_def_id()) {
+        for def_id in tcx.mir_keys(()).iter().map(|def_id| def_id.to_def_id()) {
             let defpath = tcx.def_path(def_id);
             println!("defpath is {:?}, name is {}", defpath, name);
             match &defpath.data[..] {
