@@ -43,7 +43,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let lo = smap.lookup_char_pos(sp.lo());
         let line = lo.line;
         let col = 1 + lo.col_display;
-        Location::new(lo.file.name.to_string(), self.fname_option(), line, Some(col))
+        Location::new(
+            lo.file.name.prefer_remapped().to_string_lossy().to_string(),
+            self.fname_option(),
+            line,
+            Some(col),
+        )
     }
 
     /// Dereference a boxed type `std::boxed::Box<T>` to get a `*T`.

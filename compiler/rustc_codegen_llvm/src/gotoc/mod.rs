@@ -233,17 +233,14 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
 
 impl CodegenBackend for GotocCodegenBackend {
     fn metadata_loader(&self) -> Box<MetadataLoaderDyn> {
-        Box::new(crate::metadata::LlvmMetadataLoader)
+        Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
     }
 
     fn provide(&self, providers: &mut Providers) {
-        crate::attributes::provide_both(providers);
         monomorphize::partitioning::provide(providers);
     }
 
-    fn provide_extern(&self, providers: &mut ty::query::Providers) {
-        crate::attributes::provide_both(providers);
-    }
+    fn provide_extern(&self, _providers: &mut ty::query::Providers) {}
 
     fn codegen_crate<'tcx>(
         &self,
@@ -253,8 +250,7 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
-        let codegen_units: &'tcx [CodegenUnit<'_>] =
-            tcx.collect_and_partition_mono_items(LOCAL_CRATE).1;
+        let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mm = machine_model_from_session(&tcx.sess);
         let mut c = GotocCtx::new(tcx, SymbolTable::new(mm));
 

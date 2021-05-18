@@ -7,7 +7,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::{par_iter, MTLock, MTRef, ParallelIterator};
 use rustc_errors::{ErrorReported, FatalError};
 use rustc_hir as hir;
-use rustc_hir::def_id::{DefId, DefIdMap, LocalDefId, LOCAL_CRATE};
+use rustc_hir::def_id::{DefId, DefIdMap, LocalDefId};
 use rustc_hir::itemlikevisit::ItemLikeVisitor;
 use rustc_hir::lang_items::LangItem;
 use rustc_index::bit_set::GrowableBitSet;
@@ -171,7 +171,7 @@ fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<
     let mut roots = Vec::new();
 
     {
-        let entry_fn = tcx.entry_fn(LOCAL_CRATE).and_then(|(id, ty)| Some((id.expect_local(), ty)));
+        let entry_fn = tcx.entry_fn(()).and_then(|(id, ty)| Some((id.expect_local(), ty)));
 
         debug!("collect_roots: entry_fn = {:?}", entry_fn);
 

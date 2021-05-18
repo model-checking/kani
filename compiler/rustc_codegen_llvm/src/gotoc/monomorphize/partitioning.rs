@@ -5,7 +5,7 @@ use tracing::debug;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync;
 use rustc_hir::def::DefKind;
-use rustc_hir::def_id::{CrateNum, DefId, DefIdSet, CRATE_DEF_INDEX, LOCAL_CRATE};
+use rustc_hir::def_id::{DefId, DefIdSet, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::middle::codegen_fn_attrs::CodegenFnAttrFlags;
 use rustc_middle::middle::exported_symbols::SymbolExportLevel;
@@ -271,7 +271,7 @@ fn mono_item_visibility(
 
     if is_generic {
         if export_generics {
-            if tcx.is_unreachable_local_definition(def_id) {
+            if tcx.is_unreachable_local_definition(def_id.as_local().unwrap()) {
                 // This instance cannot be used from another crate.
                 Visibility::Hidden
             } else {
@@ -794,10 +794,8 @@ where
 
 fn collect_and_partition_mono_items(
     tcx: TyCtxt<'tcx>,
-    cnum: CrateNum,
+    _cnum: (),
 ) -> (&'tcx DefIdSet, &'tcx [CodegenUnit<'tcx>]) {
-    assert_eq!(cnum, LOCAL_CRATE);
-
     let collection_mode = match tcx.sess.opts.debugging_opts.print_mono_items {
         Some(ref s) => {
             let mode_string = s.to_lowercase();
@@ -911,12 +909,12 @@ pub fn provide(providers: &mut Providers) {
     providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
 
     providers.is_codegened_item = |tcx, def_id| {
-        let (all_mono_items, _) = tcx.collect_and_partition_mono_items(LOCAL_CRATE);
+        let (all_mono_items, _) = tcx.collect_and_partition_mono_items(());
         all_mono_items.contains(&def_id)
     };
 
     providers.codegen_unit = |tcx, name| {
-        let (_, all) = tcx.collect_and_partition_mono_items(LOCAL_CRATE);
+        let (_, all) = tcx.collect_and_partition_mono_items(());
         all.iter()
             .find(|cgu| cgu.name() == name)
             .unwrap_or_else(|| panic!("failed to find cgu with name {:?}", name))
