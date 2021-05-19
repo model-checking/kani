@@ -10,8 +10,10 @@ If you encounter issues when using RMC we encourage you to
 
 ## Quickstart
 
+1. Install Rust using [rustup](https://www.rust-lang.org/tools/install).
+
 1. Install all dependencies required for upstream-rust, as per the 
-   [README](UPSTREAM-README.md#building-on-a-unix-like-system).
+   [README](UPSTREAM-README.md#building-on-a-unix-like-system). You do not need to do the rest of the build instructions.
 
 1. Install CBMC.
    CBMC has prebuilt releases 
