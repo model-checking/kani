@@ -1173,14 +1173,12 @@ impl Expr {
 /// The statement constructors do typechecking, so we don't redundantly do that here.
 impl Expr {
     /// `self;`
-    pub fn as_stmt(self) -> Stmt {
-        let loc = self.location.clone();
+    pub fn as_stmt(self, loc: Location) -> Stmt {
         Stmt::code_expression(self, loc)
     }
 
     /// `self = rhs;`
-    pub fn assign(self, rhs: Expr) -> Stmt {
-        let loc = rhs.location.clone();
+    pub fn assign(self, rhs: Expr, loc: Location) -> Stmt {
         Stmt::assign(self, rhs, loc)
     }
 
@@ -1190,8 +1188,7 @@ impl Expr {
     }
 
     /// `return self;`
-    pub fn ret(self) -> Stmt {
-        let loc = self.location.clone();
+    pub fn ret(self, loc: Location) -> Stmt {
         Stmt::ret(Some(self), loc)
     }
 
