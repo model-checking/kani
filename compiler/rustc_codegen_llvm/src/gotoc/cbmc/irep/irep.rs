@@ -9,7 +9,7 @@ use num::BigInt;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-/// The CBMC serilization format for goto-programs.
+/// The CBMC serialization format for goto-programs.
 /// CBMC implementation code is at:
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/irep.h
 #[derive(Clone, Debug)]
