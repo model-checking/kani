@@ -218,7 +218,7 @@ impl ToIrep for ExprValue {
             ExprValue::IntConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(*i))],
+                named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(i.clone()))],
             },
             ExprValue::Member { lhs, field } => Irep {
                 id: IrepId::Member,
