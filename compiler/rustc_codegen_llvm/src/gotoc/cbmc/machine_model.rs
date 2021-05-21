@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 /// Represents the machine specific information necessary to generate an Irep.
+use num::bigint::BigInt;
 #[derive(Debug)]
 pub struct MachineModel {
     /// Is the architecture big endian?
@@ -37,6 +38,12 @@ pub enum RoundingMode {
     Downward = 1,
     Upward = 2,
     TowardsZero = 3,
+}
+
+impl From<RoundingMode> for BigInt {
+    fn from(rm: RoundingMode) -> Self {
+        (rm as i32).into()
+    }
 }
 
 /// Constructor

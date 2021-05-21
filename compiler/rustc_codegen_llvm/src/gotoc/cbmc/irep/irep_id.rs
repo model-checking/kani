@@ -4,17 +4,16 @@
 //!
 //! This file contains [IrepId] which is the id's used in CBMC.
 //! c.f. CBMC source code [src/util/irep_ids.def]
-use std::convert::TryInto;
-use std::fmt::Debug;
+use num::bigint::BigInt;
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum IrepId {
     /// In addition to the standard enums defined below, CBMC also allows ids to be strings.
     /// For e.g, to store the id of a variable. This enum variant captures those strings.
     FreeformString(String),
     /// An integer, encoded as a decimal string
-    FreeformInteger(i128),
+    FreeformInteger(BigInt),
     /// An integer, encoded as a hex string
-    FreeformHexInteger(i128),
+    FreeformHexInteger(BigInt),
     EmptyString,
     Let,
     LetBinding,
@@ -822,18 +821,16 @@ pub enum IrepId {
 impl IrepId {
     pub fn from_int<T>(i: T) -> IrepId
     where
-        T: TryInto<i128>,
-        T::Error: Debug,
+        T: Into<BigInt>,
     {
-        IrepId::FreeformInteger(i.try_into().unwrap())
+        IrepId::FreeformInteger(i.into())
     }
 
     pub fn hex_from_int<T>(i: T) -> IrepId
     where
-        T: TryInto<i128>,
-        T::Error: Debug,
+        T: Into<BigInt>,
     {
-        IrepId::FreeformHexInteger(i.try_into().unwrap())
+        IrepId::FreeformHexInteger(i.into())
     }
 
     pub fn from_string(s: String) -> IrepId {

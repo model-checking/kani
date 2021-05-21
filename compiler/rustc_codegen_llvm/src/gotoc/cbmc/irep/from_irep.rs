@@ -144,7 +144,8 @@ impl FromIrep for Type {
             IrepId::Bool => Type::Bool,
             IrepId::CBool => {
                 assert!(i.sub.is_empty());
-                assert!(i.lookup_as_int(IrepId::Width).unwrap() == 8);
+                let width: u64 = i.lookup_as_int(IrepId::Width).unwrap().try_into().unwrap();
+                assert!(width == 8);
                 Type::c_bool()
             }
             IrepId::Code => {
@@ -165,8 +166,8 @@ impl FromIrep for Type {
             }
             IrepId::Floatbv => {
                 assert!(i.sub.is_empty());
-                let f = i.lookup_as_int(IrepId::F).unwrap();
-                let width = i.lookup_as_int(IrepId::Width).unwrap();
+                let f: u64 = i.lookup_as_int(IrepId::F).unwrap().try_into().unwrap();
+                let width: u64 = i.lookup_as_int(IrepId::Width).unwrap().try_into().unwrap();
                 match i.lookup(IrepId::CCType).unwrap().id {
                     IrepId::Double => {
                         assert!(f == 52 && width == 64);
