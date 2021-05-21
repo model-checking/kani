@@ -5,11 +5,11 @@
 use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
+use num::BigInt;
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::fmt::Debug;
 
-/// The CBMC serilization format for goto-programs.
+/// The CBMC serialization format for goto-programs.
 /// CBMC implementation code is at:
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/irep.h
 #[derive(Clone, Debug)]
@@ -25,8 +25,8 @@ impl Irep {
         self.named_sub.get(&key)
     }
 
-    pub fn lookup_as_int(&self, id: IrepId) -> Option<i128> {
-        self.lookup(id).and_then(|x| match x.id {
+    pub fn lookup_as_int(&self, id: IrepId) -> Option<&BigInt> {
+        self.lookup(id).and_then(|x| match &x.id {
             IrepId::FreeformInteger(i) | IrepId::FreeformHexInteger(i) => Some(i),
             _ => None,
         })
@@ -102,8 +102,7 @@ impl Irep {
 
     pub fn just_hex_id<T>(i: T) -> Irep
     where
-        T: TryInto<i128>,
-        T::Error: Debug,
+        T: Into<BigInt>,
     {
         Irep::just_id(IrepId::hex_from_int(i))
     }
@@ -114,8 +113,7 @@ impl Irep {
 
     pub fn just_int_id<T>(i: T) -> Irep
     where
-        T: TryInto<i128>,
-        T::Error: Debug,
+        T: Into<BigInt>,
     {
         Irep::just_id(IrepId::from_int(i))
     }
