@@ -10,14 +10,22 @@
 
 use super::goto_program::{Expr, Location, Symbol, Type};
 use super::MachineModel;
-use std::convert::TryInto;
-use std::fmt::Debug;
+use num::bigint::BigInt;
 fn int_constant<T>(name: &str, value: T) -> Symbol
 where
-    T: TryInto<i128>,
-    T::Error: Debug,
+    T: Into<BigInt>,
 {
     Symbol::constant(name, name, name, Expr::int_constant(value, Type::c_int()), Location::none())
+}
+
+fn int_constant_from_bool(name: &str, value: bool) -> Symbol {
+    Symbol::constant(
+        name,
+        name,
+        name,
+        Expr::int_constant(if value { 1 } else { 0 }, Type::c_int()),
+        Location::none(),
+    )
 }
 
 fn string_constant(name: &str, value: &str) -> Symbol {
@@ -27,10 +35,10 @@ fn string_constant(name: &str, value: &str) -> Symbol {
 pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
     vec![
         string_constant("__CPROVER_architecture_arch", mm.architecture()),
-        int_constant("__CPROVER_architecture_NULL_is_zero", mm.null_is_zero()),
+        int_constant_from_bool("__CPROVER_architecture_NULL_is_zero", mm.null_is_zero()),
         int_constant("__CPROVER_architecture_alignment", mm.alignment()),
         int_constant("__CPROVER_architecture_bool_width", mm.bool_width()),
-        int_constant("__CPROVER_architecture_char_is_unsigned", mm.char_is_unsigned()),
+        int_constant_from_bool("__CPROVER_architecture_char_is_unsigned", mm.char_is_unsigned()),
         int_constant("__CPROVER_architecture_char_width", mm.char_width()),
         int_constant("__CPROVER_architecture_double_width", mm.double_width()),
         // c.f. https://github.com/diffblue/cbmc/blob/develop/src/util/config.h
@@ -44,7 +52,10 @@ pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
         int_constant("__CPROVER_architecture_pointer_width", mm.pointer_width()),
         int_constant("__CPROVER_architecture_short_int_width", mm.short_int_width()),
         int_constant("__CPROVER_architecture_single_width", mm.single_width()),
-        int_constant("__CPROVER_architecture_wchar_t_is_unsigned", mm.wchar_t_is_unsigned()),
+        int_constant_from_bool(
+            "__CPROVER_architecture_wchar_t_is_unsigned",
+            mm.wchar_t_is_unsigned(),
+        ),
         int_constant("__CPROVER_architecture_wchar_t_width", mm.wchar_t_width()),
         int_constant("__CPROVER_architecture_word_size", mm.word_size()),
         int_constant("__CPROVER_rounding_mode", mm.rounding_mode()),

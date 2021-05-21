@@ -5,8 +5,8 @@ use self::ExprValue::*;
 use self::UnaryOperand::*;
 use super::super::MachineModel;
 use super::{DatatypeComponent, Location, Parameter, Stmt, SwitchCase, SymbolTable, Type};
+use num::bigint::BigInt;
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::fmt::Debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +98,7 @@ pub enum ExprValue {
         index: Expr,
     },
     /// `123`
-    IntConstant(i128),
+    IntConstant(BigInt),
     /// `lhs.field`
     Member {
         lhs: Expr,
@@ -247,9 +247,9 @@ impl Expr {
     }
 
     /// If the expression is an Int constant type, return its value
-    pub fn int_constant_value(&self) -> Option<i128> {
-        match *self.value {
-            ExprValue::IntConstant(i) => Some(i),
+    pub fn int_constant_value(&self) -> Option<BigInt> {
+        match &*self.value {
+            ExprValue::IntConstant(i) => Some(i.clone()),
             _ => None,
         }
     }
@@ -455,11 +455,10 @@ impl Expr {
     /// `123`
     pub fn int_constant<T>(i: T, typ: Type) -> Self
     where
-        T: TryInto<i128>,
-        T::Error: Debug,
+        T: Into<BigInt>,
     {
         assert!(typ.is_integer());
-        let i = i.try_into().unwrap();
+        let i = i.into();
         //TODO: This check fails on some regressions
         // if i != 0 && i != 1 {
         //     assert!(
