@@ -103,7 +103,10 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         let target = target.unwrap();
         let loc = tcx.codegen_span_option2(span);
 
-        Stmt::block(vec![Stmt::assume(cond, loc.clone()), Stmt::goto(tcx.find_label(&target), loc)])
+        Stmt::block(
+            vec![Stmt::assume(cond, loc.clone()), Stmt::goto(tcx.find_label(&target), loc.clone())],
+            loc,
+        )
     }
 }
 
@@ -132,15 +135,18 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
             Stmt::goto(tcx.find_label(&target), loc)
         } else {
             let pe = tcx.codegen_place(&p).goto_expr;
-            Stmt::block(vec![
-                pe.clone().assign(tcx.codegen_ty(pt).nondet()),
-                // we should potentially generate an assumption
-                match tcx.codegen_assumption(pt) {
-                    None => Stmt::skip(loc.clone()),
-                    Some(f) => Stmt::assume(f.call(vec![pe.address_of()]), loc.clone()),
-                },
-                Stmt::goto(tcx.find_label(&target), loc.clone()),
-            ])
+            Stmt::block(
+                vec![
+                    pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),
+                    // we should potentially generate an assumption
+                    match tcx.codegen_assumption(pt) {
+                        None => Stmt::skip(loc.clone()),
+                        Some(f) => Stmt::assume(f.call(vec![pe.address_of()]), loc.clone()),
+                    },
+                    Stmt::goto(tcx.find_label(&target), loc.clone()),
+                ],
+                loc,
+            )
         }
     }
 }
@@ -217,10 +223,13 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
         let loc = tcx.codegen_span_option2(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
-        Stmt::block(vec![
-            tcx.codegen_intrinsic(instance, fargs, &p, span),
-            Stmt::goto(tcx.find_label(&target), loc),
-        ])
+        Stmt::block(
+            vec![
+                tcx.codegen_intrinsic(instance, fargs, &p, span),
+                Stmt::goto(tcx.find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
     }
 }
 
@@ -250,17 +259,20 @@ impl<'tcx> GotocHook<'tcx> for MemReplace {
         let place_layout = tcx.layout_of(place_type);
         let place_is_zst = place_layout.is_zst();
         if place_is_zst {
-            Stmt::block(vec![Stmt::goto(tcx.find_label(&target), loc)])
+            Stmt::block(vec![Stmt::goto(tcx.find_label(&target), loc.clone())], loc)
         } else {
             let dest = fargs.remove(0);
             let src = fargs.remove(0);
-            Stmt::block(vec![
-                tcx.codegen_place(&p)
-                    .goto_expr
-                    .assign(dest.clone().dereference().with_location(loc.clone())),
-                dest.dereference().assign(src).with_location(loc.clone()),
-                Stmt::goto(tcx.find_label(&target), loc),
-            ])
+            Stmt::block(
+                vec![
+                    tcx.codegen_place(&p)
+                        .goto_expr
+                        .assign(dest.clone().dereference().with_location(loc.clone()), loc.clone()),
+                    dest.dereference().assign(src, loc.clone()),
+                    Stmt::goto(tcx.find_label(&target), loc.clone()),
+                ],
+                loc,
+            )
         }
     }
 }
@@ -302,8 +314,8 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
             block.push(Stmt::decl(var.to_expr(), Some(xe.clone().dereference()), Location::none()));
             let ye = y_param.to_expr();
             let var = var.to_expr();
-            block.push(xe.dereference().assign(ye.clone().dereference()));
-            block.push(ye.dereference().assign(var));
+            block.push(xe.dereference().assign(ye.clone().dereference(), loc.clone()));
+            block.push(ye.dereference().assign(var, loc.clone()));
 
             Symbol::function(
                 &func_name,
@@ -311,19 +323,18 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
                     vec![x_param.to_function_parameter(), y_param.to_function_parameter()],
                     Type::empty(),
                 ),
-                Some(Stmt::block(block)),
+                Some(Stmt::block(block, loc.clone())),
                 Location::none(),
             )
         });
 
-        Stmt::block(vec![
-            tcx.find_function(&func_name)
-                .unwrap()
-                .call(vec![x, y])
-                .as_stmt()
-                .with_location(loc.clone()),
-            Stmt::goto(tcx.find_label(&target), loc),
-        ])
+        Stmt::block(
+            vec![
+                tcx.find_function(&func_name).unwrap().call(vec![x, y]).as_stmt(loc.clone()),
+                Stmt::goto(tcx.find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
     }
 }
 
@@ -353,10 +364,15 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let src = fargs.remove(0);
-        Stmt::block(vec![
-            tcx.codegen_place(&p).goto_expr.assign(src.dereference().with_location(loc.clone())),
-            Stmt::goto(tcx.find_label(&target), loc),
-        ])
+        Stmt::block(
+            vec![
+                tcx.codegen_place(&p)
+                    .goto_expr
+                    .assign(src.dereference().with_location(loc.clone()), loc.clone()),
+                Stmt::goto(tcx.find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
     }
 }
 
@@ -386,10 +402,13 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
         let target = target.unwrap();
         let dst = fargs.remove(0);
         let src = fargs.remove(0);
-        Stmt::block(vec![
-            dst.dereference().assign(src).with_location(loc.clone()),
-            Stmt::goto(tcx.find_label(&target), loc),
-        ])
+        Stmt::block(
+            vec![
+                dst.dereference().assign(src, loc.clone()).with_location(loc.clone()),
+                Stmt::goto(tcx.find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
     }
 }
 
@@ -414,14 +433,18 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
         match (assign_to, target) {
             (Some(p), Some(target)) => {
                 let size = fargs.remove(0);
-                Stmt::block(vec![
-                    tcx.codegen_place(&p).goto_expr.assign(
-                        BuiltinFn::Malloc
-                            .call(vec![size], loc)
-                            .cast_to(Type::unsigned_int(8).to_pointer()),
-                    ),
-                    Stmt::goto(tcx.find_label(&target), Location::none()),
-                ])
+                Stmt::block(
+                    vec![
+                        tcx.codegen_place(&p).goto_expr.assign(
+                            BuiltinFn::Malloc
+                                .call(vec![size], loc.clone())
+                                .cast_to(Type::unsigned_int(8).to_pointer()),
+                            loc,
+                        ),
+                        Stmt::goto(tcx.find_label(&target), Location::none()),
+                    ],
+                    Location::none(),
+                )
             }
             _ => unreachable!(),
         }
@@ -449,10 +472,15 @@ impl<'tcx> GotocHook<'tcx> for RustDealloc {
         match target {
             Some(target) => {
                 let ptr = fargs.remove(0);
-                Stmt::block(vec![
-                    BuiltinFn::Free.call(vec![ptr.cast_to(Type::void_pointer())], loc).as_stmt(),
-                    Stmt::goto(tcx.find_label(&target), Location::none()),
-                ])
+                Stmt::block(
+                    vec![
+                        BuiltinFn::Free
+                            .call(vec![ptr.cast_to(Type::void_pointer())], loc.clone())
+                            .as_stmt(loc.clone()),
+                        Stmt::goto(tcx.find_label(&target), Location::none()),
+                    ],
+                    loc,
+                )
             }
             _ => unreachable!(),
         }
@@ -483,14 +511,18 @@ impl<'tcx> GotocHook<'tcx> for RustRealloc {
         fargs.remove(0); // old_size
         fargs.remove(0); // align
         let size = fargs.remove(0);
-        Stmt::block(vec![
-            tcx.codegen_place(&p).goto_expr.assign(
-                BuiltinFn::Realloc
-                    .call(vec![ptr, size], loc.clone())
-                    .cast_to(Type::unsigned_int(8).to_pointer()),
-            ),
-            Stmt::goto(tcx.find_label(&target), loc),
-        ])
+        Stmt::block(
+            vec![
+                tcx.codegen_place(&p).goto_expr.assign(
+                    BuiltinFn::Realloc
+                        .call(vec![ptr, size], loc.clone())
+                        .cast_to(Type::unsigned_int(8).to_pointer()),
+                    loc.clone(),
+                ),
+                Stmt::goto(tcx.find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
     }
 }
 
@@ -515,14 +547,18 @@ impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let size = fargs.remove(0);
-        Stmt::block(vec![
-            tcx.codegen_place(&p).goto_expr.assign(
-                BuiltinFn::Calloc
-                    .call(vec![Type::size_t().one(), size], loc.clone())
-                    .cast_to(Type::unsigned_int(8).to_pointer()),
-            ),
-            Stmt::goto(tcx.find_label(&target), loc),
-        ])
+        Stmt::block(
+            vec![
+                tcx.codegen_place(&p).goto_expr.assign(
+                    BuiltinFn::Calloc
+                        .call(vec![Type::size_t().one(), size], loc.clone())
+                        .cast_to(Type::unsigned_int(8).to_pointer()),
+                    loc.clone(),
+                ),
+                Stmt::goto(tcx.find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
     }
 }
 
@@ -555,9 +591,12 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
         let code = tcx
             .codegen_place(&p)
             .goto_expr
-            .assign(Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table))
+            .assign(
+                Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table),
+                loc.clone(),
+            )
             .with_location(loc.clone());
-        Stmt::block(vec![code, Stmt::goto(tcx.find_label(&target), loc)])
+        Stmt::block(vec![code, Stmt::goto(tcx.find_label(&target), loc.clone())], loc)
     }
 }
 
