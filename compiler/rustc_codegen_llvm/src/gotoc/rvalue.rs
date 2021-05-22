@@ -184,21 +184,25 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::decl(idx.clone(), Some(Type::size_t().zero()), Location::none()),
             ];
 
-            let lbody = Stmt::block(vec![
-                tcx.codegen_idx_array(res.clone(), idx.clone()).assign(inp.to_expr()),
-            ]);
+            let lbody = Stmt::block(
+                vec![
+                    tcx.codegen_idx_array(res.clone(), idx.clone())
+                        .assign(inp.to_expr(), Location::none()),
+                ],
+                Location::none(),
+            );
             body.push(Stmt::for_loop(
                 Stmt::skip(Location::none()),
                 idx.clone().lt(tcx.codegen_const(sz, None)),
-                idx.postincr().as_stmt(),
+                idx.postincr().as_stmt(Location::none()),
                 lbody,
                 Location::none(),
             ));
-            body.push(res.ret());
+            body.push(res.ret(Location::none()));
             Symbol::function(
                 &func_name,
                 Type::code(vec![inp.to_function_parameter()], res_t),
-                Some(Stmt::block(body)),
+                Some(Stmt::block(body, Location::none())),
                 Location::none(),
             )
         });
@@ -820,7 +824,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     vtable_fields,
                     &ctx.symbol_table,
                 );
-                let body = var.assign(vtable);
+                let body = var.assign(vtable, Location::none());
                 Some(body)
             },
         )
