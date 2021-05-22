@@ -170,7 +170,7 @@ impl Stmt {
             );
             let nondet_value = lhs.typ().nondet();
             let nondet_assign_stmt = stmt!(Assign { lhs, rhs: nondet_value }, loc.clone());
-            return Stmt::block(vec![assert_stmt, nondet_assign_stmt]);
+            return Stmt::block(vec![assert_stmt, nondet_assign_stmt], loc);
         }
         stmt!(Assign { lhs, rhs }, loc)
     }
@@ -178,7 +178,9 @@ impl Stmt {
     /// `__CPROVER_assert(cond, msg);`
     pub fn assert(cond: Expr, msg: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
-        BuiltinFn::CProverAssert.call(vec![cond, Expr::string_constant(msg)], loc).as_stmt()
+        BuiltinFn::CProverAssert
+            .call(vec![cond, Expr::string_constant(msg)], loc.clone())
+            .as_stmt(loc)
     }
 
     pub fn assert_false(msg: &str, loc: Location) -> Self {
@@ -192,14 +194,12 @@ impl Stmt {
     }
 
     /// { ATOMIC_BEGIN stmt1; stmt2; ... ATOMIC_END }
-    pub fn atomic_block(stmts: Vec<Stmt>) -> Self {
-        let loc = if stmts.is_empty() { Location::none() } else { stmts[0].location().clone() };
+    pub fn atomic_block(stmts: Vec<Stmt>, loc: Location) -> Self {
         stmt!(AtomicBlock(stmts), loc)
     }
 
     /// `{ stmt1; stmt2; ... }`
-    pub fn block(stmts: Vec<Stmt>) -> Self {
-        let loc = if stmts.is_empty() { Location::none() } else { stmts[0].location().clone() };
+    pub fn block(stmts: Vec<Stmt>, loc: Location) -> Self {
         stmt!(Block(stmts), loc)
     }
 
