@@ -54,7 +54,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     .dereference()
                     .ge(Expr::int_constant(below, Type::signed_int(32)))
                     .and(ptr.dereference().le(Expr::int_constant(above, Type::signed_int(32))))
-                    .ret();
+                    .ret(Location::none());
                 body.push(exp)
             })
         });
@@ -69,7 +69,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     .dereference()
                     .eq(Expr::c_true())
                     .or(ptr.dereference().eq(Expr::c_false()))
-                    .ret();
+                    .ret(Location::none());
                 body.push(exp)
             })
         });
@@ -221,22 +221,29 @@ impl<'tcx> GotocCtx<'tcx> {
                 //CHECKME: why is this 2?
                 let idx = tcx.gen_function_local_variable(2, &fname, Type::size_t()).to_expr();
                 body.push(Stmt::decl(idx.clone(), Some(Type::size_t().zero()), Location::none()));
-                let lbody = Stmt::block(vec![
-                    data.clone()
-                        .neq(data.typ().null())
-                        .implies(f.call(vec![data.plus(idx.clone())]))
-                        .not()
-                        .if_then_else(Expr::bool_false().ret(), None, Location::none()),
-                ]);
+                let lbody = Stmt::block(
+                    vec![
+                        data.clone()
+                            .neq(data.typ().null())
+                            .implies(f.call(vec![data.plus(idx.clone())]))
+                            .not()
+                            .if_then_else(
+                                Expr::bool_false().ret(Location::none()),
+                                None,
+                                Location::none(),
+                            ),
+                    ],
+                    Location::none(),
+                );
                 body.push(Stmt::for_loop(
                     Stmt::skip(Location::none()),
                     idx.clone().lt(len),
-                    idx.postincr().as_stmt(),
+                    idx.postincr().as_stmt(Location::none()),
                     lbody,
                     Location::none(),
                 ));
             }
-            body.push(fold_invariants(invariants).ret());
+            body.push(fold_invariants(invariants).ret(Location::none()));
         })
     }
 
@@ -260,7 +267,7 @@ impl<'tcx> GotocCtx<'tcx> {
             if let Some(f) = f {
                 invarints.push(x.clone().neq(x.typ().null()).implies(f.call(vec![x])));
             }
-            body.push(fold_invariants(invarints).ret());
+            body.push(fold_invariants(invarints).ret(Location::none()));
         })
     }
 
@@ -296,7 +303,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Symbol {
         self.codegen_assumption_genfunc(fname, t, |tcx, ptr, body| {
             let invariants = tcx.codegen_assumption_struct_invariant(ptr, variant, subst);
-            body.push(fold_invariants(invariants).ret());
+            body.push(fold_invariants(invariants).ret(Location::none()));
         })
     }
 
@@ -336,7 +343,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Symbol {
         self.codegen_assumption_genfunc(fname, t, |tcx, ptr, body| {
             let invariants = tcx.codegen_assumption_struct_invariant(ptr, variant, subst);
-            body.push(fold_invariants(invariants).ret());
+            body.push(fold_invariants(invariants).ret(Location::none()));
         })
     }
 
@@ -382,7 +389,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             let data_invar = tcx.codegen_assumption_struct_invariant(ptr, variant, subst);
             invariants.push(fold_invariants(data_invar));
-            body.push(fold_invariants_or(invariants).ret());
+            body.push(fold_invariants_or(invariants).ret(Location::none()));
         })
     }
 
@@ -486,7 +493,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
 
-            body.push(fold_invariants(invariants).ret());
+            body.push(fold_invariants(invariants).ret(Location::none()));
         })
     }
 
@@ -510,25 +517,29 @@ impl<'tcx> GotocCtx<'tcx> {
                 let idx = tcx.gen_function_local_variable(2, &fname, Type::size_t());
                 body.push(Stmt::decl(idx.to_expr(), Some(Type::size_t().zero()), Location::none()));
                 let idxe = idx.to_expr();
-                let lbody = Stmt::block(vec![
-                    f.call(vec![
-                        tcx.codegen_idx_array(ptr.clone().dereference(), idxe.clone()).address_of(),
-                    ])
-                    .not()
-                    .if_then_else(
-                        Expr::bool_false().ret(),
-                        None,
-                        Location::none(),
-                    ),
-                ]);
+                let lbody = Stmt::block(
+                    vec![
+                        f.call(vec![
+                            tcx.codegen_idx_array(ptr.clone().dereference(), idxe.clone())
+                                .address_of(),
+                        ])
+                        .not()
+                        .if_then_else(
+                            Expr::bool_false().ret(Location::none()),
+                            None,
+                            Location::none(),
+                        ),
+                    ],
+                    Location::none(),
+                );
                 body.push(Stmt::for_loop(
                     Stmt::skip(Location::none()),
                     idxe.clone().lt(tcx.codegen_const(c, None)),
-                    idxe.postincr().as_stmt(),
+                    idxe.postincr().as_stmt(Location::none()),
                     lbody,
                     Location::none(),
                 ));
-                body.push(Expr::bool_true().ret());
+                body.push(Expr::bool_true().ret(Location::none()));
             }
         })
     }
@@ -553,7 +564,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     invariants.push(f.call(vec![field]));
                 }
             }
-            body.push(fold_invariants(invariants).ret());
+            body.push(fold_invariants(invariants).ret(Location::none()));
         })
     }
 
@@ -570,7 +581,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut stmts = vec![];
         //let mut body = Stmt::block(vec![]);
         f(self, ptr, &mut stmts);
-        let body = Stmt::block(stmts);
+        let body = Stmt::block(stmts, Location::none());
         Symbol::function(
             fname,
             Type::code(vec![var.to_function_parameter()], Type::bool()),
