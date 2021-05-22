@@ -120,10 +120,13 @@ pub trait RustStubber<'tcx> {
         let p = assign_to.unwrap();
         let fn_call = fctn.call(fargs);
         let target = target.unwrap();
-        Stmt::block(vec![
-            tcx.codegen_expr_to_place(&p, fn_call),
-            Stmt::goto(tcx.find_label(&target), Location::none()),
-        ])
+        Stmt::block(
+            vec![
+                tcx.codegen_expr_to_place(&p, fn_call),
+                Stmt::goto(tcx.find_label(&target), Location::none()),
+            ],
+            Location::none(),
+        )
     }
 
     fn find_cbmc_fn(&self, tcx: TyCtxt<'tcx>, stubbed_ty: Ty<'tcx>, name: &str) -> Option<DefId> {
