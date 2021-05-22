@@ -273,13 +273,15 @@ impl<'tcx> GotocCtx<'tcx> {
             let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
-                var.clone().member("case", &tcx.symbol_table).assign(param.to_expr()),
-                var.clone().ret(),
+                var.clone()
+                    .member("case", &tcx.symbol_table)
+                    .assign(param.to_expr(), Location::none()),
+                var.clone().ret(Location::none()),
             ];
             Symbol::function(
                 &func_name,
                 Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body)),
+                Some(Stmt::block(body, Location::none())),
                 Location::none(),
             )
         });
@@ -474,10 +476,13 @@ impl<'tcx> GotocCtx<'tcx> {
         );
         let fn_name = Self::initializer_fn_name(&name);
         let temp_var = self.gen_function_local_variable(0, &fn_name, alloc_typ_ref).to_expr();
-        let body = Stmt::block(vec![
-            Stmt::decl(temp_var.clone(), Some(val), Location::none()),
-            var.assign(temp_var.transmute_to(var_typ, &self.symbol_table)),
-        ]);
+        let body = Stmt::block(
+            vec![
+                Stmt::decl(temp_var.clone(), Some(val), Location::none()),
+                var.assign(temp_var.transmute_to(var_typ, &self.symbol_table), Location::none()),
+            ],
+            Location::none(),
+        );
         self.register_initializer(&name, body);
 
         self.alloc_map.insert(alloc, name);
@@ -525,13 +530,14 @@ impl<'tcx> GotocCtx<'tcx> {
             let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_get_niche(var.clone(), offset, target_ty).assign(param.to_expr()),
-                var.ret(),
+                tcx.codegen_get_niche(var.clone(), offset, target_ty)
+                    .assign(param.to_expr(), Location::none()),
+                var.ret(Location::none()),
             ];
             Symbol::function(
                 &fname,
                 Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body)),
+                Some(Stmt::block(body, Location::none())),
                 Location::none(),
             )
         });

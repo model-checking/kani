@@ -444,7 +444,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Symbol::function(
                 &fn_name,
                 Type::code(vec![], Type::constructor()),
-                Some(Stmt::block(vec![body])), //TODO is this block needed?
+                Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
                 Location::none(),
             )
             .with_is_file_local(true)
@@ -479,7 +479,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             // Assume false to block any further exploration of this path.
             Stmt::assume(Expr::bool_false(), loc.clone()),
-            t.nondet().as_stmt().with_location(loc.clone()), //TODO assume rust validity contraints
+            t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
         ];
 
         Expr::statement_expression(body, t).with_location(loc)
