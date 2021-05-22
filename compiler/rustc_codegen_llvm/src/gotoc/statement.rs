@@ -45,9 +45,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     let p = Place::from(mir::RETURN_PLACE);
                     let v = self.codegen_place(&p).goto_expr;
                     if self.place_ty(&p).is_bool() {
-                        v.cast_to(Type::c_bool()).ret()
+                        v.cast_to(Type::c_bool()).ret(loc)
                     } else {
-                        v.ret()
+                        v.ret(loc)
                     }
                 }
             }
@@ -65,15 +65,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                Stmt::block(vec![
-                    cond.cast_to(Type::bool()).if_then_else(
+                Stmt::block(
+                    vec![
+                        cond.cast_to(Type::bool()).if_then_else(
+                            Stmt::goto(self.find_label(target), loc.clone()),
+                            None,
+                            loc.clone(),
+                        ),
+                        Stmt::assert_false(&format!("{:?}", msg), loc.clone()),
                         Stmt::goto(self.find_label(target), loc.clone()),
-                        None,
-                        loc.clone(),
-                    ),
-                    Stmt::assert_false(&format!("{:?}", msg), loc.clone()),
-                    Stmt::goto(self.find_label(target), loc),
-                ])
+                    ],
+                    loc,
+                )
             }
             TerminatorKind::Yield { .. }
             | TerminatorKind::GeneratorDrop
@@ -83,10 +86,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 .codegen_unimplemented(
                     "InlineAsm",
                     Type::empty(),
-                    loc,
+                    loc.clone(),
                     "https://github.com/model-checking/rmc/issues/2",
                 )
-                .as_stmt(),
+                .as_stmt(loc),
         }
     }
 
@@ -107,16 +110,17 @@ impl<'tcx> GotocCtx<'tcx> {
                         Location::none(),
                         "https://github.com/model-checking/rmc/issues/11",
                     )
-                    .as_stmt(),
+                    .as_stmt(Location::none()),
                 InstanceDef::DropGlue(..) => Stmt::skip(Location::none()),
                 _ => {
                     let func = self.codegen_func_expr(instance, None);
-                    func.call(vec![self.codegen_place(location).goto_expr.address_of()]).as_stmt()
+                    func.call(vec![self.codegen_place(location).goto_expr.address_of()])
+                        .as_stmt(Location::none())
                 }
             };
             let goto_target = Stmt::goto(self.find_label(target), Location::none());
             let block = vec![drop_implementation, goto_target];
-            Stmt::block(block)
+            Stmt::block(block, Location::none())
         }
     }
 
@@ -140,20 +144,23 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bool => {
                 let jmp: usize = values[0].try_into().unwrap();
                 let jmp2 = if jmp == 0 { 1 } else { 0 };
-                Stmt::block(vec![
-                    v.cast_to(Type::bool()).if_then_else(
-                        Stmt::goto(
-                            self.current_fn().labels()[targets[jmp2].index()].clone(),
+                Stmt::block(
+                    vec![
+                        v.cast_to(Type::bool()).if_then_else(
+                            Stmt::goto(
+                                self.current_fn().labels()[targets[jmp2].index()].clone(),
+                                Location::none(),
+                            ),
+                            None,
                             Location::none(),
                         ),
-                        None,
-                        Location::none(),
-                    ),
-                    Stmt::goto(
-                        self.current_fn().labels()[targets[jmp].index()].clone(),
-                        Location::none(),
-                    ),
-                ])
+                        Stmt::goto(
+                            self.current_fn().labels()[targets[jmp].index()].clone(),
+                            Location::none(),
+                        ),
+                    ],
+                    Location::none(),
+                )
             }
             ty::Char | ty::Int(_) | ty::Uint(_) => {
                 let cases = values
@@ -313,19 +320,22 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Actually generate the function call, and store the return value, if any.
                 stmts.append(&mut vec![
                     self.codegen_expr_to_place(&p, funce.call(fargs)).with_location(loc.clone()),
-                    Stmt::goto(self.find_label(&target), loc),
+                    Stmt::goto(self.find_label(&target), loc.clone()),
                 ]);
-                Stmt::block(stmts)
+                Stmt::block(stmts, loc)
             }
             ty::FnPtr(_) => {
                 let (p, target) = destination.unwrap();
                 let func_expr = self.codegen_operand(func).dereference();
                 // Actually generate the function call, and store the return value, if any.
-                Stmt::block(vec![
-                    self.codegen_expr_to_place(&p, func_expr.call(fargs))
-                        .with_location(loc.clone()),
-                    Stmt::goto(self.find_label(&target), loc),
-                ])
+                Stmt::block(
+                    vec![
+                        self.codegen_expr_to_place(&p, func_expr.call(fargs))
+                            .with_location(loc.clone()),
+                        Stmt::goto(self.find_label(&target), loc.clone()),
+                    ],
+                    loc,
+                )
             }
             x => unreachable!("Function call where the function was of unexpected type: {:?}", x),
         }
@@ -336,9 +346,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Otherwise, we assign the value of the expression to the place.
     pub fn codegen_expr_to_place(&mut self, p: &Place<'tcx>, e: Expr) -> Stmt {
         if self.place_ty(p).is_unit() {
-            e.as_stmt()
+            e.as_stmt(Location::none())
         } else {
-            self.codegen_place(&p).goto_expr.assign(e)
+            self.codegen_place(&p).goto_expr.assign(e, Location::none())
         }
     }
 
@@ -372,10 +382,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 None => self.codegen_assert_false(arg, loc),
                 Some(alt) => {
                     let loc = self.codegen_span2(&pterm.source_info.span);
-                    Stmt::block(vec![
-                        self.codegen_assert_false(arg, loc),
-                        Stmt::goto(self.find_label(alt), Location::none()),
-                    ])
+                    Stmt::block(
+                        vec![
+                            self.codegen_assert_false(arg, loc.clone()),
+                            Stmt::goto(self.find_label(alt), Location::none()),
+                        ],
+                        loc,
+                    )
                 }
             }
         } else {
@@ -386,7 +399,7 @@ impl<'tcx> GotocCtx<'tcx> {
     // By the time we get this, the string constant has been codegenned.
     // TODO: make this case also use the Stmt::assert_false() constructor
     pub fn codegen_assert_false(&mut self, err: Expr, loc: Location) -> Stmt {
-        BuiltinFn::CProverAssert.call(vec![Expr::bool_false(), err], loc).as_stmt()
+        BuiltinFn::CProverAssert.call(vec![Expr::bool_false(), err], loc.clone()).as_stmt(loc)
     }
 
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
@@ -403,13 +416,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     // implicit address of a function pointer, e.g.
                     // let fp: fn() -> i32 = foo;
                     // where the reference is implicit.
-                    self.codegen_place(l).goto_expr.assign(self.codegen_rvalue(r).address_of())
+                    self.codegen_place(l)
+                        .goto_expr
+                        .assign(self.codegen_rvalue(r).address_of(), Location::none())
                 } else if rty.is_bool() {
                     self.codegen_place(l)
                         .goto_expr
-                        .assign(self.codegen_rvalue(r).cast_to(Type::c_bool()))
+                        .assign(self.codegen_rvalue(r).cast_to(Type::c_bool()), Location::none())
                 } else {
-                    self.codegen_place(l).goto_expr.assign(self.codegen_rvalue(r))
+                    self.codegen_place(l).goto_expr.assign(self.codegen_rvalue(r), Location::none())
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
@@ -430,7 +445,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             self.codegen_place(place)
                                 .goto_expr
                                 .member("case", &self.symbol_table)
-                                .assign(discr)
+                                .assign(discr, Location::none())
                         }
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                             if dataful_variant != variant_index {
@@ -451,7 +466,8 @@ impl<'tcx> GotocCtx<'tcx> {
                                     Expr::int_constant(niche_value, discr_ty.clone())
                                 };
                                 let place = self.codegen_place(place).goto_expr;
-                                self.codegen_get_niche(place, offset, discr_ty).assign(value)
+                                self.codegen_get_niche(place, offset, discr_ty)
+                                    .assign(value, Location::none())
                             } else {
                                 Stmt::skip(Location::none())
                             }
@@ -468,7 +484,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Location::none(),
                     "https://github.com/model-checking/rmc/issues/2",
                 )
-                .as_stmt(),
+                .as_stmt(Location::none()),
             StatementKind::CopyNonOverlapping(box mir::CopyNonOverlapping {
                 ref src,
                 ref dst,
@@ -482,7 +498,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let n = sz.mul(count);
                 let dst = dst.cast_to(Type::void_pointer());
                 let e = BuiltinFn::Memcpy.call(vec![dst, src, n], Location::none());
-                e.as_stmt()
+                e.as_stmt(Location::none())
             }
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)

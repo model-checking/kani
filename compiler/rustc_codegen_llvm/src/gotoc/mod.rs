@@ -114,7 +114,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             let loc = self.codegen_span2(&mir.span);
             let stmts = std::mem::replace(&mut self.current_fn_mut().block, vec![]);
-            let body = Stmt::block(stmts).with_location(loc);
+            let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
         }
         self.reset_current_fn();
