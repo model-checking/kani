@@ -179,9 +179,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc.clone());
                 let var2 = fargs.remove(0);
                 let op_expr = (var1.clone()).$op(var2).with_location(loc.clone());
-                let assign_stmt = (var1.clone()).assign(op_expr);
+                let assign_stmt = (var1.clone()).assign(op_expr, loc.clone());
                 let res_stmt = self.codegen_expr_to_place(p, tmp.clone());
-                Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt])
+                Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
             }};
         }
 
@@ -449,12 +449,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
         let division_does_not_overflow = dividend_is_int_min.and(divisor_is_minus_one).not();
-        Stmt::block(vec![
-            Stmt::assert(division_is_exact, "exact_div arguments divide exactly", loc.clone()),
-            Stmt::assert(divisor_is_nonzero, "exact_div divisor is nonzero", loc.clone()),
-            Stmt::assert(division_does_not_overflow, "exact_div division does not overflow", loc),
-            self.codegen_expr_to_place(p, a.div(b)),
-        ])
+        Stmt::block(
+            vec![
+                Stmt::assert(division_is_exact, "exact_div arguments divide exactly", loc.clone()),
+                Stmt::assert(divisor_is_nonzero, "exact_div divisor is nonzero", loc.clone()),
+                Stmt::assert(
+                    division_does_not_overflow,
+                    "exact_div division does not overflow",
+                    loc.clone(),
+                ),
+                self.codegen_expr_to_place(p, a.div(b)),
+            ],
+            loc,
+        )
     }
 
     /// An atomic load simply returns the value referenced
@@ -476,9 +483,9 @@ impl<'tcx> GotocCtx<'tcx> {
             intrinsic
         );
         let var1_ref = fargs.remove(0);
-        let var1 = var1_ref.dereference().with_location(loc);
+        let var1 = var1_ref.dereference().with_location(loc.clone());
         let res_stmt = self.codegen_expr_to_place(p, var1);
-        Stmt::atomic_block(vec![res_stmt])
+        Stmt::atomic_block(vec![res_stmt], loc)
     }
 
     /// An atomic compare-and-exchange updates the value referenced in
@@ -513,7 +520,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let var2 = fargs.remove(0).with_location(loc.clone());
         let var3 = fargs.remove(0).with_location(loc.clone());
         let eq_expr = (var1.clone()).eq(var2.clone());
-        let assign_stmt = (var1.clone()).assign(var3);
+        let assign_stmt = (var1.clone()).assign(var3, loc.clone());
         let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc.clone());
         let place_type = self.place_ty(p);
         let res_type = self.codegen_ty(place_type);
@@ -521,7 +528,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
                 .with_location(loc.clone());
         let res_stmt = self.codegen_expr_to_place(p, tuple_expr);
-        Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt])
+        Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
     }
 
     /// An atomic store updates the value referenced in
@@ -550,9 +557,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
         let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc.clone());
         let var2 = fargs.remove(0).with_location(loc.clone());
-        let assign_stmt = (var1.clone()).assign(var2);
+        let assign_stmt = (var1.clone()).assign(var2, loc.clone());
         let res_stmt = self.codegen_expr_to_place(p, tmp.clone());
-        Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt])
+        Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
     }
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
@@ -561,8 +568,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "RMC does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
-        let skip_stmt = Stmt::skip(loc);
-        Stmt::atomic_block(vec![skip_stmt])
+        let skip_stmt = Stmt::skip(loc.clone());
+        Stmt::atomic_block(vec![skip_stmt], loc)
     }
 
     /// ptr_offset_from returns the offset between two pointers
@@ -577,14 +584,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let b = fargs.remove(0);
         let pointers_to_same_object = a.clone().same_object(b.clone());
 
-        Stmt::block(vec![
-            Stmt::assert(
-                pointers_to_same_object,
-                "ptr_offset_from: pointers point to same object",
-                loc,
-            ),
-            self.codegen_expr_to_place(p, a.sub(b)),
-        ])
+        Stmt::block(
+            vec![
+                Stmt::assert(
+                    pointers_to_same_object,
+                    "ptr_offset_from: pointers point to same object",
+                    loc.clone(),
+                ),
+                self.codegen_expr_to_place(p, a.sub(b)),
+            ],
+            loc,
+        )
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
