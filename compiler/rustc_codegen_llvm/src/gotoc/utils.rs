@@ -85,7 +85,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // };
         // ```
         // And notice that its `.pointer` field is exactly what we want.
-        assert!(e.typ().is_rust_box());
+        assert!(e.typ().is_rust_box(), "expected rust box {:?}", e);
         let unique_ptr_typ =
             self.symbol_table.lookup_field_type_in_type(e.typ(), "0").unwrap().clone();
         assert!(unique_ptr_typ.is_rust_unique_pointer());
@@ -96,7 +96,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `boxed_type the_box = >>> { .0=nondet(), .1={ ._marker=nondet(), .pointer=boxed_value } } <<<`
     /// `boxed_type` is the type of the resulting expression
     pub fn box_value(&self, boxed_value: Expr, boxed_type: Type) -> Expr {
-        assert!(boxed_type.is_rust_box());
+        assert!(boxed_type.is_rust_box(), "expected rust box {:?}", boxed_type);
         let get_field_type = |struct_typ, field| {
             self.symbol_table.lookup_field_type_in_type(struct_typ, field).unwrap().clone()
         };
@@ -119,11 +119,15 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 impl Type {
-    /// Checks if the struct represents a Rust "Box"
+    /// Best effort check if the struct represents a Rust "Box". May return false positives.
     pub fn is_rust_box(&self) -> bool {
-        self.type_name().map_or(false, |name| {
-            name.starts_with("tag-std::boxed::Box") || name.starts_with("tag-core::boxed::Box")
-        })
+        // We have seen variants on the name, including
+        // tag-std::boxed::Box, tag-core::boxed::Box, tag-boxed::Box.
+        // If we match on exact names, we're playing whack-a-mole trying to keep track of how this
+        // can be reimported.
+        // If we don't, we spuriously fail. https://github.com/model-checking/rmc/issues/113
+        // TODO: find a better way of checking this https://github.com/model-checking/rmc/issues/152
+        self.type_name().map_or(false, |name| name.contains("boxed::Box"))
     }
 
     /// Checks if the struct represents a Rust "Unique"
