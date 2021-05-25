@@ -8,7 +8,7 @@ fn __nondet<T>() -> T {
 }
 
 macro_rules! test_saturating_intrinsics {
-    ($ty:tt) => {
+    ($ty:ty) => {
         let v: $ty = __nondet();
         let w: $ty = __nondet();
         let result = intrinsics::saturating_add(v, w);
