@@ -5,7 +5,7 @@ fn main() {
     let address = 0x01234usize;
     let ptr = address as *mut i32;
     unsafe {
-        // random address cannot be dereferenced from memory
+        // dereferencing a random address in memory will probably crash the program
         *ptr = 1;
     };
 }
