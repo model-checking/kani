@@ -14,6 +14,7 @@ fn main() {
     let num_leading = ctlz(v8);
     let num_trailing_nz = unsafe { cttz_nonzero(v8) };
 
+    // fail because of https://github.com/model-checking/rmc/issues/26
     assert!(nttz8 == 3);
     assert!(nttz16 == 11);
     assert!(nttz32 == 27);
