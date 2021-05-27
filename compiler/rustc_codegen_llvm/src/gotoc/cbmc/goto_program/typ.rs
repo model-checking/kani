@@ -366,6 +366,17 @@ impl Type {
         }
     }
 
+    /// Whether self and other have the same concrete type on the given machine
+    /// (specifically whether they have the same bit-size and signed-ness)
+    pub fn is_equal_on_machine(&self, other: &Self, mm: &MachineModel) -> bool {
+        if self == other {
+            true
+        } else {
+            self.native_width(mm) == other.native_width(mm)
+                && self.is_signed(mm) == other.is_signed(mm)
+        }
+    }
+
     pub fn is_float(&self) -> bool {
         match self {
             Float => true,

@@ -416,6 +416,43 @@ impl Expr {
         }
     }
 
+    /// Casts value to new_typ, only when the current type of value
+    /// is equivalent to new_typ on the given machine (e.g. i32 -> c_int)
+    pub fn cast_between_machine_equivalent_types(
+        value: Expr,
+        new_typ: &Type,
+        mm: &MachineModel,
+    ) -> Expr {
+        if value.typ() == new_typ {
+            value
+        } else {
+            assert!(value.typ().is_equal_on_machine(new_typ, mm));
+            value.cast_to(new_typ.clone())
+        }
+    }
+
+    /// Casts arguments to type of function parameters when the corresponding types
+    /// are equivalent on the given machine (e.g. i32 -> c_int)
+    pub fn cast_arguments_to_machine_equivalent_function_parameter_types(
+        function: &Expr,
+        mut arguments: Vec<Expr>,
+        mm: &MachineModel,
+    ) -> Vec<Expr> {
+        let parameters = function.typ().parameters().unwrap();
+        assert!(arguments.len() >= parameters.len());
+        let mut rval: Vec<_> = parameters
+            .iter()
+            .map(|parameter| {
+                let argument = arguments.remove(0);
+                Self::cast_between_machine_equivalent_types(argument, &parameter.typ(), mm)
+            })
+            .collect();
+
+        rval.append(&mut arguments);
+
+        rval
+    }
+
     /// *self: t
     pub fn dereference(self) -> Self {
         assert!(self.typ.is_pointer());
