@@ -6,7 +6,5 @@ fn main() {
     let a: u8 = 8;
     let b: u8 = 4;
     let i = unsafe { std::intrinsics::exact_div(a, b) };
+    assert!(i == 2);
 }
-
-//  let mut iter = "a".split_whitespace();
-//  iter.next();
