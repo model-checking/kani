@@ -83,7 +83,14 @@ impl<'tcx> GotocCtx<'tcx> {
         //  TODO: https://github.com/model-checking/rmc/issues/5
         macro_rules! codegen_simple_intrinsic {
             ($f:ident) => {{
-                let e = BuiltinFn::$f.call(fargs, loc);
+                let mm = self.symbol_table.machine_model();
+                let casted_fargs =
+                    Expr::cast_arguments_to_machine_equivalent_function_parameter_types(
+                        &BuiltinFn::$f.as_expr(),
+                        fargs,
+                        mm,
+                    );
+                let e = BuiltinFn::$f.call(casted_fargs, loc);
                 self.codegen_expr_to_place(p, e)
             }};
         }
