@@ -292,7 +292,11 @@ impl BuiltinFn {
         Symbol::builtin_function(&self.to_string(), self.param_types(), self.return_type())
     }
 
+    pub fn as_expr(&self) -> Expr {
+        self.as_symbol().to_expr()
+    }
+
     pub fn call(&self, arguments: Vec<Expr>, loc: Location) -> Expr {
-        self.as_symbol().to_expr().with_location(loc.clone()).call(arguments).with_location(loc)
+        self.as_expr().with_location(loc.clone()).call(arguments).with_location(loc)
     }
 }
