@@ -278,7 +278,7 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm)],
                 named_sub: btree_map![(
                     IrepId::CBoundsCheck,
-                    if *allow_zero { Irep::one() } else { Irep::zero() }
+                    if *allow_zero { Irep::zero() } else { Irep::one() }
                 )],
             },
             ExprValue::UnOp { op: UnaryOperand::CountTrailingZeros { allow_zero }, e } => Irep {
@@ -286,7 +286,7 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm)],
                 named_sub: btree_map![(
                     IrepId::CBoundsCheck,
-                    if *allow_zero { Irep::one() } else { Irep::zero() }
+                    if *allow_zero { Irep::zero() } else { Irep::one() }
                 )],
             },
             ExprValue::UnOp { op, e } => {

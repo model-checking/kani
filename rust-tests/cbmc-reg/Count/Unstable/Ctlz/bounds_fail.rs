@@ -3,6 +3,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::ctlz_nonzero;
 
+/// rmc bounds_fail.rs -- --bounds-check
 fn main() {
     let uv8: u8 = 0;
     let uv16: u16 = 0;
