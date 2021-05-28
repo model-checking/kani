@@ -20,6 +20,9 @@ jobs:
 
       - name: Install CBMC
         run: ./scripts/setup/${{ matrix.os }}/install_cbmc.sh
+      
+      - name: Install cbmc-viewer
+        run: ./scripts/setup/install_viewer.sh
 
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh

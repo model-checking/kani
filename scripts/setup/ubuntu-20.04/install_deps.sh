@@ -10,6 +10,7 @@ sudo apt-get --yes update \
   bison \
   cmake \
   curl \
+  ctags \
   flex \
   g++ \
   gcc \
