@@ -23,7 +23,12 @@ for f in `find $TEST_DIR -name '*.rs'`; do
         continue
     fi
 
-    rmc $f -- --object-bits 11 --unwind $UNWIND > .sandbox/"$NAME".output
+    EXTRA_ARGS=""
+    if [[ "$f" == *bounds* ]]; then
+        EXTRA_ARGS+="--bounds-check"
+    fi
+
+    rmc $f -- --object-bits 11 --unwind $UNWIND $EXTRA_ARGS > .sandbox/"$NAME".output
 
     CODE=$?
     if [[ $CODE == 0 ]]; then
