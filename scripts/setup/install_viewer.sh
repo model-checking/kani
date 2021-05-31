@@ -4,6 +4,11 @@
 
 set -eux
 
-# Install cbmc-viewer 2.5
-wget https://github.com/awslabs/aws-viewer-for-cbmc/releases/download/viewer-2.5/cbmc_viewer-2.5-py3-none-any.whl \
-  && sudo python3 -m pip install --upgrade cbmc_viewer-2.5-py3-none-any.whl
+# Install cbmc-viewer
+if [[ $# -eq 1 ]] ; then
+wget https://github.com/awslabs/aws-viewer-for-cbmc/releases/download/viewer-$1/cbmc_viewer-$1-py3-none-any.whl \
+  && sudo python3 -m pip install --upgrade cbmc_viewer-$1-py3-none-any.whl
+else
+  echo "Error: Specify the version to install"
+  exit 1
+fi

@@ -9,8 +9,8 @@ sudo apt-get --yes update \
   && sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes \
   bison \
   cmake \
-  curl \
   ctags \
+  curl \
   flex \
   g++ \
   gcc \

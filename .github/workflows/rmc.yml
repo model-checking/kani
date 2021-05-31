@@ -22,7 +22,7 @@ jobs:
         run: ./scripts/setup/${{ matrix.os }}/install_cbmc.sh
       
       - name: Install cbmc-viewer
-        run: ./scripts/setup/install_viewer.sh
+        run: ./scripts/setup/install_viewer.sh 2.5
 
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
