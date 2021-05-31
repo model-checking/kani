@@ -6,3 +6,4 @@ set -eux
 
 # Update tools in macOS 10.15 via `brew`
 brew update
+brew install ctags
