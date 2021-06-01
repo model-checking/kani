@@ -2,7 +2,7 @@
 
 use crate::common::{expected_output_path, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT};
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
-use crate::common::{Assembly, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui};
+use crate::common::{Assembly, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC};
 use crate::common::{Codegen, CodegenUnits, DebugInfo, Debugger, Rustdoc};
 use crate::common::{CompareMode, FailMode, PassMode};
 use crate::common::{Config, TestPaths};
@@ -351,6 +351,7 @@ impl<'test> TestCx<'test> {
             MirOpt => self.run_mir_opt_test(),
             Assembly => self.run_assembly_test(),
             JsDocTest => self.run_js_doc_test(),
+            RMC => self.run_rmc_test(),
         }
     }
 
@@ -1791,6 +1792,22 @@ impl<'test> TestCx<'test> {
 
     fn compose_and_run_compiler(&self, mut rustc: Command, input: Option<String>) -> ProcRes {
         let aux_dir = self.build_all_auxiliary(&mut rustc);
+
+        if (self.config.mode == RMC) {
+            // add the RMC scripts directory to the PATH environment variable
+            if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
+                rustc.env(
+                    String::from("PATH"),
+                    format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val),
+                );
+            } else {
+                rustc.env(
+                    String::from("PATH"),
+                    String::from(self.config.rmc_dir_path.to_str().unwrap()),
+                );
+            }
+        }
+
         self.props.unset_rustc_env.clone().iter().fold(&mut rustc, |rustc, v| rustc.env_remove(v));
         rustc.envs(self.props.rustc_env.clone());
         self.compose_and_run(
@@ -2009,7 +2026,7 @@ impl<'test> TestCx<'test> {
                 rustc.arg(dir_opt);
             }
             RunPassValgrind | Pretty | DebugInfo | Codegen | Rustdoc | RustdocJson | RunMake
-            | CodegenUnits | JsDocTest | Assembly => {
+            | CodegenUnits | JsDocTest | Assembly | RMC => {
                 // do not use JSON output
             }
         }
@@ -2366,6 +2383,15 @@ impl<'test> TestCx<'test> {
         let proc_res = self.verify_with_filecheck(&output_path);
         if !proc_res.status.success() {
             self.fatal_proc_rec("verification with 'FileCheck' failed", &proc_res);
+        }
+    }
+
+    fn run_rmc_test(&self) {
+        let mut rmc = Command::new("rmc");
+        rmc.arg(&self.testpaths.file);
+        let proc_res = self.compose_and_run_compiler(rmc, None);
+        if !proc_res.status.success() {
+            self.fatal_proc_rec("compilation failed!", &proc_res);
         }
     }
 
