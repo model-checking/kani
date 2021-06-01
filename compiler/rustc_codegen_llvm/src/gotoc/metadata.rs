@@ -11,7 +11,7 @@ use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;
 use rustc_data_structures::sync::MetadataRef;
-use rustc_hir::def_id::DefId;
+use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_middle::middle::cstore::MetadataLoader;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::mir::{BasicBlock, Body, HasLocalDecls, Local, Operand, Place, Rvalue};
@@ -155,7 +155,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn crate_name(&self) -> String {
-        self.tcx.crate_name.to_string()
+        self.tcx.crate_name(LOCAL_CRATE).to_string()
     }
 
     #[inline]
