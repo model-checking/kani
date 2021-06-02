@@ -2382,12 +2382,13 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs rmc model checker on the test file specified by `self.testpaths.file`. A "verification failed!" error is printed to the stdout if verfication fails.
+    /// Runs RMC on the test file specified by `self.testpaths.file`.
+    /// An error message is printed to stdout if verfication fails.
     fn run_rmc_test(&self) {
         // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
-        // 1. It calls rustc instead of rmc, and
-        // 2. It may pass some options that do not make sense for rmc.
-        // So, we create our own command to execute rmc and pass it to self.compose_and_run_compiler(...) directly.
+        // 1. It calls rustc instead of RMC
+        // 2. It may pass some options that do not make sense for RMC
+        // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
         self.add_rmc_dir_to_path(&mut rmc);
         rmc.arg(&self.testpaths.file);
