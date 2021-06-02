@@ -1792,22 +1792,6 @@ impl<'test> TestCx<'test> {
 
     fn compose_and_run_compiler(&self, mut rustc: Command, input: Option<String>) -> ProcRes {
         let aux_dir = self.build_all_auxiliary(&mut rustc);
-
-        if (self.config.mode == RMC) {
-            // add the RMC scripts directory to the PATH environment variable
-            if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
-                rustc.env(
-                    String::from("PATH"),
-                    format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val),
-                );
-            } else {
-                rustc.env(
-                    String::from("PATH"),
-                    String::from(self.config.rmc_dir_path.to_str().unwrap()),
-                );
-            }
-        }
-
         self.props.unset_rustc_env.clone().iter().fold(&mut rustc, |rustc, v| rustc.env_remove(v));
         rustc.envs(self.props.rustc_env.clone());
         self.compose_and_run(
@@ -2386,12 +2370,30 @@ impl<'test> TestCx<'test> {
         }
     }
 
+    /// Adds rmc scripts directory to the `PATH` environment variable.
+    fn add_rmc_dir_to_path(&self, rmc: &mut Command) {
+        // If the PATH enviornment variable is already defined,
+        if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
+            // Add the RMC scripts directory to the PATH.
+            rmc.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
+        } else {
+            // Otherwise, insert PATH as a new enviornment variable and set its value to the RMC scripts directory.
+            rmc.env(String::from("PATH"), String::from(self.config.rmc_dir_path.to_str().unwrap()));
+        }
+    }
+
+    /// Runs rmc model checker on the test file specified by `self.testpaths.file`. A "verification failed!" error is printed to the stdout if verfication fails.
     fn run_rmc_test(&self) {
+        // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
+        // 1. It calls rustc instead of rmc, and
+        // 2. It may pass some options that do not make sense for rmc.
+        // So, we create our own command to execute rmc and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
+        self.add_rmc_dir_to_path(&mut rmc);
         rmc.arg(&self.testpaths.file);
         let proc_res = self.compose_and_run_compiler(rmc, None);
         if !proc_res.status.success() {
-            self.fatal_proc_rec("compilation failed!", &proc_res);
+            self.fatal_proc_rec("verification failed!", &proc_res);
         }
     }
 
