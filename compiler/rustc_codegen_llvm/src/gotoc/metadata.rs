@@ -186,10 +186,10 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn.as_ref().map(|x| self.symbol_name(x.instance))
     }
 
-    // Pretty name including crate path and trait information. For example:
-    //    boxtrait_fail::<Concrete as Trait>::increment
-    // Generated from the fn instance to insert _into_ the symbol table.
-    // Must match the format of pretty_name_from_dynamic_object.
+    /// Pretty name including crate path and trait information. For example:
+    ///    boxtrait_fail::<Concrete as Trait>::increment
+    /// Generated from the fn instance to insert _into_ the symbol table.
+    /// Must match the format of pretty_name_from_dynamic_object.
     pub fn pretty_name_from_instance(&self, instance: Instance<'tcx>) -> String {
         format!(
             "{}::{}",
@@ -198,10 +198,10 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    // Pretty name including crate path and trait information. For example:
-    //    boxtrait_fail::<Concrete as Trait>::increment
-    // Generated from the dynamic object type for _lookup_ from the symbol table.
-    // Must match the format of pretty_name_from_instance.
+    /// Pretty name including crate path and trait information. For example:
+    ///    boxtrait_fail::<Concrete as Trait>::increment
+    /// Generated from the dynamic object type for _lookup_ from the symbol table.
+    /// Must match the format of pretty_name_from_instance.
     pub fn pretty_name_from_dynamic_object(
         &self,
         def_id: DefId,
