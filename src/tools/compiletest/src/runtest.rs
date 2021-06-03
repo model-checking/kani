@@ -2,7 +2,7 @@
 
 use crate::common::{expected_output_path, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT};
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
-use crate::common::{Assembly, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui};
+use crate::common::{Assembly, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC};
 use crate::common::{Codegen, CodegenUnits, DebugInfo, Debugger, Rustdoc};
 use crate::common::{CompareMode, FailMode, PassMode};
 use crate::common::{Config, TestPaths};
@@ -351,6 +351,7 @@ impl<'test> TestCx<'test> {
             MirOpt => self.run_mir_opt_test(),
             Assembly => self.run_assembly_test(),
             JsDocTest => self.run_js_doc_test(),
+            RMC => self.run_rmc_test(),
         }
     }
 
@@ -2010,7 +2011,7 @@ impl<'test> TestCx<'test> {
                 rustc.arg(dir_opt);
             }
             RunPassValgrind | Pretty | DebugInfo | Codegen | Rustdoc | RustdocJson | RunMake
-            | CodegenUnits | JsDocTest | Assembly => {
+            | CodegenUnits | JsDocTest | Assembly | RMC => {
                 // do not use JSON output
             }
         }
@@ -2367,6 +2368,34 @@ impl<'test> TestCx<'test> {
         let proc_res = self.verify_with_filecheck(&output_path);
         if !proc_res.status.success() {
             self.fatal_proc_rec("verification with 'FileCheck' failed", &proc_res);
+        }
+    }
+
+    /// Adds rmc scripts directory to the `PATH` environment variable.
+    fn add_rmc_dir_to_path(&self, rmc: &mut Command) {
+        // If the PATH enviornment variable is already defined,
+        if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
+            // Add the RMC scripts directory to the PATH.
+            rmc.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
+        } else {
+            // Otherwise, insert PATH as a new enviornment variable and set its value to the RMC scripts directory.
+            rmc.env(String::from("PATH"), String::from(self.config.rmc_dir_path.to_str().unwrap()));
+        }
+    }
+
+    /// Runs RMC on the test file specified by `self.testpaths.file`.
+    /// An error message is printed to stdout if verfication fails.
+    fn run_rmc_test(&self) {
+        // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
+        // 1. It calls rustc instead of RMC
+        // 2. It may pass some options that do not make sense for RMC
+        // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
+        let mut rmc = Command::new("rmc");
+        self.add_rmc_dir_to_path(&mut rmc);
+        rmc.arg(&self.testpaths.file);
+        let proc_res = self.compose_and_run_compiler(rmc, None);
+        if !proc_res.status.success() {
+            self.fatal_proc_rec("verification failed!", &proc_res);
         }
     }
 

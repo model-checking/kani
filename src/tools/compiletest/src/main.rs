@@ -58,6 +58,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
     opts.reqopt("", "compile-lib-path", "path to host shared libraries", "PATH")
         .reqopt("", "run-lib-path", "path to target shared libraries", "PATH")
         .reqopt("", "rustc-path", "path to rustc to use for compiling", "PATH")
+        .reqopt("", "rmc-dir-path", "path to directory where rmc is located", "PATH")
         .optopt("", "rustdoc-path", "path to rustdoc to use for compiling", "PATH")
         .optopt("", "rust-demangler-path", "path to rust-demangler to use in tests", "PATH")
         .reqopt("", "lldb-python", "path to python to use for doc tests", "PATH")
@@ -75,7 +76,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
             "mode",
             "which sort of compile tests to run",
             "run-pass-valgrind | pretty | debug-info | codegen | rustdoc \
-            | rustdoc-json | codegen-units | incremental | run-make | ui | js-doc-test | mir-opt | assembly",
+            | rustdoc-json | codegen-units | incremental | run-make | ui | js-doc-test | mir-opt | assembly | rmc",
         )
         .reqopt(
             "",
@@ -215,6 +216,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         compile_lib_path: make_absolute(opt_path(matches, "compile-lib-path")),
         run_lib_path: make_absolute(opt_path(matches, "run-lib-path")),
         rustc_path: opt_path(matches, "rustc-path"),
+        rmc_dir_path: opt_path(matches, "rmc-dir-path"),
         rustdoc_path: matches.opt_str("rustdoc-path").map(PathBuf::from),
         rust_demangler_path: matches.opt_str("rust-demangler-path").map(PathBuf::from),
         lldb_python: matches.opt_str("lldb-python").unwrap(),
