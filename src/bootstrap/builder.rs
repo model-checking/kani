@@ -455,6 +455,7 @@ impl<'a> Builder<'a> {
                 test::Bootstrap,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
+                test::CBMC,
             ),
             Kind::Bench => describe!(test::Crate, test::CrateLibrustc),
             Kind::Doc => describe!(
