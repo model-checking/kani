@@ -1,29 +1,25 @@
-// --unwind 3 --unwinding-assertions
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Example from Firecracker balloon device
-// We test the functional correctness of the compact function
-// Outstanding issues:
-//   - Padstone-4988 (vector sort not supported)
-//   - Padstone-4856 (vector tuple iteration)
+// Try with: rmc ignore-main.rs -- --unwind 3 --unwinding-assertions --pointer-check --object-bits 11
+// With kissat as the solver (--external-sat-solver /path/to/kissat) this takes ~5mins
 
-#[allow(dead_code)]
+pub const MAX_PAGE_COMPACT_BUFFER: usize = 2048;
 
-pub const MAX_PAGES_IN_DESC: usize = 256;
-
-pub(crate) fn compact_page_frame_numbers(v: &mut Vec<u32>) -> Vec<(u32, u32)> {
+pub(crate) fn compact_page_frame_numbers(v: &mut [u32]) -> Vec<(u32, u32)> {
     if v.is_empty() {
         return vec![];
     }
 
     // Since the total number of pages that can be
-    // received at once from a single descriptor is `MAX_PAGES_IN_DESC`,
+    // received at once is `MAX_PAGE_COMPACT_BUFFER`,
     // this sort does not change the complexity of handling
     // an inflation.
-    // v.sort(); //< Padstone-4988 (vector sort not supported)
+    v.sort_unstable();
 
-    // Since there are at most `MAX_PAGES_IN_DESC` pages, setting the
+    // Since there are at most `MAX_PAGE_COMPACT_BUFFER` pages, setting the
     // capacity of `result` to this makes sense.
-    let mut result = Vec::with_capacity(MAX_PAGES_IN_DESC);
+    let mut result = Vec::with_capacity(MAX_PAGE_COMPACT_BUFFER);
 
     // The most recent range of pages is [previous..previous + length).
     let mut previous = v[0];
@@ -57,27 +53,14 @@ fn expand(ranges: Vec<(u32, u32)>) -> Vec<u32> {
     return v;
 }
 
-// Padstone-4856 this version of expand required instead of fn above
-fn rmc_expand(ranges: Vec<(u32, u32)>) -> Vec<u32> {
-    let mut i = 0;
-    let mut v: Vec<u32> = Vec::new();
-    while i < ranges.len() {
-        let (start, len) = ranges[i];
-        for j in start..=(start + len - 1) {
-            v.push(j)
-        }
-        i += 1;
-    }
-    return v;
-}
-
 fn __nondet<T>() -> T {
     unimplemented!()
 }
 
 fn main() {
-    let mut input = vec![__nondet(); 2];
+    let mut input = vec![0; 2];
     for i in 0..input.len() {
+        input[i] = __nondet();
         if input[i] == u32::MAX {
             return;
         }
@@ -87,7 +70,7 @@ fn main() {
         assert!(1 <= *len);
     }
     assert!(output.len() <= input.len());
-    let expanded_output = rmc_expand(output);
+    let expanded_output = expand(output);
     let i: usize = __nondet();
     if i < expanded_output.len() {
         assert!(expanded_output[i] == input[i]);
