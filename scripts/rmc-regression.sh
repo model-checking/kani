@@ -38,3 +38,4 @@ popd
 
 # run-make tests
 ./x.py test -i --stage 1 src/test/run-make --test-args gotoc
+./x.py test -i --stage 1 src/test/cbmc
