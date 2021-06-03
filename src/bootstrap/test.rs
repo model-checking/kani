@@ -1128,6 +1128,8 @@ host_test!(RunMakeFullDeps {
 
 default_test!(Assembly { path: "src/test/assembly", mode: "assembly", suite: "assembly" });
 
+default_test!(CBMC { path: "src/test/cbmc", mode: "rmc", suite: "cbmc" });
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Compiletest {
     compiler: Compiler,
@@ -1205,6 +1207,12 @@ note: if you're sure you want to do this, please open an issue as to why. In the
         cmd.arg("--compile-lib-path").arg(builder.rustc_libdir(compiler));
         cmd.arg("--run-lib-path").arg(builder.sysroot_libdir(compiler, target));
         cmd.arg("--rustc-path").arg(builder.rustc(compiler));
+
+        // Pass the path to the RMC script directory as an option to compiletest.
+        if let Ok(path) = env::var("RMC_DIR") {
+            cmd.arg("--rmc-dir-path")
+                .arg(Path::new(&path).components().collect::<PathBuf>().to_str().unwrap());
+        }
 
         let is_rustdoc = suite.ends_with("rustdoc-ui") || suite.ends_with("rustdoc-js");
 
