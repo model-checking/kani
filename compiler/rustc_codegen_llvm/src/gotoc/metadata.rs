@@ -17,7 +17,7 @@ use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::mir::{BasicBlock, Body, HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, Binder, Instance, TraitRef, Ty, TyCtxt, TypeFoldable};
 use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::iter;
@@ -186,10 +186,34 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn.as_ref().map(|x| self.symbol_name(x.instance))
     }
 
-    /// a path to the def id. the difference from [instance_name] is that it does not consider generics.
-    pub fn pretty_name(&self, did: DefId) -> String {
-        let def_path = self.tcx.def_path(did);
-        format!("{}{}", self.tcx.crate_name(did.krate), def_path.to_string_no_crate_verbose())
+    // Pretty name including crate path and trait information. For example:
+    //    boxtrait_fail::<Concrete as Trait>::increment
+    // Generated from the fn instance to insert _into_ the symbol table.
+    // Must match the format of pretty_name_from_dynamic_object.
+    pub fn pretty_name_from_instance(&self, instance: Instance<'tcx>) -> String {
+        format!(
+            "{}::{}",
+            self.tcx.crate_name(instance.def_id().krate),
+            with_no_trimmed_paths(|| instance.to_string())
+        )
+    }
+
+    // Pretty name including crate path and trait information. For example:
+    //    boxtrait_fail::<Concrete as Trait>::increment
+    // Generated from the dynamic object type for _lookup_ from the symbol table.
+    // Must match the format of pretty_name_from_instance.
+    pub fn pretty_name_from_dynamic_object(
+        &self,
+        def_id: DefId,
+        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
+    ) -> String {
+        let normalized_object_type_name = self.normalized_name_of_dynamic_object_type(trait_ref_t);
+        format!(
+            "{}::{}::{}",
+            self.tcx.crate_name(def_id.krate),
+            normalized_object_type_name,
+            self.tcx.item_name(def_id)
+        )
     }
 
     /// a human readable name in rust for reference
@@ -208,8 +232,8 @@ impl<'tcx> GotocCtx<'tcx> {
             llvm_mangled,
             rustc_demangle::demangle(&llvm_mangled).to_string()
         );
-        let did = instance.def.def_id();
-        let pretty = self.pretty_name(did);
+
+        let pretty = self.pretty_name_from_instance(instance);
 
         // make main function a special case for easy CBMC entry
         if pretty.ends_with("::main") {

@@ -680,9 +680,8 @@ impl<'tcx> GotocCtx<'tcx> {
             .unwrap();
 
         // TODO: this name lookup does not work with rust-tests/cbmc-reg/DynTrait/main.rs
-        let normalized_object_type_name = self.normalized_name_of_dynamic_object_type(trait_ref_t);
-        let pretty_function_name = format!("{}::{}", normalized_object_type_name, function_name);
-        let matching_symbols = self.symbol_table.find_by_pretty_name(&pretty_function_name); //("<Rectangle as Vol>::vol");
+        let pretty_function_name = self.pretty_name_from_dynamic_object(def_id, trait_ref_t);
+        let matching_symbols = self.symbol_table.find_by_pretty_name(&pretty_function_name); //("<path>::<Rectangle as Vol>::vol");
         match matching_symbols.len() {
             0 => {
                 warn!(
