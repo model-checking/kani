@@ -23,6 +23,7 @@ pub enum Mode {
     JsDocTest,
     MirOpt,
     Assembly,
+    RMC,
 }
 
 impl Mode {
@@ -53,6 +54,7 @@ impl FromStr for Mode {
             "js-doc-test" => Ok(JsDocTest),
             "mir-opt" => Ok(MirOpt),
             "assembly" => Ok(Assembly),
+            "rmc" => Ok(RMC),
             _ => Err(()),
         }
     }
@@ -74,6 +76,7 @@ impl fmt::Display for Mode {
             JsDocTest => "js-doc-test",
             MirOpt => "mir-opt",
             Assembly => "assembly",
+            RMC => "rmc",
         };
         fmt::Display::fmt(s, f)
     }
@@ -191,6 +194,9 @@ pub struct Config {
 
     /// The rustc executable.
     pub rustc_path: PathBuf,
+
+    /// The path to the directory where the RMC executable is located
+    pub rmc_dir_path: PathBuf,
 
     /// The rustdoc executable.
     pub rustdoc_path: Option<PathBuf>,
