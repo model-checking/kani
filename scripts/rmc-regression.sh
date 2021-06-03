@@ -15,7 +15,7 @@ export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 18
+check-cbmc-version.py --major 5 --minor 30
 
 # Formatting check
 ./x.py fmt --check
