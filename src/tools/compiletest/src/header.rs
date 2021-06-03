@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::collections::HashSet;
 use std::env;
 use std::fs::File;
@@ -50,6 +51,14 @@ impl EarlyProps {
         let has_msan = util::MSAN_SUPPORTED_TARGETS.contains(&&*config.target);
         let has_tsan = util::TSAN_SUPPORTED_TARGETS.contains(&&*config.target);
         let has_hwasan = util::HWASAN_SUPPORTED_TARGETS.contains(&&*config.target);
+
+        if config.mode == Mode::RMC {
+            // If the path to the test contains "fixme" or "ignore", skip it.
+            let re = Regex::new(r"fixme|ignore").unwrap();
+            if re.is_match(testfile.to_str().unwrap()) {
+                props.ignore = true;
+            }
+        }
 
         iter_header(testfile, None, rdr, &mut |ln| {
             // we should check if any only-<platform> exists and if it exists
@@ -277,6 +286,10 @@ pub struct TestProps {
     pub error_patterns: Vec<String>,
     // Extra flags to pass to the compiler
     pub compile_flags: Vec<String>,
+    // Extra flags to pass to RMC
+    pub rmc_flags: Vec<String>,
+    // Extra flags to pass to CBMC
+    pub cbmc_flags: Vec<String>,
     // Extra flags to pass when the compiled code is run (such as --bench)
     pub run_flags: Option<String>,
     // If present, the name of a file that this test should match when
@@ -360,6 +373,8 @@ impl TestProps {
         TestProps {
             error_patterns: vec![],
             compile_flags: vec![],
+            rmc_flags: vec![],
+            cbmc_flags: vec![],
             run_flags: None,
             pp_exact: None,
             aux_builds: vec![],
@@ -434,6 +449,14 @@ impl TestProps {
 
                 if let Some(flags) = config.parse_compile_flags(ln) {
                     self.compile_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
+                }
+
+                if let Some(flags) = config.parse_rmc_flags(ln) {
+                    self.rmc_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
+                }
+
+                if let Some(flags) = config.parse_cbmc_flags(ln) {
+                    self.cbmc_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
                 }
 
                 if let Some(edition) = config.parse_edition(ln) {
@@ -727,6 +750,16 @@ impl Config {
 
     fn parse_compile_flags(&self, line: &str) -> Option<String> {
         self.parse_name_value_directive(line, "compile-flags")
+    }
+
+    /// Parses strings of the form `// rmc-flags: ...` and returns the options listed after `rmc-flags:`
+    fn parse_rmc_flags(&self, line: &str) -> Option<String> {
+        self.parse_name_value_directive(line, "rmc-flags")
+    }
+
+    /// Parses strings of the form `// cbmc-flags: ...` and returns the options listed after `cbmc-flags:`
+    fn parse_cbmc_flags(&self, line: &str) -> Option<String> {
+        self.parse_name_value_directive(line, "cbmc-flags")
     }
 
     fn parse_and_update_revisions(&self, line: &str, existing: &mut Vec<String>) {

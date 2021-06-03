@@ -396,6 +396,7 @@ impl<'test> TestCx<'test> {
                     panic!("revision name must begin with rpass, rfail, or cfail");
                 }
             }
+            RMC => !self.testpaths.file.to_str().unwrap().contains("fail"),
             mode => panic!("unimplemented for mode {:?}", mode),
         }
     }
@@ -2382,19 +2383,31 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs RMC on the test file specified by `self.testpaths.file`.
-    /// An error message is printed to stdout if verfication fails.
+    /// Runs RMC on the test file specified by `self.testpaths.file`. An error
+    /// message is printed to stdout if verfication result is not expected.
     fn run_rmc_test(&self) {
         // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
         // 1. It calls rustc instead of RMC
         // 2. It may pass some options that do not make sense for RMC
         // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
+        rmc.args(&self.props.rmc_flags)
+            .arg(&self.testpaths.file)
+            .arg("--")
+            .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
-        rmc.arg(&self.testpaths.file);
         let proc_res = self.compose_and_run_compiler(rmc, None);
-        if !proc_res.status.success() {
-            self.fatal_proc_rec("verification failed!", &proc_res);
+        if self.should_compile_successfully(self.pass_mode()) {
+            if !proc_res.status.success() {
+                self.fatal_proc_rec("test verification failed although it shouldn't!", &proc_res);
+            }
+        } else {
+            if proc_res.status.success() {
+                self.fatal_proc_rec(
+                    "test verification succeeded although it shouldn't!",
+                    &proc_res,
+                );
+            }
         }
     }
 
