@@ -190,6 +190,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///    boxtrait_fail::<Concrete as Trait>::increment
     /// Generated from the fn instance to insert _into_ the symbol table.
     /// Must match the format of pretty_name_from_dynamic_object.
+    /// TODO: internal unit tests https://github.com/model-checking/rmc/issues/172
     pub fn pretty_name_from_instance(&self, instance: Instance<'tcx>) -> String {
         format!(
             "{}::{}",
