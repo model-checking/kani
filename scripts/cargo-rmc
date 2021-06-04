@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--quiet", "-q", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-temps", action="store_true")
+    parser.add_argument("--mangler", default="v0")
     parser.add_argument("crate", help="crate to verify")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
@@ -31,7 +32,7 @@ def main():
     if not rmc.dependencies_in_path():
         return 1
 
-    rmc.cargo_build(args.crate, args.verbose, args.debug)
+    rmc.cargo_build(args.crate, args.verbose, args.debug, args.mangler)
 
     pattern = f"target/debug/deps/*.json"
     jsons = glob.glob(pattern)
