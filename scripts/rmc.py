@@ -44,10 +44,10 @@ def print_rmc_step_status(step_name, completed_process, verbose=False):
         print(f"[RMC] cmd: {' '.join(completed_process.args)}")
 
 
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False):
+def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0"):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
-    build_cmd = [RMC_RUSTC_EXE, "-Z", "codegen-backend=gotoc",
+    build_cmd = [RMC_RUSTC_EXE, "-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}",
                  f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
     build_env = os.environ
     if debug:
@@ -60,8 +60,8 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     return process.returncode
 
 
-def cargo_build(crate, verbose=False, debug=False):
-    rustflags = ["-Z", "codegen-backend=gotoc", f"--cfg={RMC_CFG}"]
+def cargo_build(crate, verbose=False, debug=False, mangler="v0"):
+    rustflags = ["-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}", f"--cfg={RMC_CFG}"]
     rustflags = " ".join(rustflags)
     if "RUSTFLAGS" in os.environ:
         rustflags = os.environ["RUSTFLAGS"] + " " + rustflags
