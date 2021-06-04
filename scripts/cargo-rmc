@@ -22,10 +22,19 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-temps", action="store_true")
     parser.add_argument("--mangler", default="v0")
+    parser.add_argument("--visualize", action="store_true")
+    parser.add_argument("--srcdir", default=".")
+    parser.add_argument("--wkdir", default=".")
     parser.add_argument("crate", help="crate to verify")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
+
+    # In the future we hope to make this configurable in the command line.
+    # For now, however, changing this from "main" breaks rmc.
+    # Issue: https://github.com/model-checking/rmc/issues/169
+    args.function = "main"
+
     if args.quiet:
         args.verbose = False
 
@@ -43,7 +52,15 @@ def main():
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps):
         return 1
 
-    return rmc.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet)
+    if "--function" not in args.cbmc_args:
+        args.cbmc_args.extend(["--function", args.function])
+
+    if args.visualize:
+        return rmc.run_visualize(cbmc_filename, args.cbmc_args, \
+                                 args.verbose, args.quiet, args.keep_temps, \
+                                 args.function, args.srcdir, args.wkdir)
+    else:
+        return rmc.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet)
 
 
 if __name__ == "__main__":
