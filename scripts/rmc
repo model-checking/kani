@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--gen-c", action="store_true")
     parser.add_argument("--gen-symbols", action="store_true")
     parser.add_argument("--allow-cbmc-verification-failure", action="store_true")
+    parser.add_argument("--mangler", default="v0")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
@@ -41,7 +42,7 @@ def main():
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps):
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler):
         return 1
 
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps):
