@@ -2384,29 +2384,28 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs RMC on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verfication result is not expected.
+    /// message is printed to stdout if verification result is not expected.
     fn run_rmc_test(&self) {
         // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
         // 1. It calls rustc instead of RMC
         // 2. It may pass some options that do not make sense for RMC
         // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
+        // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
         rmc.args(&self.props.rmc_flags)
             .arg(&self.testpaths.file)
             .arg("--")
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
+        // Print an error if the verification result is not expected.
         if self.should_compile_successfully(self.pass_mode()) {
             if !proc_res.status.success() {
-                self.fatal_proc_rec("test verification failed although it shouldn't!", &proc_res);
+                self.fatal_proc_rec("test failed: expected success, got failure", &proc_res);
             }
         } else {
             if proc_res.status.success() {
-                self.fatal_proc_rec(
-                    "test verification succeeded although it shouldn't!",
-                    &proc_res,
-                );
+                self.fatal_proc_rec("test failed: expected failure, got success", &proc_res);
             }
         }
     }

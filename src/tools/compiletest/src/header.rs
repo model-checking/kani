@@ -1,4 +1,3 @@
-use regex::Regex;
 use std::collections::HashSet;
 use std::env;
 use std::fs::File;
@@ -54,8 +53,8 @@ impl EarlyProps {
 
         if config.mode == Mode::RMC {
             // If the path to the test contains "fixme" or "ignore", skip it.
-            let re = Regex::new(r"fixme|ignore").unwrap();
-            if re.is_match(testfile.to_str().unwrap()) {
+            let path = testfile.to_str().unwrap();
+            if path.contains("fixme") || path.contains("ignore") {
                 props.ignore = true;
             }
         }

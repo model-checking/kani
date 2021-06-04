@@ -434,6 +434,7 @@ impl<'a> Builder<'a> {
                 test::RustdocJson,
                 // Run bootstrap close to the end as it's unlikely to fail
                 test::Bootstrap,
+                // RMC regression tests
                 test::CBMC,
                 test::Firecracker,
                 test::Prusti,
