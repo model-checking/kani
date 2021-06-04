@@ -21,6 +21,8 @@ If you encounter issues when using RMC we encourage you to
    [the cmake instructions from the CBMC repo](https://github.com/diffblue/cbmc/blob/develop/COMPILING.md#working-with-cmake).
    We recommend using `ninja` as the CBMC build system.
 
+1. Install [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc/releases/latest).
+
 1. Configure RMC. 
    We recommend using the following options:
    ```
