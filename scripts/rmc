@@ -24,9 +24,18 @@ def main():
     parser.add_argument("--gen-symbols", action="store_true")
     parser.add_argument("--allow-cbmc-verification-failure", action="store_true")
     parser.add_argument("--mangler", default="v0")
+    parser.add_argument("--visualize", action="store_true")
+    parser.add_argument("--srcdir", default=".")
+    parser.add_argument("--wkdir", default=".")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
+
+    # In the future we hope to make this configurable in the command line.
+    # For now, however, changing this from "main" breaks rmc.
+    # Issue: https://github.com/model-checking/rmc/issues/169
+    args.function = "main"
+    
     if args.quiet:
         args.verbose = False
 
@@ -57,10 +66,15 @@ def main():
             return 1
 
     if "--function" not in args.cbmc_args:
-        args.cbmc_args.extend(["--function", "main"])
+        args.cbmc_args.extend(["--function", args.function])
     
     args.cbmc_args.append(str(RMC_C_LIB))
-    retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet)
+    if args.visualize:
+        retcode = rmc.run_visualize(goto_filename, args.cbmc_args, \
+                                    args.verbose, args.quiet, args.keep_temps, \
+                                    args.function, args.srcdir, args.wkdir)
+    else:
+        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet)
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
         retcode = EXIT_CODE_SUCCESS
     return retcode
