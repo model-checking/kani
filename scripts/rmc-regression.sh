@@ -23,14 +23,10 @@ check-cbmc-version.py --major 5 --minor 30
 # Standalone rmc tests
 pushd $RUST_DIR
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-cd rust-tests
-for TEST_DIR in cbmc-reg smack-regressions prusti-regressions; do
-    ./run.sh $TEST_DIR
-done
-./run.sh firecracker-like 2
+./x.py test -i --stage 1 cbmc firecracker prusti smack
 
 # Standalone cargo-rmc tests
-cd ../cargo-rmc-tests
+cd cargo-rmc-tests
 for DIR in */; do
   ./run.py $DIR
 done
@@ -38,4 +34,3 @@ popd
 
 # run-make tests
 ./x.py test -i --stage 1 src/test/run-make --test-args gotoc
-./x.py test -i --stage 1 src/test/cbmc
