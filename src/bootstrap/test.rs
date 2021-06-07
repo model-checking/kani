@@ -1193,6 +1193,14 @@ default_test!(Assembly { path: "src/test/assembly", mode: "assembly", suite: "as
 
 default_test!(CBMC { path: "src/test/cbmc", mode: "rmc", suite: "cbmc" });
 
+default_test!(Firecracker { path: "src/test/firecracker", mode: "rmc", suite: "firecracker" });
+
+default_test!(Prusti { path: "src/test/prusti", mode: "rmc", suite: "prusti" });
+
+default_test!(Serial { path: "src/test/serial", mode: "rmc", suite: "serial" });
+
+default_test!(SMACK { path: "src/test/smack", mode: "rmc", suite: "smack" });
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Compiletest {
     compiler: Compiler,
