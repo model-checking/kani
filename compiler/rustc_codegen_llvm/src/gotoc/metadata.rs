@@ -17,7 +17,7 @@ use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::mir::{BasicBlock, Body, HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Binder, Instance, TraitRef, Ty, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, Ty, TyCtxt, TypeFoldable};
 use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::iter;
@@ -184,32 +184,13 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Pretty name including crate path and trait information. For example:
     ///    boxtrait_fail::<Concrete as Trait>::increment
-    /// Generated from the fn instance to insert _into_ the symbol table.
-    /// Must match the format of pretty_name_from_dynamic_object.
+    /// Generated from the fn instance to insert into/lookup in the symbol table.
     /// TODO: internal unit tests https://github.com/model-checking/rmc/issues/172
     pub fn pretty_name_from_instance(&self, instance: Instance<'tcx>) -> String {
         format!(
             "{}::{}",
             self.tcx.crate_name(instance.def_id().krate),
             with_no_trimmed_paths(|| instance.to_string())
-        )
-    }
-
-    /// Pretty name including crate path and trait information. For example:
-    ///    boxtrait_fail::<Concrete as Trait>::increment
-    /// Generated from the dynamic object type for _lookup_ from the symbol table.
-    /// Must match the format of pretty_name_from_instance.
-    pub fn pretty_name_from_dynamic_object(
-        &self,
-        def_id: DefId,
-        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
-    ) -> String {
-        let normalized_object_type_name = self.normalized_name_of_dynamic_object_type(trait_ref_t);
-        format!(
-            "{}::{}::{}",
-            self.tcx.crate_name(def_id.krate),
-            normalized_object_type_name,
-            self.tcx.item_name(def_id)
         )
     }
 

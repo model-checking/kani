@@ -9,7 +9,7 @@ use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::{self, Binder, IntTy, TraitRef, Ty, UintTy};
+use rustc_middle::ty::{self, Binder, Instance, IntTy, TraitRef, Ty, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
@@ -678,8 +678,16 @@ impl<'tcx> GotocCtx<'tcx> {
             .lookup_field_type(&vtable_type_name, &vtable_field_name)
             .cloned()
             .unwrap();
+        let instance = Instance::resolve(
+            self.tcx,
+            ty::ParamEnv::reveal_all(),
+            def_id,
+            trait_ref_t.skip_binder().substs,
+        )
+        .unwrap()
+        .unwrap();
 
-        let pretty_function_name = self.pretty_name_from_dynamic_object(def_id, trait_ref_t);
+        let pretty_function_name = self.pretty_name_from_instance(instance);
         let matching_symbols = self.symbol_table.find_by_pretty_name(&pretty_function_name); //("<path>::<Rectangle as Vol>::vol");
         match matching_symbols.len() {
             0 => {
