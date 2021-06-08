@@ -305,16 +305,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     //Update the argument from arg0 to arg0.data
                     fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-
-                    // TODO: this is a temporary RMC-only flag for issue 30
-                    // <https://github.com/model-checking/rmc/issues/30>
-                    let is_well_formed = vtable
-                        .clone()
-                        .member(VTABLE_IS_WELL_FORMED_FIELD, &self.symbol_table)
-                        .cast_to(Type::bool());
-                    let assert_msg = format!("well formed vtable for type {:?}", &vtable.typ());
-                    let assert = Stmt::assert(is_well_formed, &assert_msg, loc.clone());
-                    stmts.push(assert);
                 }
 
                 // Actually generate the function call, and store the return value, if any.

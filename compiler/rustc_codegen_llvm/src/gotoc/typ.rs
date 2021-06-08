@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::cbmc::goto_program::{DatatypeComponent, Expr, Symbol, SymbolTable, Type};
 use super::cbmc::utils::aggr_name;
-use super::metadata::{GotocCtx, VTABLE_IS_WELL_FORMED_FIELD};
+use super::metadata::GotocCtx;
 use crate::btree_map;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
@@ -147,8 +147,6 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      size_t align;
     ///      int (*f)(int) f1;
     ///      ...
-    ///      bool is_well_formed; //< TODO: this is a temporary RMC-only flag for issue #30
-    ///                           // <https://github.com/model-checking/rmc/issues/30>
     ///   }
     /// Ensures that the vtable is added to the symbol table.
     fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
@@ -200,9 +198,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::datatype_component("align", Type::size_t()),
             ];
             vtable_base.append(&mut flds);
-            // TODO: this is a temporary RMC-only flag for issue #30
-            // <https://github.com/model-checking/rmc/issues/30>
-            vtable_base.push(Type::datatype_component(VTABLE_IS_WELL_FORMED_FIELD, Type::c_bool()));
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");

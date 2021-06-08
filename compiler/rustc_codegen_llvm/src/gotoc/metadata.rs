@@ -24,10 +24,6 @@ use std::iter;
 use std::path::Path;
 use tracing::debug;
 
-// TODO: this is a temporary RMC-only flag used in vtables for issue #30
-// <https://github.com/model-checking/rmc/issues/30>
-pub static VTABLE_IS_WELL_FORMED_FIELD: &str = "is_vtable_well_formed";
-
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
     pub symtab: SymbolTable,

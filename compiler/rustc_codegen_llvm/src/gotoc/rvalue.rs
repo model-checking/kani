@@ -813,10 +813,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     .symbol_table
                     .lookup_fields_in_type(&Type::struct_tag(&vtable_name))
                     .unwrap();
-                // TODO: this is a temporary RMC-only flag for issue #30
-                // <https://github.com/model-checking/rmc/issues/30>
-                let is_well_formed = Expr::c_bool_constant(Type::components_are_unique(fields));
-                vtable_fields.push(is_well_formed);
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,
