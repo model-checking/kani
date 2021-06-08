@@ -131,14 +131,13 @@ impl<'tcx> GotocCtx<'tcx> {
         // gives an Irep Pointer object for the signature
         let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
 
-        //DSN For now, use the pretty name not the mangled name.
-        let _mangled_fname = self.symbol_name(instance);
-        let pretty_fname = self.tcx.item_name(def_id).to_string();
+        // vtable field name, i.e., ::Shape::vol
+        let vtable_field_name = self.vtable_fild_name(def_id);
 
         let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         let _layout = self.layout_of(ins_ty);
 
-        Type::datatype_component(&pretty_fname, fnptr)
+        Type::datatype_component(&vtable_field_name, fnptr)
     }
 
     /// Generates a vtable that looks like this:

@@ -217,6 +217,16 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
+    /// For the vtable field name, we need exactly the dyn trait name and the function
+    /// name. The table itself already is scoped by the object type.
+    ///     Example: ::Shape::vol
+    /// Note: this is _not_ the same name for top-level entry into the symbol table,
+    /// which does need more crate and type information. For now, the symbol table
+    /// name is from the pretty_name_* functions above.
+    pub fn vtable_fild_name(&self, def_id: DefId) -> String {
+        self.tcx.def_path(def_id).to_string_no_crate_verbose()
+    }
+
     /// a human readable name in rust for reference
     pub fn instance_name(&self, instance: Instance<'tcx>) -> String {
         with_no_trimmed_paths(|| self.tcx.def_path_str(instance.def_id()))
