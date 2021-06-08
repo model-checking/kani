@@ -199,8 +199,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     Example: ::Shape::vol
     /// Note: this is _not_ the same name for top-level entry into the symbol table,
     /// which does need more crate and type information. For now, the symbol table
-    /// name is from the pretty_name_* functions above.
-    pub fn vtable_fild_name(&self, def_id: DefId) -> String {
+    /// name is from the pretty_name_from_instance function above.
+    pub fn vtable_field_name(&self, def_id: DefId) -> String {
         self.tcx.def_path(def_id).to_string_no_crate_verbose()
     }
 

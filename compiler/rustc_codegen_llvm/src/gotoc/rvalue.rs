@@ -671,7 +671,7 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_ref_t: Binder<'_, TraitRef<'tcx>>,
         t: Ty<'tcx>,
     ) -> Expr {
-        let vtable_field_name = self.vtable_fild_name(def_id);
+        let vtable_field_name = self.vtable_field_name(def_id);
         let vtable_type_name = aggr_name(&self.vtable_name(t));
         let field_type = self
             .symbol_table

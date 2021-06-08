@@ -291,7 +291,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     // The first argument to a virtual function is a fat pointer for the trait
                     let trait_fat_ptr = fargs[0].to_owned();
-                    let vtable_field_name = self.vtable_fild_name(def_id);
+                    let vtable_field_name = self.vtable_field_name(def_id);
 
                     // Now that we have all the stuff we need, we can actually build the dynamic call
                     // If the original call was of the form

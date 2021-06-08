@@ -132,7 +132,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
 
         // vtable field name, i.e., ::Shape::vol
-        let vtable_field_name = self.vtable_fild_name(def_id);
+        let vtable_field_name = self.vtable_field_name(def_id);
 
         let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         let _layout = self.layout_of(ins_ty);
