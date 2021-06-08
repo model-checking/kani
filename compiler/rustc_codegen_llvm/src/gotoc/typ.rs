@@ -204,23 +204,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Given a Binder<TraitRef>, gives back a normalized name for the dynamic type
-    /// For example, if we have a `Rectangle` that implements a `Shape`, this will give back
-    /// "<Rectangle as Shape>"
-    ///
-    /// This is used to generate the pretty name of trait methods when building the vtable.
-    /// Ideally, we would just use Instance::resolve() to get a defid for a vtable method.
-    /// Unfortunately, this doesn't currently work, so instead, we look at the pretty name of the method, and look by that.
-    /// As with vtable_name, we have both cases which have "&" and cases which don't.
-    /// e.g. "<Rectangle as Shape>" and "<&Rectangle as Shape>".
-    /// We solve this by normalizeing and removing the "&">::vol", but the inner type would be <&Rectangle as Vol>
-    pub fn normalized_name_of_dynamic_object_type(
-        &self,
-        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
-    ) -> String {
-        with_no_trimmed_paths(|| trait_ref_t.skip_binder().to_string().replace("&", ""))
-    }
-
     /// Gives the name for a trait.
     /// In some cases, we have &T, in other cases T, so normalize.
     pub fn normalized_trait_name(&self, t: Ty<'tcx>) -> String {
