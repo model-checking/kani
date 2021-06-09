@@ -9,7 +9,7 @@ use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::{self, Binder, IntTy, TraitRef, Ty, UintTy};
+use rustc_middle::ty::{self, Binder, Instance, IntTy, TraitRef, Ty, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
@@ -671,15 +671,29 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_ref_t: Binder<'_, TraitRef<'tcx>>,
         t: Ty<'tcx>,
     ) -> Expr {
-        let function_name = self.tcx.item_name(def_id).to_string();
+        let vtable_field_name = self.vtable_field_name(def_id);
         let vtable_type_name = aggr_name(&self.vtable_name(t));
         let field_type = self
             .symbol_table
-            .lookup_field_type(&vtable_type_name, &function_name)
+            .lookup_field_type(&vtable_type_name, &vtable_field_name)
             .cloned()
             .unwrap();
 
-        let pretty_function_name = self.pretty_name_from_dynamic_object(def_id, trait_ref_t);
+        // We use Instance::resolve to more closely match Rust proper behavior. The comment
+        // there says "used to find the precise code that will run for a trait method invocation"
+        // and it is used (in a more indirect way) to generate vtables.
+        let instance = Instance::resolve(
+            self.tcx,
+            ty::ParamEnv::reveal_all(),
+            def_id,
+            trait_ref_t.skip_binder().substs,
+        )
+        .unwrap()
+        .unwrap();
+
+        // TODO: stop using this pretty name here
+        // https://github.com/model-checking/rmc/issues/187
+        let pretty_function_name = self.pretty_name_from_instance(instance);
         let matching_symbols = self.symbol_table.find_by_pretty_name(&pretty_function_name); //("<path>::<Rectangle as Vol>::vol");
         match matching_symbols.len() {
             0 => {
@@ -809,14 +823,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
                 let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
                 vtable_fields.append(&mut methods);
-                let fields = ctx
-                    .symbol_table
-                    .lookup_fields_in_type(&Type::struct_tag(&vtable_name))
-                    .unwrap();
-                // TODO: this is a temporary RMC-only flag for issue #30
-                // <https://github.com/model-checking/rmc/issues/30>
-                let is_well_formed = Expr::c_bool_constant(Type::components_are_unique(fields));
-                vtable_fields.push(is_well_formed);
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,
