@@ -27,9 +27,7 @@ impl Iterator for Counter {
 
 trait Combined : Iterator + std::iter::Iterator<Item = usize> {}
 
-impl Combined for Counter {
-
-}
+impl Combined for Counter {}
 
 fn std_count(c : &mut dyn std::iter::Iterator<Item = usize>) -> usize {
     c.next().unwrap()

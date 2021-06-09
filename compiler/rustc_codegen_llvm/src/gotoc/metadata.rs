@@ -201,6 +201,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// which does need more crate and type information. For now, the symbol table
     /// name is from the pretty_name_from_instance function above.
     pub fn vtable_field_name(&self, def_id: DefId) -> String {
+        // `to_string_no_crate_verbose` is from Rust proper, we use it here because it
+        // always includes the dyn trait name and function name.
+        // Tracking a less brittle solution here: https://github.com/model-checking/rmc/issues/187
         self.tcx.def_path(def_id).to_string_no_crate_verbose()
     }
 

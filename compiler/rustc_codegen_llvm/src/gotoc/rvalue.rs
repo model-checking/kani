@@ -678,6 +678,10 @@ impl<'tcx> GotocCtx<'tcx> {
             .lookup_field_type(&vtable_type_name, &vtable_field_name)
             .cloned()
             .unwrap();
+
+        // We use Instance::resolve to more closely match Rust proper behavior. The comment
+        // there says "used to find the precise code that will run for a trait method invocation"
+        // and it is used (in a more indirect way) to generate vtables.
         let instance = Instance::resolve(
             self.tcx,
             ty::ParamEnv::reveal_all(),
@@ -687,6 +691,8 @@ impl<'tcx> GotocCtx<'tcx> {
         .unwrap()
         .unwrap();
 
+        // TODO: stop using this pretty name here
+        // https://github.com/model-checking/rmc/issues/187
         let pretty_function_name = self.pretty_name_from_instance(instance);
         let matching_symbols = self.symbol_table.find_by_pretty_name(&pretty_function_name); //("<path>::<Rectangle as Vol>::vol");
         match matching_symbols.len() {
