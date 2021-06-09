@@ -17,16 +17,12 @@ use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::mir::{BasicBlock, Body, HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Binder, Instance, TraitRef, Ty, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypeFoldable};
 use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::iter;
 use std::path::Path;
 use tracing::debug;
-
-// TODO: this is a temporary RMC-only flag used in vtables for issue #30
-// <https://github.com/model-checking/rmc/issues/30>
-pub static VTABLE_IS_WELL_FORMED_FIELD: &str = "is_vtable_well_formed";
 
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
@@ -188,8 +184,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Pretty name including crate path and trait information. For example:
     ///    boxtrait_fail::<Concrete as Trait>::increment
-    /// Generated from the fn instance to insert _into_ the symbol table.
-    /// Must match the format of pretty_name_from_dynamic_object.
+    /// Generated from the fn instance to insert into/lookup in the symbol table.
     /// TODO: internal unit tests https://github.com/model-checking/rmc/issues/172
     pub fn pretty_name_from_instance(&self, instance: Instance<'tcx>) -> String {
         format!(
@@ -199,22 +194,17 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    /// Pretty name including crate path and trait information. For example:
-    ///    boxtrait_fail::<Concrete as Trait>::increment
-    /// Generated from the dynamic object type for _lookup_ from the symbol table.
-    /// Must match the format of pretty_name_from_instance.
-    pub fn pretty_name_from_dynamic_object(
-        &self,
-        def_id: DefId,
-        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
-    ) -> String {
-        let normalized_object_type_name = self.normalized_name_of_dynamic_object_type(trait_ref_t);
-        format!(
-            "{}::{}::{}",
-            self.tcx.crate_name(def_id.krate),
-            normalized_object_type_name,
-            self.tcx.item_name(def_id)
-        )
+    /// For the vtable field name, we need exactly the dyn trait name and the function
+    /// name. The table itself already is scoped by the object type.
+    ///     Example: ::Shape::vol
+    /// Note: this is _not_ the same name for top-level entry into the symbol table,
+    /// which does need more crate and type information. For now, the symbol table
+    /// name is from the pretty_name_from_instance function above.
+    pub fn vtable_field_name(&self, def_id: DefId) -> String {
+        // `to_string_no_crate_verbose` is from Rust proper, we use it here because it
+        // always includes the dyn trait name and function name.
+        // Tracking a less brittle solution here: https://github.com/model-checking/rmc/issues/187
+        self.tcx.def_path(def_id).to_string_no_crate_verbose()
     }
 
     /// a human readable name in rust for reference
