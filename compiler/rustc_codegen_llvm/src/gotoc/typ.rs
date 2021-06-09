@@ -11,8 +11,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::{InternalSubsts, SubstsRef};
 use rustc_middle::ty::{
-    self, AdtDef, Binder, FloatTy, Instance, IntTy, PolyFnSig, TraitRef, Ty, TyS, UintTy,
-    VariantDef,
+    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef,
 };
 use rustc_span;
 use rustc_span::def_id::DefId;

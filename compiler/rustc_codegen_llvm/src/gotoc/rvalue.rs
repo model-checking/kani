@@ -823,10 +823,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
                 let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
                 vtable_fields.append(&mut methods);
-                let fields = ctx
-                    .symbol_table
-                    .lookup_fields_in_type(&Type::struct_tag(&vtable_name))
-                    .unwrap();
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,

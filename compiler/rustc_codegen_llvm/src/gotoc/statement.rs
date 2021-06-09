@@ -281,8 +281,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Mutable so that we can override it in case of a virtual function call
                 // TODO is there a better way to do this without needing the mut?
                 let mut funce = self.codegen_operand(func);
-
-                let mut stmts: Vec<Stmt> = vec![];
                 if let InstanceDef::Virtual(def_id, size) = instance.def {
                     debug!(
                         "Codegen a call through a virtual function. def_id: {:?} size: {:?}",
@@ -300,7 +298,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // arg0.vtable->f(arg0.data,arg1);
                     let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
                     let vtable = vtable_ref.dereference();
-                    let fn_ptr = vtable.clone().member(&vtable_field_name, &self.symbol_table);
+                    let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
                     funce = fn_ptr.dereference();
 
                     //Update the argument from arg0 to arg0.data
@@ -308,11 +306,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
 
                 // Actually generate the function call, and store the return value, if any.
-                stmts.append(&mut vec![
-                    self.codegen_expr_to_place(&p, funce.call(fargs)).with_location(loc.clone()),
-                    Stmt::goto(self.find_label(&target), loc.clone()),
-                ]);
-                Stmt::block(stmts, loc)
+                Stmt::block(
+                    vec![
+                        self.codegen_expr_to_place(&p, funce.call(fargs))
+                            .with_location(loc.clone()),
+                        Stmt::goto(self.find_label(&target), loc.clone()),
+                    ],
+                    loc,
+                )
             }
             ty::FnPtr(_) => {
                 let (p, target) = destination.unwrap();
