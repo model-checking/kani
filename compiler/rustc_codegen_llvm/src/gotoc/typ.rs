@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::cbmc::goto_program::{DatatypeComponent, Expr, Symbol, SymbolTable, Type};
 use super::cbmc::utils::aggr_name;
-use super::metadata::{GotocCtx, VTABLE_IS_WELL_FORMED_FIELD};
+use super::metadata::GotocCtx;
 use crate::btree_map;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
@@ -11,8 +11,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::{InternalSubsts, SubstsRef};
 use rustc_middle::ty::{
-    self, AdtDef, Binder, FloatTy, Instance, IntTy, PolyFnSig, TraitRef, Ty, TyS, UintTy,
-    VariantDef,
+    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef,
 };
 use rustc_span;
 use rustc_span::def_id::DefId;
@@ -131,14 +130,13 @@ impl<'tcx> GotocCtx<'tcx> {
         // gives an Irep Pointer object for the signature
         let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
 
-        //DSN For now, use the pretty name not the mangled name.
-        let _mangled_fname = self.symbol_name(instance);
-        let pretty_fname = self.tcx.item_name(def_id).to_string();
+        // vtable field name, i.e., ::Shape::vol
+        let vtable_field_name = self.vtable_field_name(def_id);
 
         let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         let _layout = self.layout_of(ins_ty);
 
-        Type::datatype_component(&pretty_fname, fnptr)
+        Type::datatype_component(&vtable_field_name, fnptr)
     }
 
     /// Generates a vtable that looks like this:
@@ -148,8 +146,6 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      size_t align;
     ///      int (*f)(int) f1;
     ///      ...
-    ///      bool is_well_formed; //< TODO: this is a temporary RMC-only flag for issue #30
-    ///                           // <https://github.com/model-checking/rmc/issues/30>
     ///   }
     /// Ensures that the vtable is added to the symbol table.
     fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
@@ -201,30 +197,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::datatype_component("align", Type::size_t()),
             ];
             vtable_base.append(&mut flds);
-            // TODO: this is a temporary RMC-only flag for issue #30
-            // <https://github.com/model-checking/rmc/issues/30>
-            vtable_base.push(Type::datatype_component(VTABLE_IS_WELL_FORMED_FIELD, Type::c_bool()));
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");
         }
-    }
-
-    /// Given a Binder<TraitRef>, gives back a normalized name for the dynamic type
-    /// For example, if we have a `Rectangle` that implements a `Shape`, this will give back
-    /// "<Rectangle as Shape>"
-    ///
-    /// This is used to generate the pretty name of trait methods when building the vtable.
-    /// Ideally, we would just use Instance::resolve() to get a defid for a vtable method.
-    /// Unfortunately, this doesn't currently work, so instead, we look at the pretty name of the method, and look by that.
-    /// As with vtable_name, we have both cases which have "&" and cases which don't.
-    /// e.g. "<Rectangle as Shape>" and "<&Rectangle as Shape>".
-    /// We solve this by normalizeing and removing the "&">::vol", but the inner type would be <&Rectangle as Vol>
-    pub fn normalized_name_of_dynamic_object_type(
-        &self,
-        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
-    ) -> String {
-        with_no_trimmed_paths(|| trait_ref_t.skip_binder().to_string().replace("&", ""))
     }
 
     /// Gives the name for a trait.
