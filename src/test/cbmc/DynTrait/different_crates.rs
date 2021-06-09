@@ -1,10 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// This test uses a trait defined in a different crate (the standard library)
+// and a test defined in the local crate. The goal is to test vtable resolution
+// of duplicate names across different crates.
 struct Counter {
     count: usize,
 }
 
+// A custom impl for the standard library trait.
 impl std::iter::Iterator for Counter {
     type Item = usize;
 
@@ -15,6 +19,7 @@ impl std::iter::Iterator for Counter {
     }
 }
 
+// An impl for our local trait, with an indentical name to the standard library
 trait Iterator {
     fn next(&mut self) -> Option<usize>;
 }
@@ -36,7 +41,6 @@ fn std_count(c : &mut dyn std::iter::Iterator<Item = usize>) -> usize {
 fn weird_count(c : &mut dyn Iterator) -> usize {
     c.next().unwrap()
 }
-
 
 fn main() {
     let counter : &mut Counter = &mut Counter { count: 0 };
