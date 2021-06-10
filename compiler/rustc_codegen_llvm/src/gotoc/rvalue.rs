@@ -694,20 +694,23 @@ impl<'tcx> GotocCtx<'tcx> {
         // Lookup in the symbol table using the full symbol table name/key
         let fn_name = self.symbol_name(instance);
         let matching_symbols = self.symbol_table.lookup(&fn_name);
-        if let Some(fn_symbol) = matching_symbols {
-            // Create a pointer to the method
-            // Note that the method takes a self* as the first argument, but the vtable field type has a void* as the first arg.
-            // So we need to cast it at the end.
-            Expr::symbol_expression(fn_symbol.name.clone(), fn_symbol.typ.clone())
-                .address_of()
-                .cast_to(field_type)
-        } else {
-            warn!(
-                "Unable to find vtable symbol for virtual function {}, attempted lookup for symbol name: {}",
-                self.instance_name(instance),
-                fn_name,
-            );
-            field_type.null()
+        match matching_symbols {
+            Some(fn_symbol) => {
+                // Create a pointer to the method
+                // Note that the method takes a self* as the first argument, but the vtable field type has a void* as the first arg.
+                // So we need to cast it at the end.
+                Expr::symbol_expression(fn_symbol.name.clone(), fn_symbol.typ.clone())
+                    .address_of()
+                    .cast_to(field_type)
+            }
+            None => {
+                warn!(
+                    "Unable to find vtable symbol for virtual function {}, attempted lookup for symbol name: {}",
+                    self.instance_name(instance),
+                    fn_name,
+                );
+                field_type.null()
+            }
         }
     }
 
