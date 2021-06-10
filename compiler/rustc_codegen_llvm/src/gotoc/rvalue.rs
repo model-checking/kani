@@ -706,7 +706,7 @@ impl<'tcx> GotocCtx<'tcx> {
             None => {
                 warn!(
                     "Unable to find vtable symbol for virtual function {}, attempted lookup for symbol name: {}",
-                    self.instance_name(instance),
+                    self.readable_instance_name(instance),
                     fn_name,
                 );
                 field_type.null()
