@@ -323,6 +323,7 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
 
             Symbol::function(
                 &func_name,
+                &func_name,
                 Type::code(
                     vec![x_param.to_function_parameter(), y_param.to_function_parameter()],
                     Type::empty(),

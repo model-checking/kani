@@ -201,6 +201,7 @@ impl<'tcx> GotocCtx<'tcx> {
             body.push(res.ret(Location::none()));
             Symbol::function(
                 &func_name,
+                &func_name,
                 Type::code(vec![inp.to_function_parameter()], res_t),
                 Some(Stmt::block(body, Location::none())),
                 Location::none(),

@@ -584,6 +584,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let body = Stmt::block(stmts, Location::none());
         Symbol::function(
             fname,
+            fname,
             Type::code(vec![var.to_function_parameter()], Type::bool()),
             Some(body),
             Location::none(),

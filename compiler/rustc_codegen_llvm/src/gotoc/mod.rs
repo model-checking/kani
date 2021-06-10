@@ -165,8 +165,13 @@ impl<'tcx> GotocCtx<'tcx> {
         self.set_current_fn(instance);
         self.ensure(&self.fname(), |ctx, fname| {
             let mir = ctx.mir();
-            Symbol::function(fname, ctx.fn_typ(), None, ctx.codegen_span2(&mir.span))
-                .with_pretty_name(&ctx.readable_instance_name(instance))
+            Symbol::function(
+                fname,
+                &ctx.readable_instance_name(instance),
+                ctx.fn_typ(),
+                None,
+                ctx.codegen_span2(&mir.span),
+            )
         });
         self.reset_current_fn();
     }
