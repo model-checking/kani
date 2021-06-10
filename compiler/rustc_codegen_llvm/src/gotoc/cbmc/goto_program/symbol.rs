@@ -111,8 +111,8 @@ impl Symbol {
     pub fn builtin_function(name: &str, param_types: Vec<Type>, return_type: Type) -> Symbol {
         Symbol::function(
             name,
-            name,
             Type::code_with_unnamed_parameters(param_types, return_type),
+            None,
             None,
             Location::builtin_function(name, None),
         )
@@ -138,9 +138,9 @@ impl Symbol {
 
     pub fn function(
         name: &str,
-        pretty_name: &str,
         typ: Type,
         body: Option<Stmt>,
+        pretty_name: Option<String>,
         loc: Location,
     ) -> Symbol {
         Symbol::new(
@@ -149,7 +149,7 @@ impl Symbol {
             typ,
             body.map_or(SymbolValues::None, |x| SymbolValues::Stmt(x)),
             Some(name.to_string()),
-            Some(pretty_name.to_string()),
+            pretty_name,
         )
         .with_is_lvalue(true)
     }

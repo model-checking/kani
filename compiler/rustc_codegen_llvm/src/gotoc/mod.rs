@@ -167,9 +167,9 @@ impl<'tcx> GotocCtx<'tcx> {
             let mir = ctx.mir();
             Symbol::function(
                 fname,
-                &ctx.readable_instance_name(instance),
                 ctx.fn_typ(),
                 None,
+                Some(ctx.readable_instance_name(instance)),
                 ctx.codegen_span2(&mir.span),
             )
         });

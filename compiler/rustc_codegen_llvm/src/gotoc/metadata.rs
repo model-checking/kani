@@ -446,9 +446,9 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure(&fn_name, |_tcx, _| {
             Symbol::function(
                 &fn_name,
-                &fn_name,
                 Type::code(vec![], Type::constructor()),
                 Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
+                None,
                 Location::none(),
             )
             .with_is_file_local(true)
