@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--quiet", "-q", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-temps", action="store_true")
+    parser.add_argument("--gen-c", action="store_true")
     parser.add_argument("--mangler", default="v0")
     parser.add_argument("--visualize", action="store_true")
     parser.add_argument("--srcdir", default=".")
@@ -49,8 +50,13 @@ def main():
         print("ERROR: unexpected number of json outputs")
         return 1
     cbmc_filename = "cbmc.out"
+    c_filename = "cbmc.c"
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps):
         return 1
+
+    if args.gen_c:
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_filename, c_filename, args.verbose):
+            return 1
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
