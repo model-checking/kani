@@ -1105,6 +1105,13 @@ impl Expr {
         self.lt(typ.zero())
     }
 
+    /// `self != NULL`
+    pub fn is_nonnull(self) -> Self {
+        assert!(self.typ.is_pointer());
+        let nullptr = self.typ().null();
+        self.neq(nullptr)
+    }
+
     /// `ArithmeticOverflowResult r; >>>r.overflowed = builtin_add_overflow(self, e, &r.result)<<<`
     pub fn add_overflow(self, e: Expr) -> ArithmeticOverflowResult {
         let result = self.clone().plus(e.clone());
