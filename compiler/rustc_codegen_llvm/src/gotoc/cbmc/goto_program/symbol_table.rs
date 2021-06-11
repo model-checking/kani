@@ -76,19 +76,6 @@ impl SymbolTable {
         self.symbol_table.contains_key(name)
     }
 
-    //TODO DSN
-    // https://github.com/model-checking/rmc/issues/4
-    // This is SUPER DUMB AND SLOW. We should just keep a second map. But for now, this is good enough
-    pub fn find_by_pretty_name(&self, pretty_name: &str) -> Vec<&Symbol> {
-        let mut rval = Vec::new();
-        for (_name, symbol) in &self.symbol_table {
-            if symbol.pretty_name.as_ref().map_or(false, |x| x == pretty_name) {
-                rval.push(symbol);
-            }
-        }
-        rval
-    }
-
     pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Symbol> {
         self.symbol_table.iter()
     }
