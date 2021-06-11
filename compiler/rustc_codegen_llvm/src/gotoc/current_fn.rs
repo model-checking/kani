@@ -13,14 +13,14 @@ use rustc_middle::ty::TyCtxt;
 /// This structure represents useful data about the function we are currently compiling.
 pub struct CurrentFnCtx<'tcx> {
     /// The GOTO block we are compiling into
-    pub block: Vec<Stmt>,
-    /// the current MIR basic block
+    block: Vec<Stmt>,
+    /// The current MIR basic block
     current_bb: Option<BasicBlock>,
-    /// the codegen instance for the current function
+    /// The codegen instance for the current function
     instance: Instance<'tcx>,
-    /// the goto labels for all blocks
+    /// The goto labels for all blocks
     labels: Vec<String>,
-    /// the mir for the current instance
+    /// The mir for the current instance
     mir: &'tcx Body<'tcx>,
     /// The symbol name of the current function
     name: String,

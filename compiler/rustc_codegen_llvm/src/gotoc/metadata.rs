@@ -92,18 +92,6 @@ impl<'tcx> GotocCtx<'tcx> {
         format!("{}::global::{}::", self.crate_name(), c)
     }
 
-    /// The name of the current function, if there is one.
-    /// None, if there is no current function (i.e. we are compiling global state).
-    ///
-    /// This method returns the function name for contexts describing functions
-    /// and the empty string for contexts describing static variables. It
-    /// currently returns the managled name. It should return the pretty name.
-    pub fn fname_option(&self) -> Option<String> {
-        // The function name is contained in the context member named instance,
-        // and instance is defined only for function contexts.
-        self.current_fn.as_ref().map(|x| self.symbol_name(x.instance()))
-    }
-
     /// For the vtable field name, we need exactly the dyn trait name and the function
     /// name. The table itself already is scoped by the object type.
     ///     Example: ::Shape::vol
