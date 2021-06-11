@@ -776,7 +776,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let size_from_layout = vtable_layout.size.bytes();
 
-        // Check against the size we get from the layout from the what we 
+        // Check against the size we get from the layout from the what we
         // get constructing a value of that type
         let codegen_size = self.codegen_ty(inner_ty).sizeof(&self.symbol_table);
         assert!(size_from_layout == codegen_size);
