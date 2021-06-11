@@ -328,6 +328,7 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
                     Type::empty(),
                 ),
                 Some(Stmt::block(block, loc.clone())),
+                None,
                 Location::none(),
             )
         });
