@@ -23,6 +23,7 @@ use tracing::{debug, warn};
 
 mod assumptions;
 pub mod cbmc;
+mod current_fn;
 mod hooks;
 mod intrinsic;
 mod metadata;
@@ -41,33 +42,33 @@ pub struct GotocCodegenBackend();
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
         self.current_fn_mut().set_current_bb(bb);
-        let label: String = self.find_label(&bb);
+        let label: String = self.current_fn().find_label(&bb);
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
         match bbd.statements.len() {
             0 => {
                 let term = bbd.terminator();
                 let tcode = self.codegen_terminator(term);
-                self.current_fn_mut().block.push(tcode.with_label(label));
+                self.current_fn_mut().push_onto_block(tcode.with_label(label));
             }
             _ => {
                 let stmt = &bbd.statements[0];
                 let scode = self.codegen_statement(stmt);
-                self.current_fn_mut().block.push(scode.with_label(label));
+                self.current_fn_mut().push_onto_block(scode.with_label(label));
 
                 for s in &bbd.statements[1..] {
                     let stmt = self.codegen_statement(s);
-                    self.current_fn_mut().block.push(stmt);
+                    self.current_fn_mut().push_onto_block(stmt);
                 }
                 let term = self.codegen_terminator(bbd.terminator());
-                self.current_fn_mut().block.push(term);
+                self.current_fn_mut().push_onto_block(term);
             }
         }
-        self.current_fn_mut().current_bb = None;
+        self.current_fn_mut().reset_current_bb();
     }
 
     fn codegen_declare_variables(&mut self) {
-        let mir = self.mir();
+        let mir = self.current_fn().mir();
         let ldecls = mir.local_decls();
         ldecls.indices().for_each(|lc| {
             let base_name = match self.find_debug_info(&lc) {
@@ -86,25 +87,25 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // declare local variables. 0 represents return value
             if lc.index() < 1 || lc.index() > mir.arg_count {
-                self.current_fn_mut().block.push(Stmt::decl(sym_e, None, loc));
+                self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, None, loc));
             }
         });
     }
 
     /// collect all labels for goto
     fn codegen_prepare_blocks(&self) -> Vec<String> {
-        self.mir().basic_blocks().indices().map(|bb| format!("{:?}", bb)).collect()
+        self.current_fn().mir().basic_blocks().indices().map(|bb| format!("{:?}", bb)).collect()
     }
 
     pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
         self.set_current_fn(instance);
-        let name = self.fname();
+        let name = self.current_fn().name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
         assert!(old_sym.is_function());
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
         } else {
-            let mir = self.mir();
+            let mir = self.current_fn().mir();
             self.print_instance(instance, mir);
             let labels = self.codegen_prepare_blocks();
             self.current_fn_mut().set_labels(labels);
@@ -113,7 +114,7 @@ impl<'tcx> GotocCtx<'tcx> {
             mir.basic_blocks().iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
 
             let loc = self.codegen_span2(&mir.span);
-            let stmts = std::mem::replace(&mut self.current_fn_mut().block, vec![]);
+            let stmts = self.current_fn_mut().extract_block();
             let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
         }
@@ -163,8 +164,8 @@ impl<'tcx> GotocCtx<'tcx> {
     fn declare_function(&mut self, instance: Instance<'tcx>) {
         debug!("declaring {}; {:?}", instance, instance);
         self.set_current_fn(instance);
-        self.ensure(&self.fname(), |ctx, fname| {
-            let mir = ctx.mir();
+        self.ensure(&self.current_fn().name(), |ctx, fname| {
+            let mir = ctx.current_fn().mir();
             Symbol::function(
                 fname,
                 ctx.fn_typ(),

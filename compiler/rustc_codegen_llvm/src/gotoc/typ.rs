@@ -928,8 +928,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// the function type of the current instance
     pub fn fn_typ(&mut self) -> Type {
-        let mir = self.mir();
-        let sig = self.fn_sig();
+        let mir = self.current_fn().mir();
+        let sig = self.current_fn().sig();
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
         let params = sig
