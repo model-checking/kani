@@ -104,7 +104,10 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         let loc = tcx.codegen_span_option2(span);
 
         Stmt::block(
-            vec![Stmt::assume(cond, loc.clone()), Stmt::goto(tcx.find_label(&target), loc.clone())],
+            vec![
+                Stmt::assume(cond, loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
+            ],
             loc,
         )
     }
@@ -132,7 +135,7 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         let target = target.unwrap();
         let pt = tcx.place_ty(&p);
         if pt.is_unit() {
-            Stmt::goto(tcx.find_label(&target), loc)
+            Stmt::goto(tcx.current_fn().find_label(&target), loc)
         } else {
             let pe = tcx.codegen_place(&p).goto_expr;
             Stmt::block(
@@ -143,7 +146,7 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
                         None => Stmt::skip(loc.clone()),
                         Some(f) => Stmt::assume(f.call(vec![pe.address_of()]), loc.clone()),
                     },
-                    Stmt::goto(tcx.find_label(&target), loc.clone()),
+                    Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
                 ],
                 loc,
             )
@@ -229,7 +232,7 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
             Stmt::block(
                 vec![
                     tcx.codegen_intrinsic(instance, fargs, &p, span),
-                    Stmt::goto(tcx.find_label(&target), loc.clone()),
+                    Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
                 ],
                 loc,
             )
@@ -263,7 +266,7 @@ impl<'tcx> GotocHook<'tcx> for MemReplace {
         let place_layout = tcx.layout_of(place_type);
         let place_is_zst = place_layout.is_zst();
         if place_is_zst {
-            Stmt::block(vec![Stmt::goto(tcx.find_label(&target), loc.clone())], loc)
+            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target), loc.clone())], loc)
         } else {
             let dest = fargs.remove(0);
             let src = fargs.remove(0);
@@ -273,7 +276,7 @@ impl<'tcx> GotocHook<'tcx> for MemReplace {
                         .goto_expr
                         .assign(dest.clone().dereference().with_location(loc.clone()), loc.clone()),
                     dest.dereference().assign(src, loc.clone()),
-                    Stmt::goto(tcx.find_label(&target), loc.clone()),
+                    Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
                 ],
                 loc,
             )
@@ -336,7 +339,7 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
         Stmt::block(
             vec![
                 tcx.find_function(&func_name).unwrap().call(vec![x, y]).as_stmt(loc.clone()),
-                Stmt::goto(tcx.find_label(&target), loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
         )
@@ -374,7 +377,7 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
                 tcx.codegen_place(&p)
                     .goto_expr
                     .assign(src.dereference().with_location(loc.clone()), loc.clone()),
-                Stmt::goto(tcx.find_label(&target), loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
         )
@@ -410,7 +413,7 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
         Stmt::block(
             vec![
                 dst.dereference().assign(src, loc.clone()).with_location(loc.clone()),
-                Stmt::goto(tcx.find_label(&target), loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
         )
@@ -446,7 +449,7 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
                                 .cast_to(Type::unsigned_int(8).to_pointer()),
                             loc,
                         ),
-                        Stmt::goto(tcx.find_label(&target), Location::none()),
+                        Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
                     ],
                     Location::none(),
                 )
@@ -482,7 +485,7 @@ impl<'tcx> GotocHook<'tcx> for RustDealloc {
                         BuiltinFn::Free
                             .call(vec![ptr.cast_to(Type::void_pointer())], loc.clone())
                             .as_stmt(loc.clone()),
-                        Stmt::goto(tcx.find_label(&target), Location::none()),
+                        Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
                     ],
                     loc,
                 )
@@ -524,7 +527,7 @@ impl<'tcx> GotocHook<'tcx> for RustRealloc {
                         .cast_to(Type::unsigned_int(8).to_pointer()),
                     loc.clone(),
                 ),
-                Stmt::goto(tcx.find_label(&target), loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
         )
@@ -560,7 +563,7 @@ impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
                         .cast_to(Type::unsigned_int(8).to_pointer()),
                     loc.clone(),
                 ),
-                Stmt::goto(tcx.find_label(&target), loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
         )
@@ -601,7 +604,7 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
                 loc.clone(),
             )
             .with_location(loc.clone());
-        Stmt::block(vec![code, Stmt::goto(tcx.find_label(&target), loc.clone())], loc)
+        Stmt::block(vec![code, Stmt::goto(tcx.current_fn().find_label(&target), loc.clone())], loc)
     }
 }
 
