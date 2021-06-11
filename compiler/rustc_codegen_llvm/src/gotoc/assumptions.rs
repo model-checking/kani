@@ -215,7 +215,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let len = sl.member("len", &tcx.symbol_table);
             let mut invariants = vec![];
             if is_ref {
-                invariants.push(data.clone().neq(data.typ().null()));
+                invariants.push(data.clone().is_nonnull());
             }
             if let Some(f) = f {
                 //CHECKME: why is this 2?
@@ -224,7 +224,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let lbody = Stmt::block(
                     vec![
                         data.clone()
-                            .neq(data.typ().null())
+                            .is_nonnull()
                             .implies(f.call(vec![data.plus(idx.clone())]))
                             .not()
                             .if_then_else(
@@ -262,10 +262,10 @@ impl<'tcx> GotocCtx<'tcx> {
             let x = ptr.dereference();
             let mut invarints = vec![];
             if is_ref {
-                invarints.push(x.clone().neq(x.typ().null()));
+                invarints.push(x.clone().is_nonnull());
             }
             if let Some(f) = f {
-                invarints.push(x.clone().neq(x.typ().null()).implies(f.call(vec![x])));
+                invarints.push(x.clone().is_nonnull().implies(f.call(vec![x])));
             }
             body.push(fold_invariants(invarints).ret(Location::none()));
         })
@@ -586,6 +586,7 @@ impl<'tcx> GotocCtx<'tcx> {
             fname,
             Type::code(vec![var.to_function_parameter()], Type::bool()),
             Some(body),
+            None,
             Location::none(),
         )
     }

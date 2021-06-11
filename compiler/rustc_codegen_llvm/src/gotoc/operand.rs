@@ -282,6 +282,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func_name,
                 Type::code(vec![param.to_function_parameter()], cgt),
                 Some(Stmt::block(body, Location::none())),
+                None,
                 Location::none(),
             )
         });
@@ -538,6 +539,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &fname,
                 Type::code(vec![param.to_function_parameter()], cgt),
                 Some(Stmt::block(body, Location::none())),
+                None,
                 Location::none(),
             )
         });
@@ -548,8 +550,15 @@ impl<'tcx> GotocCtx<'tcx> {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
         // make sure the functions imported from other modules are in the symbol table
-        self.ensure(&func, |_, _| {
-            Symbol::function(&func, funct.clone(), None, Location::none()).with_is_extern(true)
+        self.ensure(&func, |ctx, _| {
+            Symbol::function(
+                &func,
+                funct.clone(),
+                None,
+                Some(ctx.readable_instance_name(instance)),
+                Location::none(),
+            )
+            .with_is_extern(true)
         });
         Expr::symbol_expression(func, funct).with_location(self.codegen_span_option2(span.cloned()))
     }

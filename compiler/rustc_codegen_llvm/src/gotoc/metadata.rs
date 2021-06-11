@@ -182,24 +182,11 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn.as_ref().map(|x| self.symbol_name(x.instance))
     }
 
-    /// Pretty name including crate path and trait information. For example:
-    ///    boxtrait_fail::<Concrete as Trait>::increment
-    /// Generated from the fn instance to insert into/lookup in the symbol table.
-    /// TODO: internal unit tests https://github.com/model-checking/rmc/issues/172
-    pub fn pretty_name_from_instance(&self, instance: Instance<'tcx>) -> String {
-        format!(
-            "{}::{}",
-            self.tcx.crate_name(instance.def_id().krate),
-            with_no_trimmed_paths(|| instance.to_string())
-        )
-    }
-
     /// For the vtable field name, we need exactly the dyn trait name and the function
     /// name. The table itself already is scoped by the object type.
     ///     Example: ::Shape::vol
     /// Note: this is _not_ the same name for top-level entry into the symbol table,
-    /// which does need more crate and type information. For now, the symbol table
-    /// name is from the pretty_name_from_instance function above.
+    /// which does need more crate/type information and uses the full symbol_name(...)
     pub fn vtable_field_name(&self, def_id: DefId) -> String {
         // `to_string_no_crate_verbose` is from Rust proper, we use it here because it
         // always includes the dyn trait name and function name.
@@ -207,27 +194,28 @@ impl<'tcx> GotocCtx<'tcx> {
         self.tcx.def_path(def_id).to_string_no_crate_verbose()
     }
 
-    /// a human readable name in rust for reference
-    pub fn instance_name(&self, instance: Instance<'tcx>) -> String {
+    /// A human readable name in Rust for reference, should not be used as a key.
+    pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
         with_no_trimmed_paths(|| self.tcx.def_path_str(instance.def_id()))
     }
 
-    /// the actual function name used in the symbol table
+    /// The actual function name used in the symbol table
     pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
         let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
         debug!(
             "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}, demangle: {}",
             instance,
             instance,
-            self.instance_name(instance),
+            self.readable_instance_name(instance),
             llvm_mangled,
             rustc_demangle::demangle(&llvm_mangled).to_string()
         );
 
-        let pretty = self.pretty_name_from_instance(instance);
+        let pretty = self.readable_instance_name(instance);
 
-        // make main function a special case for easy CBMC entry
-        if pretty.ends_with("::main") {
+        // Make main function a special case for easy CBMC entry
+        // TODO: probably need to edit for https://github.com/model-checking/rmc/issues/169
+        if pretty == "main" {
             "main".to_string()
         } else {
             // TODO: llvm mangled string is not very readable. one way to tackle this is to
@@ -460,6 +448,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &fn_name,
                 Type::code(vec![], Type::constructor()),
                 Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
+                None,
                 Location::none(),
             )
             .with_is_file_local(true)
