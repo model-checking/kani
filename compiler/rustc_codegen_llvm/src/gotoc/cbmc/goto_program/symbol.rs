@@ -113,6 +113,7 @@ impl Symbol {
             name,
             Type::code_with_unnamed_parameters(param_types, return_type),
             None,
+            None,
             Location::builtin_function(name, None),
         )
     }
@@ -135,15 +136,20 @@ impl Symbol {
         .with_is_static_lifetime(true) //TODO with thread local was also true??
     }
 
-    pub fn function(name: &str, typ: Type, body: Option<Stmt>, loc: Location) -> Symbol {
-        // TODO should take pretty name
+    pub fn function(
+        name: &str,
+        typ: Type,
+        body: Option<Stmt>,
+        pretty_name: Option<String>,
+        loc: Location,
+    ) -> Symbol {
         Symbol::new(
             name.to_string(),
             loc,
             typ,
             body.map_or(SymbolValues::None, |x| SymbolValues::Stmt(x)),
             Some(name.to_string()),
-            None,
+            pretty_name,
         )
         .with_is_lvalue(true)
     }
