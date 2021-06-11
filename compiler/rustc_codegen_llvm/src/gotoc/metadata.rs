@@ -6,6 +6,7 @@ use super::cbmc::goto_program::{
     DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type,
 };
 use super::cbmc::utils::aggr_name;
+use crate::gotoc::current_fn::CurrentFnCtx;
 use crate::gotoc::hooks::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
@@ -14,7 +15,7 @@ use rustc_data_structures::sync::MetadataRef;
 use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_middle::middle::cstore::MetadataLoader;
 use rustc_middle::mir::interpret::Allocation;
-use rustc_middle::mir::{BasicBlock, Body, HasLocalDecls, Local, Operand, Place, Rvalue};
+use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypeFoldable};
@@ -31,64 +32,6 @@ pub struct GotocCodegenResult {
 }
 
 pub struct GotocMetadataLoader();
-
-pub struct CurrentFnCtx<'tcx> {
-    // following fields are updated per function
-    /// the codegen instance for the current function
-    instance: Instance<'tcx>,
-    /// the def id for the current instance
-    _def_id: DefId,
-    /// the mir for the current instance
-    mir: &'tcx Body<'tcx>,
-    /// the goto labels for all blocks
-    labels: Vec<String>,
-    /// the block of the current function body
-    pub block: Vec<Stmt>,
-    /// the current basic block
-    pub current_bb: Option<BasicBlock>,
-    /// A counter to enable creating temporary variables
-    temp_var_counter: u64,
-}
-
-/// Constructor
-impl CurrentFnCtx<'tcx> {
-    pub fn new(instance: Instance<'tcx>, tcx: TyCtxt<'tcx>) -> Self {
-        Self {
-            instance,
-            mir: tcx.instance_mir(instance.def),
-            _def_id: instance.def_id(),
-            labels: vec![],
-            block: vec![],
-            current_bb: None,
-            temp_var_counter: 0,
-        }
-    }
-}
-
-/// Setters
-impl CurrentFnCtx<'tcx> {
-    pub fn get_and_incr_counter(&mut self) -> u64 {
-        let rval = self.temp_var_counter;
-        self.temp_var_counter += 1;
-        rval
-    }
-
-    pub fn set_current_bb(&mut self, bb: BasicBlock) {
-        self.current_bb = Some(bb);
-    }
-
-    pub fn set_labels(&mut self, labels: Vec<String>) {
-        assert!(self.labels.is_empty());
-        self.labels = labels;
-    }
-}
-
-/// Getters
-impl CurrentFnCtx<'tcx> {
-    pub fn labels(&self) -> &Vec<String> {
-        &self.labels
-    }
-}
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
@@ -118,24 +61,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn instance(&self) -> Instance<'tcx> {
-        self.current_fn().instance
-    }
-
-    pub fn mir(&self) -> &'tcx Body<'tcx> {
-        self.current_fn().mir
-    }
-
-    pub fn current_bb(&self) -> BasicBlock {
-        self.current_fn().current_bb.unwrap()
-    }
-
-    pub fn find_label(&self, bb: &BasicBlock) -> String {
-        self.current_fn().labels[bb.index()].clone()
-    }
-
     pub fn set_current_fn(&mut self, instance: Instance<'tcx>) {
-        self.current_fn = Some(CurrentFnCtx::new(instance, self.tcx));
+        self.current_fn = Some(CurrentFnCtx::new(instance, self));
     }
 
     pub fn current_fn(&self) -> &CurrentFnCtx<'tcx> {
@@ -163,23 +90,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let c = self.global_var_count;
         self.global_var_count += 1;
         format!("{}::global::{}::", self.crate_name(), c)
-    }
-
-    /// the name of the current function
-    pub fn fname(&self) -> String {
-        self.symbol_name(self.instance())
-    }
-
-    /// The name of the current function, if there is one.
-    /// None, if there is no current function (i.e. we are compiling global state).
-    ///
-    /// This method returns the function name for contexts describing functions
-    /// and the empty string for contexts describing static variables. It
-    /// currently returns the managled name. It should return the pretty name.
-    pub fn fname_option(&self) -> Option<String> {
-        // The function name is contained in the context member named instance,
-        // and instance is defined only for function contexts.
-        self.current_fn.as_ref().map(|x| self.symbol_name(x.instance))
     }
 
     /// For the vtable field name, we need exactly the dyn trait name and the function
@@ -316,8 +226,8 @@ impl<'tcx> GotocCtx<'tcx> {
         T: TypeFoldable<'tcx>,
     {
         // Instance is Some(..) only when current codegen unit is a function.
-        if self.current_fn.is_some() {
-            self.instance().subst_mir_and_normalize_erasing_regions(
+        if let Some(current_fn) = &self.current_fn {
+            current_fn.instance().subst_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::ParamEnv::reveal_all(),
                 value,
@@ -330,19 +240,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn local_ty(&self, l: Local) -> Ty<'tcx> {
-        self.monomorphize(self.mir().local_decls()[l].ty)
+        self.monomorphize(self.current_fn().mir().local_decls()[l].ty)
     }
 
     pub fn rvalue_ty(&self, rv: &Rvalue<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(rv.ty(self.mir().local_decls(), self.tcx))
+        self.monomorphize(rv.ty(self.current_fn().mir().local_decls(), self.tcx))
     }
 
     pub fn operand_ty(&self, o: &Operand<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(o.ty(self.mir().local_decls(), self.tcx))
+        self.monomorphize(o.ty(self.current_fn().mir().local_decls(), self.tcx))
     }
 
     pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(p.ty(self.mir().local_decls(), self.tcx).ty)
+        self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
     }
 
     pub fn closure_params(&self, substs: ty::subst::SubstsRef<'tcx>) -> Vec<Ty<'tcx>> {
@@ -400,10 +310,6 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    pub fn fn_sig(&self) -> ty::PolyFnSig<'tcx> {
-        self.fn_sig_of_instance(self.instance())
-    }
-
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
     /// It is an error to reuse an existing `c`, `fname` `prefix` tuple.
     fn gen_stack_variable(
@@ -429,7 +335,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate a new function local variable that can be used as a temporary in RMC expressions.
     pub fn gen_temp_variable(&mut self, t: Type, loc: Location) -> Symbol {
         let c = self.current_fn_mut().get_and_incr_counter();
-        self.gen_stack_variable(c, &self.fname(), "temp", t, loc)
+        self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc)
     }
 
     pub fn find_function(&mut self, fname: &str) -> Option<Expr> {

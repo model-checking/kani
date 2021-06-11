@@ -29,7 +29,9 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
-            TerminatorKind::Goto { target } => Stmt::goto(self.find_label(target), loc),
+            TerminatorKind::Goto { target } => {
+                Stmt::goto(self.current_fn().find_label(target), loc)
+            }
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => match targets {
                 SwitchTargets { values, targets } => {
                     self.codegen_switch_int(discr, switch_ty, values, targets)
@@ -38,7 +40,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
             TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
             TerminatorKind::Return => {
-                let rty = self.fn_sig().skip_binder().output();
+                let rty = self.current_fn().sig().skip_binder().output();
                 if rty.is_unit() {
                     self.codegen_ret_unit()
                 } else {
@@ -68,12 +70,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::block(
                     vec![
                         cond.cast_to(Type::bool()).if_then_else(
-                            Stmt::goto(self.find_label(target), loc.clone()),
+                            Stmt::goto(self.current_fn().find_label(target), loc.clone()),
                             None,
                             loc.clone(),
                         ),
                         Stmt::assert_false(&format!("{:?}", msg), loc.clone()),
-                        Stmt::goto(self.find_label(target), loc.clone()),
+                        Stmt::goto(self.current_fn().find_label(target), loc.clone()),
                     ],
                     loc,
                 )
@@ -118,7 +120,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .as_stmt(Location::none())
                 }
             };
-            let goto_target = Stmt::goto(self.find_label(target), Location::none());
+            let goto_target = Stmt::goto(self.current_fn().find_label(target), Location::none());
             let block = vec![drop_implementation, goto_target];
             Stmt::block(block, Location::none())
         }
@@ -275,7 +277,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 if let ty::InstanceDef::DropGlue(_, None) = instance.def {
                     // here an empty drop glue is invoked. we just ignore it.
-                    return Stmt::goto(self.find_label(&target), Location::none());
+                    return Stmt::goto(self.current_fn().find_label(&target), Location::none());
                 }
 
                 // Handle the case of a virtual function call via vtable lookup.
@@ -326,7 +328,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
 
                 // Add return jump.
-                stmts.push(Stmt::goto(self.find_label(&target), loc.clone()));
+                stmts.push(Stmt::goto(self.current_fn().find_label(&target), loc.clone()));
 
                 // Produce the full function call block.
                 Stmt::block(stmts, loc)
@@ -339,7 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     vec![
                         self.codegen_expr_to_place(&p, func_expr.call(fargs))
                             .with_location(loc.clone()),
-                        Stmt::goto(self.find_label(&target), loc.clone()),
+                        Stmt::goto(self.current_fn().find_label(&target), loc.clone()),
                     ],
                     loc,
                 )
@@ -371,7 +373,7 @@ impl<'tcx> GotocCtx<'tcx> {
         };
 
         let loc = self.codegen_span_option2(span);
-        let cbb = self.current_bb();
+        let cbb = self.current_fn().current_bb();
 
         // TODO: is it proper?
         //
@@ -380,10 +382,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // thus when we compile [panic], we would like to continue with
         // the code following [assert!(expr)] as well as display the panic
         // location using the assert's location.
-        let preds = &self.mir().predecessors()[cbb];
+        let preds = &self.current_fn().mir().predecessors()[cbb];
         if preds.len() == 1 {
             let pred: &BasicBlock = preds.first().unwrap();
-            let pred_bbd = &self.mir()[*pred];
+            let pred_bbd = &self.current_fn().mir()[*pred];
             let pterm = pred_bbd.terminator();
             match pterm.successors().find(|bb| **bb != cbb) {
                 None => self.codegen_assert_false(arg, loc),
@@ -392,7 +394,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Stmt::block(
                         vec![
                             self.codegen_assert_false(arg, loc.clone()),
-                            Stmt::goto(self.find_label(alt), Location::none()),
+                            Stmt::goto(self.current_fn().find_label(alt), Location::none()),
                         ],
                         loc,
                     )
