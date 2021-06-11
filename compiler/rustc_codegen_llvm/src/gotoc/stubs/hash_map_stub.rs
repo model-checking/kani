@@ -80,7 +80,7 @@ impl<'tcx> GotocHook<'tcx> for HashMapStub<'tcx> {
                 self.translate_to_stub(tcx, instance, fargs, assign_to, target, "get")
             }
             _ if self.is_target_destructor(instance) => {
-                Stmt::goto(tcx.find_label(&target.unwrap()), Location::none())
+                Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), Location::none())
             }
             _ => unreachable!(),
         }

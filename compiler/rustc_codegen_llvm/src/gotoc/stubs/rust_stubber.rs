@@ -123,7 +123,7 @@ pub trait RustStubber<'tcx> {
         Stmt::block(
             vec![
                 tcx.codegen_expr_to_place(&p, fn_call),
-                Stmt::goto(tcx.find_label(&target), Location::none()),
+                Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
             ],
             Location::none(),
         )
