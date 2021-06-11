@@ -20,17 +20,10 @@ check-cbmc-version.py --major 5 --minor 30
 # Formatting check
 ./x.py fmt --check
 
-# Standalone rmc tests
+# Standalone rmc tests and cargo tests
 pushd $RUST_DIR
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-./x.py test -i --stage 1 cbmc firecracker prusti smack
-
-# Standalone cargo-rmc tests
-cd cargo-rmc-tests
-for DIR in */; do
-  ./run.py $DIR
-done
-popd
+./x.py test -i --stage 1 cbmc firecracker prusti smack src/test/cargo
 
 # run-make tests
 ./x.py test -i --stage 1 src/test/run-make --test-args gotoc

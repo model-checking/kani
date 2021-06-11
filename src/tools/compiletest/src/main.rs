@@ -582,6 +582,24 @@ fn collect_tests_from_dir(
     let build_dir = output_relative_path(config, relative_dir_path);
     fs::create_dir_all(&build_dir).unwrap();
 
+    // If we find a `Cargo.toml` file in the current directory and we're in
+    // Cargo mode, we should look for `*.expected` files and create an output
+    // directory corresponding to each to avoid race conditions during the
+    // testing phase. We immedietly return after adding the tests to avoid
+    // treating `*.rs` files as tests.
+    if config.mode == Mode::Cargo && dir.join("Cargo.toml").exists() {
+        for file in fs::read_dir(dir)? {
+            let file_path = file?.path();
+            if file_path.to_str().unwrap().ends_with(".expected") {
+                fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+                let paths =
+                    TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
+                tests.extend(make_test(config, &paths, inputs));
+            }
+        }
+        return Ok(());
+    }
+
     // Add each `.rs` file as a test, and recurse further on any
     // subdirectories we find, except for `aux` directories.
     for file in fs::read_dir(dir)? {
