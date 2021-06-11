@@ -18,7 +18,7 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_var_name(&self, l: &Local) -> String {
-        let fname = self.fname();
+        let fname = self.current_fn().name();
         match self.find_debug_info(l) {
             Some(info) => format!("{}::1::var{:?}::{}", fname, l, info.name),
             None => format!("{}::1::var{:?}", fname, l),
@@ -26,7 +26,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn find_debug_info(&self, l: &Local) -> Option<&VarDebugInfo<'tcx>> {
-        self.mir().var_debug_info.iter().find(|info| match info.value {
+        self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
             VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
             VarDebugInfoContents::Const(_) => false,
         })
