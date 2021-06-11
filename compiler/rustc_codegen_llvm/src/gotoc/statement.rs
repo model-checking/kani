@@ -278,10 +278,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     return Stmt::goto(self.find_label(&target), Location::none());
                 }
 
-                // Mutable so that we can override it in case of a virtual function call
-                // TODO is there a better way to do this without needing the mut?
-                let mut funce = self.codegen_operand(func);
-                if let InstanceDef::Virtual(def_id, size) = instance.def {
+                // Handle the case of a virtual function call via vtable lookup.
+                let mut stmts = if let InstanceDef::Virtual(def_id, size) = instance.def {
                     debug!(
                         "Codegen a call through a virtual function. def_id: {:?} size: {:?}",
                         def_id, size
@@ -299,21 +297,39 @@ impl<'tcx> GotocCtx<'tcx> {
                     let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
                     let vtable = vtable_ref.dereference();
                     let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
-                    funce = fn_ptr.dereference();
 
-                    //Update the argument from arg0 to arg0.data
+                    // Update the argument from arg0 to arg0.data
                     fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-                }
 
-                // Actually generate the function call, and store the return value, if any.
-                Stmt::block(
+                    // For soundness, add an assertion that the vtable function call is not null.
+                    // Otherwise, CBMC might treat this as an assert(0) and later user-added assertions
+                    // could be vacuously true.
+                    let call_is_nonnull = fn_ptr.clone().is_nonnull();
+                    let assert_msg =
+                        format!("Non-null virtual function call for {:?}", vtable_field_name);
+                    let assert_nonnull = Stmt::assert(call_is_nonnull, &assert_msg, loc.clone());
+
+                    // Virtual function call and corresponding nonnull assertion.
+                    let func_exp: Expr = fn_ptr.dereference();
                     vec![
-                        self.codegen_expr_to_place(&p, funce.call(fargs))
+                        assert_nonnull,
+                        self.codegen_expr_to_place(&p, func_exp.call(fargs))
                             .with_location(loc.clone()),
-                        Stmt::goto(self.find_label(&target), loc.clone()),
-                    ],
-                    loc,
-                )
+                    ]
+                } else {
+                    // Non-virtual function call.
+                    let func_exp = self.codegen_operand(func);
+                    vec![
+                        self.codegen_expr_to_place(&p, func_exp.call(fargs))
+                            .with_location(loc.clone()),
+                    ]
+                };
+
+                // Add return jump.
+                stmts.push(Stmt::goto(self.find_label(&target), loc.clone()));
+
+                // Produce the full function call block.
+                Stmt::block(stmts, loc)
             }
             ty::FnPtr(_) => {
                 let (p, target) = destination.unwrap();
