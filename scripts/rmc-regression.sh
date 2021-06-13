@@ -16,6 +16,7 @@ EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 
 # Required dependencies
 check-cbmc-version.py --major 5 --minor 30
+check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
 ./x.py fmt --check
