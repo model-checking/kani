@@ -178,25 +178,27 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Currently, we also add a well-formed flag field to the end of the struct.
     fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
+        let mut vtable_base = vec![
+            // TODO: get the correct type for the drop in place. For now, just use void*
+            Type::datatype_component("drop", Type::void_pointer()),
+            Type::datatype_component("size", Type::size_t()),
+            Type::datatype_component("align", Type::size_t()),
+        ];
         if let ty::Dynamic(binder, _region) = t.kind() {
-            // the virtual methods on the trait ref
-            let poly = binder.principal().unwrap().with_self_ty(self.tcx, t);
-            let mut flds = self
-                .tcx
-                .vtable_methods(poly)
-                .iter()
-                .cloned()
-                .filter_map(|method| method)
-                .map(|(def_id, substs)| self.trait_method_vtable_field_type(def_id, substs))
-                .collect();
+            // The virtual methods on the trait ref. Some auto traits have no methods.
+            if let Some(principal) = binder.principal() {
+                let poly = principal.with_self_ty(self.tcx, t);
+                let mut flds = self
+                    .tcx
+                    .vtable_methods(poly)
+                    .iter()
+                    .cloned()
+                    .filter_map(|method| method)
+                    .map(|(def_id, substs)| self.trait_method_vtable_field_type(def_id, substs))
+                    .collect();
 
-            let mut vtable_base = vec![
-                // TODO: get the correct type for the drop in place. For now, just use void*
-                Type::datatype_component("drop", Type::void_pointer()),
-                Type::datatype_component("size", Type::size_t()),
-                Type::datatype_component("align", Type::size_t()),
-            ];
-            vtable_base.append(&mut flds);
+                vtable_base.append(&mut flds);
+            }
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");

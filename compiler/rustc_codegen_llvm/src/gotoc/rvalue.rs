@@ -815,10 +815,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 let drop_irep = ctx.codegen_vtable_drop_in_place();
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
                 let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
-                let concrete_type =
-                    binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
-                let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
-                vtable_fields.append(&mut methods);
+                if let Some(principal) = binders.principal() {
+                    let concrete_type = principal.with_self_ty(ctx.tcx, src_mir_type);
+                    let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
+                    vtable_fields.append(&mut methods);
+                }
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,
