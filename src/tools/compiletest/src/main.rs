@@ -76,7 +76,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
             "mode",
             "which sort of compile tests to run",
             "run-pass-valgrind | pretty | debug-info | codegen | rustdoc \
-            | rustdoc-json | codegen-units | incremental | run-make | ui | js-doc-test | mir-opt | assembly | rmc",
+            | rustdoc-json | codegen-units | incremental | run-make | ui | js-doc-test | mir-opt | assembly | rmc | cargo-rmc",
         )
         .reqopt(
             "",
@@ -583,11 +583,11 @@ fn collect_tests_from_dir(
     fs::create_dir_all(&build_dir).unwrap();
 
     // If we find a `Cargo.toml` file in the current directory and we're in
-    // Cargo mode, we should look for `*.expected` files and create an output
-    // directory corresponding to each to avoid race conditions during the
-    // testing phase. We immedietly return after adding the tests to avoid
+    // Cargo-rmc mode, we should look for `*.expected` files and create an
+    // output directory corresponding to each to avoid race conditions during
+    // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    if config.mode == Mode::Cargo && dir.join("Cargo.toml").exists() {
+    if config.mode == Mode::CargoRMC && dir.join("Cargo.toml").exists() {
         for file in fs::read_dir(dir)? {
             let file_path = file?.path();
             if file_path.to_str().unwrap().ends_with(".expected") {

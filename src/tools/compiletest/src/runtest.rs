@@ -3,7 +3,7 @@
 use crate::common::{expected_output_path, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT};
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
 use crate::common::{
-    Assembly, Cargo, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC,
+    Assembly, CargoRMC, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC,
 };
 use crate::common::{Codegen, CodegenUnits, DebugInfo, Debugger, Rustdoc};
 use crate::common::{CompareMode, FailMode, PassMode};
@@ -354,7 +354,7 @@ impl<'test> TestCx<'test> {
             Assembly => self.run_assembly_test(),
             JsDocTest => self.run_js_doc_test(),
             RMC => self.run_rmc_test(),
-            Cargo => self.run_cargo_test(),
+            CargoRMC => self.run_cargo_rmc_test(),
         }
     }
 
@@ -2015,7 +2015,7 @@ impl<'test> TestCx<'test> {
                 rustc.arg(dir_opt);
             }
             RunPassValgrind | Pretty | DebugInfo | Codegen | Rustdoc | RustdocJson | RunMake
-            | CodegenUnits | JsDocTest | Assembly | RMC | Cargo => {
+            | CodegenUnits | JsDocTest | Assembly | RMC | CargoRMC => {
                 // do not use JSON output
             }
         }
@@ -2417,7 +2417,7 @@ impl<'test> TestCx<'test> {
     /// Runs cargo-rmc on the function specified by the stem of `self.testpaths.file`.
     /// An error message is printed to stdout if verification result does not
     /// contain the expected output in `self.testpaths.file`.
-    fn run_cargo_test(&self) {
+    fn run_cargo_rmc_test(&self) {
         // We create our own command for the same reasons listed in `run_rmc_test` method.
         let mut cargo = Command::new("cargo");
         // We run `cargo` on the directory where we found the `*.expected` file

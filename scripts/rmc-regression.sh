@@ -23,7 +23,7 @@ check-cbmc-version.py --major 5 --minor 30
 # Standalone rmc tests and cargo tests
 pushd $RUST_DIR
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-./x.py test -i --stage 1 cbmc firecracker prusti smack src/test/cargo
+./x.py test -i --stage 1 cbmc firecracker prusti smack cargo-rmc
 
 # run-make tests
 ./x.py test -i --stage 1 src/test/run-make --test-args gotoc
