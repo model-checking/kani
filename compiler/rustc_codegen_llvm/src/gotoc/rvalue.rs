@@ -756,8 +756,8 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// The size and alignment for the vtable is of the underlying type.
-    /// If we get the size and align of the ty::Ref, it will always be the size of a pointer
-    /// Whereas if we go inside the pointer, we get what appears to be the right type.
+    /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
+    /// returns the correct size to match rustc vtable values.
     ///
     /// TODO: Add a test that the sizeof given here matches the sizeof CBMC uses.
     /// This is hard to do in pure rust, since the .size field is not exposed, but could be added
@@ -767,19 +767,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `__CPROVER_POINTER_OFFSET(&((int *)0)[1])`
     fn codegen_vtable_size_and_align(&mut self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
-        let inner_ty = match operand_type.kind() {
-            ty::Ref(_, inner_type, ..) => inner_type,
-            ty::RawPtr(ty::TypeAndMut { ty: inner_type, .. }) => inner_type,
-            _ => operand_type,
-        };
-        let vtable_layout = self.layout_of(inner_ty);
-
+        let vtable_layout = self.layout_of(operand_type);
         let size_from_layout = vtable_layout.size.bytes();
 
         // Check against the size we get from the layout from the what we
         // get constructing a value of that type
-        let codegen_size = self.codegen_ty(inner_ty).sizeof(&self.symbol_table);
-        assert!(size_from_layout == codegen_size);
+        let codegen_size = self.codegen_ty(operand_type).sizeof(&self.symbol_table);
+        assert_eq!(size_from_layout, codegen_size);
 
         let vt_size = Expr::int_constant(size_from_layout, Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
