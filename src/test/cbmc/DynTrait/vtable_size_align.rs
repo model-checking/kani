@@ -14,6 +14,8 @@ use std::intrinsics::size_of;
 use std::mem::transmute;
 use std::raw::TraitObject;
 
+include!("../Helpers/vtable_utils.rs");
+
 // Different sized data fields on each struct
 struct Sheep {
     pub sheep_num: i32,
@@ -81,13 +83,13 @@ fn main() {
         assert!(*(data_ptr as *mut i32) == 7); // From Sheep
         
         let vtable_ptr = trait_object.vtable as *mut usize;
-        let drop_ptr = vtable_ptr.clone();
-        let size_ptr = vtable_ptr.offset(1) as *mut usize;
-        let align_ptr = vtable_ptr.offset(2) as *mut usize;
 
-        assert!(!drop_ptr.is_null());
-        assert!(*size_ptr == size_of::<i32>());
-        assert!(*align_ptr == size_of::<i32>());
+        // Drop pointer
+        assert!(!vtable_ptr.is_null());
+
+        // Size and align as usizes
+        assert!(size_from_vtable(vtable_ptr) == size_of::<i32>());
+        assert!(align_from_vtable(vtable_ptr) == size_of::<i32>());
     }
      // Check layout/values for Cow
     unsafe {
@@ -103,13 +105,13 @@ fn main() {
         assert!(*(data_ptr as *mut i8) == 9); // From Cow
         
         let vtable_ptr = trait_object.vtable as *mut usize;
-        let drop_ptr = vtable_ptr.clone();
-        let size_ptr = vtable_ptr.offset(1) as *mut usize;
-        let align_ptr = vtable_ptr.offset(2) as *mut usize;
 
-        assert!(!drop_ptr.is_null());
-        assert!(*size_ptr == size_of::<i8>());
-        assert!(*align_ptr == size_of::<i8>());
+        // Drop pointer
+        assert!(!vtable_ptr.is_null());
+
+        // Size and align as usizes
+        assert!(size_from_vtable(vtable_ptr) == size_of::<i8>());
+        assert!(align_from_vtable(vtable_ptr) == size_of::<i8>());
     }
 }
  

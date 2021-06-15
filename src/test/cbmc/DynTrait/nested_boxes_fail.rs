@@ -3,16 +3,16 @@
 
 // This test checks the size and align fields for 3-deep nested trait pointers. The 
 // outter 2 dynamic trait objects have fat pointers as their backing data.
+// In this failing tests, assertions are inverted to use !=.
 
 #![feature(core_intrinsics)]
 #![feature(raw)]
 #![allow(deprecated)]
 
+use std::fs::File;
 use std::intrinsics::size_of;
 use std::mem::transmute;
 use std::raw::TraitObject;
-
-include!("../Helpers/vtable_utils.rs");
 
 struct Foo {
     pub _a: i32,
@@ -31,8 +31,8 @@ fn main() {
         // Outermost trait object
         // The size is 16, because the data is another fat pointer
         let vtable3: *mut usize = trait_object3.vtable as *mut usize;
-        assert!(size_from_vtable(vtable3) == 16);
-        assert!(align_from_vtable(vtable3) == 8);
+        assert!(size_from_vtable(vtable3) != 16);
+        assert!(align_from_vtable(vtable3) != 8);
         
         // Inspect the data pointer from dyn_trait3
         let data_ptr3 = trait_object3.data as *mut usize;
@@ -41,8 +41,8 @@ fn main() {
         let vtable2 = *(data_ptr3.offset(1) as *mut *mut usize);
 
         // The size is 16, because the data is another fat pointer
-        assert!(size_from_vtable(vtable2) == 16);
-        assert!(align_from_vtable(vtable2) == 8);
+        assert!(size_from_vtable(vtable2) != 16);
+        assert!(align_from_vtable(vtable2) != 8);
         
         // Inspect the data pointer from dyn_trait2
         let data_ptr2 = *(data_ptr3 as *mut *mut usize);
@@ -51,7 +51,7 @@ fn main() {
         let vtable1 = *(data_ptr2.offset(1) as *mut *mut usize);
 
         // The size is 8, because the data is the Foo itself
-        assert!(size_from_vtable(vtable1) == size_of::<Foo>());
-        assert!(align_from_vtable(vtable1) == 4);
+        assert!(size_from_vtable(vtable1) != size_of::<Foo>());
+        assert!(align_from_vtable(vtable1) != 4);
     }
 }

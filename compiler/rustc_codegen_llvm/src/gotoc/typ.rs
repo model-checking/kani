@@ -180,6 +180,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = vec![
             // TODO: get the correct type for the drop in place. For now, just use void*
+            // https://github.com/model-checking/rmc/issues/11
             Type::datatype_component("drop", Type::void_pointer()),
             Type::datatype_component("size", Type::size_t()),
             Type::datatype_component("align", Type::size_t()),
