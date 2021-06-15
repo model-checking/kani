@@ -7,6 +7,7 @@ use super::metadata::*;
 use super::typ::{is_pointer, pointee_type};
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
+use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{self, Binder, Instance, IntTy, TraitRef, Ty, UintTy};
@@ -756,25 +757,42 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// The size and alignment for the vtable is of the underlying type.
-    /// If we get the size and align of the ty::Ref, it will always be the size of a pointer
-    /// Whereas if we go inside the pointer, we get what appears to be the right type.
-    ///
-    /// TODO: Add a test that the sizeof given here matches the sizeof CBMC uses.
-    /// This is hard to do in pure rust, since the .size field is not exposed, but could be added
-    /// to the initialization code.
+    /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
+    /// returns the correct size to match rustc vtable values. Checked via
+    /// RMC-compile-time and CBMC assertions in check_vtable_size.
     ///
     /// As per tautschn@, the way to get the sizeof an object in gotoc is
     /// `__CPROVER_POINTER_OFFSET(&((int *)0)[1])`
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
-        let vtable_layout = match operand_type.kind() {
-            ty::Ref(_, inner_type, ..) => self.layout_of(inner_type),
-            ty::RawPtr(ty::TypeAndMut { ty: inner_type, .. }) => self.layout_of(inner_type),
-            _ => self.layout_of(operand_type),
-        };
+        let vtable_layout = self.layout_of(operand_type);
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
+
         (vt_size, vt_align)
+    }
+
+    // Check the size are inserting in to the vtable against two sources of
+    // truth: (1) the compile-time rustc sizeof functions, and (2) the CBMC
+    //  __CPROVER_OBJECT_SIZE function.
+    fn check_vtable_size(&mut self, operand_type: Ty<'tcx>, vt_size: Expr) -> Stmt {
+        // Check against the size we get from the layout from the what we
+        // get constructing a value of that type
+        let ty: Type = self.codegen_ty(operand_type);
+        let codegen_size = ty.sizeof(&self.symbol_table);
+        assert_eq!(vt_size.int_constant_value().unwrap(), BigInt::from(codegen_size));
+
+        // Insert a CBMC-time size check, roughly:
+        //     <Ty> local_temp = nondet();
+        //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
+        let temp_var = self.gen_temp_variable(ty, Location::none()).to_expr();
+        let decl = Stmt::decl(temp_var.clone(), None, Location::none());
+        let check = Expr::eq(Expr::object_size(temp_var.address_of()), vt_size.clone());
+
+        // TODO: Add an rmc_sanity_check function https://github.com/model-checking/rmc/issues/200
+        let assert_msg = format!("Correct CBMC vtable size for {:?}", operand_type.kind());
+        let size_assert = Stmt::assert(check, &assert_msg, Location::none());
+        Stmt::block(vec![decl, size_assert], Location::none())
     }
 
     fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
@@ -810,18 +828,23 @@ impl<'tcx> GotocCtx<'tcx> {
                 // See compiler/rustc_codegen_llvm/src/gotoc/typ.rs `trait_vtable_field_types` for field order
                 let drop_irep = ctx.codegen_vtable_drop_in_place();
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
+                let size_assert = ctx.check_vtable_size(&src_mir_type, vt_size.clone());
                 let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
-                let concrete_type =
-                    binders.principal().unwrap().with_self_ty(ctx.tcx, src_mir_type);
-                let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
-                vtable_fields.append(&mut methods);
+
+                // The virtual methods on the trait ref. Some auto traits have no methods.
+                if let Some(principal) = binders.principal() {
+                    let concrete_type = principal.with_self_ty(ctx.tcx, src_mir_type);
+                    let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
+                    vtable_fields.append(&mut methods);
+                }
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,
                     &ctx.symbol_table,
                 );
                 let body = var.assign(vtable, Location::none());
-                Some(body)
+                let block = Stmt::block(vec![size_assert, body], Location::none());
+                Some(block)
             },
         )
     }
