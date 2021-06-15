@@ -759,26 +759,35 @@ impl<'tcx> GotocCtx<'tcx> {
     /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
     /// returns the correct size to match rustc vtable values.
     ///
-    /// TODO: Add a test that the sizeof given here matches the sizeof CBMC uses.
-    /// This is hard to do in pure rust, since the .size field is not exposed, but could be added
-    /// to the initialization code.
-    ///
     /// As per tautschn@, the way to get the sizeof an object in gotoc is
     /// `__CPROVER_POINTER_OFFSET(&((int *)0)[1])`
-    fn codegen_vtable_size_and_align(&mut self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
+    fn codegen_vtable_size_and_align(&mut self, operand_type: Ty<'tcx>) -> (Expr, Expr, Stmt) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);
         let size_from_layout = vtable_layout.size.bytes();
 
         // Check against the size we get from the layout from the what we
         // get constructing a value of that type
-        let codegen_size = self.codegen_ty(operand_type).sizeof(&self.symbol_table);
+        let ty = self.codegen_ty(operand_type);
+        let codegen_size = ty.sizeof(&self.symbol_table);
         assert_eq!(size_from_layout, codegen_size);
 
         let vt_size = Expr::int_constant(size_from_layout, Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
 
-        (vt_size, vt_align)
+        // Insert a CBMC-time size check, roughly:
+        //     <Ty> local_temp = nondet();
+        //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
+        let temp_name = self.gen_temp_variable(ty, Location::none()).to_expr();
+        let decl = Stmt::decl(temp_name.clone(), None, Location::none());
+        let check = Expr::eq(Expr::object_size(temp_name.address_of()), vt_size.clone());
+
+        // TODO: Add an rmc_sanity_check function https://github.com/model-checking/rmc/issues/200
+        let assert_msg = format!("Correct CBMC vtable size for {:?}", operand_type.kind());
+        let size_assert = Stmt::assert(check, &assert_msg, Location::none());
+        let assert_block = Stmt::block(vec![decl, size_assert], Location::none());
+
+        (vt_size, vt_align, assert_block)
     }
 
     fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
@@ -813,7 +822,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Build the vtable
                 // See compiler/rustc_codegen_llvm/src/gotoc/typ.rs `trait_vtable_field_types` for field order
                 let drop_irep = ctx.codegen_vtable_drop_in_place();
-                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
+                let (vt_size, vt_align, assertion) =
+                    ctx.codegen_vtable_size_and_align(&src_mir_type);
                 let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
                 if let Some(principal) = binders.principal() {
                     let concrete_type = principal.with_self_ty(ctx.tcx, src_mir_type);
@@ -826,7 +836,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     &ctx.symbol_table,
                 );
                 let body = var.assign(vtable, Location::none());
-                Some(body)
+                let block = Stmt::block(vec![body, assertion], Location::none());
+                Some(block)
             },
         )
     }
