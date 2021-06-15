@@ -8,7 +8,7 @@ use std::mem::transmute;
 use std::raw::TraitObject;
 use std::io::{sink, Write};
 
-include!("../Helpers/vtable_utils.rs");
+include!("../Helpers/vtable_utils_ignore.rs");
 
 fn main() {
     let mut log: Box<dyn Write + Send> = Box::new(sink());

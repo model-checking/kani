@@ -12,7 +12,7 @@ use std::intrinsics::size_of;
 use std::mem::transmute;
 use std::raw::TraitObject;
 
-include!("../Helpers/vtable_utils.rs");
+include!("../Helpers/vtable_utils_ignore.rs");
 
 struct Foo {
     pub _a: i32,
