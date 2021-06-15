@@ -97,13 +97,40 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn().mir().basic_blocks().indices().map(|bb| format!("{:?}", bb)).collect()
     }
 
+    fn should_skip_current_fn(&self) -> bool {
+        match self.current_fn().readable_name().as_str() {
+            //thread 'rustc' panicked at
+            //'Expected fat pointer, got
+            // Pointer { typ: StructTag("tag-fmt::Opaque") }
+            //in function fmt::ArgumentV1::<'a>::as_usize',
+            // compiler/rustc_codegen_llvm/src/gotoc/place.rs:96:13
+            "fmt::ArgumentV1::<'a>::as_usize" => true,
+            // https://doc.rust-lang.org/std/intrinsics/fn.caller_location.html
+            "panic::Location::<'a>::caller" => true,
+            // thread 'rustc' panicked at 'Can't cast
+            // Expr { value: Symbol { identifier: "_ZN54_$LT$dyn$u20$core..any..Any$u2b$core..marker..Send$GT$12downcast_ref17hfd95d38a01cb23d4E::1::var_3" }, typ: StructTag("tag-dyn core::any::Any + core::marker::Send"), location: None }
+            // Pointer { typ: Empty }', compiler/rustc_codegen_llvm/src/gotoc/cbmc/goto_program/expr.rs:408:9
+            "<(dyn core::any::Any + core::marker::Send + 'static)>::downcast_ref" => true,
+            _ => false,
+        }
+    }
+
     pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
+        dbg!(&old_sym.pretty_name);
         assert!(old_sym.is_function());
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
+        } else if self.should_skip_current_fn() {
+            dbg!("skipping");
+            let loc = self.codegen_span2(&self.current_fn().mir().span);
+            let body = Stmt::assert_false(
+                &format! {"The function {} is not curently supported by RMC", self.current_fn().readable_name()},
+                loc,
+            );
+            self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {
             let mir = self.current_fn().mir();
             self.print_instance(instance, mir);
@@ -170,7 +197,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 fname,
                 ctx.fn_typ(),
                 None,
-                Some(ctx.readable_instance_name(instance)),
+                Some(ctx.current_fn().readable_name()),
                 ctx.codegen_span2(&mir.span),
             )
         });
@@ -268,8 +295,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     MonoItem::Fn(instance) => c.declare_function(instance),
                     MonoItem::Static(def_id) => c.declare_static(def_id, item),
                     MonoItem::GlobalAsm(_) => {
-                        tcx.sess.err("does not support assembly code");
-                        tcx.sess.abort_if_errors()
+                        // tcx.sess.err("does not support assembly code");
+                        // tcx.sess.abort_if_errors()
                     }
                 }
             }
@@ -282,7 +309,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 match item {
                     MonoItem::Fn(instance) => c.codegen_function(instance),
                     MonoItem::Static(def_id) => c.codegen_static(def_id, item),
-                    MonoItem::GlobalAsm(_) => unreachable!(), // we have aborted above
+                    MonoItem::GlobalAsm(_) => {} //unreachable!(), // we have aborted above
                 }
             }
         }

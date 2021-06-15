@@ -486,7 +486,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 final_fields
             }
-            _ => unreachable!(),
+            // Primitives, such as NEVER, have no fields
+            FieldsShape::Primitive => vec![],
+            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields),
         }
     }
 
@@ -579,11 +581,15 @@ impl<'tcx> GotocCtx<'tcx> {
             // TODO, determine if this is the right course of action
             ty::FnDef(_, _) | ty::Never => self.codegen_ty(pointee_type).to_pointer(),
 
+            // These types were blocking stdlib. Doing the default thing to unblock.
+            // TODO, determine if this is the right course of action
+            ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
+
             // These types have no regression tests for them.
             // For soundess, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::FnPtr(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            //ty::FnPtr(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Generator(_, _, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
