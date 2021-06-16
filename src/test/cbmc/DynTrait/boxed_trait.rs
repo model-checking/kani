@@ -1,7 +1,7 @@
-/// Dynamic traits should work when used through a box
-/// Currently fails with error:
-///
-/// thread 'rustc' panicked at 'not implemented: from std::boxed::Box<Rectangle> to std::boxed::Box<dyn Shape>', src/librustc_codegen_llvm/gotoc/rvalue.rs:641:34
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Dynamic traits should work when used through a box
 trait Shape {
     fn area(&self) -> u32;
     fn vol(&self, z: u32) -> u32;
