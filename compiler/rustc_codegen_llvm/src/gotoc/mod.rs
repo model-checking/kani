@@ -122,7 +122,6 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
-        dbg!(self.current_fn().readable_name());
         let old_sym = self.symbol_table.lookup(&name).unwrap();
         assert!(old_sym.is_function());
         if old_sym.is_function_definition() {
