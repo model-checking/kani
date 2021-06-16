@@ -93,7 +93,12 @@ impl<'tcx> ProjectedPlace<'tcx> {
         let mir_typ_or_variant = mir_typ_or_variant.monomorphize(ctx);
         let fat_ptr_mir_typ = fat_ptr_mir_typ.map(|t| ctx.monomorphize(t));
         if let Some(fat_ptr) = &fat_ptr_goto_expr {
-            assert!(fat_ptr.typ().is_rust_fat_ptr(&ctx.symbol_table));
+            assert!(
+                fat_ptr.typ().is_rust_fat_ptr(&ctx.symbol_table),
+                "Expected fat pointer, got {:?} in function {}",
+                fat_ptr.typ(),
+                ctx.current_fn().readable_name()
+            );
         }
         // TODO: these assertions fail on a few regressions. Figure out why.
         // I think it may have to do with boxed fat pointers.
