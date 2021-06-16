@@ -468,6 +468,7 @@ impl<'a> Builder<'a> {
                 test::Prusti,
                 test::Serial,
                 test::SMACK,
+                test::CargoRMC,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),
