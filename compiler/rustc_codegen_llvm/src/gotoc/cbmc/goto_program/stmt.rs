@@ -187,15 +187,12 @@ impl Stmt {
         Stmt::assert(Expr::bool_false(), msg, loc)
     }
 
-    /// RMC-specific function to sanity check expected components of in code
-    /// generation. If users see these assertions fail, something in our
+    /// A __CPROVER_assert to sanity check expected components of code
+    /// generation. If users see these assertions fail, something in the
     /// translation to Gotoc has gone wrong, and we want them to file an issue.
-    pub fn assert_sanity_check(expect_true: Expr, message: &str, loc: Location) -> Stmt {
-        let url = "https://github.com/model-checking/rmc/issues/new?template=bug_report.md";
-        let assert_msg = format!(
-            "RMC code generation sanity check: {}. Please report failures:\n{}",
-            message, url
-        );
+    pub fn assert_sanity_check(expect_true: Expr, message: &str, url: &str, loc: Location) -> Stmt {
+        let assert_msg =
+            format!("Code generation sanity check: {}. Please report failures:\n{}", message, url);
 
         Stmt::block(
             vec![
