@@ -789,7 +789,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let decl = Stmt::decl(temp_var.clone(), None, Location::none());
         let check = Expr::eq(Expr::object_size(temp_var.address_of()), vt_size.clone());
         let assert_msg = format!("Correct CBMC vtable size for {:?}", operand_type.kind());
-        let size_assert = self.codegen_sanity_check(check, &assert_msg, Location::none());
+        let size_assert = Stmt::assert_sanity_check(check, &assert_msg, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
 
