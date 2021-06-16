@@ -3,12 +3,10 @@
 
 use crate::gotoc::GotocCtx;
 use crate::gotoc::Stmt;
-use rustc_hir::def_id::DefId;
 use rustc_middle::mir::BasicBlock;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::Instance;
 use rustc_middle::ty::PolyFnSig;
-use rustc_middle::ty::TyCtxt;
 
 /// This structure represents useful data about the function we are currently compiling.
 pub struct CurrentFnCtx<'tcx> {
@@ -108,8 +106,8 @@ impl CurrentFnCtx<'tcx> {
     }
 
     /// The pretty name of the function we are currently compiling
-    pub fn readable_name(&self) -> String {
-        self.readable_name.clone()
+    pub fn readable_name(&self) -> &str {
+        &self.readable_name
     }
 
     /// The signature of the function we are currently compiling
