@@ -76,13 +76,13 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug)
 
 
-def cargo_build(crate, verbose=False, debug=False, mangler="v0"):
+def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0"):
     rustflags = ["-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}", f"--cfg={RMC_CFG}"]
     rustflags = " ".join(rustflags)
     if "RUSTFLAGS" in os.environ:
         rustflags = os.environ["RUSTFLAGS"] + " " + rustflags
 
-    build_cmd = ["cargo", "build"]
+    build_cmd = ["cargo", "build", "--target-dir", target_dir]
     build_env = {"RUSTFLAGS": rustflags,
                  "RUSTC": RMC_RUSTC_EXE,
                  "PATH": os.environ["PATH"],
@@ -102,11 +102,11 @@ def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
     return run_cmd(cbmc_cmd, label="cbmc", output_to="stdout", verbose=verbose, quiet=quiet)
 
-def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir="."):
-    results_filename = "results.xml"
-    coverage_filename = "coverage.xml"
-    property_filename = "property.xml"
-    temp_goto_filename = "temp.goto"
+def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir=".", outdir="."):
+    results_filename = os.path.join(outdir, "results.xml")
+    coverage_filename = os.path.join(outdir, "coverage.xml")
+    property_filename = os.path.join(outdir, "property.xml")
+    temp_goto_filename = os.path.join(outdir, "temp.goto")
     if not keep_temps:
         for filename in [results_filename, coverage_filename, property_filename, temp_goto_filename]:
             atexit.register(delete_file, filename)
@@ -115,7 +115,7 @@ def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_tem
     # 2) cbmc --xml-ui --trace ~/rmc/library/rmc/rmc_lib.c temp.goto > results.xml
     # 3) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c temp.goto > coverage.xml
     # 4) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c temp.goto > property.xml
-    # 5) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto temp.goto
+    # 5) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto temp.goto --reportdir report
 
     run_goto_cc(cbmc_filename, temp_goto_filename, verbose, quiet)
     
@@ -128,7 +128,8 @@ def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_tem
     run_cbmc_local(cbmc_xml_args + ["--cover", "location"], coverage_filename)
     run_cbmc_local(cbmc_xml_args + ["--show-properties"], property_filename)
 
-    run_cbmc_viewer(temp_goto_filename, results_filename, coverage_filename, property_filename, verbose, quiet, srcdir, wkdir)
+    run_cbmc_viewer(temp_goto_filename, results_filename, coverage_filename,
+                    property_filename, verbose, quiet, srcdir, wkdir, os.path.join(outdir, "report"))
 
     return retcode
 
@@ -136,14 +137,15 @@ def run_goto_cc(src, dst, verbose=False, quiet=False, function="main"):
     cmd = ["goto-cc"] + ["--function", function] + [src] + ["-o", dst]
     return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet)
 
-def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property_filename, verbose=False, quiet=False, srcdir=".", wkdir="."):
+def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property_filename, verbose=False, quiet=False, srcdir=".", wkdir=".", reportdir="report"):
     cmd = ["cbmc-viewer"] + \
           ["--result", results_filename] + \
           ["--coverage", coverage_filename] + \
           ["--property", property_filename] + \
           ["--srcdir", os.path.realpath(srcdir)] + \
           ["--wkdir", os.path.realpath(wkdir)] + \
-          ["--goto", goto_filename]
+          ["--goto", goto_filename] + \
+          ["--reportdir", reportdir]
     return run_cmd(cmd, label="cbmc-viewer", verbose=verbose, quiet=quiet)
 
 
