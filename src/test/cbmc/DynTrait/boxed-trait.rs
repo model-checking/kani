@@ -51,5 +51,5 @@ fn main() {
 
     let square = Box::new(Square { w: 3 });
     assert!(square.vol(3) == 27);
-    //   assert!(do_vol(&square, 2) == 18);
+    assert!(do_vol(&*square, 2) == 18);
 }
