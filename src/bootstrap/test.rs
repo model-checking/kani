@@ -1210,6 +1210,8 @@ default_test!(Serial { path: "src/test/serial", mode: "rmc", suite: "serial" });
 
 default_test!(SMACK { path: "src/test/smack", mode: "rmc", suite: "smack" });
 
+default_test!(CargoRMC { path: "src/test/cargo-rmc", mode: "cargo-rmc", suite: "cargo-rmc" });
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Compiletest {
     compiler: Compiler,
