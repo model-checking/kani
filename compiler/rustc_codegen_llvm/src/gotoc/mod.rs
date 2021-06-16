@@ -97,6 +97,28 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn().mir().basic_blocks().indices().map(|bb| format!("{:?}", bb)).collect()
     }
 
+    fn should_skip_current_fn(&self) -> bool {
+        match self.current_fn().readable_name() {
+            // https://github.com/model-checking/rmc/issues/202
+            "fmt::ArgumentV1::<'a>::as_usize" => true,
+            // https://github.com/model-checking/rmc/issues/203
+            "<(dyn core::any::Any + core::marker::Send + 'static)>::downcast_ref" => true,
+            // https://github.com/model-checking/rmc/issues/204
+            x if x.ends_with("__getit") => true,
+            // https://github.com/model-checking/rmc/issues/205
+            "panic::Location::<'a>::caller" => true,
+            // https://github.com/model-checking/rmc/issues/206
+            "core::sync::atomic::atomic_swap" => true,
+            // https://github.com/model-checking/rmc/issues/207
+            "core::slice::<impl [T]>::split_first" => true,
+            // https://github.com/model-checking/rmc/issues/208
+            "panicking::take_hook" => true,
+            // https://github.com/model-checking/rmc/issues/209
+            "panicking::r#try" => true,
+            _ => false,
+        }
+    }
+
     pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
@@ -104,6 +126,17 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(old_sym.is_function());
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
+        } else if self.should_skip_current_fn() {
+            debug!("Skipping function {}", self.current_fn().readable_name());
+            let loc = self.codegen_span2(&self.current_fn().mir().span);
+            let body = Stmt::assert_false(
+                &format!(
+                    "The function {} is not currently supported by RMC",
+                    self.current_fn().readable_name()
+                ),
+                loc,
+            );
+            self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {
             let mir = self.current_fn().mir();
             self.print_instance(instance, mir);
@@ -170,7 +203,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 fname,
                 ctx.fn_typ(),
                 None,
-                Some(ctx.readable_instance_name(instance)),
+                Some(ctx.current_fn().readable_name().to_string()),
                 ctx.codegen_span2(&mir.span),
             )
         });
@@ -268,8 +301,10 @@ impl CodegenBackend for GotocCodegenBackend {
                     MonoItem::Fn(instance) => c.declare_function(instance),
                     MonoItem::Static(def_id) => c.declare_static(def_id, item),
                     MonoItem::GlobalAsm(_) => {
-                        tcx.sess.err("does not support assembly code");
-                        tcx.sess.abort_if_errors()
+                        warn!(
+                            "Crate {} contains global ASM, which is not handled by RMC",
+                            c.crate_name()
+                        );
                     }
                 }
             }
@@ -282,7 +317,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 match item {
                     MonoItem::Fn(instance) => c.codegen_function(instance),
                     MonoItem::Static(def_id) => c.codegen_static(def_id, item),
-                    MonoItem::GlobalAsm(_) => unreachable!(), // we have aborted above
+                    MonoItem::GlobalAsm(_) => {} // We have already warned above
                 }
             }
         }

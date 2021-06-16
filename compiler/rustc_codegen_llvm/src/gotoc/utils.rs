@@ -88,7 +88,12 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(e.typ().is_rust_box(), "expected rust box {:?}", e);
         let unique_ptr_typ =
             self.symbol_table.lookup_field_type_in_type(e.typ(), "0").unwrap().clone();
-        assert!(unique_ptr_typ.is_rust_unique_pointer());
+        assert!(
+            unique_ptr_typ.is_rust_unique_pointer(),
+            "{:?}\n\t{}",
+            unique_ptr_typ,
+            self.current_fn().readable_name()
+        );
         e.member("0", &self.symbol_table).member("pointer", &self.symbol_table)
     }
 
@@ -133,7 +138,9 @@ impl Type {
     /// Checks if the struct represents a Rust "Unique"
     pub fn is_rust_unique_pointer(&self) -> bool {
         self.type_name().map_or(false, |name| {
-            name.starts_with("tag-std::ptr::Unique") || name.starts_with("tag-core::ptr::Unique")
+            name.starts_with("tag-std::ptr::Unique")
+                || name.starts_with("tag-core::ptr::Unique")
+                || name.starts_with("tag-rustc_std_workspace_core::ptr::Unique")
         })
     }
 

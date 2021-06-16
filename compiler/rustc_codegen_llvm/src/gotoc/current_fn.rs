@@ -3,12 +3,10 @@
 
 use crate::gotoc::GotocCtx;
 use crate::gotoc::Stmt;
-use rustc_hir::def_id::DefId;
 use rustc_middle::mir::BasicBlock;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::Instance;
 use rustc_middle::ty::PolyFnSig;
-use rustc_middle::ty::TyCtxt;
 
 /// This structure represents useful data about the function we are currently compiling.
 pub struct CurrentFnCtx<'tcx> {
@@ -24,6 +22,8 @@ pub struct CurrentFnCtx<'tcx> {
     mir: &'tcx Body<'tcx>,
     /// The symbol name of the current function
     name: String,
+    /// A human readable pretty name for the current function
+    readable_name: String,
     /// The signature of the current function
     sig: PolyFnSig<'tcx>,
     /// A counter to enable creating temporary variables
@@ -40,6 +40,7 @@ impl CurrentFnCtx<'tcx> {
             labels: vec![],
             mir: gcx.tcx.instance_mir(instance.def),
             name: gcx.symbol_name(instance),
+            readable_name: gcx.readable_instance_name(instance),
             sig: gcx.fn_sig_of_instance(instance),
             temp_var_counter: 0,
         }
@@ -102,6 +103,11 @@ impl CurrentFnCtx<'tcx> {
     /// The name of the function we are currently compiling
     pub fn name(&self) -> String {
         self.name.clone()
+    }
+
+    /// The pretty name of the function we are currently compiling
+    pub fn readable_name(&self) -> &str {
+        &self.readable_name
     }
 
     /// The signature of the function we are currently compiling

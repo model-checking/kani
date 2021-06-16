@@ -224,7 +224,7 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
         span: Option<Span>,
     ) -> Stmt {
         let loc = tcx.codegen_span_option2(span);
-        if (tcx.symbol_name(instance) == "abort") {
+        if tcx.symbol_name(instance) == "abort" {
             Stmt::assert_false("abort intrinsic reached", loc)
         } else {
             let p = assign_to.unwrap();
