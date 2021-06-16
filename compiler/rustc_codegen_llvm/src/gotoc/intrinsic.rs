@@ -255,6 +255,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_load" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_acq" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_relaxed" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_load_unordered" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_or" => codegen_atomic_binop!(bitor),
             "atomic_or_acq" => codegen_atomic_binop!(bitor),
             "atomic_or_acqrel" => codegen_atomic_binop!(bitor),
@@ -263,6 +264,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_store" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_store_unordered" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_xadd" => codegen_atomic_binop!(plus),
             "atomic_xadd_acq" => codegen_atomic_binop!(plus),
             "atomic_xadd_acqrel" => codegen_atomic_binop!(plus),
@@ -434,7 +436,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "va_start" => unimplemented!(),
             "volatile_set_memory" => unimplemented!(),
             "volatile_store" => unimplemented!(),
-            _ => unimplemented!("unsupported intrinsic: {}", intrinsic),
+            _ => unimplemented!(
+                "unsupported intrinsic: {}\n\tin function {}",
+                intrinsic,
+                self.current_fn().readable_name()
+            ),
         }
     }
 
