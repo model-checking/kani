@@ -24,6 +24,7 @@ pub enum Mode {
     MirOpt,
     Assembly,
     RMC,
+    CargoRMC,
 }
 
 impl Mode {
@@ -55,6 +56,7 @@ impl FromStr for Mode {
             "mir-opt" => Ok(MirOpt),
             "assembly" => Ok(Assembly),
             "rmc" => Ok(RMC),
+            "cargo-rmc" => Ok(CargoRMC),
             _ => Err(()),
         }
     }
@@ -77,6 +79,7 @@ impl fmt::Display for Mode {
             MirOpt => "mir-opt",
             Assembly => "assembly",
             RMC => "rmc",
+            CargoRMC => "cargo-rmc",
         };
         fmt::Display::fmt(s, f)
     }
