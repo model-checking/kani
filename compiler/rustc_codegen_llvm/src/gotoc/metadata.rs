@@ -394,37 +394,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
         Expr::statement_expression(body, t).with_location(loc)
     }
-
-    /// RMC-specific function to sanity check expected components of in code
-    /// generation. If users see these assertions fail, something in our
-    /// translation to Gotoc has gone wrong, and we want them to file an issue.
-    pub fn codegen_sanity_check(
-        &mut self,
-        expect_true: Expr,
-        message: &str,
-        loc: Location,
-    ) -> Stmt {
-        let url = "https://github.com/model-checking/rmc/issues/new?template=bug_report.md";
-        let assert_msg = format!(
-            "RMC code generation sanity check: {}. Please report failures:\n{}",
-            message, url
-        );
-
-        Stmt::block(
-            vec![
-                // Assert our expected true expression.
-                Stmt::assert(expect_true.clone(), &assert_msg, loc.clone()),
-                // If it fails, assume false to block any further exploration of this path.
-                Stmt::if_then_else(
-                    expect_true.not(),
-                    Stmt::assume(Expr::bool_false(), loc.clone()),
-                    None,
-                    loc.clone(),
-                ),
-            ],
-            loc,
-        )
-    }
 }
 
 impl<'tcx> LayoutOf for GotocCtx<'tcx> {
