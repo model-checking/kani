@@ -99,18 +99,22 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn should_skip_current_fn(&self) -> bool {
         match self.current_fn().readable_name().as_str() {
-            //thread 'rustc' panicked at
-            //'Expected fat pointer, got
-            // Pointer { typ: StructTag("tag-fmt::Opaque") }
-            //in function fmt::ArgumentV1::<'a>::as_usize',
-            // compiler/rustc_codegen_llvm/src/gotoc/place.rs:96:13
+            // https://github.com/model-checking/rmc/issues/202
             "fmt::ArgumentV1::<'a>::as_usize" => true,
-            // https://doc.rust-lang.org/std/intrinsics/fn.caller_location.html
-            "panic::Location::<'a>::caller" => true,
-            // thread 'rustc' panicked at 'Can't cast
-            // Expr { value: Symbol { identifier: "_ZN54_$LT$dyn$u20$core..any..Any$u2b$core..marker..Send$GT$12downcast_ref17hfd95d38a01cb23d4E::1::var_3" }, typ: StructTag("tag-dyn core::any::Any + core::marker::Send"), location: None }
-            // Pointer { typ: Empty }', compiler/rustc_codegen_llvm/src/gotoc/cbmc/goto_program/expr.rs:408:9
+            // https://github.com/model-checking/rmc/issues/203
             "<(dyn core::any::Any + core::marker::Send + 'static)>::downcast_ref" => true,
+            // https://github.com/model-checking/rmc/issues/204
+            "sys_common::thread_info::THREAD_INFO::__getit" => true,
+            // https://github.com/model-checking/rmc/issues/205
+            "panic::Location::<'a>::caller" => true,
+            // https://github.com/model-checking/rmc/issues/206
+            "core::sync::atomic::atomic_swap" => true,
+            // https://github.com/model-checking/rmc/issues/207
+            "core::slice::<impl [T]>::split_first" => true,
+            // https://github.com/model-checking/rmc/issues/208
+            "panicking::take_hook" => true,
+            // https://github.com/model-checking/rmc/issues/209
+            "panicking::r#try" => true,
             _ => false,
         }
     }
@@ -119,12 +123,11 @@ impl<'tcx> GotocCtx<'tcx> {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
-        dbg!(&old_sym.pretty_name);
         assert!(old_sym.is_function());
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
-            dbg!("skipping");
+            debug!("Skipping function {}", self.current_fn().readable_name());
             let loc = self.codegen_span2(&self.current_fn().mir().span);
             let body = Stmt::assert_false(
                 &format! {"The function {} is not curently supported by RMC", self.current_fn().readable_name()},

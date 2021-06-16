@@ -428,7 +428,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "prefetch_read_instruction" => unimplemented!(),
             "prefetch_write_data" => unimplemented!(),
             "prefetch_write_instruction" => unimplemented!(),
-            "try" => unimplemented!(),
+            "try" => unimplemented!(
+                "unsupported intrinsic: {}\n\tin function {}",
+                intrinsic,
+                self.current_fn().readable_name()
+            ),
             "unaligned_volatile_store" => unimplemented!(),
             "va_arg" => unimplemented!(),
             "va_copy" => unimplemented!(),
