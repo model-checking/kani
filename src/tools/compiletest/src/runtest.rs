@@ -2438,7 +2438,7 @@ impl<'test> TestCx<'test> {
         self.add_rmc_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run_compiler(cargo, None);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
-        // Print an error if the verification result does not contains the expected lines.
+        // Print an error if the verification result does not contain the expected lines.
         if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
         {
             self.fatal_proc_rec(
@@ -2462,7 +2462,7 @@ impl<'test> TestCx<'test> {
         self.add_rmc_dir_to_path(&mut rmc);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
-        // Print an error if the verification result does not contains the expected lines.
+        // Print an error if the verification result does not contain the expected lines.
         let expected =
             fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
         if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
