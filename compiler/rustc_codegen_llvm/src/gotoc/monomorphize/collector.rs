@@ -810,20 +810,20 @@ fn create_mono_items_for_vtable_methods<'tcx>(
             assert!(!poly_trait_ref.has_escaping_bound_vars());
 
             // Walk all methods of the trait, including those of its supertraits
-            let methods = tcx.vtable_methods(poly_trait_ref);
+            let methods = tcx.vtable_entries(poly_trait_ref);
             let methods = methods
                 .iter()
                 .cloned()
-                .filter_map(|method| method)
-                .map(|(def_id, substs)| {
-                    ty::Instance::resolve_for_vtable(
+                .map(|entry| match entry {
+                    ty::VtblEntry::Method(def_id, substs) => ty::Instance::resolve_for_vtable(
                         tcx,
                         ty::ParamEnv::reveal_all(),
                         def_id,
                         substs,
-                    )
-                    .unwrap()
+                    ),
+                    _ => None,
                 })
+                .filter_map(|x| x)
                 .filter(|&instance| should_codegen_locally(tcx, &instance))
                 .map(|item| create_fn_mono_item(item, source));
             output.extend(methods);
