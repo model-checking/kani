@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use super::cbmc::utils::aggr_name;
+use super::cbmc::utils::{aggr_name, BUG_REPORT_URL};
 use super::cbmc::MachineModel;
 use super::metadata::*;
 use super::typ::{is_pointer, pointee_type};
@@ -788,10 +788,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let temp_var = self.gen_temp_variable(ty, Location::none()).to_expr();
         let decl = Stmt::decl(temp_var.clone(), None, Location::none());
         let check = Expr::eq(Expr::object_size(temp_var.address_of()), vt_size.clone());
-
-        // TODO: Add an rmc_sanity_check function https://github.com/model-checking/rmc/issues/200
         let assert_msg = format!("Correct CBMC vtable size for {:?}", operand_type.kind());
-        let size_assert = Stmt::assert(check, &assert_msg, Location::none());
+        let size_assert =
+            Stmt::assert_sanity_check(check, &assert_msg, BUG_REPORT_URL, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
 
