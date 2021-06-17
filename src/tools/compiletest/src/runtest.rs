@@ -2419,7 +2419,7 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs cargo-rmc on the function specified by the stem of `self.testpaths.file`.
-    /// An error message is printed to stdout if verification result does not
+    /// An error message is printed to stdout if verification output does not
     /// contain the expected output in `self.testpaths.file`.
     fn run_cargo_rmc_test(&self) {
         // We create our own command for the same reasons listed in `run_rmc_test` method.
@@ -2438,18 +2438,11 @@ impl<'test> TestCx<'test> {
         self.add_rmc_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run_compiler(cargo, None);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
-        // Print an error if the verification result does not contain the expected lines.
-        if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
-        {
-            self.fatal_proc_rec(
-                &format!("test failed: expected output to contain the line: {}", line),
-                &proc_res,
-            );
-        }
+        self.verify_output(&proc_res, &expected);
     }
 
     /// Runs RMC on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification result does not contain
+    /// message is printed to stdout if verification output does not contain
     /// the expected output in `expected` file.
     fn run_expected_test(&self) {
         // We create our own command for the same reasons listed in `run_rmc_test` method.
@@ -2460,11 +2453,15 @@ impl<'test> TestCx<'test> {
             .arg("--")
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
-        self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
-        // Print an error if the verification result does not contain the expected lines.
         let expected =
             fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
+        self.verify_output(&proc_res, &expected);
+    }
+
+    /// Print an error if the verification output does not contain the expected
+    /// lines.
+    fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
         if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
         {
             self.fatal_proc_rec(

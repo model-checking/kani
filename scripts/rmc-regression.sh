@@ -19,6 +19,6 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Formatting check
 ./x.py fmt --check
 
-# Standalone rmc tests, cargo tests, and expected tests
+# Standalone rmc tests, expected tests, and cargo tests
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-./x.py test -i --stage 1 cbmc firecracker prusti smack cargo-rmc expected
+./x.py test -i --stage 1 cbmc firecracker prusti smack expected cargo-rmc
