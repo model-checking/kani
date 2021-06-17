@@ -19,7 +19,12 @@ impl<'tcx> GotocCtx<'tcx> {
             Ok(pathbuf) => pathbuf.to_str().unwrap().to_string(),
             Err(_) => filename0,
         };
-        Location::new(filename1, self.current_fn.as_ref().map(|x| x.name()), line, Some(col))
+        Location::new(
+            filename1,
+            self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
+            line,
+            Some(col),
+        )
     }
 
     pub fn codegen_span_option(&self, sp: Option<Span>) -> Location {
