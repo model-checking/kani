@@ -742,16 +742,16 @@ impl<'tcx> GotocCtx<'tcx> {
         //DSN This assumes that we always get the methods back in the same order.
         let methods = self
             .tcx
-            .vtable_methods(trait_ref_t)
+            .vtable_entries(trait_ref_t)
             .iter()
             .cloned()
-            // if `optional_method` is None then the method cannot be called from this object
-            // in this case, do not emit a field
-            .filter_map(|optional_method| {
-                optional_method.map(|(def_id, substs)| {
-                    self.codegen_vtable_method_field(def_id, substs, trait_ref_t, t)
-                })
+            .map(|entry| match entry {
+                ty::VtblEntry::Method(def_id, substs) => {
+                    Some(self.codegen_vtable_method_field(def_id, substs, trait_ref_t, t))
+                }
+                _ => None,
             })
+            .filter_map(|x| x)
             .collect();
         methods
     }
