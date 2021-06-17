@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Useful utilities for CBMC
 
+/// RMC bug report URL, for asserts/errors
+pub const BUG_REPORT_URL: &str =
+    "https://github.com/model-checking/rmc/issues/new?template=bug_report.md";
+
 /// The aggregate name used in CBMC for aggregates of type `n`.
 pub fn aggr_name(n: &str) -> String {
     format!("tag-{}", n)
