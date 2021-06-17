@@ -3,7 +3,7 @@
 use crate::common::{expected_output_path, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT};
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
 use crate::common::{
-    Assembly, CargoRMC, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC,
+    Assembly, CargoRMC, Expected, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC,
 };
 use crate::common::{Codegen, CodegenUnits, DebugInfo, Debugger, Rustdoc};
 use crate::common::{CompareMode, FailMode, PassMode};
@@ -355,6 +355,7 @@ impl<'test> TestCx<'test> {
             JsDocTest => self.run_js_doc_test(),
             RMC => self.run_rmc_test(),
             CargoRMC => self.run_cargo_rmc_test(),
+            Expected => self.run_expected_test(),
         }
     }
 
@@ -2018,7 +2019,7 @@ impl<'test> TestCx<'test> {
                 rustc.arg(dir_opt);
             }
             RunPassValgrind | Pretty | DebugInfo | Codegen | Rustdoc | RustdocJson | RunMake
-            | CodegenUnits | JsDocTest | Assembly | RMC | CargoRMC => {
+            | CodegenUnits | JsDocTest | Assembly | RMC | CargoRMC | Expected => {
                 // do not use JSON output
             }
         }
@@ -2418,7 +2419,7 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs cargo-rmc on the function specified by the stem of `self.testpaths.file`.
-    /// An error message is printed to stdout if verification result does not
+    /// An error message is printed to stdout if verification output does not
     /// contain the expected output in `self.testpaths.file`.
     fn run_cargo_rmc_test(&self) {
         // We create our own command for the same reasons listed in `run_rmc_test` method.
@@ -2437,7 +2438,30 @@ impl<'test> TestCx<'test> {
         self.add_rmc_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run_compiler(cargo, None);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
-        // Print an error if the verification result does not contains the expected lines.
+        self.verify_output(&proc_res, &expected);
+    }
+
+    /// Runs RMC on the test file specified by `self.testpaths.file`. An error
+    /// message is printed to stdout if verification output does not contain
+    /// the expected output in `expected` file.
+    fn run_expected_test(&self) {
+        // We create our own command for the same reasons listed in `run_rmc_test` method.
+        let mut rmc = Command::new("rmc");
+        // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
+        rmc.args(&self.props.rmc_flags)
+            .arg(&self.testpaths.file)
+            .arg("--")
+            .args(&self.props.cbmc_flags);
+        self.add_rmc_dir_to_path(&mut rmc);
+        let proc_res = self.compose_and_run_compiler(rmc, None);
+        let expected =
+            fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
+        self.verify_output(&proc_res, &expected);
+    }
+
+    /// Print an error if the verification output does not contain the expected
+    /// lines.
+    fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
         if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
         {
             self.fatal_proc_rec(
