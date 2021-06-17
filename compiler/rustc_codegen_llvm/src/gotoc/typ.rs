@@ -191,11 +191,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 let poly = principal.with_self_ty(self.tcx, t);
                 let mut flds = self
                     .tcx
-                    .vtable_methods(poly)
+                    .vtable_entries(poly)
                     .iter()
                     .cloned()
-                    .filter_map(|method| method)
-                    .map(|(def_id, substs)| self.trait_method_vtable_field_type(def_id, substs))
+                    .map(|entry| match entry {
+                        ty::VtblEntry::Method(def_id, substs) => {
+                            Some(self.trait_method_vtable_field_type(def_id, substs))
+                        }
+                        _ => None,
+                    })
+                    .filter_map(|x| x)
                     .collect();
 
                 vtable_base.append(&mut flds);
