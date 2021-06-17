@@ -1,0 +1,6 @@
+line 28 attempt to compute `((*_1).0: usize) + const 1_usize`, which would overflow: SUCCESS
+line 28 arithmetic overflow on unsigned + in self->len + 1: SUCCESS
+line 58 assertion failed: a.is_some(): FAILURE
+line 59 assertion failed: a.is_none(): FAILURE
+line 61 assertion failed: b.is_some(): SUCCESS
+line 62 assertion failed: b.is_none(): FAILURE
