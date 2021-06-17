@@ -1,9 +1,0 @@
-array 'y'.0 upper bound in y.0[var_8]: SUCCESS
-array 'y'.0 upper bound in y.0[var_12]: SUCCESS
-array 'y'.0 upper bound in y.0[var_16]: FAILURE
-array 'x'.0 upper bound in x.0[var_3]: SUCCESS
-array 'x'.0 upper bound in x.0[var_5]: SUCCESS
-line 11 assertion failed: y[0] == 1: SUCCESS
-line 12 assertion failed: y[1] == 2: SUCCESS
-line 13 index out of bounds: the length is move _17 but the index is _16: FAILURE
-line 13 assertion failed: y[z] == 3: FAILURE
