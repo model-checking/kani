@@ -3,8 +3,12 @@
 
 include!("../../rmc-prelude.rs");
 
+fn __VERIFIER_expect_fail(cond: bool, msg: &str)  {
+    unimplemented!()
+}
+
 fn main() {
     let i: i32 = __nondet();
     __VERIFIER_assume(i < 10);
-    assert!(i > 20);
+    __VERIFIER_expect_fail(i > 20, "Blocked by assumption above.");
 }
