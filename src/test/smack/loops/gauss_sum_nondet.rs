@@ -5,9 +5,7 @@
 
 // cbmc-flags: --unwind 5 --unwinding-assertions
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let mut sum = 0;

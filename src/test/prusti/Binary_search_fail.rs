@@ -43,9 +43,7 @@ fn binary_search<T: Ord>(arr: &[T], elem: &T) -> Option<usize> {
     None
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn get() -> [i32; 11] {
     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
