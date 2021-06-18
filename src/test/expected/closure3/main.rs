@@ -7,9 +7,7 @@ fn call_with_one<F, T>(f: F) -> T
     f(10)
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let num: i64 = __nondet();

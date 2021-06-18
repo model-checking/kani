@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::convert::TryInto;
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     let input: &[u8] = &vec![

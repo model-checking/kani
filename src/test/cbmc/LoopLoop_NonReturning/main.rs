@@ -3,9 +3,7 @@
 
 // cbmc-flags: --unwind 10 --unwinding-assertions
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     let mut a: u32 = __nondet();

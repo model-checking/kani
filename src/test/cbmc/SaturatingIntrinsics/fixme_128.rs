@@ -5,9 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics;
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     let v: u128 = __nondet();

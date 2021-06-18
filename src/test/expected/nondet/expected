@@ -1,5 +1,5 @@
-line 11 attempt to compute `move _12 * move _13`, which would overflow: SUCCESS
-line 11 attempt to compute `const 2_i32 * move _16`, which would overflow: SUCCESS
-line 11 attempt to compute `move _11 - move _15`, which would overflow: SUCCESS
-line 11 attempt to compute `move _10 + const 1_i32`, which would overflow: SUCCESS
-line 11 assertion failed: x * x - 2 * x + 1 != 4 || (x == -1 || x == 3): SUCCESS
+line 9 attempt to compute `move _12 * move _13`, which would overflow: SUCCESS
+line 9 attempt to compute `const 2_i32 * move _16`, which would overflow: SUCCESS
+line 9 attempt to compute `move _11 - move _15`, which would overflow: SUCCESS
+line 9 attempt to compute `move _10 + const 1_i32`, which would overflow: SUCCESS
+line 9 assertion failed: x * x - 2 * x + 1 != 4 || (x == -1 || x == 3): SUCCESS

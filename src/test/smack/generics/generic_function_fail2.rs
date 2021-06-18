@@ -33,9 +33,7 @@ fn swapem<T, U: S<T>>(s: U) -> U {
     s.swap_items()
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let x2 = __nondet();

@@ -12,9 +12,7 @@ fn eq2(a: i32, b: i32) {
     assert!(a - b < a);
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     let a = __nondet();
