@@ -13,9 +13,7 @@ fn fac(n: u64) -> u64 {
     }
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let mut a = 1;

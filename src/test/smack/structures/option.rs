@@ -6,9 +6,7 @@ fn safe_div(x: u32, y: u32) -> Option<u32> {
     if y != 0 { Some(x / y) } else { None }
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let x = __nondet();

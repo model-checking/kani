@@ -36,9 +36,7 @@ impl AddAssign for Point {
     }
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let w = __nondet();

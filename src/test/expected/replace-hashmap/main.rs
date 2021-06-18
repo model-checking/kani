@@ -5,9 +5,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::collections::hash_map::RandomState;
 use std::borrow::Borrow;
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 use std::marker::PhantomData;
 struct CbmcHashMap<K,V, S=RandomState> {len: usize, _k : PhantomData<K>, _s : PhantomData<S>, last : Option<V>}
