@@ -1,12 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+include!("../../rmc-prelude.rs");
+
 #[derive(Debug, PartialEq)]
 pub enum Unit {
     Unit,
-}
-
-fn __nondet<T>() -> T {
-    unimplemented!()
 }
 
 fn foo(input: &Result<u32, Unit>) -> u32 {
