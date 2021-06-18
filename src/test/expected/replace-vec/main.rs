@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(allocator_api)]
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 use std::marker::PhantomData;
 use std::alloc::Allocator;

@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     let mut a: u32 = __nondet();

@@ -3,9 +3,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics;
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 macro_rules! test_saturating_intrinsics {
     ($ty:ty) => {
