@@ -6,9 +6,7 @@ fn double(a: u32) -> u32 {
     a * 2
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let a = __nondet();
