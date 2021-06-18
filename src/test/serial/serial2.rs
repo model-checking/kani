@@ -322,9 +322,7 @@ impl Serial {
     }
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     {
