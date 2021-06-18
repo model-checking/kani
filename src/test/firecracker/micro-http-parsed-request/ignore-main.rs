@@ -3,9 +3,7 @@
 // Example from Firecracker micro_http request handling
 // https://github.com/firecracker-microvm/firecracker/commit/22908c9fb0cd5fb20febc5d18ff1284caa5f3a53
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 // Should return a nondet string of up to n characters
 // Currently RMC does not support strings
