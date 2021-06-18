@@ -10,9 +10,7 @@ where
     some_closure(1);
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 pub fn main() {
     let mut num: i32 = __nondet();
