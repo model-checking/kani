@@ -25,9 +25,7 @@ static mut TRACK_READ_OBJ: Option<GuestAddress> = None;
 
 pub struct GuestMemoryMmap {}
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 impl GuestMemoryMmap {
     fn checked_offset(&self, base: GuestAddress, offset: usize) -> Option<GuestAddress> {
