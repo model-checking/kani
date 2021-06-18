@@ -61,8 +61,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 };
                 let n = sz.mul(count);
-                let e = BuiltinFn::$f.call(vec![dst, src, n], loc);
-                self.codegen_expr_to_place(p, e)
+                let call_memcopy = BuiltinFn::$f.call(vec![dst.clone(), src, n.clone()], loc);
+
+                // The C implementation of memcpy does not allow an invalid pointer for
+                // the src/dst, but the LLVM implementation specifies that a copy with
+                // length zero is a no-op. This comes up specifically when handling
+                // the empty string; CBMC will fail on passing a reference to empty
+                // string unless we codegen this zero check.
+                // https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic
+                let copy_if_nontrivial = n.is_zero().ternary(dst, call_memcopy);
+                self.codegen_expr_to_place(p, copy_if_nontrivial)
             }};
         }
 
