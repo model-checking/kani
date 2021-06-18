@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::slice;
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 // From Listing 19-7: Creating a slice from an arbitrary memory location. https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html
 fn main() {
