@@ -53,9 +53,7 @@ fn expand(ranges: Vec<(u32, u32)>) -> Vec<u32> {
     return v;
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
+include!("../../rmc-prelude.rs");
 
 fn main() {
     let mut input = vec![0; 2];
