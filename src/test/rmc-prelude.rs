@@ -5,6 +5,10 @@ fn __VERIFIER_assume(cond: bool) {
     unimplemented!()
 }
 
+fn __VERIFIER_expect_fail(cond: bool) {
+    unimplemented!()
+}
+
 fn __nondet<T>() -> T {
     unimplemented!()
 }
