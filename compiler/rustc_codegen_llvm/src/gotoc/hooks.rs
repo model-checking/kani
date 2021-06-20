@@ -74,6 +74,46 @@ fn name_is(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str) -> bool 
     false
 }
 
+struct ExpectFail;
+impl<'tcx> GotocHook<'tcx> for ExpectFail {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        let def_path = tcx.def_path(instance.def.def_id());
+        if let Some(data) = def_path.data.last() {
+            match data.data.name() {
+                DefPathDataName::Named(name) => {
+                    return name.to_string().starts_with("__VERIFIER_expect_fail");
+                }
+                DefPathDataName::Anon { .. } => (),
+            }
+        }
+        false
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        _assign_to: Option<Place<'tcx>>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let target = target.unwrap();
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        //TODO: actually use the error message passed by the user.
+        let msg = "EXPECTED FAIL";
+        let loc = tcx.codegen_span_option2(span);
+        Stmt::block(
+            vec![
+                Stmt::assert(cond, msg, loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
+            ],
+            loc,
+        )
+    }
+}
+
 struct Assume;
 impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
@@ -616,6 +656,7 @@ pub fn type_and_fn_hooks<'tcx>() -> (GotocTypeHooks<'tcx>, GotocHooks<'tcx>) {
         hooks: vec![
             Rc::new(Panic), //Must go first, so it overrides Nevers
             Rc::new(Assume),
+            Rc::new(ExpectFail),
             Rc::new(Intrinsic),
             Rc::new(MemReplace),
             Rc::new(MemSwap),
