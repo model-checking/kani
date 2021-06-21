@@ -175,13 +175,14 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
     /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
     /// `get_vtable`.
-    ///
-    /// Currently, we also add a well-formed flag field to the end of the struct.
     fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
+        // `drop_in_place` is a function with type t -> (), the vtable needs a
+        // pointer to it
+        let drop_ty =
+            Type::code_with_unnamed_parameters(vec![self.codegen_ty(t)], Type::unit()).to_pointer();
+
         let mut vtable_base = vec![
-            // TODO: get the correct type for the drop in place. For now, just use void*
-            // https://github.com/model-checking/rmc/issues/11
-            Type::datatype_component("drop", Type::void_pointer()),
+            Type::datatype_component("drop", drop_ty),
             Type::datatype_component("size", Type::size_t()),
             Type::datatype_component("align", Type::size_t()),
         ];
