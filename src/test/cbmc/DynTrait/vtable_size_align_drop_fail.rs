@@ -87,7 +87,7 @@ fn main() {
         let vtable_ptr = trait_object.vtable as *mut usize;
 
         // Drop pointer
-        assert!(vtable_ptr.is_null());
+        assert!(drop_from_vtrable(vtable_ptr) != drop_in_place::<Sheep> as *mut ());
         
         // Size and align as usizes
         assert!(size_from_vtable(vtable_ptr) != size_of::<i32>());
@@ -109,7 +109,7 @@ fn main() {
         let vtable_ptr = trait_object.vtable as *mut usize;
 
         // Drop pointer
-        assert!(vtable_ptr.is_null());
+        assert!(drop_from_vtrable(vtable_ptr) != drop_in_place::<Cow> as *mut ());
 
         // Size and align as usizes
         assert!(size_from_vtable(vtable_ptr) != size_of::<i8>());
