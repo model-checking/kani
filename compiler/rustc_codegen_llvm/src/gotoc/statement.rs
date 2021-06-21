@@ -96,6 +96,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     // TODO: this function doesn't handle unwinding which begins if the destructor panics
+    // https://github.com/model-checking/rmc/issues/221
     fn codegen_drop(&mut self, location: &Place<'tcx>, target: &BasicBlock) -> Stmt {
         // instance for drop function
         let loc_ty = self.place_ty(location);
