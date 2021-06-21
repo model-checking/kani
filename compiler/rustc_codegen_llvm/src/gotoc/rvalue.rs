@@ -712,26 +712,23 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_vtable_drop_in_place(&self) -> Expr {
-        // TODO: The following still needs to be done for the destructor (drop_in_place method), but before that
-        // the right type for drop_in_place needs to be set in typ.rs in codegen_ty_ref method as well.
-        // Atm we pass a nullpointer instead (Type::empty().pointer(ctx.ptr_width()).null() in vtable_base)
-        // This is sound, because CBMC will give a pointer error if we ever actually use it.
-        //
-        // let drop_instance =
-        //     Instance::resolve_drop_in_place(ctx.tcx, operand_type);
-        // let drop_method_name = self.symbol_name(drop_instance);
-        // let drop_inst_type =
-        //     drop_instance.ty(self.tcx, ty::ParamEnv::reveal_all());
-        // let drop_irep = data::Variable {
-        //     data: drop_method_name.clone(),
-        //     typ: self.codegen_ty(drop_inst_type),
-        //     // typ: output_type,
-        //     location: data::Irep::nil(),
-        // }
-        // .to_expr()
-        // .address_of();
-        Type::void_pointer().null()
+    /// Generate a function pointer to drop_in_place for entry into the vtable
+    fn codegen_vtable_drop_in_place(
+        &mut self,
+        ty: Ty<'tcx>,
+        trait_ty: &'tcx ty::TyS<'tcx>,
+    ) -> Expr {
+        let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty);
+        let drop_sym_name = self.symbol_name(drop_instance);
+        let drop_sym = self.symbol_table.lookup(&drop_sym_name).unwrap().clone();
+
+        // The drop instance has the concrete object type, for consistency with
+        // type codegen we need the trait type for the function parameter.
+        let trait_fn_ty =
+            Type::code_with_unnamed_parameters(vec![self.codegen_ty(trait_ty)], Type::unit())
+                .to_pointer();
+
+        Expr::symbol_expression(drop_sym_name, drop_sym.typ).address_of().cast_to(trait_fn_ty)
     }
 
     fn codegen_vtable_methods(
@@ -825,7 +822,7 @@ impl<'tcx> GotocCtx<'tcx> {
             |ctx, var| {
                 // Build the vtable
                 // See compiler/rustc_codegen_llvm/src/gotoc/typ.rs `trait_vtable_field_types` for field order
-                let drop_irep = ctx.codegen_vtable_drop_in_place();
+                let drop_irep = ctx.codegen_vtable_drop_in_place(&src_mir_type, trait_type);
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
                 let size_assert = ctx.check_vtable_size(&src_mir_type, vt_size.clone());
                 let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
