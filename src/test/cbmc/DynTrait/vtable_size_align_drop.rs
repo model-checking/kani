@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks the `size` and `align` fields of vtables, for a 
+// This test checks the `size` and `align` fields of vtables, for a
 // dynamic trait where two implementing structs have different sizes.
 // The strategy is to cast the dyn trait object to a raw::TraitObject
 // then do some unsafe pointer math.
@@ -12,6 +12,7 @@
 
 use std::intrinsics::size_of;
 use std::mem::transmute;
+use std::ptr::drop_in_place;
 use std::raw::TraitObject;
 
 include!("../Helpers/vtable_utils_ignore.rs");
@@ -45,18 +46,16 @@ impl Animal for Cow {
 
 // Returns some struct that implements Animal, but we don't know which one at compile time.
 fn random_animal(random_number: i64) -> Box<dyn Animal> {
-    if random_number < 5 { 
-        Box::new(Sheep { sheep_num : 7 }) 
-    } else { 
-        Box::new(Cow { cow_num : 9 }) 
+    if random_number < 5 {
+        Box::new(Sheep { sheep_num: 7 })
+    } else {
+        Box::new(Cow { cow_num: 9 })
     }
 }
 
 fn main() {
-    let ptr_size = size_of::<&usize>() as isize;
-
     // The vtable is laid out as the right hand side here:
-    // 
+    //
     // +-------+------------------+
     // | size  |      value       |
     // +-------+------------------+
@@ -65,8 +64,8 @@ fn main() {
     // | usize | align in bytes   |
     // | ?     | function ptrs... |
     // +-------+------------------+
-    // 
-    // This layout taken from miri's handling: 
+    //
+    // This layout taken from miri's handling:
     // https://github.com/rust-lang/rust/blob/ec487bf3cfc9ce386da25169509fae8f2b4d4eec/compiler/rustc_mir/src/interpret/traits.rs#L155
 
     // Check layout/values for Sheep
@@ -81,17 +80,17 @@ fn main() {
 
         // Note: i32 ptr cast
         assert!(*(data_ptr as *mut i32) == 7); // From Sheep
-        
+
         let vtable_ptr = trait_object.vtable as *mut usize;
 
         // Drop pointer
-        assert!(!vtable_ptr.is_null());
+        assert!(drop_from_vtrable(vtable_ptr) == drop_in_place::<Sheep> as *mut ());
 
         // Size and align as usizes
         assert!(size_from_vtable(vtable_ptr) == size_of::<i32>());
         assert!(align_from_vtable(vtable_ptr) == size_of::<i32>());
     }
-     // Check layout/values for Cow
+    // Check layout/values for Cow
     unsafe {
         let animal_cow = random_animal(6);
 
@@ -103,15 +102,14 @@ fn main() {
 
         // Note: i8 ptr cast
         assert!(*(data_ptr as *mut i8) == 9); // From Cow
-        
+
         let vtable_ptr = trait_object.vtable as *mut usize;
 
         // Drop pointer
-        assert!(!vtable_ptr.is_null());
+        assert!(drop_from_vtrable(vtable_ptr) == drop_in_place::<Cow> as *mut ());
 
         // Size and align as usizes
         assert!(size_from_vtable(vtable_ptr) == size_of::<i8>());
         assert!(align_from_vtable(vtable_ptr) == size_of::<i8>());
     }
 }
- 
