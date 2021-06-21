@@ -5,7 +5,7 @@ fn __VERIFIER_assume(cond: bool) {
     unimplemented!()
 }
 
-fn __VERIFIER_expect_fail(cond: bool) {
+fn __VERIFIER_expect_fail(cond: bool, message: &str) {
     unimplemented!()
 }
 
