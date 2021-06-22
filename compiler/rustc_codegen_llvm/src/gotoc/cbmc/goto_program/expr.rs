@@ -1105,6 +1105,13 @@ impl Expr {
         self.lt(typ.zero())
     }
 
+    /// `self == 0`
+    pub fn is_zero(self) -> Self {
+        assert!(self.typ.is_numeric());
+        let typ = self.typ.clone();
+        self.eq(typ.zero())
+    }
+
     /// `self != NULL`
     pub fn is_nonnull(self) -> Self {
         assert!(self.typ.is_pointer());
