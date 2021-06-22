@@ -7,9 +7,9 @@
 
 extern crate libc;
 
+use std::mem::size_of;
 use std::ptr::copy_nonoverlapping;
 use std::slice::from_raw_parts;
-use std::mem::{size_of};
 use std::str;
 
 fn copy_string(s: &str, l: usize) {
@@ -17,7 +17,7 @@ fn copy_string(s: &str, l: usize) {
         // Unsafe buffer
         let size: libc::size_t = size_of::<u8>();
         let dest: *mut u8 = libc::malloc(size * l) as *mut u8;
-        
+
         // Copy
         let src = from_raw_parts(s.as_ptr(), l).as_ptr();
         copy_nonoverlapping(src, dest, l);
@@ -25,6 +25,6 @@ fn copy_string(s: &str, l: usize) {
 }
 
 fn main() {
-    copy_string("x", 1); 
-    copy_string("", 0);  
+    copy_string("x", 1);
+    copy_string("", 0);
 }
