@@ -2430,11 +2430,10 @@ impl<'test> TestCx<'test> {
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
         cargo
             .arg("rmc")
+            .args(["--function", function_name])
             .arg("--target")
             .arg(self.output_base_dir().join("target"))
-            .arg(&parent_dir)
-            .arg("--")
-            .args(["--function", function_name]);
+            .arg(&parent_dir);
         self.add_rmc_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run_compiler(cargo, None);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
