@@ -418,16 +418,12 @@ impl Expr {
 
     /// Casts value to new_typ, only when the current type of value
     /// is equivalent to new_typ on the given machine (e.g. i32 -> c_int)
-    pub fn cast_between_machine_equivalent_types(
-        value: Expr,
-        new_typ: &Type,
-        mm: &MachineModel,
-    ) -> Expr {
-        if value.typ() == new_typ {
-            value
+    pub fn cast_to_machine_equivalent_type(self, new_typ: &Type, mm: &MachineModel) -> Expr {
+        if self.typ() == new_typ {
+            self
         } else {
-            assert!(value.typ().is_equal_on_machine(new_typ, mm));
-            value.cast_to(new_typ.clone())
+            assert!(self.typ().is_equal_on_machine(new_typ, mm));
+            self.cast_to(new_typ.clone())
         }
     }
 
@@ -443,8 +439,7 @@ impl Expr {
         let mut rval: Vec<_> = parameters
             .iter()
             .map(|parameter| {
-                let argument = arguments.remove(0);
-                Self::cast_between_machine_equivalent_types(argument, &parameter.typ(), mm)
+                arguments.remove(0).cast_to_machine_equivalent_type(&parameter.typ(), mm)
             })
             .collect();
 

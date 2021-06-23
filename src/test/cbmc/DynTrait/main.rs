@@ -1,5 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+include!("../../rmc-prelude.rs");
+
 struct Sheep {}
 struct Cow {}
 
@@ -24,12 +27,20 @@ impl Animal for Cow {
 
 // Returns some struct that implements Animal, but we don't know which one at compile time.
 fn random_animal(random_number: i64) -> Box<dyn Animal> {
-    if random_number < 5 { Box::new(Sheep {}) } else { Box::new(Cow {}) }
+    if random_number < 5 {
+        Box::new(Sheep {})
+    } else {
+        Box::new(Cow {})
+    }
 }
 
 fn main() {
-    let random_number = 1;
+    let random_number = __nondet();
     let animal = random_animal(random_number);
     let s = animal.noise();
-    assert!(s == 1);
+    if (random_number < 5) {
+        assert!(s == 1);
+    } else {
+        assert!(s == 2);
+    }
 }
