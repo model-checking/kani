@@ -27,11 +27,7 @@ impl Animal for Cow {
 
 // Returns some struct that implements Animal, but we don't know which one at compile time.
 fn random_animal(random_number: i64) -> Box<dyn Animal> {
-    if random_number < 5 {
-        Box::new(Sheep {})
-    } else {
-        Box::new(Cow {})
-    }
+    if random_number < 5 { Box::new(Sheep {}) } else { Box::new(Cow {}) }
 }
 
 fn main() {
