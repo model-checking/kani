@@ -58,9 +58,9 @@ pub fn format(build: &Build, check: bool, paths: &[PathBuf]) {
     }
     let rustfmt_config = t!(std::fs::read_to_string(&rustfmt_config));
     let rustfmt_config: RustfmtConfig = t!(toml::from_str(&rustfmt_config));
-    let mut ignore_fmt = ignore::overrides::OverrideBuilder::new(&build.src);
+    let mut ignore_fmt = ignore::gitignore::GitignoreBuilder::new(&build.src);
     for ignore in rustfmt_config.ignore {
-        ignore_fmt.add(&format!("!{}", ignore)).expect(&ignore);
+        ignore_fmt.add_line(None, &ignore).expect(&ignore);
     }
     let git_available = match Command::new("git")
         .arg("--version")
@@ -129,7 +129,9 @@ pub fn format(build: &Build, check: bool, paths: &[PathBuf]) {
         None => WalkBuilder::new(src.clone()),
     }
     .types(matcher)
-    .overrides(ignore_fmt)
+    .filter_entry(move |e| {
+        !ignore_fmt.matched(e.path(), e.file_type().unwrap().is_dir()).is_ignore()
+    })
     .build_parallel();
 
     // there is a lot of blocking involved in spawning a child process and reading files to format.
