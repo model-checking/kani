@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 fn call_with_one<F, T>(f: F) -> T
-    where
-        F: FnOnce(i64) -> T,
+where
+    F: FnOnce(i64) -> T,
 {
     f(10)
 }

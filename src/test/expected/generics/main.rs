@@ -10,10 +10,7 @@ fn ident<T>(x: T) -> T {
 }
 
 fn wrapped<T>(x: T) -> Foo<T> {
-    Foo {
-        data: ident(x),
-        i: 0,
-    }
+    Foo { data: ident(x), i: 0 }
 }
 
 fn main() {
