@@ -117,7 +117,7 @@ def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_tem
     # 4) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c temp.goto > property.xml
     # 5) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto temp.goto --reportdir report
 
-    run_goto_cc(cbmc_filename, temp_goto_filename, verbose, quiet)
+    run_goto_cc(cbmc_filename, temp_goto_filename, verbose, quiet, function=function)
     
     def run_cbmc_local(cbmc_args, output_to):
         cbmc_cmd = ["cbmc"] + cbmc_args + [temp_goto_filename]

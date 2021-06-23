@@ -29,15 +29,11 @@ def main():
     parser.add_argument("--target-dir", default="target",
                         help="Directory for all generated artifacts")
     parser.add_argument("--wkdir", default=".")
+    parser.add_argument("--function", default="main")
     parser.add_argument("crate", help="crate to verify")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
-
-    # In the future we hope to make this configurable in the command line.
-    # For now, however, changing this from "main" breaks rmc.
-    # Issue: https://github.com/model-checking/rmc/issues/169
-    args.function = "main"
 
     if args.quiet:
         args.verbose = False
