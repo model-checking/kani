@@ -161,6 +161,10 @@ def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temp
     cmd = ["symtab2gb", json_filename, "--out", cbmc_filename]
     return run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run)
 
+def run_goto_cc(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
+    cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
+    return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
+
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
     scanners = []
@@ -186,8 +190,6 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
     # 4) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c temp.goto > property.xml
     # 5) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto temp.goto --reportdir report
 
-    run_goto_cc(cbmc_filename, temp_goto_filename, verbose, quiet, function=function, dry_run=dry_run)
-    
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
         cbmc_cmd = ["cbmc"] + cbmc_args + [temp_goto_filename]
         return run_cmd(cbmc_cmd, label="cbmc", output_to=output_to, verbose=verbose, quiet=quiet, dry_run=dry_run)
@@ -203,10 +205,6 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
                     property_filename, verbose, quiet, srcdir, wkdir, os.path.join(outdir, "report"), dry_run=dry_run)
 
     return retcode
-
-def run_goto_cc(src, dst, verbose=False, quiet=False, function="main", dry_run=False):
-    cmd = ["goto-cc"] + ["--function", function] + [src] + ["-o", dst]
-    return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
 
 def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property_filename, verbose=False, quiet=False, srcdir=".", wkdir=".", reportdir="report", dry_run=False):
     cmd = ["cbmc-viewer"] + \
