@@ -1,8 +1,8 @@
-line 22 attempt to compute `((*_1).0: usize) + const 1_usize`, which would overflow: SUCCESS
-line 32 attempt to compute `((*_1).0: usize) - const 1_usize`, which would overflow: SUCCESS
-line 51 assertion failed: v.len() == 1: SUCCESS
-line 52 assertion failed: v.len() == 11: FAILURE
-line 54 assertion failed: p != None: SUCCESS
-line 55 assertion failed: p == None: FAILURE
-line 56 assertion failed: p == Some(to_push): SUCCESS
-line 57 assertion failed: p == Some(not_pushed): FAILURE
+line 25 attempt to compute `((*_1).0: usize) + const 1_usize`, which would overflow: SUCCESS
+line 35 attempt to compute `((*_1).0: usize) - const 1_usize`, which would overflow: SUCCESS
+line 53 assertion failed: v.len() == 1: SUCCESS
+line 54 assertion failed: v.len() == 11: FAILURE
+line 56 assertion failed: p != None: SUCCESS
+line 57 assertion failed: p == None: FAILURE
+line 58 assertion failed: p == Some(to_push): SUCCESS
+line 59 assertion failed: p == Some(not_pushed): FAILURE
