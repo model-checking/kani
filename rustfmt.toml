@@ -13,7 +13,15 @@ ignore = [
 
     # tests for now are not formatted, as they are sometimes pretty-printing constrained
     # (and generally rustfmt can move around comments in UI-testing incompatible ways)
-    "src/test",
+    "src/test/*",
+    "!src/test/cargo-rmc",
+    "!src/test/cbmc",
+    "!src/test/expected",
+    "!src/test/firecracker",
+    "!src/test/prusti",
+    "!src/test/rmc-prelude.rs",
+    "!src/test/serial",
+    "!src/test/smack",
 
     # do not format submodules
     "library/backtrace",

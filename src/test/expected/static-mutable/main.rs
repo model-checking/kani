@@ -3,12 +3,10 @@
 static mut X: i32 = 12;
 
 fn foo() -> i32 {
-    unsafe {
-        X
-    }
+    unsafe { X }
 }
 
-fn mutate_the_thing(new : i32) {
+fn mutate_the_thing(new: i32) {
     unsafe {
         X = new;
     }
