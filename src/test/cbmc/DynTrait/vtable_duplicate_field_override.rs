@@ -9,7 +9,7 @@ trait B {
 }
 
 trait T: A + B {
-    fn foo(&self) -> i32;   
+    fn foo(&self) -> i32;
 }
 
 struct S {
