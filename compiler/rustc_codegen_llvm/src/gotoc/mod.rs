@@ -101,8 +101,6 @@ impl<'tcx> GotocCtx<'tcx> {
         match self.current_fn().readable_name() {
             // https://github.com/model-checking/rmc/issues/202
             "fmt::ArgumentV1::<'a>::as_usize" => true,
-            // https://github.com/model-checking/rmc/issues/203
-            "<(dyn core::any::Any + core::marker::Send + 'static)>::downcast_ref" => true,
             // https://github.com/model-checking/rmc/issues/204
             x if x.ends_with("__getit") => true,
             // https://github.com/model-checking/rmc/issues/205

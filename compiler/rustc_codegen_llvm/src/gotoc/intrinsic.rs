@@ -155,7 +155,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     .tcx
                     .const_eval_instance(ty::ParamEnv::reveal_all(), instance, None)
                     .unwrap();
-                let e = self.codegen_const_value(value, self.tcx.types.usize, None);
+                // We may have an implicit cast between machine equivalent
+                // types where CBMC expects a different type than Rust.
+                let place_type = self.codegen_ty(self.place_ty(p));
+                let e = self
+                    .codegen_const_value(value, self.tcx.types.usize, None)
+                    .cast_to_machine_equivalent_type(
+                        &place_type,
+                        &self.symbol_table.machine_model(),
+                    );
                 self.codegen_expr_to_place(p, e)
             }};
         }
