@@ -10,7 +10,8 @@ use crate::btree_string_map;
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::{self, Binder, Instance, IntTy, TraitRef, Ty, UintTy};
+use rustc_middle::ty::subst::InternalSubsts;
+use rustc_middle::ty::{self, Binder, GenericParamDefKind, Instance, IntTy, TraitRef, Ty, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
@@ -689,7 +690,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         def_id: DefId,
         _substs: ty::subst::SubstsRef<'tcx>,
-        trait_ref_t: Binder<'_, TraitRef<'tcx>>,
+        trait_ref_t: Binder<'tcx, TraitRef<'tcx>>,
         t: Ty<'tcx>,
     ) -> Expr {
         let vtable_field_name = self.vtable_field_name(def_id);
@@ -700,17 +701,33 @@ impl<'tcx> GotocCtx<'tcx> {
             .cloned()
             .unwrap();
 
+        ///////////////////////////////////////////////////////////////////////
+        // Copied from rustc impl:
+        //     compiler/rustc_trait_selection/src/traits/mod.rs
+        //
+        // The method may have some early-bound lifetimes; add regions for those.
+        let substs = trait_ref_t.map_bound(|trait_ref| {
+            InternalSubsts::for_item(self.tcx, def_id, |param, _| match param.kind {
+                GenericParamDefKind::Lifetime => self.tcx.lifetimes.re_erased.into(),
+                GenericParamDefKind::Type { .. } | GenericParamDefKind::Const { .. } => {
+                    trait_ref.substs[param.index as usize]
+                }
+            })
+        });
+
+        // The trait type may have higher-ranked lifetimes in it;
+        // erase them if they appear, so that we get the type
+        // at some particular call site.
+        let substs =
+            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), substs);
+        ///////////////////////////////////////////////////////////////////////
+
         // We use Instance::resolve to more closely match Rust proper behavior. The comment
         // there says "used to find the precise code that will run for a trait method invocation"
         // and it is used (in a more indirect way) to generate vtables.
-        let instance = Instance::resolve(
-            self.tcx,
-            ty::ParamEnv::reveal_all(),
-            def_id,
-            trait_ref_t.skip_binder().substs,
-        )
-        .unwrap()
-        .unwrap();
+        let instance = Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), def_id, substs)
+            .unwrap()
+            .unwrap();
 
         // Lookup in the symbol table using the full symbol table name/key
         let fn_name = self.symbol_name(instance);
@@ -739,15 +756,25 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty);
         let drop_sym_name = self.symbol_name(drop_instance);
-        let drop_sym = self.symbol_table.lookup(&drop_sym_name).unwrap().clone();
+        let param_types = vec![self.codegen_ty(trait_ty)];
 
         // The drop instance has the concrete object type, for consistency with
         // type codegen we need the trait type for the function parameter.
         let trait_fn_ty =
-            Type::code_with_unnamed_parameters(vec![self.codegen_ty(trait_ty)], Type::unit())
-                .to_pointer();
+            Type::code_with_unnamed_parameters(param_types, Type::unit()).to_pointer();
 
-        Expr::symbol_expression(drop_sym_name, drop_sym.typ).address_of().cast_to(trait_fn_ty)
+        if let Some(drop_sym) = self.symbol_table.lookup(&drop_sym_name) {
+            Expr::symbol_expression(drop_sym_name, drop_sym.clone().typ)
+                .address_of()
+                .cast_to(trait_fn_ty)
+        } else {
+            // TODO: check why in https://github.com/model-checking/rmc/issues/66
+            debug!(
+                "WARNING: drop_in_place not found for {:?}",
+                self.readable_instance_name(drop_instance),
+            );
+            Type::void_pointer().null().cast_to(trait_fn_ty)
+        }
     }
 
     fn codegen_vtable_methods(
