@@ -1016,6 +1016,11 @@ pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
     }
 }
 
+/// Check if the mir type already is a vtable fat pointer.
+pub fn is_dyn_trait_fat_pointer(mir_type: Ty<'tcx>) -> bool {
+    if let Some(p) = pointee_type(mir_type) { p.is_trait() } else { false }
+}
+
 impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
