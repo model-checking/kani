@@ -677,6 +677,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 dst_mir_type,
             )
         } else {
+            // Assert that the source is not a pointer or is a thing pointer
+            assert!(pointee_type(src_mir_type).map_or(true, |p| self.use_thin_pointer(p)));
+
             // Sized to unsized cast
             self.cast_sized_expr_to_unsized_expr(src_goto_expr.clone(), src_mir_type, dst_mir_type)
         }
