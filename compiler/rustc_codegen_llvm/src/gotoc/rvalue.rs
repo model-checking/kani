@@ -4,7 +4,7 @@ use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use super::cbmc::utils::{aggr_name, BUG_REPORT_URL};
 use super::cbmc::MachineModel;
 use super::metadata::*;
-use super::typ::{is_pointer, pointee_type};
+use super::typ::{is_dyn_trait_fat_pointer, is_pointer, pointee_type};
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
 use num::bigint::BigInt;
@@ -656,13 +656,32 @@ impl<'tcx> GotocCtx<'tcx> {
                 let src_goto_expr = self.codegen_operand(o);
                 let src_mir_type = self.operand_ty(o);
                 let dst_mir_type = t;
-                let dst_goto_expr = self.cast_sized_expr_to_unsized_expr(
-                    src_goto_expr.clone(),
-                    src_mir_type,
-                    dst_mir_type,
-                );
-                dst_goto_expr.unwrap_or(src_goto_expr)
+                self.cast_to_unsized_expr(src_goto_expr.clone(), src_mir_type, dst_mir_type)
+                    .unwrap_or(src_goto_expr)
             }
+        }
+    }
+
+    fn cast_to_unsized_expr(
+        &mut self,
+        src_goto_expr: Expr,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        // Check if the cast is from a vtable fat pointer to another
+        // vtable fat pointer (which can happen with auto trait fat pointers)
+        if is_dyn_trait_fat_pointer(src_mir_type) {
+            self.cast_unsized_dyn_trait_to_unsized_dyn_trait(
+                src_goto_expr.clone(),
+                src_mir_type,
+                dst_mir_type,
+            )
+        } else {
+            // Assert that the source is not a pointer or is a thin pointer
+            assert!(pointee_type(src_mir_type).map_or(true, |p| self.use_thin_pointer(p)));
+
+            // Sized to unsized cast
+            self.cast_sized_expr_to_unsized_expr(src_goto_expr.clone(), src_mir_type, dst_mir_type)
         }
     }
 
@@ -845,6 +864,47 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
+    /// Fat pointers to dynamic auto trait objects can be the src of casts.
+    /// For example, this cast is legal, because Send is an auto trait with
+    /// no associated function:
+    ///
+    ///     &(dyn Any + Send) as &dyn Any
+    ///
+    /// This cast is legal because without any changes to the set of virtual
+    /// functions, the underlying vtable does not need to change.
+    ///
+    /// Cast a pointer from one usized dynamic trait object to another. The
+    /// result  of the cast will be a fat pointer with the same data and
+    /// vtable, but the new type. Returns None if no cast is needed.
+    fn cast_unsized_dyn_trait_to_unsized_dyn_trait(
+        &mut self,
+        src_goto_expr: Expr,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Option<Expr> {
+        if src_mir_type.kind() == dst_mir_type.kind() {
+            return None; // no cast required, nothing to do
+        }
+
+        // The source destination must be a fat pointers to a dyn trait object
+        assert!(is_dyn_trait_fat_pointer(src_mir_type));
+        assert!(is_dyn_trait_fat_pointer(dst_mir_type));
+
+        let dst_mir_dyn_ty = pointee_type(dst_mir_type).unwrap();
+
+        // Get the fat pointer data and vtable fields, and cast the type of
+        // the vtable.
+        let dst_goto_type = self.codegen_ty(dst_mir_type);
+        let data = src_goto_expr.to_owned().member("data", &self.symbol_table);
+        let vtable_name = self.vtable_name(dst_mir_dyn_ty);
+        let vtable_ty = Type::struct_tag(&vtable_name).to_pointer();
+
+        let vtable = src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_ty);
+
+        // Construct a fat pointer with the same (casted) fields and new type
+        Some(dynamic_fat_ptr(dst_goto_type, data, vtable, &self.symbol_table))
+    }
+
     /// Cast a sized object to an unsized object: the result of the cast will be
     /// a fat pointer or an ADT with a nested fat pointer.  Return the result of
     /// the cast as Some(expr) and return None if no cast was required.
@@ -866,6 +926,10 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(
             src_mir_type.is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
         );
+
+        // The src type cannot be a pointer to a dynamic trait object, otherwise
+        // we should have called cast_unsized_dyn_trait_to_unsized_dyn_trait
+        assert!(!is_dyn_trait_fat_pointer(src_mir_type));
 
         match (src_mir_type.kind(), dst_mir_type.kind()) {
             (ty::Ref(..), ty::Ref(..)) => {
@@ -1009,7 +1073,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Cast each field and collect the fields for which a cast was required
         let mut cast_required: Vec<(String, Expr)> = vec![];
         for field in src_goto_field_values.keys() {
-            if let Some(expr) = self.cast_sized_expr_to_unsized_expr(
+            if let Some(expr) = self.cast_to_unsized_expr(
                 src_goto_field_values.get(field).unwrap().clone(),
                 src_mir_field_types.get(field).unwrap(),
                 dst_mir_field_types.get(field).unwrap(),
