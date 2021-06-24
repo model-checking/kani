@@ -677,7 +677,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 dst_mir_type,
             )
         } else {
-            // Assert that the source is not a pointer or is a thing pointer
+            // Assert that the source is not a pointer or is a thin pointer
             assert!(pointee_type(src_mir_type).map_or(true, |p| self.use_thin_pointer(p)));
 
             // Sized to unsized cast
