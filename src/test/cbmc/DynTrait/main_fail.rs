@@ -1,5 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+include!("../../rmc-prelude.rs");
+
 struct Sheep {}
 struct Cow {}
 
@@ -28,8 +31,12 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 }
 
 fn main() {
-    let random_number = 1;
+    let random_number = __nondet();
     let animal = random_animal(random_number);
     let s = animal.noise();
-    assert!(s == 3); // Should be == 1
+    if (random_number < 5) {
+        _VERIFIER_expect_fail(s == 2, "Wrong noise");
+    } else {
+        _VERIFIER_expect_fail(s == 1, "Wrong noise");
+    }
 }
