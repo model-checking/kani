@@ -3,7 +3,7 @@
 //! To run this test, do
 //! rmc fixme_main.rs -- lib.c
 
-// rmc-flags: --c-lib lib.c
+// rmc-flags: --c-lib src/test/cbmc/ForeignItems/lib.c
 
 // TODO, we should also test packed and transparent representations
 // https://doc.rust-lang.org/reference/type-layout.html
@@ -56,8 +56,7 @@ fn main() {
 
         assert!(takes_int(1) == 3);
         assert!(takes_ptr(&5) == 7);
-        //assert!(takes_ptr_option(Some(&5)) == 4);
-        //assert!(takes_ptr_option(None) == 0);
+
         let mut p = 17;
         mutates_ptr(&mut p);
         assert!(p == 16);
