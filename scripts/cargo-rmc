@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--wkdir", default=".")
     parser.add_argument("--function", default="main")
     parser.add_argument("crate", help="crate to verify")
+    parser.add_argument("--no-default-flags", action="store_true")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
@@ -40,6 +41,10 @@ def main():
 
     if not rmc.dependencies_in_path():
         return 1
+
+    # Add a set of CBMC arguments by default unless `--no-default-args` is being used
+    if not args.no_default_flags:
+        rmc.add_default_cbmc_flags(args)
 
     rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.mangler)

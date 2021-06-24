@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// cbmc-flags: --unwind 2 --unwinding-assertions
+// cbmc-flags: --unwind 2
 
 fn doswitch_int() -> i32 {
     for i in [99].iter() {

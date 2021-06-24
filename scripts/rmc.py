@@ -11,6 +11,7 @@ RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
 EXIT_CODE_SUCCESS = 0
 
+DEFAULT_CBMC_FLAGS = ["--unwinding-assertions"]
 
 def is_exe(name):
     from shutil import which
@@ -31,6 +32,17 @@ def delete_file(filename):
     except OSError:
         pass
 
+# Add a set of default CBMC arguments
+def add_default_cbmc_flags(args):
+    if not args.no_default_flags:
+        # We print a warning if the user has specified one of the default flags
+        # Otherwise we append the default flags to CBMC arguments
+        for arg in DEFAULT_CBMC_FLAGS:
+            # This behavior must be reviewed if the set of default flags is extended
+            if arg in args.cbmc_args:
+                print("WARNING: Default CBMC argument `{}` not added (already specified)".format(arg))
+            else:
+                args.cbmc_args.append(arg)
 
 def add_rmc_rustc_debug_to_env(env):
     env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_llvm::gotoc")
