@@ -179,19 +179,17 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
     results_filename = os.path.join(outdir, "results.xml")
     coverage_filename = os.path.join(outdir, "coverage.xml")
     property_filename = os.path.join(outdir, "property.xml")
-    temp_goto_filename = os.path.join(outdir, "temp.goto")
     if not keep_temps:
-        for filename in [results_filename, coverage_filename, property_filename, temp_goto_filename]:
+        for filename in [results_filename, coverage_filename, property_filename]:
             atexit.register(delete_file, filename)
 
-    # 1) goto-cc --function main <cbmc_filename> -o temp.goto
-    # 2) cbmc --xml-ui --trace ~/rmc/library/rmc/rmc_lib.c temp.goto > results.xml
-    # 3) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c temp.goto > coverage.xml
-    # 4) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c temp.goto > property.xml
-    # 5) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto temp.goto --reportdir report
-
+    # 1) cbmc --xml-ui --trace ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > results.xml
+    # 2) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > coverage.xml
+    # 3) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > property.xml
+    # 4) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto <cbmc_filename> --reportdir report
+    
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
-        cbmc_cmd = ["cbmc"] + cbmc_args + [temp_goto_filename]
+        cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
         return run_cmd(cbmc_cmd, label="cbmc", output_to=output_to, verbose=verbose, quiet=quiet, dry_run=dry_run)
 
     cbmc_prop_args = prop_args + ["--xml-ui"]
@@ -201,7 +199,7 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
     run_cbmc_local(cbmc_cover_args + ["--cover", "location"], coverage_filename, dry_run=dry_run)
     run_cbmc_local(cbmc_prop_args + ["--show-properties"], property_filename, dry_run=dry_run)
 
-    run_cbmc_viewer(temp_goto_filename, results_filename, coverage_filename,
+    run_cbmc_viewer(cbmc_filename, results_filename, coverage_filename,
                     property_filename, verbose, quiet, srcdir, wkdir, os.path.join(outdir, "report"), dry_run=dry_run)
 
     return retcode

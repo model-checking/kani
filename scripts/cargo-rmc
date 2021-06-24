@@ -82,10 +82,10 @@ def main():
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
         
-    args.cbmc_args.extend(args.c_lib)
+    args.cbmc_args.append(str(RMC_C_LIB))
 
     if args.visualize:
-        return rmc.run_visualize(cbmc_filename, args.c_lib, args.cbmc_args, \
+        return rmc.run_visualize(cbmc_filename, args.cbmc_args, \
                                  args.verbose, args.quiet, args.keep_temps, \
                                  args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:

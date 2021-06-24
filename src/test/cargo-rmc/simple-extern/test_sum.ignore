@@ -1,0 +1,1 @@
+[call_into_rust.assertion.1] line 13 assertion takes_int(x) == x + 1: SUCCESS

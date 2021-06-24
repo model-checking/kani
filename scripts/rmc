@@ -90,8 +90,7 @@ def main():
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
     
-    args.c_lib.append(str(RMC_C_LIB))
-    args.cbmc_args.extend(args.c_lib)
+    args.cbmc_args.append(str(RMC_C_LIB))
     
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)

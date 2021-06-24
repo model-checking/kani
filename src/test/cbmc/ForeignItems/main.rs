@@ -69,6 +69,6 @@ fn main() {
 
         let f2 = Foo2 { i: 12, c: 7, i2: 8 };
         assert!(takes_struct_ptr2(&f2) == 19);
-        assert!(takes_struct2(f2) == 19);
+        assert!(takes_struct2(f2) == 20);
     }
 }
