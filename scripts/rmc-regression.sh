@@ -26,3 +26,6 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Check codegen for the standard library
 $SCRIPT_DIR/std-lib-regression.sh
+
+# Check codegen of firecracker
+$SCRIPT_DIR/codegen-firecracker.sh
