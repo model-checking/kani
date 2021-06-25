@@ -13,9 +13,6 @@
 #![allow(deprecated)]
 
 use std::intrinsics::size_of;
-use std::mem::transmute;
-use std::ptr::drop_in_place;
-use std::raw::TraitObject;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 include!("../../rmc-prelude.rs");
@@ -73,20 +70,17 @@ fn main() {
     unsafe {
         let animal_sheep = random_animal(1);
 
-        // Unsafe cast to dynamic trait object fat pointer
-        let trait_object: TraitObject = transmute(animal_sheep);
-
         // Check that the struct's data is what we expect
-        let data_ptr = trait_object.data;
+        let data_ptr = data!(animal_sheep);
 
         // Note: i32 ptr cast
         __VERIFIER_expect_fail(*(data_ptr as *mut i32) != 7, "Wrong data"); // From Sheep
 
-        let vtable_ptr = trait_object.vtable as *mut usize;
+        let vtable_ptr = vtable!(animal_sheep);
 
         // Drop pointer
         __VERIFIER_expect_fail(
-            drop_from_vtrable(vtable_ptr) != drop_in_place::<Sheep> as *mut (),
+            drop_from_vtable(vtable_ptr) != drop_in_place::<Sheep> as *mut (),
             "Wrong drop",
         );
 
@@ -96,22 +90,19 @@ fn main() {
     }
     // Check layout/values for Cow
     unsafe {
-        let animal_cow = random_animal(6);
-
-        // Unsafe cast to dynamic trait object fat pointer
-        let trait_object: TraitObject = transmute(animal_cow);
+        let animal_sheep = random_animal(1);
 
         // Check that the struct's data is what we expect
-        let data_ptr = trait_object.data;
+        let data_ptr = data!(animal_sheep);
 
         // Note: i8 ptr cast
         __VERIFIER_expect_fail(*(data_ptr as *mut i8) != 9, "Wrong data"); // From Cow
 
-        let vtable_ptr = trait_object.vtable as *mut usize;
+        let vtable_ptr = vtable!(animal_sheep);
 
         // Drop pointer
         __VERIFIER_expect_fail(
-            drop_from_vtrable(vtable_ptr) != drop_in_place::<Cow> as *mut (),
+            drop_from_vtable(vtable_ptr) != drop_in_place::<Cow> as *mut (),
             "Wrong drop",
         );
 
