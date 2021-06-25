@@ -11,11 +11,10 @@
 #![allow(deprecated)]
 
 use std::intrinsics::size_of;
-use std::mem::transmute;
 use std::ptr::drop_in_place;
-use std::raw::TraitObject;
 
 include!("../Helpers/vtable_utils_ignore.rs");
+include!("../../rmc-prelude.rs");
 
 // Different sized data fields on each struct
 struct Sheep {
@@ -66,21 +65,18 @@ fn main() {
 
     // Check layout/values for Sheep
     unsafe {
-        let animal_sheep = random_animal(1);
-
-        // Unsafe cast to dynamic trait object fat pointer
-        let trait_object: TraitObject = transmute(animal_sheep);
+        let animal_sheep = &*random_animal(1);
 
         // Check that the struct's data is what we expect
-        let data_ptr = trait_object.data;
+        let data_ptr = data!(animal_sheep);
 
         // Note: i32 ptr cast
         assert!(*(data_ptr as *mut i32) == 7); // From Sheep
 
-        let vtable_ptr = trait_object.vtable as *mut usize;
+        let vtable_ptr = vtable!(animal_sheep);
 
         // Drop pointer
-        assert!(drop_from_vtrable(vtable_ptr) == drop_in_place::<Sheep> as *mut ());
+        assert!(drop_from_vtable(vtable_ptr) == drop_in_place::<Sheep> as *mut ());
 
         // Size and align as usizes
         assert!(size_from_vtable(vtable_ptr) == size_of::<i32>());
@@ -88,21 +84,18 @@ fn main() {
     }
     // Check layout/values for Cow
     unsafe {
-        let animal_cow = random_animal(6);
-
-        // Unsafe cast to dynamic trait object fat pointer
-        let trait_object: TraitObject = transmute(animal_cow);
+        let animal_cow = &*random_animal(6);
 
         // Check that the struct's data is what we expect
-        let data_ptr = trait_object.data;
+        let data_ptr = data!(animal_cow);
 
         // Note: i8 ptr cast
         assert!(*(data_ptr as *mut i8) == 9); // From Cow
 
-        let vtable_ptr = trait_object.vtable as *mut usize;
+        let vtable_ptr = vtable!(animal_cow);
 
         // Drop pointer
-        assert!(drop_from_vtrable(vtable_ptr) == drop_in_place::<Cow> as *mut ());
+        assert!(drop_from_vtable(vtable_ptr) == drop_in_place::<Cow> as *mut ());
 
         // Size and align as usizes
         assert!(size_from_vtable(vtable_ptr) == size_of::<i8>());

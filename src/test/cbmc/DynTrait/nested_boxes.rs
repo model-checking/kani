@@ -9,8 +9,6 @@
 #![allow(deprecated)]
 
 use std::intrinsics::size_of;
-use std::mem::transmute;
-use std::raw::TraitObject;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 
@@ -26,16 +24,15 @@ fn main() {
 
     // Do some unsafe magic to check that we generate the right three vtables
     unsafe {
-        let trait_object3: TraitObject = transmute(dyn_trait3);
-
         // Outermost trait object
         // The size is 16, because the data is another fat pointer
-        let vtable3: *mut usize = trait_object3.vtable as *mut usize;
+        let dyn_3 = &*dyn_trait3 as &dyn Send;
+        let vtable3: *mut usize = vtable!(dyn_3);
         assert!(size_from_vtable(vtable3) == 16);
         assert!(align_from_vtable(vtable3) == 8);
 
         // Inspect the data pointer from dyn_trait3
-        let data_ptr3 = trait_object3.data as *mut usize;
+        let data_ptr3 = data!(dyn_3) as *mut usize;
 
         // The second half of this fat pointer is another vtable, for dyn_trait2
         let vtable2 = *(data_ptr3.offset(1) as *mut *mut usize);
