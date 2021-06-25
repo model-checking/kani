@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// rmc-flags: --no-default-flags
 // cbmc-flags: --unwind 10
 
 include!("../../rmc-prelude.rs");
