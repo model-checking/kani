@@ -280,6 +280,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_xadd_acqrel" => codegen_atomic_binop!(plus),
             "atomic_xadd_rel" => codegen_atomic_binop!(plus),
             "atomic_xadd_relaxed" => codegen_atomic_binop!(plus),
+            "atomic_xchg"
+            | "atomic_xchg_acq"
+            | "atomic_xchg_acqrel"
+            | "atomic_xchg_rel"
+            | "atomic_xchg_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_xor" => codegen_atomic_binop!(bitxor),
             "atomic_xor_acq" => codegen_atomic_binop!(bitxor),
             "atomic_xor_acqrel" => codegen_atomic_binop!(bitxor),
