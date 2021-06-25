@@ -11,16 +11,16 @@ pub struct Foo<T> {
 
 impl<T> Foo<T> {
     fn call_needs_drop(&self) -> bool {
-        return mem::needs_drop::<T>();   
+        return mem::needs_drop::<T>();
     }
 }
 
 fn main() {
     // Integers don't need to be dropped
-    let int_foo = Foo::<i32>{_foo : 0};
+    let int_foo = Foo::<i32> { _foo: 0 };
     assert!(!int_foo.call_needs_drop());
 
     // But strings do need to be dropped
-    let string_foo = Foo::<String>{_foo: "".to_string() };
+    let string_foo = Foo::<String> { _foo: "".to_string() };
     assert!(string_foo.call_needs_drop());
 }
