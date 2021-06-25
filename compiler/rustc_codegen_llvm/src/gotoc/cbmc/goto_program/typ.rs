@@ -252,18 +252,26 @@ impl Type {
         // base type.
         match self {
             Array { typ, size } => typ.sizeof_in_bits(st) * size,
-            Bool => unreachable!("Doesn't have a sizeof"),
+            Bool => unreachable!("Bool doesn't have a sizeof"),
             CBitField { .. } => todo!("implement sizeof for bitfields"),
             CInteger(t) => t.sizeof_in_bits(st),
-            Code { .. } => unreachable!("Doesn't have a sizeof"),
-            Constructor => unreachable!("Doesn't have a sizeof"),
+
+            // We generate Code to put a reference to a Rust FnDef into a vtable; the definition
+            // itself has no size (data is empty, and the vtable itself contains fn pointers for
+            // Fn::call, etc).
+            //
+            // See Rust's implementation of layout_of, where FnDef is treated as a univariant
+            // type with no fields (and thus a size of 0 in the layout):
+            //     FnDef case in layout_raw_uncached, compiler/rustc_middle/src/ty/layout.rs
+            Code { .. } => 0,
+            Constructor => unreachable!("Constructor doesn't have a sizeof"),
             Double => st.machine_model().double_width(),
             Empty => 0,
             FlexibleArray { .. } => 0,
             Float => st.machine_model().float_width(),
-            IncompleteStruct { .. } => unreachable!("Doesn't have a sizeof"),
-            IncompleteUnion { .. } => unreachable!("Doesn't have a sizeof"),
-            InfiniteArray { .. } => unreachable!("Doesn't have a sizeof"),
+            IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
+            IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
+            InfiniteArray { .. } => unreachable!("InfiniteArray doesn't have a sizeof"),
             Pointer { .. } => st.machine_model().pointer_width(),
             Signedbv { width } => *width,
             Struct { components, .. } => {
@@ -275,7 +283,9 @@ impl Type {
             }
             UnionTag(tag) => st.lookup(tag).unwrap().typ.sizeof_in_bits(st),
             Unsignedbv { width } => *width,
-            VariadicCode { .. } => unreachable!("Doesn't have a sizeof"),
+            // It's possible this should also have size 0, like Code, but we have not been
+            // able to generate a unit test, so leaving it unreachable for now.
+            VariadicCode { .. } => unreachable!("VariadicCode doesn't have a sizeof"),
             Vector { typ, size } => typ.sizeof_in_bits(st) * size,
         }
     }
