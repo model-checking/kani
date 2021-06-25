@@ -5,6 +5,7 @@ import subprocess
 import atexit
 import os
 import os.path
+import re
 
 
 RMC_CFG = "rmc"
@@ -12,6 +13,21 @@ RMC_RUSTC_EXE = "rmc-rustc"
 EXIT_CODE_SUCCESS = 0
 
 DEFAULT_CBMC_FLAGS = ["--unwinding-assertions"]
+
+# A Scanner is intended to match a pattern with an output
+# and edit the output based on an edit function
+class Scanner:
+    def __init__(self, pattern, edit_fun):
+        self.pattern  = re.compile(pattern)
+        self.edit_fun = edit_fun
+
+    # Returns whether the scanner's pattern matches some text
+    def match(self, text):
+        return self.pattern.search(text) != None
+
+    # Returns an edited output based on the scanner's edit function
+    def edit_output(self, text):
+        return self.edit_fun(text)
 
 def is_exe(name):
     from shutil import which
@@ -56,7 +72,7 @@ def print_rmc_step_status(step_name, completed_process, verbose=False):
         print(f"[RMC] stage: {step_name} ({status})")
         print(f"[RMC] cmd: {' '.join(completed_process.args)}")
 
-def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, verbose=False, debug=False):
+def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, verbose=False, debug=False, scanners=[]):
     process = subprocess.run(
         cmd, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         env=env, cwd=cwd)
@@ -65,14 +81,19 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     if label != None:
         print_rmc_step_status(label, process, verbose)
     
+    stdout = process.stdout
+    for scanner in scanners:
+        if scanner.match(stdout):
+            stdout = scanner.edit_output(stdout)
+
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
-        print(process.stdout)
+        print(stdout)
     
     # Write to file if given
     if output_to != None and output_to != "stdout":
         with open(output_to, "w") as f:
-            f.write(process.stdout)
+            f.write(stdout)
     
     return process.returncode
 
@@ -103,6 +124,10 @@ def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler=
         add_rmc_rustc_debug_to_env(build_env)
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug)
 
+def append_unwind_tip(text):
+    unwind_tip = ("[RMC] info: Verification output shows one or more unwinding failures.\n"
+                  "[RMC] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n")
+    return text + unwind_tip
 
 def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temps=False):
     if not keep_temps:
@@ -112,7 +137,13 @@ def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temp
 
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
-    return run_cmd(cbmc_cmd, label="cbmc", output_to="stdout", verbose=verbose, quiet=quiet)
+    scanners = []
+    if "--unwinding-assertions" in cbmc_args:
+        # Pass a scanner that shows a tip if the CBMC output contains unwinding failures
+        unwind_asserts_pattern = ".*unwinding assertion.*: FAILURE"
+        unwind_asserts_scanner = Scanner(unwind_asserts_pattern, append_unwind_tip)
+        scanners.append(unwind_asserts_scanner)
+    return run_cmd(cbmc_cmd, label="cbmc", output_to="stdout", verbose=verbose, quiet=quiet, scanners=scanners)
 
 def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir=".", outdir="."):
     results_filename = os.path.join(outdir, "results.xml")
