@@ -809,6 +809,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);
+        assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
 
