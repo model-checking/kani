@@ -31,7 +31,11 @@ def main():
     parser.add_argument("--wkdir", default=".")
     parser.add_argument("--function", default="main")
     parser.add_argument("crate", help="crate to verify")
-    parser.add_argument("--no-default-flags", action="store_true")
+    parser.add_argument("--no-default-checks", action="store_true", help="Disable all default checks")
+    parser.add_argument("--no-memory-safety-checks", action="store_true", help="Disable default memory safety checks")
+    parser.add_argument("--no-overflow-safety-checks", action="store_true", help="Disable default overflow checks")
+    parser.add_argument("--no-unwinding-checks", action="store_true", help="Disable default unwinding checks")
+    parser.add_argument("--print-cbmc-flags", action="store_true", help="Print CBMC flags associated to an RMC invocation")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
@@ -42,9 +46,12 @@ def main():
     if not rmc.dependencies_in_path():
         return 1
 
-    # Add a set of CBMC arguments by default unless `--no-default-args` is being used
-    if not args.no_default_flags:
+    # Add some CBMC flags by default unless `--no-default-checks` is being used
+    if not args.no_default_checks:
         rmc.add_default_cbmc_flags(args)
+
+    if args.print_cbmc_flags:
+        rmc.print_cbmc_flags(args)
 
     rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.mangler)

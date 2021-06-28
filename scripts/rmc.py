@@ -12,7 +12,13 @@ RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
 EXIT_CODE_SUCCESS = 0
 
-DEFAULT_CBMC_FLAGS = ["--unwinding-assertions"]
+MEMORY_SAFETY_CHECKS = ["--pointer-check",
+                        "--bounds-check"]
+OVERFLOW_SAFETY_CHECKS = ["--float-overflow-check",
+                          "--pointer-overflow-check",
+                          "--signed-overflow-check",
+                          "--unsigned-overflow-check"]
+UNWINDING_CHECKS = ["--unwinding-assertions"]
 
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
@@ -48,21 +54,36 @@ def delete_file(filename):
     except OSError:
         pass
 
-# Add a set of default CBMC arguments
+# Add a set of CBMC flags to the CBMC arguments
+def add_set_cbmc_flags(args, flags):
+    # We print a warning if the user has passed the flag via `cbmc_args`
+    # Otherwise we append it to the CBMC arguments
+    for arg in flags:
+        # This behavior must be reviewed if the set of flags is extended
+        if arg in args.cbmc_args:
+            print("WARNING: Default CBMC argument `{}` not added (already specified)".format(arg))
+        else:
+            args.cbmc_args.append(arg)
+
+# Add sets of default CBMC flags
 def add_default_cbmc_flags(args):
-    if not args.no_default_flags:
-        # We print a warning if the user has specified one of the default flags
-        # Otherwise we append the default flags to CBMC arguments
-        for arg in DEFAULT_CBMC_FLAGS:
-            # This behavior must be reviewed if the set of default flags is extended
-            if arg in args.cbmc_args:
-                print("WARNING: Default CBMC argument `{}` not added (already specified)".format(arg))
-            else:
-                args.cbmc_args.append(arg)
+    if not args.no_memory_safety_checks:
+        add_set_cbmc_flags(args, MEMORY_SAFETY_CHECKS)
+    if not args.no_overflow_safety_checks:
+        add_set_cbmc_flags(args, OVERFLOW_SAFETY_CHECKS)
+    if not args.no_unwinding_checks:
+        add_set_cbmc_flags(args, UNWINDING_CHECKS)
 
 def add_rmc_rustc_debug_to_env(env):
     env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_llvm::gotoc")
 
+def print_cbmc_flags(args):
+    line = "[RMC] info: CBMC will be called with "
+    if len(args.cbmc_args) == 0:
+        line += "no arguments"
+    else:
+        line += "arguments " + " ".join(args.cbmc_args)
+    print(line)
 
 def print_rmc_step_status(step_name, completed_process, verbose=False):
     status = "PASS"
