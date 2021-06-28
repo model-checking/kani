@@ -3,24 +3,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn main() {
-    // pub fn compare_exchange(
-    //     &self,
-    //     current: bool,
-    //     new: bool,
-    //     success: Ordering,
-    //     failure: Ordering
-    // ) -> Result<bool, bool>
-    // Stores a value into the bool if the current value is the same
-    // as the current value.
-    // The return value is a result indicating whether the new value
-    // was written and containing the previous value. On success this
-    // value is guaranteed to be equal to current.
     let a1 = AtomicBool::new(true);
     let a2 = AtomicBool::new(true);
     let a3 = AtomicBool::new(true);
     let a4 = AtomicBool::new(true);
     let a5 = AtomicBool::new(true);
-
 
     // swap is the stable version of atomic_xchg
     // https://doc.rust-lang.org/src/core/sync/atomic.rs.html#435
