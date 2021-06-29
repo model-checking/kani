@@ -336,7 +336,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_rvalue_aggregate(
         &mut self,
         k: &AggregateKind<'tcx>,
-        operands: &Vec<Operand<'tcx>>,
+        operands: &[Operand<'tcx>],
         res_ty: Ty<'tcx>,
     ) -> Expr {
         match *k {
