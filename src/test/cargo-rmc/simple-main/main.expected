@@ -1,2 +1,3 @@
-[main.assertion.1] line 4 assertion failed: 1 == 2: FAILURE
+[memcmp.precondition.1] line 19 memcmp region 1 readable: FAILURE
+[memcmp.precondition.2] line 21 memcpy region 2 readable: FAILURE
 VERIFICATION FAILED

@@ -585,14 +585,14 @@ fn collect_tests_from_dir(
     fs::create_dir_all(&build_dir).unwrap();
 
     // If we find a `Cargo.toml` file in the current directory and we're in
-    // Cargo-rmc mode, we should look for `*.expected` files and create an
-    // output directory corresponding to each to avoid race conditions during
-    // the testing phase. We immediately return after adding the tests to avoid
+    // Cargo-rmc mode, we should look for `*.config` files and create an output
+    // directory corresponding to each to avoid race conditions during the
+    // testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
     if config.mode == Mode::CargoRMC && dir.join("Cargo.toml").exists() {
         for file in fs::read_dir(dir)? {
             let file_path = file?.path();
-            if file_path.to_str().unwrap().ends_with(".expected") {
+            if file_path.to_str().unwrap().ends_with(".config") {
                 fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
                 let paths =
                     TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };

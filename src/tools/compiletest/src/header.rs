@@ -699,7 +699,13 @@ fn iter_header<R: Read>(testfile: &Path, cfg: Option<&str>, rdr: R, it: &mut dyn
         return;
     }
 
-    let comment = if testfile.to_string_lossy().ends_with(".rs") { "//" } else { "#" };
+    let comment = if testfile.to_string_lossy().ends_with(".rs") {
+        "//"
+    } else if testfile.to_string_lossy().ends_with(".config") {
+        ""
+    } else {
+        "#"
+    };
 
     let mut rdr = BufReader::new(rdr);
     let mut ln = String::new();

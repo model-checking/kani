@@ -2424,20 +2424,23 @@ impl<'test> TestCx<'test> {
     fn run_cargo_rmc_test(&self) {
         // We create our own command for the same reasons listed in `run_rmc_test` method.
         let mut cargo = Command::new("cargo");
-        // We run `cargo` on the directory where we found the `*.expected` file
+        // We run `cargo` on the directory where we found the `*.config` file
         let parent_dir = self.testpaths.file.parent().unwrap();
-        // The name of the function to test is the same as the stem of `*.expected` file
+        // The name of the function to test is the same as the stem of `*.config` file
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
         cargo
             .arg("rmc")
+            .args(&self.props.rmc_flags)
             .args(["--function", function_name])
             .arg("--target")
             .arg(self.output_base_dir().join("target"))
-            .arg(&parent_dir);
+            .arg(&parent_dir)
+            .arg("--")
+            .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run_compiler(cargo, None);
-        let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
-        self.verify_output(&proc_res, &expected);
+        let expected_path = parent_dir.join(function_name.to_string() + ".expected");
+        self.verify_output(&proc_res, &expected_path);
     }
 
     /// Runs RMC on the test file specified by `self.testpaths.file`. An error
@@ -2453,14 +2456,14 @@ impl<'test> TestCx<'test> {
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
-        let expected =
-            fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
-        self.verify_output(&proc_res, &expected);
+        let expected_path = self.testpaths.file.parent().unwrap().join("expected");
+        self.verify_output(&proc_res, &expected_path);
     }
 
     /// Print an error if the verification output does not contain the expected
-    /// lines.
-    fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
+    /// lines in the file specified by `path`.
+    fn verify_output(&self, proc_res: &ProcRes, path: &PathBuf) {
+        let expected = fs::read_to_string(path).unwrap();
         if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
         {
             self.fatal_proc_rec(
