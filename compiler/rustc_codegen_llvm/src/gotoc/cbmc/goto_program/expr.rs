@@ -505,10 +505,10 @@ impl Expr {
         expr!(IntConstant(i), typ)
     }
 
-    pub fn typecheck_call(function: &Expr, arguments: &Vec<Expr>) -> bool {
+    pub fn typecheck_call(function: &Expr, arguments: &[Expr]) -> bool {
         // For variadic functions, all named arguments must match the type of their formal param.
         // Extra arguments (e.g the ... args) can have any type.
-        fn typecheck_named_args(parameters: &Vec<Parameter>, arguments: &Vec<Expr>) -> bool {
+        fn typecheck_named_args(parameters: &[Parameter], arguments: &[Expr]) -> bool {
             parameters.iter().zip(arguments.iter()).all(|(p, a)| a.typ() == p.typ())
         }
 
@@ -577,7 +577,7 @@ impl Expr {
     /// ALL fields must be given, including padding
     fn struct_expr_with_explicit_padding(
         typ: Type,
-        fields: &Vec<DatatypeComponent>,
+        fields: &[DatatypeComponent],
         values: Vec<Expr>,
     ) -> Self {
         assert_eq!(fields.len(), values.len());

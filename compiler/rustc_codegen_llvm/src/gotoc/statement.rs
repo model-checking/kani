@@ -227,7 +227,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_funcall(
         &mut self,
         func: &Operand<'tcx>,
-        args: &Vec<Operand<'tcx>>,
+        args: &[Operand<'tcx>],
         destination: &Option<(Place<'tcx>, BasicBlock)>,
         span: Span,
     ) -> Stmt {
