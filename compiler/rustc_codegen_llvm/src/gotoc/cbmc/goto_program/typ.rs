@@ -652,7 +652,7 @@ impl Type {
         StructTag(aggr_name(name))
     }
 
-    pub fn components_are_unique(components: &Vec<DatatypeComponent>) -> bool {
+    pub fn components_are_unique(components: &[DatatypeComponent]) -> bool {
         let mut names: Vec<_> = components.iter().map(|x| x.name()).collect();
         names.sort();
         names.dedup();
