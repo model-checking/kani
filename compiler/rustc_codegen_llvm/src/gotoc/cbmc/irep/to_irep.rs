@@ -16,7 +16,7 @@ pub trait ToIrep {
 }
 
 /// Utility functions
-fn arguments_irep(arguments: &Vec<Expr>, mm: &MachineModel) -> Irep {
+fn arguments_irep(arguments: &[Expr], mm: &MachineModel) -> Irep {
     Irep {
         id: IrepId::Arguments,
         sub: arguments.iter().map(|x| x.to_irep(mm)).collect(),
