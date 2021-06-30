@@ -105,14 +105,8 @@ impl<'tcx> GotocCtx<'tcx> {
             x if x.ends_with("__getit") => true,
             // https://github.com/model-checking/rmc/issues/205
             "panic::Location::<'a>::caller" => true,
-            // https://github.com/model-checking/rmc/issues/206
-            "core::sync::atomic::atomic_swap" => true,
             // https://github.com/model-checking/rmc/issues/207
             "core::slice::<impl [T]>::split_first" => true,
-            // https://github.com/model-checking/rmc/issues/208
-            "panicking::take_hook" => true,
-            // https://github.com/model-checking/rmc/issues/209
-            "panicking::r#try" => true,
             _ => false,
         }
     }

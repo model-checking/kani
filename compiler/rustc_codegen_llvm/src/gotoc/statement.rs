@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use super::metadata::*;
-use super::typ::{is_dyn_trait_fat_pointer, FN_RETURN_VOID_VAR_NAME};
+use super::typ::FN_RETURN_VOID_VAR_NAME;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -283,10 +283,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         return Stmt::goto(self.current_fn().find_label(&target), Location::none());
                     }
                     // Handle a virtual function call via a vtable lookup
-                    InstanceDef::Virtual(def_id, size) => {
+                    InstanceDef::Virtual(def_id, _) => {
                         // We must have at least one argument, and the first one
                         // should be a fat pointer for the trait
-                        let mut trait_fat_ptr = fargs[0].to_owned();
+                        let trait_fat_ptr = fargs[0].to_owned();
 
                         //Check the Gotoc-level fat pointer type
                         assert!(trait_fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table));
@@ -295,7 +295,6 @@ impl<'tcx> GotocCtx<'tcx> {
                             trait_fat_ptr,
                             def_id,
                             &p,
-                            &target,
                             &mut fargs,
                             loc.clone(),
                         )
@@ -342,7 +341,6 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_fat_ptr: Expr,
         def_id: DefId,
         place: &Place<'tcx>,
-        target: &BasicBlock,
         fargs: &mut Vec<Expr>,
         loc: Location,
     ) -> Vec<Stmt> {

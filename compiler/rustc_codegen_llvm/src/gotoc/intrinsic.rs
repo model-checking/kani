@@ -453,7 +453,6 @@ impl<'tcx> GotocCtx<'tcx> {
             "prefetch_read_instruction" => unimplemented!(),
             "prefetch_write_data" => unimplemented!(),
             "prefetch_write_instruction" => unimplemented!(),
-            "try" => unimplemented!(),
             "unaligned_volatile_store" => unimplemented!(),
             "va_arg" => unimplemented!(),
             "va_copy" => unimplemented!(),
