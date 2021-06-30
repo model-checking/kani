@@ -42,6 +42,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let intrinsic = self.symbol_name(instance);
         let intrinsic = intrinsic.as_str();
         let loc = self.codegen_span_option2(span);
+        debug!(
+            "codegen_intrinsic:\n\tinstance {:?}\n\tfargs {:?}\n\tp {:?}\n\tspan {:?}",
+            instance, fargs, p, span
+        );
+        let sig = instance.ty(self.tcx, ty::ParamEnv::reveal_all()).fn_sig(self.tcx);
+        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+        let ret_ty = self.monomorphize(sig.output());
+        let cbmc_ret_ty = self.codegen_ty(ret_ty);
 
         /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
         /// https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
@@ -171,6 +179,13 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
+        macro_rules! codegen_unimplemented_intrinsic {
+            ($url: expr) => {{
+                let e = self.codegen_unimplemented(intrinsic, cbmc_ret_ty, loc, $url);
+                self.codegen_expr_to_place(p, e)
+            }};
+        }
+
         // Most atomic intrinsics do:
         //   1. Perform an operation on a primary argument (e.g., addition)
         //   2. Return the previous value of the primary argument
@@ -201,14 +216,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
             }};
         }
-
-        debug!(
-            "codegen_intrinsic:\n\tinstance {:?}\n\tfargs {:?}\n\tp {:?}\n\tspan {:?}",
-            instance, fargs, p, span
-        );
-        let sig = instance.ty(self.tcx, ty::ParamEnv::reveal_all()).fn_sig(self.tcx);
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let ret_ty = self.monomorphize(sig.output());
 
         match intrinsic {
             "abort" => Stmt::assert_false("abort intrinsic", loc),
@@ -394,6 +401,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
+            "try" => {
+                codegen_unimplemented_intrinsic!("https://github.com/model-checking/rmc/issues/267")
+            }
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
             "unaligned_volatile_load" => {

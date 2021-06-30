@@ -628,7 +628,15 @@ impl<'tcx> GotocCtx<'tcx> {
         match k {
             PointerCast::ReifyFnPointer => self.codegen_operand(o).address_of(),
             PointerCast::UnsafeFnPointer => self.codegen_operand(o),
-            PointerCast::ClosureFnPointer(_) => unimplemented!(),
+            PointerCast::ClosureFnPointer(_) => {
+                let dest_typ = self.codegen_ty(t);
+                self.codegen_unimplemented(
+                    "PointerCast::ClosureFnPointer",
+                    dest_typ,
+                    Location::none(),
+                    "https://github.com/model-checking/rmc/issues/274",
+                )
+            }
             PointerCast::MutToConstPointer => self.codegen_operand(o),
             PointerCast::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
