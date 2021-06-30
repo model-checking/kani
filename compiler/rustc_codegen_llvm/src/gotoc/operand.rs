@@ -28,7 +28,11 @@ impl<'tcx> GotocCtx<'tcx> {
             Operand::Copy(d) | Operand::Move(d) =>
             // TODO: move shouldn't be the same as copy
             {
-                self.codegen_place(d).goto_expr
+                let projection = self.codegen_place(d);
+                match self.operand_ty(o).kind() {
+                    ty::Dynamic(..) => projection.fat_ptr_goto_expr.unwrap(),
+                    _ => projection.goto_expr,
+                }
             }
             Operand::Constant(c) => self.codegen_constant(&c),
         }

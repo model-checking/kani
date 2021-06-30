@@ -970,12 +970,11 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// whether a variable of type ty should be ignored
+    /// Whether a variable of type ty should be ignored as a parameter to a function
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
             ty::Tuple(substs) if substs.is_empty() => true,
             ty::FnDef(_, _) => true,
-            ty::Dynamic(_, _) => true, //DSN understand why
             _ => false,
         }
     }
