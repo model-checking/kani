@@ -4,7 +4,7 @@ use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use super::cbmc::utils::{aggr_name, BUG_REPORT_URL};
 use super::cbmc::MachineModel;
 use super::metadata::*;
-use super::typ::{is_dyn_trait_fat_pointer, is_pointer, pointee_type};
+use super::typ::{is_pointer, pointee_type};
 use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
 use num::bigint::BigInt;
@@ -679,15 +679,18 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Option<Expr> {
         // Check if the cast is from a vtable fat pointer to another
         // vtable fat pointer (which can happen with auto trait fat pointers)
-        if is_dyn_trait_fat_pointer(src_mir_type) {
+        if self.is_vtable_fat_pointer(src_mir_type) {
             self.cast_unsized_dyn_trait_to_unsized_dyn_trait(
                 src_goto_expr.clone(),
                 src_mir_type,
                 dst_mir_type,
             )
         } else {
-            // Assert that the source is not a pointer or is a thin pointer
-            assert!(pointee_type(src_mir_type).map_or(true, |p| self.use_thin_pointer(p)));
+            // Check that the source is either not a pointer or some other known case
+            assert!(
+                pointee_type(src_mir_type)
+                    .map_or(true, |p| self.use_thin_pointer(p) || self.use_slice_fat_pointer(p))
+            );
 
             // Sized to unsized cast
             self.cast_sized_expr_to_unsized_expr(src_goto_expr.clone(), src_mir_type, dst_mir_type)
@@ -923,8 +926,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         // The source destination must be a fat pointers to a dyn trait object
-        assert!(is_dyn_trait_fat_pointer(src_mir_type));
-        assert!(is_dyn_trait_fat_pointer(dst_mir_type));
+        assert!(self.is_vtable_fat_pointer(src_mir_type));
+        assert!(self.is_vtable_fat_pointer(dst_mir_type));
 
         let dst_mir_dyn_ty = pointee_type(dst_mir_type).unwrap();
 
@@ -965,7 +968,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // The src type cannot be a pointer to a dynamic trait object, otherwise
         // we should have called cast_unsized_dyn_trait_to_unsized_dyn_trait
-        assert!(!is_dyn_trait_fat_pointer(src_mir_type));
+        assert!(!self.is_vtable_fat_pointer(src_mir_type));
 
         match (src_mir_type.kind(), dst_mir_type.kind()) {
             (ty::Ref(..), ty::Ref(..)) => {
