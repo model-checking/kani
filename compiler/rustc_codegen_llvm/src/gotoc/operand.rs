@@ -29,6 +29,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // TODO: move shouldn't be the same as copy
             {
                 let projection = self.codegen_place(d);
+                // If the operand itself is a Dynamic (like when passing a boxed closure), 
+                // we need to pull off the fat pointer. In that case, the rustc kind() on 
+                // both the operand and the inner type are Dynamic.
                 match self.operand_ty(o).kind() {
                     ty::Dynamic(..) => projection.fat_ptr_goto_expr.unwrap(),
                     _ => projection.goto_expr,

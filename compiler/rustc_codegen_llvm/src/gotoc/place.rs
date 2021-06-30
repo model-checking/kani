@@ -102,6 +102,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
         }
         // TODO: these assertions fail on a few regressions. Figure out why.
         // I think it may have to do with boxed fat pointers.
+        // https://github.com/model-checking/rmc/issues/277
         if !Self::_check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx) {
             warn!(
                 "Unexpected type mismatch in projection: \n{:?}\n{:?}",
