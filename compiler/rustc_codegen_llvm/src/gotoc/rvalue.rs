@@ -686,7 +686,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 dst_mir_type,
             )
         } else {
-            // Check that the source is either not a pointer or some other known case
+            // Check that the source is either not a pointer, or a thin or a slice pointer
             assert!(
                 pointee_type(src_mir_type)
                     .map_or(true, |p| self.use_thin_pointer(p) || self.use_slice_fat_pointer(p))
