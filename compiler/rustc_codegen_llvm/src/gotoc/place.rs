@@ -13,7 +13,7 @@ use rustc_middle::{
     ty::{self, Ty, TyS, VariantDef},
 };
 use rustc_target::abi::{LayoutOf, TagEncoding, Variants};
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// A projection in RMC can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
@@ -63,7 +63,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
 
 /// Constructor
 impl<'tcx> ProjectedPlace<'tcx> {
-    fn _check_expr_typ(expr: &Expr, typ: &TypeOrVariant<'tcx>, ctx: &mut GotocCtx<'tcx>) -> bool {
+    fn check_expr_typ(expr: &Expr, typ: &TypeOrVariant<'tcx>, ctx: &mut GotocCtx<'tcx>) -> bool {
         match typ {
             TypeOrVariant::Type(t) => &ctx.codegen_ty(t) == expr.typ(),
             TypeOrVariant::Variant(_) => true, //TODO, what to do here?
@@ -102,12 +102,14 @@ impl<'tcx> ProjectedPlace<'tcx> {
         }
         // TODO: these assertions fail on a few regressions. Figure out why.
         // I think it may have to do with boxed fat pointers.
-        // assert!(
-        //     Self::check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx),
-        //     "\n{:?}\n{:?}",
-        //     &goto_expr,
-        //     &mir_typ_or_variant
-        // );
+        // https://github.com/model-checking/rmc/issues/277
+        if !Self::check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx) {
+            warn!(
+                "Unexpected type mismatch in projection: \n{:?}\n{:?}",
+                &goto_expr, &mir_typ_or_variant
+            );
+        };
+
         assert!(
             Self::check_fat_ptr_typ(&fat_ptr_goto_expr, &fat_ptr_mir_typ, ctx),
             "\n{:?}\n{:?}",
@@ -251,6 +253,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     } else {
                         before.fat_ptr_goto_expr
                     };
+
+                // Check that we have a valid trait or slice fat pointer
+                if let Some(fat_ptr) = fat_ptr_goto_expr.clone() {
+                    assert!(
+                        fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table)
+                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table)
+                    );
+                };
 
                 let inner_mir_typ = inner_mir_typ_and_mut.ty;
                 let expr = match inner_mir_typ.kind() {
