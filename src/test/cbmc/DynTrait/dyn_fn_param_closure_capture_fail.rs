@@ -13,7 +13,7 @@ fn takes_dyn_fun(fun: &dyn Fn() -> i32) {
     let x = fun();
     __VERIFIER_expect_fail(x != 5, "Wrong return");
     /* The closure captures `a` and thus is sized */
-    __VERIFIER_expect_fail(size_from_vtable(vtable!(fun)) == 8, "Wrong size");
+    __VERIFIER_expect_fail(size_from_vtable(vtable!(fun)) != 8, "Wrong size");
 }
 
 fn main() {

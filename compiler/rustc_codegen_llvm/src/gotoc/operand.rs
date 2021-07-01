@@ -28,7 +28,16 @@ impl<'tcx> GotocCtx<'tcx> {
             Operand::Copy(d) | Operand::Move(d) =>
             // TODO: move shouldn't be the same as copy
             {
-                self.codegen_place(d).goto_expr
+                let projection = self.codegen_place(d);
+                // If the operand itself is a Dynamic (like when passing a boxed closure),
+                // we need to pull off the fat pointer. In that case, the rustc kind() on
+                // both the operand and the inner type are Dynamic.
+                // Consider moving this check elsewhere in:
+                // https://github.com/model-checking/rmc/issues/277
+                match self.operand_ty(o).kind() {
+                    ty::Dynamic(..) => projection.fat_ptr_goto_expr.unwrap(),
+                    _ => projection.goto_expr,
+                }
             }
             Operand::Constant(c) => self.codegen_constant(&c),
         }
