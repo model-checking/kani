@@ -2406,16 +2406,60 @@ impl<'test> TestCx<'test> {
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
-        // Print an error if the verification result is not expected.
-        if self.should_compile_successfully(self.pass_mode()) {
-            if !proc_res.status.success() {
-                self.fatal_proc_rec("test failed: expected success, got failure", &proc_res);
+        // If the test file contains expected failures in some locations, ensure
+        // that verification does indeed fail in those locations
+        let fail_lines = TestCx::find_expect_fail_lines(&self.testpaths.file);
+        if !fail_lines.is_empty() {
+            if let Some(num) = TestCx::verify_expect_fail_in_lines(&proc_res.stdout, fail_lines) {
+                self.fatal_proc_rec(
+                    &format!("test failed: expected failure in line {}, got success", num),
+                    &proc_res,
+                )
             }
         } else {
-            if proc_res.status.success() {
-                self.fatal_proc_rec("test failed: expected failure, got success", &proc_res);
+            // Print an error if the verification result is not expected.
+            if self.should_compile_successfully(self.pass_mode()) {
+                if !proc_res.status.success() {
+                    self.fatal_proc_rec("test failed: expected success, got failure", &proc_res);
+                }
+            } else {
+                if proc_res.status.success() {
+                    self.fatal_proc_rec("test failed: expected failure, got success", &proc_res);
+                }
             }
         }
+    }
+
+    /// Verify that `str` contains expected failures corresponding to each line in `lines`.
+    fn verify_expect_fail_in_lines(str: &str, line_nums: Vec<usize>) -> Option<usize> {
+        let mut lines = str.lines();
+        let first_fail = &format!("line {} EXPECTED FAIL", line_nums[0]);
+        let mut line = lines.find(|&line| line.contains(first_fail));
+
+        for line_num in line_nums {
+            // It is safe to call unwrap here because RMC always prints an
+            // "EXPECTED FAIL" line for each call to `__VERIFIER_expect_fail`.
+            if line.unwrap().contains("SUCCESS") {
+                return Some(line_num);
+            }
+            // "EXPECTED FAIL" lines are printed in sequence, so we can
+            // immediately check the next line.
+            line = lines.next()
+        }
+        None
+    }
+
+    /// Find line numbers where `__VERIFIER_expect_fail` is called in the test
+    /// file specified by `path`.
+    fn find_expect_fail_lines(path: &PathBuf) -> Vec<usize> {
+        let code = fs::read_to_string(path).unwrap();
+        let mut lines = vec![];
+        for (num, txt) in code.lines().enumerate() {
+            if txt.contains("__VERIFIER_expect_fail") {
+                lines.push(num + 1);
+            }
+        }
+        lines
     }
 
     /// Runs cargo-rmc on the function specified by the stem of `self.testpaths.file`.
