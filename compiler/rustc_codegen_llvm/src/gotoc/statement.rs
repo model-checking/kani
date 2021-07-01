@@ -3,6 +3,7 @@
 use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use super::metadata::*;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
     BasicBlock, Operand, Place, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
@@ -276,79 +277,101 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let (p, target) = destination.unwrap();
 
-                if let ty::InstanceDef::DropGlue(_, None) = instance.def {
-                    // here an empty drop glue is invoked. we just ignore it.
-                    return Stmt::goto(self.current_fn().find_label(&target), Location::none());
-                }
+                let mut stmts: Vec<Stmt> = match instance.def {
+                    // Here an empty drop glue is invoked; we just ignore it.
+                    InstanceDef::DropGlue(_, None) => {
+                        return Stmt::goto(self.current_fn().find_label(&target), Location::none());
+                    }
+                    // Handle a virtual function call via a vtable lookup
+                    InstanceDef::Virtual(def_id, _) => {
+                        // We must have at least one argument, and the first one
+                        // should be a fat pointer for the trait
+                        let trait_fat_ptr = fargs[0].to_owned();
 
-                // Handle the case of a virtual function call via vtable lookup.
-                let mut stmts = if let InstanceDef::Virtual(def_id, size) = instance.def {
-                    debug!(
-                        "Codegen a call through a virtual function. def_id: {:?} size: {:?}",
-                        def_id, size
-                    );
+                        //Check the Gotoc-level fat pointer type
+                        assert!(trait_fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table));
 
-                    // The first argument to a virtual function is a fat pointer for the trait
-                    let trait_fat_ptr = fargs[0].to_owned();
-                    let vtable_field_name = self.vtable_field_name(def_id);
-
-                    // Now that we have all the stuff we need, we can actually build the dynamic call
-                    // If the original call was of the form
-                    // f(arg0, arg1);
-                    // The new call should be of the form
-                    // arg0.vtable->f(arg0.data,arg1);
-                    let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
-                    let vtable = vtable_ref.dereference();
-                    let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
-
-                    // Update the argument from arg0 to arg0.data
-                    fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-
-                    // For soundness, add an assertion that the vtable function call is not null.
-                    // Otherwise, CBMC might treat this as an assert(0) and later user-added assertions
-                    // could be vacuously true.
-                    let call_is_nonnull = fn_ptr.clone().is_nonnull();
-                    let assert_msg =
-                        format!("Non-null virtual function call for {:?}", vtable_field_name);
-                    let assert_nonnull = Stmt::assert(call_is_nonnull, &assert_msg, loc.clone());
-
-                    // Virtual function call and corresponding nonnull assertion.
-                    let func_exp: Expr = fn_ptr.dereference();
-                    vec![
-                        assert_nonnull,
-                        self.codegen_expr_to_place(&p, func_exp.call(fargs))
-                            .with_location(loc.clone()),
-                    ]
-                } else {
-                    // Non-virtual function call.
-                    let func_exp = self.codegen_operand(func);
-                    vec![
-                        self.codegen_expr_to_place(&p, func_exp.call(fargs))
-                            .with_location(loc.clone()),
-                    ]
+                        self.codegen_virtual_funcall(
+                            trait_fat_ptr,
+                            def_id,
+                            &p,
+                            &mut fargs,
+                            loc.clone(),
+                        )
+                    }
+                    // Normal, non-virtual function calls
+                    InstanceDef::Item(..)
+                    | InstanceDef::DropGlue(_, Some(_))
+                    | InstanceDef::Intrinsic(..)
+                    | InstanceDef::FnPtrShim(.., _)
+                    | InstanceDef::VtableShim(..)
+                    | InstanceDef::ReifyShim(..)
+                    | InstanceDef::ClosureOnceShim { call_once: _ }
+                    | InstanceDef::CloneShim(..) => {
+                        let func_exp = self.codegen_operand(func);
+                        vec![
+                            self.codegen_expr_to_place(&p, func_exp.call(fargs))
+                                .with_location(loc.clone()),
+                        ]
+                    }
                 };
-
-                // Add return jump.
                 stmts.push(Stmt::goto(self.current_fn().find_label(&target), loc.clone()));
-
-                // Produce the full function call block.
-                Stmt::block(stmts, loc)
+                return Stmt::block(stmts, loc);
             }
+            // Function call through a pointer
             ty::FnPtr(_) => {
                 let (p, target) = destination.unwrap();
                 let func_expr = self.codegen_operand(func).dereference();
-                // Actually generate the function call, and store the return value, if any.
-                Stmt::block(
+                // Actually generate the function call and return.
+                return Stmt::block(
                     vec![
                         self.codegen_expr_to_place(&p, func_expr.call(fargs))
                             .with_location(loc.clone()),
                         Stmt::goto(self.current_fn().find_label(&target), loc.clone()),
                     ],
                     loc,
-                )
+                );
             }
             x => unreachable!("Function call where the function was of unexpected type: {:?}", x),
-        }
+        };
+    }
+
+    fn codegen_virtual_funcall(
+        &mut self,
+        trait_fat_ptr: Expr,
+        def_id: DefId,
+        place: &Place<'tcx>,
+        fargs: &mut Vec<Expr>,
+        loc: Location,
+    ) -> Vec<Stmt> {
+        let vtable_field_name = self.vtable_field_name(def_id);
+
+        // Now that we have all the stuff we need, we can actually build the dynamic call
+        // If the original call was of the form
+        // f(arg0, arg1);
+        // The new call should be of the form
+        // arg0.vtable->f(arg0.data,arg1);
+        let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
+        let vtable = vtable_ref.dereference();
+        let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
+
+        // Update the argument from arg0 to arg0.data
+        fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+
+        // For soundness, add an assertion that the vtable function call is not null.
+        // Otherwise, CBMC might treat this as an assert(0) and later user-added assertions
+        // could be vacuously true.
+        let call_is_nonnull = fn_ptr.clone().is_nonnull();
+        let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
+        let assert_nonnull = Stmt::assert(call_is_nonnull, &assert_msg, loc.clone());
+
+        // Virtual function call and corresponding nonnull assertion.
+        let func_exp: Expr = fn_ptr.dereference();
+        vec![
+            assert_nonnull,
+            self.codegen_expr_to_place(place, func_exp.call(fargs.to_vec()))
+                .with_location(loc.clone()),
+        ]
     }
 
     /// A place is similar to the C idea of a LHS. For example, the returned value of a function call is stored to a place.
