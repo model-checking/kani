@@ -2418,16 +2418,54 @@ impl<'test> TestCx<'test> {
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
-        // Print an error if the verification result is not expected.
-        if self.should_compile_successfully(self.pass_mode()) {
-            if !proc_res.status.success() {
-                self.fatal_proc_rec("test failed: expected success, got failure", &proc_res);
+        // If the test file contains expected failures in some locations, ensure
+        // that verification does indeed fail in those locations
+        if proc_res.stdout.contains("EXPECTED FAIL") {
+            let lines = TestCx::verify_expect_fail(&proc_res.stdout);
+            if !lines.is_empty() {
+                self.fatal_proc_rec(
+                    &format!("test failed: expected failure in lines {:?}, got success", lines),
+                    &proc_res,
+                )
             }
         } else {
-            if proc_res.status.success() {
-                self.fatal_proc_rec("test failed: expected failure, got success", &proc_res);
+            // The code above depends too much on the exact string output of
+            // RMC. If the output of RMC changes in the future, the check below
+            // will (hopefully) force some tests to fail and remind us to
+            // update the code above as well.
+            if fs::read_to_string(&self.testpaths.file).unwrap().contains("__VERIFIER_expect_fail")
+            {
+                self.fatal_proc_rec(
+                    "found call to `__VERIFIER_expect_fail` with no corresponding \
+                 \"EXPECTED FAIL\" in RMC's output",
+                    &proc_res,
+                )
+            }
+            // Print an error if the verification result is not expected.
+            if self.should_compile_successfully(self.pass_mode()) {
+                if !proc_res.status.success() {
+                    self.fatal_proc_rec("test failed: expected success, got failure", &proc_res);
+                }
+            } else {
+                if proc_res.status.success() {
+                    self.fatal_proc_rec("test failed: expected failure, got success", &proc_res);
+                }
             }
         }
+    }
+
+    /// If the test file contains expected failures in some locations, ensure
+    /// that verification does not succeed in those locations.
+    fn verify_expect_fail(str: &str) -> Vec<usize> {
+        let re = Regex::new(r"line [0-9]+ EXPECTED FAIL: SUCCESS").unwrap();
+        let mut lines = vec![];
+        for m in re.find_iter(str) {
+            let splits = m.as_str().split_ascii_whitespace();
+            let num_str = splits.skip(1).next().unwrap();
+            let num = num_str.parse().unwrap();
+            lines.push(num);
+        }
+        lines
     }
 
     /// Runs cargo-rmc on the function specified by the stem of `self.testpaths.file`.
