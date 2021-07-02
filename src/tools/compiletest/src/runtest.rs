@@ -2448,8 +2448,10 @@ impl<'test> TestCx<'test> {
         let re = Regex::new(r"line [0-9]+ EXPECTED FAIL: SUCCESS").unwrap();
         let mut lines = vec![];
         for m in re.find_iter(str) {
-            lines
-                .push(m.as_str().split_ascii_whitespace().skip(1).next().unwrap().parse().unwrap());
+            let splits = m.as_str().split_ascii_whitespace();
+            let num_str = splits.skip(1).next().unwrap();
+            let num = num_str.parse().unwrap();
+            lines.push(num);
         }
         lines
     }
