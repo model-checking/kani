@@ -2408,15 +2408,27 @@ impl<'test> TestCx<'test> {
         let proc_res = self.compose_and_run_compiler(rmc, None);
         // If the test file contains expected failures in some locations, ensure
         // that verification does indeed fail in those locations
-        let fail_lines = TestCx::find_expect_fail_lines(&self.testpaths.file);
-        if !fail_lines.is_empty() {
-            if let Some(num) = TestCx::verify_expect_fail_in_lines(&proc_res.stdout, fail_lines) {
+        if proc_res.stdout.contains("EXPECTED FAIL") {
+            let lines = TestCx::verify_expect_fail(&proc_res.stdout);
+            if !lines.is_empty() {
                 self.fatal_proc_rec(
-                    &format!("test failed: expected failure in line {}, got success", num),
+                    &format!("test failed: expected failure in lines {:?}, got success", lines),
                     &proc_res,
                 )
             }
         } else {
+            // The code above depends too much on the exact string output of
+            // RMC. If the output of RMC changes in the future, the check below
+            // will (hopefully) force some tests to fail and remind us to
+            // update the code above as well.
+            if fs::read_to_string(&self.testpaths.file).unwrap().contains("__VERIFIER_expect_fail")
+            {
+                self.fatal_proc_rec(
+                    "found call to `__VERIFIER_expect_fail` with no corresponding \
+                 \"EXPECTED FAIL\" in RMC's output",
+                    &proc_res,
+                )
+            }
             // Print an error if the verification result is not expected.
             if self.should_compile_successfully(self.pass_mode()) {
                 if !proc_res.status.success() {
@@ -2430,34 +2442,14 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Verify that `str` contains expected failures corresponding to each line in `lines`.
-    fn verify_expect_fail_in_lines(str: &str, line_nums: Vec<usize>) -> Option<usize> {
-        let mut lines = str.lines();
-        let first_fail = &format!("line {} EXPECTED FAIL", line_nums[0]);
-        let mut line = lines.find(|&line| line.contains(first_fail));
-
-        for line_num in line_nums {
-            // It is safe to call unwrap here because RMC always prints an
-            // "EXPECTED FAIL" line for each call to `__VERIFIER_expect_fail`.
-            if line.unwrap().contains("SUCCESS") {
-                return Some(line_num);
-            }
-            // "EXPECTED FAIL" lines are printed in sequence, so we can
-            // immediately check the next line.
-            line = lines.next()
-        }
-        None
-    }
-
-    /// Find line numbers where `__VERIFIER_expect_fail` is called in the test
-    /// file specified by `path`.
-    fn find_expect_fail_lines(path: &PathBuf) -> Vec<usize> {
-        let code = fs::read_to_string(path).unwrap();
+    /// If the test file contains expected failures in some locations, ensure
+    /// that verification does not succeed in those locations.
+    fn verify_expect_fail(str: &str) -> Vec<usize> {
+        let re = Regex::new(r"line [0-9]+ EXPECTED FAIL: SUCCESS").unwrap();
         let mut lines = vec![];
-        for (num, txt) in code.lines().enumerate() {
-            if txt.contains("__VERIFIER_expect_fail") {
-                lines.push(num + 1);
-            }
+        for m in re.find_iter(str) {
+            lines
+                .push(m.as_str().split_ascii_whitespace().skip(1).next().unwrap().parse().unwrap());
         }
         lines
     }
