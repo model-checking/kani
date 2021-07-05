@@ -1034,6 +1034,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Check if the mir type already is a vtable fat pointer.
     pub fn is_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        pointee_type(mir_type).map_or(false, |p| self.use_vtable_fat_pointer(p))
+        self.is_ref_of_unsized(mir_type)
+            && self.use_vtable_fat_pointer(pointee_type(mir_type).unwrap())
     }
 }
