@@ -22,3 +22,6 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Standalone rmc tests, expected tests, and cargo tests
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
 ./x.py test -i --stage 1 cbmc firecracker prusti smack expected cargo-rmc
+
+# Check codegen for the standard library
+$SCRIPT_DIR/std-lib-regression.sh
