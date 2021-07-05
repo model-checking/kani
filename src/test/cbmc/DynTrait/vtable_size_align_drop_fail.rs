@@ -13,6 +13,7 @@
 #![allow(deprecated)]
 
 use std::intrinsics::size_of;
+use std::ptr::drop_in_place;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 include!("../../rmc-prelude.rs");
@@ -68,7 +69,7 @@ fn main() {
 
     // Check layout/values for Sheep
     unsafe {
-        let animal_sheep = random_animal(1);
+        let animal_sheep = &*random_animal(1);
 
         // Check that the struct's data is what we expect
         let data_ptr = data!(animal_sheep);
@@ -90,15 +91,15 @@ fn main() {
     }
     // Check layout/values for Cow
     unsafe {
-        let animal_sheep = random_animal(1);
+        let animal_cow = &*random_animal(6);
 
         // Check that the struct's data is what we expect
-        let data_ptr = data!(animal_sheep);
+        let data_ptr = data!(animal_cow);
 
         // Note: i8 ptr cast
         __VERIFIER_expect_fail(*(data_ptr as *mut i8) != 9, "Wrong data"); // From Cow
 
-        let vtable_ptr = vtable!(animal_sheep);
+        let vtable_ptr = vtable!(animal_cow);
 
         // Drop pointer
         __VERIFIER_expect_fail(
