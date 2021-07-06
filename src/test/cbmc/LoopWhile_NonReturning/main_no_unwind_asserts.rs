@@ -1,12 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-flags: --no-default-flags
+// rmc-flags: --no-default-checks
 // cbmc-flags: --unwind 10
 
 include!("../../rmc-prelude.rs");
 
-// This example tests the RMC flag `--no-default-flags`
+// This example tests the RMC flag `--no-default-checks`
 //
 // It is the same as `main.rs` except for the flags passed to RMC and CBMC
 // Running it with `--unwind 10` is not enough to unwind the loop
@@ -18,7 +18,7 @@ include!("../../rmc-prelude.rs");
 // ** 1 of 2 failed (2 iterations)
 // VERIFICATION FAILED
 //
-// But with `--no-default-flags` we will avoid introducing a unwinding assertion:
+// But with `--no-default-checks` we will avoid introducing a unwinding assertion:
 //
 // [main.assertion.1] line 34 assertion failed: a == 0: SUCCESS
 //

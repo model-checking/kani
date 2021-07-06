@@ -1,5 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// rmc-flags: --no-overflow-checks
+
 fn test1() {
     let str = "foo";
     let string = str.to_string();

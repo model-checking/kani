@@ -33,7 +33,7 @@ def main():
     parser.add_argument("crate", help="crate to verify")
     parser.add_argument("--no-default-checks", action="store_true", help="Disable all default checks")
     parser.add_argument("--no-memory-safety-checks", action="store_true", help="Disable default memory safety checks")
-    parser.add_argument("--no-overflow-safety-checks", action="store_true", help="Disable default overflow checks")
+    parser.add_argument("--no-overflow-checks", action="store_true", help="Disable default overflow checks")
     parser.add_argument("--no-unwinding-checks", action="store_true", help="Disable default unwinding checks")
     parser.add_argument("--dry-run", action="store_true", help="Print commands instead of running them")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,

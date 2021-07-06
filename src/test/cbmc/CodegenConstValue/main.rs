@@ -1,5 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// rmc-flags: --no-memory-safety-checks
+
 const DEC_DIGITS_LUT: &'static [u8] = b"ab";
 fn main() {
     // The next two assertions don't go through to CBMC

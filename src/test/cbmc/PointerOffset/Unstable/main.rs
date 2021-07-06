@@ -1,5 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// rmc-flags: --no-overflow-checks
+
 #![feature(core_intrinsics)]
 use std::intrinsics::ptr_offset_from;
 

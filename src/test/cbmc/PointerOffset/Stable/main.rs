@@ -1,5 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// rmc-flags: --no-overflow-checks
+
 fn main() {
     // pub unsafe fn offset_from(self, origin: *const T) -> isize
     // Calculates the distance between two pointers. The returned value

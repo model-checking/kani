@@ -13,11 +13,16 @@ RMC_RUSTC_EXE = "rmc-rustc"
 EXIT_CODE_SUCCESS = 0
 
 MEMORY_SAFETY_CHECKS = ["--pointer-check",
+                        "--pointer-primitive-check",
                         "--bounds-check"]
-OVERFLOW_SAFETY_CHECKS = ["--float-overflow-check",
-                          "--pointer-overflow-check",
-                          "--signed-overflow-check",
-                          "--unsigned-overflow-check"]
+OVERFLOW_CHECKS = ["--conversion-check",
+                   "--div-by-zero-check",
+                   "--float-overflow-check",
+                   "--nan-check",
+                   "--pointer-overflow-check",
+                   "--signed-overflow-check",
+                   "--undefined-shift-check",
+                   "--unsigned-overflow-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
 # A Scanner is intended to match a pattern with an output
@@ -69,8 +74,8 @@ def add_set_cbmc_flags(args, flags):
 def add_default_cbmc_flags(args):
     if not args.no_memory_safety_checks:
         add_set_cbmc_flags(args, MEMORY_SAFETY_CHECKS)
-    if not args.no_overflow_safety_checks:
-        add_set_cbmc_flags(args, OVERFLOW_SAFETY_CHECKS)
+    if not args.no_overflow_checks:
+        add_set_cbmc_flags(args, OVERFLOW_CHECKS)
     if not args.no_unwinding_checks:
         add_set_cbmc_flags(args, UNWINDING_CHECKS)
 
