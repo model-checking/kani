@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--no-memory-safety-checks", action="store_true", help="Disable default memory safety checks")
     parser.add_argument("--no-overflow-safety-checks", action="store_true", help="Disable default overflow checks")
     parser.add_argument("--no-unwinding-checks", action="store_true", help="Disable default unwinding checks")
-    parser.add_argument("--print-cbmc-flags", action="store_true", help="Print CBMC flags associated to an RMC invocation")
+    parser.add_argument("--dry-run", action="store_true", help="Print commands instead of running them")
     parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
@@ -51,9 +51,6 @@ def main():
     if not args.no_default_checks:
         rmc.add_default_cbmc_flags(args)
 
-    if args.print_cbmc_flags:
-        rmc.print_cbmc_flags(args)
-
     base, ext = os.path.splitext(args.input)
     if ext != ".rs":
         print("ERROR: Expecting .rs input file")
@@ -63,18 +60,18 @@ def main():
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler):
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run):
         return 1
 
-    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps):
+    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
     if args.gen_c:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose):
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose, args.dry_run):
             return 1
 
     if args.gen_symbols:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(goto_filename, symbols_filename, args.verbose):
+        if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(goto_filename, symbols_filename, args.verbose, args.dry_run):
             return 1
 
     if "--function" not in args.cbmc_args:
@@ -84,9 +81,9 @@ def main():
     if args.visualize:
         retcode = rmc.run_visualize(goto_filename, args.cbmc_args, \
                                     args.verbose, args.quiet, args.keep_temps, \
-                                    args.function, args.srcdir, args.wkdir)
+                                    args.function, args.srcdir, args.wkdir, args.dry_run)
     else:
-        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet)
+        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
         retcode = EXIT_CODE_SUCCESS
     return retcode
