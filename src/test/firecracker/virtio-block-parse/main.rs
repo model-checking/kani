@@ -3,6 +3,11 @@
 
 // rmc-flags: --no-overflow-checks
 
+// We use `--no-overflow-checks` in this test to avoid getting
+// a verification failure:
+// [overflow.1] arithmetic overflow on unsigned + in var_6 + var_7: FAILURE
+// Tracking issue: https://github.com/model-checking/rmc/issues/307
+
 // Example from Firecracker virtio block device
 // We test the parse function against an arbitrary guest memory
 

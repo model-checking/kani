@@ -3,6 +3,11 @@
 
 //rmc-flags: --no-memory-safety-checks
 
+// We use `--no-memory-safety-checks` in this test to avoid getting
+// a verification failure:
+// [pointer_dereference.7] invalid function pointer: FAILURE
+// Tracking issue: https://github.com/model-checking/rmc/issues/307
+
 // Check that we can codegen a boxed dyn closure
 
 fn main() {
