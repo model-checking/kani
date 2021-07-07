@@ -1,10 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(core_intrinsics)]
-#![feature(raw)]
-#![allow(deprecated)]
+#![feature(ptr_metadata)]
 
 use std::io::{sink, Write};
+use std::ptr::DynMetadata;
+use std::any::Any;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 
@@ -31,7 +32,7 @@ fn main() {
         let dest_data_ptr = data!(dest_ptr) as *mut usize;
 
         // // The second half of this fat pointer is another vtable, for log
-        let second_vtable_ptr = dest_data_ptr.offset(1) as *mut *mut usize;
+        let second_vtable_ptr = dest_data_ptr.offset(1) as *mut DynMetadata<dyn Any>;
         let second_vtable = *second_vtable_ptr;
 
         // The sink itself has no size, weirdly enough
