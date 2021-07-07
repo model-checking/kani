@@ -91,13 +91,17 @@ def print_rmc_step_status(step_name, completed_process, verbose=False):
         print(f"[RMC] cmd: {' '.join(completed_process.args)}")
 
 def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, verbose=False, debug=False, scanners=[], dry_run=False):
+    # If this a dry run, we emulate running a successful process whose output is the command itself
+    # We set `output_to` to `stdout` so that the output is not omitted below
     if dry_run:
-        print(' '.join(cmd))
-        return EXIT_CODE_SUCCESS
-
-    process = subprocess.run(
-        cmd, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        env=env, cwd=cwd)
+        if output_to == None:
+            output_to = "stdout"
+        cmd_line = ' '.join(cmd)
+        process = subprocess.CompletedProcess(None, EXIT_CODE_SUCCESS, stdout=cmd_line)
+    else:
+        process = subprocess.run(
+            cmd, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            env=env, cwd=cwd)
     
     # Print status
     if label != None:
