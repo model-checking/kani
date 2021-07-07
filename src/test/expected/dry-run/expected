@@ -1,0 +1,3 @@
+rmc-rustc -Z codegen-backend=gotoc -Z symbol-mangling-version=v0 --cfg=rmc
+symtab2gb
+cbmc --pointer-check --pointer-primitive-check --bounds-check --conversion-check --div-by-zero-check --float-overflow-check --nan-check --pointer-overflow-check --signed-overflow-check --undefined-shift-check --unsigned-overflow-check --unwinding-assertions --function main
