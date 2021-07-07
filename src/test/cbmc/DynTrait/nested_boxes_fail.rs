@@ -6,8 +6,7 @@
 // In this failing tests, assertions are inverted to use !=.
 
 #![feature(core_intrinsics)]
-#![feature(raw)]
-#![allow(deprecated)]
+#![feature(ptr_metadata)]
 
 use std::intrinsics::size_of;
 

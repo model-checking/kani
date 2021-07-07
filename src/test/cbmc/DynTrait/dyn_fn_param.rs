@@ -4,8 +4,7 @@
 // Check that we can pass a dyn function pointer to a stand alone
 // function definition
 
-#![feature(raw)]
-#![allow(deprecated)]
+#![feature(ptr_metadata)]
 
 include!("../Helpers/vtable_utils_ignore.rs");
 
