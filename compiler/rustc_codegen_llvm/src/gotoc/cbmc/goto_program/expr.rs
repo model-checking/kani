@@ -708,6 +708,27 @@ impl Expr {
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
     }
 
+    /// Struct initializer  
+    /// `struct foo the_foo = >>> {field1, padding2, field3, ... } <<<`
+    /// Note that padding fields should be explicitiy given.
+    pub fn struct_expr_from_padded_values(
+        typ: Type,
+        mut values: Vec<Expr>,
+        symbol_table: &SymbolTable,
+    ) -> Self {
+        assert!(typ.is_struct_tag(), "Error in struct_expr\n\t{:?}\n\t{:?}", typ, values);
+        let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
+        assert_eq!(fields.len(), values.len(), "Error in struct_expr\n\t{:?}\n\t{:?}", typ, values);
+        assert!(
+            fields.iter().zip(values.iter()).all(|(f, v)| &f.typ() == v.typ()),
+            "Error in struct_expr\n\t{:?}\n\t{:?}",
+            typ,
+            values
+        );
+
+        Expr::struct_expr_with_explicit_padding(typ, fields, values)
+    }
+
     /// `identifier`
     pub fn symbol_expression(identifier: String, typ: Type) -> Self {
         expr!(Symbol { identifier }, typ)

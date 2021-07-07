@@ -1,10 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use super::super::utils::deaggr_name;
 use super::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
     Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
 };
+use crate::btree_map;
 use num::bigint::BigInt;
 use std::collections::{BTreeMap, HashSet};
 
@@ -33,9 +35,9 @@ pub trait Transformer: Sized {
             Type::Pointer { typ } => self.transform_pointer_type(typ),
             Type::Signedbv { width } => self.transform_signedbv_type(width),
             Type::Struct { tag, components } => self.transform_struct_type(tag, components),
-            Type::StructTag(tag) => self.transform_struct_tag_type(tag),
+            Type::StructTag(tag) => self.transform_struct_tag_type(&deaggr_name(tag)),
             Type::Union { tag, components } => self.transform_union_type(tag, components),
-            Type::UnionTag(tag) => self.transform_union_tag_type(tag),
+            Type::UnionTag(tag) => self.transform_union_tag_type(&deaggr_name(tag)),
             Type::Unsignedbv { width } => self.transform_unsignedbv_type(width),
             Type::VariadicCode { parameters, return_type } => {
                 self.transform_variadic_code_type(parameters, return_type)
@@ -380,22 +382,19 @@ pub trait Transformer: Sized {
     }
 
     fn transform_struct_expr(&self, typ: &Type, values: &[Expr]) -> Expr {
-        if let Type::Struct { tag: _tag, components } = typ {
-            let transformed_typ = self.transform_type(typ);
-
-            let transformed_components: BTreeMap<_, _> = {
-                let transformed_values = values.iter().map(|value| self.transform_expr(value));
-                let component_names = components.iter().filter_map(|component| match component {
-                    DatatypeComponent::Field { name, .. } => Some(name.to_string()),
-                    DatatypeComponent::Padding { .. } => None,
-                });
-                component_names.zip(transformed_values).collect()
-            };
-
-            Expr::struct_expr(transformed_typ, transformed_components, self.symbol_table())
-        } else {
-            unreachable!()
-        }
+        let transformed_typ = self.transform_type(typ);
+        assert!(
+            transformed_typ.is_struct_tag(),
+            "Transformed StructTag must be StructTag; got {:?}",
+            transformed_typ
+        );
+        let transformed_values: Vec<_> =
+            values.into_iter().map(|value| self.transform_expr(value)).collect();
+        Expr::struct_expr_from_padded_values(
+            transformed_typ,
+            transformed_values,
+            self.symbol_table(),
+        )
     }
 
     fn transform_symbol_expr(&self, typ: &Type, identifier: &str) -> Expr {
