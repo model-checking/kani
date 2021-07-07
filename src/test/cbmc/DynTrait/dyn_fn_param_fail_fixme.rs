@@ -5,9 +5,7 @@
 // function definition. Inverted negative test.
 
 // FIXME https://github.com/model-checking/rmc/issues/240
-
-#![feature(raw)]
-#![allow(deprecated)]
+#![feature(ptr_metadata)]
 
 include!("../Helpers/vtable_utils_ignore.rs");
 include!("../../rmc-prelude.rs");

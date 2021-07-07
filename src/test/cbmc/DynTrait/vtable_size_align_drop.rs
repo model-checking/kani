@@ -3,12 +3,11 @@
 
 // This test checks the `size` and `align` fields of vtables, for a
 // dynamic trait where two implementing structs have different sizes.
-// The strategy is to cast the dyn trait object to a raw::TraitObject
-// then do some unsafe pointer math.
+// The strategy is to use the new pointer metadata API:
+// https://github.com/rust-lang/rust/issues/81513
 
 #![feature(core_intrinsics)]
-#![feature(raw)]
-#![allow(deprecated)]
+#![feature(ptr_metadata)]
 
 use std::intrinsics::size_of;
 use std::ptr::drop_in_place;
