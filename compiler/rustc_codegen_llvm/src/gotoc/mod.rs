@@ -19,6 +19,9 @@ use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
 use rustc_target::abi::Endian;
+use std::cell::RefCell;
+use std::lazy::SyncLazy;
+use std::panic;
 use tracing::{debug, warn};
 
 mod assumptions;
@@ -35,6 +38,60 @@ mod statement;
 pub mod stubs;
 mod typ;
 mod utils;
+
+// Use a thread-local global variable to track the current codegen item for debugging.
+// If RMC panics during codegen, we can grab this item to include the problematic
+// codegen item in the panic trace.
+thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<Option<String>> = RefCell::new(None));
+
+// Updates the tracking global variable for panic debugging.
+fn set_debug_item(s: String) {
+    CURRENT_CODEGEN_ITEM.with(|odb_cell| {
+        odb_cell.replace(Some(s));
+    });
+}
+
+// Include RMC's bug reporting URL in our panics.
+const BUG_REPORT_URL: &str =
+    "https://github.com/model-checking/rmc/issues/new?labels=bug&template=bug_report.md";
+
+// Custom panic hook.
+static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+    SyncLazy::new(|| {
+        let hook = panic::take_hook();
+        panic::set_hook(Box::new(|info| {
+            // Invoke the default handler, which prints the actual panic message and
+            // optionally a backtrace. This also prints Rustc's "file a bug here" message:
+            // it seems like the only way to remove that is to use rustc_driver::report_ice;
+            // however, adding that dependency to this crate causes a circular dependency.
+            // For now, just print our message after the Rust one and explicitly point to
+            // our bug template form.
+            (*DEFAULT_HOOK)(info);
+
+            // Separate the output with an empty line
+            eprintln!();
+
+            // Print the current function if available
+            CURRENT_CODEGEN_ITEM.with(|cell| {
+                if let Some(current_item) = cell.borrow().clone() {
+                    eprintln!("[RMC] current codegen item: {}", current_item);
+                } else {
+                    eprintln!("[RMC] no current codegen item.");
+                }
+            });
+
+            // Separate the output with an empty line
+            eprintln!();
+
+            // Print the RMC message
+            eprintln!("RMC unexpectedly panicked during code generation.\n");
+            eprintln!(
+                "If you are seeing this message, please file an issue here instead of on the Rust compiler: {}",
+                BUG_REPORT_URL
+            );
+        }));
+        hook
+    });
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend();
@@ -285,6 +342,9 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
+        // Install panic hook
+        SyncLazy::force(&DEFAULT_HOOK); // Install ice hook
+
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mm = machine_model_from_session(&tcx.sess);
         let mut c = GotocCtx::new(tcx, SymbolTable::new(mm));
@@ -294,8 +354,17 @@ impl CodegenBackend for GotocCodegenBackend {
             let items = cgu.items_in_deterministic_order(tcx);
             for (item, _) in items {
                 match item {
-                    MonoItem::Fn(instance) => c.declare_function(instance),
-                    MonoItem::Static(def_id) => c.declare_static(def_id, item),
+                    MonoItem::Fn(instance) => {
+                        set_debug_item(format!(
+                            "declare_function: {}",
+                            c.readable_instance_name(instance)
+                        ));
+                        c.declare_function(instance)
+                    }
+                    MonoItem::Static(def_id) => {
+                        set_debug_item(format!("declare_static: {:?}", def_id));
+                        c.declare_static(def_id, item)
+                    }
                     MonoItem::GlobalAsm(_) => {
                         warn!(
                             "Crate {} contains global ASM, which is not handled by RMC",
@@ -311,8 +380,17 @@ impl CodegenBackend for GotocCodegenBackend {
             let items = cgu.items_in_deterministic_order(tcx);
             for (item, _) in items {
                 match item {
-                    MonoItem::Fn(instance) => c.codegen_function(instance),
-                    MonoItem::Static(def_id) => c.codegen_static(def_id, item),
+                    MonoItem::Fn(instance) => {
+                        set_debug_item(format!(
+                            "codegen_function: {}",
+                            c.readable_instance_name(instance)
+                        ));
+                        c.codegen_function(instance)
+                    }
+                    MonoItem::Static(def_id) => {
+                        set_debug_item(format!("codegen_static: {:?}", def_id));
+                        c.codegen_static(def_id, item)
+                    }
                     MonoItem::GlobalAsm(_) => {} // We have already warned above
                 }
             }
