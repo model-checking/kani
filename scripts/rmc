@@ -9,6 +9,7 @@ import rmc
 import pathlib
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
+GEN_C_LIB = MY_PATH / "library" / "genc" / "genc_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -61,6 +62,8 @@ def main():
 
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose):
             return 1
+
+        rmc.fix_gen_c(c_filename)
 
         return 0
     else:

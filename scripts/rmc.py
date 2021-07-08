@@ -157,6 +157,18 @@ def run_goto_instrument(input_filename, output_filename, args, verbose=False):
 def goto_to_c(goto_filename, c_filename, verbose=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose)
 
+def fix_gen_c(c_filename, nondet_c=None):
+    with open(c_filename, "r") as f:
+        c_file_lines = f.read().splitlines()
+
+    c_file_lines.pop(0)
+    c_file_lines.insert(0, f"include \"{GEN_C_LIB}\"")
+
+    if nondet_c:
+        c_file_lines.insert(1, f"include \"{nondet_c}\"")
+
+    with open(c_filename, "w") as f:
+        f.write("\n".join(c_file_lines))
 
 def goto_to_symbols(goto_filename, symbols_filename, verbose=False):
     return run_goto_instrument(goto_filename, symbols_filename, ["--show-symbol-table"], verbose)
