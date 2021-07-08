@@ -4,6 +4,7 @@
 
 mod builtin;
 mod expr;
+mod gen_c_transformer;
 mod identity_transformer;
 mod location;
 mod name_normalize_transformer;
@@ -17,6 +18,7 @@ pub use builtin::BuiltinFn;
 pub use expr::{
     ArithmeticOverflowResult, BinaryOperand, Expr, ExprValue, SelfOperand, UnaryOperand,
 };
+pub use gen_c_transformer::GenCTransformer;
 pub use identity_transformer::IdentityTransformer;
 pub use location::Location;
 pub use name_normalize_transformer::NameTransformer;

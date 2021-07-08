@@ -68,6 +68,10 @@ impl SymbolTable {
     pub fn update_fn_declaration_with_definition(&mut self, name: &str, body: Stmt) {
         self.symbol_table.get_mut(name).unwrap().update_fn_declaration_with_definition(body);
     }
+
+    pub fn remove(&mut self, name: &str) -> Option<Symbol> {
+        self.symbol_table.remove(name)
+    }
 }
 
 /// Getters

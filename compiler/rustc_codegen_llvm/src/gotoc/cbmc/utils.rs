@@ -11,11 +11,6 @@ pub fn aggr_name(n: &str) -> String {
     format!("tag-{}", n)
 }
 
-pub fn deaggr_name(n: &str) -> String {
-    assert!(n.starts_with("tag-"), "Name is not an aggregate name: {}", n);
-    n["tag-".len()..].to_string()
-}
-
 /// Provides a useful shortcut for making BTreeMaps.
 #[macro_export]
 macro_rules! btree_map {

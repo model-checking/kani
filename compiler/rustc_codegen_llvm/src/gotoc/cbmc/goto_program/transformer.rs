@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::super::utils::deaggr_name;
 use super::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
     Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
@@ -35,9 +34,9 @@ pub trait Transformer: Sized {
             Type::Pointer { typ } => self.transform_pointer_type(typ),
             Type::Signedbv { width } => self.transform_signedbv_type(width),
             Type::Struct { tag, components } => self.transform_struct_type(tag, components),
-            Type::StructTag(tag) => self.transform_struct_tag_type(&deaggr_name(tag)),
+            Type::StructTag(tag) => self.transform_struct_tag_type(tag),
             Type::Union { tag, components } => self.transform_union_type(tag, components),
-            Type::UnionTag(tag) => self.transform_union_tag_type(&deaggr_name(tag)),
+            Type::UnionTag(tag) => self.transform_union_tag_type(tag),
             Type::Unsignedbv { width } => self.transform_unsignedbv_type(width),
             Type::VariadicCode { parameters, return_type } => {
                 self.transform_variadic_code_type(parameters, return_type)
@@ -148,7 +147,7 @@ pub trait Transformer: Sized {
     }
 
     fn transform_struct_tag_type(&self, tag: &str) -> Type {
-        Type::struct_tag(tag)
+        Type::struct_tag_raw(tag)
     }
 
     fn transform_union_type(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
@@ -160,7 +159,7 @@ pub trait Transformer: Sized {
     }
 
     fn transform_union_tag_type(&self, tag: &str) -> Type {
-        Type::union_tag(tag)
+        Type::union_tag_raw(tag)
     }
 
     fn transform_unsignedbv_type(&self, width: &u64) -> Type {
@@ -601,17 +600,24 @@ pub trait Transformer: Sized {
     }
 
     fn transform_symbol_table(mut self, orig_symtab: &SymbolTable) -> SymbolTable {
-        // let orig_symtab = self.original_symbol_table();
+        self.preprocess();
+
+        let mut added: HashSet<String> = HashSet::new();
+
+        for (name, _symbol) in self.symbol_table().iter() {
+            added.insert(name.clone());
+        }
 
         for (name, symbol) in orig_symtab.iter() {
             if !self.symbol_table().contains(name) && symbol.value.is_none() {
                 let new_symbol = self.transform_symbol(symbol);
                 self.mut_symbol_table().insert(new_symbol);
+                added.insert(name.clone());
             }
         }
 
         for (name, symbol) in orig_symtab.iter() {
-            if !self.symbol_table().contains(name) {
+            if !added.contains(name) {
                 assert!(
                     !symbol.value.is_none(),
                     "Symbol should have been inserted in first pass: {:?}",
@@ -622,6 +628,11 @@ pub trait Transformer: Sized {
             }
         }
 
+        self.postprocess();
+
         self.extract_symbol_table()
     }
+
+    fn preprocess(&mut self) {}
+    fn postprocess(&mut self) {}
 }

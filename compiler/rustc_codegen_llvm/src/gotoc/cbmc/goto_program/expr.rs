@@ -552,10 +552,11 @@ impl Expr {
             .lookup_field_type_in_type(self.typ(), field)
             .unwrap_or_else(|| {
                 panic!(
-                    "Type: {:?}, Field: {}, Type data: {:?}",
+                    "Type: {:?}, Field: {}, Type data: {:?}, Symbol table: {:?}",
                     self.typ(),
                     field,
-                    symbol_table.lookup(&self.typ().type_name().unwrap())
+                    symbol_table.lookup(&self.typ().type_name().unwrap()),
+                    symbol_table
                 )
             })
             .clone();

@@ -1,7 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{IdentityTransformer, Stmt, Symbol, SymbolTable, Transformer};
+use cbmc::goto_program::{
+    GenCTransformer, NameTransformer, Stmt, Symbol, SymbolTable, Transformer,
+};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -87,7 +89,9 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
     });
 
 #[derive(Clone)]
-pub struct GotocCodegenBackend();
+pub struct GotocCodegenBackend {
+    gen_c: bool,
+}
 
 impl<'tcx> GotocCtx<'tcx> {
     // Calls the closure while updating the tracked global variable marking the
@@ -272,7 +276,15 @@ impl<'tcx> GotocCtx<'tcx> {
 
 impl GotocCodegenBackend {
     pub fn new() -> Box<dyn CodegenBackend> {
-        Box::new(GotocCodegenBackend())
+        Box::new(GotocCodegenBackend { gen_c: false })
+    }
+
+    pub fn new_gen_c() -> Box<dyn CodegenBackend> {
+        Box::new(GotocCodegenBackend { gen_c: true })
+    }
+
+    pub fn gen_c(&self) -> bool {
+        self.gen_c
     }
 }
 
@@ -404,8 +416,14 @@ impl CodegenBackend for GotocCodegenBackend {
             }
         }
 
+        let symtab = if self.gen_c() {
+            GenCTransformer::transform(&NameTransformer::transform(&c.symbol_table))
+        } else {
+            c.symbol_table
+        };
+
         Box::new(GotocCodegenResult {
-            symtab: IdentityTransformer::transform(&c.symbol_table),
+            symtab,
             crate_name: tcx.crate_name(LOCAL_CRATE) as rustc_span::Symbol,
         })
     }
