@@ -51,33 +51,48 @@ def main():
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler):
-        return 1
-
-    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps):
-        return 1
-
     if args.gen_c:
+        backend = "genc"
+        if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, backend, args.mangler):
+            return 1
+
+        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps):
+            return 1
+
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose):
             return 1
 
-    if args.gen_symbols:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(goto_filename, symbols_filename, args.verbose):
+        return 0
+    else:
+        backend="gotoc"
+
+        if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, backend, args.mangler):
             return 1
 
-    if "--function" not in args.cbmc_args:
-        args.cbmc_args.extend(["--function", args.function])
-    
-    args.cbmc_args.append(str(RMC_C_LIB))
-    if args.visualize:
-        retcode = rmc.run_visualize(goto_filename, args.cbmc_args, \
-                                    args.verbose, args.quiet, args.keep_temps, \
-                                    args.function, args.srcdir, args.wkdir)
-    else:
-        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet)
-    if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
-        retcode = EXIT_CODE_SUCCESS
-    return retcode
+        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps):
+            return 1
+
+        if args.gen_c:
+            if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose):
+                return 1
+
+        if args.gen_symbols:
+            if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(goto_filename, symbols_filename, args.verbose):
+                return 1
+
+        if "--function" not in args.cbmc_args:
+            args.cbmc_args.extend(["--function", args.function])
+        
+        args.cbmc_args.append(str(RMC_C_LIB))
+        if args.visualize:
+            retcode = rmc.run_visualize(goto_filename, args.cbmc_args, \
+                                        args.verbose, args.quiet, args.keep_temps, \
+                                        args.function, args.srcdir, args.wkdir)
+        else:
+            retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet)
+        if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
+            retcode = EXIT_CODE_SUCCESS
+        return retcode
 
 
 if __name__ == "__main__":

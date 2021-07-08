@@ -64,10 +64,10 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     
     return process.returncode
 
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0"):
+def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, backend="gotoc", mangler="v0"):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
-    build_cmd = [RMC_RUSTC_EXE, "-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}",
+    build_cmd = [RMC_RUSTC_EXE, "-Z", f"codegen-backend={backend}", "-Z", f"symbol-mangling-version={mangler}",
                  f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
     build_env = os.environ
     if debug:
