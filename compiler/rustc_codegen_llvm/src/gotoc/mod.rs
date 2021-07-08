@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{Stmt, Symbol, SymbolTable};
+use cbmc::goto_program::{NameTransformer, Stmt, Symbol, SymbolTable, Transformer};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -405,7 +405,7 @@ impl CodegenBackend for GotocCodegenBackend {
         }
 
         Box::new(GotocCodegenResult {
-            symtab: c.symbol_table,
+            symtab: NameTransformer::transform(&c.symbol_table),
             crate_name: tcx.crate_name(LOCAL_CRATE) as rustc_span::Symbol,
         })
     }

@@ -548,7 +548,17 @@ impl Expr {
             field,
         );
 
-        let typ = symbol_table.lookup_field_type_in_type(self.typ(), field).unwrap().clone();
+        let typ = symbol_table
+            .lookup_field_type_in_type(self.typ(), field)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Type: {:?}, Field: {}, Type data: {:?}",
+                    self.typ(),
+                    field,
+                    symbol_table.lookup(&self.typ().type_name().unwrap())
+                )
+            })
+            .clone();
         expr!(Member { lhs: self, field: field.to_string() }, typ)
     }
 
@@ -1212,6 +1222,10 @@ impl Expr {
         // TODO: do we need the `.index(0)` here?
         expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
             .array_to_ptr()
+    }
+
+    pub fn raw_string_constant(s: &str) -> Self {
+        expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
     }
 }
 /// Conversions to statements
