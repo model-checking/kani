@@ -3,9 +3,9 @@
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 
+use std::any::Any;
 use std::io::{sink, Write};
 use std::ptr::DynMetadata;
-use std::any::Any;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 
