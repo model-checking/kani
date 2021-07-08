@@ -48,7 +48,7 @@ def main():
 
     # Add some CBMC flags by default unless `--no-default-checks` is being used
     if not args.no_default_checks:
-        rmc.add_default_cbmc_flags(args)
+        rmc.add_selected_default_cbmc_flags(args)
 
     rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.mangler, args.dry_run)

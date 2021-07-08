@@ -12,9 +12,9 @@ RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
 EXIT_CODE_SUCCESS = 0
 
-MEMORY_SAFETY_CHECKS = ["--pointer-check",
-                        "--pointer-primitive-check",
-                        "--bounds-check"]
+MEMORY_SAFETY_CHECKS = ["--bounds-check",
+                        "--pointer-check",
+                        "--pointer-primitive-check"]
 OVERFLOW_CHECKS = ["--conversion-check",
                    "--div-by-zero-check",
                    "--float-overflow-check",
@@ -70,8 +70,8 @@ def add_set_cbmc_flags(args, flags):
         else:
             args.cbmc_args.append(arg)
 
-# Add sets of default CBMC flags
-def add_default_cbmc_flags(args):
+# Add sets of selected default CBMC flags
+def add_selected_default_cbmc_flags(args):
     if not args.no_memory_safety_checks:
         add_set_cbmc_flags(args, MEMORY_SAFETY_CHECKS)
     if not args.no_overflow_checks:
@@ -171,7 +171,7 @@ def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False
         scanners.append(unwind_asserts_scanner)
     return run_cmd(cbmc_cmd, label="cbmc", output_to="stdout", verbose=verbose, quiet=quiet, scanners=scanners, dry_run=dry_run)
 
-def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir=".", outdir=".", dry_run=False):
+def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir=".", outdir=".", dry_run=False):
     results_filename = os.path.join(outdir, "results.xml")
     coverage_filename = os.path.join(outdir, "coverage.xml")
     property_filename = os.path.join(outdir, "property.xml")
@@ -192,10 +192,12 @@ def run_visualize(cbmc_filename, cbmc_args, verbose=False, quiet=False, keep_tem
         cbmc_cmd = ["cbmc"] + cbmc_args + [temp_goto_filename]
         return run_cmd(cbmc_cmd, label="cbmc", output_to=output_to, verbose=verbose, quiet=quiet, dry_run=dry_run)
 
-    cbmc_xml_args = cbmc_args + ["--xml-ui"]
-    retcode = run_cbmc_local(cbmc_xml_args + ["--trace"], results_filename, dry_run=dry_run)
-    run_cbmc_local(cbmc_xml_args + ["--cover", "location"], coverage_filename, dry_run=dry_run)
-    run_cbmc_local(cbmc_xml_args + ["--show-properties"], property_filename, dry_run=dry_run)
+    cbmc_prop_args = prop_args + ["--xml-ui"]
+    cbmc_cover_args = cover_args + ["--xml-ui"]
+
+    retcode = run_cbmc_local(cbmc_prop_args + ["--trace"], results_filename, dry_run=dry_run)
+    run_cbmc_local(cbmc_cover_args + ["--cover", "location"], coverage_filename, dry_run=dry_run)
+    run_cbmc_local(cbmc_prop_args + ["--show-properties"], property_filename, dry_run=dry_run)
 
     run_cbmc_viewer(temp_goto_filename, results_filename, coverage_filename,
                     property_filename, verbose, quiet, srcdir, wkdir, os.path.join(outdir, "report"), dry_run=dry_run)

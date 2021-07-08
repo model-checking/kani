@@ -49,7 +49,7 @@ def main():
     
     # Add some CBMC flags by default unless `--no-default-checks` is being used
     if not args.no_default_checks:
-        rmc.add_default_cbmc_flags(args)
+        rmc.add_selected_default_cbmc_flags(args)
 
     base, ext = os.path.splitext(args.input)
     if ext != ".rs":
@@ -79,7 +79,9 @@ def main():
     
     args.cbmc_args.append(str(RMC_C_LIB))
     if args.visualize:
-        retcode = rmc.run_visualize(goto_filename, args.cbmc_args, \
+        # Use a separate set of flags for coverage checking (empty for now)
+        cover_args = []
+        retcode = rmc.run_visualize(goto_filename, args.cbmc_args, cover_args, \
                                     args.verbose, args.quiet, args.keep_temps, \
                                     args.function, args.srcdir, args.wkdir, args.dry_run)
     else:
