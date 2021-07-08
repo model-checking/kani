@@ -15,6 +15,7 @@
 #![recursion_limit = "256"]
 #![feature(destructuring_assignment)]
 #![feature(box_patterns)]
+#![feature(once_cell)]
 
 use back::write::{create_informational_target_machine, create_target_machine};
 
