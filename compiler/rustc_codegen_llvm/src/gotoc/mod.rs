@@ -44,18 +44,6 @@ mod utils;
 // codegen item in the panic trace.
 thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<Option<String>> = RefCell::new(None));
 
-// Updates the tracking global variable for panic debugging.
-fn set_panic_debug_codegen_item(s: String) {
-    CURRENT_CODEGEN_ITEM.with(|odb_cell| {
-        odb_cell.replace(Some(s));
-    });
-}
-fn clear_panic_debug_codegen_item() {
-    CURRENT_CODEGEN_ITEM.with(|odb_cell| {
-        odb_cell.replace(None);
-    });
-}
-
 // Include RMC's bug reporting URL in our panics.
 const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/rmc/issues/new?labels=bug&template=bug_report.md";
@@ -102,6 +90,19 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
 pub struct GotocCodegenBackend();
 
 impl<'tcx> GotocCtx<'tcx> {
+    // Calls the closure while updating the tracked global variable marking the
+    // codegen item for panic debugging.
+    pub fn call_with_panic_debug_info<F: FnOnce(&mut GotocCtx<'tcx>) -> ()>(
+        &mut self,
+        call: F,
+        panic_debug: String,
+    ) {
+        CURRENT_CODEGEN_ITEM.with(|odb_cell| {
+            odb_cell.replace(Some(panic_debug));
+            call(self);
+            odb_cell.replace(None);
+        });
+    }
     pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
         self.current_fn_mut().set_current_bb(bb);
         let label: String = self.current_fn().find_label(&bb);
@@ -360,15 +361,16 @@ impl CodegenBackend for GotocCodegenBackend {
             for (item, _) in items {
                 match item {
                     MonoItem::Fn(instance) => {
-                        set_panic_debug_codegen_item(format!(
-                            "declare_function: {}",
-                            c.readable_instance_name(instance)
-                        ));
-                        c.declare_function(instance)
+                        c.call_with_panic_debug_info(
+                            |ctx| ctx.declare_function(instance),
+                            format!("declare_function: {}", c.readable_instance_name(instance)),
+                        );
                     }
                     MonoItem::Static(def_id) => {
-                        set_panic_debug_codegen_item(format!("declare_static: {:?}", def_id));
-                        c.declare_static(def_id, item)
+                        c.call_with_panic_debug_info(
+                            |ctx| ctx.declare_static(def_id, item),
+                            format!("declare_static: {:?}", def_id),
+                        );
                     }
                     MonoItem::GlobalAsm(_) => {
                         warn!(
@@ -379,7 +381,6 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
             }
         }
-        clear_panic_debug_codegen_item();
 
         // then we move on to codegen
         for cgu in codegen_units {
@@ -387,21 +388,21 @@ impl CodegenBackend for GotocCodegenBackend {
             for (item, _) in items {
                 match item {
                     MonoItem::Fn(instance) => {
-                        set_panic_debug_codegen_item(format!(
-                            "codegen_function: {}",
-                            c.readable_instance_name(instance)
-                        ));
-                        c.codegen_function(instance)
+                        c.call_with_panic_debug_info(
+                            |ctx| ctx.codegen_function(instance),
+                            format!("codegen_function: {}", c.readable_instance_name(instance)),
+                        );
                     }
                     MonoItem::Static(def_id) => {
-                        set_panic_debug_codegen_item(format!("codegen_static: {:?}", def_id));
-                        c.codegen_static(def_id, item)
+                        c.call_with_panic_debug_info(
+                            |ctx| ctx.codegen_static(def_id, item),
+                            format!("codegen_static: {:?}", def_id),
+                        );
                     }
                     MonoItem::GlobalAsm(_) => {} // We have already warned above
                 }
             }
         }
-        clear_panic_debug_codegen_item();
 
         Box::new(GotocCodegenResult {
             symtab: c.symbol_table,
