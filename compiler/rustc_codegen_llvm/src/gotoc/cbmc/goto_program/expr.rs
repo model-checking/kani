@@ -548,18 +548,7 @@ impl Expr {
             field,
         );
 
-        let typ = symbol_table
-            .lookup_field_type_in_type(self.typ(), field)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Type: {:?}, Field: {}, Type data: {:?}, Symbol table: {:?}",
-                    self.typ(),
-                    field,
-                    symbol_table.lookup(&self.typ().type_name().unwrap()),
-                    symbol_table
-                )
-            })
-            .clone();
+        let typ = symbol_table.lookup_field_type_in_type(self.typ(), field).unwrap().clone();
         expr!(Member { lhs: self, field: field.to_string() }, typ)
     }
 
