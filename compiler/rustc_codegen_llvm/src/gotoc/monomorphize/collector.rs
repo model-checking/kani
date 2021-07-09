@@ -35,10 +35,10 @@ pub fn custom_coerce_unsize_info<'tcx>(
 ) -> CustomCoerceUnsized {
     let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
 
-    let trait_ref = ty::Binder::bind(
-        ty::TraitRef { def_id, substs: tcx.mk_substs_trait(source_ty, &[target_ty.into()]) },
-        tcx,
-    );
+    let trait_ref = ty::Binder::dummy(ty::TraitRef {
+        def_id,
+        substs: tcx.mk_substs_trait(source_ty, &[target_ty.into()]),
+    });
 
     match tcx.codegen_fulfill_obligation((ty::ParamEnv::reveal_all(), trait_ref)) {
         Ok(traits::ImplSource::UserDefined(traits::ImplSourceUserDefinedData {
@@ -301,7 +301,7 @@ fn check_recursion_limit<'tcx>(
     // Code that needs to instantiate the same function recursively
     // more than the recursion limit is assumed to be causing an
     // infinite expansion.
-    if !tcx.sess.recursion_limit().value_within_limit(adjusted_recursion_depth) {
+    if !tcx.recursion_limit().value_within_limit(adjusted_recursion_depth) {
         let error = format!("reached the recursion limit while instantiating `{}`", instance);
         let mut err = tcx.sess.struct_span_fatal(span, &error);
         err.span_note(
@@ -335,7 +335,7 @@ fn check_type_length_limit<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
     // which means that rustc basically hangs.
     //
     // Bail out in these cases to avoid that bad user experience.
-    if !tcx.sess.type_length_limit().value_within_limit(type_length) {
+    if !tcx.type_length_limit().value_within_limit(type_length) {
         // The instance name is already known to be too long for rustc.
         // Show only the first and last 32 characters to avoid blasting
         // the user's terminal with thousands of lines of type-name.
