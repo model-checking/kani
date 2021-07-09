@@ -8,6 +8,7 @@ mod location;
 mod stmt;
 mod symbol;
 mod symbol_table;
+mod transformer;
 mod typ;
 
 pub use builtin::BuiltinFn;
@@ -18,4 +19,5 @@ pub use location::Location;
 pub use stmt::{Stmt, StmtBody, SwitchCase};
 pub use symbol::{Symbol, SymbolValues};
 pub use symbol_table::SymbolTable;
+pub use transformer::Transformer;
 pub use typ::{CIntType, DatatypeComponent, Parameter, Type};

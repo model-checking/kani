@@ -652,6 +652,11 @@ impl Type {
         StructTag(aggr_name(name))
     }
 
+    /// struct name, but don't add a tag- prefix
+    pub fn struct_tag_raw(name: &str) -> Self {
+        StructTag(name.to_string())
+    }
+
     pub fn components_are_unique(components: &[DatatypeComponent]) -> bool {
         let mut names: Vec<_> = components.iter().map(|x| x.name()).collect();
         names.sort();
@@ -674,6 +679,11 @@ impl Type {
     /// union name
     pub fn union_tag(name: &str) -> Self {
         UnionTag(aggr_name(name))
+    }
+
+    /// union name, but don't add a tag- prefix
+    pub fn union_tag_raw(name: &str) -> Self {
+        UnionTag(name.to_string())
     }
 
     /// union name {
