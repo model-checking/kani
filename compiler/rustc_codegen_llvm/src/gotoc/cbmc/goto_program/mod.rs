@@ -4,6 +4,7 @@
 
 mod builtin;
 mod expr;
+mod identity_transformer;
 mod location;
 mod stmt;
 mod symbol;
@@ -15,6 +16,7 @@ pub use builtin::BuiltinFn;
 pub use expr::{
     ArithmeticOverflowResult, BinaryOperand, Expr, ExprValue, SelfOperand, UnaryOperand,
 };
+pub use identity_transformer::IdentityTransformer;
 pub use location::Location;
 pub use stmt::{Stmt, StmtBody, SwitchCase};
 pub use symbol::{Symbol, SymbolValues};
