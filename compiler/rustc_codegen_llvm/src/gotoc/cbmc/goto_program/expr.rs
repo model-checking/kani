@@ -1227,16 +1227,18 @@ impl Expr {
     }
 
     /// `"s"`
+    /// only to be used when manually wrapped in `.array_to_ptr()`
+    pub fn raw_string_constant(s: &str) -> Self {
+        expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
+    }
+
+    /// `"s"`
     pub fn string_constant(s: &str) -> Self {
         // Internally, CBMC distinguishes between the string constant, and the pointer to it.
         // The thing we actually manipulate is the pointer, so what is what we return from the constructor.
         // TODO: do we need the `.index(0)` here?
         expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
             .array_to_ptr()
-    }
-
-    pub fn raw_string_constant(s: &str) -> Self {
-        expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
     }
 }
 /// Conversions to statements

@@ -9,11 +9,34 @@ use crate::btree_map;
 use num::bigint::BigInt;
 use std::collections::{BTreeMap, HashSet};
 
+/// The `Transformer` trait is a visitor pattern for the `SymbolTable`.
+/// To use it, you just need to implement the three symbol table accessor methods,
+/// and then override any methods that you want to change the behavior of.
+///
+/// The entry point is `transform_symbol_table`. It then:
+/// - calls `preprocess`
+/// - transforms and inserts type symbols
+/// - transforms and inserts expr/stmt symbols
+/// - calls `postprocess`
+///
+/// To transform a symbol, we call `transform_type` on its type,
+/// and then `transform_value` on its value, which redirects to
+/// either `transform_expr` or `transform_stmt`.
+///
+/// The three methods `transform_type`, `transform_expr`, and `transform_stmt`
+/// perform a recursive descent on their corresponding structures.
+/// They default to just reconstruct the structure, but can be overridden.
 pub trait Transformer: Sized {
+    /// Get reference to symbol table.
     fn symbol_table(&self) -> &SymbolTable;
+    /// Get mutable reference to symbol table.
     fn mut_symbol_table(&mut self) -> &mut SymbolTable;
+    /// Get owned symbol table.
     fn extract_symbol_table(self) -> SymbolTable;
 
+    /// Perform recursive descent on a `Type` data structure.
+    /// Extracts the variant's field data, and passes them into
+    /// the corresponding type transformer method.
     fn transform_type(&self, typ: &Type) -> Type {
         match typ {
             Type::Array { typ, size } => self.transform_array_type(typ, size),
@@ -45,20 +68,24 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Transforms an array type (`typ x[size]`)
     fn transform_array_type(&self, typ: &Box<Type>, size: &u64) -> Type {
         let transformed_typ = self.transform_type(typ.as_ref());
         transformed_typ.array_of(*size)
     }
 
+    /// Transforms a CPROVER boolean type (`__CPROVER_bool x`)
     fn transform_bool_type(&self) -> Type {
         Type::bool()
     }
 
+    /// Transforms a c bit field type (`typ x : width`)
     fn transform_c_bit_field_type(&self, typ: &Box<Type>, width: &u64) -> Type {
         let transformed_typ = self.transform_type(typ.as_ref());
         transformed_typ.as_bitfield(*width)
     }
 
+    /// Transforms a machine-dependent integer type (`bool`, `char`, `int`, `size_t`)
     fn transform_c_integer_type(&self, c_int_type: &CIntType) -> Type {
         match c_int_type {
             CIntType::Bool => Type::c_bool(),
@@ -69,6 +96,7 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Transforms a parameter for a function
     fn transform_parameter(&self, parameter: &Parameter) -> Parameter {
         Type::parameter(
             parameter.identifier().cloned(),
@@ -77,6 +105,7 @@ pub trait Transformer: Sized {
         )
     }
 
+    /// Transforms a function type (`return_type x(parameters)`)
     fn transform_code_type(&self, parameters: &[Parameter], return_type: &Box<Type>) -> Type {
         let transformed_parameters =
             parameters.iter().map(|parameter| self.transform_parameter(parameter)).collect();
@@ -84,49 +113,60 @@ pub trait Transformer: Sized {
         Type::code(transformed_parameters, transformed_return_type)
     }
 
+    /// Transforms a constructor type (`__attribute__(constructor)`)
     fn transform_constructor_type(&self) -> Type {
         Type::constructor()
     }
 
+    /// Transforms a double type (`double`)
     fn transform_double_type(&self) -> Type {
         Type::double()
     }
 
+    /// Transforms an empty type (`void`)
     fn transform_empty_type(&self) -> Type {
         Type::empty()
     }
 
+    /// Transforms a flexible array type (`typ x[]`)
     fn transform_flexible_array_type(&self, typ: &Box<Type>) -> Type {
         let transformed_typ = self.transform_type(typ);
         Type::flexible_array_of(transformed_typ)
     }
 
+    /// Transforms a float type (`float`)
     fn transform_float_type(&self) -> Type {
         Type::float()
     }
 
+    /// Transforms an incomplete struct type (`struct x {}`)
     fn transform_incomplete_struct_type(&self, tag: &str) -> Type {
         Type::incomplete_struct(tag)
     }
 
+    /// Transforms an incomplete union type (`union x {}`)
     fn transform_incomplete_union_type(&self, tag: &str) -> Type {
         Type::incomplete_union(tag)
     }
 
+    /// Transforms an infinite array type (`typ x[__CPROVER_infinity()]`)
     fn transform_infinite_array_type(&self, typ: &Box<Type>) -> Type {
         let transformed_typ = self.transform_type(typ.as_ref());
         transformed_typ.infinite_array_of()
     }
 
+    /// Transforms a pointer type (`typ*`)
     fn transform_pointer_type(&self, typ: &Box<Type>) -> Type {
         let transformed_typ = self.transform_type(typ.as_ref());
         transformed_typ.to_pointer()
     }
 
+    /// Transforms a signed bitvector type (`int<width>_t`)
     fn transform_signedbv_type(&self, width: &u64) -> Type {
         Type::signed_int(*width)
     }
 
+    /// Transforms a datatype component
     fn transform_datatype_component(&self, component: &DatatypeComponent) -> DatatypeComponent {
         match component {
             DatatypeComponent::Field { name, typ } => {
@@ -138,6 +178,7 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Transforms a struct type (`struct tag {component1.typ component1.name; component2.typ component2.name ... }`)
     fn transform_struct_type(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
         let transformed_components = components
             .iter()
@@ -146,10 +187,12 @@ pub trait Transformer: Sized {
         Type::struct_type(tag, transformed_components)
     }
 
+    /// Transforms a struct tag type (`tag-<tag>`)
     fn transform_struct_tag_type(&self, tag: &str) -> Type {
         Type::struct_tag_raw(tag)
     }
 
+    /// Transforms a union type (`union tag {component1.typ component1.name; component2.typ component2.name ... }`)
     fn transform_union_type(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
         let transformed_components = components
             .iter()
@@ -158,14 +201,17 @@ pub trait Transformer: Sized {
         Type::union_type(tag, transformed_components)
     }
 
+    /// Transforms a uniont tag type (`tag-<tag>`)
     fn transform_union_tag_type(&self, tag: &str) -> Type {
         Type::union_tag_raw(tag)
     }
 
+    /// Transforms an unsigned bitvector type (`uint<width>_t`)
     fn transform_unsignedbv_type(&self, width: &u64) -> Type {
         Type::unsigned_int(*width)
     }
 
+    /// Transforms a variadic function type (`return_type x(parameters, ...)`)
     fn transform_variadic_code_type(
         &self,
         parameters: &[Parameter],
@@ -177,11 +223,15 @@ pub trait Transformer: Sized {
         Type::variadic_code(transformed_parameters, transformed_return_type)
     }
 
+    /// Transforms a vector type (`typ __attribute__((vector_size (size * sizeof(typ)))) var;`)
     fn transform_vector_type(&self, typ: &Box<Type>, size: &u64) -> Type {
         let transformed_typ = self.transform_type(typ.as_ref());
         Type::vector(transformed_typ, *size)
     }
 
+    /// Perform recursive descent on a `Expr` data structure.
+    /// Extracts the variant's field data, and passes them into
+    /// the corresponding expr transformer method along with the expr type.
     fn transform_expr(&self, e: &Expr) -> Expr {
         let typ = e.typ();
         match e.value() {
@@ -221,16 +271,19 @@ pub trait Transformer: Sized {
         .with_location(e.location().clone())
     }
 
+    /// Transforms a reference expr (`&self`)
     fn transform_address_of_expr(&self, _typ: &Type, child: &Expr) -> Expr {
         self.transform_expr(child).address_of()
     }
 
+    /// Transform an array expr (`typ x[] = >>> {elems0, elems1 ...} <<<`)
     fn transform_array_expr(&self, typ: &Type, elems: &[Expr]) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_elems = elems.iter().map(|elem| self.transform_expr(elem)).collect();
         Expr::array_expr(transformed_typ, transformed_elems)
     }
 
+    /// Transforms an array of expr (`typ x[width] = >>> {elem} <<<`)
     fn transform_array_of_expr(&self, typ: &Type, elem: &Expr) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_elem = self.transform_expr(elem);
@@ -241,10 +294,13 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Transform an assign expr (`left == right`)
+    /// Currently not able to be constructed, as does not exist in Rust
     fn transform_assign_expr(&self, _typ: &Type, _left: &Expr, _right: &Expr) -> Expr {
         unreachable!()
     }
 
+    /// Transform a binary operation expr (`lhs op rhs`)
     fn transform_bin_op_expr(
         &self,
         _typ: &Type,
@@ -287,33 +343,40 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Transforms a CPROVER boolean expression (`(__CPROVER_bool) >>> true/false <<<`)
     fn transform_bool_constant_expr(&self, _typ: &Type, value: &bool) -> Expr {
         Expr::bool_constant(*value)
     }
 
+    /// Transforms a byte extraction expr (e as type self.typ)
     fn transform_byte_extract_expr(&self, typ: &Type, e: &Expr, _offset: &u64) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_e = self.transform_expr(e);
         transformed_e.transmute_to(transformed_typ, self.symbol_table())
     }
 
+    /// Transforms a C boolean constant expr (`(bool) 1`)
     fn transform_c_bool_constant_expr(&self, _typ: &Type, value: &bool) -> Expr {
         Expr::c_bool_constant(*value)
     }
 
+    /// Transforms a deref expr (`*self`)
     fn transform_dereference_expr(&self, _typ: &Type, child: &Expr) -> Expr {
         let transformed_child = self.transform_expr(child);
         transformed_child.dereference()
     }
 
+    /// Transforms a double constant expr (`1.0`)
     fn transform_double_constant_expr(&self, _typ: &Type, value: &f64) -> Expr {
         Expr::double_constant(*value)
     }
 
+    /// Transforms a float constant expr (`1.0f`)
     fn transform_float_constant_expr(&self, _typ: &Type, value: &f32) -> Expr {
         Expr::float_constant(*value)
     }
 
+    /// Transforms a function call expr (`function(arguments)`)
     fn transform_function_call_expr(
         &self,
         _typ: &Type,
@@ -326,6 +389,7 @@ pub trait Transformer: Sized {
         transformed_function.call(transformed_arguments)
     }
 
+    /// Transforms an if expr (`c ? t : e`)
     fn transform_if_expr(&self, _typ: &Type, c: &Expr, t: &Expr, e: &Expr) -> Expr {
         let transformed_c = self.transform_expr(c);
         let transformed_t = self.transform_expr(t);
@@ -333,32 +397,38 @@ pub trait Transformer: Sized {
         transformed_c.ternary(transformed_t, transformed_e)
     }
 
+    /// Transforms an array index expr (`array[expr]`)
     fn transform_index_expr(&self, _typ: &Type, array: &Expr, index: &Expr) -> Expr {
         let transformed_array = self.transform_expr(array);
         let transformed_index = self.transform_expr(index);
         transformed_array.index(transformed_index)
     }
 
+    /// Transforms an int constant expr (`123`)
     fn transform_int_constant_expr(&self, typ: &Type, value: &BigInt) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::int_constant(value.clone(), transformed_typ)
     }
 
+    /// Transforms a member access expr (`lhs.field`)
     fn transform_member_expr(&self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
         transformed_lhs.member(field, self.symbol_table())
     }
 
+    /// Transforms a CPROVER nondet call (`__nondet()`)
     fn transform_nondet_expr(&self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::nondet(transformed_typ)
     }
 
+    /// Transforms a pointer constant expr (`NULL`)
     fn transform_pointer_constant_expr(&self, typ: &Type, value: &u64) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::pointer_constant(*value, transformed_typ)
     }
 
+    /// Transforms a self-op expr (`op++`, etc.)
     fn transform_self_op_expr(&self, _typ: &Type, op: &SelfOperand, e: &Expr) -> Expr {
         let transformed_e = self.transform_expr(e);
         match op {
@@ -369,6 +439,7 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Transforms a statement expr (({ stmt1; stmt2; ...}))
     fn transform_statement_expression_expr(&self, typ: &Type, statements: &[Stmt]) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_statements =
@@ -376,10 +447,12 @@ pub trait Transformer: Sized {
         Expr::statement_expression(transformed_statements, transformed_typ)
     }
 
+    /// Transforms a string constant expr (`"s"`)
     fn transform_string_constant_expr(&self, _typ: &Type, value: &str) -> Expr {
         Expr::raw_string_constant(value)
     }
 
+    /// Transforms a struct initializer expr (`struct foo the_foo = >>> {field1, field2, ... } <<<`)
     fn transform_struct_expr(&self, typ: &Type, values: &[Expr]) -> Expr {
         let transformed_typ = self.transform_type(typ);
         assert!(
@@ -396,23 +469,27 @@ pub trait Transformer: Sized {
         )
     }
 
+    /// Transforms a symbol expr (`self`)
     fn transform_symbol_expr(&self, typ: &Type, identifier: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::symbol_expression(identifier.to_string(), transformed_typ)
     }
 
+    /// Transforms a typecast expr (`(typ) self`)
     fn transform_typecast_expr(&self, typ: &Type, child: &Expr) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_child = self.transform_expr(child);
         transformed_child.cast_to(transformed_typ)
     }
 
+    /// Transforms a union initializer expr (`union foo the_foo = >>> {.field = value } <<<`)
     fn transform_union_expr(&self, typ: &Type, value: &Expr, field: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_value = self.transform_expr(value);
         Expr::union_expr(transformed_typ, field, transformed_value, self.symbol_table())
     }
 
+    /// Transforms a unary operator expr (`op self`)
     fn transform_un_op_expr(&self, _typ: &Type, op: &UnaryOperand, e: &Expr) -> Expr {
         let transformed_e = self.transform_expr(e);
         match op {
@@ -430,6 +507,9 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Perform recursive descent on a `Stmt` data structure.
+    /// Extracts the variant's field data, and passes them into
+    /// the corresponding stmt transformer method.
     fn transform_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt.body() {
             StmtBody::Assign { lhs, rhs } => self.transform_assign_stmt(lhs, rhs),
@@ -459,46 +539,55 @@ pub trait Transformer: Sized {
         .with_location(stmt.location().clone())
     }
 
+    /// Transforms an assign stmt (`lhs = rhs;`)
     fn transform_assign_stmt(&self, lhs: &Expr, rhs: &Expr) -> Stmt {
         let transformed_lhs = self.transform_expr(lhs);
         let transformed_rhs = self.transform_expr(rhs);
         transformed_lhs.assign(transformed_rhs, Location::none())
     }
 
+    /// Transforms a CPROVER assume stmt (`__CPROVER_assume(cond);`)
     fn transform_assume_stmt(&self, cond: &Expr) -> Stmt {
         let transformed_cond = self.transform_expr(cond);
         Stmt::assume(transformed_cond, Location::none())
     }
 
+    /// Transforms an atomic block stmt (`{ ATOMIC_BEGIN stmt1; stmt2; ... ATOMIC_END }`)
     fn transform_atomic_block_stmt(&self, block: &[Stmt]) -> Stmt {
         let transformed_block = block.iter().map(|stmt| self.transform_stmt(stmt)).collect();
         Stmt::atomic_block(transformed_block, Location::none())
     }
 
+    /// Transforms a block stmt (`{ stmt1; stmt2; ... }`)
     fn transform_block_stmt(&self, block: &[Stmt]) -> Stmt {
         let transformed_block = block.iter().map(|stmt| self.transform_stmt(stmt)).collect();
         Stmt::block(transformed_block, Location::none())
     }
 
+    /// Transform a break stmt (`break;`)
     fn transform_break_stmt(&self) -> Stmt {
         Stmt::break_stmt(Location::none())
     }
 
+    /// Transform a continue stmt (`continue;`)
     fn transform_continue_stmt(&self) -> Stmt {
         Stmt::continue_stmt(Location::none())
     }
 
+    /// Transform a decl stmt (`lhs.typ lhs = value;` or `lhs.typ lhs;`)
     fn transform_decl_stmt(&self, lhs: &Expr, value: &Option<Expr>) -> Stmt {
         let transformed_lhs = self.transform_expr(lhs);
         let transformed_value = value.as_ref().map(|value| self.transform_expr(value));
         Stmt::decl(transformed_lhs, transformed_value, Location::none())
     }
 
+    /// Transform an expression stmt (`e;`)
     fn transform_expression_stmt(&self, expr: &Expr) -> Stmt {
         let transformed_expr = self.transform_expr(expr);
         transformed_expr.as_stmt(Location::none())
     }
 
+    /// Transform a for loop stmt (`for (init; cond; update) {body}`)
     fn transform_for_stmt(&self, init: &Stmt, cond: &Expr, update: &Stmt, body: &Stmt) -> Stmt {
         let transformed_init = self.transform_stmt(init);
         let transformed_cond = self.transform_expr(cond);
@@ -514,6 +603,7 @@ pub trait Transformer: Sized {
         )
     }
 
+    /// Transforms a function call stmt (`lhs = function(arguments);` or `function(arguments);`)
     fn transform_function_call_stmt(
         &self,
         lhs: &Option<Expr>,
@@ -532,10 +622,12 @@ pub trait Transformer: Sized {
         )
     }
 
+    /// Transforms a goto stmt (`goto dest;`)
     fn transform_goto_stmt(&self, label: &str) -> Stmt {
         Stmt::goto(label.to_string(), Location::none())
     }
 
+    /// Transforms an if-then-else stmt (`if (i) { t } else { e }`)
     fn transform_ifthenelse_stmt(&self, i: &Expr, t: &Stmt, e: &Option<Stmt>) -> Stmt {
         let transformed_i = self.transform_expr(i);
         let transformed_t = self.transform_stmt(t);
@@ -544,20 +636,24 @@ pub trait Transformer: Sized {
         Stmt::if_then_else(transformed_i, transformed_t, transformed_e, Location::none())
     }
 
+    /// Transforms a label stmt (`label: body`)
     fn transform_label_stmt(&self, label: &str, body: &Stmt) -> Stmt {
         let transformed_body = self.transform_stmt(body);
         transformed_body.with_label(label.to_string())
     }
 
+    /// Transforms a return stmt (`return e;` or `return;`)
     fn transform_return_stmt(&self, value: &Option<Expr>) -> Stmt {
         let transformed_value = value.as_ref().map(|value| self.transform_expr(value));
         Stmt::ret(transformed_value, Location::none())
     }
 
+    /// Transforms a skip stmt (`;`)
     fn transform_skip_stmt(&self) -> Stmt {
         Stmt::skip(Location::none())
     }
 
+    /// Transforms a switch stmt (`switch (control) { case1.case: cast1.body; case2.case: case2.body; ... }`)
     fn transform_switch_stmt(
         &self,
         control: &Expr,
@@ -576,12 +672,14 @@ pub trait Transformer: Sized {
         Stmt::switch(transformed_control, transformed_cases, transformed_default, Location::none())
     }
 
+    /// Transforms a while loop stmt (`while (cond) { body }`)
     fn transform_while_stmt(&self, cond: &Expr, body: &Stmt) -> Stmt {
         let transformed_cond = self.transform_expr(cond);
         let transformed_body = self.transform_stmt(body);
         Stmt::while_loop(transformed_cond, transformed_body, Location::none())
     }
 
+    /// Transforms a symbol's type and value
     fn transform_symbol(&self, symbol: &Symbol) -> Symbol {
         let new_typ = self.transform_type(&symbol.typ);
         let new_value = self.transform_value(&symbol.value);
@@ -591,6 +689,7 @@ pub trait Transformer: Sized {
         new_symbol
     }
 
+    /// Transforms a symbol value
     fn transform_value(&self, value: &SymbolValues) -> SymbolValues {
         match value {
             SymbolValues::None => SymbolValues::None,
@@ -599,6 +698,14 @@ pub trait Transformer: Sized {
         }
     }
 
+    /// Preprocessing to perform before adding transformed symbols
+    fn preprocess(&mut self) {}
+
+    /// Postprocessing to perform after adding transformed symbols
+    fn postprocess(&mut self) {}
+
+    /// Transforms the orig_symtab, producing a new one.
+    /// See `Transformer` trait documentation for details.
     fn transform_symbol_table(mut self, orig_symtab: &SymbolTable) -> SymbolTable {
         self.preprocess();
 
@@ -632,7 +739,4 @@ pub trait Transformer: Sized {
 
         self.extract_symbol_table()
     }
-
-    fn preprocess(&mut self) {}
-    fn postprocess(&mut self) {}
 }

@@ -405,6 +405,7 @@ impl CodegenBackend for GotocCodegenBackend {
             }
         }
 
+        // perform post-processing symbol table passes
         let symbol_table = symtab_transformer::do_passes(
             c.symbol_table,
             &tcx.sess.opts.debugging_opts.symbol_table_passes,

@@ -59,7 +59,7 @@ pub enum Type {
     Union { tag: String, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
     UnionTag(String),
-    /// `int<width>_t`. e.g. `int32_t`
+    /// `uint<width>_t`. e.g. `uint32_t`
     Unsignedbv { width: u64 },
     /// `return_type x(parameters, ...)`
     VariadicCode { parameters: Vec<Parameter>, return_type: Box<Type> },
