@@ -7,7 +7,6 @@ mod expr;
 mod gen_c_transformer;
 mod identity_transformer;
 mod location;
-mod name_normalize_transformer;
 mod stmt;
 mod symbol;
 mod symbol_table;
@@ -21,7 +20,6 @@ pub use expr::{
 pub use gen_c_transformer::GenCTransformer;
 pub use identity_transformer::IdentityTransformer;
 pub use location::Location;
-pub use name_normalize_transformer::NameTransformer;
 pub use stmt::{Stmt, StmtBody, SwitchCase};
 pub use symbol::{Symbol, SymbolValues};
 pub use symbol_table::SymbolTable;

@@ -1,9 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{
-    GenCTransformer, NameTransformer, Stmt, Symbol, SymbolTable, Transformer,
-};
+use cbmc::goto_program::{GenCTransformer, Stmt, Symbol, SymbolTable, Transformer};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -416,11 +414,8 @@ impl CodegenBackend for GotocCodegenBackend {
             }
         }
 
-        let symtab = if self.gen_c() {
-            GenCTransformer::transform(&NameTransformer::transform(&c.symbol_table))
-        } else {
-            c.symbol_table
-        };
+        let symtab =
+            if self.gen_c() { GenCTransformer::transform(&c.symbol_table) } else { c.symbol_table };
 
         Box::new(GotocCodegenResult {
             symtab,
