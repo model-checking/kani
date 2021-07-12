@@ -25,6 +25,8 @@ DEPS=(
   wget
   zlib1g
   zlib1g-dev
+  # Default in CI, but not present on AWS AMI:
+  python3-pip
 )
 
 set -x
