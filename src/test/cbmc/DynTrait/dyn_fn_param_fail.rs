@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that we can pass a dyn function pointer to a stand alone
-// function definition. Inverted negative test.
+// function definition. Inverted negative test, expected to fail
+// all asserts.
 
-// FIXME https://github.com/model-checking/rmc/issues/240
 #![feature(ptr_metadata)]
 
 include!("../Helpers/vtable_utils_ignore.rs");
