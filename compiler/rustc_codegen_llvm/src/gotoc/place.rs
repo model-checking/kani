@@ -199,20 +199,41 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// codegen for a local
-    pub fn codegen_local(&mut self, l: Local) -> Expr {
+    /// If a local is a function definition, ignore the local variable name and
+    /// generate a function call based on the def id.
+    ///
+    /// Note that this is finicky. A local might be a function definition or a
+    /// pointer to one. For example, the auto-generated code for Fn::call_once
+    /// uses a local FnDef to call the wrapped function, while the auto-generated
+    /// code for Fn::call and Fn::call_mut both use pointers to a FnDef.
+    /// In these cases, we need to generate an expression that references the
+    /// existing fndef rather than a named variable.
+    pub fn codegen_local_fndef(&mut self, l: Local) -> Option<Expr> {
         let t = self.local_ty(l);
         match t.kind() {
-            ty::FnDef(defid, substs) => {
-                // this is nasty. a local might have type FnDef, in which case, we should ignore
-                // the info about local completely.
-                self.codegen_fndef(*defid, substs, None)
-            }
-            _ => {
-                let vname = self.codegen_var_name(&l);
-                Expr::symbol_expression(vname, self.codegen_ty(t))
-            }
+            // A local that is itself a FnDef, like Fn::call_once
+            ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
+            // A local that is a pointer to a FnDef, like Fn::call and Fn::call_mut
+            ty::RawPtr(inner) => match inner.ty.kind() {
+                ty::FnDef(defid, substs) => {
+                    Some(self.codegen_fndef(*defid, substs, None).address_of())
+                }
+                _ => None,
+            },
+            _ => None,
         }
+    }
+
+    /// Codegen for a local
+    pub fn codegen_local(&mut self, l: Local) -> Expr {
+        // Check if the local is a function definition (see comment above)
+        if let Some(fn_def) = self.codegen_local_fndef(l) {
+            return fn_def;
+        }
+
+        // Otherwise, simply look up the local by the var name.
+        let vname = self.codegen_var_name(&l);
+        Expr::symbol_expression(vname, self.codegen_ty(self.local_ty(l)))
     }
 
     /// A projection is an operation that translates an lvalue to another lvalue.
