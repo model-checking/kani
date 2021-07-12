@@ -7,10 +7,13 @@ import os
 import os.path
 import sys
 import re
+import pathlib
 
 
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
+MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
+GEN_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -255,6 +258,20 @@ def run_goto_instrument(input_filename, output_filename, args, verbose=False, dr
 # Generates a C program from a goto program
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
+    
+def gen_c_postprocess(c_filename):
+    with open(c_filename, "r") as f:
+        lines = f.read().splitlines()
+
+    # Remove header line
+    lines.pop(0)
+
+    # Import gen_c_lib.c
+    lines.insert(1, f"#include {GEN_C_LIB}")
+
+    with open(c_filename, "w") as f:
+        f.write("\n".join(lines))
+
 
 # Generates the CMBC symbol table from a goto program
 def goto_to_symbols(goto_filename, symbols_filename, verbose=False, dry_run=False):
