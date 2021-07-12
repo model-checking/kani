@@ -13,7 +13,7 @@ import pathlib
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
-GEN_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
+GEN_C_LIB = MY_PATH / "library" / "rmc" / "gen_c_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -267,7 +267,7 @@ def gen_c_postprocess(c_filename):
     lines.pop(0)
 
     # Import gen_c_lib.c
-    lines.insert(1, f"#include {GEN_C_LIB}")
+    lines.insert(1, f"#include \"{GEN_C_LIB}\"")
 
     with open(c_filename, "w") as f:
         f.write("\n".join(lines))

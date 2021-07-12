@@ -30,3 +30,4 @@ void __CPROVER_assume(int condition) {
 // nondet_<k>
 #define byte_extract_little_endian(from_val, offset, to_type) \
     *((to_type*) (((void*) &from_val) + offset))
+
