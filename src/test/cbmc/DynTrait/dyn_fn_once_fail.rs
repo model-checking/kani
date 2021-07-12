@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that we can pass a dyn FnOnce pointer to a stand alone
-// function definition. Fail case checks wrong int.
+// function definition. Expected to fail because we are comparing
+// to an incorrect value.
 
 include!("../../rmc-prelude.rs");
 

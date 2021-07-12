@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that we can pass a dyn FnOnce pointer to a stand alone
-// function definition
+// function definition.
+
 fn takes_dyn_fun(fun: Box<dyn FnOnce() -> u32>) -> u32 {
     fun()
 }

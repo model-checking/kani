@@ -199,12 +199,15 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    // This is nasty. A local might be a function definition or a pointer to
-    // one. For example, the auto-generated code for Fn::call_once
-    // uses a local FnDef to call the wrapped function, while the auto-generated
-    // code for Fn::call and Fn::call_mut both use pointers to a FnDef.
-    // In these cases, we need to generate an expression that references the
-    // existing fndef rather than a named variable.
+    /// If a local is a function definition, ignore the local variable name and
+    /// generate a function call based on the def id.
+    ///
+    /// Note that this is finicky. A local might be a function definition or a
+    /// pointer to one. For example, the auto-generated code for Fn::call_once
+    /// uses a local FnDef to call the wrapped function, while the auto-generated
+    /// code for Fn::call and Fn::call_mut both use pointers to a FnDef.
+    /// In these cases, we need to generate an expression that references the
+    /// existing fndef rather than a named variable.
     pub fn codegen_local_fndef(&mut self, l: Local) -> Option<Expr> {
         let t = self.local_ty(l);
         match t.kind() {
