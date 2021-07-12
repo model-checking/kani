@@ -7,9 +7,11 @@
 // called in the resulting CotoC code.
 // https://github.com/model-checking/rmc/issues/240
 
+include!("../../rmc-prelude.rs");
+
 fn main() {
     // Create a boxed once-callable closure
-    let f: Box<dyn FnOnce()> = Box::new(|x| {
+    let f: Box<dyn FnOnce(i32)> = Box::new(|x| {
         __VERIFIER_expect_fail(x == 2, "Wrong int");
     });
 
