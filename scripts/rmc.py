@@ -79,9 +79,11 @@ def add_selected_default_cbmc_flags(args):
     if not args.no_unwinding_checks:
         add_set_cbmc_flags(args, UNWINDING_CHECKS)
 
+# Updates environment to use gotoc backend debugging
 def add_rmc_rustc_debug_to_env(env):
     env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_llvm::gotoc")
 
+# Prints info about the RMC process
 def print_rmc_step_status(step_name, completed_process, verbose=False):
     status = "PASS"
     if completed_process.returncode != EXIT_CODE_SUCCESS:
@@ -90,6 +92,7 @@ def print_rmc_step_status(step_name, completed_process, verbose=False):
         print(f"[RMC] stage: {step_name} ({status})")
         print(f"[RMC] cmd: {' '.join(completed_process.args)}")
 
+# Handler for running arbitrary command-line commands
 def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, verbose=False, debug=False, scanners=[], dry_run=False):
     # If this a dry run, we emulate running a successful process whose output is the command itself
     # We set `output_to` to `stdout` so that the output is not omitted below
@@ -123,6 +126,7 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     
     return process.returncode
 
+# Generates a symbol table from a rust file
 def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
@@ -134,7 +138,7 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
 
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
-
+# Generates a symbol table (and some other artifacts) from a rust crate
 def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False):
     rustflags = ["-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}", f"--cfg={RMC_CFG}"]
     rustflags = " ".join(rustflags)
@@ -150,21 +154,25 @@ def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler=
         add_rmc_rustc_debug_to_env(build_env)
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
 
+# Adds information about unwinding to the RMC output
 def append_unwind_tip(text):
     unwind_tip = ("[RMC] info: Verification output shows one or more unwinding failures.\n"
                   "[RMC] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n")
     return text + unwind_tip
 
+# Generates a goto program from a symbol table
 def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temps=False, dry_run=False):
     if not keep_temps:
         atexit.register(delete_file, cbmc_filename)
     cmd = ["symtab2gb", json_filename, "--out", cbmc_filename]
     return run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run)
 
+# Links in external C programs into a goto program
 def link_c_lib(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
     cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
     return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
 
+# Runs CBMC on a goto program
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
     scanners = []
@@ -175,6 +183,7 @@ def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False
         scanners.append(unwind_asserts_scanner)
     return run_cmd(cbmc_cmd, label="cbmc", output_to="stdout", verbose=verbose, quiet=quiet, scanners=scanners, dry_run=dry_run)
 
+# Generates a viewer report from a goto program
 def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir=".", outdir=".", dry_run=False):
     results_filename = os.path.join(outdir, "results.xml")
     coverage_filename = os.path.join(outdir, "coverage.xml")
@@ -204,6 +213,7 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
 
     return retcode
 
+# Handler for calling cbmc-viewer
 def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property_filename, verbose=False, quiet=False, srcdir=".", wkdir=".", reportdir="report", dry_run=False):
     cmd = ["cbmc-viewer"] + \
           ["--result", results_filename] + \
@@ -215,15 +225,15 @@ def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property
           ["--reportdir", reportdir]
     return run_cmd(cmd, label="cbmc-viewer", verbose=verbose, quiet=quiet, dry_run=dry_run)
 
-
+# Handler for calling goto-instrument
 def run_goto_instrument(input_filename, output_filename, args, verbose=False, dry_run=False):
     cmd = ["goto-instrument"] + args + [input_filename]
     return run_cmd(cmd, label="goto-instrument", verbose=verbose, output_to=output_filename, dry_run=dry_run)
 
-
+# Generates a C program from a goto program
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
 
-
+# Generates the CMBC symbol table from a goto program
 def goto_to_symbols(goto_filename, symbols_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, symbols_filename, ["--show-symbol-table"], verbose, dry_run=dry_run)

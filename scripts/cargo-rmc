@@ -85,7 +85,9 @@ def main():
     args.cbmc_args.append(str(RMC_C_LIB))
 
     if args.visualize:
-        return rmc.run_visualize(cbmc_filename, args.cbmc_args, \
+        # Use a separate set of flags for coverage checking (empty for now)
+        cover_args = []
+        return rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args, \
                                  args.verbose, args.quiet, args.keep_temps, \
                                  args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
