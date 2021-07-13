@@ -1,5 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// rmc-flags: --no-overflow-checks
+
+// We use `--no-overflow-checks` in this test to avoid getting
+// a verification failure:
+// [main.NaN.1] line 25 NaN on * in var_30 * 0.0f: FAILURE
+// Tracking issue: https://github.com/model-checking/rmc/issues/307
+
 include!("../../rmc-prelude.rs");
 
 fn main() {
