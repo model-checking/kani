@@ -49,6 +49,7 @@ exclude = [
   "src/tools/x",
   # stdarch has its own Cargo workspace
   "library/stdarch",
+  "src/tools/dashboard",
 ]
 
 [profile.release.package.compiler_builtins]
