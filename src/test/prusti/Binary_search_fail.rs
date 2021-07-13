@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// cbmc-flags: --unwind 4 --unwinding-assertions
+// cbmc-flags: --unwind 4
 
 use std::cmp::Ordering::*;
 

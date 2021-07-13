@@ -1,7 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// rmc-flags: --no-unwinding-checks
 // cbmc-flags: --unwind 10
+
+// We use `--no-unwinding-checks` in this test to avoid getting
+// a verification failure (the loop being unwound depends on
+// a nondet. variable)
 
 include!("../../rmc-prelude.rs");
 
