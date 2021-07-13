@@ -3,7 +3,7 @@
 // @flag --no-memory-splitting --unroll=10
 // @expect error
 
-// cbmc-flags: --unwind 5 --unwinding-assertions
+// cbmc-flags: --unwind 5
 
 include!("../../rmc-prelude.rs");
 
