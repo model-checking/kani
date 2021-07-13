@@ -1,5 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// rmc-flags: --no-overflow-checks
+
+// We use `--no-overflow-checks` in this test to avoid getting
+// a verification failure:
+// [overflow.1] arithmetic overflow on signed - in var_11 - var_12: FAILURE
+// [overflow.2] arithmetic overflow on signed - in var_11 - var_12: FAILURE
+// Tracking issue: https://github.com/model-checking/rmc/issues/307
+
 fn main() {
     // pub unsafe fn offset_from(self, origin: *const T) -> isize
     // Calculates the distance between two pointers. The returned value

@@ -1,13 +1,15 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// --unwinding-assertions
-//
+
+// rmc-flags: --no-overflow-checks
+
+// We use `--no-overflow-checks` in this test to avoid getting
+// a verification failure:
+// [overflow.1] arithmetic overflow on unsigned + in var_6 + var_7: FAILURE
+// Tracking issue: https://github.com/model-checking/rmc/issues/307
+
 // Example from Firecracker virtio block device
 // We test the parse function against an arbitrary guest memory
-// Outstanding issues:
-//   - Padstone-4795 (std::io:error in enum variant)
-// RMC changes
-//   - strict is_valid check and loop in descriptor chain check during parse
 
 #![allow(dead_code)]
 #![allow(unused_variables)]

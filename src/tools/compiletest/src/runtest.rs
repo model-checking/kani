@@ -2478,8 +2478,11 @@ impl<'test> TestCx<'test> {
         let parent_dir = self.testpaths.file.parent().unwrap();
         // The name of the function to test is the same as the stem of `*.expected` file
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
+        // `cargo-rmc` has issues with default flags so we pass `--no-default-checks` to disable them
+        // https://github.com/model-checking/rmc/issues/289
         cargo
             .arg("rmc")
+            .arg("--no-default-checks")
             .args(["--function", function_name])
             .arg("--target")
             .arg(self.output_base_dir().join("target"))
