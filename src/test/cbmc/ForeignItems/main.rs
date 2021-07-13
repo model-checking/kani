@@ -5,16 +5,12 @@
 
 // rmc-flags: --c-lib src/test/cbmc/ForeignItems/lib.c
 
-// TODO, we should also test packed and transparent representations
-// https://doc.rust-lang.org/reference/type-layout.html
 #[repr(C)]
 pub struct Foo {
     i: u32,
     c: u8,
 }
 
-// TODO:
-//#[repr(packed)]
 #[repr(C)]
 pub struct Foo2 {
     i: u32,
@@ -25,19 +21,11 @@ pub struct Foo2 {
 // https://doc.rust-lang.org/reference/items/external-blocks.html
 // https://doc.rust-lang.org/nomicon/ffi.html
 extern "C" {
-    // NOTE: this currently works even if I don't make S static, but is UB.
-    // We should have a check for that.
     static mut S: u32;
 
     fn update_static();
     fn takes_int(i: u32) -> u32;
     fn takes_ptr(p: &u32) -> u32;
-    // In rust, you say nullable pointer by using option of reference.
-    // Rust guarantees that this has the bitwise represntation
-    // Some(&x) => &x;
-    // None => NULL;
-    // FIXME: we need to notice when this happens and do a bitcast, or C is unhappy
-    // https://github.com/model-checking/rmc/issues/3
     fn takes_ptr_option(p: Option<&u32>) -> u32;
     fn mutates_ptr(p: &mut u32);
     #[link_name = "name_in_c"]

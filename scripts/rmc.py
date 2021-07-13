@@ -161,7 +161,7 @@ def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temp
     cmd = ["symtab2gb", json_filename, "--out", cbmc_filename]
     return run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run)
 
-def run_goto_cc(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
+def link_c_lib(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
     cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
     return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
 

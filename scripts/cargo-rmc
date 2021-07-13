@@ -72,7 +72,7 @@ def main():
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
-    if EXIT_CODE_SUCCESS != rmc.run_goto_cc(cbmc_filename, cbmc_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
+    if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_filename, cbmc_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
         return 1
 
     if args.gen_c:
