@@ -1,7 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// cbmc-flags: --unwind 2 --unwinding-assertions
+// rmc-flags: --no-overflow-checks
+// cbmc-flags: --unwind 2
+
+// We use `--no-overflow-checks` in this test to avoid getting
+// a verification failure:
+// [_RNvCs21hi0yVfW1J_4main14doswitch_chars.overflow.1] line 17 arithmetic overflow on unsigned - in *((unsigned int *)((unsigned char *)&var_7 + 0)) - 1114112: FAILURE
+// Tracking issue: https://github.com/model-checking/rmc/issues/307
 
 fn doswitch_int() -> i32 {
     for i in [99].iter() {

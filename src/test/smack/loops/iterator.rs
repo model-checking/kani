@@ -3,7 +3,7 @@
 // @flag --no-memory-splitting --unroll=4
 // @expect verified
 
-// cbmc-flags: --unwind 5 --unwinding-assertions
+// cbmc-flags: --unwind 5
 
 fn fac(n: u64) -> u64 {
     match n {
