@@ -16,5 +16,5 @@ URL="https://github.com/awslabs/aws-viewer-for-cbmc/releases/download/viewer-$1/
 
 set -x
 
-curl --fail --silent --location "$URL" -o "$FILE"
+wget -O "$FILE" "$URL"
 sudo python3 -m pip install --upgrade "$FILE"

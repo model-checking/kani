@@ -11,7 +11,7 @@ URL="https://github.com/diffblue/cbmc/releases/download/cbmc-5.30.1/$FILE"
 
 set -x
 
-curl --fail --silent --location "$URL" -o "$FILE"
+wget -O "$FILE" "$URL"
 sudo dpkg -i "$FILE"
 
 cbmc --version
