@@ -21,12 +21,11 @@ DEPS=(
   patch
   pkg-config
   python-is-python3
+  python3-pip # Default in CI, but missing in AWS AMI
   software-properties-common
   wget
   zlib1g
   zlib1g-dev
-  # Default in CI, but not present on AWS AMI:
-  python3-pip
 )
 
 set -x
