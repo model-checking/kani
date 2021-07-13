@@ -8,6 +8,7 @@ import sys
 import rmc
 import os
 import pathlib
+
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
@@ -44,9 +45,9 @@ def main():
     args = parser.parse_args()
 
     if args.crate:
-        assert args.crate_flag is None, "Please only provide one crate."
+        assert args.crate_flag is None, "Please provide a single crate to verify."
     else:
-        assert args.crate_flag is not None, "Please provide a crate."
+        assert args.crate_flag is not None, "Please provide a crate to verify."
         args.crate = args.crate_flag
 
     if args.quiet:
@@ -72,6 +73,8 @@ def main():
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
+    args.c_lib.append(str(RMC_C_LIB))
+
     if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_filename, cbmc_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
         return 1
 
@@ -81,8 +84,6 @@ def main():
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
-        
-    args.cbmc_args.append(str(RMC_C_LIB))
 
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)

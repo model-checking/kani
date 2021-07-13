@@ -7,6 +7,7 @@ import os
 import sys
 import rmc
 import pathlib
+
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
@@ -46,7 +47,7 @@ def main():
     args.function = "main"
 
     if args.input:
-        assert args.input_flag is None, "Please only provide one file to verify."
+        assert args.input_flag is None, "Please provide a single file to verify."
     else:
         assert args.input_flag is not None, "Please provide a file to verify."
         args.input = args.input_flag
@@ -91,8 +92,6 @@ def main():
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
-    
-    args.cbmc_args.append(str(RMC_C_LIB))
     
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)

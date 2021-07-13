@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! To run this test, do
-//! rmc fixme_main.rs -- lib.c
+//! rmc main.rs -- lib.c
 
 // rmc-flags: --c-lib src/test/cbmc/ForeignItems/lib.c
 
