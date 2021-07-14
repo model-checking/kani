@@ -7,6 +7,7 @@ import os
 import sys
 import rmc
 import pathlib
+
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
@@ -15,7 +16,8 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
 def main():
     parser = argparse.ArgumentParser(description="Verify a single Rust file")
-    parser.add_argument("input", help="Rust file to verify")
+    parser.add_argument("input", help="Rust file to verify", nargs="?")
+    parser.add_argument("--input", help="Rust file to verify", dest="input_flag")
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--quiet", "-q", action="store_true")
     parser.add_argument("--debug", action="store_true")
@@ -25,14 +27,17 @@ def main():
     parser.add_argument("--allow-cbmc-verification-failure", action="store_true")
     parser.add_argument("--mangler", default="v0")
     parser.add_argument("--visualize", action="store_true")
+    parser.add_argument("--c-lib", nargs="*", default=[], action="extend")
     parser.add_argument("--srcdir", default=".")
+    parser.add_argument("--target-dir", default=".",
+                        help="Directory for all generated artifacts")
     parser.add_argument("--wkdir", default=".")
     parser.add_argument("--no-default-checks", action="store_true", help="Disable all default checks")
     parser.add_argument("--no-memory-safety-checks", action="store_true", help="Disable default memory safety checks")
     parser.add_argument("--no-overflow-checks", action="store_true", help="Disable default overflow checks")
     parser.add_argument("--no-unwinding-checks", action="store_true", help="Disable default unwinding checks")
     parser.add_argument("--dry-run", action="store_true", help="Print commands instead of running them")
-    parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
+    parser.add_argument("--cbmc-args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
 
@@ -40,6 +45,12 @@ def main():
     # For now, however, changing this from "main" breaks rmc.
     # Issue: https://github.com/model-checking/rmc/issues/169
     args.function = "main"
+
+    if args.input:
+        assert args.input_flag is None, "Please provide a single file to verify."
+    else:
+        assert args.input_flag is not None, "Please provide a file to verify."
+        args.input = args.input_flag
     
     if args.quiet:
         args.verbose = False
@@ -66,6 +77,11 @@ def main():
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
+    args.c_lib.append(str(RMC_C_LIB))
+
+    if EXIT_CODE_SUCCESS != rmc.link_c_lib(goto_filename, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
+        return 1
+
     if args.gen_c:
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose, args.dry_run):
             return 1
@@ -77,13 +93,12 @@ def main():
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
     
-    args.cbmc_args.append(str(RMC_C_LIB))
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
         retcode = rmc.run_visualize(goto_filename, args.cbmc_args, cover_args, \
                                     args.verbose, args.quiet, args.keep_temps, \
-                                    args.function, args.srcdir, args.wkdir, args.dry_run)
+                                    args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
         retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
