@@ -2413,8 +2413,9 @@ impl<'test> TestCx<'test> {
         let mut rmc = Command::new("rmc");
         // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
         rmc.args(&self.props.rmc_flags)
+            .arg("--input")
             .arg(&self.testpaths.file)
-            .arg("--")
+            .arg("--cbmc-args")
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);
@@ -2486,6 +2487,7 @@ impl<'test> TestCx<'test> {
             .args(["--function", function_name])
             .arg("--target")
             .arg(self.output_base_dir().join("target"))
+            .arg("--crate")
             .arg(&parent_dir);
         self.add_rmc_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run_compiler(cargo, None);
@@ -2501,8 +2503,9 @@ impl<'test> TestCx<'test> {
         let mut rmc = Command::new("rmc");
         // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
         rmc.args(&self.props.rmc_flags)
+            .arg("--input")
             .arg(&self.testpaths.file)
-            .arg("--")
+            .arg("--cbmc-args")
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
         let proc_res = self.compose_and_run_compiler(rmc, None);

@@ -84,7 +84,7 @@ uint32_t takes_struct_ptr(struct Foo* f) {
 
 uint32_t takes_struct2(struct Foo2 f) {
     assert(sizeof(unsigned int) == sizeof(uint32_t));
-    return f.i + f.c;
+    return f.i + f.i2;
 }
 
 uint32_t takes_struct_ptr2(struct Foo2* f) {
