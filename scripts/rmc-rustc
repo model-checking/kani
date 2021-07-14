@@ -11,7 +11,8 @@ shopt -s nullglob
 RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
 
 if [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]; then
-    echo "ERROR: Could not find RMC binary. Looked under: $REPO_DIR"
+    echo "ERROR: Could not find RMC binary."
+    echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
     echo "Was RMC successfully built first?"
     exit 1
 fi
