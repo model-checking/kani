@@ -7,8 +7,10 @@ import glob
 import sys
 import rmc
 import os
+import pathlib
 
-
+MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
+RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
 
 
@@ -18,6 +20,8 @@ def main():
         del sys.argv[1]
 
     parser = argparse.ArgumentParser(description="Verify a Rust crate")
+    parser.add_argument("crate", help="crate to verify", nargs="?")
+    parser.add_argument("--crate", help="crate to verify", dest="crate_flag")
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--quiet", "-q", action="store_true")
     parser.add_argument("--debug", action="store_true")
@@ -25,20 +29,26 @@ def main():
     parser.add_argument("--gen-c", action="store_true")
     parser.add_argument("--mangler", default="v0")
     parser.add_argument("--visualize", action="store_true")
+    parser.add_argument("--c-lib", nargs="*", default=[], action="extend")
     parser.add_argument("--srcdir", default=".")
     parser.add_argument("--target-dir", default="target",
                         help="Directory for all generated artifacts")
     parser.add_argument("--wkdir", default=".")
     parser.add_argument("--function", default="main")
-    parser.add_argument("crate", help="crate to verify")
     parser.add_argument("--no-default-checks", action="store_true", help="Disable all default checks")
     parser.add_argument("--no-memory-safety-checks", action="store_true", help="Disable default memory safety checks")
     parser.add_argument("--no-overflow-checks", action="store_true", help="Disable default overflow checks")
     parser.add_argument("--no-unwinding-checks", action="store_true", help="Disable default unwinding checks")
     parser.add_argument("--dry-run", action="store_true", help="Print commands instead of running them")
-    parser.add_argument("cbmc_args", nargs=argparse.REMAINDER,
+    parser.add_argument("--cbmc-args", nargs=argparse.REMAINDER,
                         default=[], help="Pass through directly to CBMC")
     args = parser.parse_args()
+
+    if args.crate:
+        assert args.crate_flag is None, "Please provide a single crate to verify."
+    else:
+        assert args.crate_flag is not None, "Please provide a crate to verify."
+        args.crate = args.crate_flag
 
     if args.quiet:
         args.verbose = False
@@ -63,6 +73,11 @@ def main():
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
+    args.c_lib.append(str(RMC_C_LIB))
+
+    if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_filename, cbmc_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
+        return 1
+
     if args.gen_c:
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_filename, c_filename, args.verbose, args.dry_run):
             return 1
@@ -71,7 +86,9 @@ def main():
         args.cbmc_args.extend(["--function", args.function])
 
     if args.visualize:
-        return rmc.run_visualize(cbmc_filename, args.cbmc_args, \
+        # Use a separate set of flags for coverage checking (empty for now)
+        cover_args = []
+        return rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args, \
                                  args.verbose, args.quiet, args.keep_temps, \
                                  args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
