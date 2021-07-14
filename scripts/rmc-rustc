@@ -2,10 +2,19 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-set -o errexit
-set -o pipefail
-set -o nounset
+set -eu
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-RUST_DIR=$SCRIPT_DIR/..
-RMC_RUSTC=`find $RUST_DIR/build -name "rustc" -print | grep stage1`
-$RMC_RUSTC "$@"
+REPO_DIR="$(dirname $SCRIPT_DIR)"
+
+shopt -s nullglob
+RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
+
+if [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]; then
+    echo "ERROR: Could not find RMC binary."
+    echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
+    echo "Was RMC successfully built first?"
+    exit 1
+fi
+
+"${RMC_CANDIDATES[0]}" "$@"
