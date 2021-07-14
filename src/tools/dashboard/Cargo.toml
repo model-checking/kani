@@ -8,4 +8,3 @@ edition = "2018"
 
 [dependencies]
 pulldown-cmark = { version = "0.8.0", default-features = false }
-either = "1.6.1"
