@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 import rmc
+import rmc_flags
 import pathlib
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
@@ -16,29 +17,12 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
 def main():
     parser = argparse.ArgumentParser(description="Verify a single Rust file")
-    parser.add_argument("input", help="Rust file to verify", nargs="?")
-    parser.add_argument("--input", help="Rust file to verify", dest="input_flag")
-    parser.add_argument("--verbose", "-v", action="store_true")
-    parser.add_argument("--quiet", "-q", action="store_true")
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--keep-temps", action="store_true")
-    parser.add_argument("--gen-c", action="store_true")
-    parser.add_argument("--gen-symbols", action="store_true")
-    parser.add_argument("--allow-cbmc-verification-failure", action="store_true")
-    parser.add_argument("--mangler", default="v0")
-    parser.add_argument("--visualize", action="store_true")
-    parser.add_argument("--c-lib", nargs="*", default=[], action="extend")
-    parser.add_argument("--srcdir", default=".")
-    parser.add_argument("--target-dir", default=".",
-                        help="Directory for all generated artifacts")
-    parser.add_argument("--wkdir", default=".")
-    parser.add_argument("--no-default-checks", action="store_true", help="Disable all default checks")
-    parser.add_argument("--no-memory-safety-checks", action="store_true", help="Disable default memory safety checks")
-    parser.add_argument("--no-overflow-checks", action="store_true", help="Disable default overflow checks")
-    parser.add_argument("--no-unwinding-checks", action="store_true", help="Disable default unwinding checks")
-    parser.add_argument("--dry-run", action="store_true", help="Print commands instead of running them")
-    parser.add_argument("--cbmc-args", nargs=argparse.REMAINDER,
-                        default=[], help="Pass through directly to CBMC")
+
+    input_group = parser.add_argument_group("Input", "You can pass in the rust file positionally or with the --input flag.")
+    input_group.add_argument("input", help="Rust file to verify", nargs="?")
+    input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
+
+    rmc_flags.add_flags(parser, exclude_flags=["--function"])
     args = parser.parse_args()
 
     # In the future we hope to make this configurable in the command line.
