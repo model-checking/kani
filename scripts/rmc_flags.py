@@ -2,22 +2,30 @@ import argparse
 
 def add_loudness_flags(make_group, add_flag):
     group = make_group("Loudness flags", "Determine how much textual output to produce.")
-    add_flag(group, "--verbose", "-v", action="store_true")
-    add_flag(group, "--quiet", "-q", action="store_true")
-    add_flag(group, "--debug", action="store_true")
+    add_flag(group, "--debug", action="store_true", 
+        help="Produce full debug information")
+    add_flag(group, "--verbose", "-v", action="store_true",
+        help="Output processing stages and commands, along with minor debug information")
+    add_flag(group, "--quiet", "-q", action="store_true",
+        help="Produces no output, just an exit code and requested artifacts. Overrides --verbose")
 
 def add_um_flags(make_group, add_flag):
-    group = make_group("Um flags", "Um")
-    add_flag(group, "--c-lib", nargs="*", default=[], action="extend")
-    add_flag(group, "--function", default="main")
+    group = make_group("Um flags", "Um") # TODO: Come up with name and description
+    add_flag(group, "--c-lib", nargs="*", default=[], action="extend",
+        help="External C files referenced by Rust code")
+    add_flag(group, "--function", default="main",
+        help="Entry point for verification")
 
 def add_artifact_flags(make_group, add_flag):
     group = make_group("Artifact flags", "Produce artifacts in addition to a basic RMC report.")
     add_flag(group, "--target-dir", default=".",
-                       help="Directory for all generated artifacts")
-    add_flag(group, "--keep-temps", action="store_true")
-    add_flag(group, "--gen-c", action="store_true")
-    add_flag(group, "--gen-symbols", action="store_true")
+        help="Directory for all generated artifacts")
+    add_flag(group, "--keep-temps", action="store_true",
+        help="Keep temporary files generated throughout RMC process")
+    add_flag(group, "--gen-c", action="store_true",
+        help="Generate C file equivalent to inputted program")
+    add_flag(group, "--gen-symbols", action="store_true",
+        help="Generate a symbol table")
 
 def add_check_flags(make_group, add_flag):
     group = make_group("Check flags", "Disable some or all default checks.")
@@ -28,20 +36,24 @@ def add_check_flags(make_group, add_flag):
 
 def add_visualizer_flags(make_group, add_flag):
     group = make_group("Visualizer flags", "Generate an HTML-based UI for the generated RMC report.")
-    add_flag(group, "--srcdir", default=".")
-    add_flag(group, "--wkdir", default=".")
-    add_flag(group, "--visualize", action="store_true")
+    add_flag(group, "--srcdir", default=".") # TODO: help?
+    add_flag(group, "--wkdir", default=".") # TODO: help?
+    add_flag(group, "--visualize", action="store_true",
+        help="Generate visualizer report; open report/html/index.html")
 
 def add_other_flags(make_group, add_flag):
     group = make_group("Other flags")
-    add_flag(group, "--allow-cbmc-verification-failure", action="store_true")
-    add_flag(group, "--mangler", default="v0")
-    add_flag(group, "--dry-run", action="store_true", help="Print commands instead of running them")
+    add_flag(group, "--allow-cbmc-verification-failure", action="store_true",
+        help="Do not produce error retcode on CBMC verification failure")
+    add_flag(group, "--mangler", default="v0",
+        help="Change what mangler is used by the Rust compiler")
+    add_flag(group, "--dry-run", action="store_true", 
+        help="Print commands instead of running them")
 
 def add_developer_flags(make_group, add_flag):
     group = make_group("Developer flags", "These are generally meant for use by RMC developers, and are not necessarily stable.")
-    add_flag(group, "--cbmc-args", nargs=argparse.REMAINDER,
-                        default=[], help="Pass through directly to CBMC")
+    add_flag(group, "--cbmc-args", nargs=argparse.REMAINDER, default=[], 
+                        help="Pass through directly to CBMC; must be the last flag")
 
 def add_flags(
     parser, 
