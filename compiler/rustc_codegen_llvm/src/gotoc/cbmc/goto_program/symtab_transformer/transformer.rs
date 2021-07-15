@@ -5,9 +5,8 @@ use super::super::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
     Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
 };
-use crate::btree_map;
 use num::bigint::BigInt;
-use std::collections::{BTreeMap, HashSet};
+use rustc_data_structures::fx::FxHashSet;
 
 /// The `Transformer` trait is a visitor pattern for the `SymbolTable`.
 /// To use it, you just need to implement the three symbol table accessor methods,
@@ -709,7 +708,7 @@ pub trait Transformer: Sized {
     fn transform_symbol_table(mut self, orig_symtab: &SymbolTable) -> SymbolTable {
         self.preprocess();
 
-        let mut added: HashSet<String> = HashSet::new();
+        let mut added: FxHashSet<String> = FxHashSet::default();
 
         // New symbol tables come with some items in them by default. Skip over those.
         for (name, _symbol) in self.symbol_table().iter() {

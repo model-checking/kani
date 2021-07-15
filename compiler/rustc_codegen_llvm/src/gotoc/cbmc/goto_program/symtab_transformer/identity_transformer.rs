@@ -1,11 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::super::{
-    DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, SymbolValues, Type,
-};
+use super::super::SymbolTable;
 use super::Transformer;
-use std::collections::{BTreeMap, HashSet};
 
 /// Struct for performing the identity transformation on a symbol table.
 /// Mainly used as a demo/for testing.

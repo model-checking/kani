@@ -710,7 +710,7 @@ impl Expr {
     /// e.g. when extracting the values out of an existing struct expr (see transformer.rs)
     pub fn struct_expr_from_padded_values(
         typ: Type,
-        mut values: Vec<Expr>,
+        values: Vec<Expr>,
         symbol_table: &SymbolTable,
     ) -> Self {
         assert!(

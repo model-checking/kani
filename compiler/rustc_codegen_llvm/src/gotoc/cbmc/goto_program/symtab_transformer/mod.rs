@@ -6,6 +6,5 @@ mod identity_transformer;
 mod passes;
 mod transformer;
 
-use identity_transformer::IdentityTransformer;
 pub use passes::do_passes;
 use transformer::Transformer;
