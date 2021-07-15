@@ -360,6 +360,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "ptr_guaranteed_eq" => codegen_intrinsic_boolean_binop!(eq),
             "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
+            "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
             "rintf32" => codegen_simple_intrinsic!(Rintf),
             "rintf64" => codegen_simple_intrinsic!(Rint),
             "rotate_left" => codegen_intrinsic_binop!(rol),
@@ -664,6 +665,33 @@ impl<'tcx> GotocCtx<'tcx> {
         let arg = fargs.remove(0);
         let expr = arg.transmute_to(self.codegen_ty(ret_ty), &self.symbol_table);
         self.codegen_expr_to_place(p, expr)
+    }
+
+    // `raw_eq` determines whether the raw bytes of two values are equal.
+    // https://stdrs.dev/nightly/x86_64-pc-windows-gnu/std/intrinsics/fn.raw_eq.html
+    //
+    // The implementation below calls `memcmp` and returns equal if the result is zero.
+    //
+    // TODO: Handle more cases in this intrinsic by looking into the parameters' layouts.
+    // TODO: Fix soundness issues in this intrinsic. It's UB to call `raw_eq` if any of
+    // the bytes in the first or second arguments are uninitialized.
+    fn codegen_intrinsic_raw_eq(
+        &mut self,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let ty = self.monomorphize(instance.substs.type_at(0));
+        let dst = fargs.remove(0).cast_to(Type::void_pointer());
+        let val = fargs.remove(0).cast_to(Type::void_pointer());
+        let layout = self.layout_of(ty);
+        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
+        let e = BuiltinFn::Memcmp
+            .call(vec![dst, val, sz], loc)
+            .eq(Type::c_int().zero())
+            .cast_to(Type::c_bool());
+        self.codegen_expr_to_place(p, e)
     }
 
     /// This function computes the size and alignment of a dynamically-sized type.
