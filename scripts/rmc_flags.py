@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
 import argparse
 
 def add_loudness_flags(make_group, add_flag):
@@ -97,4 +101,3 @@ def add_flags(
     extra_flags = set(exclude_flags) - excluded_flags
     if extra_flags:
         print(f"WARNING: Attempt to exclude flags which don't exist: {extra_flags}")
-
