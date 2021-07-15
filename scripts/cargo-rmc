@@ -42,6 +42,12 @@ def main():
 
     rmc.ensure_dependencies_in_path()
 
+    if args.gen_symbols:
+        print("WARNING: --gen-symbols is not supported for cargo-rmc.")
+
+    if args.allow_cbmc_verification_failure:
+        print("WARNING: --allow-cbmc-verification-failure is not supported for cargo-rmc.")
+
     # Add some CBMC flags by default unless `--no-default-checks` is being used
     if not args.no_default_checks:
         rmc.add_selected_default_cbmc_flags(args)

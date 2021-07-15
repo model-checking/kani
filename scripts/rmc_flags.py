@@ -110,7 +110,6 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
         if flag in exclude_flags:
             excluded_flags.add(flag)
             return
-
         group.add_argument(flag, *args, **kwargs)
 
     add_groups = [
