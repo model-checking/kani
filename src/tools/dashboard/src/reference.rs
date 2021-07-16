@@ -120,10 +120,9 @@ fn copy(from: &Path, map: &HashMap<String, PathBuf>) {
     let key_line_test = from.parent().unwrap().file_name().unwrap().to_str().unwrap();
     // Extract <key> and <line-num> from `key_line_test` to get <val> and
     // construct destination path.
-    let _2 = key_line_test.rfind("_").unwrap();
-    let _1 = key_line_test[.._2].rfind("_").unwrap();
-    let key = &key_line_test[.._1];
-    let line = &key_line_test[_1 + 1.._2];
+    let splits: Vec<_> = key_line_test.rsplitn(3, '_').collect();
+    let key = splits[2];
+    let line = splits[1];
     let val = &map[key];
     let name = &format!("{}.rs", line);
     let to = Path::new("src").join("test").join(val).join(name);
