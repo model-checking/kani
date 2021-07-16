@@ -11,7 +11,10 @@ use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::subst::InternalSubsts;
-use rustc_middle::ty::{self, Binder, GenericParamDefKind, Instance, IntTy, TraitRef, Ty, UintTy};
+use rustc_middle::ty::{
+    self, Binder, GenericParamDefKind, Instance, IntTy, TraitRef, Ty, UintTy, VtblEntry,
+    COMMON_VTABLE_ENTRIES,
+};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
@@ -700,8 +703,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_vtable_method_field(
         &mut self,
         def_id: DefId,
-        _substs: ty::subst::SubstsRef<'tcx>,
-        trait_ref_t: Binder<'tcx, TraitRef<'tcx>>,
+        substs: ty::subst::SubstsRef<'tcx>,
         t: Ty<'tcx>,
     ) -> Expr {
         let vtable_field_name = self.vtable_field_name(def_id);
@@ -711,27 +713,6 @@ impl<'tcx> GotocCtx<'tcx> {
             .lookup_field_type(&vtable_type_name, &vtable_field_name)
             .cloned()
             .unwrap();
-
-        ///////////////////////////////////////////////////////////////////////
-        // Copied from rustc impl:
-        //     compiler/rustc_trait_selection/src/traits/mod.rs
-        //
-        // The method may have some early-bound lifetimes; add regions for those.
-        let substs = trait_ref_t.map_bound(|trait_ref| {
-            InternalSubsts::for_item(self.tcx, def_id, |param, _| match param.kind {
-                GenericParamDefKind::Lifetime => self.tcx.lifetimes.re_erased.into(),
-                GenericParamDefKind::Type { .. } | GenericParamDefKind::Const { .. } => {
-                    trait_ref.substs[param.index as usize]
-                }
-            })
-        });
-
-        // The trait type may have higher-ranked lifetimes in it;
-        // erase them if they appear, so that we get the type
-        // at some particular call site.
-        let substs =
-            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), substs);
-        ///////////////////////////////////////////////////////////////////////
 
         // We use Instance::resolve to more closely match Rust proper behavior. The comment
         // there says "used to find the precise code that will run for a trait method invocation"
@@ -788,35 +769,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_vtable_methods(
-        &mut self,
-        trait_ref_t: Binder<'tcx, TraitRef<'tcx>>,
-        t: Ty<'tcx>,
-    ) -> Vec<Expr> {
-        //DSN This assumes that we always get the methods back in the same order.
-        let methods = self
-            .tcx
-            .vtable_entries(trait_ref_t)
-            .iter()
-            .cloned()
-            .map(|entry| match entry {
-                ty::VtblEntry::Method(def_id, substs) => {
-                    Some(self.codegen_vtable_method_field(def_id, substs, trait_ref_t, t))
-                }
-                _ => None,
-            })
-            .filter_map(|x| x)
-            .collect();
-        methods
-    }
-
     /// The size and alignment for the vtable is of the underlying type.
     /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
     /// returns the correct size to match rustc vtable values. Checked via
     /// RMC-compile-time and CBMC assertions in check_vtable_size.
-    ///
-    /// As per tautschn@, the way to get the sizeof an object in gotoc is
-    /// `__CPROVER_POINTER_OFFSET(&((int *)0)[1])`
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);
@@ -851,13 +807,13 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
         let trait_type = match dst_mir_type.kind() {
-            // dst is pointer type
+            // DST is pointer type
             ty::Ref(_, pointee_type, ..) => pointee_type,
-            // dst is box type
+            // DST is box type
             ty::Adt(adt_def, adt_subst) if adt_def.is_box() => {
                 adt_subst.first().unwrap().expect_ty()
             }
-            // dst is dynamic type
+            // DST is dynamic type
             ty::Dynamic(..) => dst_mir_type,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
@@ -868,29 +824,44 @@ impl<'tcx> GotocCtx<'tcx> {
         };
 
         let src_name = self.ty_mangled_name(src_mir_type);
-        // name needs to be the same as inserted in typ.rs
+        // The name needs to be the same as inserted in typ.rs
         let vtable_name = self.vtable_name(trait_type);
         let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
 
         self.ensure_global_var(
             &vtable_impl_name,
-            true, // REVISIT: static-scope https://github.com/model-checking/rmc/issues/10
+            true,
             Type::struct_tag(&vtable_name),
             Location::none(),
             |ctx, var| {
-                // Build the vtable
-                // See compiler/rustc_codegen_llvm/src/gotoc/typ.rs `trait_vtable_field_types` for field order
-                let drop_irep = ctx.codegen_vtable_drop_in_place(&src_mir_type, trait_type);
+                // Build the vtable, using Rust's vtable_entries to determine field order
+                let vtable_entries = if let Some(principal) = binders.principal() {
+                    let trait_ref_binder = principal.with_self_ty(ctx.tcx, src_mir_type);
+                    let trait_ref_binder = ctx.tcx.erase_regions(trait_ref_binder);
+
+                    ctx.tcx.vtable_entries(trait_ref_binder)
+                } else {
+                    COMMON_VTABLE_ENTRIES
+                };
+
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
                 let size_assert = ctx.check_vtable_size(&src_mir_type, vt_size.clone());
-                let mut vtable_fields = vec![drop_irep, vt_size, vt_align];
 
-                // The virtual methods on the trait ref. Some auto traits have no methods.
-                if let Some(principal) = binders.principal() {
-                    let concrete_type = principal.with_self_ty(ctx.tcx, src_mir_type);
-                    let mut methods = ctx.codegen_vtable_methods(concrete_type, trait_type);
-                    vtable_fields.append(&mut methods);
-                }
+                let vtable_fields: Vec<Expr> = vtable_entries
+                    .iter()
+                    .filter_map(|entry| match entry {
+                        VtblEntry::MetadataDropInPlace => {
+                            Some(ctx.codegen_vtable_drop_in_place(&src_mir_type, trait_type))
+                        }
+                        VtblEntry::MetadataSize => Some(vt_size.clone()),
+                        VtblEntry::MetadataAlign => Some(vt_align.clone()),
+                        VtblEntry::Vacant => None,
+                        VtblEntry::Method(def_id, substs) => {
+                            Some(ctx.codegen_vtable_method_field(*def_id, substs, trait_type))
+                        }
+                    })
+                    .collect();
+
                 let vtable = Expr::struct_expr_from_values(
                     Type::struct_tag(&vtable_name),
                     vtable_fields,
