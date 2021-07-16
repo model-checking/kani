@@ -11,7 +11,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::{InternalSubsts, SubstsRef};
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef,
+    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef, VtblEntry,
 };
 use rustc_span;
 use rustc_span::def_id::DefId;
@@ -195,13 +195,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     .vtable_entries(poly)
                     .iter()
                     .cloned()
-                    .map(|entry| match entry {
-                        ty::VtblEntry::Method(def_id, substs) => {
+                    .filter_map(|entry| match entry {
+                        VtblEntry::Method(def_id, substs) => {
                             Some(self.trait_method_vtable_field_type(def_id, substs))
                         }
-                        _ => None,
+                        VtblEntry::MetadataDropInPlace
+                        | VtblEntry::MetadataSize
+                        | VtblEntry::MetadataAlign
+                        | VtblEntry::Vacant => None,
                     })
-                    .filter_map(|x| x)
                     .collect();
 
                 vtable_base.append(&mut flds);

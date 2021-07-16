@@ -21,7 +21,7 @@ use rustc_middle::traits;
 use rustc_middle::ty::adjustment::{CustomCoerceUnsized, PointerCast};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::subst::{GenericArgKind, InternalSubsts};
-use rustc_middle::ty::{self, GenericParamDefKind, Instance, Ty, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, GenericParamDefKind, Instance, Ty, TyCtxt, TypeFoldable, VtblEntry};
 use rustc_session::config::EntryFnType;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
 use std::iter;
@@ -814,16 +814,18 @@ fn create_mono_items_for_vtable_methods<'tcx>(
             let methods = methods
                 .iter()
                 .cloned()
-                .map(|entry| match entry {
-                    ty::VtblEntry::Method(def_id, substs) => ty::Instance::resolve_for_vtable(
+                .filter_map(|entry| match entry {
+                    VtblEntry::Method(def_id, substs) => ty::Instance::resolve_for_vtable(
                         tcx,
                         ty::ParamEnv::reveal_all(),
                         def_id,
                         substs,
                     ),
-                    _ => None,
+                    VtblEntry::MetadataDropInPlace
+                    | VtblEntry::MetadataSize
+                    | VtblEntry::MetadataAlign
+                    | VtblEntry::Vacant => None,
                 })
-                .filter_map(|x| x)
                 .filter(|&instance| should_codegen_locally(tcx, &instance))
                 .map(|item| create_fn_mono_item(item, source));
             output.extend(methods);
