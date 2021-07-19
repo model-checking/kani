@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::super::{
-    CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, StmtBody, Symbol, SymbolTable,
-    SymbolValues, Type,
+    CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
 };
 use super::Transformer;
+use rustc_data_structures::fx::FxHashMap;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
 
-thread_local!(static NONDET_TYPES: RefCell<HashMap<String, Type>> = RefCell::new(HashMap::new()));
+thread_local!(static NONDET_TYPES: RefCell<FxHashMap<String, Type>> = RefCell::new(FxHashMap::default()));
 
 /// Converts an arbitrary identifier into a valid C identifier.
 fn normalize_identifier(name: &str) -> String {
@@ -31,7 +30,7 @@ fn normalize_identifier(name: &str) -> String {
     };
 
     // Replace reserved names with alternatives
-    let mut illegal_names: HashMap<_, _> = [("case", "case_"), ("main", "main_")]
+    let mut illegal_names: FxHashMap<_, _> = [("case", "case_"), ("main", "main_")]
         .iter()
         .map(|(key, value)| (key.to_string(), value.to_string()))
         .collect();
@@ -98,7 +97,7 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize parameter identifier.
-    fn transform_parameter(&self, parameter: &Parameter) -> Parameter {
+    fn transform_type_parameter(&self, parameter: &Parameter) -> Parameter {
         Type::parameter(
             parameter.identifier().map(|name| normalize_identifier(name)),
             parameter.base_name().map(|name| normalize_identifier(name)),
@@ -107,13 +106,13 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize field names.
-    fn transform_member_expr(&self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
+    fn transform_expr_member(&self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
         transformed_lhs.member(&normalize_identifier(field), self.symbol_table())
     }
 
     // Transform nondets to missing functions so they get headers
-    fn transform_nondet_expr(&self, typ: &Type) -> Expr {
+    fn transform_expr_nondet(&self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let typ_string = type_to_string(&transformed_typ);
         let identifier = format!("non_det_{}", typ_string);
@@ -124,13 +123,13 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize name in identifier expression.
-    fn transform_symbol_expr(&self, typ: &Type, identifier: &str) -> Expr {
+    fn transform_expr_symbol(&self, typ: &Type, identifier: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::symbol_expression(normalize_identifier(identifier), transformed_typ)
     }
 
     /// Normalize union field names.
-    fn transform_union_expr(&self, typ: &Type, value: &Expr, field: &str) -> Expr {
+    fn transform_expr_union(&self, typ: &Type, value: &Expr, field: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_value = self.transform_expr(value);
         Expr::union_expr(
@@ -142,12 +141,12 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize incomplete struct tag name.
-    fn transform_incomplete_struct_type(&self, tag: &str) -> Type {
+    fn transform_type_incomplete_struct(&self, tag: &str) -> Type {
         Type::incomplete_struct(&normalize_identifier(tag))
     }
 
     /// Normalize incomplete union tag name.
-    fn transform_incomplete_union_type(&self, tag: &str) -> Type {
+    fn transform_type_incomplete_union(&self, tag: &str) -> Type {
         Type::incomplete_union(&normalize_identifier(tag))
     }
 
@@ -165,7 +164,7 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize struct type name.
-    fn transform_struct_type(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_struct(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
@@ -174,12 +173,12 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize struct tag name.
-    fn transform_struct_tag_type(&self, tag: &str) -> Type {
+    fn transform_type_struct_tag(&self, tag: &str) -> Type {
         Type::struct_tag_raw(&normalize_identifier(tag))
     }
 
     /// Normalize union type name.
-    fn transform_union_type(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_union(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
@@ -188,17 +187,17 @@ impl Transformer for GenCTransformer {
     }
 
     /// Normalize union tag name.
-    fn transform_union_tag_type(&self, tag: &str) -> Type {
+    fn transform_type_union_tag(&self, tag: &str) -> Type {
         Type::union_tag_raw(&normalize_identifier(tag))
     }
 
     /// Normalize goto label name.
-    fn transform_goto_stmt(&self, label: &str) -> Stmt {
+    fn transform_stmt_goto(&self, label: &str) -> Stmt {
         Stmt::goto(normalize_identifier(label), Location::none())
     }
 
     /// Normalize label name.
-    fn transform_label_stmt(&self, label: &str, body: &Stmt) -> Stmt {
+    fn transform_stmt_label(&self, label: &str, body: &Stmt) -> Stmt {
         let transformed_body = self.transform_stmt(body);
         transformed_body.with_label(normalize_identifier(label))
     }
@@ -223,6 +222,8 @@ impl Transformer for GenCTransformer {
         assert!(memcpy.is_some());
         let memmove = self.mut_symbol_table().remove("memmove");
         assert!(memmove.is_some());
+        let memcmp = self.mut_symbol_table().remove("memcmp");
+        assert!(memcmp.is_some());
 
         // Redefine main function to return an `int`.
         // Moves `main` to `main_`, and create `main` to call now `main_`.
