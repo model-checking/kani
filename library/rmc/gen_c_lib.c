@@ -5,10 +5,13 @@
 #include <string.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 void __CPROVER_assume(int condition) {
     assert(condition);
 }
+
+typedef bool __CPROVER_bool;
 
 #define OBJECT_SIZE(value) sizeof(*value)
 
@@ -27,7 +30,6 @@ void __CPROVER_assume(int condition) {
         1 \
     )
 
-// nondet_<k>
 #define byte_extract_little_endian(from_val, offset, to_type) \
     *((to_type*) (((void*) &from_val) + offset))
 

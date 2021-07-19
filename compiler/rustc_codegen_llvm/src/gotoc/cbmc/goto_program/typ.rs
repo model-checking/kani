@@ -811,6 +811,58 @@ impl Type {
             unreachable!("Can't convert {:?} to a one value", self);
         }
     }
+
+    pub fn default(&self, symtab: &SymbolTable) -> Expr {
+        match self {
+            Array { typ, size } => typ.default(symtab).array_constant(*size),
+            Bool => Expr::bool_false(),
+            CBitField { .. } => todo!(),
+            CInteger(_) | Signedbv { .. } | Unsignedbv { .. } | Double | Float | Pointer { .. } => {
+                self.zero()
+            }
+            Struct { tag, .. } => {
+                let field_exprs = self
+                    .struct_field_types(symtab)
+                    .into_iter()
+                    .map(|(field_name, typ)| (field_name, typ.default(symtab)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Expr::struct_expr(Type::struct_tag(tag), field_exprs, symtab)
+            }
+            StructTag(_) => {
+                let field_exprs = self
+                    .struct_field_types(symtab)
+                    .into_iter()
+                    .map(|(field_name, typ)| (field_name, typ.default(symtab)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Expr::struct_expr(self.clone(), field_exprs, symtab)
+            }
+            Union { tag, components } => {
+                let first_component = components.get(0).unwrap();
+                let field = first_component.name();
+                let value = first_component.field_typ().unwrap().default(symtab);
+
+                Expr::union_expr(Type::union_tag(tag), field, value, symtab)
+            }
+            UnionTag(_) => {
+                let first_component = symtab.lookup_fields_in_type(self).unwrap().get(0).unwrap();
+                let field = first_component.name();
+                let value = first_component.field_typ().unwrap().default(symtab);
+
+                Expr::union_expr(self.clone(), field, value, symtab)
+            }
+            VariadicCode { .. } => todo!(),
+            Vector { .. } => todo!(),
+            Code { .. } => todo!(),
+            Constructor => todo!(),
+            Empty => todo!(),
+            FlexibleArray { .. } => todo!(),
+            IncompleteStruct { .. } => todo!(),
+            IncompleteUnion { .. } => todo!(),
+            InfiniteArray { .. } => todo!(),
+        }
+    }
 }
 
 impl Type {

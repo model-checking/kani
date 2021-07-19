@@ -6,14 +6,17 @@ use super::super::{
     SymbolValues, Type,
 };
 use super::Transformer;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
+
+thread_local!(static NONDET_TYPES: RefCell<HashMap<String, Type>> = RefCell::new(HashMap::new()));
 
 /// Converts an arbitrary identifier into a valid C identifier.
 fn normalize_identifier(name: &str) -> String {
     // Convert non-(alphanumeric + underscore) characters to underscore
     let valid_chars = name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_'), "_");
 
-    /// If the first character is a number, prefix with underscore
+    // If the first character is a number, prefix with underscore
     let new_name = match valid_chars.chars().next() {
         Some(first) => {
             if first.is_numeric() {
@@ -27,12 +30,41 @@ fn normalize_identifier(name: &str) -> String {
         None => "_".to_string(),
     };
 
-    /// Replace reserved names with alternatives
+    // Replace reserved names with alternatives
     let mut illegal_names: HashMap<_, _> = [("case", "case_"), ("main", "main_")]
         .iter()
         .map(|(key, value)| (key.to_string(), value.to_string()))
         .collect();
     illegal_names.remove(&new_name).unwrap_or(new_name)
+}
+
+fn type_to_string(typ: &Type) -> String {
+    match typ {
+        Type::Array { typ, size } => format!("array_of_{}_{}", size, type_to_string(typ.as_ref())),
+        Type::Bool => format!("bool"),
+        Type::CBitField { typ, .. } => format!("cbitfield_of_{}", type_to_string(typ.as_ref())),
+        Type::CInteger(_) => format!("c_int"),
+        Type::Code { .. } => format!("code"),
+        Type::Constructor => format!("constructor"),
+        Type::Double => format!("double"),
+        Type::Empty => format!("empty"),
+        Type::FlexibleArray { typ } => format!("flexarray_of_{}", type_to_string(typ.as_ref())),
+        Type::Float => format!("float"),
+        Type::IncompleteStruct { tag } => tag.clone(),
+        Type::IncompleteUnion { tag } => tag.clone(),
+        Type::InfiniteArray { typ } => {
+            format!("infinite_array_of_{}", type_to_string(typ.as_ref()))
+        }
+        Type::Pointer { typ } => format!("pointer_to_{}", type_to_string(typ.as_ref())),
+        Type::Signedbv { width } => format!("signed_bv_{}", width),
+        Type::Struct { tag, .. } => format!("struct_{}", tag),
+        Type::StructTag(tag) => format!("struct_{}", tag),
+        Type::Union { tag, .. } => format!("union_{}", tag),
+        Type::UnionTag(tag) => format!("union_{}", tag),
+        Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
+        Type::VariadicCode { .. } => format!("variadic_code"),
+        Type::Vector { typ, .. } => format!("vec_of_{}", type_to_string(typ.as_ref())),
+    }
 }
 
 /// Struct for performing the gen-c transformation on a symbol table.
@@ -78,6 +110,17 @@ impl Transformer for GenCTransformer {
     fn transform_member_expr(&self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
         transformed_lhs.member(&normalize_identifier(field), self.symbol_table())
+    }
+
+    // Transform nondets to missing functions so they get headers
+    fn transform_nondet_expr(&self, typ: &Type) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        let typ_string = type_to_string(&transformed_typ);
+        let identifier = format!("non_det_{}", typ_string);
+        let function_type = Type::code(vec![], transformed_typ);
+        NONDET_TYPES
+            .with(|cell| cell.borrow_mut().insert(identifier.clone(), function_type.clone()));
+        Expr::symbol_expression(identifier, function_type).call(vec![])
     }
 
     /// Normalize name in identifier expression.
@@ -206,6 +249,18 @@ impl Transformer for GenCTransformer {
                 Location::none(),
             );
             self.mut_symbol_table().insert(new_main);
+        }
+
+        for (identifier, typ) in NONDET_TYPES.with(|cell| cell.take()) {
+            let value = typ.return_type().unwrap().default(self.symbol_table());
+            let sym = Symbol::function(
+                &identifier,
+                typ,
+                Some(Stmt::ret(Some(value), Location::none())),
+                Some(identifier.clone()),
+                Location::none(),
+            );
+            self.mut_symbol_table().insert(sym);
         }
     }
 }
