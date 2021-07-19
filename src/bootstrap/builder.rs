@@ -372,6 +372,7 @@ impl<'a> Builder<'a> {
                 tool::Linkchecker,
                 tool::CargoTest,
                 tool::Compiletest,
+                tool::Dashboard,
                 tool::RemoteTestServer,
                 tool::RemoteTestClient,
                 tool::RustInstaller,
@@ -523,7 +524,7 @@ impl<'a> Builder<'a> {
                 install::Src,
                 install::Rustc
             ),
-            Kind::Run => describe!(run::ExpandYamlAnchors, run::BuildManifest),
+            Kind::Run => describe!(run::Dashboard, run::ExpandYamlAnchors, run::BuildManifest),
         }
     }
 
