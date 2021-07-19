@@ -20,7 +20,7 @@ def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
         del sys.argv[1]
 
-    parser = argparse.ArgumentParser(description="Verify a Rust crate")
+    parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate")
 
     crate_group = parser.add_argument_group("Crate", "You can pass in the rust crate positionally or with the --crate flag.")
     crate_group.add_argument("crate", help="crate to verify", nargs="?")
