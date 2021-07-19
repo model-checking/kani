@@ -5,13 +5,22 @@ use super::super::{
     CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
 };
 use super::Transformer;
-use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 
 thread_local!(static NONDET_TYPES: RefCell<FxHashMap<String, Type>> = RefCell::new(FxHashMap::default()));
 
+thread_local!(static MAPPED_NAMES: RefCell<FxHashMap<String, String>> = RefCell::new(FxHashMap::default()));
+thread_local!(static USED_NAMES: RefCell<FxHashSet<String>> = RefCell::new(FxHashSet::default()));
+
 /// Converts an arbitrary identifier into a valid C identifier.
 fn normalize_identifier(name: &str) -> String {
+    // If name already encountered, return same result
+    match MAPPED_NAMES.with(|map| map.borrow().get(name).cloned()) {
+        Some(result) => return result.clone(),
+        None => (),
+    }
+
     // Convert non-(alphanumeric + underscore) characters to underscore
     let valid_chars = name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_'), "_");
 
@@ -34,7 +43,27 @@ fn normalize_identifier(name: &str) -> String {
         .iter()
         .map(|(key, value)| (key.to_string(), value.to_string()))
         .collect();
-    illegal_names.remove(&new_name).unwrap_or(new_name)
+    let result = illegal_names.remove(&new_name).unwrap_or(new_name);
+
+    // Ensure result has not been used before
+    let result = if USED_NAMES.with(|set| set.borrow().contains(&result)) {
+        let mut suffix = 0;
+        loop {
+            let result = format!("{}_{}", result, suffix);
+            if !USED_NAMES.with(|set| set.borrow().contains(&result)) {
+                break result;
+            }
+            suffix += 1;
+        }
+    } else {
+        result
+    };
+
+    // Remember result and return
+    MAPPED_NAMES.with(|map| {
+        map.borrow_mut().insert(name.to_string(), result);
+        map.borrow().get(name).unwrap().clone()
+    })
 }
 
 fn type_to_string(typ: &Type) -> String {
