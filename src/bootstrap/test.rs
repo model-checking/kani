@@ -1212,6 +1212,8 @@ default_test!(CargoRMC { path: "src/test/cargo-rmc", mode: "cargo-rmc", suite: "
 
 default_test!(Expected { path: "src/test/expected", mode: "expected", suite: "expected" });
 
+default_test!(Ref { path: "src/test/ref", mode: "rmc", suite: "ref" });
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Compiletest {
     compiler: Compiler,
