@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::super::{
-    CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
+    CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable,
+    SymbolValues, Type,
 };
 use super::Transformer;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
@@ -10,11 +11,34 @@ use std::cell::RefCell;
 
 thread_local!(static NONDET_TYPES: RefCell<FxHashMap<String, Type>> = RefCell::new(FxHashMap::default()));
 
+thread_local!(static NEW_SYMS: RefCell<FxHashMap<String, Symbol>> = RefCell::new(FxHashMap::default()));
+
+/// Add identifier to a transformed parameter if it's missing.
+/// Necessary when function wasn't originally a definition.
+fn add_identifier(parameter: &Parameter) -> Parameter {
+    if parameter.identifier().is_some() {
+        parameter.clone()
+    } else {
+        let new_name = format!("__{}", type_to_string(parameter.typ()));
+        let parameter_sym = Symbol::variable(
+            new_name.clone(),
+            new_name.clone(),
+            parameter.typ().clone(),
+            Location::none(),
+        );
+        let parameter = parameter_sym.to_function_parameter();
+        NEW_SYMS.with(|cell| cell.borrow_mut().insert(new_name, parameter_sym));
+        parameter
+    }
+}
+
 thread_local!(static MAPPED_NAMES: RefCell<FxHashMap<String, String>> = RefCell::new(FxHashMap::default()));
 thread_local!(static USED_NAMES: RefCell<FxHashSet<String>> = RefCell::new(FxHashSet::default()));
 
 /// Converts an arbitrary identifier into a valid C identifier.
 fn normalize_identifier(name: &str) -> String {
+    assert!(!name.is_empty(), "Received empty identifier.");
+
     // If name already encountered, return same result
     match MAPPED_NAMES.with(|map| map.borrow().get(name).cloned()) {
         Some(result) => return result.clone(),
@@ -258,11 +282,45 @@ impl Transformer for GenCTransformer {
 
     /// Normalize symbol names.
     fn transform_symbol(&self, symbol: &Symbol) -> Symbol {
-        let new_typ = self.transform_type(&symbol.typ);
-        let new_value = self.transform_value(&symbol.value);
-        let mut new_symbol = symbol.clone();
-        new_symbol.value = new_value;
-        new_symbol.typ = new_typ;
+        let mut new_symbol = if symbol.is_extern {
+            // Replace extern functions with nondet body so linker doesn't break
+            assert!(
+                symbol.typ.is_code() || symbol.typ.is_variadic_code(),
+                "Extern symbol should be function."
+            );
+            assert!(symbol.value.is_none(), "Extern function should have no body.");
+            let new_typ = self.transform_type(&symbol.typ);
+            let nondet_expr =
+                self.transform_expr(&Expr::nondet(symbol.typ.return_type().unwrap().clone()));
+            let new_value = SymbolValues::Stmt(Stmt::ret(Some(nondet_expr), Location::none()));
+
+            // Fill missing parameter names with dummy name
+            let parameters = new_typ
+                .parameters()
+                .unwrap()
+                .iter()
+                .map(|parameter| add_identifier(parameter))
+                .collect();
+            let new_typ = if new_typ.is_code() {
+                Type::code(parameters, new_typ.return_type().unwrap().clone())
+            } else {
+                Type::variadic_code(parameters, new_typ.return_type().unwrap().clone())
+            };
+
+            let mut new_symbol = symbol.clone();
+            new_symbol.value = new_value;
+            new_symbol.typ = new_typ;
+            new_symbol.with_is_extern(false)
+        } else {
+            let new_typ = self.transform_type(&symbol.typ);
+            let new_value = self.transform_value(&symbol.value);
+
+            let mut new_symbol = symbol.clone();
+            new_symbol.value = new_value;
+            new_symbol.typ = new_typ;
+            new_symbol
+        };
+
         new_symbol.name = normalize_identifier(&new_symbol.name);
         new_symbol.base_name = new_symbol.base_name.map(|name| normalize_identifier(&name));
         new_symbol.pretty_name = new_symbol.pretty_name.map(|name| normalize_identifier(&name));
@@ -316,6 +374,10 @@ impl Transformer for GenCTransformer {
                 Location::none(),
             );
             self.mut_symbol_table().insert(sym);
+        }
+
+        for (_, symbol) in NEW_SYMS.with(|cell| cell.take()) {
+            self.mut_symbol_table().insert(symbol);
         }
     }
 }
