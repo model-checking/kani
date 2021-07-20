@@ -61,7 +61,7 @@ def main():
         rmc.add_selected_default_cbmc_flags(args)
 
     rmc.cargo_build(args.crate, args.target_dir,
-                    args.verbose, args.debug, args.mangler, args.dry_run)
+                    args.verbose, args.debug, args.mangler, args.dry_run, [])
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
