@@ -12,7 +12,7 @@ use std::fmt::Debug;
 /// The CBMC serialization format for goto-programs.
 /// CBMC implementation code is at:
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/irep.h
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Irep {
     pub id: IrepId,
     pub sub: Vec<Irep>,
