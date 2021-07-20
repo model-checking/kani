@@ -140,7 +140,7 @@ impl Transformer for GenCTransformer {
         transformed_lhs.member(&normalize_identifier(field), self.symbol_table())
     }
 
-    // Transform nondets to missing functions so they get headers
+    /// Transform nondets to missing functions so they get headers
     fn transform_expr_nondet(&self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let typ_string = type_to_string(&transformed_typ);
@@ -149,6 +149,31 @@ impl Transformer for GenCTransformer {
         NONDET_TYPES
             .with(|cell| cell.borrow_mut().insert(identifier.clone(), function_type.clone()));
         Expr::symbol_expression(identifier, function_type).call(vec![])
+    }
+
+    /// Don't transform padding fields so that they are ignored by CBMC --dump-c.
+    fn transform_expr_struct(&self, typ: &Type, values: &[Expr]) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        assert!(
+            transformed_typ.is_struct_tag(),
+            "Transformed StructTag must be StructTag; got {:?}",
+            transformed_typ
+        );
+        let fields = self.symbol_table().lookup_fields_in_type(&transformed_typ).unwrap();
+        let transformed_values: Vec<_> = fields
+            .into_iter()
+            .zip(values.into_iter())
+            .map(
+                |(field, value)| {
+                    if field.is_padding() { value.clone() } else { self.transform_expr(value) }
+                },
+            )
+            .collect();
+        Expr::struct_expr_from_padded_values(
+            transformed_typ,
+            transformed_values,
+            self.symbol_table(),
+        )
     }
 
     /// Normalize name in identifier expression.
