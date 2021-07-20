@@ -761,6 +761,7 @@ fn test_debugging_options_tracking_hash() {
     tracked!(show_span, Some(String::from("abc")));
     tracked!(src_hash_algorithm, Some(SourceFileHashAlgorithm::Sha1));
     tracked!(symbol_mangling_version, Some(SymbolManglingVersion::V0));
+    tracked!(symbol_table_passes, vec![String::from("identity")]);
     tracked!(teach, true);
     tracked!(thinlto, Some(true));
     tracked!(thir_unsafeck, true);

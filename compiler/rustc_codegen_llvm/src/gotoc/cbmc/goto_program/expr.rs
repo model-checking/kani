@@ -584,7 +584,7 @@ impl Expr {
         // Check that each formal field has an value
         assert!(
             fields.iter().zip(values.iter()).all(|(f, v)| f.typ() == *v.typ()),
-            "Error in struct_expr\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}",
             typ,
             values
         );
@@ -593,20 +593,25 @@ impl Expr {
 
     /// Struct initializer  
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
-    /// Note that only the NON padding fields should be explicitiy given.
+    /// Note that only the NON padding fields should be explicitly given.
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
     pub fn struct_expr(
         typ: Type,
         mut components: BTreeMap<String, Expr>,
         symbol_table: &SymbolTable,
     ) -> Self {
-        assert!(typ.is_struct_tag(), "Error in struct_expr\n\t{:?}\n\t{:?}", typ, components);
+        assert!(
+            typ.is_struct_tag(),
+            "Error in struct_expr; must be given a struct_tag.\n\t{:?}\n\t{:?}",
+            typ,
+            components
+        );
         let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
         let non_padding_fields: Vec<_> = fields.iter().filter(|x| !x.is_padding()).collect();
         assert_eq!(
             non_padding_fields.len(),
             components.len(),
-            "Error in struct_expr\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; mismatch in number of fields and components.\n\t{:?}\n\t{:?}",
             typ,
             components
         );
@@ -658,7 +663,7 @@ impl Expr {
 
     /// Struct initializer  
     /// `struct foo the_foo = >>> {field1, field2, ... } <<<`
-    /// Note that only the NON padding fields should be explicitiy given.
+    /// Note that only the NON padding fields should be explicitly given.
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
     pub fn struct_expr_from_values(
         typ: Type,
@@ -667,7 +672,7 @@ impl Expr {
     ) -> Self {
         assert!(
             typ.is_struct_tag(),
-            "Error in struct_expr\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; must be given struct_tag.\n\t{:?}\n\t{:?}",
             typ,
             non_padding_values
         );
@@ -676,7 +681,7 @@ impl Expr {
         assert_eq!(
             non_padding_fields.len(),
             non_padding_values.len(),
-            "Error in struct_expr\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; mismatch in number of fields and values.\n\t{:?}\n\t{:?}",
             typ,
             non_padding_values
         );
@@ -685,7 +690,7 @@ impl Expr {
                 .iter()
                 .zip(non_padding_values.iter())
                 .all(|(f, v)| f.field_typ().unwrap() == v.typ()),
-            "Error in struct_expr\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}",
             typ,
             non_padding_values
         );
@@ -694,6 +699,40 @@ impl Expr {
             .iter()
             .map(|f| if f.is_padding() { f.typ().nondet() } else { non_padding_values.remove(0) })
             .collect();
+
+        Expr::struct_expr_with_explicit_padding(typ, fields, values)
+    }
+
+    /// Struct initializer  
+    /// `struct foo the_foo = >>> {field1, padding2, field3, ... } <<<`
+    /// Note that padding fields should be explicitly given.
+    /// This would be used when the values and padding have already been combined,
+    /// e.g. when extracting the values out of an existing struct expr (see transformer.rs)
+    pub fn struct_expr_from_padded_values(
+        typ: Type,
+        values: Vec<Expr>,
+        symbol_table: &SymbolTable,
+    ) -> Self {
+        assert!(
+            typ.is_struct_tag(),
+            "Error in struct_expr; must be given struct_tag.\n\t{:?}\n\t{:?}",
+            typ,
+            values
+        );
+        let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
+        assert_eq!(
+            fields.len(),
+            values.len(),
+            "Error in struct_expr; mismatch in number of padded fields and padded values.\n\t{:?}\n\t{:?}",
+            typ,
+            values
+        );
+        assert!(
+            fields.iter().zip(values.iter()).all(|(f, v)| &f.typ() == v.typ()),
+            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}",
+            typ,
+            values
+        );
 
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
     }
@@ -1203,6 +1242,12 @@ impl Expr {
         // Otherwise, if something minus a positive overflowed, it must have overflowed to past min. Saturate there.
         let saturating_val = e.is_negative().ternary(typ.max_int_expr(mm), typ.min_int_expr(mm));
         res.overflowed.ternary(saturating_val, res.result)
+    }
+
+    /// `"s"`
+    /// only to be used when manually wrapped in `.array_to_ptr()`
+    pub fn raw_string_constant(s: &str) -> Self {
+        expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
     }
 
     /// `"s"`
