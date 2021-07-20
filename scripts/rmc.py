@@ -269,6 +269,29 @@ def gen_c_postprocess(c_filename):
     # Import gen_c_lib.c
     lines.insert(1, f"#include \"{GEN_C_LIB}\"")
 
+    # Remove builtin macros
+    to_remove = [
+        # memcmp
+        "// memcmp",
+        "// file <builtin-library-memcmp> function memcmp",
+        "int memcmp(void *, void *, unsigned long int);",
+
+        # memcpy
+        "// memcpy",
+        "// file <builtin-library-memcpy> function memcpy",
+        "void * memcpy(void *, void *, unsigned long int);",
+
+        # memmove
+        "// memmove",
+        "// file <builtin-library-memmove> function memmove",
+        "void * memmove(void *, void *, unsigned long int);",
+    ]
+
+    for line in to_remove:
+        assert line in lines, f"Did not find {line} in C output."
+        lines.remove(line)
+
+    # Print back to file
     with open(c_filename, "w") as f:
         f.write("\n".join(lines))
 

@@ -373,14 +373,6 @@ impl Transformer for GenCTransformer {
 
     /// Perform cleanup necessary to make C code valid.
     fn postprocess(&mut self) {
-        // Remove predefined macros that cause issues being re-declared.
-        let memcpy = self.mut_symbol_table().remove("memcpy");
-        assert!(memcpy.is_some());
-        let memmove = self.mut_symbol_table().remove("memmove");
-        assert!(memmove.is_some());
-        let memcmp = self.mut_symbol_table().remove("memcmp");
-        assert!(memcmp.is_some());
-
         // Redefine main function to return an `int`.
         // Moves `main` to `main_`, and create `main` to call now `main_`.
         let old_main = self.symbol_table().lookup("main_");
