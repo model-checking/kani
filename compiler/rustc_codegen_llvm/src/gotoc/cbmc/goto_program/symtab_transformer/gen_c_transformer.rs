@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::super::{
-    CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable,
-    SymbolValues, Type,
+    BinaryOperand, CIntType, DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol,
+    SymbolTable, SymbolValues, Type,
 };
 use super::Transformer;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
@@ -156,6 +156,50 @@ impl Transformer for GenCTransformer {
             parameter.base_name().map(|name| normalize_identifier(name)),
             self.transform_type(parameter.typ()),
         )
+    }
+
+    /// Translate Implies into Or/Not
+    fn transform_expr_bin_op(
+        &self,
+        _typ: &Type,
+        op: &BinaryOperand,
+        lhs: &Expr,
+        rhs: &Expr,
+    ) -> Expr {
+        let lhs = self.transform_expr(lhs);
+        let rhs = self.transform_expr(rhs);
+
+        match op {
+            BinaryOperand::And => lhs.and(rhs),
+            BinaryOperand::Ashr => lhs.ashr(rhs),
+            BinaryOperand::Bitand => lhs.bitand(rhs),
+            BinaryOperand::Bitor => lhs.bitor(rhs),
+            BinaryOperand::Bitxor => lhs.bitxor(rhs),
+            BinaryOperand::Div => lhs.div(rhs),
+            BinaryOperand::Equal => lhs.eq(rhs),
+            BinaryOperand::Ge => lhs.ge(rhs),
+            BinaryOperand::Gt => lhs.gt(rhs),
+            BinaryOperand::IeeeFloatEqual => lhs.feq(rhs),
+            BinaryOperand::IeeeFloatNotequal => lhs.fneq(rhs),
+            // `lhs ==> rhs` <==> `!lhs || rhs`
+            BinaryOperand::Implies => lhs.not().or(rhs),
+            BinaryOperand::Le => lhs.le(rhs),
+            BinaryOperand::Lshr => lhs.lshr(rhs),
+            BinaryOperand::Lt => lhs.lt(rhs),
+            BinaryOperand::Minus => lhs.sub(rhs),
+            BinaryOperand::Mod => lhs.rem(rhs),
+            BinaryOperand::Mult => lhs.mul(rhs),
+            BinaryOperand::Notequal => lhs.neq(rhs),
+            BinaryOperand::Or => lhs.or(rhs),
+            BinaryOperand::OverflowMinus => lhs.sub_overflow_p(rhs),
+            BinaryOperand::OverflowMult => lhs.mul_overflow_p(rhs),
+            BinaryOperand::OverflowPlus => lhs.add_overflow_p(rhs),
+            BinaryOperand::Plus => lhs.plus(rhs),
+            BinaryOperand::Rol => lhs.rol(rhs),
+            BinaryOperand::Ror => lhs.ror(rhs),
+            BinaryOperand::Shl => lhs.shl(rhs),
+            BinaryOperand::Xor => lhs.xor(rhs),
+        }
     }
 
     /// Normalize field names.
