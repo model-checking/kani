@@ -127,10 +127,14 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     return process.returncode
 
 # Generates a symbol table from a rust file
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False):
+def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
-    build_cmd = [RMC_RUSTC_EXE, "-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}",
+        
+    build_cmd = [RMC_RUSTC_EXE, 
+                 "-Z", "codegen-backend=gotoc", 
+                 "-Z", f"symbol-mangling-version={mangler}", 
+                 "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
                  f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
     build_env = os.environ
     if debug:
@@ -139,8 +143,12 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False):
-    rustflags = ["-Z", "codegen-backend=gotoc", "-Z", f"symbol-mangling-version={mangler}", f"--cfg={RMC_CFG}"]
+def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+    rustflags = [
+        "-Z", "codegen-backend=gotoc", 
+        "-Z", f"symbol-mangling-version={mangler}", 
+        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}", 
+        f"--cfg={RMC_CFG}"]
     rustflags = " ".join(rustflags)
     if "RUSTFLAGS" in os.environ:
         rustflags = os.environ["RUSTFLAGS"] + " " + rustflags
