@@ -8,6 +8,7 @@ mod location;
 mod stmt;
 mod symbol;
 mod symbol_table;
+pub mod symtab_transformer;
 mod typ;
 
 pub use builtin::BuiltinFn;

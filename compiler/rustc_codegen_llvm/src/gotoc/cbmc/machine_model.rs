@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 /// Represents the machine specific information necessary to generate an Irep.
 use num::bigint::BigInt;
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MachineModel {
     /// Is the architecture big endian?
     /// Minimum architectural alignment, in bytes
