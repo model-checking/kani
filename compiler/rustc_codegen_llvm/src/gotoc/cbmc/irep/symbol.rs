@@ -5,7 +5,7 @@ use super::Irep;
 /// A direct implementation of the CBMC serilization format for symbols implemented in
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h
 // TODO: do we want these members to be public?
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Symbol {
     pub typ: Irep,
     pub value: Irep,
