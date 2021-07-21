@@ -77,5 +77,3 @@ src/test/rustdoc-gui/src/**.lock
 
 # Before adding new lines, see the comment at the top.
 /src/test/ref
-/src/tools/dashboard/Cargo.lock
-/src/tools/dashboard/target
