@@ -5,6 +5,33 @@ use build_helper::output;
 use std::process::Command;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Dashboard;
+
+impl Step for Dashboard {
+    type Output = ();
+
+    /// Runs the `dashboard` tool.
+    ///
+    /// This tool in `src/tools` extracts examples from books, runs them through
+    /// RMC, and displays their results.
+    fn run(self, builder: &Builder<'_>) {
+        builder.info("Generating confidence dashboard");
+        try_run(
+            builder,
+            &mut builder.tool_cmd(Tool::Dashboard).env("TRIPLE", builder.config.build.triple),
+        );
+    }
+
+    fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
+        run.path("src/tools/dashboard")
+    }
+
+    fn make_run(run: RunConfig<'_>) {
+        run.builder.ensure(Dashboard);
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ExpandYamlAnchors;
 
 impl Step for ExpandYamlAnchors {

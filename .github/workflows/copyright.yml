@@ -15,7 +15,8 @@ jobs:
       - name: Get paths for files added
         id: git-diff
         run: |
-          files=$(git diff --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -v -E '(expected|ignore|gitignore)$' | xargs)
+          ignore='(.md|expected|ignore|gitignore)$'
+          files=$(git diff --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -v -E $ignore | xargs)
           echo "::set-output name=paths::$files"
 
       - name: Execute copyright check
