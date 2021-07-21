@@ -19,6 +19,7 @@ extern "platform-intrinsic" {
     fn simd_or<T>(x: T, y: T) -> T;
     fn simd_xor<T>(x: T, y: T) -> T;
     fn simd_extract<T, U>(x: T, idx: u32) -> U;
+    fn simd_insert<T, U>(x: T, idx: u32, b: U) -> T;
 }
 
 macro_rules! assert_op {
@@ -45,6 +46,10 @@ fn main() {
         let y_1: i64 = unsafe { simd_extract(y, 1) };
         assert!(y_0 == 0);
         assert!(y_1 == 1);
+        let m = unsafe { simd_insert(y, 0, 1) };
+        let n = unsafe { simd_insert(y, 1, 5) };
+        assert!(m.0 == 1 && m.1 == 1);
+        assert!(n.0 == 0 && n.1 == 5);
     }
 
     unsafe {

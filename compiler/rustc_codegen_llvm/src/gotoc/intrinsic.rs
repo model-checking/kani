@@ -382,6 +382,22 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_ge" => codegen_intrinsic_binop!(ge),
             "simd_gt" => codegen_intrinsic_binop!(gt),
+            "simd_insert" => {
+                let vec = fargs.remove(0);
+                let index = fargs.remove(0);
+                let newval = fargs.remove(0);
+                // Type checker should have ensured it's a vector type
+                let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
+                let tmp = self.gen_temp_variable(cbmc_ret_ty, loc.clone()).to_expr();
+                Stmt::block(
+                    vec![
+                        Stmt::decl(tmp.clone(), Some(vec), loc.clone()),
+                        tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc.clone()),
+                        self.codegen_expr_to_place(p, tmp),
+                    ],
+                    loc,
+                )
+            }
             "simd_le" => codegen_intrinsic_binop!(le),
             "simd_lt" => codegen_intrinsic_binop!(lt),
             "simd_mul" => codegen_intrinsic_binop!(mul),
