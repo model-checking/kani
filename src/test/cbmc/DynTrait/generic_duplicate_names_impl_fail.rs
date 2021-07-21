@@ -12,18 +12,21 @@ trait Foo<T> {
     fn method(&self, t: T) -> T;
 }
 
-trait Bar: Foo<u32> + Foo<i32> { }
+trait Bar: Foo<u32> + Foo<i32> {}
 
 impl Foo<i32> for () {
-    fn method(&self, t: i32) -> i32 { 0 }
+    fn method(&self, t: i32) -> i32 {
+        0
+    }
 }
 
 impl Foo<u32> for () {
-    fn method(&self, t: u32) -> u32 { t }
+    fn method(&self, t: u32) -> u32 {
+        t
+    }
 }
 
-impl Bar for () {
-}
+impl Bar for () {}
 
 fn main() {
     let b: &dyn Bar = &();
