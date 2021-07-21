@@ -47,5 +47,5 @@ typedef bool __CPROVER_bool;
     )
 
 #define byte_extract_little_endian(from_val, offset, to_type) \
-    *((to_type*) (((void*) &from_val) + offset))
+    *((typeof(to_type)*) (((void*) &from_val) + (offset)))
 
