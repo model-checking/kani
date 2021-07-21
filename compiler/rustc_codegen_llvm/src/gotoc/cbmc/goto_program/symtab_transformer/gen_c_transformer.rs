@@ -64,7 +64,7 @@ fn normalize_identifier(name: &str) -> String {
 
     // Replace reserved names with alternatives
     let mut illegal_names: FxHashMap<_, _> =
-        [("case", "case_"), ("main", "main_"), ("_default", "default")]
+        [("case", "case_"), ("main", "main_"), ("default", "_default")]
             .iter()
             .map(|(key, value)| (key.to_string(), value.to_string()))
             .collect();
