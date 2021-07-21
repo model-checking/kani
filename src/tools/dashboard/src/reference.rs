@@ -111,7 +111,7 @@ fn organize_examples(map: &HashMap<PathBuf, PathBuf>, book_dir: &Path, from_dir:
 /// `map`.
 fn copy(from: &Path, map: &HashMap<String, PathBuf>) {
     // The path specified by `from` has the form:
-    // `src/tools/dashboard/target/ref/<key>_<line-num>_<test-num>/rust_out`
+    // `build/<triple>/dashboard/ref/<key>_<line-num>_<test-num>/rust_out`
     // We copy the file in this path to a new path of the form:
     // `src/test/<val>/<line-num>.rs
     // where `map[<key>] == <val>`. We omit <test-num> because all tests have
@@ -259,8 +259,10 @@ fn display_dashboard(dashboard: dashboard::Tree) {
 pub fn display_reference_dashboard() {
     let summary_path: PathBuf = ["src", "doc", "reference", "src", "SUMMARY.md"].iter().collect();
     let ref_dir: PathBuf = ["src", "doc", "reference", "src"].iter().collect();
-    let gen_dir: PathBuf = ["src", "tools", "dashboard", "target", "ref"].iter().collect();
-    let log_path: PathBuf = ["src", "tools", "dashboard", "target", "ref.log"].iter().collect();
+    let build_dir = &env::var("BUILD_DIR").unwrap();
+    let triple = &env::var("TRIPLE").unwrap();
+    let gen_dir: PathBuf = [build_dir, triple, "dashboard", "ref"].iter().collect();
+    let log_path: PathBuf = [build_dir, triple, "dashboard", "ref.log"].iter().collect();
     // Parse the chapter/section hierarchy from the table of contents in The
     // Rust Reference.
     let map = parse_hierarchy(&summary_path);
