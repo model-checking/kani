@@ -35,8 +35,8 @@ fn main() {
     let animal = random_animal(random_number);
     let s = animal.noise();
     if (random_number < 5) {
-        _VERIFIER_expect_fail(s == 2, "Wrong noise");
+        __VERIFIER_expect_fail(s == 2, "Wrong noise");
     } else {
-        _VERIFIER_expect_fail(s == 1, "Wrong noise");
+        __VERIFIER_expect_fail(s == 1, "Wrong noise");
     }
 }
