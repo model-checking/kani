@@ -283,7 +283,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         return Stmt::goto(self.current_fn().find_label(&target), Location::none());
                     }
                     // Handle a virtual function call via a vtable lookup
-                    InstanceDef::Virtual(def_id, _) => {
+                    InstanceDef::Virtual(def_id, idx) => {
                         // We must have at least one argument, and the first one
                         // should be a fat pointer for the trait
                         let trait_fat_ptr = fargs[0].to_owned();
@@ -294,6 +294,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         self.codegen_virtual_funcall(
                             trait_fat_ptr,
                             def_id,
+                            idx,
                             &p,
                             &mut fargs,
                             loc.clone(),
@@ -340,11 +341,12 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         trait_fat_ptr: Expr,
         def_id: DefId,
+        idx: usize,
         place: &Place<'tcx>,
         fargs: &mut Vec<Expr>,
         loc: Location,
     ) -> Vec<Stmt> {
-        let vtable_field_name = self.vtable_field_name(def_id);
+        let vtable_field_name = self.vtable_field_name(def_id, idx);
 
         // Now that we have all the stuff we need, we can actually build the dynamic call
         // If the original call was of the form

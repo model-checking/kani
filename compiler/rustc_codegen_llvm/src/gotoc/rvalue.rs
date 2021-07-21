@@ -705,8 +705,9 @@ impl<'tcx> GotocCtx<'tcx> {
         def_id: DefId,
         substs: ty::subst::SubstsRef<'tcx>,
         t: Ty<'tcx>,
+        idx: usize,
     ) -> Expr {
-        let vtable_field_name = self.vtable_field_name(def_id);
+        let vtable_field_name = self.vtable_field_name(def_id, idx);
         let vtable_type_name = aggr_name(&self.vtable_name(t));
         let field_type = self
             .symbol_table
@@ -849,7 +850,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let vtable_fields: Vec<Expr> = vtable_entries
                     .iter()
-                    .filter_map(|entry| match entry {
+                    .enumerate()
+                    .filter_map(|(idx, entry)| match entry {
                         VtblEntry::MetadataDropInPlace => {
                             Some(ctx.codegen_vtable_drop_in_place(&src_mir_type, trait_type))
                         }
@@ -857,7 +859,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
                         VtblEntry::Vacant => None,
                         VtblEntry::Method(def_id, substs) => {
-                            Some(ctx.codegen_vtable_method_field(*def_id, substs, trait_type))
+                            Some(ctx.codegen_vtable_method_field(*def_id, substs, trait_type, idx))
                         }
                     })
                     .collect();
