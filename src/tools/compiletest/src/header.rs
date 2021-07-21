@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use tracing::*;
 
-use crate::common::{CompareMode, Config, Debugger, FailMode, Mode, PanicStrategy, PassMode};
+use crate::common::{
+    CompareMode, Config, Debugger, FailMode, Mode, PanicStrategy, PassMode, RMCFailMode,
+};
 use crate::util;
 use crate::{extract_cdb_version, extract_gdb_version};
 
@@ -121,6 +123,8 @@ pub struct TestProps {
     pass_mode: Option<PassMode>,
     // Ignore `--pass` overrides from the command line for this test.
     ignore_pass: bool,
+    // How far this RMC test should proceed to start failing.
+    pub rmc_fail_mode: Option<RMCFailMode>,
     // How far this test should proceed to start failing.
     pub fail_mode: Option<FailMode>,
     // rustdoc will test the output of the `--test` option
@@ -170,6 +174,7 @@ impl TestProps {
             forbid_output: vec![],
             incremental_dir: None,
             pass_mode: None,
+            rmc_fail_mode: None,
             fail_mode: None,
             ignore_pass: false,
             check_test_line_numbers_match: false,
@@ -331,6 +336,7 @@ impl TestProps {
                 }
 
                 self.update_pass_mode(ln, cfg, config);
+                self.update_rmc_fail_mode(ln, config);
                 self.update_fail_mode(ln, config);
 
                 if !self.ignore_pass {
@@ -380,6 +386,33 @@ impl TestProps {
                     self.exec_env.push(((*key).to_owned(), val))
                 }
             }
+        }
+    }
+
+    /// Checks if `ln` specifies which stage the test should fail on and updates
+    /// RMC fail mode accordingly.
+    fn update_rmc_fail_mode(&mut self, ln: &str, config: &Config) {
+        let check_rmc = |mode: &str| {
+            if config.mode != Mode::RMC {
+                panic!("`rmc-{}-fail` header is only supported in RMC tests", mode);
+            }
+        };
+        let rmc_fail_mode = if config.parse_name_directive(ln, "rmc-check-fail") {
+            check_rmc("check");
+            Some(RMCFailMode::Check)
+        } else if config.parse_name_directive(ln, "rmc-codegen-fail") {
+            check_rmc("codegen");
+            Some(RMCFailMode::Codegen)
+        } else if config.parse_name_directive(ln, "rmc-verify-fail") {
+            check_rmc("verify");
+            Some(RMCFailMode::Verify)
+        } else {
+            None
+        };
+        match (self.rmc_fail_mode, rmc_fail_mode) {
+            (None, Some(_)) => self.rmc_fail_mode = rmc_fail_mode,
+            (Some(_), Some(_)) => panic!("multiple `rmc-*-fail` headers in a single test"),
+            (_, None) => {}
         }
     }
 

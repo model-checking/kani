@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// rmc-verify-fail
 // cbmc-flags: --unwind 4
 
 use std::cmp::Ordering::*;
@@ -43,7 +44,7 @@ fn binary_search<T: Ord>(arr: &[T], elem: &T) -> Option<usize> {
     None
 }
 
-include!("../../rmc-prelude.rs");
+include!("../rmc-prelude.rs");
 
 fn get() -> [i32; 11] {
     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --integer-overflow
 // @expect overflow
+// rmc-verify-fail
 
 fn get128() -> u8 {
     128

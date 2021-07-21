@@ -1,6 +1,8 @@
 // ignore-tidy-filelength
 
-use crate::common::{expected_output_path, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT};
+use crate::common::{
+    expected_output_path, RMCFailMode, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT,
+};
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
 use crate::common::{
     Assembly, CargoRMC, Expected, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC,
@@ -400,7 +402,6 @@ impl<'test> TestCx<'test> {
                     panic!("revision name must begin with rpass, rfail, or cfail");
                 }
             }
-            RMC => !self.testpaths.file.to_str().unwrap().contains("fail"),
             mode => panic!("unimplemented for mode {:?}", mode),
         }
     }
@@ -2392,20 +2393,68 @@ impl<'test> TestCx<'test> {
     }
 
     /// Adds rmc scripts directory to the `PATH` environment variable.
-    fn add_rmc_dir_to_path(&self, rmc: &mut Command) {
+    fn add_rmc_dir_to_path(&self, command: &mut Command) {
         // If the PATH enviornment variable is already defined,
         if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
             // Add the RMC scripts directory to the PATH.
-            rmc.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
+            command.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
         } else {
             // Otherwise, insert PATH as a new enviornment variable and set its value to the RMC scripts directory.
-            rmc.env(String::from("PATH"), String::from(self.config.rmc_dir_path.to_str().unwrap()));
+            command.env(
+                String::from("PATH"),
+                String::from(self.config.rmc_dir_path.to_str().unwrap()),
+            );
+        }
+    }
+
+    /// Runs `rustc` on the test file specified by `self.testpaths.file`. An
+    /// error message is printed to stdout if the check result is not expected.
+    fn check(&self) {
+        let mut rustc = Command::new("rmc-rustc");
+        rustc.args(["-Z", "no-codegen"]).arg(&self.testpaths.file);
+        self.add_rmc_dir_to_path(&mut rustc);
+        let proc_res = self.compose_and_run_compiler(rustc, None);
+        if self.props.rmc_fail_mode == Some(RMCFailMode::Check) {
+            if proc_res.status.success() {
+                self.fatal_proc_rec("test failed: expected check failure, got success", &proc_res);
+            }
+        } else {
+            if !proc_res.status.success() {
+                self.fatal_proc_rec("test failed: expected check success, got failure", &proc_res);
+            }
+        }
+    }
+
+    /// Runs `rustc` on the test file specified by `self.testpaths.file`. An
+    /// error message is printed to stdout if the codgen result is not expected.
+    fn codgen(&self) {
+        let mut rustc = Command::new("rmc-rustc");
+        rustc
+            .args(["-Z", "codegen-backend=gotoc", "--cfg=rmc", "--out-dir"])
+            .arg(self.output_base_dir())
+            .arg(&self.testpaths.file);
+        self.add_rmc_dir_to_path(&mut rustc);
+        let proc_res = self.compose_and_run_compiler(rustc, None);
+        if self.props.rmc_fail_mode == Some(RMCFailMode::Codegen) {
+            if proc_res.status.success() {
+                self.fatal_proc_rec(
+                    "test failed: expected codegen failure, got success",
+                    &proc_res,
+                );
+            }
+        } else {
+            if !proc_res.status.success() {
+                self.fatal_proc_rec(
+                    "test failed: expected codegen success, got failure",
+                    &proc_res,
+                );
+            }
         }
     }
 
     /// Runs RMC on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification result is not expected.
-    fn run_rmc_test(&self) {
+    /// message is printed to stdout if the verification result is not expected.
+    fn verify(&self) {
         // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
         // 1. It calls rustc instead of RMC
         // 2. It may pass some options that do not make sense for RMC
@@ -2443,16 +2492,37 @@ impl<'test> TestCx<'test> {
                 )
             }
             // Print an error if the verification result is not expected.
-            if self.should_compile_successfully(self.pass_mode()) {
-                if !proc_res.status.success() {
-                    self.fatal_proc_rec("test failed: expected success, got failure", &proc_res);
+            if self.props.rmc_fail_mode == Some(RMCFailMode::Verify) {
+                if proc_res.status.success() {
+                    self.fatal_proc_rec(
+                        "test failed: expected verification failure, got success",
+                        &proc_res,
+                    );
                 }
             } else {
-                if proc_res.status.success() {
-                    self.fatal_proc_rec("test failed: expected failure, got success", &proc_res);
+                if !proc_res.status.success() {
+                    self.fatal_proc_rec(
+                        "test failed: expected verification success, got failure",
+                        &proc_res,
+                    );
                 }
             }
         }
+    }
+
+    /// Checks, codgens, and verifies the test file specified by
+    /// `self.testpaths.file`. An error message is printed to stdout if a result
+    /// is not expected.
+    fn run_rmc_test(&self) {
+        self.check();
+        if self.props.rmc_fail_mode == Some(RMCFailMode::Check) {
+            return;
+        }
+        self.codgen();
+        if self.props.rmc_fail_mode == Some(RMCFailMode::Codegen) {
+            return;
+        }
+        self.verify();
     }
 
     /// If the test file contains expected failures in some locations, ensure

@@ -118,6 +118,14 @@ impl fmt::Display for PassMode {
     }
 }
 
+/// Stage where an RMC test should fail.
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub enum RMCFailMode {
+    Check,
+    Codegen,
+    Verify,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum FailMode {
     Check,

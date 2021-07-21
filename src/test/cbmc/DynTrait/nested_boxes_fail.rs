@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// rmc-verify-fail
+
 // This test checks the size and align fields for 3-deep nested trait pointers. The
 // outter 2 dynamic trait objects have fat pointers as their backing data.
 // In this failing tests, assertions are inverted to use !=.

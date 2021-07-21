@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @expect reachable
+// rmc-verify-fail
 
 fn safe_div(x: u32, y: u32) -> Option<u32> {
     if y != 0 { Some(x / y) } else { None }
