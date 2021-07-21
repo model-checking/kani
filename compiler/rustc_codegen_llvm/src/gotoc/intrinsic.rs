@@ -375,6 +375,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => codegen_intrinsic_binop!(div),
             "simd_eq" => codegen_intrinsic_binop!(eq),
+            "simd_extract" => {
+                let vec = fargs.remove(0);
+                let index = fargs.remove(0);
+                self.codegen_expr_to_place(p, vec.index_array(index))
+            }
             "simd_ge" => codegen_intrinsic_binop!(ge),
             "simd_gt" => codegen_intrinsic_binop!(gt),
             "simd_le" => codegen_intrinsic_binop!(le),

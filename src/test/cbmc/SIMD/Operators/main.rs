@@ -18,6 +18,7 @@ extern "platform-intrinsic" {
     fn simd_and<T>(x: T, y: T) -> T;
     fn simd_or<T>(x: T, y: T) -> T;
     fn simd_xor<T>(x: T, y: T) -> T;
+    fn simd_extract<T, U>(x: T, idx: u32) -> U;
 }
 
 macro_rules! assert_op {
@@ -35,14 +36,24 @@ fn main() {
     let z = i64x2(1, 2);
     let v = i64x2(1, 3);
 
+    // Indexing into the vectors
+    assert!(z.1 == 2);
+    assert!(z.0 == 1);
+
+    {
+        let y_0: i64 = unsafe { simd_extract(y, 0) };
+        let y_1: i64 = unsafe { simd_extract(y, 1) };
+        assert!(y_0 == 0);
+        assert!(y_1 == 1);
+    }
+
     unsafe {
         assert_op!(res_add, simd_add, x, y, 0, 1);
         assert_op!(res_sub, simd_sub, x, y, 0, -1);
         assert_op!(res_mul, simd_mul, y, z, 0, 2);
         assert_op!(res_div, simd_div, v, z, 1, 1);
         assert_op!(res_rem, simd_rem, v, z, 0, 1);
-        assert_op!(res_rem, simd_rem, v, z, 0, 1);
-        assert_op!(res_shr, simd_shl, z, z, 2, 8);
+        assert_op!(res_shl, simd_shl, z, z, 2, 8);
         assert_op!(res_shr, simd_shr, z, y, 1, 1);
         assert_op!(res_and, simd_and, y, v, 0, 1);
         assert_op!(res_or, simd_or, x, y, 0, 1);
