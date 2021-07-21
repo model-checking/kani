@@ -1269,6 +1269,9 @@ options! {
     symbol_mangling_version: Option<SymbolManglingVersion> = (None,
         parse_symbol_mangling_version, [TRACKED],
         "which mangling version to use for symbol names ('legacy' (default) or 'v0')"),
+    symbol_table_passes: Vec<String> = (Vec::new(), parse_list, [TRACKED],
+        "transformations to perform to the symbol table after it has been generated. \
+        space separated"),
     teach: bool = (false, parse_bool, [TRACKED],
         "show extended diagnostic help (default: no)"),
     terminal_width: Option<usize> = (None, parse_opt_number, [UNTRACKED],
