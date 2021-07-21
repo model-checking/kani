@@ -2,21 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #include <assert.h>
-#include <string.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 void __CPROVER_assume(int condition) {
     assert(condition);
 }
 
 void __CPROVER_atomic_begin(void) {
-
 }
 
 void __CPROVER_atomic_end(void) {
+}
 
+double powi(double base, int expt) {
+    return pow(base, (double) expt);
+}
+
+float powif(float base, int expt) {
+    return (float) powi((double) base, expt);
 }
 
 typedef bool __CPROVER_bool;
