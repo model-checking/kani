@@ -11,6 +11,14 @@ void __CPROVER_assume(int condition) {
     assert(condition);
 }
 
+void __CPROVER_atomic_begin(void) {
+
+}
+
+void __CPROVER_atomic_end(void) {
+
+}
+
 typedef bool __CPROVER_bool;
 
 #define OBJECT_SIZE(value) sizeof(*value)
