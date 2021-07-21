@@ -30,7 +30,8 @@ typedef bool __CPROVER_bool;
 
 #define OBJECT_SIZE(value) sizeof(*value)
 
-
+// A temporary definition to always cause checks to be true.
+#define POINTER_OBJECT(value) 0
 
 #define overflow(op, typ, var1, var2) \
     (strcmp(op, "+") == 0) ? ( \
