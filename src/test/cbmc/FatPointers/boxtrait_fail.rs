@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // This is handled by the box to box case of unsized pointers
 
