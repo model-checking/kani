@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --no-memory-splitting
 // @expect verified
+// rmc-verify-fail
 
 fn call_with_one<F>(mut some_closure: F) -> ()
 where

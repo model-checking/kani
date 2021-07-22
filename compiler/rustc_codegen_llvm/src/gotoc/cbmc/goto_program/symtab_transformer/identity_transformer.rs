@@ -331,9 +331,9 @@ mod tests {
     fn transmute_to_expr() {
         let mut original = empty_symtab();
         let sym = Symbol::constant(
-            "tt",
-            "tt",
-            "tt",
+            "transmuted",
+            "transmuted",
+            "transmuted",
             Expr::array_expr(Type::c_int().array_of(1), vec![Expr::int_constant(3, Type::c_int())])
                 .transmute_to(Type::c_int(), &original),
             Location::none(),

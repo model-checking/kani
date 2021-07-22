@@ -118,6 +118,21 @@ impl fmt::Display for PassMode {
     }
 }
 
+/// Step at which RMC test should fail.
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub enum RMCFailStep {
+    /// RMC panics before the codegen step (up to MIR generation). This step
+    /// runs the same checks on the test code as `cargo check` including syntax,
+    /// type, name resolution, and borrow checks.
+    Check,
+    /// RMC panics at the codegen step because the test code uses unimplemented
+    /// and/or unsupported features.
+    Codegen,
+    /// RMC panics after the codegen step because of verification failures or
+    /// other CBMC errors.
+    Verify,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum FailMode {
     Check,

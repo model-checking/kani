@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // This test checks the size and align fields for 3-deep nested trait pointers. The
 // outter 2 dynamic trait objects have fat pointers as their backing data.
@@ -8,7 +9,9 @@
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 
+use std::any::Any;
 use std::intrinsics::size_of;
+use std::ptr::DynMetadata;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 
@@ -26,15 +29,16 @@ fn main() {
     unsafe {
         // Outermost trait object
         // The size is 16, because the data is another fat pointer
-        let vtable3: *mut usize = vtable!(dyn_trait3);
+        let dyn_3 = &*dyn_trait3 as &dyn Send;
+        let vtable3: DynMetadata<dyn Any> = vtable!(dyn_3);
         assert!(size_from_vtable(vtable3) != 16);
         assert!(align_from_vtable(vtable3) != 8);
 
         // Inspect the data pointer from dyn_trait3
-        let data_ptr3 = data!(dyn_trait3) as *mut usize;
+        let data_ptr3 = data!(dyn_3) as *mut usize;
 
         // The second half of this fat pointer is another vtable, for dyn_trait2
-        let vtable2 = *(data_ptr3.offset(1) as *mut *mut usize);
+        let vtable2 = *(data_ptr3.offset(1) as *mut DynMetadata<dyn Any>);
 
         // The size is 16, because the data is another fat pointer
         assert!(size_from_vtable(vtable2) != 16);
@@ -44,7 +48,7 @@ fn main() {
         let data_ptr2 = *(data_ptr3 as *mut *mut usize);
 
         // The second half of this fat pointer is another vtable, for dyn_trait1
-        let vtable1 = *(data_ptr2.offset(1) as *mut *mut usize);
+        let vtable1 = *(data_ptr2.offset(1) as *mut DynMetadata<dyn Any>);
 
         // The size is 8, because the data is the Foo itself
         assert!(size_from_vtable(vtable1) != size_of::<Foo>());
