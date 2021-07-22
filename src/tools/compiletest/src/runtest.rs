@@ -1,7 +1,7 @@
 // ignore-tidy-filelength
 
 use crate::common::{
-    expected_output_path, RMCFailMode, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT,
+    expected_output_path, RMCFailStep, UI_EXTENSIONS, UI_FIXED, UI_STDERR, UI_STDOUT,
 };
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
 use crate::common::{
@@ -2407,14 +2407,14 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs `rustc` on the test file specified by `self.testpaths.file`. An
+    /// Runs `rmc-rustc` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the check result is not expected.
     fn check(&self) {
         let mut rustc = Command::new("rmc-rustc");
         rustc.args(["-Z", "no-codegen"]).arg(&self.testpaths.file);
         self.add_rmc_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run_compiler(rustc, None);
-        if self.props.rmc_fail_mode == Some(RMCFailMode::Check) {
+        if self.props.rmc_panic_step == Some(RMCFailStep::Check) {
             if proc_res.status.success() {
                 self.fatal_proc_rec("test failed: expected check failure, got success", &proc_res);
             }
@@ -2425,7 +2425,7 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs `rustc` on the test file specified by `self.testpaths.file`. An
+    /// Runs `rmc-rustc` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the codegen result is not
     /// expected.
     fn codegen(&self) {
@@ -2436,7 +2436,7 @@ impl<'test> TestCx<'test> {
             .arg(&self.testpaths.file);
         self.add_rmc_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run_compiler(rustc, None);
-        if self.props.rmc_fail_mode == Some(RMCFailMode::Codegen) {
+        if self.props.rmc_panic_step == Some(RMCFailStep::Codegen) {
             if proc_res.status.success() {
                 self.fatal_proc_rec(
                     "test failed: expected codegen failure, got success",
@@ -2493,7 +2493,7 @@ impl<'test> TestCx<'test> {
                 )
             }
             // Print an error if the verification result is not expected.
-            if self.props.rmc_fail_mode == Some(RMCFailMode::Verify) {
+            if self.props.rmc_panic_step == Some(RMCFailStep::Verify) {
                 if proc_res.status.success() {
                     self.fatal_proc_rec(
                         "test failed: expected verification failure, got success",
@@ -2516,11 +2516,11 @@ impl<'test> TestCx<'test> {
     /// is not expected.
     fn run_rmc_test(&self) {
         self.check();
-        if self.props.rmc_fail_mode == Some(RMCFailMode::Check) {
+        if self.props.rmc_panic_step == Some(RMCFailStep::Check) {
             return;
         }
         self.codegen();
-        if self.props.rmc_fail_mode == Some(RMCFailMode::Codegen) {
+        if self.props.rmc_panic_step == Some(RMCFailStep::Codegen) {
             return;
         }
         self.verify();

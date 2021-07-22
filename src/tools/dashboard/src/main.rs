@@ -4,6 +4,19 @@
 mod dashboard;
 mod reference;
 
+use std::intrinsics::*;
+
 fn main() {
     reference::display_reference_dashboard();
+    let mut a: Box<u8> = Box::new(0);
+    unsafe {
+        let x = volatile_load(&*a);
+        assert!(x == *a);
+        volatile_store(&mut *a, 1);
+        assert!(*a == 1);
+        unaligned_volatile_store(&mut *a, 2);
+        assert!(*a == 2);
+        volatile_set_memory(&mut *a, 3, 1);
+        assert!(*a == 3);
+    }
 }
