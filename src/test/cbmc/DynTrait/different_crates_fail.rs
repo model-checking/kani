@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
 // rmc-verify-fail
 
 // This test uses a trait defined in a different crate (the standard library)

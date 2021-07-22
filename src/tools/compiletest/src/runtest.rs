@@ -2511,7 +2511,7 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Checks, codgens, and verifies the test file specified by
+    /// Checks, codegens, and verifies the test file specified by
     /// `self.testpaths.file`. An error message is printed to stdout if a result
     /// is not expected.
     fn run_rmc_test(&self) {

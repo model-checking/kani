@@ -1,10 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // Check that we can codegen a boxed dyn closure and fail an inner assertion
 
 // This current verifies "successfully" because the closure is not actually
-// called in the resulting CotoC code.
+// called in the resulting GotoC code.
 // https://github.com/model-checking/rmc/issues/240
 
 include!("../../rmc-prelude.rs");

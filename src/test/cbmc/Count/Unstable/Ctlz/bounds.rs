@@ -1,11 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
 // rmc-verify-fail
 // cbmc-flags: --bounds-check
 
 #![feature(core_intrinsics)]
-use std::intrinsics::cttz_nonzero;
+use std::intrinsics::ctlz_nonzero;
 
 fn main() {
     let uv8: u8 = 0;
@@ -18,15 +17,15 @@ fn main() {
     let iv64: i64 = 0;
 
     // Each one of the following statements is expected to fail
-    // because `cttz_nonzero` shows UB when the argument is 0
+    // because `ctlz_nonzero` shows UB when the argument is 0
     unsafe {
-        let _ = cttz_nonzero(uv8);
-        let _ = cttz_nonzero(uv16);
-        let _ = cttz_nonzero(uv32);
-        let _ = cttz_nonzero(uv64);
-        let _ = cttz_nonzero(iv8);
-        let _ = cttz_nonzero(iv16);
-        let _ = cttz_nonzero(iv32);
-        let _ = cttz_nonzero(iv64);
+        let _ = ctlz_nonzero(uv8);
+        let _ = ctlz_nonzero(uv16);
+        let _ = ctlz_nonzero(uv32);
+        let _ = ctlz_nonzero(uv64);
+        let _ = ctlz_nonzero(iv8);
+        let _ = ctlz_nonzero(iv16);
+        let _ = ctlz_nonzero(iv32);
+        let _ = ctlz_nonzero(iv64);
     }
 }
