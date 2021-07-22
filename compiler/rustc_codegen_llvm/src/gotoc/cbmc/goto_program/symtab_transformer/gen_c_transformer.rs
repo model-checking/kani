@@ -36,17 +36,24 @@ thread_local!(static MAPPED_NAMES: RefCell<FxHashMap<String, String>> = RefCell:
 thread_local!(static USED_NAMES: RefCell<FxHashSet<String>> = RefCell::new(FxHashSet::default()));
 
 /// Converts an arbitrary identifier into a valid C identifier.
-fn normalize_identifier(name: &str) -> String {
-    assert!(!name.is_empty(), "Received empty identifier.");
+fn normalize_identifier(orig_name: &str) -> String {
+    assert!(!orig_name.is_empty(), "Received empty identifier.");
 
     // If name already encountered, return same result
-    match MAPPED_NAMES.with(|map| map.borrow().get(name).cloned()) {
+    match MAPPED_NAMES.with(|map| map.borrow().get(orig_name).cloned()) {
         Some(result) => return result.clone(),
         None => (),
     }
 
+    let (prefix, name) = if orig_name.starts_with("tag-") {
+        (&orig_name[..4], &orig_name[4..])
+    } else {
+        ("", orig_name)
+    };
+
     // Convert non-(alphanumeric + underscore) characters to underscore
-    let valid_chars = name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_'), "_");
+    let valid_chars =
+        name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '$'), "_");
 
     // If the first character is a number, prefix with underscore
     let new_name = match valid_chars.chars().next() {
@@ -84,10 +91,16 @@ fn normalize_identifier(name: &str) -> String {
         result
     };
 
+    let result = {
+        let mut prefix = prefix.to_string();
+        prefix.push_str(&result);
+        prefix
+    };
+
     // Remember result and return
     MAPPED_NAMES.with(|map| {
-        map.borrow_mut().insert(name.to_string(), result);
-        map.borrow().get(name).unwrap().clone()
+        map.borrow_mut().insert(orig_name.to_string(), result);
+        map.borrow().get(orig_name).unwrap().clone()
     })
 }
 
