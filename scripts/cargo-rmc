@@ -26,7 +26,7 @@ def main():
     crate_group.add_argument("crate", help="crate to verify", nargs="?")
     crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
-    if not rmc_flags.add_flags(parser, exclude_flags=["--gen-symbols, --allow-cbmc-verification-failure"]):
+    if not rmc_flags.add_flags(parser, exclude_flags=["--gen-symbols", "--allow-cbmc-verification-failure"]):
         return 1
     args = parser.parse_args()
 
