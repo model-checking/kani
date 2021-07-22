@@ -2426,8 +2426,9 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs `rustc` on the test file specified by `self.testpaths.file`. An
-    /// error message is printed to stdout if the codgen result is not expected.
-    fn codgen(&self) {
+    /// error message is printed to stdout if the codegen result is not
+    /// expected.
+    fn codegen(&self) {
         let mut rustc = Command::new("rmc-rustc");
         rustc
             .args(["-Z", "codegen-backend=gotoc", "--cfg=rmc", "--out-dir"])
@@ -2518,7 +2519,7 @@ impl<'test> TestCx<'test> {
         if self.props.rmc_fail_mode == Some(RMCFailMode::Check) {
             return;
         }
-        self.codgen();
+        self.codegen();
         if self.props.rmc_fail_mode == Some(RMCFailMode::Codegen) {
             return;
         }
