@@ -92,16 +92,15 @@ impl<'tcx> GotocCtx<'tcx> {
         format!("{}::global::{}::", self.crate_name(), c)
     }
 
-    /// For the vtable field name, we need exactly the dyn trait name and the function
-    /// name. The table itself already is scoped by the object type.
-    ///     Example: ::Shape::vol
-    /// Note: this is _not_ the same name for top-level entry into the symbol table,
-    /// which does need more crate/type information and uses the full symbol_name(...)
-    pub fn vtable_field_name(&self, def_id: DefId) -> String {
-        // `to_string_no_crate_verbose` is from Rust proper, we use it here because it
-        // always includes the dyn trait name and function name.
-        // Tracking a less brittle solution here: https://github.com/model-checking/rmc/issues/187
-        self.tcx.def_path(def_id).to_string_no_crate_verbose()
+    /// The name for the struct field on a vtable for a given function. Because generic
+    /// functions can share the same name, we need to use the index of the entry in the
+    /// vtable. This is the same index that will be passed in virtual function calls as
+    /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
+    /// the vtable struct, but we add the trait and function names for debugging
+    /// readability.
+    ///     Example: 3_Shape::vol
+    pub fn vtable_field_name(&self, def_id: DefId, idx: usize) -> String {
+        format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.def_path_str(def_id)))
     }
 
     /// A human readable name in Rust for reference, should not be used as a key.
