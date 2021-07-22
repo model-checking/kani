@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --unroll=10
 // @expect error
+// rmc-verify-fail
 
 fn fib(x: u64) -> u64 {
     match x {

@@ -5,6 +5,7 @@
 // Arc<Mutex<dyn Subscriber>>.
 // This test still fails with a final coercion error for
 // DummySubscriber to dyn Subscriber.
+// rmc-verify-fail
 
 use std::sync::Arc;
 use std::sync::Mutex;
