@@ -392,11 +392,6 @@ impl TestProps {
     /// Checks if `ln` specifies which stage the test should fail on and updates
     /// RMC fail mode accordingly.
     fn update_rmc_fail_mode(&mut self, ln: &str, config: &Config) {
-        let check_rmc = |mode: &str| {
-            if config.mode != Mode::RMC {
-                panic!("`rmc-{}-fail` header is only supported in RMC tests", mode);
-            }
-        };
         let rmc_fail_step = config.parse_rmc_step_fail_directive(ln);
         match (self.rmc_panic_step, rmc_fail_step) {
             (None, Some(_)) => self.rmc_panic_step = rmc_fail_step,
