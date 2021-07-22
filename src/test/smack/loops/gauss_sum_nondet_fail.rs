@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --no-memory-splitting --unroll=10
 // @expect error
-
+// rmc-verify-fail
 // cbmc-flags: --unwind 5
 
 include!("../../rmc-prelude.rs");
