@@ -42,10 +42,12 @@ def main():
         return 1
 
     if args.gen_symbols:
-        print("WARNING: --gen-symbols is not supported for cargo-rmc.")
+        print("Error: --gen-symbols is not supported for cargo-rmc.")
+        return 1
 
     if args.allow_cbmc_verification_failure:
-        print("WARNING: --allow-cbmc-verification-failure is not supported for cargo-rmc.")
+        print("Error: --allow-cbmc-verification-failure is not supported for cargo-rmc.")
+        return 1
 
     # Add some CBMC flags by default unless `--no-default-checks` is being used
     if not args.no_default_checks:
