@@ -37,10 +37,13 @@ def main():
         if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_runnable_filename, goto_runnable_filename, args.verbose, args.keep_temps, args.dry_run):
             return 1
 
+        if EXIT_CODE_SUCCESS != rmc.link_c_lib(goto_runnable_filename, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
+            return 1
+
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
             return 1
         
-        rmc.gen_c_postprocess(c_runnable_filename)
+        rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, []):
         return 1

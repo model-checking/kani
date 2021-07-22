@@ -259,41 +259,42 @@ def run_goto_instrument(input_filename, output_filename, args, verbose=False, dr
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
     
-def gen_c_postprocess(c_filename):
-    with open(c_filename, "r") as f:
-        lines = f.read().splitlines()
+def gen_c_postprocess(c_filename, dry_run=False):
+    if not dry_run:
+        with open(c_filename, "r") as f:
+            lines = f.read().splitlines()
 
-    # Remove header line
-    lines.pop(0)
+        # Remove header line
+        lines.pop(0)
 
-    # Import gen_c_lib.c
-    lines.insert(1, f"#include \"{GEN_C_LIB}\"")
+        # Import gen_c_lib.c
+        lines.insert(1, f"#include \"{GEN_C_LIB}\"")
 
-    # Remove builtin macros
-    to_remove = [
-        # memcmp
-        "// memcmp",
-        "// file <builtin-library-memcmp> function memcmp",
-        "int memcmp(void *, void *, unsigned long int);",
+        # Remove builtin macros
+        to_remove = [
+            # memcmp
+            "// memcmp",
+            "// file <builtin-library-memcmp> function memcmp",
+            "int memcmp(void *, void *, unsigned long int);",
 
-        # memcpy
-        "// memcpy",
-        "// file <builtin-library-memcpy> function memcpy",
-        "void * memcpy(void *, void *, unsigned long int);",
+            # memcpy
+            "// memcpy",
+            "// file <builtin-library-memcpy> function memcpy",
+            "void * memcpy(void *, void *, unsigned long int);",
 
-        # memmove
-        "// memmove",
-        "// file <builtin-library-memmove> function memmove",
-        "void * memmove(void *, void *, unsigned long int);",
-    ]
+            # memmove
+            "// memmove",
+            "// file <builtin-library-memmove> function memmove",
+            "void * memmove(void *, void *, unsigned long int);",
+        ]
 
-    for line in to_remove:
-        assert line in lines, f"Did not find {line} in C output."
-        lines.remove(line)
+        for line in to_remove:
+            assert line in lines, f"Did not find {line} in C output."
+            lines.remove(line)
 
-    # Print back to file
-    with open(c_filename, "w") as f:
-        f.write("\n".join(lines))
+        # Print back to file
+        with open(c_filename, "w") as f:
+            f.write("\n".join(lines))
 
 
 # Generates the CMBC symbol table from a goto program
