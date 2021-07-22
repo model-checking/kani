@@ -52,8 +52,13 @@ def add_check_flags(make_group, add_flag):
 def add_visualizer_flags(make_group, add_flag):
     group = make_group(
         "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
-    add_flag(group, "--srcdir", default=".")  # TODO: help?
-    add_flag(group, "--wkdir", default=".")  # TODO: help?
+    add_flag(group, "--srcdir", default="."
+             help="The source directory. The root of the source tree.")
+    add_flag(group, "--wkdir", default="."
+             help="""
+                  The working directory. Used to determine source locations in output.
+                  This is generally the location from which rmc is currently being invoked.
+                  """)
     add_flag(group, "--visualize", action="store_true",
              help="Generate visualizer report; open report/html/index.html")
 
