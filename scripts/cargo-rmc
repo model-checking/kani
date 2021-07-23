@@ -129,12 +129,13 @@ def try_load_toml(dir, args):
                 args.append(f"--{flag}")
         elif type(value) == list:
             args.append(f"--{flag}")
+            assert all(map(lambda arg: type(arg) == str, value)), f"ERROR: Invalid config: {flag} = {value}"
             args.extend(value)
         elif type(value) == str:
             args.append(f"--{flag}")
             args.append(value)
         else:
-            print(f"ERROR: Unrecognized value: {flag} = {value}")
+            print(f"ERROR: Invalid config: {flag} = {value}")
             success = False
     for flag in flags:
         add_flag(flag, flags[flag])
