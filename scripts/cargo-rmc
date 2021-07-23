@@ -9,6 +9,7 @@ import rmc
 import rmc_flags
 import os
 import pathlib
+import toml
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
@@ -20,6 +21,13 @@ def main():
     # Remove "rmc" from arg if invoked `cargo rmc ...`
     if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
         del sys.argv[1]
+
+    # When no flags provided, look up in Cargo.toml
+    if len(sys.argv) <= 2:
+        dir = sys.argv[1] if len(sys.argv) == 2 else "."
+        no_failure = try_load_toml(dir, sys.argv)
+        if not no_failure:
+            return 1
 
     parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
 
@@ -34,8 +42,9 @@ def main():
     if args.crate:
         rmc.ensure(args.crate_flag is None, "Please provide a single crate to verify.")
     else:
-        rmc.ensure(args.crate_flag is not None, "Please provide a crate to verify.")
         args.crate = args.crate_flag
+    else:
+        args.crate = "."
 
     if args.quiet:
         args.verbose = False
@@ -89,6 +98,48 @@ def main():
 
     return retcode
 
+# Try to load Cargo.toml from dir, and update args
+def try_load_toml(dir, args):
+    cargo_toml = pathlib.Path(dir) / "Cargo.toml"
+
+    # If there is no Cargo.toml file, just return
+    if not cargo_toml.is_file():
+        return True
+
+    # Load the flag data from Cargo.toml
+    data = toml.load(cargo_toml)
+    rmc_data = data["rmc"]
+    flag_data = rmc_data["flags"]
+
+    # Extract nested flags
+    flags = dict()
+    def find_flags(map):
+        for key in map:
+            if type(map[key]) == dict:
+                find_flags(map[key])
+            else:
+                flags[key] = map[key]
+    find_flags(flag_data)
+
+    # Add flags to args
+    success = True
+    def add_flag(flag, value):
+        if type(value) == bool:
+            if value:
+                args.append(f"--{flag}")
+        elif type(value) == list:
+            args.append(f"--{flag}")
+            args.extend(value)
+        elif type(value) == str:
+            args.append(f"--{flag}")
+            args.append(value)
+        else:
+            print(f"ERROR: Unrecognized value: {flag} = {value}")
+            success = False
+    for flag in flags:
+        add_flag(flag, flags[flag])
+    
+    return success
 
 if __name__ == "__main__":
     sys.exit(main())
