@@ -20,27 +20,25 @@ def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
         del sys.argv[1]
 
-    parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate")
+    parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
 
     crate_group = parser.add_argument_group("Crate", "You can pass in the rust crate positionally or with the --crate flag.")
     crate_group.add_argument("crate", help="crate to verify", nargs="?")
     crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
-    if not rmc_flags.add_flags(parser, exclude_flags=["--gen-symbols", "--allow-cbmc-verification-failure"]):
-        return 1
+    rmc_flags.add_flags(parser, {"default-target", "target"}, exclude_flags=["--gen-symbols", "--allow-cbmc-verification-failure"])
     args = parser.parse_args()
 
     if args.crate:
-        assert args.crate_flag is None, "Please provide a single crate to verify."
+        rmc.ensure(args.crate_flag is None, "Please provide a single crate to verify.")
     else:
-        assert args.crate_flag is not None, "Please provide a crate to verify."
+        rmc.ensure(args.crate_flag is not None, "Please provide a crate to verify.")
         args.crate = args.crate_flag
 
     if args.quiet:
         args.verbose = False
 
-    if not rmc.dependencies_in_path():
-        return 1
+    rmc.ensure_dependencies_in_path()
 
     # Add some CBMC flags by default unless `--no-default-checks` is being used
     if not args.no_default_checks:
@@ -51,9 +49,8 @@ def main():
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
-    if len(jsons) != 1:
-        print("ERROR: unexpected number of json outputs")
-        return 1
+    rmc.ensure(len(jsons) == 1, "Unexpected number of json outputs.")
+
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
