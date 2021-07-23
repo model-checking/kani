@@ -42,11 +42,6 @@ class Scanner:
     def edit_output(self, text):
         return self.edit_fun(text)
 
-def ensure(condition, message, retcode=1):
-    if not condition:
-        print(f"ERROR: {message}")
-        sys.exit(retcode)
-
 def is_exe(name):
     from shutil import which
     return which(name) is not None
