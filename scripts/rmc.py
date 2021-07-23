@@ -41,21 +41,21 @@ class Scanner:
     def edit_output(self, text):
         return self.edit_fun(text)
 
+def is_exe(name):
+    from shutil import which
+    return which(name) is not None
+    
+def ensure_dependencies_in_path():
+    for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
+        ensure(is_exe(program), f"Could not find {program} in PATH")
+
+# Assert a condition holds, or produce a user error message.
 def ensure(condition, message, retcode=1):
     if not condition:
         print(f"ERROR: {message}")
         sys.exit(retcode)
 
-def is_exe(name):
-    from shutil import which
-    return which(name) is not None
-
-
-def ensure_dependencies_in_path():
-    for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
-        ensure(is_exe(program), f"Could not find {program} in PATH")
-
-
+# Deletes a file; used by atexit.register to remove temporary files on exit
 def delete_file(filename):
     try:
         os.remove(filename)
