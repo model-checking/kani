@@ -22,7 +22,7 @@ def main():
     input_group.add_argument("input", help="Rust file to verify", nargs="?")
     input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
 
-    rmc_flags.add_flags(parser, {"default-target", "."}, exclude_flags=["--function"])
+    rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=["--function"])
     args = parser.parse_args()
 
     # In the future we hope to make this configurable in the command line.
