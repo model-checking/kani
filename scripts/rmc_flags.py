@@ -13,7 +13,7 @@ def add_loudness_flags(make_group, add_flag, config):
     add_flag(group, "--verbose", "-v", action="store_true",
              help="Output processing stages and commands, along with minor debug information")
     add_flag(group, "--quiet", "-q", action="store_true",
-             help="Produces no output, just an exit code and requested artifacts. Overrides --verbose")
+             help="Produces no output, just an exit code and requested artifacts; overrides --verbose")
 
 # Add flags which specify configurations for the proof.
 def add_linking_flags(make_group, add_flag, config):
@@ -34,7 +34,7 @@ def add_artifact_flags(make_group, add_flag, config):
     group = make_group(
         "Artifact flags", "Produce artifacts in addition to a basic RMC report.")
     add_flag(group, "--target-dir", default=default_target, metavar="DIR",
-             help=f"Directory for all generated artifacts. Defaults to \"{default_target}\"")
+             help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
     add_flag(group, "--keep-temps", action="store_true",
              help="Keep temporary files generated throughout RMC process")
     add_flag(group, "--gen-c", action="store_true",
@@ -59,11 +59,11 @@ def add_visualizer_flags(make_group, add_flag, config):
     group = make_group(
         "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
     add_flag(group, "--srcdir", default=".",
-             help="The source directory. The root of the source tree.")
+             help="The source directory: the root of the source tree")
     add_flag(group, "--wkdir", default=".",
              help="""
-                  The working directory. Used to determine source locations in output.
-                  This is generally the location from which rmc is currently being invoked.
+                  The working directory: used to determine source locations in output;
+                  this is generally the location from which rmc is currently being invoked
                   """)
     add_flag(group, "--visualize", action="store_true",
              help="Generate visualizer report to <target-dir>/report/html/index.html")
