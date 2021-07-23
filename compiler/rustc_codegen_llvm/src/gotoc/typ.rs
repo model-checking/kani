@@ -119,6 +119,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         def_id: DefId,
         substs: SubstsRef<'tcx>,
+        idx: usize,
     ) -> DatatypeComponent {
         let instance = Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), def_id, substs)
             .unwrap()
@@ -130,8 +131,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // gives an Irep Pointer object for the signature
         let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
 
-        // vtable field name, i.e., ::Shape::vol
-        let vtable_field_name = self.vtable_field_name(def_id);
+        // vtable field name, i.e., 3_Shape::vol (idx_Trait::method)
+        let vtable_field_name = self.vtable_field_name(def_id, idx);
 
         let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         let _layout = self.layout_of(ins_ty);
@@ -195,9 +196,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     .vtable_entries(poly)
                     .iter()
                     .cloned()
-                    .filter_map(|entry| match entry {
+                    .enumerate()
+                    .filter_map(|(idx, entry)| match entry {
                         VtblEntry::Method(def_id, substs) => {
-                            Some(self.trait_method_vtable_field_type(def_id, substs))
+                            Some(self.trait_method_vtable_field_type(def_id, substs, idx))
                         }
                         VtblEntry::MetadataDropInPlace
                         | VtblEntry::MetadataSize

@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use tracing::*;
 
-use crate::common::{CompareMode, Config, Debugger, FailMode, Mode, PanicStrategy, PassMode};
+use crate::common::{
+    CompareMode, Config, Debugger, FailMode, Mode, PanicStrategy, PassMode, RMCFailStep,
+};
 use crate::util;
 use crate::{extract_cdb_version, extract_gdb_version};
 
@@ -121,6 +123,8 @@ pub struct TestProps {
     pass_mode: Option<PassMode>,
     // Ignore `--pass` overrides from the command line for this test.
     ignore_pass: bool,
+    // At which step is the RMC test expected to fail.
+    pub rmc_panic_step: Option<RMCFailStep>,
     // How far this test should proceed to start failing.
     pub fail_mode: Option<FailMode>,
     // rustdoc will test the output of the `--test` option
@@ -170,6 +174,7 @@ impl TestProps {
             forbid_output: vec![],
             incremental_dir: None,
             pass_mode: None,
+            rmc_panic_step: None,
             fail_mode: None,
             ignore_pass: false,
             check_test_line_numbers_match: false,
@@ -331,6 +336,7 @@ impl TestProps {
                 }
 
                 self.update_pass_mode(ln, cfg, config);
+                self.update_rmc_fail_mode(ln, config);
                 self.update_fail_mode(ln, config);
 
                 if !self.ignore_pass {
@@ -380,6 +386,17 @@ impl TestProps {
                     self.exec_env.push(((*key).to_owned(), val))
                 }
             }
+        }
+    }
+
+    /// Checks if `ln` specifies which stage the test should fail on and updates
+    /// RMC fail mode accordingly.
+    fn update_rmc_fail_mode(&mut self, ln: &str, config: &Config) {
+        let rmc_fail_step = config.parse_rmc_step_fail_directive(ln);
+        match (self.rmc_panic_step, rmc_fail_step) {
+            (None, Some(_)) => self.rmc_panic_step = rmc_fail_step,
+            (Some(_), Some(_)) => panic!("multiple `rmc-*-fail` headers in a single test"),
+            (_, None) => {}
         }
     }
 
@@ -524,6 +541,28 @@ impl Config {
 
     fn parse_compile_flags(&self, line: &str) -> Option<String> {
         self.parse_name_value_directive(line, "compile-flags")
+    }
+
+    /// Parses strings of the form `rmc-*-fail` and returns the step at which
+    /// RMC is expected to panic.
+    fn parse_rmc_step_fail_directive(&self, line: &str) -> Option<RMCFailStep> {
+        let check_rmc = |mode: &str| {
+            if self.mode != Mode::RMC {
+                panic!("`rmc-{}-fail` header is only supported in RMC tests", mode);
+            }
+        };
+        if self.parse_name_directive(line, "rmc-check-fail") {
+            check_rmc("check");
+            Some(RMCFailStep::Check)
+        } else if self.parse_name_directive(line, "rmc-codegen-fail") {
+            check_rmc("codegen");
+            Some(RMCFailStep::Codegen)
+        } else if self.parse_name_directive(line, "rmc-verify-fail") {
+            check_rmc("verify");
+            Some(RMCFailStep::Verify)
+        } else {
+            None
+        }
     }
 
     /// Parses strings of the form `// rmc-flags: ...` and returns the options listed after `rmc-flags:`

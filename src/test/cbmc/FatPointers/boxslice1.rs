@@ -11,5 +11,5 @@ fn main() {
     // This transformer produces a Box<[u8]>
     let _sparkle_heart_str = str::from_utf8(&sparkle_heart_vec);
 
-    // see boxslice2_fail.rs for an attempt to test sparkle_heart_str
+    // see boxslice2.rs for an attempt to test sparkle_heart_str
 }
