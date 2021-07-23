@@ -23,6 +23,7 @@ def main():
     input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     exclude_flags = [
         # In the future we hope to make this configurable in the command line.
         # For now, however, changing this from "main" breaks rmc.
@@ -33,6 +34,9 @@ def main():
 =======
     rmc_flags.add_flags(parser, {"default-target", "."}, exclude_flags=["--function"])
 >>>>>>> c34879eced1 (Changes from deep dive.)
+=======
+    rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=["--function"])
+>>>>>>> 60e922d0349 (Fix typo.)
     args = parser.parse_args()
     args.function = "main"
 
