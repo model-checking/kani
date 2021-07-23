@@ -16,14 +16,13 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Verify a single Rust file")
+    parser = argparse.ArgumentParser(description="Verify a single Rust file. For more information, see https://github.com/model-checking/rmc.")
 
     input_group = parser.add_argument_group("Input", "You can pass in the rust file positionally or with the --input flag.")
     input_group.add_argument("input", help="Rust file to verify", nargs="?")
     input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
 
-    if not rmc_flags.add_flags(parser, exclude_flags=["--function"]):
-        return 1
+    rmc_flags.add_flags(parser, {"default-target", "."}, exclude_flags=["--function"])
     args = parser.parse_args()
 
     # In the future we hope to make this configurable in the command line.
@@ -32,25 +31,23 @@ def main():
     args.function = "main"
 
     if args.input:
-        assert args.input_flag is None, "Please provide a single file to verify."
+        rmc.ensure(args.input_flag is None, "Please provide a single file to verify.")
     else:
-        assert args.input_flag is not None, "Please provide a file to verify."
+        rmc.ensure(args.input_flag is not None, "Please provide a file to verify.")
         args.input = args.input_flag
     
     if args.quiet:
         args.verbose = False
 
-    if not rmc.dependencies_in_path():
-        return 1
+    rmc.ensure_dependencies_in_path()
     
     # Add some CBMC flags by default unless `--no-default-checks` is being used
     if not args.no_default_checks:
         rmc.add_selected_default_cbmc_flags(args)
 
     base, ext = os.path.splitext(args.input)
-    if ext != ".rs":
-        print("ERROR: Expecting .rs input file")
-        return 1
+    rmc.ensure(ext == ".rs", "Expecting .rs input file.")
+
     json_filename = base + ".json"
     goto_filename = base + ".goto"
     c_filename = base + ".c"
