@@ -382,7 +382,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let pointer_size = self.ptr_width() as usize / 8;
 
         let mut next_offset = 0;
-        for &(offset, ((), alloc_id)) in alloc.relocations().iter() {
+        for &(offset, alloc_id) in alloc.relocations().iter() {
             let offset = offset.bytes_usize();
             if offset > next_offset {
                 let bytes =

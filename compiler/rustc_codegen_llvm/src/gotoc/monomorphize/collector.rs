@@ -225,7 +225,7 @@ fn collect_items_rec<'tcx>(
             recursion_depth_reset = None;
 
             if let Ok(alloc) = tcx.eval_static_initializer(def_id) {
-                for &((), id) in alloc.relocations().values() {
+                for &id in alloc.relocations().values() {
                     collect_miri(tcx, id, &mut neighbors);
                 }
             }
@@ -1039,7 +1039,7 @@ fn collect_miri<'tcx>(
         }
         GlobalAlloc::Memory(alloc) => {
             trace!("collecting {:?} with {:#?}", alloc_id, alloc);
-            for &((), inner) in alloc.relocations().values() {
+            for &inner in alloc.relocations().values() {
                 rustc_data_structures::stack::ensure_sufficient_stack(|| {
                     collect_miri(tcx, inner, output);
                 });
@@ -1075,7 +1075,7 @@ fn collect_const_value<'tcx>(
     match value {
         ConstValue::Scalar(Scalar::Ptr(ptr)) => collect_miri(tcx, ptr.alloc_id, output),
         ConstValue::Slice { data: alloc, start: _, end: _ } | ConstValue::ByRef { alloc, .. } => {
-            for &((), id) in alloc.relocations().values() {
+            for &id in alloc.relocations().values() {
                 collect_miri(tcx, id, output);
             }
         }
