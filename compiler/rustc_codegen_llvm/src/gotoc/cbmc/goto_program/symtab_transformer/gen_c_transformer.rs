@@ -6,6 +6,7 @@ use super::super::{
     SymbolTable, SymbolValues, Type,
 };
 use super::Transformer;
+use num::bigint::BigInt;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 
@@ -104,6 +105,7 @@ fn normalize_identifier(orig_name: &str) -> String {
     })
 }
 
+/// Create a string representation of type for use as variable name suffix.
 fn type_to_string(typ: &Type) -> String {
     match typ {
         Type::Array { typ, size } => format!("array_of_{}_{}", size, type_to_string(typ.as_ref())),
@@ -130,6 +132,21 @@ fn type_to_string(typ: &Type) -> String {
         Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
         Type::VariadicCode { .. } => format!("variadic_code"),
         Type::Vector { typ, .. } => format!("vec_of_{}", type_to_string(typ.as_ref())),
+    }
+}
+
+/// Create an expr from an int constant using only values <= u64::MAX.
+fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
+    let u64_bigint = BigInt::from(u64::MAX);
+    if num <= &u64_bigint {
+        Expr::int_constant(num.clone(), typ.clone())
+    } else {
+        let quotient = num / &u64_bigint;
+        let remainder = num % &u64_bigint;
+
+        let quotient_expr = bignum_to_expr(&quotient, typ);
+        let remainder_expr = bignum_to_expr(&remainder, typ);
+        Expr::int_constant(u64_bigint, typ.clone()).mul(quotient_expr).plus(remainder_expr)
     }
 }
 
@@ -214,6 +231,12 @@ impl Transformer for GenCTransformer {
             BinaryOperand::Shl => lhs.shl(rhs),
             BinaryOperand::Xor => lhs.xor(rhs),
         }
+    }
+
+    /// Prevent error for too large constants with u128.
+    fn transform_expr_int_constant(&self, typ: &Type, value: &BigInt) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        bignum_to_expr(value, typ)
     }
 
     /// Normalize field names.
