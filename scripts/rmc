@@ -22,12 +22,14 @@ def main():
     input_group.add_argument("input", help="Rust file to verify", nargs="?")
     input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
 
-    rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=["--function"])
+    exclude_flags = [
+        # In the future we hope to make this configurable in the command line.
+        # For now, however, changing this from "main" breaks rmc.
+        # Issue: https://github.com/model-checking/rmc/issues/169
+        "--function"
+    ]
+    rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=exclude_flags)
     args = parser.parse_args()
-
-    # In the future we hope to make this configurable in the command line.
-    # For now, however, changing this from "main" breaks rmc.
-    # Issue: https://github.com/model-checking/rmc/issues/169
     args.function = "main"
 
     if args.input:

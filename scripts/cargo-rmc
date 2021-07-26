@@ -26,7 +26,13 @@ def main():
     crate_group.add_argument("crate", help="crate to verify", nargs="?")
     crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
-    rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=["--gen-symbols", "--allow-cbmc-verification-failure"])
+    exclude_flags = [
+        # This should be able to be supported; https://github.com/model-checking/rmc/issues/359
+        "--gen-symbols",
+        # This should be able to be supported; https://github.com/model-checking/rmc/issues/360
+        "--allow-cbmc-verification-failure",
+    ]
+    rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
     args = parser.parse_args()
 
     if args.crate:
