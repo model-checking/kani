@@ -41,8 +41,7 @@ fn main() {
         assert_op!(res_mul, simd_mul, y, z, 0, 2);
         assert_op!(res_div, simd_div, v, z, 1, 1);
         assert_op!(res_rem, simd_rem, v, z, 0, 1);
-        assert_op!(res_rem, simd_rem, v, z, 0, 1);
-        assert_op!(res_shr, simd_shl, z, z, 2, 8);
+        assert_op!(res_shl, simd_shl, z, z, 2, 8);
         assert_op!(res_shr, simd_shr, z, y, 1, 1);
         assert_op!(res_and, simd_and, y, v, 0, 1);
         assert_op!(res_or, simd_or, x, y, 0, 1);
