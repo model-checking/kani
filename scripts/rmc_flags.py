@@ -78,6 +78,10 @@ def add_artifact_flags(make_group, add_flag, config):
         "Artifact flags", "Produce artifacts in addition to a basic RMC report.")
     add_flag(group, "--gen-c", default=False, action=BooleanOptionalAction,
              help="Generate C file equivalent to inputted program")
+    add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
+             help="Generate C file equivalent to inputted program; "
+                  "performs additional processing to produce valid C code "
+                  "at the cost of some readability")
     add_flag(group, "--gen-symbols", default=False, action=BooleanOptionalAction,
              help="Generate a goto symbol table")
     add_flag(group, "--keep-temps", default=False, action=BooleanOptionalAction,
