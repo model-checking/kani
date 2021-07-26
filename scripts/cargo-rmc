@@ -121,10 +121,12 @@ def parse_args():
 
     # Combine args set by config toml and provided on command line
     def get_combined_args(config_toml, crate, cl_args):
-        # Check that config toml exists, or set to default (<crate>/Config.toml)
+        # Set config_toml to valid toml file
         if config_toml is not None:
+            # If config_toml is explicitly given, ensure it exists
             rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid config file: {config_toml}")
         else:
+            # Otherwise, look for `Cargo.toml` in the given crate
             crate_cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
             if crate_cargo_toml.is_file():
                 config_toml = crate_cargo_toml
@@ -134,11 +136,11 @@ def parse_args():
                 print(f"WARNING: Could not find Cargo.toml in project {pathlib.Path(crate).absolute()}")
                 return cl_args
         
-        # Extract flags from config toml
+        # Extract flags from config_toml
         toml_args = extract_args_from_toml(config_toml)
 
-        # Parse args from both toml and command line
-        # but let command line args override toml args
+        # Parse args from both config_toml and command line
+        # but let command line args override config_toml args
         combined_args = argparse.Namespace()
         parser.parse_args(toml_args, namespace=combined_args)
         parser.parse_args(namespace=combined_args)
