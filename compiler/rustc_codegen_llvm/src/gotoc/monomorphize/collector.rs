@@ -815,16 +815,13 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                 .iter()
                 .cloned()
                 .filter_map(|entry| match entry {
-                    VtblEntry::Method(def_id, substs) => ty::Instance::resolve_for_vtable(
-                        tcx,
-                        ty::ParamEnv::reveal_all(),
-                        def_id,
-                        substs,
-                    ),
+                    VtblEntry::Method(instance) => Some(instance),
                     VtblEntry::MetadataDropInPlace
                     | VtblEntry::MetadataSize
                     | VtblEntry::MetadataAlign
                     | VtblEntry::Vacant => None,
+                    // Super trait vtable entries already handled by now
+                    VtblEntry::TraitVPtr(..) => None,
                 })
                 .filter(|&instance| should_codegen_locally(tcx, &instance))
                 .map(|item| create_fn_mono_item(item, source));

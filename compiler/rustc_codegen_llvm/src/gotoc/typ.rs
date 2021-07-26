@@ -9,7 +9,7 @@ use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
-use rustc_middle::ty::subst::{InternalSubsts, SubstsRef};
+use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
     self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef, VtblEntry,
 };
@@ -117,14 +117,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// In particular, these fields are function pointers.
     fn trait_method_vtable_field_type(
         &mut self,
-        def_id: DefId,
-        substs: SubstsRef<'tcx>,
+        instance: Instance<'tcx>,
         idx: usize,
     ) -> DatatypeComponent {
-        let instance = Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), def_id, substs)
-            .unwrap()
-            .unwrap();
-
         // gives a binder with function signature
         let sig = self.fn_sig_of_instance(instance);
 
@@ -132,7 +127,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
 
         // vtable field name, i.e., 3_Shape::vol (idx_Trait::method)
-        let vtable_field_name = self.vtable_field_name(def_id, idx);
+        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
 
         let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         let _layout = self.layout_of(ins_ty);
@@ -198,13 +193,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     .cloned()
                     .enumerate()
                     .filter_map(|(idx, entry)| match entry {
-                        VtblEntry::Method(def_id, substs) => {
-                            Some(self.trait_method_vtable_field_type(def_id, substs, idx))
+                        VtblEntry::Method(instance) => {
+                            Some(self.trait_method_vtable_field_type(instance, idx))
                         }
                         VtblEntry::MetadataDropInPlace
                         | VtblEntry::MetadataSize
                         | VtblEntry::MetadataAlign
-                        | VtblEntry::Vacant => None,
+                        | VtblEntry::Vacant
+                        | VtblEntry::TraitVPtr(..) => None,
                     })
                     .collect();
 
