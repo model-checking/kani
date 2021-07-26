@@ -32,3 +32,10 @@ set -x
 
 sudo apt-get --yes update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}"
+
+# Add Python package dependencies
+PYTHON_DEPS=(
+  toml # Used for parsing `cargo-rmc` config toml
+)
+
+python3 -m pip install "${PYTHON_DEPS[@]}"
