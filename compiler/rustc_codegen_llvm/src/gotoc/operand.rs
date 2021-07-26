@@ -265,9 +265,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     &self.symbol_table,
                 )
             }
-            (Scalar::Ptr(ptr), _) => {
+            (Scalar::Ptr(ptr, _size), _) => {
                 let res_t = self.codegen_ty(ty);
-                self.codegen_alloc_pointer(res_t, ptr.alloc_id, ptr.offset, span)
+                let (alloc_id, offset) = ptr.into_parts();
+                self.codegen_alloc_pointer(res_t, alloc_id, offset, span)
             }
             _ => unimplemented!(),
         }

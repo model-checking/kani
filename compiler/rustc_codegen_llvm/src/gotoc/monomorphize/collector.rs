@@ -1073,7 +1073,10 @@ fn collect_const_value<'tcx>(
     output: &mut Vec<Spanned<MonoItem<'tcx>>>,
 ) {
     match value {
-        ConstValue::Scalar(Scalar::Ptr(ptr)) => collect_miri(tcx, ptr.alloc_id, output),
+        ConstValue::Scalar(Scalar::Ptr(ptr, _size)) => {
+            let (alloc_id, _offset) = ptr.into_parts();
+            collect_miri(tcx, alloc_id, output);
+        }
         ConstValue::Slice { data: alloc, start: _, end: _ } | ConstValue::ByRef { alloc, .. } => {
             for &id in alloc.relocations().values() {
                 collect_miri(tcx, id, output);
