@@ -131,7 +131,7 @@ def parse_args():
                 return cl_args
         
         # Extract flags from config toml
-        toml_args = load_toml(config_toml)
+        toml_args = extract_args_from_toml(config_toml)
 
         # Parse args from both toml and command line
         # but let command line args override toml args
@@ -162,7 +162,7 @@ def parse_args():
     return final_args
 
 # Try to load Cargo.toml from dir, and update args
-def load_toml(path):
+def extract_args_from_toml(path):
     # Load the flag data from toml
     data = toml.load(path)
     rmc_data = data["rmc"]
