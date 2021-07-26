@@ -20,7 +20,7 @@ fn add_identifier(parameter: &Parameter) -> Parameter {
     if parameter.identifier().is_some() {
         parameter.clone()
     } else {
-        let new_name = format!("__{}", type_to_string(parameter.typ()));
+        let new_name = normalize_identifier(&format!("__{}", type_to_string(parameter.typ())));
         let parameter_sym = Symbol::variable(
             new_name.clone(),
             new_name.clone(),
@@ -248,7 +248,7 @@ impl Transformer for GenCTransformer {
     /// Transform nondets to missing functions so they get headers
     fn transform_expr_nondet(&self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
-        let typ_string = type_to_string(&transformed_typ);
+        let typ_string = normalize_identifier(&type_to_string(&transformed_typ));
         let identifier = format!("non_det_{}", typ_string);
         let function_type = Type::code(vec![], transformed_typ);
         NONDET_TYPES
