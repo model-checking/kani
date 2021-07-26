@@ -102,10 +102,14 @@ def parse_args():
         rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")   
         rmc.ensure(not (args.no_config_toml and args.config_toml), "Incompatible flags: --config-toml, --no-config-toml")
 
+    # Determine what crate to analyze from flags
+    def get_crate_from_args(args):
+        return args.crate or args.crate_flag or "."
+
     # Fix up args before returning
     def post_process(args):
         # Combine positional and flag argument for input
-        cl_args.crate = cl_args.crate or cl_args.crate_flag or "."
+        cl_args.crate = get_crate_from_args(args)
 
         # --quiet overrides --verbose
         if args.quiet:
@@ -154,7 +158,7 @@ def parse_args():
     if cl_args.no_config_toml:
         final_args = cl_args
     else:
-        crate = cl_args.crate or cl_args.crate_flag or "."
+        crate = get_crate_from_args(cl_args)
         final_args = get_combined_args(cl_args.config_toml, crate, cl_args)
         validate(final_args)
 
