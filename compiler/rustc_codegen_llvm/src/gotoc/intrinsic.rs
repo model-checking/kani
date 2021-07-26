@@ -375,8 +375,14 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => codegen_intrinsic_binop!(div),
             "simd_eq" => codegen_intrinsic_binop!(eq),
+            "simd_extract" => {
+                let vec = fargs.remove(0);
+                let index = fargs.remove(0);
+                self.codegen_expr_to_place(p, vec.index_array(index))
+            }
             "simd_ge" => codegen_intrinsic_binop!(ge),
             "simd_gt" => codegen_intrinsic_binop!(gt),
+            "simd_insert" => self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc),
             "simd_le" => codegen_intrinsic_binop!(le),
             "simd_lt" => codegen_intrinsic_binop!(lt),
             "simd_mul" => codegen_intrinsic_binop!(mul),
@@ -790,5 +796,34 @@ impl<'tcx> GotocCtx<'tcx> {
                 SizeAlign { size, align }
             }
         }
+    }
+
+    /// Insert is a generic update of a single value in a SIMD vector.
+    /// `P = simd_insert(vector, index, newval)` is here translated to
+    /// `{ T v = vector; v[index] = (cast)newval; P = v; }`
+    ///
+    /// CBMC does not currently seem to implement intrinsics like insert e.g.:
+    /// `**** WARNING: no body for function __builtin_ia32_vec_set_v4si`
+    pub fn codegen_intrinsic_simd_insert(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        cbmc_ret_ty: Type,
+        loc: Location,
+    ) -> Stmt {
+        let vec = fargs.remove(0);
+        let index = fargs.remove(0);
+        let newval = fargs.remove(0);
+        // Type checker should have ensured it's a vector type
+        let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
+        let tmp = self.gen_temp_variable(cbmc_ret_ty, loc.clone()).to_expr();
+        Stmt::block(
+            vec![
+                Stmt::decl(tmp.clone(), Some(vec), loc.clone()),
+                tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc.clone()),
+                self.codegen_expr_to_place(p, tmp),
+            ],
+            loc,
+        )
     }
 }
