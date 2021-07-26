@@ -19,9 +19,9 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 def main():
     args = parse_args()
 
-    if args.crate:
+    if args.crate is not None:
         rmc.ensure(args.crate_flag is None, "Please provide a single crate to verify.")
-    else:
+    elif args.crate_flag is not None:
         args.crate = args.crate_flag
     else:
         args.crate = "."
@@ -116,19 +116,19 @@ def parse_args():
             rmc.add_selected_default_cbmc_flags(args)
 
     # Combine args set by config toml and provided on command line
-    def get_combined_args(config_toml, crate):
+    def get_combined_args(config_toml, crate, cl_args):
         # Check that config toml exists, or set to default (<crate>/Config.toml)
         if config_toml is not None:
-            rmc.ensure(pathlib.Path(cl_args.config_toml).is_file(), f"Invalid config file: {cl_args.config_toml}")
+            rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid config file: {config_toml}")
         else:
-            crate_cargo_toml = pathlib.Path(cl_args.crate).joinpath("Cargo.toml")
+            crate_cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
             if crate_cargo_toml.is_file():
-                cl_args.config_toml = crate_cargo_toml
+                config_toml = crate_cargo_toml
             else:
                 return cl_args
         
         # Extract flags from config toml
-        toml_args = load_toml(cl_args.config_toml)
+        toml_args = load_toml(config_toml)
 
         # Parse args from both toml and command line
         # but let command line args override toml args
@@ -143,6 +143,7 @@ def parse_args():
         del sys.argv[1]
 
     # Parse command line args to find crate and check for config flags
+    parser = create_parser()
     cl_args = parser.parse_args()
     validate(cl_args)
 
@@ -151,7 +152,7 @@ def parse_args():
         final_args = cl_args
     else:
         crate = cl_args.crate or cl_args.crate_flag or "."
-        final_args = get_combined_args(cl_args.config_toml, crate)
+        final_args = get_combined_args(cl_args.config_toml, crate, cl_args)
         validate(final_args)
 
     post_process(final_args)
