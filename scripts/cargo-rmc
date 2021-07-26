@@ -125,6 +125,9 @@ def parse_args():
             if crate_cargo_toml.is_file():
                 config_toml = crate_cargo_toml
             else:
+                # If no config_toml is given and we can't find Cargo.toml
+                # then just use command line arguments
+                print(f"WARNING: Could not find Cargo.toml in project {pathlib.Path(crate).absolute()}")
                 return cl_args
         
         # Extract flags from config toml
