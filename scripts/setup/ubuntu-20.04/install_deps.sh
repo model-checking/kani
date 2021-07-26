@@ -36,6 +36,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --ye
 # Add Python package dependencies
 PYTHON_DEPS=(
   toml # Used for parsing `cargo-rmc` config toml
+  "argparse>=1.4" # We need newer version to get BooleanOptionalAction
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"
