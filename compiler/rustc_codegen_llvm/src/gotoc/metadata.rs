@@ -96,11 +96,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// functions can share the same name, we need to use the index of the entry in the
     /// vtable. This is the same index that will be passed in virtual function calls as
     /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
-    /// the vtable struct, but we add the trait and function names for debugging
-    /// readability.
-    ///     Example: 3_Shape::vol
-    pub fn vtable_field_name(&self, def_id: DefId, idx: usize) -> String {
-        format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.def_path_str(def_id)))
+    /// the vtable struct, but we add the method name for debugging readability.
+    ///     Example: 3_vol
+    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> String {
+        // format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.item_name(def_id)))
+        /// TODO: use def_id https://github.com/model-checking/rmc/issues/364
+        idx.to_string()
     }
 
     /// A human readable name in Rust for reference, should not be used as a key.

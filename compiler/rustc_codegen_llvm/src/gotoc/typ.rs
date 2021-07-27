@@ -126,7 +126,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // gives an Irep Pointer object for the signature
         let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
 
-        // vtable field name, i.e., 3_Shape::vol (idx_Trait::method)
+        // vtable field name, i.e., 3_vol (idx_method)
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
 
         let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
@@ -196,11 +196,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::Method(instance) => {
                             Some(self.trait_method_vtable_field_type(instance, idx))
                         }
+                        // TODO: trait upcasting
+                        // https://github.com/model-checking/rmc/issues/358
+                        VtblEntry::TraitVPtr(..) => None,
                         VtblEntry::MetadataDropInPlace
                         | VtblEntry::MetadataSize
                         | VtblEntry::MetadataAlign
-                        | VtblEntry::Vacant
-                        | VtblEntry::TraitVPtr(..) => None,
+                        | VtblEntry::Vacant => None,
                     })
                     .collect();
 
@@ -221,6 +223,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Gives the vtable name for a type.
     /// In some cases, we have &T, in other cases T, so normalize.
+    ///
+    /// TODO: to handle trait upcasting, this will need to use a
+    /// poly existential trait type as a part of the key as well.
+    /// See compiler/rustc_middle/src/ty/vtable.rs
+    /// https://github.com/model-checking/rmc/issues/358
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
         self.normalized_trait_name(t) + "::vtable"
     }

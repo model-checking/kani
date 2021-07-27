@@ -845,6 +845,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
                         VtblEntry::Vacant => None,
+                        // TODO: trait upcasting
+                        // https://github.com/model-checking/rmc/issues/358
                         VtblEntry::TraitVPtr(_trait_ref) => None,
                         VtblEntry::Method(instance) => {
                             Some(ctx.codegen_vtable_method_field(*instance, trait_type, idx))
