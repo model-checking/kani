@@ -239,6 +239,18 @@ impl Transformer for GenCTransformer {
         bignum_to_expr(value, typ)
     }
 
+    /// When indexing into a SIMD vector, cast to a pointer first to make legal index in C
+    fn transform_expr_index(&self, typ: &Type, array: &Expr, index: &Expr) -> Expr {
+        let transformed_array = self.transform_expr(array);
+        let transformed_index = self.transform_expr(index);
+        if transformed_array.typ().is_vector() {
+            let base_type = transformed_array.typ().base_type().unwrap().clone();
+            transformed_array.address_of().cast_to(base_type.to_pointer()).index(transformed_index)
+        } else {
+            transformed_array.index(transformed_index)
+        }
+    }
+
     /// Normalize field names.
     fn transform_expr_member(&self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
