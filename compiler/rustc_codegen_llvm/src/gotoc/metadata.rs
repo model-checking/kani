@@ -100,7 +100,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     Example: 3_vol
     pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> String {
         // format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.item_name(def_id)))
-        /// TODO: use def_id https://github.com/model-checking/rmc/issues/364
+        // TODO: use def_id https://github.com/model-checking/rmc/issues/364
         idx.to_string()
     }
 
