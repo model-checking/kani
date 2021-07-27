@@ -21,6 +21,28 @@ def main():
 
     rmc.ensure_dependencies_in_path()
 
+    if args.gen_c_runnable:
+        rmc.cargo_build(args.crate, args.target_dir,
+                        args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
+
+        pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
+        jsons = glob.glob(pattern)
+        rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+
+        cbmc_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.out")
+        c_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.c")
+
+        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_runnable_filename, args.verbose, args.keep_temps, args.dry_run):
+            return 1
+
+        if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_runnable_filename, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
+            return 1
+
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
+            return 1
+        
+        rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
+
     rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.mangler, args.dry_run, [])
 

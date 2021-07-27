@@ -22,15 +22,10 @@ def main():
     base, ext = os.path.splitext(args.input)
     rmc.ensure(ext == ".rs", "Expecting .rs input file.")
 
-    json_filename = base + ".json"
-    json_runnable_filename = base + "_runnable.json"
-    goto_filename = base + ".goto"
-    goto_runnable_filename = base + "_runnable.goto"
-    c_filename = base + ".c"
-    c_runnable_filename = base + "_runnable.c"
-    symbols_filename = base + ".symbols"
-
     if args.gen_c_runnable:
+        json_runnable_filename = base + "_runnable.json"
+        goto_runnable_filename = base + "_runnable.goto"
+        c_runnable_filename = base + "_runnable.c"
         if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_runnable_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, ["gen-c"]):
             return 1
 
@@ -44,6 +39,11 @@ def main():
             return 1
         
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
+
+    json_filename = base + ".json"
+    goto_filename = base + ".goto"
+    c_filename = base + ".c"
+    symbols_filename = base + ".symbols"
 
     if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, []):
         return 1
