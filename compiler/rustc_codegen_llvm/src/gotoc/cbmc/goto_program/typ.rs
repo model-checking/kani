@@ -856,7 +856,7 @@ impl Type {
             Vector { .. } => todo!(),
             Code { .. } => todo!(),
             Constructor => todo!(),
-            Empty => todo!(),
+            Empty => panic!("Cannot produce value of type Empty."),
             FlexibleArray { .. } => todo!(),
             IncompleteStruct { .. } => todo!(),
             IncompleteUnion { .. } => todo!(),

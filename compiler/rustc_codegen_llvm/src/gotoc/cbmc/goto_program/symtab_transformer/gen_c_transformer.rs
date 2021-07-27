@@ -257,7 +257,7 @@ impl Transformer for GenCTransformer {
         transformed_lhs.member(&normalize_identifier(field), self.symbol_table())
     }
 
-    /// Transform nondets to missing functions so they get headers
+    /// Transform nondets to create default values for the expected type.
     fn transform_expr_nondet(&self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let typ_string = normalize_identifier(&type_to_string(&transformed_typ));
@@ -450,14 +450,21 @@ impl Transformer for GenCTransformer {
         }
 
         for (identifier, typ) in NONDET_TYPES.with(|cell| cell.take()) {
-            let value = typ.return_type().unwrap().default(self.symbol_table());
+            let ret_type = typ.return_type().unwrap();
+            let ret_value = if ret_type.is_empty() {
+                None
+            } else {
+                Some(ret_type.default(self.symbol_table()))
+            };
+
             let sym = Symbol::function(
                 &identifier,
                 typ,
-                Some(Stmt::ret(Some(value), Location::none())),
+                Some(Stmt::ret(ret_value, Location::none())),
                 Some(identifier.clone()),
                 Location::none(),
             );
+
             self.mut_symbol_table().insert(sym);
         }
 
