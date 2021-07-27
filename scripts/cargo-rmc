@@ -19,16 +19,6 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 def main():
     args = parse_args()
 
-    if args.crate is not None:
-        rmc.ensure(args.crate_flag is None, "Please provide a single crate to verify.")
-    elif args.crate_flag is not None:
-        args.crate = args.crate_flag
-    else:
-        args.crate = "."
-
-    if args.quiet:
-        args.verbose = False
-
     rmc.ensure_dependencies_in_path()
 
     rmc.cargo_build(args.crate, args.target_dir,
@@ -97,14 +87,48 @@ def parse_args():
         
         return parser
 
+    # Determine what crate to analyze from flags;
+    # args should be validated before calling this function to ensure
+    # that not both args.crate and args.crate_flag are present
+    def get_crate_from_args(args):
+        return args.crate or args.crate_flag or "."
+
+    # Combine the command line parameter to get a config file; 
+    # return None if no_config_toml is set, or if can't find a default
+    def get_config_toml(no_config_toml, config_toml, crate, crate_flag):
+        crate = get_crate_from_args(crate, crate_flag)
+        if no_config_toml:
+            return None
+        elif config_toml is not None:
+            # If config_toml is explicitly given, ensure it exists
+            rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid path to config file: {config_toml}")
+            return config_toml
+        else:
+            # If no config flags are set, look for config toml in default location (<crate>/Config.toml)
+            cargo_toml = pathlib.Path(crate).joinpath("Config.toml")
+            if cargo_toml.is_file():
+                return cargo_toml
+            else:
+                print(f"WARNING: Cannot find configuration toml at expected location: {cargo_toml}")
+                return None
+
+    # Combine args set by config toml and provided on command line
+    def get_combined_args(parser, config_toml)
+        # Extract flags from config_toml
+        toml_args = extract_args_from_toml(config_toml)
+
+        # Parse args from both config_toml and command line
+        # but let command line args override config_toml args
+        combined_args = argparse.Namespace()
+        parser.parse_args(toml_args, namespace=combined_args)
+        parser.parse_args(sys.argv, namespace=combined_args)
+
+        return combined_args
+
     # Check for conflicting flags
     def validate(args):
         rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")   
         rmc.ensure(not (args.no_config_toml and args.config_toml), "Incompatible flags: --config-toml, --no-config-toml")
-
-    # Determine what crate to analyze from flags
-    def get_crate_from_args(args):
-        return args.crate or args.crate_flag or "."
 
     # Fix up args before returning
     def post_process(args):
@@ -119,34 +143,6 @@ def parse_args():
         if args.default_checks:
             rmc.add_selected_default_cbmc_flags(args)
 
-    # Combine args set by config toml and provided on command line
-    def get_combined_args(config_toml, crate, cl_args):
-        # Set config_toml to valid toml file
-        if config_toml is not None:
-            # If config_toml is explicitly given, ensure it exists
-            rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid config file: {config_toml}")
-        else:
-            # Otherwise, look for `Cargo.toml` in the given crate
-            crate_cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
-            if crate_cargo_toml.is_file():
-                config_toml = crate_cargo_toml
-            else:
-                # If no config_toml is given and we can't find Cargo.toml
-                # then just use command line arguments
-                print(f"WARNING: Could not find Cargo.toml in project {pathlib.Path(crate).absolute()}")
-                return cl_args
-        
-        # Extract flags from config_toml
-        toml_args = extract_args_from_toml(config_toml)
-
-        # Parse args from both config_toml and command line
-        # but let command line args override config_toml args
-        combined_args = argparse.Namespace()
-        parser.parse_args(toml_args, namespace=combined_args)
-        parser.parse_args(namespace=combined_args)
-
-        return combined_args
-
     # Remove "rmc" from arg if invoked `cargo rmc ...`
     if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
         del sys.argv[1]
@@ -156,18 +152,21 @@ def parse_args():
     cl_args = parser.parse_args()
     validate(cl_args)
 
-    # Load flags from config toml
-    if cl_args.no_config_toml:
-        final_args = cl_args
+    # Try to find the config_toml based on command line arguments
+    config_toml = get_config_toml(cl_args.no_config_toml, cl_args.config_toml, cl_args.crate, cl_args.crate_flag)
+
+    if config_toml is not None:
+        # If config_toml is found, combine configuration with command line arguments
+        combined_args = extract_args_from_toml(parser, config_toml)
+        validate(combined_args)
+        post_process(combined_args)
+        return combined_args
     else:
-        crate = get_crate_from_args(cl_args)
-        final_args = get_combined_args(cl_args.config_toml, crate, cl_args)
-        validate(final_args)
+        # If config_toml is missing, just use parsed command line arguments
+        post_process(cl_args)
+        return cl_args
 
-    post_process(final_args)
-    return final_args
-
-# Try to load Cargo.toml from dir, and update args
+# Extract a list of args based on given config toml
 def extract_args_from_toml(path):
     # Load the flag data from toml
     data = toml.load(path)
