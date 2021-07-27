@@ -225,7 +225,7 @@ fn collect_items_rec<'tcx>(
             recursion_depth_reset = None;
 
             if let Ok(alloc) = tcx.eval_static_initializer(def_id) {
-                for &((), id) in alloc.relocations().values() {
+                for &id in alloc.relocations().values() {
                     collect_miri(tcx, id, &mut neighbors);
                 }
             }
@@ -815,16 +815,13 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                 .iter()
                 .cloned()
                 .filter_map(|entry| match entry {
-                    VtblEntry::Method(def_id, substs) => ty::Instance::resolve_for_vtable(
-                        tcx,
-                        ty::ParamEnv::reveal_all(),
-                        def_id,
-                        substs,
-                    ),
+                    VtblEntry::Method(instance) => Some(instance),
                     VtblEntry::MetadataDropInPlace
                     | VtblEntry::MetadataSize
                     | VtblEntry::MetadataAlign
                     | VtblEntry::Vacant => None,
+                    // Super trait vtable entries already handled by now
+                    VtblEntry::TraitVPtr(..) => None,
                 })
                 .filter(|&instance| should_codegen_locally(tcx, &instance))
                 .map(|item| create_fn_mono_item(item, source));
@@ -1039,7 +1036,7 @@ fn collect_miri<'tcx>(
         }
         GlobalAlloc::Memory(alloc) => {
             trace!("collecting {:?} with {:#?}", alloc_id, alloc);
-            for &((), inner) in alloc.relocations().values() {
+            for &inner in alloc.relocations().values() {
                 rustc_data_structures::stack::ensure_sufficient_stack(|| {
                     collect_miri(tcx, inner, output);
                 });
@@ -1073,9 +1070,12 @@ fn collect_const_value<'tcx>(
     output: &mut Vec<Spanned<MonoItem<'tcx>>>,
 ) {
     match value {
-        ConstValue::Scalar(Scalar::Ptr(ptr)) => collect_miri(tcx, ptr.alloc_id, output),
+        ConstValue::Scalar(Scalar::Ptr(ptr, _size)) => {
+            let (alloc_id, _offset) = ptr.into_parts();
+            collect_miri(tcx, alloc_id, output);
+        }
         ConstValue::Slice { data: alloc, start: _, end: _ } | ConstValue::ByRef { alloc, .. } => {
-            for &((), id) in alloc.relocations().values() {
+            for &id in alloc.relocations().values() {
                 collect_miri(tcx, id, output);
             }
         }
