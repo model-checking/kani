@@ -4,15 +4,57 @@
 
 import argparse
 
+# Taken from https://github.com/python/cpython/blob/3.9/Lib/argparse.py#L858
+# Cannot use `BooleanOptionalAction` with Python 3.8
+class BooleanOptionalAction(argparse.Action):
+    def __init__(self,
+                 option_strings,
+                 dest,
+                 default=None,
+                 type=None,
+                 choices=None,
+                 required=False,
+                 help=None,
+                 metavar=None):
+
+        _option_strings = []
+        for option_string in option_strings:
+            _option_strings.append(option_string)
+
+            if option_string.startswith('--'):
+                option_string = '--no-' + option_string[2:]
+                _option_strings.append(option_string)
+
+        if help is not None and default is not None:
+            help += f" (default: {default})"
+
+        super().__init__(
+            option_strings=_option_strings,
+            dest=dest,
+            nargs=0,
+            default=default,
+            type=type,
+            choices=choices,
+            required=required,
+            help=help,
+            metavar=metavar)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if option_string in self.option_strings:
+            setattr(namespace, self.dest, not option_string.startswith('--no-'))
+
+    def format_usage(self):
+        return ' | '.join(self.option_strings)
+
 # Add flags related to debugging output.
 def add_loudness_flags(make_group, add_flag, config):
     group = make_group(
         "Loudness flags", "Determine how much textual output to produce.")
-    add_flag(group, "--debug", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--debug", default=False, action=BooleanOptionalAction,
              help="Produce full debug information")
-    add_flag(group, "--quiet", "-q", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--quiet", "-q", default=False, action=BooleanOptionalAction,
              help="Produces no output, just an exit code and requested artifacts; overrides --verbose")
-    add_flag(group, "--verbose", "-v", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--verbose", "-v", default=False, action=BooleanOptionalAction,
              help="Output processing stages and commands, along with minor debug information")
 
 # Add flags which specify configurations for the proof.
@@ -33,11 +75,11 @@ def add_artifact_flags(make_group, add_flag, config):
 
     group = make_group(
         "Artifact flags", "Produce artifacts in addition to a basic RMC report.")
-    add_flag(group, "--gen-c", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--gen-c", default=False, action=BooleanOptionalAction,
              help="Generate C file equivalent to inputted program")
-    add_flag(group, "--gen-symbols", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--gen-symbols", default=False, action=BooleanOptionalAction,
              help="Generate a goto symbol table")
-    add_flag(group, "--keep-temps", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--keep-temps", default=False, action=BooleanOptionalAction,
              help="Keep temporary files generated throughout RMC process")
     add_flag(group, "--target-dir", default=default_target, metavar="DIR",
              help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
@@ -45,13 +87,13 @@ def add_artifact_flags(make_group, add_flag, config):
 # Add flags to turn off default checks.
 def add_check_flags(make_group, add_flag, config):
     group = make_group("Check flags", "Disable some or all default checks.")
-    add_flag(group, "--default-checks", default=True, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--default-checks", default=True, action=BooleanOptionalAction,
              help="Turn on all default checks")
-    add_flag(group, "--memory-safety-checks", default=True, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--memory-safety-checks", default=True, action=BooleanOptionalAction,
              help="Turn on default memory safety checks")
-    add_flag(group, "--overflow-checks", default=True, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--overflow-checks", default=True, action=BooleanOptionalAction,
              help="Turn on default overflow checks")
-    add_flag(group, "--unwinding-checks", default=True, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--unwinding-checks", default=True, action=BooleanOptionalAction,
              help="Turn on default unwinding checks")
 
 # Add flags needed only for visualizer.
@@ -60,7 +102,7 @@ def add_visualizer_flags(make_group, add_flag, config):
         "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
     add_flag(group, "--srcdir", default=".",
              help="The source directory: the root of the source tree")
-    add_flag(group, "--visualize", default=True, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--visualize", default=True, action=BooleanOptionalAction,
              help="Generate visualizer report to <target-dir>/report/html/index.html")
     add_flag(group, "--wkdir", default=".",
              help="""
@@ -71,9 +113,9 @@ def add_visualizer_flags(make_group, add_flag, config):
 # Add flags for ad-hoc features.
 def add_other_flags(make_group, add_flag, config):
     group = make_group("Other flags")
-    add_flag(group, "--allow-cbmc-verification-failure", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--allow-cbmc-verification-failure", default=False, action=BooleanOptionalAction,
              help="Do not produce error return code on CBMC verification failure")
-    add_flag(group, "--dry-run", default=False, action=argparse.BooleanOptionalAction,
+    add_flag(group, "--dry-run", default=False, action=BooleanOptionalAction,
              help="Print commands instead of running them")
 
 # Add flags we don't expect end-users to use.
