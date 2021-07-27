@@ -95,8 +95,8 @@ def parse_args():
 
     # Combine the command line parameter to get a config file; 
     # return None if no_config_toml is set, or if can't find a default
-    def get_config_toml(no_config_toml, config_toml, crate, crate_flag):
-        crate = get_crate_from_args(crate, crate_flag)
+    def get_config_toml(no_config_toml, config_toml, args):
+        crate = get_crate_from_args(args)
         if no_config_toml:
             return None
         elif config_toml is not None:
@@ -104,8 +104,8 @@ def parse_args():
             rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid path to config file: {config_toml}")
             return config_toml
         else:
-            # If no config flags are set, look for config toml in default location (<crate>/Config.toml)
-            cargo_toml = pathlib.Path(crate).joinpath("Config.toml")
+            # If no config flags are set, look for config toml in default location (<crate>/Cargo.toml)
+            cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
             if cargo_toml.is_file():
                 return cargo_toml
             else:
@@ -113,7 +113,7 @@ def parse_args():
                 return None
 
     # Combine args set by config toml and provided on command line
-    def get_combined_args(parser, config_toml)
+    def get_combined_args(parser, config_toml):
         # Extract flags from config_toml
         toml_args = extract_args_from_toml(config_toml)
 
@@ -121,7 +121,7 @@ def parse_args():
         # but let command line args override config_toml args
         combined_args = argparse.Namespace()
         parser.parse_args(toml_args, namespace=combined_args)
-        parser.parse_args(sys.argv, namespace=combined_args)
+        parser.parse_args(sys.argv[1:], namespace=combined_args)
 
         return combined_args
 
@@ -153,11 +153,11 @@ def parse_args():
     validate(cl_args)
 
     # Try to find the config_toml based on command line arguments
-    config_toml = get_config_toml(cl_args.no_config_toml, cl_args.config_toml, cl_args.crate, cl_args.crate_flag)
+    config_toml = get_config_toml(cl_args.no_config_toml, cl_args.config_toml, cl_args)
 
     if config_toml is not None:
         # If config_toml is found, combine configuration with command line arguments
-        combined_args = extract_args_from_toml(parser, config_toml)
+        combined_args = get_combined_args(parser, config_toml)
         validate(combined_args)
         post_process(combined_args)
         return combined_args
