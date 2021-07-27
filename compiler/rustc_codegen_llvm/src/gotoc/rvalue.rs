@@ -10,12 +10,7 @@ use crate::btree_string_map;
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::subst::InternalSubsts;
-use rustc_middle::ty::{
-    self, Binder, GenericParamDefKind, Instance, IntTy, TraitRef, Ty, UintTy, VtblEntry,
-    COMMON_VTABLE_ENTRIES,
-};
-use rustc_span::def_id::DefId;
+use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, COMMON_VTABLE_ENTRIES};
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
 
@@ -702,24 +697,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_vtable_method_field(
         &mut self,
-        def_id: DefId,
-        substs: ty::subst::SubstsRef<'tcx>,
+        instance: Instance<'tcx>,
         t: Ty<'tcx>,
         idx: usize,
     ) -> Expr {
-        let vtable_field_name = self.vtable_field_name(def_id, idx);
+        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
         let vtable_type_name = aggr_name(&self.vtable_name(t));
         let field_type = self
             .symbol_table
             .lookup_field_type(&vtable_type_name, &vtable_field_name)
             .cloned()
-            .unwrap();
-
-        // We use Instance::resolve to more closely match Rust proper behavior. The comment
-        // there says "used to find the precise code that will run for a trait method invocation"
-        // and it is used (in a more indirect way) to generate vtables.
-        let instance = Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), def_id, substs)
-            .unwrap()
             .unwrap();
 
         // Lookup in the symbol table using the full symbol table name/key
@@ -858,8 +845,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
                         VtblEntry::Vacant => None,
-                        VtblEntry::Method(def_id, substs) => {
-                            Some(ctx.codegen_vtable_method_field(*def_id, substs, trait_type, idx))
+                        // TODO: trait upcasting
+                        // https://github.com/model-checking/rmc/issues/358
+                        VtblEntry::TraitVPtr(_trait_ref) => None,
+                        VtblEntry::Method(instance) => {
+                            Some(ctx.codegen_vtable_method_field(*instance, trait_type, idx))
                         }
                     })
                     .collect();
