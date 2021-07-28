@@ -2394,12 +2394,12 @@ impl<'test> TestCx<'test> {
 
     /// Adds rmc scripts directory to the `PATH` environment variable.
     fn add_rmc_dir_to_path(&self, command: &mut Command) {
-        // If the PATH enviornment variable is already defined,
+        // If the PATH environment variable is already defined,
         if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
             // Add the RMC scripts directory to the PATH.
             command.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
         } else {
-            // Otherwise, insert PATH as a new enviornment variable and set its value to the RMC scripts directory.
+            // Otherwise, insert PATH as a new environment variable and set its value to the RMC scripts directory.
             command.env(
                 String::from("PATH"),
                 String::from(self.config.rmc_dir_path.to_str().unwrap()),
@@ -2411,7 +2411,10 @@ impl<'test> TestCx<'test> {
     /// error message is printed to stdout if the check result is not expected.
     fn check(&self) {
         let mut rustc = Command::new("rmc-rustc");
-        rustc.args(["-Z", "no-codegen"]).arg(&self.testpaths.file);
+        rustc
+            .args(self.props.compile_flags.clone())
+            .args(["-Z", "no-codegen"])
+            .arg(&self.testpaths.file);
         self.add_rmc_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run_compiler(rustc, None);
         if self.props.rmc_panic_step == Some(RMCFailStep::Check) {
@@ -2431,6 +2434,7 @@ impl<'test> TestCx<'test> {
     fn codegen(&self) {
         let mut rustc = Command::new("rmc-rustc");
         rustc
+            .args(self.props.compile_flags.clone())
             .args(["-Z", "codegen-backend=gotoc", "--cfg=rmc", "--out-dir"])
             .arg(self.output_base_dir())
             .arg(&self.testpaths.file);
@@ -2461,6 +2465,13 @@ impl<'test> TestCx<'test> {
         // 2. It may pass some options that do not make sense for RMC
         // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
+        // We cannot pass rustc flags directly to RMC. Instead, we add them
+        // to the current environment through the `RUSTFLAGS` environment
+        // variable. RMC recognizes the variable and adds those flags to its
+        // internal call to rustc.
+        if !self.props.compile_flags.is_empty() {
+            rmc.env("RUSTFLAGS", self.props.compile_flags.join(" "));
+        }
         // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
         rmc.args(&self.props.rmc_flags)
             .arg("--input")
