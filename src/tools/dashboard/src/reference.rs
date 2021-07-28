@@ -65,7 +65,7 @@ fn parse_hierarchy(summary_path: &Path) -> HashMap<PathBuf, PathBuf> {
 struct Example {
     /// Path to the markdown file containing the example.
     path: PathBuf,
-    /// Line number where the example is introduced.
+    /// Line number of the code block introducing the example.
     line: usize,
 }
 
@@ -164,8 +164,10 @@ fn preprocess_examples(map: &HashMap<Example, PathBuf>) {
     // block.
     for (from, to) in map.iter() {
         let file = File::open(&from.path).unwrap();
-        let mut it = BufReader::new(file).lines().skip(from.line - 1);
-        let line = it.next().unwrap().unwrap();
+        // Skip to the first line of the example code block.
+        // Line numbers in files start with 1 but `nth(...)` starts with 0.
+        // Subtract 1 to account for the difference.
+        let line = BufReader::new(file).lines().nth(from.line - 1).unwrap().unwrap();
         if line.contains("edition2015") {
             prepend_text(to, "// compile-flags: --edition 2015");
         } else {

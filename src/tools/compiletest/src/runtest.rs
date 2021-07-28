@@ -2394,12 +2394,12 @@ impl<'test> TestCx<'test> {
 
     /// Adds rmc scripts directory to the `PATH` environment variable.
     fn add_rmc_dir_to_path(&self, command: &mut Command) {
-        // If the PATH enviornment variable is already defined,
+        // If the PATH environment variable is already defined,
         if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
             // Add the RMC scripts directory to the PATH.
             command.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
         } else {
-            // Otherwise, insert PATH as a new enviornment variable and set its value to the RMC scripts directory.
+            // Otherwise, insert PATH as a new environment variable and set its value to the RMC scripts directory.
             command.env(
                 String::from("PATH"),
                 String::from(self.config.rmc_dir_path.to_str().unwrap()),
@@ -2466,9 +2466,9 @@ impl<'test> TestCx<'test> {
         // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
         // We cannot pass rustc flags directly to RMC. Instead, we add them
-        // to the current enviornment through the `RUSTFLAGS` environment
+        // to the current environment through the `RUSTFLAGS` environment
         // variable. RMC recognizes the variable and adds those flags to its
-        // internal call to value to rustc.
+        // internal call to rustc.
         if !self.props.compile_flags.is_empty() {
             rmc.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
