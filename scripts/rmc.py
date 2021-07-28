@@ -100,9 +100,12 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     # If this a dry run, we emulate running a successful process whose output is the command itself
     # We set `output_to` to `stdout` so that the output is not omitted below
     if dry_run:
-        if output_to == None:
-            output_to = "stdout"
         cmd_line = ' '.join(cmd)
+        if output_to != "stdout" and output_to is not None:
+            cmd_line += f" > \"{output_to}\""
+
+        output_to = "stdout"
+
         process = subprocess.CompletedProcess(None, EXIT_CODE_SUCCESS, stdout=cmd_line)
     else:
         process = subprocess.run(
