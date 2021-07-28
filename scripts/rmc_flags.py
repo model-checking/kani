@@ -102,7 +102,7 @@ def add_visualizer_flags(make_group, add_flag, config):
         "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
     add_flag(group, "--srcdir", default=".",
              help="The source directory: the root of the source tree")
-    add_flag(group, "--visualize", default=True, action=BooleanOptionalAction,
+    add_flag(group, "--visualize", default=False, action=BooleanOptionalAction,
              help="Generate visualizer report to <target-dir>/report/html/index.html")
     add_flag(group, "--wkdir", default=".",
              help="""
