@@ -129,6 +129,10 @@ def add_other_flags(make_group, add_flag, config):
              help="Do not produce error return code on CBMC verification failure")
     add_flag(group, "--dry-run", default=False, action=BooleanOptionalAction,
              help="Print commands instead of running them")
+    add_flag(group, "--error-on-warnings-except", default=False, action="extend",
+             help="If this flag is provided, then anything that would normally be a warning "
+                  "will instead be converted to an error, unless the warning message matches "
+                  "one of the provided arguments; matches with regex on partial strings")
 
 # Add flags we don't expect end-users to use.
 def add_developer_flags(make_group, add_flag, config):
