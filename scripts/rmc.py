@@ -142,6 +142,8 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
                  "-Z", f"symbol-mangling-version={mangler}", 
                  "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
                  f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
+    if "RUSTFLAGS" in os.environ:
+        build_cmd += os.environ["RUSTFLAGS"].split(" ")
     build_env = os.environ
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
