@@ -203,14 +203,14 @@ impl<'tcx> GotocCtx<'tcx> {
     /// generate a function call based on the def id.
     ///
     /// Note that this is finicky. A local might be a function definition, a
-    /// pointer to one, or a boxed pointer to one. For example, the 
+    /// pointer to one, or a boxed pointer to one. For example, the
     /// auto-generated code for Fn::call_once uses a local FnDef to call the
-    /// wrapped function, while the auto-generated code for Fn::call and 
+    /// wrapped function, while the auto-generated code for Fn::call and
     /// Fn::call_mut both use pointers to a FnDef. In these cases, we need to
-    /// generate an expression that references the existing FnDef rather than 
+    /// generate an expression that references the existing FnDef rather than
     /// a named variable.
-    /// 
-    /// Recursively finds the actual FnDef from a pointer or box. 
+    ///
+    /// Recursively finds the actual FnDef from a pointer or box.
     pub fn codegen_local_fndef(&mut self, ty: &'tcx ty::TyS<'tcx>) -> Option<Expr> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
