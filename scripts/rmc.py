@@ -8,6 +8,7 @@ import os.path
 import sys
 import re
 import pathlib
+import xml.etree.ElementTree as xml
 
 
 RMC_CFG = "rmc"
@@ -207,6 +208,38 @@ def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temp
 def link_c_lib(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
     cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
     return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
+
+# Runs CBMC with --xml-ui to look for warnings
+def get_warnings(cbmc_filename, cbmc_args, ignore_patterns, verbose=False, quiet=False, keep_temps=False, outdir=".", dry_run=False):
+    results_filename = os.path.join(outdir, "results.xml")
+    if not keep_temps:
+        atexit.register(delete_file, results_filename)
+
+    # Produce xml cbmc report
+    cbmc_cmd = ["cbmc"] + ["--xml-ui"] + cbmc_args + [cbmc_filename]
+    run_cmd(cbmc_cmd, label="cbmc warnings", output_to=results_filename, verbose=verbose, quiet=quiet, dry_run=dry_run)
+
+    # Extract warnings from report
+    results = xml.parse(results_filename)
+    warnings = [
+        message.find("text").text
+        for message in results.findall("message")
+        if message.attrib["type"] == "WARNING"
+    ]
+
+    # Remove ignored warnings
+    def ignore(warning):
+        return any([re.match(pattern, warning) is not None
+            for pattern in ignore_patterns])
+
+    errors = [
+        warning
+        for warning in warnings
+        if not ignore(warning)
+    ]
+
+    # Ensure that all warnings are ignored
+    ensure(errors == [], f"ERROR: Warnings produced by CBMC that were not ignored:\n{errors}")
 
 # Runs CBMC on a goto program
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):

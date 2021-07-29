@@ -67,6 +67,9 @@ def main():
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
+
+    if args.error_on_warnings_except is not None:
+        rmc.get_warnings(goto_filename, args.cbmc_args, args.error_on_warnings_except, args.verbose, args.quiet, args.keep_temps, args.target_dir, args.dry_run)
     
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
