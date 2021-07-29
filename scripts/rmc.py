@@ -12,6 +12,7 @@ import re
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
 EXIT_CODE_SUCCESS = 0
+CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
 MEMORY_SAFETY_CHECKS = ["--bounds-check",
                         "--pointer-check",
