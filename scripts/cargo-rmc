@@ -13,6 +13,7 @@ import pathlib
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
+CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
 
 def main():
@@ -26,10 +27,7 @@ def main():
     crate_group.add_argument("crate", help="crate to verify", nargs="?")
     crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
-    exclude_flags = [
-        # This should be able to be supported; https://github.com/model-checking/rmc/issues/360
-        "--allow-cbmc-verification-failure",
-    ]
+    exclude_flags = []
     rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
     args = parser.parse_args()
 
@@ -80,11 +78,16 @@ def main():
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
-        return rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args, \
+        retcode = rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args, \
                                  args.verbose, args.quiet, args.keep_temps, \
                                  args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
-        return rmc.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
+        retcode = rmc.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
+
+    if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
+        retcode = EXIT_CODE_SUCCESS
+
+    return retcode
 
 
 if __name__ == "__main__":
