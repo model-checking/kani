@@ -133,7 +133,7 @@ def parse_args():
     # Fix up args before returning
     def post_process(args):
         # Combine positional and flag argument for input
-        cl_args.crate = get_crate_from_args(args)
+        args.crate = get_crate_from_args(args)
 
         # --quiet overrides --verbose
         if args.quiet:
