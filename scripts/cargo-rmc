@@ -27,8 +27,6 @@ def main():
     crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
     exclude_flags = [
-        # This should be able to be supported; https://github.com/model-checking/rmc/issues/359
-        "--gen-symbols",
         # This should be able to be supported; https://github.com/model-checking/rmc/issues/360
         "--allow-cbmc-verification-failure",
     ]
@@ -59,6 +57,7 @@ def main():
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
+    symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
@@ -69,6 +68,10 @@ def main():
 
     if args.gen_c:
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_filename, c_filename, args.verbose, args.dry_run):
+            return 1
+
+    if args.gen_symbols:
+        if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(cbmc_filename, symbols_filename, args.verbose, args.dry_run):
             return 1
 
     if "--function" not in args.cbmc_args:
