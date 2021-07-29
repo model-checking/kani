@@ -154,6 +154,8 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
 
 # Generates a symbol table (and some other artifacts) from a rust crate
 def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+    ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
+
     rustflags = [
         "-Z", "codegen-backend=gotoc", 
         "-Z", f"symbol-mangling-version={mangler}", 
