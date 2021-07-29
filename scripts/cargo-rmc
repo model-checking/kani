@@ -170,6 +170,11 @@ def parse_args():
 def extract_args_from_toml(path):
     # Load the flag data from toml
     data = toml.load(path)
+
+    # Extract the rmc flags from the toml, if any present
+    if rmc not in data or flags not in rmc_data["rmc"]:
+        # If no flags are present, just return none
+        return []
     rmc_data = data["rmc"]
     flag_data = rmc_data["flags"]
 
