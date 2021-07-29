@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{DatatypeComponent, Expr, Symbol, SymbolTable, Type};
+use super::cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
 use super::cbmc::utils::aggr_name;
 use super::metadata::GotocCtx;
 use crate::btree_map;
@@ -186,6 +186,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
+                let poly = self.tcx.erase_regions(poly);
                 let mut flds = self
                     .tcx
                     .vtable_entries(poly)
@@ -954,7 +955,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let sig = self.current_fn().sig();
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
-        let params = sig
+        let mut params: Vec<Parameter> = sig
             .inputs()
             .iter()
             .enumerate()
@@ -970,6 +971,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             })
             .collect();
+
+        // For vtable shims, we need to modify fn(self, ...) to fn(self: *mut Self, ...),
+        // since the vtable functions expect a pointer as the first argument. See the comment
+        // and similar code in compiler/rustc_mir/src/shim.rs.
+        if let ty::InstanceDef::VtableShim(..) = self.current_fn().instance().def {
+            if let Some(self_param) = params.first() {
+                let ident = self_param.identifier().map(|i| i.to_string());
+                let ty = self_param.typ().clone();
+                params[0] = Type::parameter(ident.clone(), ident, ty.to_pointer());
+            }
+        }
+
         if sig.c_variadic {
             Type::variadic_code(params, self.codegen_ty(sig.output()))
         } else {
