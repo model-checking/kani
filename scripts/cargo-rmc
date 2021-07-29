@@ -23,7 +23,7 @@ def main():
     rmc.ensure_dependencies_in_path(args.quiet)
 
     if args.gen_c_runnable:
-        rmc.cargo_build(args.crate, args.target_dir,
+        rmc.cargo_build(args.crate, args.target_dir, False, [],
                         args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
 
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
@@ -44,7 +44,7 @@ def main():
         
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    rmc.cargo_build(args.crate, args.target_dir,
+    rmc.cargo_build(args.crate, args.target_dir, args.error_on_warning, args.suppress_rmc_warnings,
                     args.verbose, args.debug, args.save_logs, args.mangler, args.dry_run, [])
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
@@ -73,8 +73,8 @@ def main():
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
 
-    if args.error_on_warnings_except is not None:
-        rmc.get_warnings(cbmc_filename, args.cbmc_args, args.error_on_warnings_except, args.verbose, args.quiet, args.keep_temps, args.target_dir, args.dry_run)
+    if args.error_on_warning:
+        rmc.get_warnings(cbmc_filename, args.cbmc_args, args.suppress_cbmc_warnings, args.verbose, args.quiet, args.keep_temps, args.target_dir, args.dry_run)
 
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)

@@ -67,17 +67,9 @@ def error(message, quiet=False, retcode=1):
         print(f"ERROR: {message}")
     sys.exit(retcode)
 
-# Determine whether a warning should be ignored
-def ignore(warning, error_on_warnings_except):
-    return any([re.match(pattern, warning) is not None
-        for pattern in ignore_patterns])
-
 # Print warning message, or possibly convert to an error
-def warn(message, error_on_warnings_except=None, quiet=False):
-    if error_on_warnings_except is not None:
-        if not ignore(message, error_on_warnings_except):
-            error(message, quiet=quiet)
-    elif not quiet:
+def warn(message, quiet=False):
+    if not quiet:
         print(f"WARNING: {message}")
 
 # Deletes a file; used by atexit.register to remove temporary files on exit
@@ -88,13 +80,13 @@ def delete_file(filename):
         pass
 
 # Add a set of CBMC flags to the CBMC arguments
-def add_set_cbmc_flags(args, flags, error_on_warnings_except=None, quiet=False):
+def add_set_cbmc_flags(args, flags, quiet=False):
     # We print a warning if the user has passed the flag via `cbmc_args`
     # Otherwise we append it to the CBMC arguments
     for arg in flags:
         # This behavior must be reviewed if the set of flags is extended
         if arg in args.cbmc_args:
-            warn(f"Default CBMC argument `{arg}` not added (already specified)", error_on_warnings_except, quiet)
+            warn(f"Default CBMC argument `{arg}` not added (already specified)", quiet)
         else:
             args.cbmc_args.append(arg)
 
@@ -161,8 +153,32 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     
     return process.returncode
 
+# If warnings are present, moves warnings to bottom of output and produces error
+def create_rmc_warning_handler(ignore_types):
+    def ignore(warning):
+        return any([re.match(f".*<{typ}>.*", warning) is not None
+            for typ in ignore_types])
+
+    def rmc_warning_handler(stdout):
+        errors = []
+        for warning in re.findall("WARN (\S* )? (.*)", stdout):
+            stdout = stdout.replace(f"DEBUG WARNING: {warning}", "")
+            if not ignore(warning, ignore_patterns):
+                errors.append(warning)
+
+        if errors != []:
+            if not quiet:
+                print(stdout)
+            for err in errors:
+                warn(err, None, quiet)
+            error("Unhandled warnings.", quiet)
+        else:
+            return stdout
+
+    return rmc_warning_handler
+
 # Generates a symbol table from a rust file
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def compile_single_rust_file(input_filename, output_filename, error_on_warning=False, ignore_types=[], verbose=False, debug=False, quiet=False, keep_temps=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
         
@@ -172,20 +188,21 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
                  "-Z", f"symbol-mangling-version={mangler}",
                  "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
                  f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
-    if "RUSTFLAGS" in os.environ:
-        build_cmd += os.environ["RUSTFLAGS"].split(" ")
     build_env = os.environ
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
     if save_logs is not None:
         add_rmc_log_file_to_env(build_env, save_logs)
 
-    return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
+    scanners = []
+    if error_on_warning:
+        scanners.append(Scanner("", create_rmc_warning_handler()))
+
+    return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, scanners=scanners, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir="target", verbose=False, debug=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def cargo_build(crate, target_dir="target", error_on_warning=False, ignore_types=[], verbose=False, debug=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
-
     rustflags = [
         "-Z", "codegen-backend=gotoc",
         "-Z", "trim-diagnostic-paths=no",
@@ -226,7 +243,7 @@ def link_c_lib(src, dst, c_lib, verbose=False, quiet=False, function="main", dry
     cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
     return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
 
-# Runs CBMC with --xml-ui to look for warnings
+# Runs CBMC with --xml-ui to look for warnings, and raise error if any present
 def get_warnings(cbmc_filename, cbmc_args, ignore_patterns, verbose=False, quiet=False, keep_temps=False, outdir=".", dry_run=False):
     results_filename = os.path.join(outdir, "results.xml")
     if not keep_temps:
@@ -243,6 +260,10 @@ def get_warnings(cbmc_filename, cbmc_args, ignore_patterns, verbose=False, quiet
         for message in results.findall("message")
         if message.attrib["type"] == "WARNING"
     ]
+
+    def ignore(warning, ignore_patterns):
+        return any([re.match(pattern, warning) is not None
+            for pattern in ignore_patterns])
 
     errors = [
         warning

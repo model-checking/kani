@@ -46,7 +46,8 @@ def main():
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.save_logs, args.mangler, args.dry_run, []):
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.error_on_warning, args.suppress_rmc_warnings, 
+                                                         args.verbose, args.debug, args.quiet, args.keep_temps, args.save_logs, args.mangler, args.dry_run, []):
         return 1
 
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
@@ -68,8 +69,8 @@ def main():
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
 
-    if args.error_on_warnings_except is not None:
-        rmc.get_warnings(goto_filename, args.cbmc_args, args.error_on_warnings_except, args.verbose, args.quiet, args.keep_temps, args.target_dir, args.dry_run)
+    if args.error_on_warning:
+        rmc.get_warnings(goto_filename, args.cbmc_args, args.suppress_cbmc_warnings, args.verbose, args.quiet, args.keep_temps, args.target_dir, args.dry_run)
     
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)

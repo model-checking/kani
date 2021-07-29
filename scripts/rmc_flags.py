@@ -55,9 +55,20 @@ def add_loudness_flags(make_group, add_flag, config):
     add_flag(group, "--debug", default=False, action=BooleanOptionalAction,
              help="Produce full debug information")
     add_flag(group, "--quiet", "-q", default=False, action=BooleanOptionalAction,
-             help="Produces no output, just an exit code and requested artifacts; overrides --verbose")
+             help="Produce no output, just an exit code and requested artifacts; overrides --verbose")
     add_flag(group, "--verbose", "-v", default=False, action=BooleanOptionalAction,
              help="Output processing stages and commands, along with minor debug information")
+
+# Add flags that suppress or raise seriousness of warnings
+def add_warning_flags(make_group, add_flag, config):
+    group = make_group(
+        "Warning flags", "Suppress warnings, or promote them to errors.")
+    add_flag(group, "--error-on-warning", action="store_true",
+             help="Raise an error when an unsuppressed warning is present")
+    add_flag(group, "--suppress-cbmc-warnings", nargs="*", default=[], action="extend",
+             help="Ignore warnings produced by cbmc by regex pattern match on the message")
+    add_flag(group, "--suppress-rmc-warnings", nargs="*", default=[], action="extend", choices=[],
+             help="Ignore warnings produced by RMC by type")
 
 # Add flags which specify configurations for the proof.
 def add_linking_flags(make_group, add_flag, config):
@@ -129,10 +140,6 @@ def add_other_flags(make_group, add_flag, config):
              help="Do not produce error return code on CBMC verification failure")
     add_flag(group, "--dry-run", default=False, action=BooleanOptionalAction,
              help="Print commands instead of running them")
-    add_flag(group, "--error-on-warnings-except", nargs="*", default=None, action="extend",
-             help="If this flag is provided, then anything that would normally be a warning "
-                  "will instead be converted to an error, unless the warning message matches "
-                  "one of the provided arguments; matches with regex on partial strings")
 
 # Add flags we don't expect end-users to use.
 def add_developer_flags(make_group, add_flag, config):
@@ -172,6 +179,7 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
 
     add_groups = [
         add_loudness_flags,
+        add_warning_flags,
         add_linking_flags,
         add_artifact_flags,
         add_check_flags,
