@@ -52,16 +52,33 @@ def is_exe(name):
     from shutil import which
     return which(name) is not None
     
-def ensure_dependencies_in_path():
+def ensure_dependencies_in_path(quiet=False):
     for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
-        ensure(is_exe(program), f"Could not find {program} in PATH")
+        ensure(is_exe(program), f"Could not find {program} in PATH", quiet)
 
-# Assert a condition holds, or produce a user error message.
-def ensure(condition, message=None, retcode=1):
+# Assert a condition holds, or produce a user error message
+def ensure(condition, message, quiet=False, retcode=1):
     if not condition:
-        if message:
-            print(f"ERROR: {message}")
-        sys.exit(retcode)
+        error(message, retcode, quiet)
+
+# Print an error message and exit with retcode
+def error(message, quiet=False, retcode=1):
+    if message is not None and not quiet:
+        print(f"ERROR: {message}")
+    sys.exit(retcode)
+
+# Determine whether a warning should be ignored
+def ignore(warning, error_on_warnings_except):
+    return any([re.match(pattern, warning) is not None
+        for pattern in ignore_patterns])
+
+# Print warning message, or possibly convert to an error
+def warn(message, error_on_warnings_except=None, quiet=False):
+    if error_on_warnings_except is not None:
+        if not ignore(message, error_on_warnings_except):
+            error(message, quiet=quiet)
+    elif not quiet:
+        print(f"WARNING: {message}")
 
 # Deletes a file; used by atexit.register to remove temporary files on exit
 def delete_file(filename):
@@ -71,13 +88,13 @@ def delete_file(filename):
         pass
 
 # Add a set of CBMC flags to the CBMC arguments
-def add_set_cbmc_flags(args, flags):
+def add_set_cbmc_flags(args, flags, error_on_warnings_except=None, quiet=False):
     # We print a warning if the user has passed the flag via `cbmc_args`
     # Otherwise we append it to the CBMC arguments
     for arg in flags:
         # This behavior must be reviewed if the set of flags is extended
         if arg in args.cbmc_args:
-            print("WARNING: Default CBMC argument `{}` not added (already specified)".format(arg))
+            warn(f"Default CBMC argument `{arg}` not added (already specified)", error_on_warnings_except, quiet)
         else:
             args.cbmc_args.append(arg)
 
@@ -227,11 +244,6 @@ def get_warnings(cbmc_filename, cbmc_args, ignore_patterns, verbose=False, quiet
         if message.attrib["type"] == "WARNING"
     ]
 
-    # Remove ignored warnings
-    def ignore(warning):
-        return any([re.match(pattern, warning) is not None
-            for pattern in ignore_patterns])
-
     errors = [
         warning
         for warning in warnings
@@ -239,7 +251,7 @@ def get_warnings(cbmc_filename, cbmc_args, ignore_patterns, verbose=False, quiet
     ]
 
     # Ensure that all warnings are ignored
-    ensure(errors == [], f"ERROR: Warnings produced by CBMC that were not ignored:\n{errors}")
+    ensure(errors == [], f"Warnings produced by CBMC that were not ignored:\n{errors}", quiet)
 
 # Runs CBMC on a goto program
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):

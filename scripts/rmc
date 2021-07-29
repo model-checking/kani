@@ -21,7 +21,7 @@ def main():
     rmc.ensure_dependencies_in_path()
 
     base, ext = os.path.splitext(args.input)
-    rmc.ensure(ext == ".rs", "Expecting .rs input file.")
+    rmc.ensure(ext == ".rs", "Expecting .rs input file.", args.quiet)
 
     if args.gen_c_runnable:
         json_runnable_filename = base + "_runnable.json"

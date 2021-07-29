@@ -20,7 +20,7 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 def main():
     args = parse_args()
 
-    rmc.ensure_dependencies_in_path()
+    rmc.ensure_dependencies_in_path(args.quiet)
 
     if args.gen_c_runnable:
         rmc.cargo_build(args.crate, args.target_dir,
@@ -49,7 +49,7 @@ def main():
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
-    rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+    rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}", args.quiet)
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
