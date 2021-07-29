@@ -202,24 +202,27 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If a local is a function definition, ignore the local variable name and
     /// generate a function call based on the def id.
     ///
-    /// Note that this is finicky. A local might be a function definition or a
-    /// pointer to one. For example, the auto-generated code for Fn::call_once
-    /// uses a local FnDef to call the wrapped function, while the auto-generated
-    /// code for Fn::call and Fn::call_mut both use pointers to a FnDef.
-    /// In these cases, we need to generate an expression that references the
-    /// existing fndef rather than a named variable.
-    pub fn codegen_local_fndef(&mut self, l: Local) -> Option<Expr> {
-        let t = self.local_ty(l);
-        match t.kind() {
+    /// Note that this is finicky. A local might be a function definition, a
+    /// pointer to one, or a boxed pointer to one. For example, the
+    /// auto-generated code for Fn::call_once uses a local FnDef to call the
+    /// wrapped function, while the auto-generated code for Fn::call and
+    /// Fn::call_mut both use pointers to a FnDef. In these cases, we need to
+    /// generate an expression that references the existing FnDef rather than
+    /// a named variable.
+    ///
+    /// Recursively finds the actual FnDef from a pointer or box.
+    pub fn codegen_local_fndef(&mut self, ty: &'tcx ty::TyS<'tcx>) -> Option<Expr> {
+        match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
             ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
-            // A local that is a pointer to a FnDef, like Fn::call and Fn::call_mut
-            ty::RawPtr(inner) => match inner.ty.kind() {
-                ty::FnDef(defid, substs) => {
-                    Some(self.codegen_fndef(*defid, substs, None).address_of())
-                }
-                _ => None,
-            },
+            // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
+            ty::RawPtr(inner) => self.codegen_local_fndef(inner.ty).map(|f| f.address_of()),
+            // A local can be a boxed function pointer
+            ty::Adt(def, _) if def.is_box() => {
+                let boxed_ty = self.codegen_ty(ty);
+                self.codegen_local_fndef(ty.boxed_ty())
+                    .map(|f| self.box_value(f.address_of(), boxed_ty))
+            }
             _ => None,
         }
     }
@@ -227,7 +230,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Codegen for a local
     pub fn codegen_local(&mut self, l: Local) -> Expr {
         // Check if the local is a function definition (see comment above)
-        if let Some(fn_def) = self.codegen_local_fndef(l) {
+        if let Some(fn_def) = self.codegen_local_fndef(self.local_ty(l)) {
             return fn_def;
         }
 
