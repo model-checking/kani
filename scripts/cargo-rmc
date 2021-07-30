@@ -26,7 +26,7 @@ def main():
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
-    rmc.ensure(len(jsons) == 1, "Unexpected number of json outputs.")
+    rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
@@ -108,10 +108,24 @@ def parse_args():
         # Extract flags from config_toml
         toml_flags = extract_flags_from_toml(config_toml)
 
-        # Parse args from both config_toml and command line
-        # but let command line args override config_toml args
+        # Load args from toml flags
         combined_args = argparse.Namespace()
         parser.parse_args(toml_flags, namespace=combined_args)
+
+        # Set relative paths to be rooted at config toml's directory rather than cwd
+        def fix_paths(value):
+            if type(value) == list:
+                return list(map(fix_paths, value))
+            elif isinstance(value, pathlib.PurePath):
+                return pathlib.Path(config_toml).parent.joinpath(value)
+            else:
+                return value
+
+        ca_dict = combined_args.__dict__
+        for key in ca_dict:
+            ca_dict[key] = fix_paths(ca_dict[key])
+
+        # Load args from command line using toml args as default
         parser.parse_args(sys.argv[1:], namespace=combined_args)
 
         return combined_args
@@ -163,7 +177,7 @@ def extract_flags_from_toml(path):
     data = toml.load(path)
 
     # Extract the rmc flags from the toml, if any present
-    if rmc not in data or flags not in rmc_data["rmc"]:
+    if ("rmc" not in data) or ("flags" not in data["rmc"]):
         # If no flags are present, just return none
         return []
     rmc_data = data["rmc"]

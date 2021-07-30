@@ -1,0 +1,1 @@
+/Users/vecchiot/Documents/rmc/src/test/cargo-rmc/simple-lib/target/debug/libsimple_lib.rlib: /Users/vecchiot/Documents/rmc/src/test/cargo-rmc/simple-lib/gotoc /Users/vecchiot/Documents/rmc/src/test/cargo-rmc/simple-lib/src/lib.rs /Users/vecchiot/Documents/rmc/src/test/cargo-rmc/simple-lib/src/pair.rs

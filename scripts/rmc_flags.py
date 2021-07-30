@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import argparse
+import pathlib as pl
 
 # Taken from https://github.com/python/cpython/blob/3.9/Lib/argparse.py#L858
 # Cannot use `BooleanOptionalAction` with Python 3.8
@@ -61,7 +62,7 @@ def add_loudness_flags(make_group, add_flag, config):
 def add_linking_flags(make_group, add_flag, config):
     group = make_group("Linking flags",
                        "Provide information about how to link the prover for RMC.")
-    add_flag(group, "--c-lib", nargs="*", default=[], action="extend",
+    add_flag(group, "--c-lib", type=pl.Path, nargs="*", default=[], action="extend",
              help="Link external C files referenced by Rust code")
     add_flag(group, "--function", default="main",
              help="Entry point for verification")
@@ -81,7 +82,7 @@ def add_artifact_flags(make_group, add_flag, config):
              help="Generate a goto symbol table")
     add_flag(group, "--keep-temps", default=False, action=BooleanOptionalAction,
              help="Keep temporary files generated throughout RMC process")
-    add_flag(group, "--target-dir", default=default_target, metavar="DIR",
+    add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
              help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
 # Add flags to turn off default checks.
@@ -100,11 +101,11 @@ def add_check_flags(make_group, add_flag, config):
 def add_visualizer_flags(make_group, add_flag, config):
     group = make_group(
         "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
-    add_flag(group, "--srcdir", default=".",
+    add_flag(group, "--srcdir", type=pl.Path, default=".",
              help="The source directory: the root of the source tree")
     add_flag(group, "--visualize", default=False, action=BooleanOptionalAction,
              help="Generate visualizer report to <target-dir>/report/html/index.html")
-    add_flag(group, "--wkdir", default=".",
+    add_flag(group, "--wkdir", type=pl.Path, default=".",
              help="""
                   The working directory: used to determine source locations in output;
                   this is generally the location from which rmc is currently being invoked
