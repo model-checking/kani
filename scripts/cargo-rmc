@@ -77,12 +77,7 @@ def parse_args():
         config_group.add_argument("--config-toml", help="Where to read configuration from; defaults to crate's Cargo.toml")
         config_group.add_argument("--no-config-toml", action="store_true", help="Do not use any configuration toml")
 
-        exclude_flags = [
-            # This should be able to be supported; https://github.com/model-checking/rmc/issues/359
-            "--gen-symbols",
-            # This should be able to be supported; https://github.com/model-checking/rmc/issues/360
-            "--allow-cbmc-verification-failure",
-        ]
+        exclude_flags = []
         rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
         
         return parser
