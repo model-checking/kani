@@ -82,10 +82,9 @@ def parse_args():
         
         return parser
 
-    # Determine what crate to analyze from flags;
-    # args should be validated before calling this function to ensure
-    # that not both args.crate and args.crate_flag are present
+    # Determine what crate to analyze from flags
     def get_crate_from_args(args):
+        validate(args)
         return args.crate or args.crate_flag or "."
 
     # Combine the command line parameter to get a config file; 
@@ -101,21 +100,18 @@ def parse_args():
         else:
             # If no config flags are set, look for config toml in default location (<crate>/Cargo.toml)
             cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
-            if cargo_toml.is_file():
-                return cargo_toml
-            else:
-                print(f"WARNING: Cannot find configuration toml at expected location: {cargo_toml}")
-                return None
+            rmc.ensure(cargo_toml.is_file(), f"Cannot find configuration toml at expected location: {cargo_toml}")
+            return cargo_toml
 
     # Combine args set by config toml and provided on command line
     def get_combined_args(parser, config_toml):
         # Extract flags from config_toml
-        toml_args = extract_args_from_toml(config_toml)
+        toml_flags = extract_flags_from_toml(config_toml)
 
         # Parse args from both config_toml and command line
         # but let command line args override config_toml args
         combined_args = argparse.Namespace()
-        parser.parse_args(toml_args, namespace=combined_args)
+        parser.parse_args(toml_flags, namespace=combined_args)
         parser.parse_args(sys.argv[1:], namespace=combined_args)
 
         return combined_args
@@ -162,7 +158,7 @@ def parse_args():
         return cl_args
 
 # Extract a list of args based on given config toml
-def extract_args_from_toml(path):
+def extract_flags_from_toml(path):
     # Load the flag data from toml
     data = toml.load(path)
 
@@ -183,25 +179,25 @@ def extract_args_from_toml(path):
                 flags[key] = map[key]
     find_flags(flag_data)
 
-    # Add flags to args
+    # Add config toml flags to flag list
     success = True
-    args = []
+    flag_list = []
     def add_flag(flag, value):
         if type(value) == bool:
             if value:
-                args.append(f"--{flag}")
+                flag_list.append(f"--{flag}")
             else:
                 if flag.startswith("no-"):
-                    args.append(f"--{flag[3:]}")
+                    flag_list.append(f"--{flag[3:]}")
                 else:
-                    args.append(f"--no-{flag}")
+                    flag_list.append(f"--no-{flag}")
         elif type(value) == list:
-            args.append(f"--{flag}")
+            flag_list.append(f"--{flag}")
             assert all(map(lambda arg: type(arg) == str, value)), f"ERROR: Invalid config: {flag} = {value}"
-            args.extend(value)
+            flag_list.extend(value)
         elif type(value) == str:
-            args.append(f"--{flag}")
-            args.append(value)
+            flag_list.append(f"--{flag}")
+            flag_list.append(value)
         else:
             print(f"ERROR: Invalid config: {flag} = {value}")
             success = False
@@ -209,7 +205,7 @@ def extract_args_from_toml(path):
         add_flag(flag, flags[flag])
     
     rmc.ensure(success)
-    return args
+    return flag_list
 
 if __name__ == "__main__":
     sys.exit(main())
