@@ -393,45 +393,42 @@ impl Transformer for GenCTransformer {
 
     /// Normalize symbol names.
     fn transform_symbol(&self, symbol: &Symbol) -> Symbol {
-        let mut new_symbol = if symbol.is_extern {
-            // Purpose-tag: nondet
-            // Replace extern functions with nondet body so linker doesn't break
-            assert!(
-                symbol.typ.is_code() || symbol.typ.is_variadic_code(),
-                "Extern symbol should be function."
-            );
-            assert!(symbol.value.is_none(), "Extern function should have no body.");
-            let new_typ = self.transform_type(&symbol.typ);
-            let nondet_expr =
-                self.transform_expr(&Expr::nondet(symbol.typ.return_type().unwrap().clone()));
-            let new_value = SymbolValues::Stmt(Stmt::ret(Some(nondet_expr), Location::none()));
+        let mut new_symbol =
+            if symbol.is_extern && (symbol.typ.is_code() || symbol.typ.is_variadic_code()) {
+                // Purpose-tag: nondet
+                // Replace extern functions with nondet body so linker doesn't break
+                assert!(symbol.value.is_none(), "Extern function should have no body.");
+                let new_typ = self.transform_type(&symbol.typ);
+                let nondet_expr =
+                    self.transform_expr(&Expr::nondet(symbol.typ.return_type().unwrap().clone()));
+                let new_value = SymbolValues::Stmt(Stmt::ret(Some(nondet_expr), Location::none()));
 
-            // Fill missing parameter names with dummy name
-            let parameters = new_typ
-                .parameters()
-                .unwrap()
-                .iter()
-                .map(|parameter| add_identifier(parameter))
-                .collect();
-            let new_typ = if new_typ.is_code() {
-                Type::code(parameters, new_typ.return_type().unwrap().clone())
+                // Fill missing parameter names with dummy name
+                let parameters = new_typ
+                    .parameters()
+                    .unwrap()
+                    .iter()
+                    .map(|parameter| add_identifier(parameter))
+                    .collect();
+                let new_typ = if new_typ.is_code() {
+                    Type::code(parameters, new_typ.return_type().unwrap().clone())
+                } else {
+                    Type::variadic_code(parameters, new_typ.return_type().unwrap().clone())
+                };
+
+                let mut new_symbol = symbol.clone();
+                new_symbol.value = new_value;
+                new_symbol.typ = new_typ;
+                new_symbol.with_is_extern(false)
             } else {
-                Type::variadic_code(parameters, new_typ.return_type().unwrap().clone())
+                let new_typ = self.transform_type(&symbol.typ);
+                let new_value = self.transform_value(&symbol.value);
+
+                let mut new_symbol = symbol.clone();
+                new_symbol.value = new_value;
+                new_symbol.typ = new_typ;
+                new_symbol
             };
-
-            let mut new_symbol = symbol.clone();
-            new_symbol.value = new_value;
-            new_symbol.typ = new_typ;
-            new_symbol.with_is_extern(false)
-        } else {
-            let new_typ = self.transform_type(&symbol.typ);
-            let new_value = self.transform_value(&symbol.value);
-
-            let mut new_symbol = symbol.clone();
-            new_symbol.value = new_value;
-            new_symbol.typ = new_typ;
-            new_symbol
-        };
 
         // Purpose-tag: normalize-name
         new_symbol.name = normalize_identifier(&new_symbol.name);
@@ -473,16 +470,20 @@ impl Transformer for GenCTransformer {
         // Purpose-tag: nondet
         for (identifier, typ) in NONDET_TYPES.with(|cell| cell.take()) {
             let ret_type = typ.return_type().unwrap();
-            let ret_value = if ret_type.is_empty() {
-                None
+            let (typ, body) = if ret_type.type_name() == Some("tag-Unit".to_string()) {
+                let typ = Type::code(typ.parameters().unwrap().clone(), Type::empty());
+                let body = Stmt::block(vec![], Location::none());
+                (typ, body)
             } else {
-                Some(ret_type.default(self.symbol_table()))
+                let ret_value = Some(ret_type.default(self.symbol_table()));
+                let body = Stmt::ret(ret_value, Location::none());
+                (typ, body)
             };
 
             let sym = Symbol::function(
                 &identifier,
                 typ,
-                Some(Stmt::ret(ret_value, Location::none())),
+                Some(body),
                 Some(identifier.clone()),
                 Location::none(),
             );
