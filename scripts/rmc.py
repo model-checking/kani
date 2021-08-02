@@ -51,9 +51,10 @@ def ensure_dependencies_in_path():
         ensure(is_exe(program), f"Could not find {program} in PATH")
 
 # Assert a condition holds, or produce a user error message.
-def ensure(condition, message, retcode=1):
+def ensure(condition, message=None, retcode=1):
     if not condition:
-        print(f"ERROR: {message}")
+        if message:
+            print(f"ERROR: {message}")
         sys.exit(retcode)
 
 # Deletes a file; used by atexit.register to remove temporary files on exit
@@ -76,11 +77,11 @@ def add_set_cbmc_flags(args, flags):
 
 # Add sets of selected default CBMC flags
 def add_selected_default_cbmc_flags(args):
-    if not args.no_memory_safety_checks:
+    if args.memory_safety_checks:
         add_set_cbmc_flags(args, MEMORY_SAFETY_CHECKS)
-    if not args.no_overflow_checks:
+    if args.overflow_checks:
         add_set_cbmc_flags(args, OVERFLOW_CHECKS)
-    if not args.no_unwinding_checks:
+    if args.unwinding_checks:
         add_set_cbmc_flags(args, UNWINDING_CHECKS)
 
 # Updates environment to use gotoc backend debugging
@@ -153,6 +154,8 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
 
 # Generates a symbol table (and some other artifacts) from a rust crate
 def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+    ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
+
     rustflags = [
         "-Z", "codegen-backend=gotoc", 
         "-Z", f"symbol-mangling-version={mangler}", 
