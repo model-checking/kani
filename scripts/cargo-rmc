@@ -88,7 +88,7 @@ def parse_args():
         return args.crate or args.crate_flag or "."
 
     # Combine the command line parameter to get a config file; 
-    # return None if no_config_toml is set, or if can't find a default
+    # return None if no_config_toml is set
     def get_config_toml(no_config_toml, config_toml, args):
         crate = get_crate_from_args(args)
         if no_config_toml:
