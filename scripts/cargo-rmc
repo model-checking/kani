@@ -167,7 +167,7 @@ def parse_args():
         post_process(combined_args)
         return combined_args
     else:
-        # If config_toml is missing, just use parsed command line arguments
+        # If config_toml is missing, just use the parsed command line arguments
         post_process(cl_args)
         return cl_args
 
