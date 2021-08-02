@@ -304,6 +304,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
             "breakpoint" => Stmt::skip(loc),
             "bswap" => self.codegen_expr_to_place(p, fargs.remove(0).bswap()),
+            // TODO: Handle new `caller_location` intrinsic
+            // https://github.com/model-checking/rmc/issues/374
+            "caller_location" => Stmt::skip(loc),
             "ceilf32" => codegen_simple_intrinsic!(Ceilf),
             "ceilf64" => codegen_simple_intrinsic!(Ceil),
             "copy" => codegen_intrinsic_copy!(Memmove),
