@@ -137,8 +137,8 @@ impl<'tcx> GotocCtx<'tcx> {
         ldecls.indices().for_each(|lc| {
             if Some(lc) == mir.spread_arg {
                 // We have already added this local in the functin prelude, so
-                // skip adding it again here. 
-                return
+                // skip adding it again here.
+                return;
             }
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
