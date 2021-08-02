@@ -25,6 +25,23 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    pub fn codegen_var_base_name(&self, l: &Local) -> String {
+        match self.find_debug_info(l) {
+            None => format!("var_{}", l.index()),
+            Some(info) => format!("{}", info.name),
+        }
+    }
+
+    // Special naming conventions for parameters that are spread from a tuple
+    // into its individual components at the LLVM level, see comment at
+    // compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
+    pub fn codegen_spread_arg_name(&self, l: &Local) -> (String, String) {
+        let fname = self.current_fn().name();
+        let base_name = format!("spread{:?}", l);
+        let name = format!("{}::1::{}", fname, base_name);
+        (name, base_name)
+    }
+
     pub fn find_debug_info(&self, l: &Local) -> Option<&VarDebugInfo<'tcx>> {
         self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
             VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
