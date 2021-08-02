@@ -9,49 +9,24 @@ import rmc
 import rmc_flags
 import os
 import pathlib
+import toml
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
-
 def main():
-    # Remove "rmc" from arg if invoked `cargo rmc ...`
-    if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
-        del sys.argv[1]
-
-    parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
-
-    crate_group = parser.add_argument_group("Crate", "You can pass in the rust crate positionally or with the --crate flag.")
-    crate_group.add_argument("crate", help="crate to verify", nargs="?")
-    crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
-
-    exclude_flags = []
-    rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
-    args = parser.parse_args()
-
-    if args.crate:
-        rmc.ensure(args.crate_flag is None, "Please provide a single crate to verify.")
-    else:
-        rmc.ensure(args.crate_flag is not None, "Please provide a crate to verify.")
-        args.crate = args.crate_flag
-
-    if args.quiet:
-        args.verbose = False
+    args = parse_args()
 
     rmc.ensure_dependencies_in_path()
-
-    # Add some CBMC flags by default unless `--no-default-checks` is being used
-    if not args.no_default_checks:
-        rmc.add_selected_default_cbmc_flags(args)
 
     rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.mangler, args.dry_run, [])
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
-    rmc.ensure(len(jsons) == 1, "Unexpected number of json outputs.")
+    rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
@@ -89,6 +64,162 @@ def main():
 
     return retcode
 
+def parse_args():
+    # Create parser
+    def create_parser():
+        parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
+
+        crate_group = parser.add_argument_group("Crate", "You can pass in the rust crate positionally or with the --crate flag.")
+        crate_group.add_argument("crate", help="crate to verify", nargs="?")
+        crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
+
+        config_group = parser.add_argument_group("Config", "You can configure cargo rmc with your Cargo.toml file.")
+        config_group.add_argument("--config-toml", help="Where to read configuration from; defaults to crate's Cargo.toml")
+        config_group.add_argument("--no-config-toml", action="store_true", help="Do not use any configuration toml")
+
+        exclude_flags = []
+        rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
+        
+        return parser
+
+    # Determine what crate to analyze from flags
+    def get_crate_from_args(args):
+        validate(args)
+        return args.crate or args.crate_flag or "."
+
+    # Combine the command line parameter to get a config file; 
+    # return None if no_config_toml is set
+    def get_config_toml(no_config_toml, config_toml, args):
+        crate = get_crate_from_args(args)
+        if no_config_toml:
+            return None
+        elif config_toml is not None:
+            # If config_toml is explicitly given, ensure it exists
+            rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid path to config file: {config_toml}")
+            return config_toml
+        else:
+            # If no config flags are set, look for config toml in default location (<crate>/Cargo.toml)
+            cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
+            rmc.ensure(cargo_toml.is_file(), f"Cannot find configuration toml at expected location: {cargo_toml}")
+            return cargo_toml
+
+    # Combine args set by config toml and provided on command line
+    def get_combined_args(parser, config_toml):
+        # Extract flags from config_toml
+        toml_flags = extract_flags_from_toml(config_toml)
+
+        # Load args from toml flags
+        combined_args = argparse.Namespace()
+        parser.parse_args(toml_flags, namespace=combined_args)
+
+        # Set relative paths to be rooted at config toml's directory rather than cwd
+        def fix_paths(value):
+            if type(value) == list:
+                return list(map(fix_paths, value))
+            elif isinstance(value, pathlib.PurePath):
+                return pathlib.Path(config_toml).parent.joinpath(value)
+            else:
+                return value
+
+        ca_dict = combined_args.__dict__
+        for key in ca_dict:
+            ca_dict[key] = fix_paths(ca_dict[key])
+
+        # Load args from command line using toml args as default
+        parser.parse_args(sys.argv[1:], namespace=combined_args)
+
+        return combined_args
+
+    # Check for conflicting flags
+    def validate(args):
+        rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")   
+        rmc.ensure(not (args.no_config_toml and args.config_toml), "Incompatible flags: --config-toml, --no-config-toml")
+
+    # Fix up args before returning
+    def post_process(args):
+        # Combine positional and flag argument for input
+        args.crate = get_crate_from_args(args)
+
+        # --quiet overrides --verbose
+        if args.quiet:
+            args.verbose = False
+
+        # Add some CBMC flags by default unless `--no-default-checks` is being used
+        if args.default_checks:
+            rmc.add_selected_default_cbmc_flags(args)
+
+    # Remove "rmc" from arg if invoked `cargo rmc ...`
+    if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
+        del sys.argv[1]
+
+    # Parse command line args to find crate and check for config flags
+    parser = create_parser()
+    cl_args = parser.parse_args()
+    validate(cl_args)
+
+    # Try to find the config_toml based on command line arguments
+    config_toml = get_config_toml(cl_args.no_config_toml, cl_args.config_toml, cl_args)
+
+    if config_toml is not None:
+        # If config_toml is found, combine configuration with command line arguments
+        combined_args = get_combined_args(parser, config_toml)
+        validate(combined_args)
+        post_process(combined_args)
+        return combined_args
+    else:
+        # If config_toml is missing, just use the parsed command line arguments
+        post_process(cl_args)
+        return cl_args
+
+# Extract a list of args based on given config toml
+def extract_flags_from_toml(path):
+    # Load the flag data from toml
+    data = toml.load(path)
+
+    # Extract the rmc flags from the toml, if any present
+    if ("rmc" not in data) or ("flags" not in data["rmc"]):
+        # If no flags are present, just return none
+        return []
+    rmc_data = data["rmc"]
+    flag_data = rmc_data["flags"]
+
+    # Extract nested flags
+    flags = dict()
+    def find_flags(map):
+        for key in map:
+            if type(map[key]) == dict:
+                find_flags(map[key])
+            else:
+                flags[key] = map[key]
+    find_flags(flag_data)
+
+    # Add config toml flags to flag list
+    success = True
+    flag_list = []
+    def add_flag(flag, value):
+        if type(value) == bool:
+            if value:
+                flag_list.append(f"--{flag}")
+            else:
+                if flag.startswith("no-"):
+                    flag_list.append(f"--{flag[3:]}")
+                else:
+                    flag_list.append(f"--no-{flag}")
+        elif type(value) == list:
+            flag_list.append(f"--{flag}")
+            assert all(map(lambda arg: type(arg) == str, value)), f"ERROR: Invalid config: {flag} = {value}"
+            flag_list.extend(value)
+        elif type(value) == str:
+            flag_list.append(f"--{flag}")
+            flag_list.append(value)
+        else:
+            print(f"ERROR: Invalid config: {flag} = {value}")
+            success = False
+    for flag in flags:
+        add_flag(flag, flags[flag])
+    
+    rmc.ensure(success)
+    return flag_list
 
 if __name__ == "__main__":
     sys.exit(main())
