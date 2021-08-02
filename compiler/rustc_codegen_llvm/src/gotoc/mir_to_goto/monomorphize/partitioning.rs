@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use tracing::debug;
+use crate::rmc_debug;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync;
@@ -402,7 +402,7 @@ fn merge_codegen_units<'tcx>(
         let mut consumed_cgu_names = cgu_contents.remove(&smallest.name()).unwrap();
         cgu_contents.get_mut(&second_smallest.name()).unwrap().extend(consumed_cgu_names.drain(..));
 
-        debug!(
+        rmc_debug!(
             "CodegenUnit {} merged into CodegenUnit {}",
             smallest.name(),
             second_smallest.name()
@@ -725,9 +725,9 @@ where
     'tcx: 'a,
 {
     if cfg!(debug_assertions) {
-        debug!("{}", label);
+        rmc_debug!("{}", label);
         for cgu in cgus {
-            debug!("CodegenUnit {} estimated size {} :", cgu.name(), cgu.size_estimate());
+            rmc_debug!("CodegenUnit {} estimated size {} :", cgu.name(), cgu.size_estimate());
 
             for (mono_item, linkage) in cgu.items() {
                 let symbol_name = mono_item.symbol_name(tcx).name;
@@ -735,7 +735,7 @@ where
                 let symbol_hash =
                     symbol_hash_start.map(|i| &symbol_name[i..]).unwrap_or("<no hash>");
 
-                debug!(
+                rmc_debug!(
                     " - {} [{:?}] [{}] estimated size {}",
                     mono_item.to_string(),
                     linkage,
@@ -744,7 +744,7 @@ where
                 );
             }
 
-            debug!("");
+            rmc_debug!("");
         }
     }
 }

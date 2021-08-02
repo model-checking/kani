@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::StmtBody::*;
+use super::super::super::logging::{rmc_warn, WarningType};
 use super::{BuiltinFn, Expr, Location};
 use std::fmt::Debug;
-use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// Datatypes
@@ -155,8 +155,9 @@ impl Stmt {
         //by disabling the assert and soundly assigning nondet
         //assert_eq!(lhs.typ(), rhs.typ());
         if lhs.typ() != rhs.typ() {
-            debug!(
-                "WARNING: assign statement with unequal types lhs {:?} rhs {:?}",
+            rmc_warn!(
+                WarningType::Other,
+                "Assign statement with unequal types lhs {:?} rhs {:?}",
                 lhs.typ(),
                 rhs.typ()
             );

@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
-use tracing::{debug, warn};
 
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use crate::gotoc::logging::{rmc_debug, rmc_warn, WarningType};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::Place;
 use rustc_middle::ty::Instance;
@@ -42,9 +42,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let intrinsic = self.symbol_name(instance);
         let intrinsic = intrinsic.as_str();
         let loc = self.codegen_span_option(span);
-        debug!(
+        rmc_debug!(
             "codegen_intrinsic:\n\tinstance {:?}\n\tfargs {:?}\n\tp {:?}\n\tspan {:?}",
-            instance, fargs, p, span
+            instance,
+            fargs,
+            p,
+            span
         );
         let sig = instance.ty(self.tcx, ty::ParamEnv::reveal_all()).fn_sig(self.tcx);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
@@ -203,7 +206,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // -------------------------
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
-                warn!("RMC does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
+                rmc_warn!(WarningType::Concurrency, "RMC does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
                 let loc = self.codegen_span_option(span);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
@@ -531,7 +534,8 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
+        rmc_warn!(
+            WarningType::Concurrency,
             "RMC does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
@@ -562,7 +566,8 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
+        rmc_warn!(
+            WarningType::Concurrency,
             "RMC does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
@@ -601,7 +606,8 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
+        rmc_warn!(
+            WarningType::Concurrency,
             "RMC does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
@@ -617,7 +623,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
-        warn!(
+        rmc_warn!(
+            WarningType::Concurrency,
             "RMC does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );

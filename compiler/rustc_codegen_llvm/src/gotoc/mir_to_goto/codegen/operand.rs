@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::utils::slice_fat_ptr;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_ast::ast::Mutability;
@@ -15,7 +16,6 @@ use rustc_middle::ty::{
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, LayoutOf, Size, TagEncoding, Variants};
-use tracing::debug;
 
 enum AllocData<'a> {
     Bytes(&'a [u8]),
@@ -53,13 +53,13 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_const(&mut self, lit: &'tcx Const<'tcx>, span: Option<&Span>) -> Expr {
-        debug!("found literal: {:?}", lit);
+        rmc_debug!("found literal: {:?}", lit);
         let lit = self.monomorphize(lit);
 
         match lit.val {
             // evaluate constant if it has no been evaluated yet
             ConstKind::Unevaluated(unevaluated) => {
-                debug!("The literal was a Unevaluated");
+                rmc_debug!("The literal was a Unevaluated");
                 let const_val = self
                     .tcx
                     .const_eval_resolve(ty::ParamEnv::reveal_all(), unevaluated, None)
@@ -68,7 +68,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
 
             ConstKind::Value(v) => {
-                debug!("The literal was a ConstValue {:?}", v);
+                rmc_debug!("The literal was a ConstValue {:?}", v);
                 self.codegen_const_value(v, lit.ty, span)
             }
             _ => {
@@ -118,7 +118,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 _ => unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty, span),
             },
             ConstValue::ByRef { alloc, offset } => {
-                debug!("ConstValue by ref {:?} {:?}", alloc, offset);
+                rmc_debug!("ConstValue by ref {:?} {:?}", alloc, offset);
                 let mem_var =
                     self.codegen_allocation_auto_imm_name(alloc, |tcx| tcx.next_global_name());
                 mem_var
@@ -131,7 +131,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
-        debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind};
+        rmc_debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind};
         match (s, &ty.kind()) {
             (Scalar::Int(ScalarInt { data, .. }), ty::Int(it)) => match it {
                 IntTy::I8 => Expr::int_constant(data, Type::signed_int(8)),
@@ -379,7 +379,7 @@ impl<'tcx> GotocCtx<'tcx> {
         mut_name: F,
         imm_name: Option<String>,
     ) -> Expr {
-        debug!("codegen_allocation imm_name {:?} alloc {:?}", imm_name, alloc);
+        rmc_debug!("codegen_allocation imm_name {:?} alloc {:?}", imm_name, alloc);
         let mem_var = match alloc.mutability {
             Mutability::Mut => {
                 let name = mut_name(self);
@@ -445,7 +445,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Codegen alloc as a static global variable with initial value
     fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
-        debug!("codegen_alloc_in_memory name: {}", name);
+        rmc_debug!("codegen_alloc_in_memory name: {}", name);
 
         // The declaration of a static variable may have one type and the constant initializer for
         // a static variable may have a different type. This is because Rust uses bit patterns for

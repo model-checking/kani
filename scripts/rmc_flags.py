@@ -4,6 +4,7 @@
 
 import argparse
 import pathlib as pl
+import rmc
 
 # Taken from https://github.com/python/cpython/blob/3.9/Lib/argparse.py#L858
 # Cannot use `BooleanOptionalAction` with Python 3.8
@@ -86,6 +87,12 @@ def add_artifact_flags(make_group, add_flag, config):
              help="Generate a goto symbol table")
     add_flag(group, "--keep-temps", default=False, action=BooleanOptionalAction,
              help="Keep temporary files generated throughout RMC process")
+    add_flag(group, "--save-logs", nargs="?", type=pl.Path, const=rmc.RMC_LOG_FILE,
+             help="""
+                  If flag is not provided, uses a temporary log file at <target>/rmc.log;
+                  if flag is provided without argument, logs are saved to <target>/rmc.log;
+                  if flag is provided with argument, logs are saved to <target>/<argument>
+                  """)
     add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
              help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 

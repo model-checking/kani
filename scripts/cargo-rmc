@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import argparse
+import atexit
 import glob
 import sys
 import rmc
@@ -44,7 +45,7 @@ def main():
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     rmc.cargo_build(args.crate, args.target_dir,
-                    args.verbose, args.debug, args.mangler, args.dry_run, [])
+                    args.verbose, args.debug, args.save_logs, args.mangler, args.dry_run, [])
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
@@ -165,6 +166,12 @@ def parse_args():
         # --quiet overrides --verbose
         if args.quiet:
             args.verbose = False
+
+        # If --save-logs not present, use default and delete after done
+        if args.save_logs is None:
+            args.save_logs = pathlib.Path(args.target_dir) / rmc.RMC_LOG_FILE
+            if not args.keep_temps:
+                atexit.register(rmc.delete_file, args.save_logs)
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:

@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::overrides::GotocHooks;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::{par_iter, MTLock, MTRef, ParallelIterator};
@@ -25,7 +26,7 @@ use rustc_session::config::EntryFnType;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
 use smallvec::SmallVec;
 use std::iter;
-use tracing::{debug, trace};
+use tracing::trace;
 
 pub fn custom_coerce_unsize_info<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -134,7 +135,7 @@ pub fn collect_crate_mono_items(
     let roots =
         tcx.sess.time("monomorphization_collector_root_collections", || collect_roots(tcx, mode));
 
-    debug!("building mono item graph, beginning at roots");
+    rmc_debug!("building mono item graph, beginning at roots");
 
     let mut visited = MTLock::new(FxHashSet::default());
     let mut inlining_map = MTLock::new(InliningMap::new());
@@ -166,13 +167,13 @@ pub fn collect_crate_mono_items(
 // Find all non-generic items by walking the HIR. These items serve as roots to
 // start monomorphizing from.
 fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<'_>> {
-    debug!("collecting roots");
+    rmc_debug!("collecting roots");
     let mut roots = Vec::new();
 
     {
         let entry_fn = tcx.entry_fn(()).and_then(|(id, ty)| Some((id.expect_local(), ty)));
 
-        debug!("collect_roots: entry_fn = {:?}", entry_fn);
+        rmc_debug!("collect_roots: entry_fn = {:?}", entry_fn);
 
         let hooks = GotocHooks::default();
         let mut visitor = RootCollector { tcx, mode, entry_fn, hooks, output: &mut roots };
@@ -206,7 +207,7 @@ fn collect_items_rec<'tcx>(
         // We've been here already, no need to search again.
         return;
     }
-    debug!("BEGIN collect_items_rec({})", starting_point.node.to_string());
+    rmc_debug!("BEGIN collect_items_rec({})", starting_point.node.to_string());
 
     let mut neighbors = Vec::new();
     let recursion_depth_reset;
@@ -257,7 +258,7 @@ fn collect_items_rec<'tcx>(
         recursion_depths.insert(def_id, depth);
     }
 
-    debug!("END collect_items_rec({})", starting_point.node.to_string());
+    rmc_debug!("END collect_items_rec({})", starting_point.node.to_string());
 }
 
 fn record_accesses<'a, 'tcx: 'a>(
@@ -287,7 +288,7 @@ fn check_recursion_limit<'tcx>(
 ) -> (DefId, usize) {
     let def_id = instance.def_id();
     let recursion_depth = recursion_depths.get(&def_id).cloned().unwrap_or(0);
-    debug!(" => recursion depth={}", recursion_depth);
+    rmc_debug!(" => recursion depth={}", recursion_depth);
 
     let adjusted_recursion_depth = if Some(def_id) == tcx.lang_items().drop_in_place_fn() {
         // HACK: drop_in_place creates tight monomorphization loops. Give
@@ -326,7 +327,7 @@ fn check_type_length_limit<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
             GenericArgKind::Lifetime(_) => false,
         })
         .count();
-    debug!(" => type length={}", type_length);
+    rmc_debug!(" => type length={}", type_length);
 
     // Rust code can easily create exponentially-long types using only a
     // polynomial recursion depth. Even with the default recursion
@@ -379,7 +380,7 @@ impl<'a, 'tcx> MirNeighborCollector<'a, 'tcx> {
     where
         T: TypeFoldable<'tcx>,
     {
-        debug!("monomorphize: self.instance={:?}", self.instance);
+        rmc_debug!("monomorphize: self.instance={:?}", self.instance);
         self.instance.subst_mir_and_normalize_erasing_regions(
             self.tcx,
             ty::ParamEnv::reveal_all(),
@@ -390,7 +391,7 @@ impl<'a, 'tcx> MirNeighborCollector<'a, 'tcx> {
 
 impl<'a, 'tcx> MirVisitor<'tcx> for MirNeighborCollector<'a, 'tcx> {
     fn visit_rvalue(&mut self, rvalue: &mir::Rvalue<'tcx>, location: Location) {
-        debug!("visiting rvalue {:?}", *rvalue);
+        rmc_debug!("visiting rvalue {:?}", *rvalue);
 
         let span = self.body.source_info(location).span;
 
@@ -477,7 +478,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirNeighborCollector<'a, 'tcx> {
     }
 
     fn visit_const(&mut self, constant: &&'tcx ty::Const<'tcx>, location: Location) {
-        debug!("visiting const {:?} @ {:?}", *constant, location);
+        rmc_debug!("visiting const {:?} @ {:?}", *constant, location);
 
         let substituted_constant = self.monomorphize(*constant);
         let param_env = ty::ParamEnv::reveal_all();
@@ -501,7 +502,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirNeighborCollector<'a, 'tcx> {
     }
 
     fn visit_terminator(&mut self, terminator: &mir::Terminator<'tcx>, location: Location) {
-        debug!("visiting terminator {:?} @ {:?}", terminator, location);
+        rmc_debug!("visiting terminator {:?} @ {:?}", terminator, location);
         let source = self.body.source_info(location).span;
 
         let tcx = self.tcx;
@@ -608,7 +609,7 @@ fn visit_instance_use<'tcx>(
     source: Span,
     output: &mut Vec<Spanned<MonoItem<'tcx>>>,
 ) {
-    debug!("visit_item_use({:?}, is_direct_call={:?})", instance, is_direct_call);
+    rmc_debug!("visit_item_use({:?}, is_direct_call={:?})", instance, is_direct_call);
     if !should_codegen_locally(tcx, &instance) {
         return;
     }
@@ -782,7 +783,7 @@ fn find_vtable_types_for_unsizing<'tcx>(
 }
 
 fn create_fn_mono_item(instance: Instance<'_>, source: Span) -> Spanned<MonoItem<'_>> {
-    debug!("create_fn_mono_item(instance={})", instance);
+    rmc_debug!("create_fn_mono_item(instance={})", instance);
     respan(source, MonoItem::Fn(instance))
 }
 
@@ -873,7 +874,7 @@ impl ItemLikeVisitor<'v> for RootCollector<'_, 'v> {
             | hir::ItemKind::Union(_, ref generics) => {
                 if generics.params.is_empty() {
                     if self.mode == MonoItemCollectionMode::Eager {
-                        debug!(
+                        rmc_debug!(
                             "RootCollector: ADT drop-glue for {}",
                             self.tcx.def_path_str(item.def_id.to_def_id())
                         );
@@ -885,14 +886,14 @@ impl ItemLikeVisitor<'v> for RootCollector<'_, 'v> {
                 }
             }
             hir::ItemKind::GlobalAsm(..) => {
-                debug!(
+                rmc_debug!(
                     "RootCollector: ItemKind::GlobalAsm({})",
                     self.tcx.def_path_str(item.def_id.to_def_id())
                 );
                 self.output.push(dummy_spanned(MonoItem::GlobalAsm(item.item_id())));
             }
             hir::ItemKind::Static(..) => {
-                debug!(
+                rmc_debug!(
                     "RootCollector: ItemKind::Static({})",
                     self.tcx.def_path_str(item.def_id.to_def_id())
                 );
@@ -946,7 +947,7 @@ impl RootCollector<'_, 'v> {
     /// outputs. (Note that all roots must be monomorphic.)
     fn push_if_root(&mut self, def_id: LocalDefId) {
         if self.is_root(def_id) {
-            debug!("RootCollector::push_if_root: found root def_id={:?}", def_id);
+            rmc_debug!("RootCollector::push_if_root: found root def_id={:?}", def_id);
 
             let instance = Instance::mono(self.tcx, def_id.to_def_id());
             self.output.push(create_fn_mono_item(instance, DUMMY_SP));
@@ -975,7 +976,7 @@ fn create_mono_items_for_default_impls<'tcx>(
                 }
             }
 
-            debug!(
+            rmc_debug!(
                 "create_mono_items_for_default_impls(item={})",
                 tcx.def_path_str(item.def_id.to_def_id())
             );
@@ -1057,7 +1058,7 @@ fn collect_neighbours<'tcx>(
     hooks: &GotocHooks<'tcx>,
     output: &mut Vec<Spanned<MonoItem<'tcx>>>,
 ) {
-    debug!("collect_neighbours: {:?}", instance.def_id());
+    rmc_debug!("collect_neighbours: {:?}", instance.def_id());
     let body = tcx.instance_mir(instance.def);
 
     MirNeighborCollector { tcx, body: &body, output, instance, hooks }.visit_body(&body);

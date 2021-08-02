@@ -5,6 +5,7 @@ use crate::btree_string_map;
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use crate::gotoc::cbmc::utils::{aggr_name, BUG_REPORT_URL};
 use crate::gotoc::cbmc::MachineModel;
+use crate::gotoc::logging::{rmc_debug, rmc_warn, WarningType};
 use crate::gotoc::mir_to_goto::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use num::bigint::BigInt;
@@ -12,7 +13,6 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, COMMON_VTABLE_ENTRIES};
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
-use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
@@ -81,10 +81,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let place_mir_type = self.place_ty(place);
         let projection = self.codegen_place(place);
 
-        debug!("codegen_rvalue_ref: place: {:?}", place);
-        debug!("codegen_rvalue_ref: place type: {:?}", place_mir_type);
-        debug!("codegen_rvalue_ref: place kind: {:?}", place_mir_type.kind());
-        debug!("codegen_rvalue_ref: projection: {:?}", projection);
+        rmc_debug!("codegen_rvalue_ref: place: {:?}", place);
+        rmc_debug!("codegen_rvalue_ref: place type: {:?}", place_mir_type);
+        rmc_debug!("codegen_rvalue_ref: place kind: {:?}", place_mir_type.kind());
+        rmc_debug!("codegen_rvalue_ref: projection: {:?}", projection);
 
         assert!(
             is_pointer(result_mir_type),
@@ -479,7 +479,7 @@ impl<'tcx> GotocCtx<'tcx> {
         src: &Operand<'tcx>,
         dst_t: Ty<'tcx>,
     ) -> Expr {
-        debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
+        rmc_debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
         let dst_data_type =
@@ -515,7 +515,7 @@ impl<'tcx> GotocCtx<'tcx> {
         src: &Operand<'tcx>,
         dst_t: Ty<'tcx>,
     ) -> Expr {
-        debug!("codegen_fat_ptr_to_thin_ptr_cast |{:?}| |{:?}|", src, dst_t);
+        rmc_debug!("codegen_fat_ptr_to_thin_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
         // In a vtable fat pointer, the data member is a void pointer,
@@ -525,9 +525,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
-        debug!(
+        rmc_debug!(
             "codegen_misc_cast: casting operand {:?} from type {:?} to type {:?}",
-            src, src_t, dst_t
+            src,
+            src_t,
+            dst_t
         );
 
         // number casting
@@ -701,10 +703,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 .address_of()
                 .cast_to(field_type)
         } else {
-            warn!(
+            rmc_warn!(
+                WarningType::Other,
                 "Unable to find vtable symbol for virtual function {}, attempted lookup for symbol name: {}",
                 self.readable_instance_name(instance),
-                fn_name,
+                fn_name
             );
             field_type.null()
         }
@@ -731,9 +734,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 .cast_to(trait_fn_ty)
         } else {
             // TODO: check why in https://github.com/model-checking/rmc/issues/66
-            debug!(
-                "WARNING: drop_in_place not found for {:?}",
-                self.readable_instance_name(drop_instance),
+            rmc_warn!(
+                WarningType::Other,
+                "drop_in_place not found for {:?}",
+                self.readable_instance_name(drop_instance)
             );
             Type::void_pointer().null().cast_to(trait_fn_ty)
         }
@@ -744,7 +748,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// returns the correct size to match rustc vtable values. Checked via
     /// RMC-compile-time and CBMC assertions in check_vtable_size.
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
-        debug!("vtable_size_and_align {:?}", operand_type.kind());
+        rmc_debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());

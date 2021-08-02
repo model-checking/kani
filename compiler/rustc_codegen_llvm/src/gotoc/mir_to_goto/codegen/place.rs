@@ -6,13 +6,13 @@
 //! in [codegen_place] below.
 
 use crate::gotoc::cbmc::goto_program::{Expr, Type};
+use crate::gotoc::logging::{rmc_debug, rmc_warn, WarningType};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
     ty::{self, Ty, TyS, VariantDef},
 };
 use rustc_target::abi::{LayoutOf, TagEncoding, Variants};
-use tracing::{debug, warn};
 
 /// A projection in RMC can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
@@ -106,9 +106,11 @@ impl<'tcx> ProjectedPlace<'tcx> {
         // I think it may have to do with boxed fat pointers.
         // https://github.com/model-checking/rmc/issues/277
         if !Self::check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx) {
-            warn!(
+            rmc_warn!(
+                WarningType::Other,
                 "Unexpected type mismatch in projection: \n{:?}\n{:?}",
-                &goto_expr, &mir_typ_or_variant
+                &goto_expr,
+                &mir_typ_or_variant
             );
         };
 
@@ -399,7 +401,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If it passes through a fat pointer along the way, it stores info about it,
     /// which can be useful in reconstructing fat pointer operations.
     pub fn codegen_place(&mut self, p: &Place<'tcx>) -> ProjectedPlace<'tcx> {
-        debug!("codegen_place: {:?}", p);
+        rmc_debug!("codegen_place: {:?}", p);
         let initial_expr = self.codegen_local(p.local);
         let initial_typ = TypeOrVariant::Type(self.local_ty(p.local));
         let initial_projection = ProjectedPlace::new(initial_expr, initial_typ, None, None, self);

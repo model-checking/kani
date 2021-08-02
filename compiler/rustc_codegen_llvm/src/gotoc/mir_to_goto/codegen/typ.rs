@@ -5,6 +5,7 @@ use crate::gotoc::cbmc::goto_program::{
     DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type,
 };
 use crate::gotoc::cbmc::utils::aggr_name;
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
@@ -27,7 +28,6 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::iter;
-use tracing::debug;
 use ty::layout::HasParamEnv;
 
 /// Map the unit type to an empty struct
@@ -86,7 +86,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Closures expect their last arg untupled at call site, see comment at
     /// ty_needs_closure_untupled.
     fn sig_with_closure_untupled(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
-        debug!("sig_with_closure_untupled sig: {:?}", sig);
+        rmc_debug!("sig_with_closure_untupled sig: {:?}", sig);
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
             let args: Vec<Ty<'tcx>> = match tupe.kind() {
@@ -401,7 +401,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A foreign type is a type that rust does not know the contents of.
     /// We handle this by treating it as an incomplete struct.
     fn codegen_foreign(&mut self, ty: Ty<'tcx>, defid: DefId) -> Type {
-        debug!("codegen_foreign {:?} {:?}", ty, defid);
+        rmc_debug!("codegen_foreign {:?} {:?}", ty, defid);
         let name = self.ty_mangled_name(ty);
         self.ensure(&aggr_name(&name), |_ctx, _| Symbol::incomplete_struct(&name));
         Type::struct_tag(&name)
@@ -435,7 +435,7 @@ impl<'tcx> GotocCtx<'tcx> {
             },
             ty::Adt(def, _) if def.repr.simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
-                debug!("variants are: {:?}", def.variants);
+                rmc_debug!("variants are: {:?}", def.variants);
                 if def.is_struct() {
                     self.codegen_struct(ty, def, subst)
                 } else if def.is_union() {
@@ -782,13 +782,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 if is_first {
                     //TODO assert that this is a dynamic object
                     is_first = false;
-                    debug!("The first element in a dynamic function signature had type {:?}", t);
+                    rmc_debug!(
+                        "The first element in a dynamic function signature had type {:?}",
+                        t
+                    );
                     Some(Type::void_pointer())
                 } else if self.ignore_var_ty(t) {
-                    debug!("Ignoring type {:?} in function signature", t);
+                    rmc_debug!("Ignoring type {:?} in function signature", t);
                     None
                 } else {
-                    debug!("Using type {:?} in function signature", t);
+                    rmc_debug!("Using type {:?} in function signature", t);
                     Some(self.codegen_ty(t))
                 }
             })
@@ -806,10 +809,10 @@ impl<'tcx> GotocCtx<'tcx> {
             .iter()
             .filter_map(|t| {
                 if self.ignore_var_ty(t) {
-                    debug!("Ignoring type {:?} in function signature", t);
+                    rmc_debug!("Ignoring type {:?} in function signature", t);
                     None
                 } else {
-                    debug!("Using type {:?} in function signature", t);
+                    rmc_debug!("Using type {:?} in function signature", t);
                     Some(self.codegen_ty(t))
                 }
             })
@@ -1084,7 +1087,7 @@ impl<'tcx> GotocCtx<'tcx> {
         initial_offset: usize,
     ) -> Type {
         let case_name = format!("{}::{}", name, case.ident.name);
-        debug!("handling variant {}: {:?}", case_name, case);
+        rmc_debug!("handling variant {}: {:?}", case_name, case);
         self.ensure_struct(&case_name, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)
         })
@@ -1092,7 +1095,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_vector(&mut self, ty: Ty<'tcx>) -> Type {
         let layout = &self.layout_of(ty).layout.abi;
-        debug! {"handling simd with layout {:?}", layout};
+        rmc_debug!("handling simd with layout {:?}", layout);
 
         let (element, size) = match layout {
             Vector { element, count } => (element.clone(), *count),

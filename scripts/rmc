@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import argparse
+import atexit
 import os
 import sys
 import rmc
@@ -45,7 +46,7 @@ def main():
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, []):
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.save_logs, args.mangler, args.dry_run, []):
         return 1
 
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
@@ -114,6 +115,12 @@ def parse_args():
         if args.quiet:
             args.verbose = False
 
+        # If --save-logs not present, use default and delete after done
+        if args.save_logs is None:
+            args.save_logs = pathlib.Path(args.target_dir) / rmc.RMC_LOG_FILE
+            if not args.keep_temps:
+                atexit.register(rmc.delete_file, args.save_logs)
+            
         # In the future we hope to make this configurable in the command line.
         # For now, however, changing this from "main" breaks rmc.
         # Issue: https://github.com/model-checking/rmc/issues/169

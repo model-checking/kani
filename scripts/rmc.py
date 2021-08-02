@@ -30,6 +30,8 @@ OVERFLOW_CHECKS = ["--conversion-check",
                    "--unsigned-overflow-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
+RMC_LOG_FILE = "rmc.log"
+
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
 class Scanner:
@@ -91,6 +93,10 @@ def add_selected_default_cbmc_flags(args):
 def add_rmc_rustc_debug_to_env(env):
     env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_llvm::gotoc")
 
+# Updates environment to write RMC logs to `path`
+def add_rmc_log_file_to_env(env, path):
+    env["RMC_LOG_FILE"] = env.get("RMC_LOG_FILE", str(path.absolute()))
+
 # Prints info about the RMC process
 def print_rmc_step_status(step_name, completed_process, verbose=False):
     status = "PASS"
@@ -138,7 +144,7 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     return process.returncode
 
 # Generates a symbol table from a rust file
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
         
@@ -153,11 +159,13 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     build_env = os.environ
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
+    if save_logs is not None:
+        add_rmc_log_file_to_env(build_env, save_logs)
 
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def cargo_build(crate, target_dir="target", verbose=False, debug=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     rustflags = [
@@ -177,6 +185,9 @@ def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler=
                  }
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
+    if save_logs is not None:
+        add_rmc_log_file_to_env(build_env, save_logs)
+
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Adds information about unwinding to the RMC output

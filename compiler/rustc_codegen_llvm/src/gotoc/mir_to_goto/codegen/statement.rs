@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
@@ -14,7 +15,6 @@ use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
 use smallvec::SmallVec;
 use std::convert::TryInto;
-use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self) -> Stmt {
@@ -27,7 +27,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
         let loc = self.codegen_span(&term.source_info.span);
-        debug!("handling terminator {:?}", term);
+        rmc_debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
             TerminatorKind::Goto { target } => {
@@ -201,7 +201,7 @@ impl<'tcx> GotocCtx<'tcx> {
         fargs: &mut Vec<Expr>,
         last_mir_arg: Option<&Operand<'tcx>>,
     ) {
-        debug!(
+        rmc_debug!(
             "codegen_untuple_closure_args instance: {:?}, fargs {:?}",
             self.readable_instance_name(instance),
             fargs
@@ -460,7 +460,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
-        debug!("handling statement {:?}", stmt);
+        rmc_debug!("handling statement {:?}", stmt);
         match &stmt.kind {
             StatementKind::Assign(box (l, r)) => {
                 let lty = self.place_ty(l);
