@@ -136,7 +136,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let ldecls = mir.local_decls();
         ldecls.indices().for_each(|lc| {
             if Some(lc) == mir.spread_arg {
-                // We have already added this local in the functin prelude, so
+                // We have already added this local in the function prelude, so
                 // skip adding it again here.
                 return;
             }
