@@ -399,9 +399,6 @@ impl Transformer for GenCTransformer {
                 // Replace extern functions with nondet body so linker doesn't break
                 assert!(symbol.value.is_none(), "Extern function should have no body.");
                 let new_typ = self.transform_type(&symbol.typ);
-                let nondet_expr =
-                    self.transform_expr(&Expr::nondet(symbol.typ.return_type().unwrap().clone()));
-                let new_value = SymbolValues::Stmt(Stmt::ret(Some(nondet_expr), Location::none()));
 
                 // Fill missing parameter names with dummy name
                 let parameters = new_typ
@@ -410,10 +407,25 @@ impl Transformer for GenCTransformer {
                     .iter()
                     .map(|parameter| add_identifier(parameter))
                     .collect();
-                let new_typ = if new_typ.is_code() {
-                    Type::code(parameters, new_typ.return_type().unwrap().clone())
+
+                let ret_typ = new_typ.return_type().unwrap();
+                let (ret_typ, new_body) = if ret_typ.type_name() == Some("tag-Unit".to_string()) {
+                    let ret_typ = Type::empty();
+                    let new_body = Stmt::block(vec![], Location::none());
+                    (ret_typ, new_body)
                 } else {
-                    Type::variadic_code(parameters, new_typ.return_type().unwrap().clone())
+                    let nondet_expr = self
+                        .transform_expr(&Expr::nondet(symbol.typ.return_type().unwrap().clone()));
+                    let new_body = Stmt::ret(Some(nondet_expr), Location::none());
+                    (ret_typ.clone(), new_body)
+                };
+
+                let new_value = SymbolValues::Stmt(new_body);
+
+                let new_typ = if new_typ.is_code() {
+                    Type::code(parameters, ret_typ)
+                } else {
+                    Type::variadic_code(parameters, ret_typ)
                 };
 
                 let mut new_symbol = symbol.clone();
