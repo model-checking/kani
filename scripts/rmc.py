@@ -268,7 +268,7 @@ def gen_c_postprocess(c_filename, dry_run=False):
         lines.pop(0)
 
         # Import gen_c_lib.c
-        lines.insert(1, f"#include \"{GEN_C_LIB}\"")
+        lines.insert(0, f"#include \"{GEN_C_LIB}\"")
 
         # Remove builtin macros
         to_remove = [
