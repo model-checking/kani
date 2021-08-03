@@ -270,31 +270,69 @@ def gen_c_postprocess(c_filename, dry_run=False):
         # Import gen_c_lib.c
         lines.insert(0, f"#include \"{GEN_C_LIB}\"")
 
+        # Convert back to string
+        string_contents = "\n".join(lines)
+
         # Remove builtin macros
         to_remove = [
             # memcmp
-            "// memcmp",
-            "// file <builtin-library-memcmp> function memcmp",
-            "int memcmp(void *, void *, unsigned long int);",
+            """// memcmp
+// file <builtin-library-memcmp> function memcmp
+int memcmp(void *, void *, unsigned long int);""",
 
             # memcpy
-            "// memcpy",
-            "// file <builtin-library-memcpy> function memcpy",
-            "void * memcpy(void *, void *, unsigned long int);",
+            """// memcpy
+// file <builtin-library-memcpy> function memcpy
+void * memcpy(void *, void *, unsigned long int);""",
 
             # memmove
-            "// memmove",
-            "// file <builtin-library-memmove> function memmove",
-            "void * memmove(void *, void *, unsigned long int);",
+            """// memmove
+// file <builtin-library-memmove> function memmove
+void * memmove(void *, void *, unsigned long int);""",
+
+            # sputc
+            """// __sputc
+// file /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdio.h line 260
+inline signed int __sputc(signed int _c, FILE *_p);""",
+
+            """// __sputc
+// file /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdio.h line 260
+inline signed int __sputc(signed int _c, FILE *_p)
+{
+  signed int tmp_pre=_p->_w - 1;
+  _p->_w = tmp_pre;
+  __CPROVER_bool tmp_if_expr;
+  if(tmp_pre >= 0)
+    tmp_if_expr = 1;
+
+  else
+    tmp_if_expr = (_p->_w >= _p->_lbfsize ? ((signed int)(char)_c != 10 ? 1 : 0) : 0) ? 1 : 0;
+  unsigned char *tmp_post;
+  unsigned char tmp_assign;
+  signed int return_value___swbuf;
+  if(tmp_if_expr)
+  {
+    tmp_post = _p->_p;
+    _p->_p = _p->_p + 1l;
+    tmp_assign = (unsigned char)_c;
+    *tmp_post = tmp_assign;
+    return (signed int)tmp_assign;
+  }
+
+  else
+  {
+    return_value___swbuf=__swbuf(_c, _p);
+    return return_value___swbuf;
+  }
+}"""
         ]
 
-        for line in to_remove:
-            assert line in lines, f"Did not find {line} in C output."
-            lines.remove(line)
+        for block in to_remove:
+            string_contents = string_contents.replace(block, "")
 
         # Print back to file
         with open(c_filename, "w") as f:
-            f.write("\n".join(lines))
+            f.write(string_contents)
 
 
 # Generates the CMBC symbol table from a goto program
