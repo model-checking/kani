@@ -4,26 +4,30 @@
 // Check that we can codegen various nesting structures of boxes and
 // pointer to closures.
 
-// FIXME: several cases fail because we need to "retuple" closures,
-// see: https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F
-
 fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> = Box::new(Box::new(|x| assert!(x == 1)));
     f(1);
 
     // Create a pointer to a closure
-    let g = |y| assert!(y == 2);
-    let p: &dyn Fn(i32) = &g;
-    p(2);
+    let g = |x: f32, y: i32| {
+        assert!(x == 1.0);
+        assert!(y == 2)
+    };
+    let p: &dyn Fn(f32, i32) = &g;
+    p(1.0, 2);
 
     // Additional level of pointer nesting
-    let q: &dyn Fn(i32) = &p;
-    q(2);
+    let q: &dyn Fn(f32, i32) = &p;
+    q(1.0, 2);
 
     // Create a boxed pointer to a closure
-    let r: Box<&dyn Fn(i32)> = Box::new(&g);
-    r(2);
+    let r: Box<&dyn Fn(f32, i32, bool)> = Box::new(&|x: f32, y: i32, z: bool| {
+        assert!(x == 1.0);
+        assert!(y == 2);
+        assert!(z);
+    });
+    r(1.0, 2, true);
 
     // Another boxed box
     let s: Box<Box<dyn Fn(i32)>> = Box::new(Box::new(|x| assert!(x == 3)));
