@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
-use cbmc::goto_program::{Stmt, Symbol, SymbolTable};
+use cbmc::goto_program::{Expr, Stmt, Symbol, SymbolTable};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -12,10 +12,10 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::middle::cstore::{EncodedMetadata, MetadataLoaderDyn};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
-use rustc_middle::mir::{BasicBlock, BasicBlockData, Body, HasLocalDecls};
+use rustc_middle::mir::{BasicBlock, BasicBlockData, Body, HasLocalDecls, Local};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{self, Instance, TyCtxt, TyS};
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
@@ -135,10 +135,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let mir = self.current_fn().mir();
         let ldecls = mir.local_decls();
         ldecls.indices().for_each(|lc| {
-            let base_name = match self.find_debug_info(&lc) {
-                None => format!("var_{}", lc.index()),
-                Some(info) => format!("{}", info.name),
-            };
+            if Some(lc) == mir.spread_arg {
+                // We have already added this local in the function prelude, so
+                // skip adding it again here.
+                return;
+            }
+            let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
             let ldata = &ldecls[lc];
             let t = self.monomorphize(ldata.ty);
@@ -149,11 +151,94 @@ impl<'tcx> GotocCtx<'tcx> {
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
-            // declare local variables. 0 represents return value
+            // Index 0 represents the return value, which does not need to be
+            // declared in the first block
             if lc.index() < 1 || lc.index() > mir.arg_count {
                 self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, None, loc));
             }
         });
+    }
+
+    /// MIR functions have a `spread_arg` field that specifies whether the
+    /// final argument to the function is "spread" at the LLVM/codegen level
+    /// from a tuple into its individual components. (Used for the "rust-
+    /// call" ABI, necessary because dynamic trait closure cannot have an
+    /// argument list in MIR that is both generic and variadic, so Rust
+    /// allows a generic tuple).
+    ///
+    /// If `spread_arg` is Some, then the wrapped value is the local that is
+    /// to be "spread"/untupled. However, the MIR function body itself expects
+    /// the tuple instead of the individual components, so we need to generate
+    /// a function prelude that _retuples_, that is, writes the components
+    /// back to the tuple local for use in the body.
+    ///
+    /// See:
+    /// https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F
+    fn codegen_function_prelude(&mut self) {
+        let mir = self.current_fn().mir();
+        if mir.spread_arg.is_none() {
+            // No special tuple argument, no work to be done.
+            return;
+        }
+        let spread_arg = mir.spread_arg.unwrap();
+        let spread_data = &mir.local_decls()[spread_arg];
+        let loc = self.codegen_span2(&spread_data.source_info.span);
+
+        // When we codegen the function signature elsewhere, we will codegen the
+        // untupled version. So, the tuple argument itself needs to have a
+        // symbol declared for it outside of the function signature, we do that
+        // here.
+        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
+        let tup_sym = Symbol::variable(
+            self.codegen_var_name(&spread_arg),
+            self.codegen_var_base_name(&spread_arg),
+            tup_typ.clone(),
+            loc.clone(),
+        );
+        self.symbol_table.insert(tup_sym.clone());
+
+        // Get the function signature from MIR, _before_ we untuple
+        let fntyp = self.current_fn().instance().ty(self.tcx, ty::ParamEnv::reveal_all());
+        let sig = match fntyp.kind() {
+            ty::FnPtr(..) | ty::FnDef(..) => fntyp.fn_sig(self.tcx).skip_binder(),
+            // Closures themselves will have their arguments already untupled,
+            // see Zulip link above.
+            ty::Closure(..) => unreachable!(
+                "Unexpected `spread arg` set for closure, got: {:?}, {:?}",
+                fntyp,
+                self.current_fn().readable_name()
+            ),
+            _ => unreachable!(
+                "Expected function type for `spread arg` prelude, got: {:?}, {:?}",
+                fntyp,
+                self.current_fn().readable_name()
+            ),
+        };
+
+        // Now that we have the tuple, write the individual component locals
+        // back to it as a GotoC struct.
+        let tupe = sig.inputs().last().unwrap();
+        let args: Vec<&TyS<'tcx>> = match tupe.kind() {
+            ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()).collect(),
+            _ => unreachable!("a function's spread argument must be a tuple"),
+        };
+
+        // Convert each arg to a GotoC expression.
+        let mut arg_exprs = Vec::new();
+        let starting_idx = sig.inputs().len();
+        for (arg_i, arg_t) in args.iter().enumerate() {
+            // The components come at the end, so offset by the untupled length.
+            let lc = Local::from_usize(arg_i + starting_idx);
+            let (name, base_name) = self.codegen_spread_arg_name(&lc);
+            let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
+            self.symbol_table.insert(sym.clone());
+            arg_exprs.push(sym.to_expr());
+        }
+
+        // Finally, combine the expression into a struct.
+        let tuple_expr = Expr::struct_expr_from_values(tup_typ, arg_exprs, &self.symbol_table)
+            .with_location(loc.clone());
+        self.current_fn_mut().push_onto_block(Stmt::decl(tup_sym.to_expr(), Some(tuple_expr), loc));
     }
 
     /// collect all labels for goto
@@ -202,6 +287,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.print_instance(instance, mir);
             let labels = self.codegen_prepare_blocks();
             self.current_fn_mut().set_labels(labels);
+            self.codegen_function_prelude();
             self.codegen_declare_variables();
 
             mir.basic_blocks().iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
