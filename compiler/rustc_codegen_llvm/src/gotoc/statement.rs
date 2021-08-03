@@ -195,31 +195,50 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_adjust_arguments(&mut self, fargs: &mut Vec<Expr>, instance: Instance<'tcx>) {
-        let ins_ty = self.monomorphize(instance.ty(self.tcx, ty::ParamEnv::reveal_all()));
-        debug!("codegen_adjust_arguments instance: {:?} ins_ty: {:?}", instance, ins_ty);
-        if let ty::Closure(_, substs) = ins_ty.kind() {
-            // a closure takes two argument:
-            // 0. a struct representing the environment
-            // 1. a tuple containing the parameters
-            //
-            // however, for some reason, Rust decides to generate a function which still
-            // takes the first argument as the environment struct, but the tuple of parameters
-            // are flattened as subsequent parameters.
-            // therefore, we have to project out the corresponding fields when we detect
-            // an invocation of a closure.
-            //
-            // In the case where the closure takes no paramaters, rustc appears to elide the
-            // second (empty) tuple. So we should only expand the tuple if its there.
-            if fargs.len() > 1 {
-                assert_eq!(fargs.len(), 2);
-                let tupe = fargs.remove(1);
-                for (i, t) in self.closure_params(substs).iter().enumerate() {
-                    if !t.is_unit() {
-                        // Access the tupled parameters through the `member` operation
-                        let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
-                        fargs.push(index_param);
+    fn codegen_untuple_closure_args(
+        &mut self,
+        instance: Instance<'tcx>,
+        fargs: &mut Vec<Expr>,
+        last_mir_arg: Option<&Operand<'tcx>>,
+    ) {
+        debug!(
+            "codegen_untuple_closure_args instance: {:?}, fargs {:?}",
+            self.readable_instance_name(instance),
+            fargs
+        );
+        // A closure takes two arguments:
+        //     0. a struct representing the environment
+        //     1. a tuple containing the parameters
+        //
+        // However, for some reason, Rust decides to generate a function which still
+        // takes the first argument as the environment struct, but the tuple of parameters
+        // are flattened as subsequent parameters.
+        // Therefore, we have to project out the corresponding fields when we detect
+        // an invocation of a closure.
+        //
+        // Note: In some cases, the enviroment struct has type FnDef, so we skip it in
+        // ignore_var_ty. So the tuple is always the last arg, but it might be in the
+        // first or the second position.
+        if fargs.len() > 0 {
+            let tupe = fargs.remove(fargs.len() - 1);
+            let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
+                ty::Tuple(tupled_args) => {
+                    // The tuple needs to be added back for type checking even if empty
+                    if tupled_args.is_empty() {
+                        fargs.push(tupe);
+                        return;
                     }
+                    tupled_args.iter().map(|s| self.codegen_ty(s.expect_ty())).collect()
+                }
+                _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
+            };
+
+            // Unwrap as needed
+            for (i, t) in tupled_args.iter().enumerate() {
+                if !t.is_unit() {
+                    // Access the tupled parameters through the `member` operation
+                    let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
+                    fargs.push(index_param);
                 }
             }
         }
@@ -253,7 +272,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *defid, subst)
                         .unwrap()
                         .unwrap();
-                self.codegen_adjust_arguments(&mut fargs, instance);
+
+                if self.ty_needs_closure_untupled(funct) {
+                    self.codegen_untuple_closure_args(instance, &mut fargs, args.last());
+                }
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
                     return hk.handle(
