@@ -14,38 +14,10 @@ RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Verify a single Rust file. For more information, see https://github.com/model-checking/rmc.")
-
-    input_group = parser.add_argument_group("Input", "You can pass in the rust file positionally or with the --input flag.")
-    input_group.add_argument("input", help="Rust file to verify", nargs="?")
-    input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
-
-    exclude_flags = [
-        # In the future we hope to make this configurable in the command line.
-        # For now, however, changing this from "main" breaks rmc.
-        # Issue: https://github.com/model-checking/rmc/issues/169
-        "--function"
-    ]
-    rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=exclude_flags)
-    args = parser.parse_args()
-    args.function = "main"
-
-    if args.input:
-        rmc.ensure(args.input_flag is None, "Please provide a single file to verify.")
-    else:
-        rmc.ensure(args.input_flag is not None, "Please provide a file to verify.")
-        args.input = args.input_flag
-    
-    if args.quiet:
-        args.verbose = False
+    args = parse_args()
 
     rmc.ensure_dependencies_in_path()
-    
-    # Add some CBMC flags by default unless `--no-default-checks` is being used
-    if not args.no_default_checks:
-        rmc.add_selected_default_cbmc_flags(args)
 
     base, ext = os.path.splitext(args.input)
     rmc.ensure(ext == ".rs", "Expecting .rs input file.")
@@ -91,6 +63,54 @@ def main():
 
     return retcode
 
+def parse_args():
+    # Create parser
+    def create_parser():
+        parser = argparse.ArgumentParser(description="Verify a single Rust file. For more information, see https://github.com/model-checking/rmc.")
+
+        input_group = parser.add_argument_group("Input", "You can pass in the rust file positionally or with the --input flag.")
+        input_group.add_argument("input", help="Rust file to verify", nargs="?")
+        input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
+
+        exclude_flags = [
+            # In the future we hope to make this configurable in the command line.
+            # For now, however, changing this from "main" breaks rmc.
+            # Issue: https://github.com/model-checking/rmc/issues/169
+            "--function"
+        ]
+        rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=exclude_flags)
+        
+        return parser
+
+    # Check for conflicting flags
+    def validate(args):
+        rmc.ensure(not (args.input and args.input_flag), "Please provide a single file to verify.")
+        rmc.ensure(args.input or args.input_flag, "Please provide a file to verify.")
+
+    # Fix up args before returning
+    def post_process(args):
+        # Combine positional and flag argument for input
+        args.input = args.input or args.input_flag
+
+        # --quiet overrides --verbose
+        if args.quiet:
+            args.verbose = False
+
+        # In the future we hope to make this configurable in the command line.
+        # For now, however, changing this from "main" breaks rmc.
+        # Issue: https://github.com/model-checking/rmc/issues/169
+        args.function = "main"
+
+        # Add some CBMC flags by default unless `--no-default-checks` is being used
+        if args.default_checks:
+            rmc.add_selected_default_cbmc_flags(args)
+
+    parser = create_parser()
+    args = parser.parse_args()
+    validate(args)
+    post_process(args)
+
+    return args
 
 if __name__ == "__main__":
     sys.exit(main())
