@@ -11,6 +11,7 @@ set -o nounset
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
+RMC_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
 check-cbmc-version.py --major 5 --minor 30
@@ -26,3 +27,6 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Check codegen for the standard library
 $SCRIPT_DIR/std-lib-regression.sh
+
+# Check codegen of firecracker
+$SCRIPT_DIR/codegen-firecracker.sh
