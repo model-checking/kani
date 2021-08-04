@@ -164,6 +164,7 @@ impl GenCTransformer {
         };
 
         // Remember result and return
+        self.used_names.insert(result.clone());
         self.mapped_names.insert(orig_name.to_string(), result);
         self.mapped_names.get(orig_name).unwrap().clone()
     }
