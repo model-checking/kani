@@ -10,103 +10,6 @@ use num::bigint::BigInt;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 
-thread_local!(static NONDET_TYPES: RefCell<FxHashMap<String, Type>> = RefCell::new(FxHashMap::default()));
-
-thread_local!(static NEW_SYMS: RefCell<FxHashMap<String, Symbol>> = RefCell::new(FxHashMap::default()));
-
-thread_local!(static EMPTY_STATICS: RefCell<FxHashMap<String, (Type, Type)>> = RefCell::new(FxHashMap::default()));
-
-/// Add identifier to a transformed parameter if it's missing.
-/// Necessary when function wasn't originally a definition.
-fn add_identifier(parameter: &Parameter) -> Parameter {
-    if parameter.identifier().is_some() {
-        parameter.clone()
-    } else {
-        let new_name = normalize_identifier(&format!("__{}", type_to_string(parameter.typ())));
-        let parameter_sym = Symbol::variable(
-            new_name.clone(),
-            new_name.clone(),
-            parameter.typ().clone(),
-            Location::none(),
-        );
-        let parameter = parameter_sym.to_function_parameter();
-        NEW_SYMS.with(|cell| cell.borrow_mut().insert(new_name, parameter_sym));
-        parameter
-    }
-}
-
-thread_local!(static MAPPED_NAMES: RefCell<FxHashMap<String, String>> = RefCell::new(FxHashMap::default()));
-thread_local!(static USED_NAMES: RefCell<FxHashSet<String>> = RefCell::new(FxHashSet::default()));
-
-/// Converts an arbitrary identifier into a valid C identifier.
-fn normalize_identifier(orig_name: &str) -> String {
-    assert!(!orig_name.is_empty(), "Received empty identifier.");
-
-    // If name already encountered, return same result
-    match MAPPED_NAMES.with(|map| map.borrow().get(orig_name).cloned()) {
-        Some(result) => return result.clone(),
-        None => (),
-    }
-
-    let (prefix, name) = if orig_name.starts_with("tag-") {
-        (&orig_name[..4], &orig_name[4..])
-    } else {
-        ("", orig_name)
-    };
-
-    // Convert non-(alphanumeric + underscore) characters to underscore
-    let valid_chars =
-        name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '$'), "_");
-
-    // If the first character is a number, prefix with underscore
-    let new_name = match valid_chars.chars().next() {
-        Some(first) => {
-            if first.is_numeric() {
-                let mut name = "_".to_string();
-                name.push_str(&valid_chars);
-                name
-            } else {
-                valid_chars
-            }
-        }
-        None => "_".to_string(),
-    };
-
-    // Replace reserved names with alternatives
-    let mut illegal_names: FxHashMap<_, _> =
-        [("case", "case_"), ("main", "main_"), ("default", "_default")]
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect();
-    let result = illegal_names.remove(&new_name).unwrap_or(new_name);
-
-    // Ensure result has not been used before
-    let result = if USED_NAMES.with(|set| set.borrow().contains(&result)) {
-        let mut suffix = 0;
-        loop {
-            let result = format!("{}_{}", result, suffix);
-            if !USED_NAMES.with(|set| set.borrow().contains(&result)) {
-                break result;
-            }
-            suffix += 1;
-        }
-    } else {
-        result
-    };
-
-    let result = {
-        let mut prefix = prefix.to_string();
-        prefix.push_str(&result);
-        prefix
-    };
-
-    // Remember result and return
-    MAPPED_NAMES.with(|map| {
-        map.borrow_mut().insert(orig_name.to_string(), result);
-        map.borrow().get(orig_name).unwrap().clone()
-    })
-}
-
 /// Create a string representation of type for use as variable name suffix.
 fn type_to_string(typ: &Type) -> String {
     match typ {
@@ -155,6 +58,11 @@ fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
 /// Struct for performing the gen-c transformation on a symbol table.
 pub struct GenCTransformer {
     new_symbol_table: SymbolTable,
+    nondet_types: FxHashMap<String, Type>,
+    new_syms: FxHashMap<String, Symbol>,
+    empty_statics: FxHashMap<String, (Type, Type)>,
+    mapped_names: FxHashMap<String, String>,
+    used_names: FxHashSet<String>,
 }
 
 impl GenCTransformer {
@@ -162,7 +70,102 @@ impl GenCTransformer {
     /// perform other clean-up operations to make valid C code.
     pub fn transform(original_symbol_table: &SymbolTable) -> SymbolTable {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
-        GenCTransformer { new_symbol_table }.transform_symbol_table(original_symbol_table)
+        GenCTransformer {
+            new_symbol_table,
+            nondet_types: FxHashMap::default(),
+            new_syms: FxHashMap::default(),
+            empty_statics: FxHashMap::default(),
+            mapped_names: FxHashMap::default(),
+            used_names: FxHashSet::default(),
+        }
+        .transform_symbol_table(original_symbol_table)
+    }
+
+    /// Add identifier to a transformed parameter if it's missing.
+    /// Necessary when function wasn't originally a definition.
+    fn add_identifier(&mut self, parameter: &Parameter) -> Parameter {
+        if parameter.identifier().is_some() {
+            parameter.clone()
+        } else {
+            let new_name =
+                self.normalize_identifier(&format!("__{}", type_to_string(parameter.typ())));
+            let parameter_sym = Symbol::variable(
+                new_name.clone(),
+                new_name.clone(),
+                parameter.typ().clone(),
+                Location::none(),
+            );
+            let parameter = parameter_sym.to_function_parameter();
+            self.new_syms.insert(new_name, parameter_sym);
+            parameter
+        }
+    }
+
+    /// Converts an arbitrary identifier into a valid C identifier.
+    fn normalize_identifier(&mut self, orig_name: &str) -> String {
+        assert!(!orig_name.is_empty(), "Received empty identifier.");
+
+        // If name already encountered, return same result
+        match self.mapped_names.get(orig_name).cloned() {
+            Some(result) => return result.clone(),
+            None => (),
+        }
+
+        let (prefix, name) = if orig_name.starts_with("tag-") {
+            (&orig_name[..4], &orig_name[4..])
+        } else {
+            ("", orig_name)
+        };
+
+        // Convert non-(alphanumeric + underscore) characters to underscore
+        let valid_chars =
+            name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '$'), "_");
+
+        // If the first character is a number, prefix with underscore
+        let new_name = match valid_chars.chars().next() {
+            Some(first) => {
+                if first.is_numeric() {
+                    let mut name = "_".to_string();
+                    name.push_str(&valid_chars);
+                    name
+                } else {
+                    valid_chars
+                }
+            }
+            None => "_".to_string(),
+        };
+
+        // Replace reserved names with alternatives
+        let mut illegal_names: FxHashMap<_, _> =
+            [("case", "case_"), ("main", "main_"), ("default", "_default")]
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect();
+        let result = illegal_names.remove(&new_name).unwrap_or(new_name);
+
+        // Ensure result has not been used before
+        let result = if self.used_names.contains(&result) {
+            let mut suffix = 0;
+            loop {
+                let result = format!("{}_{}", result, suffix);
+                if !self.used_names.contains(&result) {
+                    break result;
+                }
+                suffix += 1;
+            }
+        } else {
+            result
+        };
+
+        let result = {
+            let mut prefix = prefix.to_string();
+            prefix.push_str(&result);
+            prefix
+        };
+
+        // Remember result and return
+        self.mapped_names.insert(orig_name.to_string(), result);
+        self.mapped_names.get(orig_name).unwrap().clone()
     }
 }
 
@@ -186,8 +189,8 @@ impl Transformer for GenCTransformer {
     /// Purpose-tag: normalize-name
     fn transform_type_parameter(&mut self, parameter: &Parameter) -> Parameter {
         Type::parameter(
-            parameter.identifier().map(|name| normalize_identifier(name)),
-            parameter.base_name().map(|name| normalize_identifier(name)),
+            parameter.identifier().map(|name| self.normalize_identifier(name)),
+            parameter.base_name().map(|name| self.normalize_identifier(name)),
             self.transform_type(parameter.typ()),
         )
     }
@@ -261,18 +264,17 @@ impl Transformer for GenCTransformer {
     /// Purpose-tag: normalize-name
     fn transform_expr_member(&mut self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
-        transformed_lhs.member(&normalize_identifier(field), self.symbol_table())
+        transformed_lhs.member(&self.normalize_identifier(field), self.symbol_table())
     }
 
     /// Transform nondets to create default values for the expected type.
     /// Purpose-tag: nondet
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
-        let typ_string = normalize_identifier(&type_to_string(&transformed_typ));
+        let typ_string = self.normalize_identifier(&type_to_string(&transformed_typ));
         let identifier = format!("non_det_{}", typ_string);
         let function_type = Type::code(vec![], transformed_typ);
-        NONDET_TYPES
-            .with(|cell| cell.borrow_mut().insert(identifier.clone(), function_type.clone()));
+        self.nondet_types.insert(identifier.clone(), function_type.clone());
         Expr::symbol_expression(identifier, function_type).call(vec![])
     }
 
@@ -305,7 +307,7 @@ impl Transformer for GenCTransformer {
     /// Purpose-tag: normalize-name
     fn transform_expr_symbol(&mut self, typ: &Type, identifier: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
-        Expr::symbol_expression(normalize_identifier(identifier), transformed_typ)
+        Expr::symbol_expression(self.normalize_identifier(identifier), transformed_typ)
     }
 
     /// Normalize union field names.
@@ -315,7 +317,7 @@ impl Transformer for GenCTransformer {
         let transformed_value = self.transform_expr(value);
         Expr::union_expr(
             transformed_typ,
-            &normalize_identifier(field),
+            &self.normalize_identifier(field),
             transformed_value,
             self.symbol_table(),
         )
@@ -324,13 +326,13 @@ impl Transformer for GenCTransformer {
     /// Normalize incomplete struct tag name.
     /// Purpose-tag: normalize-name
     fn transform_type_incomplete_struct(&mut self, tag: &str) -> Type {
-        Type::incomplete_struct(&normalize_identifier(tag))
+        Type::incomplete_struct(&self.normalize_identifier(tag))
     }
 
     /// Normalize incomplete union tag name.
     /// Purpose-tag: normalize-name
     fn transform_type_incomplete_union(&mut self, tag: &str) -> Type {
-        Type::incomplete_union(&normalize_identifier(tag))
+        Type::incomplete_union(&self.normalize_identifier(tag))
     }
 
     /// Normalize union/struct component name.
@@ -338,11 +340,11 @@ impl Transformer for GenCTransformer {
     fn transform_datatype_component(&mut self, component: &DatatypeComponent) -> DatatypeComponent {
         match component {
             DatatypeComponent::Field { name, typ } => DatatypeComponent::Field {
-                name: normalize_identifier(name),
+                name: self.normalize_identifier(name),
                 typ: self.transform_type(typ),
             },
             DatatypeComponent::Padding { name, bits } => {
-                DatatypeComponent::Padding { name: normalize_identifier(name), bits: *bits }
+                DatatypeComponent::Padding { name: self.normalize_identifier(name), bits: *bits }
             }
         }
     }
@@ -354,13 +356,13 @@ impl Transformer for GenCTransformer {
             .iter()
             .map(|component| self.transform_datatype_component(component))
             .collect();
-        Type::struct_type(&normalize_identifier(tag), transformed_components)
+        Type::struct_type(&self.normalize_identifier(tag), transformed_components)
     }
 
     /// Normalize struct tag name.
     /// Purpose-tag: normalize-name
     fn transform_type_struct_tag(&mut self, tag: &str) -> Type {
-        Type::struct_tag_raw(&normalize_identifier(tag))
+        Type::struct_tag_raw(&self.normalize_identifier(tag))
     }
 
     /// Normalize union type name.
@@ -370,26 +372,26 @@ impl Transformer for GenCTransformer {
             .iter()
             .map(|component| self.transform_datatype_component(component))
             .collect();
-        Type::union_type(&normalize_identifier(tag), transformed_components)
+        Type::union_type(&self.normalize_identifier(tag), transformed_components)
     }
 
     /// Normalize union tag name.
     /// Purpose-tag: normalize-name
     fn transform_type_union_tag(&mut self, tag: &str) -> Type {
-        Type::union_tag_raw(&normalize_identifier(tag))
+        Type::union_tag_raw(&self.normalize_identifier(tag))
     }
 
     /// Normalize goto label name.
     /// Purpose-tag: normalize-name
     fn transform_stmt_goto(&mut self, label: &str) -> Stmt {
-        Stmt::goto(normalize_identifier(label), Location::none())
+        Stmt::goto(self.normalize_identifier(label), Location::none())
     }
 
     /// Normalize label name.
     /// Purpose-tag: normalize-name
     fn transform_stmt_label(&mut self, label: &str, body: &Stmt) -> Stmt {
         let transformed_body = self.transform_stmt(body);
-        transformed_body.with_label(normalize_identifier(label))
+        transformed_body.with_label(self.normalize_identifier(label))
     }
 
     /// Normalize symbol names.
@@ -406,7 +408,7 @@ impl Transformer for GenCTransformer {
                     .parameters()
                     .unwrap()
                     .iter()
-                    .map(|parameter| add_identifier(parameter))
+                    .map(|parameter| self.add_identifier(parameter))
                     .collect();
 
                 let ret_typ = new_typ.return_type().unwrap();
@@ -445,12 +447,9 @@ impl Transformer for GenCTransformer {
                 new_symbol.value = new_value;
                 new_symbol.typ = new_typ.clone();
 
-                EMPTY_STATICS.with(|cell| {
-                    cell.borrow_mut().insert(
-                        normalize_identifier(&new_symbol.name),
-                        (symbol.typ.clone(), new_typ),
-                    )
-                });
+                let normalized_name = self.normalize_identifier(&new_symbol.name);
+
+                self.empty_statics.insert(normalized_name, (symbol.typ.clone(), new_typ));
 
                 new_symbol.with_is_extern(false)
             }
@@ -465,9 +464,10 @@ impl Transformer for GenCTransformer {
         };
 
         // Purpose-tag: normalize-name
-        new_symbol.name = normalize_identifier(&new_symbol.name);
-        new_symbol.base_name = new_symbol.base_name.map(|name| normalize_identifier(&name));
-        new_symbol.pretty_name = new_symbol.pretty_name.map(|name| normalize_identifier(&name));
+        new_symbol.name = self.normalize_identifier(&new_symbol.name);
+        new_symbol.base_name = new_symbol.base_name.map(|name| self.normalize_identifier(&name));
+        new_symbol.pretty_name =
+            new_symbol.pretty_name.map(|name| self.normalize_identifier(&name));
         new_symbol
     }
 
@@ -479,7 +479,7 @@ impl Transformer for GenCTransformer {
         let old_main_typ = self.symbol_table().lookup("main_").map(|old_main| old_main.typ.clone());
         if let Some(old_main_typ) = old_main_typ {
             let mut main_body = {
-                let statics_map = EMPTY_STATICS.with(|cell| cell.take());
+                let statics_map = std::mem::replace(&mut self.empty_statics, FxHashMap::default());
                 let mut assgns = Vec::new();
                 for (name, (orig_typ, new_typ)) in statics_map {
                     let sym_expr = Expr::symbol_expression(name, new_typ.clone());
@@ -508,7 +508,7 @@ impl Transformer for GenCTransformer {
         }
 
         // Purpose-tag: nondet
-        for (identifier, typ) in NONDET_TYPES.with(|cell| cell.take()) {
+        for (identifier, typ) in std::mem::replace(&mut self.nondet_types, FxHashMap::default()) {
             let ret_type = typ.return_type().unwrap();
             let (typ, body) = if ret_type.type_name() == Some("tag-Unit".to_string()) {
                 let typ = Type::code(typ.parameters().unwrap().clone(), Type::empty());
@@ -532,7 +532,7 @@ impl Transformer for GenCTransformer {
         }
 
         // Purpose-tag: normalize-name
-        for (_, symbol) in NEW_SYMS.with(|cell| cell.take()) {
+        for (_, symbol) in std::mem::replace(&mut self.new_syms, FxHashMap::default()) {
             self.mut_symbol_table().insert(symbol);
         }
     }
