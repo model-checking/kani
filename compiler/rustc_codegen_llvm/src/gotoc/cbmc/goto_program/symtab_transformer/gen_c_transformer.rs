@@ -14,6 +14,8 @@ thread_local!(static NONDET_TYPES: RefCell<FxHashMap<String, Type>> = RefCell::n
 
 thread_local!(static NEW_SYMS: RefCell<FxHashMap<String, Symbol>> = RefCell::new(FxHashMap::default()));
 
+thread_local!(static EMPTY_STATICS: RefCell<FxHashMap<String, (Type, Type)>> = RefCell::new(FxHashMap::default()));
+
 /// Add identifier to a transformed parameter if it's missing.
 /// Necessary when function wasn't originally a definition.
 fn add_identifier(parameter: &Parameter) -> Parameter {
@@ -393,8 +395,8 @@ impl Transformer for GenCTransformer {
 
     /// Normalize symbol names.
     fn transform_symbol(&self, symbol: &Symbol) -> Symbol {
-        let mut new_symbol =
-            if symbol.is_extern && (symbol.typ.is_code() || symbol.typ.is_variadic_code()) {
+        let mut new_symbol = if symbol.is_extern {
+            if symbol.typ.is_code() || symbol.typ.is_variadic_code() {
                 // Purpose-tag: nondet
                 // Replace extern functions with nondet body so linker doesn't break
                 assert!(symbol.value.is_none(), "Extern function should have no body.");
@@ -433,14 +435,35 @@ impl Transformer for GenCTransformer {
                 new_symbol.typ = new_typ;
                 new_symbol.with_is_extern(false)
             } else {
+                assert!(
+                    symbol.is_static_lifetime,
+                    "Extern objects that aren't functions should be static variables."
+                );
                 let new_typ = self.transform_type(&symbol.typ);
-                let new_value = self.transform_value(&symbol.value);
+                let new_value = SymbolValues::Expr(self.transform_expr_nondet(&symbol.typ));
 
                 let mut new_symbol = symbol.clone();
                 new_symbol.value = new_value;
-                new_symbol.typ = new_typ;
-                new_symbol
-            };
+                new_symbol.typ = new_typ.clone();
+
+                EMPTY_STATICS.with(|cell| {
+                    cell.borrow_mut().insert(
+                        normalize_identifier(&new_symbol.name),
+                        (symbol.typ.clone(), new_typ),
+                    )
+                });
+
+                new_symbol.with_is_extern(false)
+            }
+        } else {
+            let new_typ = self.transform_type(&symbol.typ);
+            let new_value = self.transform_value(&symbol.value);
+
+            let mut new_symbol = symbol.clone();
+            new_symbol.value = new_value;
+            new_symbol.typ = new_typ;
+            new_symbol
+        };
 
         // Purpose-tag: normalize-name
         new_symbol.name = normalize_identifier(&new_symbol.name);
@@ -456,23 +479,29 @@ impl Transformer for GenCTransformer {
         // Purpose-tag: replace
         let old_main = self.symbol_table().lookup("main_");
         if let Some(old_main) = old_main {
+            let mut main_body = {
+                let statics_map = EMPTY_STATICS.with(|cell| cell.take());
+                let mut assgns = Vec::new();
+                for (name, (orig_typ, new_typ)) in statics_map {
+                    let sym_expr = Expr::symbol_expression(name, new_typ.clone());
+                    let value = self.transform_expr_nondet(&orig_typ);
+                    assgns.push(Stmt::assign(sym_expr, value, Location::none()));
+                }
+                assgns
+            };
+            main_body.push(Stmt::code_expression(
+                Expr::symbol_expression("main_".to_string(), old_main.typ.clone()).call(Vec::new()),
+                Location::none(),
+            ));
+            main_body.push(Stmt::ret(
+                Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
+                Location::none(),
+            ));
+
             let new_main = Symbol::function(
                 "main",
                 Type::code(Vec::new(), Type::CInteger(CIntType::Int)),
-                Some(Stmt::block(
-                    vec![
-                        Stmt::code_expression(
-                            Expr::symbol_expression("main_".to_string(), old_main.typ.clone())
-                                .call(Vec::new()),
-                            Location::none(),
-                        ),
-                        Stmt::ret(
-                            Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
-                            Location::none(),
-                        ),
-                    ],
-                    Location::none(),
-                )),
+                Some(Stmt::block(main_body, Location::none())),
                 Some("main".to_string()),
                 Location::none(),
             );
