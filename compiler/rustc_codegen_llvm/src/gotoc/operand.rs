@@ -332,6 +332,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
 
                     // we believe rlinkage being `Some` means the static not extern
+                    // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
                     // see https://github.com/model-checking/rmc/issues/388
                     assert!(rlinkage.is_none());
 
