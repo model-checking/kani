@@ -81,6 +81,18 @@ impl GenCTransformer {
         .transform_symbol_table(original_symbol_table)
     }
 
+    pub fn nondet_types_owned(&mut self) -> FxHashMap<String, Type> {
+        std::mem::replace(&mut self.nondet_types, FxHashMap::default())
+    }
+
+    pub fn new_syms_owned(&mut self) -> FxHashMap<String, Symbol> {
+        std::mem::replace(&mut self.new_syms, FxHashMap::default())
+    }
+
+    pub fn empty_statics_owned(&mut self) -> FxHashMap<String, (Type, Type)> {
+        std::mem::replace(&mut self.empty_statics, FxHashMap::default())
+    }
+
     /// Add identifier to a transformed parameter if it's missing.
     /// Necessary when function wasn't originally a definition.
     fn add_identifier(&mut self, parameter: &Parameter) -> Parameter {
@@ -480,7 +492,7 @@ impl Transformer for GenCTransformer {
         let old_main_typ = self.symbol_table().lookup("main_").map(|old_main| old_main.typ.clone());
         if let Some(old_main_typ) = old_main_typ {
             let mut main_body = {
-                let statics_map = std::mem::replace(&mut self.empty_statics, FxHashMap::default());
+                let statics_map = self.empty_statics_owned();
                 let mut assgns = Vec::new();
                 for (name, (orig_typ, new_typ)) in statics_map {
                     let sym_expr = Expr::symbol_expression(name, new_typ.clone());
@@ -489,14 +501,19 @@ impl Transformer for GenCTransformer {
                 }
                 assgns
             };
-            main_body.push(Stmt::code_expression(
-                Expr::symbol_expression("main_".to_string(), old_main_typ).call(Vec::new()),
-                Location::none(),
-            ));
-            main_body.push(Stmt::ret(
-                Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
-                Location::none(),
-            ));
+            main_body.extend(
+                vec![
+                    Stmt::code_expression(
+                        Expr::symbol_expression("main_".to_string(), old_main_typ).call(Vec::new()),
+                        Location::none(),
+                    ),
+                    Stmt::ret(
+                        Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
+                        Location::none(),
+                    ),
+                ]
+                .into_iter(),
+            );
 
             let new_main = Symbol::function(
                 "main",
@@ -508,8 +525,9 @@ impl Transformer for GenCTransformer {
             self.mut_symbol_table().insert(new_main);
         }
 
+        // For each type nondet is called for, generate a function which just returns a default value.
         // Purpose-tag: nondet
-        for (identifier, typ) in std::mem::replace(&mut self.nondet_types, FxHashMap::default()) {
+        for (identifier, typ) in self.nondet_types_owned() {
             let ret_type = typ.return_type().unwrap();
             let (typ, body) = if ret_type.type_name() == Some("tag-Unit".to_string()) {
                 let typ = Type::code(typ.parameters().unwrap().clone(), Type::empty());
@@ -533,7 +551,7 @@ impl Transformer for GenCTransformer {
         }
 
         // Purpose-tag: normalize-name
-        for (_, symbol) in std::mem::replace(&mut self.new_syms, FxHashMap::default()) {
+        for (_, symbol) in self.new_syms_owned() {
             self.mut_symbol_table().insert(symbol);
         }
     }
