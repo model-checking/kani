@@ -184,7 +184,7 @@ impl Transformer for GenCTransformer {
 
     /// Normalize parameter identifier.
     /// Purpose-tag: normalize-name
-    fn transform_type_parameter(&self, parameter: &Parameter) -> Parameter {
+    fn transform_type_parameter(&mut self, parameter: &Parameter) -> Parameter {
         Type::parameter(
             parameter.identifier().map(|name| normalize_identifier(name)),
             parameter.base_name().map(|name| normalize_identifier(name)),
@@ -195,7 +195,7 @@ impl Transformer for GenCTransformer {
     /// Translate Implies into Or/Not
     /// Purpose-tag: replace
     fn transform_expr_bin_op(
-        &self,
+        &mut self,
         _typ: &Type,
         op: &BinaryOperand,
         lhs: &Expr,
@@ -239,14 +239,14 @@ impl Transformer for GenCTransformer {
 
     /// Prevent error for too large constants with u128.
     /// Purpose-tag: replace
-    fn transform_expr_int_constant(&self, typ: &Type, value: &BigInt) -> Expr {
+    fn transform_expr_int_constant(&mut self, typ: &Type, value: &BigInt) -> Expr {
         let transformed_typ = self.transform_type(typ);
         bignum_to_expr(value, typ)
     }
 
     /// When indexing into a SIMD vector, cast to a pointer first to make legal index in C
     /// Purpose-tag: replace
-    fn transform_expr_index(&self, typ: &Type, array: &Expr, index: &Expr) -> Expr {
+    fn transform_expr_index(&mut self, typ: &Type, array: &Expr, index: &Expr) -> Expr {
         let transformed_array = self.transform_expr(array);
         let transformed_index = self.transform_expr(index);
         if transformed_array.typ().is_vector() {
@@ -259,14 +259,14 @@ impl Transformer for GenCTransformer {
 
     /// Normalize field names.
     /// Purpose-tag: normalize-name
-    fn transform_expr_member(&self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
+    fn transform_expr_member(&mut self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
         transformed_lhs.member(&normalize_identifier(field), self.symbol_table())
     }
 
     /// Transform nondets to create default values for the expected type.
     /// Purpose-tag: nondet
-    fn transform_expr_nondet(&self, typ: &Type) -> Expr {
+    fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let typ_string = normalize_identifier(&type_to_string(&transformed_typ));
         let identifier = format!("non_det_{}", typ_string);
@@ -278,23 +278,22 @@ impl Transformer for GenCTransformer {
 
     /// Don't transform padding fields so that they are ignored by CBMC --dump-c.
     /// Purpose-tag: nondet
-    fn transform_expr_struct(&self, typ: &Type, values: &[Expr]) -> Expr {
+    fn transform_expr_struct(&mut self, typ: &Type, values: &[Expr]) -> Expr {
         let transformed_typ = self.transform_type(typ);
         assert!(
             transformed_typ.is_struct_tag(),
             "Transformed StructTag must be StructTag; got {:?}",
             transformed_typ
         );
-        let fields = self.symbol_table().lookup_fields_in_type(&transformed_typ).unwrap();
-        let transformed_values: Vec<_> = fields
-            .into_iter()
-            .zip(values.into_iter())
-            .map(
-                |(field, value)| {
-                    if field.is_padding() { value.clone() } else { self.transform_expr(value) }
-                },
-            )
-            .collect();
+        let fields = self.symbol_table().lookup_fields_in_type(&transformed_typ).unwrap().clone();
+        let mut transformed_values = Vec::new();
+        for (field, value) in fields.into_iter().zip(values.into_iter()) {
+            if field.is_padding() {
+                transformed_values.push(value.clone());
+            } else {
+                transformed_values.push(self.transform_expr(value));
+            }
+        }
         Expr::struct_expr_from_padded_values(
             transformed_typ,
             transformed_values,
@@ -304,14 +303,14 @@ impl Transformer for GenCTransformer {
 
     /// Normalize name in identifier expression.
     /// Purpose-tag: normalize-name
-    fn transform_expr_symbol(&self, typ: &Type, identifier: &str) -> Expr {
+    fn transform_expr_symbol(&mut self, typ: &Type, identifier: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::symbol_expression(normalize_identifier(identifier), transformed_typ)
     }
 
     /// Normalize union field names.
     /// Purpose-tag: normalize-name
-    fn transform_expr_union(&self, typ: &Type, value: &Expr, field: &str) -> Expr {
+    fn transform_expr_union(&mut self, typ: &Type, value: &Expr, field: &str) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_value = self.transform_expr(value);
         Expr::union_expr(
@@ -324,19 +323,19 @@ impl Transformer for GenCTransformer {
 
     /// Normalize incomplete struct tag name.
     /// Purpose-tag: normalize-name
-    fn transform_type_incomplete_struct(&self, tag: &str) -> Type {
+    fn transform_type_incomplete_struct(&mut self, tag: &str) -> Type {
         Type::incomplete_struct(&normalize_identifier(tag))
     }
 
     /// Normalize incomplete union tag name.
     /// Purpose-tag: normalize-name
-    fn transform_type_incomplete_union(&self, tag: &str) -> Type {
+    fn transform_type_incomplete_union(&mut self, tag: &str) -> Type {
         Type::incomplete_union(&normalize_identifier(tag))
     }
 
     /// Normalize union/struct component name.
     /// Purpose-tag: normalize-name
-    fn transform_datatype_component(&self, component: &DatatypeComponent) -> DatatypeComponent {
+    fn transform_datatype_component(&mut self, component: &DatatypeComponent) -> DatatypeComponent {
         match component {
             DatatypeComponent::Field { name, typ } => DatatypeComponent::Field {
                 name: normalize_identifier(name),
@@ -350,7 +349,7 @@ impl Transformer for GenCTransformer {
 
     /// Normalize struct type name.
     /// Purpose-tag: normalize-name
-    fn transform_type_struct(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_struct(&mut self, tag: &str, components: &[DatatypeComponent]) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
@@ -360,13 +359,13 @@ impl Transformer for GenCTransformer {
 
     /// Normalize struct tag name.
     /// Purpose-tag: normalize-name
-    fn transform_type_struct_tag(&self, tag: &str) -> Type {
+    fn transform_type_struct_tag(&mut self, tag: &str) -> Type {
         Type::struct_tag_raw(&normalize_identifier(tag))
     }
 
     /// Normalize union type name.
     /// Purpose-tag: normalize-name
-    fn transform_type_union(&self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_union(&mut self, tag: &str, components: &[DatatypeComponent]) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
@@ -376,25 +375,25 @@ impl Transformer for GenCTransformer {
 
     /// Normalize union tag name.
     /// Purpose-tag: normalize-name
-    fn transform_type_union_tag(&self, tag: &str) -> Type {
+    fn transform_type_union_tag(&mut self, tag: &str) -> Type {
         Type::union_tag_raw(&normalize_identifier(tag))
     }
 
     /// Normalize goto label name.
     /// Purpose-tag: normalize-name
-    fn transform_stmt_goto(&self, label: &str) -> Stmt {
+    fn transform_stmt_goto(&mut self, label: &str) -> Stmt {
         Stmt::goto(normalize_identifier(label), Location::none())
     }
 
     /// Normalize label name.
     /// Purpose-tag: normalize-name
-    fn transform_stmt_label(&self, label: &str, body: &Stmt) -> Stmt {
+    fn transform_stmt_label(&mut self, label: &str, body: &Stmt) -> Stmt {
         let transformed_body = self.transform_stmt(body);
         transformed_body.with_label(normalize_identifier(label))
     }
 
     /// Normalize symbol names.
-    fn transform_symbol(&self, symbol: &Symbol) -> Symbol {
+    fn transform_symbol(&mut self, symbol: &Symbol) -> Symbol {
         let mut new_symbol = if symbol.is_extern {
             if symbol.typ.is_code() || symbol.typ.is_variadic_code() {
                 // Purpose-tag: nondet
@@ -477,8 +476,8 @@ impl Transformer for GenCTransformer {
         // Redefine main function to return an `int`.
         // Moves `main` to `main_`, and create `main` to call now `main_`.
         // Purpose-tag: replace
-        let old_main = self.symbol_table().lookup("main_");
-        if let Some(old_main) = old_main {
+        let old_main_typ = self.symbol_table().lookup("main_").map(|old_main| old_main.typ.clone());
+        if let Some(old_main_typ) = old_main_typ {
             let mut main_body = {
                 let statics_map = EMPTY_STATICS.with(|cell| cell.take());
                 let mut assgns = Vec::new();
@@ -490,7 +489,7 @@ impl Transformer for GenCTransformer {
                 assgns
             };
             main_body.push(Stmt::code_expression(
-                Expr::symbol_expression("main_".to_string(), old_main.typ.clone()).call(Vec::new()),
+                Expr::symbol_expression("main_".to_string(), old_main_typ).call(Vec::new()),
                 Location::none(),
             ));
             main_body.push(Stmt::ret(
