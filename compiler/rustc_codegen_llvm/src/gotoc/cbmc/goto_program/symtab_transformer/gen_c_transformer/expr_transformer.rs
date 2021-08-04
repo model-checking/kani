@@ -25,21 +25,21 @@ fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
     }
 }
 
-/// Struct for performing the gen-c transformation on a symbol table.
+/// Struct for handling the expression replacement transformations for --gen-c-runnable.
 pub struct ExprTransformer {
     new_symbol_table: SymbolTable,
     empty_statics: FxHashMap<String, Expr>,
 }
 
 impl ExprTransformer {
-    /// Transform all identifiers in the symbol table to be valid C identifiers;
-    /// perform other clean-up operations to make valid C code.
+    /// Replace expressions which lead to invalid C with alternatives.
     pub fn transform(original_symbol_table: &SymbolTable) -> SymbolTable {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
         ExprTransformer { new_symbol_table, empty_statics: FxHashMap::default() }
             .transform_symbol_table(original_symbol_table)
     }
 
+    /// Extract `empty_statics` map for final processing.
     pub fn empty_statics_owned(&mut self) -> FxHashMap<String, Expr> {
         std::mem::replace(&mut self.empty_statics, FxHashMap::default())
     }
@@ -80,7 +80,7 @@ impl Transformer for ExprTransformer {
         self.new_symbol_table
     }
 
-    /// Translate Implies into Or/Not
+    /// Translate Implies into Or/Not.
     fn transform_expr_bin_op(
         &mut self,
         _typ: &Type,
@@ -130,7 +130,7 @@ impl Transformer for ExprTransformer {
         bignum_to_expr(value, &transformed_typ)
     }
 
-    /// When indexing into a SIMD vector, cast to a pointer first to make legal index in C
+    /// When indexing into a SIMD vector, cast to a pointer first to make legal indexing in C.
     fn transform_expr_index(&mut self, _typ: &Type, array: &Expr, index: &Expr) -> Expr {
         let transformed_array = self.transform_expr(array);
         let transformed_index = self.transform_expr(index);
@@ -142,43 +142,47 @@ impl Transformer for ExprTransformer {
         }
     }
 
-    /// Normalize symbol names.
+    /// Replace `extern` functions and values with `nondet` so linker doesn't break.
     fn transform_symbol(&mut self, symbol: &Symbol) -> Symbol {
         let (new_typ, new_value) = if symbol.is_extern {
             if symbol.typ.is_code() || symbol.typ.is_variadic_code() {
-                // Replace extern functions with nondet body so linker doesn't break
+                // Replace `extern` function with one which returns `nondet`
                 assert!(symbol.value.is_none(), "Extern function should have no body.");
-                let new_typ = self.transform_type(&symbol.typ);
+
+                let transformed_typ = self.transform_type(&symbol.typ);
 
                 // Fill missing parameter names with dummy name
-                let parameters = new_typ
+                let parameters = transformed_typ
                     .parameters()
                     .unwrap()
                     .iter()
                     .map(|parameter| self.add_parameter_identifier(parameter))
                     .collect();
 
-                let ret_typ = new_typ.return_type().unwrap();
-                let (ret_typ, new_body) = if ret_typ.type_name() == Some("tag-Unit".to_string()) {
+                let ret_typ = transformed_typ.return_type().unwrap();
+                let (ret_typ, body) = if ret_typ.type_name() == Some("tag-Unit".to_string()) {
+                    // If return type is unit type, make return type `void` and use empty body
                     let ret_typ = Type::empty();
-                    let new_body = Stmt::block(vec![], Location::none());
-                    (ret_typ, new_body)
+                    let body = Stmt::block(vec![], Location::none());
+                    (ret_typ, body)
                 } else {
-                    let nondet_expr = self
-                        .transform_expr(&Expr::nondet(symbol.typ.return_type().unwrap().clone()));
-                    let new_body = Stmt::ret(Some(nondet_expr), Location::none());
-                    (ret_typ.clone(), new_body)
+                    // Otherwise, set body to return nondet
+                    let nondet_expr = Expr::nondet(ret_typ.clone());
+                    let body = Stmt::ret(Some(nondet_expr), Location::none());
+                    (ret_typ.clone(), body)
                 };
 
-                let new_typ = if new_typ.is_code() {
+                let new_typ = if transformed_typ.is_code() {
                     Type::code(parameters, ret_typ)
                 } else {
                     Type::variadic_code(parameters, ret_typ)
                 };
-                let new_value = SymbolValues::Stmt(new_body);
+                let new_value = SymbolValues::Stmt(body);
 
                 (new_typ, new_value)
             } else {
+                // Replace `extern static`s and initialize in `main`
+
                 assert!(
                     symbol.is_static_lifetime,
                     "Extern objects that aren't functions should be static variables."
@@ -190,6 +194,7 @@ impl Transformer for ExprTransformer {
                 (new_typ, new_value)
             }
         } else {
+            // Handle non-extern symbols normally
             let new_typ = self.transform_type(&symbol.typ);
             let new_value = self.transform_value(&symbol.value);
             (new_typ, new_value)
@@ -201,17 +206,18 @@ impl Transformer for ExprTransformer {
         new_symbol.with_is_extern(false)
     }
 
-    /// Perform cleanup necessary to make C code valid.
+    /// Move `main` to `main_`, and create a wrapper `main` to initialize statics and return `int`.
     fn postprocess(&mut self) {
-        // Redefine main function to return an `int`.
-        // Moves `main` to `main_`, and create `main` to call now `main_`.
         if let Some(old_main) = self.mut_symbol_table().remove("main") {
+            // Rename `main` to `main_`
             let mut main_ = old_main;
             main_.name = "main_".to_string();
             main_.base_name = Some("main_".to_string());
             main_.pretty_name = Some("main_".to_string());
 
             let mut main_body = Vec::new();
+
+            // Initialize statics
             for (name, value) in self.empty_statics_owned() {
                 let sym_expr = Expr::symbol_expression(name, value.typ().clone());
                 main_body.push(Stmt::assign(sym_expr, value, Location::none()));
@@ -219,7 +225,9 @@ impl Transformer for ExprTransformer {
 
             main_body.extend(
                 vec![
+                    // `main_();`
                     Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none()),
+                    // `return 0;`
                     Stmt::ret(
                         Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
                         Location::none(),
@@ -228,6 +236,7 @@ impl Transformer for ExprTransformer {
                 .into_iter(),
             );
 
+            // Create `main` symbol
             let new_main = Symbol::function(
                 "main",
                 Type::code(Vec::new(), Type::CInteger(CIntType::Int)),

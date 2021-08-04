@@ -6,7 +6,7 @@ use super::super::Transformer;
 use super::common::type_to_string;
 use rustc_data_structures::fx::FxHashMap;
 
-/// Struct for performing the gen-c transformation on a symbol table.
+/// Struct for handling the nondet transformations for --gen-c-runnable.
 pub struct NondetTransformer {
     new_symbol_table: SymbolTable,
     nondet_types: FxHashMap<String, Type>,
@@ -21,6 +21,7 @@ impl NondetTransformer {
             .transform_symbol_table(original_symbol_table)
     }
 
+    /// Extract `nondet_types` map for final processing.
     pub fn nondet_types_owned(&mut self) -> FxHashMap<String, Type> {
         std::mem::replace(&mut self.nondet_types, FxHashMap::default())
     }
@@ -48,7 +49,10 @@ impl Transformer for NondetTransformer {
         let typ_string = type_to_string(&transformed_typ);
         let identifier = format!("non_det_{}", typ_string);
         let function_type = Type::code(vec![], transformed_typ);
+
+        // Create non_det function which returns default value in postprocessing
         self.nondet_types.insert(identifier.clone(), function_type.clone());
+
         Expr::symbol_expression(identifier, function_type).call(vec![])
     }
 
@@ -76,18 +80,20 @@ impl Transformer for NondetTransformer {
         )
     }
 
-    /// Perform cleanup necessary to make C code valid.
+    /// Create non_det functions which return default value for type.
     fn postprocess(&mut self) {
-        // For each type nondet is called for, generate a function which just returns a default value.
         for (identifier, typ) in self.nondet_types_owned() {
             let ret_type = typ.return_type().unwrap();
+
             let (typ, body) = if ret_type.type_name() == Some("tag-Unit".to_string()) {
+                // If return type is unit type, make return type `void` and use empty body
                 let typ = Type::code(typ.parameters().unwrap().clone(), Type::empty());
                 let body = Stmt::block(vec![], Location::none());
                 (typ, body)
             } else {
-                let ret_value = Some(ret_type.default(self.symbol_table()));
-                let body = Stmt::ret(ret_value, Location::none());
+                // Otherwise, set body to return nondet
+                let ret_value = ret_type.default(self.symbol_table());
+                let body = Stmt::ret(Some(ret_value), Location::none());
                 (typ, body)
             };
 

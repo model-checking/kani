@@ -7,7 +7,7 @@ use super::super::super::{
 use super::super::Transformer;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 
-/// Struct for performing the gen-c transformation on a symbol table.
+/// Struct for replacing names with valid C identifiers for --gen-c-runnable.
 pub struct NameTransformer {
     new_symbol_table: SymbolTable,
     mapped_names: FxHashMap<String, String>,
@@ -15,8 +15,7 @@ pub struct NameTransformer {
 }
 
 impl NameTransformer {
-    /// Transform all identifiers in the symbol table to be valid C identifiers;
-    /// perform other clean-up operations to make valid C code.
+    /// Transform all identifiers in the symbol table to be valid C identifiers.
     pub fn transform(original_symbol_table: &SymbolTable) -> SymbolTable {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
         NameTransformer {
@@ -37,6 +36,7 @@ impl NameTransformer {
             None => (),
         }
 
+        // Don't tranform the `tag-` prefix of identifiers
         let (prefix, name) = if orig_name.starts_with("tag-") {
             (&orig_name[..4], &orig_name[4..])
         } else {
@@ -82,6 +82,7 @@ impl NameTransformer {
             result
         };
 
+        // Add `tag-` back in if it was present
         let result = {
             let mut prefix = prefix.to_string();
             prefix.push_str(&result);
