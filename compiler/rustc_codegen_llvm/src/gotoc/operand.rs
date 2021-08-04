@@ -329,11 +329,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
                     // check if this static is extern
-                    // TODO: copying what cranelift did here
                     let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
 
-                    // we believe rlinkage some => not extern
-                    assert!(rlinkage.is_none()); // leave assert, add comment to make ticket
+                    // we believe rlinkage being `Some` means the static not extern
+                    // see https://github.com/model-checking/rmc/issues/388
+                    assert!(rlinkage.is_none());
 
                     let span = ctx.tcx.def_span(def_id);
                     Symbol::static_variable(
