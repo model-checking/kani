@@ -50,16 +50,16 @@ impl ExprTransformer {
         if parameter.identifier().is_some() {
             parameter.clone()
         } else {
-            let new_name = format!("__{}", type_to_string(parameter.typ()));
-            let parameter_sym = Symbol::variable(
-                new_name.clone(),
-                new_name.clone(),
-                parameter.typ().clone(),
-                Location::none(),
-            );
-            let parameter = parameter_sym.to_function_parameter();
-            self.mut_symbol_table().insert(parameter_sym);
-            parameter
+            let name = format!("__{}", type_to_string(parameter.typ()));
+            let parameter_sym = self.mut_symbol_table().ensure(&name, |_symtab, name| {
+                Symbol::variable(
+                    name.to_string(),
+                    name.to_string(),
+                    parameter.typ().clone(),
+                    Location::none(),
+                )
+            });
+            parameter_sym.to_function_parameter()
         }
     }
 }
