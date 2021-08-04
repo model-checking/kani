@@ -42,4 +42,7 @@ ignore = [
     "src/tools/rust-analyzer",
     "src/tools/rustfmt",
     "src/tools/rust-installer",
+
+    # do not format Firecracker regression
+    "firecracker",
 ]
