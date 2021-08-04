@@ -44,3 +44,6 @@
 [submodule "library/backtrace"]
 	path = library/backtrace
 	url = https://github.com/rust-lang/backtrace-rs.git
+[submodule "firecracker"]
+	path = firecracker
+	url = https://github.com/firecracker-microvm/firecracker.git
