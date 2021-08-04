@@ -6,7 +6,7 @@ use super::metadata::GotocCtx;
 use crate::btree_map;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
-use rustc_middle::mir::{HasLocalDecls, Local};
+use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
@@ -16,8 +16,10 @@ use rustc_middle::ty::{
 use rustc_span;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi, FieldsShape, Integer, Layout, LayoutOf, Primitive, TagEncoding, VariantIdx, Variants,
+    Abi::Vector, FieldsShape, Integer, Layout, LayoutOf, Primitive, TagEncoding, VariantIdx,
+    Variants,
 };
+use rustc_target::spec::abi::Abi;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -120,19 +122,17 @@ impl<'tcx> GotocCtx<'tcx> {
         instance: Instance<'tcx>,
         idx: usize,
     ) -> DatatypeComponent {
-        // gives a binder with function signature
+        // Gives a binder with function signature
         let sig = self.fn_sig_of_instance(instance);
 
-        // gives an Irep Pointer object for the signature
-        let fnptr = self.codegen_dynamic_function_sig(sig).to_pointer();
+        // Gives an Irep Pointer object for the signature
+        let fn_ty = self.codegen_dynamic_function_sig(sig);
+        let fn_ptr = fn_ty.to_pointer();
 
         // vtable field name, i.e., 3_vol (idx_method)
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
 
-        let ins_ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
-        let _layout = self.layout_of(ins_ty);
-
-        Type::datatype_component(&vtable_field_name, fnptr)
+        Type::datatype_component(&vtable_field_name, fn_ptr)
     }
 
     /// Generates a vtable that looks like this:
@@ -513,8 +513,34 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_struct_fields(flds, layout.layout, 0)
     }
 
-    /// a closure is a struct of all its environments
-    /// that is, a closure is just a tuple with a unique type identifier, so that Fn related traits
+    /// A closure in Rust MIR takes two arguments:
+    ///    0. a struct representing the environment
+    ///    1. a tuple containing the parameters
+    ///
+    /// However, during codegen/lowering from MIR, the 2nd tuple of parameters
+    /// is flattened into subsequent parameters.
+    ///
+    /// Checking whether the type's kind is a closure is insufficient, because
+    /// a virtual method call through a vtable can have the trait's non-closure
+    /// type. For example:
+    ///         let p: &dyn Fn(i32) = &|x| assert!(x == 1);
+    ///         p(1);
+    ///
+    /// Here, the call p(1) desugars to an MIR trait call Fn::call(&p, (1,)),
+    /// where the second argument is a tuple. The instance type kind for
+    /// Fn::call is not a closure, because dynamically, the pointer may be to
+    /// a function definition instead. We still need to untuple in this case,
+    /// so we follow the example elsewhere in Rust to use the ABI call type.
+    /// See `make_call_args` in rmc/compiler/rustc_mir/src/transform/inline.rs
+    pub fn ty_needs_closure_untupled(&self, ty: Ty<'tcx>) -> bool {
+        match ty.kind() {
+            ty::FnDef(..) | ty::FnPtr(..) => ty.fn_sig(self.tcx).abi() == Abi::RustCall,
+            _ => unreachable!("Can't treat type as a function: {:?}", ty),
+        }
+    }
+
+    /// A closure is a struct of all its environments. That is, a closure is
+    /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
     fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::subst::SubstsRef<'tcx>) -> Type {
         self.ensure_struct(&self.ty_mangled_name(t), |ctx, _| {
@@ -617,6 +643,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+
         let mut is_first = true;
         let params = sig
             .inputs()
@@ -938,7 +965,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            Abi::Vector { element, count } => (element.clone(), *count),
+            Vector { element, count } => (element.clone(), *count),
             _ => unreachable!(),
         };
 
@@ -951,7 +978,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// the function type of the current instance
     pub fn fn_typ(&mut self) -> Type {
-        let mir = self.current_fn().mir();
         let sig = self.current_fn().sig();
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
@@ -963,11 +989,21 @@ impl<'tcx> GotocCtx<'tcx> {
                 if self.ignore_var_ty(t) {
                     None
                 } else {
-                    let l = Local::from_usize(i + 1);
-                    let t = *t;
-                    let _ld = &mir.local_decls()[l];
-                    let ident = self.codegen_var_name(&l);
-                    Some(Type::parameter(Some(ident.to_string()), Some(ident), self.codegen_ty(t)))
+                    let lc = Local::from_usize(i + 1);
+                    let mut ident = self.codegen_var_name(&lc);
+
+                    // `spread_arg` indicates that the last argument is tupled
+                    // at the LLVM/codegen level, so we need to declare the indivual
+                    // components as parameters with a special naming convention
+                    // so that we can "retuple" them in the function prelude.
+                    // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
+                    if let Some(spread) = self.current_fn().mir().spread_arg {
+                        if lc.index() >= spread.index() {
+                            let (name, _) = self.codegen_spread_arg_name(&lc);
+                            ident = name;
+                        }
+                    }
+                    Some(Type::parameter(Some(ident.to_string()), Some(ident), self.codegen_ty(*t)))
                 }
             })
             .collect();

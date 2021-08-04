@@ -5,8 +5,11 @@
 
 fn main() {
     // Create a boxed once-callable closure
-    let f: Box<dyn FnOnce(i32)> = Box::new(|x| assert!(x == 1));
+    let f: Box<dyn FnOnce(f32, i32)> = Box::new(|x, y| {
+        assert!(x == 1.0);
+        assert!(y == 2);
+    });
 
     // Call it
-    f(1);
+    f(1.0, 2);
 }
