@@ -16,7 +16,7 @@ jobs:
         id: git-diff
         run: |
           ignore='(.md|expected|ignore|gitignore)$'
-          files=$(git diff --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -v -E $ignore | xargs)
+          files=$(git diff --ignore-submodules=all --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -v -E $ignore | xargs)
           echo "::set-output name=paths::$files"
 
       - name: Execute copyright check

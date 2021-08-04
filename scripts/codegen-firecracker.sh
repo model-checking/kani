@@ -15,5 +15,5 @@ RMC_DIR=$SCRIPT_DIR/..
 
 # At the moment, we only test codegen for the virtio module
 git submodule update --init --recursive
-cd $(RMC_DIR)/firecracker/src/devices/src/virtio/
+cd $RMC_DIR/firecracker/src/devices/src/virtio/
 RUST_BACKTRACE=1 RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build --target x86_64-unknown-linux-gnu
