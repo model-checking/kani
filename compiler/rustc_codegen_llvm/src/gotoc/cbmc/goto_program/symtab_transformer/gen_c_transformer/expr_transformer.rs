@@ -160,7 +160,11 @@ impl Transformer for ExprTransformer {
                     .collect();
 
                 let ret_typ = transformed_typ.return_type().unwrap();
-                let (ret_typ, body) = if ret_typ.type_name() == Some("tag-Unit".to_string()) {
+                let (ret_typ, body) = if ret_typ.is_empty() {
+                    // If return type is empty, use empty body
+                    let body = Stmt::block(vec![], Location::none());
+                    (ret_typ.clone(), body)
+                } else if ret_typ.type_name() == Some("tag-Unit".to_string()) {
                     // If return type is unit type, make return type `void` and use empty body
                     let ret_typ = Type::empty();
                     let body = Stmt::block(vec![], Location::none());

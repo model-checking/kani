@@ -85,7 +85,11 @@ impl Transformer for NondetTransformer {
         for (identifier, typ) in self.nondet_types_owned() {
             let ret_type = typ.return_type().unwrap();
 
-            let (typ, body) = if ret_type.type_name() == Some("tag-Unit".to_string()) {
+            let (typ, body) = if ret_type.is_empty() {
+                // If return type is empty, use empty body
+                let body = Stmt::block(vec![], Location::none());
+                (typ, body)
+            } else if ret_type.type_name() == Some("tag-Unit".to_string()) {
                 // If return type is unit type, make return type `void` and use empty body
                 let typ = Type::code(typ.parameters().unwrap().clone(), Type::empty());
                 let body = Stmt::block(vec![], Location::none());
