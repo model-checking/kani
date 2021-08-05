@@ -89,6 +89,7 @@ impl Transformer for NondetTransformer {
         for (identifier, typ) in self.nondet_types_owned() {
             // Create function body which initializes variable and returns it
             let ret_type = typ.return_type().unwrap();
+            assert!(!ret_type.is_empty(), "Cannot generate nondet of type `void`.");
             let ret_name = format!("{}_ret", &identifier);
             let ret_expr = Expr::symbol_expression(ret_name.clone(), ret_type.clone());
             let body = Stmt::block(
