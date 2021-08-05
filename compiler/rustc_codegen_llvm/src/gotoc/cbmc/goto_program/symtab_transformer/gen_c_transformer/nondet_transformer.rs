@@ -64,6 +64,9 @@ impl Transformer for NondetTransformer {
             "Transformed StructTag must be StructTag; got {:?}",
             transformed_typ
         );
+
+        // Instead of just mapping `self.transform_expr` over the values,
+        // only transform those which are true fields, not padding
         let fields = self.symbol_table().lookup_fields_in_type(&transformed_typ).unwrap().clone();
         let mut transformed_values = Vec::new();
         for (field, value) in fields.into_iter().zip(values.into_iter()) {
@@ -73,6 +76,7 @@ impl Transformer for NondetTransformer {
                 transformed_values.push(self.transform_expr(value));
             }
         }
+
         Expr::struct_expr_from_padded_values(
             transformed_typ,
             transformed_values,
@@ -89,7 +93,9 @@ impl Transformer for NondetTransformer {
             let ret_expr = Expr::symbol_expression(ret_name.clone(), ret_type.clone());
             let body = Stmt::block(
                 vec![
+                    // <ret_type> var_ret;
                     Stmt::decl(ret_expr.clone(), None, Location::none()),
+                    // return var_ret;
                     Stmt::ret(Some(ret_expr), Location::none()),
                 ],
                 Location::none(),
