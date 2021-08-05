@@ -334,9 +334,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let typ = self.codegen_ty(self.tcx.type_of(def_id));
         let span = self.tcx.def_span(def_id);
         let location = self.codegen_span2(&span);
-        let symbol = Symbol::variable(symbol_name.to_string(), symbol_name, typ, location)
-            .with_is_thread_local(false)
-            .with_is_static_lifetime(true);
+        let symbol = Symbol::static_variable(symbol_name.to_string(), symbol_name, typ, location);
         self.symbol_table.insert(symbol);
     }
 

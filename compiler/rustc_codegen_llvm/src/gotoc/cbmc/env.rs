@@ -69,14 +69,12 @@ pub fn additional_env_symbols() -> Vec<Symbol> {
         int_constant("__CPROVER_malloc_failure_mode_assert_then_assume", 2),
         int_constant("__CPROVER_malloc_failure_mode_return_null", 1),
         Symbol::typedef("__CPROVER_size_t", "__CPROVER_size_t", Type::size_t(), Location::none()),
-        Symbol::variable(
+        Symbol::static_variable(
             "__CPROVER_memory".to_string(),
             "__CPROVER_memory".to_string(),
             Type::unsigned_int(8).infinite_array_of(),
             Location::none(),
         )
-        .with_is_extern(true)
-        .with_is_static_lifetime(true)
-        .with_is_thread_local(false),
+        .with_is_extern(true),
     ]
 }
