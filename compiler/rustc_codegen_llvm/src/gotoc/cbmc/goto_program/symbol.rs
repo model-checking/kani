@@ -175,6 +175,12 @@ impl Symbol {
             .with_is_state_var(true)
     }
 
+    pub fn static_variable(name: String, base_name: String, t: Type, l: Location) -> Symbol {
+        Symbol::variable(name, base_name, t, l)
+            .with_is_thread_local(false)
+            .with_is_static_lifetime(true)
+    }
+
     pub fn struct_type(name: &str, components: Vec<DatatypeComponent>) -> Symbol {
         Symbol::aggr_ty(Type::struct_type(name, components))
     }

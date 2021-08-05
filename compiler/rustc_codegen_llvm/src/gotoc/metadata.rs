@@ -194,10 +194,8 @@ impl<'tcx> GotocCtx<'tcx> {
         init_fn: F,
     ) -> Expr {
         if !self.symbol_table.contains(name) {
-            let sym = Symbol::variable(name.to_string(), name.to_string(), t.clone(), loc)
-                .with_is_file_local(is_file_local)
-                .with_is_thread_local(false)
-                .with_is_static_lifetime(true);
+            let sym = Symbol::static_variable(name.to_string(), name.to_string(), t.clone(), loc)
+                .with_is_file_local(is_file_local);
             let var = sym.to_expr();
             self.symbol_table.insert(sym);
             if let Some(body) = init_fn(self, var) {
