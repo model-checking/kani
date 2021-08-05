@@ -198,45 +198,49 @@ impl Transformer for ExprTransformer {
 
     /// Move `main` to `main_`, and create a wrapper `main` to initialize statics and return `int`.
     fn postprocess(&mut self) {
-        if let Some(old_main) = self.mut_symbol_table().remove("main") {
-            // Rename `main` to `main_`
+        // Rename `main` to `main_` if present
+        let call_old_main = self.mut_symbol_table().remove("main").map(|old_main| {
             let mut main_ = old_main;
             main_.name = "main_".to_string();
             main_.base_name = Some("main_".to_string());
             main_.pretty_name = Some("main_".to_string());
 
-            let mut main_body = Vec::new();
+            // Add `main_` to symbol table
+            self.mut_symbol_table().insert(main_.clone());
 
-            // Initialize statics
-            for (name, value) in self.empty_statics_owned() {
-                let sym_expr = Expr::symbol_expression(name, value.typ().clone());
-                main_body.push(Stmt::assign(sym_expr, value, Location::none()));
-            }
+            // `main_();`
+            Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none())
+        });
 
-            main_body.extend(
-                vec![
-                    // `main_();`
-                    Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none()),
-                    // `return 0;`
-                    Stmt::ret(
-                        Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
-                        Location::none(),
-                    ),
-                ]
-                .into_iter(),
-            );
+        // The body of the new `main` function
+        let mut main_body = Vec::new();
 
-            // Create `main` symbol
-            let new_main = Symbol::function(
-                "main",
-                Type::code(Vec::new(), Type::CInteger(CIntType::Int)),
-                Some(Stmt::block(main_body, Location::none())),
-                Some("main".to_string()),
-                Location::none(),
-            );
-
-            self.mut_symbol_table().insert(main_);
-            self.mut_symbol_table().insert(new_main);
+        // Initialize statics
+        for (name, value) in self.empty_statics_owned() {
+            let sym_expr = Expr::symbol_expression(name, value.typ().clone());
+            main_body.push(Stmt::assign(sym_expr, value, Location::none()));
         }
+
+        // `main_();`
+        if let Some(call_old_main) = call_old_main {
+            main_body.push(call_old_main);
+        }
+
+        // `return 0;`
+        main_body.push(Stmt::ret(
+            Some(Expr::int_constant(0, Type::CInteger(CIntType::Int))),
+            Location::none(),
+        ));
+
+        // Create `main` symbol
+        let new_main = Symbol::function(
+            "main",
+            Type::code(Vec::new(), Type::CInteger(CIntType::Int)),
+            Some(Stmt::block(main_body, Location::none())),
+            Some("main".to_string()),
+            Location::none(),
+        );
+
+        self.mut_symbol_table().insert(new_main);
     }
 }
