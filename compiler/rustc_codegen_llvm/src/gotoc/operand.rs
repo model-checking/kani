@@ -323,20 +323,29 @@ impl<'tcx> GotocCtx<'tcx> {
                 // here we have a function pointer
                 self.codegen_func_expr(instance, span).address_of()
             }
-            GlobalAlloc::Static(defid) => {
+            GlobalAlloc::Static(def_id) => {
                 // here we have a potentially unevaluated static
-                let instance = Instance::mono(self.tcx, defid);
-                let name = self.symbol_name(instance);
-                self.ensure(&name, |tcx, _| {
-                    let span = tcx.tcx.def_span(defid);
-                    Symbol::variable(
-                        name.clone(),
-                        name.clone(),
-                        tcx.codegen_ty(instance.ty(tcx.tcx, ty::ParamEnv::reveal_all())),
-                        tcx.codegen_span2(&span),
+                let instance = Instance::mono(self.tcx, def_id);
+
+                let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
+                    // check if this static is extern
+                    let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
+
+                    // we believe rlinkage being `Some` means the static not extern
+                    // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
+                    // see https://github.com/model-checking/rmc/issues/388
+                    assert!(rlinkage.is_none());
+
+                    let span = ctx.tcx.def_span(def_id);
+                    Symbol::static_variable(
+                        name.to_string(),
+                        name.to_string(),
+                        ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
+                        ctx.codegen_span2(&span),
                     )
+                    .with_is_extern(rlinkage.is_none())
                 });
-                self.symbol_table.lookup(&name).unwrap().clone().to_expr().address_of()
+                sym.clone().to_expr().address_of()
             }
             GlobalAlloc::Memory(alloc) => {
                 // crate_name added so that allocations in different crates don't clash
