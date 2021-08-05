@@ -271,7 +271,7 @@ pub trait Transformer: Sized {
         .with_location(e.location().clone())
     }
 
-    /// Transforms a reference expr (`&mut self`)
+    /// Transforms a reference expr (`&self`)
     fn transform_expr_address_of(&mut self, _typ: &Type, child: &Expr) -> Expr {
         self.transform_expr(child).address_of()
     }
