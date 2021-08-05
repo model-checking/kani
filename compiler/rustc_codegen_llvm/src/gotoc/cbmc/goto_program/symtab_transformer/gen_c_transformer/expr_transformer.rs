@@ -158,35 +158,21 @@ impl Transformer for ExprTransformer {
                     .iter()
                     .map(|parameter| self.add_parameter_identifier(parameter))
                     .collect();
-
-                let ret_typ = transformed_typ.return_type().unwrap();
-                let (ret_typ, body) = if ret_typ.is_empty() {
-                    // If return type is empty, use empty body
-                    let body = Stmt::block(vec![], Location::none());
-                    (ret_typ.clone(), body)
-                } else if ret_typ.type_name() == Some("tag-Unit".to_string()) {
-                    // If return type is unit type, make return type `void` and use empty body
-                    let ret_typ = Type::empty();
-                    let body = Stmt::block(vec![], Location::none());
-                    (ret_typ, body)
-                } else {
-                    // Otherwise, set body to return nondet
-                    let nondet_expr = Expr::nondet(ret_typ.clone());
-                    let body = Stmt::ret(Some(nondet_expr), Location::none());
-                    (ret_typ.clone(), body)
-                };
-
+                let ret_typ = transformed_typ.return_type().unwrap().clone();
                 let new_typ = if transformed_typ.is_code() {
-                    Type::code(parameters, ret_typ)
+                    Type::code(parameters, ret_typ.clone())
                 } else {
-                    Type::variadic_code(parameters, ret_typ)
+                    Type::variadic_code(parameters, ret_typ.clone())
                 };
+
+                // Create body, which returns nondet
+                let ret_e = if ret_typ.is_empty() { None } else { Some(Expr::nondet(ret_typ)) };
+                let body = Stmt::ret(ret_e, Location::none());
                 let new_value = SymbolValues::Stmt(body);
 
                 (new_typ, new_value)
             } else {
                 // Replace `extern static`s and initialize in `main`
-
                 assert!(
                     symbol.is_static_lifetime,
                     "Extern objects that aren't functions should be static variables."
