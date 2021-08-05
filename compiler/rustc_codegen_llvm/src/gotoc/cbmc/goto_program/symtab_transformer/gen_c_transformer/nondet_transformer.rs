@@ -83,33 +83,32 @@ impl Transformer for NondetTransformer {
     /// Create non_det functions which return default value for type.
     fn postprocess(&mut self) {
         for (identifier, typ) in self.nondet_types_owned() {
+            // Create function body which initializes variable and returns it
             let ret_type = typ.return_type().unwrap();
+            let ret_name = format!("{}_ret", &identifier);
+            let ret_expr = Expr::symbol_expression(ret_name.clone(), ret_type.clone());
+            let body = Stmt::block(
+                vec![
+                    Stmt::decl(ret_expr.clone(), None, Location::none()),
+                    Stmt::ret(Some(ret_expr), Location::none()),
+                ],
+                Location::none(),
+            );
 
-            let (typ, body) = if ret_type.is_empty() {
-                // If return type is empty, use empty body
-                let body = Stmt::block(vec![], Location::none());
-                (typ, body)
-            } else if ret_type.type_name() == Some("tag-Unit".to_string()) {
-                // If return type is unit type, make return type `void` and use empty body
-                let typ = Type::code(typ.parameters().unwrap().clone(), Type::empty());
-                let body = Stmt::block(vec![], Location::none());
-                (typ, body)
-            } else {
-                // Otherwise, set body to return nondet
-                let ret_value = ret_type.default(self.symbol_table());
-                let body = Stmt::ret(Some(ret_value), Location::none());
-                (typ, body)
-            };
+            // Add return variable to symbol table
+            let ret_sym =
+                Symbol::variable(ret_name, "ret".to_string(), ret_type.clone(), Location::none());
+            self.mut_symbol_table().insert(ret_sym);
 
-            let sym = Symbol::function(
+            // Add function to symbol table
+            let func_sym = Symbol::function(
                 &identifier,
                 typ,
                 Some(body),
                 Some(identifier.clone()),
                 Location::none(),
             );
-
-            self.mut_symbol_table().insert(sym);
+            self.mut_symbol_table().insert(func_sym);
         }
     }
 }
