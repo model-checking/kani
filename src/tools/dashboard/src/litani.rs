@@ -54,18 +54,17 @@ impl Litani {
         // to the command before passing it to Litani.
         let job_envs: HashMap<_, _> = job.get_envs().collect();
         let mut new_envs = String::new();
-        command.get_envs().filter(|(k, _)| !job_envs.contains_key(k)).fold(
-            &mut new_envs,
-            |fmt, (k, v)| {
+        command.get_envs().fold(&mut new_envs, |fmt, (k, v)| {
+            if !job_envs.contains_key(k) {
                 fmt.write_fmt(format_args!(
                     "{}=\"{}\" ",
                     k.to_str().unwrap(),
                     v.unwrap().to_str().unwrap()
                 ))
                 .unwrap();
-                fmt
-            },
-        );
+            }
+            fmt
+        });
         job.args([
             "add-job",
             "--command",
@@ -78,6 +77,8 @@ impl Litani {
             stage,
             "--ok-returns",
             &exit_status.to_string(),
+            "--timeout",
+            "10",
         ]);
         // Start executing the command, but do not wait for it to terminate.
         self.spawned_commands.push(job.spawn().unwrap());
