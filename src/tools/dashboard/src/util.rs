@@ -116,7 +116,7 @@ pub fn add_rmc_and_litani_to_path() {
     let cwd = env::current_dir().unwrap();
     let rmc_dir = cwd.join("scripts");
     let mut litani_dir = cwd.clone();
-    litani_dir.extend(["src", "tools", "aws-build-accumulator"].iter());
+    litani_dir.extend(["src", "tools", "litani"].iter());
     env::set_var(
         "PATH",
         format!("{}:{}:{}", rmc_dir.display(), litani_dir.display(), env::var("PATH").unwrap()),
@@ -133,8 +133,12 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
     rmc_rustc.args(&test_props.rustc_args).args(["-Z", "no-codegen"]).arg(&test_props.path);
     // TODO: replace `build` with `check` when Litani adds support for custom
     // stages (see issue #391).
+    let mut phony_out = test_props.path.clone();
+    phony_out.set_extension("check");
     litani.add_job(
         &rmc_rustc,
+        &[&test_props.path],
+        &[&phony_out],
         "Is this valid Rust code?",
         test_props.path.to_str().unwrap(),
         "build",
@@ -155,8 +159,14 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         .arg(&test_props.path);
     // TODO: replace `test` with `codegen` when Litani adds support for custom
     // stages (see issue #391).
+    let mut phony_in = test_props.path.clone();
+    phony_in.set_extension("check");
+    let mut phony_out = test_props.path.clone();
+    phony_out.set_extension("codegen");
     litani.add_job(
         &rmc_rustc,
+        &[&phony_in],
+        &[&phony_out],
         "Does RMC support all the Rust features used in it?",
         test_props.path.to_str().unwrap(),
         "test",
@@ -174,8 +184,12 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
     }
     // TODO: replace `report` with `verification` when Litani adds support for
     // custom stages (see issue #391).
+    let mut phony_in = test_props.path.clone();
+    phony_in.set_extension("codegen");
     litani.add_job(
         &rmc,
+        &[&phony_in],
+        &[],
         "Can RMC reason about it?",
         test_props.path.to_str().unwrap(),
         "report",

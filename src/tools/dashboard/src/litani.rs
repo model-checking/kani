@@ -44,6 +44,8 @@ impl Litani {
     pub fn add_job(
         &mut self,
         command: &Command,
+        inputs: &[&Path],
+        outputs: &[&Path],
         description: &str,
         pipeline: &str,
         stage: &str,
@@ -80,6 +82,12 @@ impl Litani {
             "--timeout",
             "10",
         ]);
+        if !inputs.is_empty() {
+            job.arg("--inputs").args(inputs);
+        }
+        if !outputs.is_empty() {
+            job.arg("--outputs").args(outputs).arg("--phony-outputs").args(outputs);
+        }
         // Start executing the command, but do not wait for it to terminate.
         self.spawned_commands.push(job.spawn().unwrap());
     }
