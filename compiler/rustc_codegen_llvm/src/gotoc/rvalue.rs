@@ -52,21 +52,21 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Rem => ce1.rem(ce2),
             BinOp::BitXor => {
                 if self.operand_ty(e1).is_bool() {
-                    ce1.xor(ce2)
+                    ce1.cast_to(Type::bool()).xor(ce2.cast_to(Type::bool()))
                 } else {
                     ce1.bitxor(ce2)
                 }
             }
             BinOp::BitAnd => {
                 if self.operand_ty(e1).is_bool() {
-                    ce1.and(ce2)
+                    ce1.cast_to(Type::bool()).and(ce2.cast_to(Type::bool()))
                 } else {
                     ce1.bitand(ce2)
                 }
             }
             BinOp::BitOr => {
                 if self.operand_ty(e1).is_bool() {
-                    ce1.or(ce2)
+                    ce1.cast_to(Type::bool()).or(ce2.cast_to(Type::bool()))
                 } else {
                     ce1.bitor(ce2)
                 }
