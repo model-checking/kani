@@ -3,8 +3,8 @@
 //! Utilities types and procedures to parse and run tests.
 //!
 //! TODO: The types and procedures in this modules are similar to the ones in
-//! `compiletest`. Consider using `Litani` to run the test suites (see issue
-//! #390).
+//! `compiletest`. Consider using `Litani` to run the test suites (see
+//! [issue #390](https://github.com/model-checking/rmc/issues/390)).
 
 use crate::litani::Litani;
 use std::{
@@ -125,14 +125,11 @@ pub fn add_rmc_and_litani_to_path() {
 
 /// Does RMC catch syntax, type, and borrow errors (if any)?
 pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
-    // TODO: add logic to ensure that the next 2 steps run only if this step
-    // succeeds (and RMC is not expected to panic in this step) (see issue
-    // #392).
     let exit_status = if test_props.fail_step == Some(FailStep::Check) { 1 } else { 0 };
     let mut rmc_rustc = Command::new("rmc-rustc");
     rmc_rustc.args(&test_props.rustc_args).args(["-Z", "no-codegen"]).arg(&test_props.path);
     // TODO: replace `build` with `check` when Litani adds support for custom
-    // stages (see issue #391).
+    // stages (see https://github.com/model-checking/rmc/issues/391).
     let mut phony_out = test_props.path.clone();
     phony_out.set_extension("check");
     litani.add_job(
@@ -143,14 +140,12 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "build",
         exit_status,
+        1,
     );
 }
 
 /// Is RMC expected to codegen all the Rust features in the test?
 pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
-    // TODO: again, add logic to ensure that the next step runs only if this
-    // step succeeds (and RMC is not expected to panic in this step) (see issue
-    // #392).
     let exit_status = if test_props.fail_step == Some(FailStep::Codegen) { 1 } else { 0 };
     let mut rmc_rustc = Command::new("rmc-rustc");
     rmc_rustc
@@ -158,7 +153,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         .args(["-Z", "codegen-backend=gotoc", "--cfg=rmc", "--out-dir", "build/tmp"])
         .arg(&test_props.path);
     // TODO: replace `test` with `codegen` when Litani adds support for custom
-    // stages (see issue #391).
+    // stages (see https://github.com/model-checking/rmc/issues/391).
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("check");
     let mut phony_out = test_props.path.clone();
@@ -171,6 +166,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "test",
         exit_status,
+        1,
     );
 }
 
@@ -183,7 +179,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
         rmc.env("RUSTFLAGS", test_props.rustc_args.join(" "));
     }
     // TODO: replace `report` with `verification` when Litani adds support for
-    // custom stages (see issue #391).
+    // custom stages (see https://github.com/model-checking/rmc/issues/391).
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("codegen");
     litani.add_job(
@@ -194,6 +190,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "report",
         exit_status,
+        10,
     );
 }
 

@@ -50,6 +50,7 @@ impl Litani {
         pipeline: &str,
         stage: &str,
         exit_status: i32,
+        timeout: u32,
     ) {
         let mut job = Command::new("litani");
         // The given command may contain additional env vars. Prepend those vars
@@ -80,7 +81,7 @@ impl Litani {
             "--ok-returns",
             &exit_status.to_string(),
             "--timeout",
-            "10",
+            &timeout.to_string(),
         ]);
         if !inputs.is_empty() {
             job.arg("--inputs").args(inputs);
