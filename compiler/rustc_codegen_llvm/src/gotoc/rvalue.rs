@@ -48,30 +48,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let ce1 = self.codegen_operand(e1);
         let ce2 = self.codegen_operand(e2);
         match op {
+            BinOp::BitAnd => ce1.bitand(ce2),
+            BinOp::BitOr => ce1.bitor(ce2),
+            BinOp::BitXor => ce1.bitxor(ce2),
             BinOp::Div => ce1.div(ce2),
             BinOp::Rem => ce1.rem(ce2),
-            BinOp::BitXor => {
-                if self.operand_ty(e1).is_bool() {
-                    ce1.xor(ce2)
-                } else {
-                    ce1.bitxor(ce2)
-                }
-            }
-            BinOp::BitAnd => {
-                if self.operand_ty(e1).is_bool() {
-                    ce1.and(ce2)
-                } else {
-                    ce1.bitand(ce2)
-                }
-            }
-            BinOp::BitOr => {
-                if self.operand_ty(e1).is_bool() {
-                    ce1.or(ce2)
-                } else {
-                    ce1.bitor(ce2)
-                }
-            }
-            _ => unreachable!(),
+            _ => unreachable!("Unexpected {:?}", op),
         }
     }
 
