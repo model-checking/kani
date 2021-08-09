@@ -11,7 +11,7 @@
 //! This file is for defining the data-structure itself.
 //!   1. Defines `GotocCtx<'tcx>`
 //!   2. Provides constructors, getters and setters for the context.
-//! Any MIR specific functionality (e.g. codegen etc) should live in specalized files that use
+//! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 
 use super::cbmc::goto_program::{
