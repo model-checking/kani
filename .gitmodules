@@ -47,3 +47,7 @@
 [submodule "firecracker"]
 	path = firecracker
 	url = https://github.com/firecracker-microvm/firecracker.git
+[submodule "src/tools/litani"]
+	path = src/tools/litani
+	url = https://github.com/awslabs/aws-build-accumulator.git
+	branch = develop

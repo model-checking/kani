@@ -4,7 +4,7 @@
 //! [The Rust Reference](https://doc.rust-lang.org/nightly/reference),
 //! run them through RMC, and display their results.
 
-use crate::dashboard;
+use crate::{dashboard, litani::Litani, util};
 use pulldown_cmark::{Parser, Tag};
 use std::{
     collections::HashMap,
@@ -214,7 +214,7 @@ fn preprocess_examples(map: &HashMap<Example, PathBuf>) {
 
     for test in loop_tests {
         let code = fs::read_to_string(&test).unwrap();
-        let code = format!("// cbmc-flags: --unwind 1 --unwinding-assertions\n{}", code);
+        let code = format!("// rmc-flags: --cbmc-args --unwind 1\n{}", code);
         fs::write(&test, code).unwrap();
     }
 }
@@ -303,6 +303,30 @@ fn display_dashboard(dashboard: dashboard::Tree) {
     println!("{}", dashboard);
 }
 
+/// Runs examples using Litani build.
+fn litani_run_tests() {
+    let output_prefix: PathBuf = ["build", "output"].iter().collect();
+    let output_symlink: PathBuf = output_prefix.join("latest");
+    let ref_dir: PathBuf = ["src", "test", "ref"].iter().collect();
+    util::add_rmc_and_litani_to_path();
+    let mut litani = Litani::init("RMC", &output_prefix, &output_symlink);
+    let mut stack = vec![ref_dir];
+    // Run all tests under the `src/test/ref` directory.
+    while !stack.is_empty() {
+        let cur_dir = stack.pop().unwrap();
+        for child in cur_dir.read_dir().unwrap() {
+            let child = child.unwrap().path();
+            if child.is_file() {
+                let test_props = util::parse_test_header(&child);
+                util::add_test_pipeline(&mut litani, &test_props);
+            } else {
+                stack.push(child);
+            }
+        }
+    }
+    litani.run_build();
+}
+
 /// Extracts examples from The Rust Reference, run them through RMC, and
 /// displays their results in a terminal dashboard.
 pub fn display_reference_dashboard() {
@@ -324,4 +348,6 @@ pub fn display_reference_dashboard() {
     let dashboard = parse_log(&log_path);
     // Display the reference dashboard.
     display_dashboard(dashboard);
+    // Generate Litani's dashboard.
+    litani_run_tests();
 }
