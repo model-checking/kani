@@ -21,14 +21,6 @@ use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
 
-// #[derive(RustcEncodable, RustcDecodable)]
-pub struct GotocCodegenResult {
-    pub symtab: SymbolTable,
-    pub crate_name: rustc_span::Symbol,
-}
-
-pub struct GotocMetadataLoader();
-
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
@@ -186,6 +178,21 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn find_function(&mut self, fname: &str) -> Option<Expr> {
         self.symbol_table.lookup(&fname).map(|s| s.to_expr())
     }
+
+    /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
+    pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
+        let fn_name = Self::initializer_fn_name(var_name);
+        self.ensure(&fn_name, |_tcx, _| {
+            Symbol::function(
+                &fn_name,
+                Type::code(vec![], Type::constructor()),
+                Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
+                None,
+                Location::none(),
+            )
+            .with_is_file_local(true)
+        })
+    }
 }
 
 /// Mutators
@@ -202,55 +209,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let c = self.global_var_count;
         self.global_var_count += 1;
         format!("{}::global::{}::", self.tcx.crate_name(LOCAL_CRATE), c)
-    }
-
-    /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
-    pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
-        let fn_name = Self::initializer_fn_name(var_name);
-        self.ensure(&fn_name, |_tcx, _| {
-            Symbol::function(
-                &fn_name,
-                Type::code(vec![], Type::constructor()),
-                Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
-                None,
-                Location::none(),
-            )
-            .with_is_file_local(true)
-        })
-    }
-
-    /// RMC does not currently support all MIR constructs.
-    /// When we hit a construct we don't handle, we have two choices:
-    /// We can use the `unimplemented!()` macro, which causes a compile time failure.
-    /// Or, we can use this function, which inserts an `assert(false, "FOO is not currently supported by RMC")` into the generated code.
-    /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
-    /// If it is not used, we the assertion will pass.
-    /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
-    ///
-    /// TODO: https://github.com/model-checking/rmc/issues/8 assume the required validity constraints for the nondet return
-    /// TODO: https://github.com/model-checking/rmc/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
-    pub fn codegen_unimplemented(
-        &mut self,
-        operation_name: &str,
-        t: Type,
-        loc: Location,
-        url: &str,
-    ) -> Expr {
-        let body = vec![
-            // Assert false to alert the user that there is a path that uses an unimplemented feature.
-            Stmt::assert_false(
-                &format!(
-                    "{} is not currently supported by RMC. Please post your example at {} ",
-                    operation_name, url
-                ),
-                loc.clone(),
-            ),
-            // Assume false to block any further exploration of this path.
-            Stmt::assume(Expr::bool_false(), loc.clone()),
-            t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
-        ];
-
-        Expr::statement_expression(body, t).with_location(loc)
     }
 }
 
@@ -280,7 +238,7 @@ impl<'tcx> HasDataLayout for GotocCtx<'tcx> {
         self.tcx.data_layout()
     }
 }
-
+pub struct GotocMetadataLoader();
 impl MetadataLoader for GotocMetadataLoader {
     fn get_rlib_metadata(&self, _: &Target, _filename: &Path) -> Result<MetadataRef, String> {
         let buf = vec![];

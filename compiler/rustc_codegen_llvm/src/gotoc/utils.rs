@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{Expr, Location, SymbolTable, Type};
+use super::cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
 use super::metadata::*;
 use crate::btree_string_map;
 use rustc_hir::def_id::DefId;
@@ -16,6 +16,42 @@ pub fn slice_fat_ptr(typ: Type, data: Expr, len: Expr, symbol_table: &SymbolTabl
 
 pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &SymbolTable) -> Expr {
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
+}
+
+impl<'tcx> GotocCtx<'tcx> {
+    /// RMC does not currently support all MIR constructs.
+    /// When we hit a construct we don't handle, we have two choices:
+    /// We can use the `unimplemented!()` macro, which causes a compile time failure.
+    /// Or, we can use this function, which inserts an `assert(false, "FOO is not currently supported by RMC")` into the generated code.
+    /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
+    /// If it is not used, we the assertion will pass.
+    /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
+    ///
+    /// TODO: https://github.com/model-checking/rmc/issues/8 assume the required validity constraints for the nondet return
+    /// TODO: https://github.com/model-checking/rmc/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
+    pub fn codegen_unimplemented(
+        &mut self,
+        operation_name: &str,
+        t: Type,
+        loc: Location,
+        url: &str,
+    ) -> Expr {
+        let body = vec![
+            // Assert false to alert the user that there is a path that uses an unimplemented feature.
+            Stmt::assert_false(
+                &format!(
+                    "{} is not currently supported by RMC. Please post your example at {} ",
+                    operation_name, url
+                ),
+                loc.clone(),
+            ),
+            // Assume false to block any further exploration of this path.
+            Stmt::assume(Expr::bool_false(), loc.clone()),
+            t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
+        ];
+
+        Expr::statement_expression(body, t).with_location(loc)
+    }
 }
 
 /// Functions that make names for things
