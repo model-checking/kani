@@ -1,6 +1,18 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! this module defines some metadata structures for the codegen
+
+//! RMC can be thought of as a translator from an MIR context to a goto context.
+//! This struct `GotocCtx<'tcx>` defined in this file, tracks both views of information.
+//! In particular
+//!   - `tcx` of the struct represents the MIR view
+//!   - `symbol_table` represents the collected intermediate codegen results
+//!   - the remaining fields represent temporary metadata held to assist in codegen.
+//!
+//! This file is for defining the data-structure itself.
+//!   1. Defines `GotocCtx<'tcx>`
+//!   2. Provides constructors, getters and setters for the context.
+//! Any MIR specific functionality (e.g. codegen etc) should live in specalized files that use
+//! this structure as input.
 
 use super::cbmc::goto_program::{
     DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type,
