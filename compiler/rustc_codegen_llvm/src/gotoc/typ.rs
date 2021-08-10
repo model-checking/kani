@@ -6,10 +6,11 @@ use super::metadata::GotocCtx;
 use crate::btree_map;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
-use rustc_middle::mir::Local;
+use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
+use rustc_middle::ty::TypeFoldable;
 use rustc_middle::ty::{
     self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef, VtblEntry,
 };
@@ -23,6 +24,7 @@ use rustc_target::spec::abi::Abi;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
+use std::iter;
 use tracing::debug;
 use ty::layout::HasParamEnv;
 
@@ -81,7 +83,134 @@ struct StructField<'tcx> {
     ty: Ty<'tcx>,
 }
 
+/// Function signatures
 impl<'tcx> GotocCtx<'tcx> {
+    /// Closures expect their last arg untupled at call site, see comment at
+    /// ty_needs_closure_untupled.
+    fn sig_with_closure_untupled(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
+        debug!("sig_with_closure_untupled sig: {:?}", sig);
+        let fn_sig = sig.skip_binder();
+        if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
+            let args: Vec<Ty<'tcx>> = match tupe.kind() {
+                ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()),
+                _ => unreachable!("the final argument of a closure must be a tuple"),
+            }
+            .collect();
+
+            // The leading argument should be exactly the environment
+            assert!(prev_args.len() == 1);
+            let env = prev_args[0].clone();
+
+            // Recombine arguments: environment first, then the flattened tuple elements
+            let recombined_args = iter::once(env).chain(args);
+
+            return ty::Binder::bind_with_vars(
+                self.tcx.mk_fn_sig(
+                    recombined_args,
+                    fn_sig.output(),
+                    fn_sig.c_variadic,
+                    fn_sig.unsafety,
+                    fn_sig.abi,
+                ),
+                sig.bound_vars(),
+            );
+        }
+        sig
+    }
+
+    fn closure_sig(
+        &self,
+        def_id: DefId,
+        substs: ty::subst::SubstsRef<'tcx>,
+    ) -> ty::PolyFnSig<'tcx> {
+        let sig = self.monomorphize(substs.as_closure().sig());
+
+        // In addition to `def_id` and `substs`, we need to provide the kind of region `env_region`
+        // in `closure_env_ty`, which we can build from the bound variables as follows
+        let bound_vars = self.tcx.mk_bound_variable_kinds(
+            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
+        );
+        let br = ty::BoundRegion {
+            var: ty::BoundVar::from_usize(bound_vars.len() - 1),
+            kind: ty::BoundRegionKind::BrEnv,
+        };
+        let env_region = ty::ReLateBound(ty::INNERMOST, br);
+        let env_ty = self.tcx.closure_env_ty(def_id, substs, env_region).unwrap();
+
+        let sig = sig.skip_binder();
+
+        // We build a binder from `sig` where:
+        //  * `inputs` contains a sequence with the closure and parameter types
+        //  * the rest of attributes are obtained from `sig`
+        let sig = ty::Binder::bind_with_vars(
+            self.tcx.mk_fn_sig(
+                iter::once(env_ty).chain(iter::once(sig.inputs()[0])),
+                sig.output(),
+                sig.c_variadic,
+                sig.unsafety,
+                sig.abi,
+            ),
+            bound_vars,
+        );
+
+        // The parameter types are tupled, but we want to have them in a vector
+        self.sig_with_closure_untupled(sig)
+    }
+
+    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> ty::PolyFnSig<'tcx> {
+        let fntyp = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
+        self.monomorphize(match fntyp.kind() {
+            ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
+            ty::FnPtr(..) | ty::FnDef(..) => {
+                let sig = fntyp.fn_sig(self.tcx);
+                // Some virtual calls through a vtable may actually be closures
+                // or shims that also need the arguments untupled, even though
+                // the kind of the trait type is not a ty::Closure.
+                if self.ty_needs_closure_untupled(fntyp) {
+                    return self.sig_with_closure_untupled(sig);
+                }
+                sig
+            }
+            _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
+        })
+    }
+}
+
+impl<'tcx> GotocCtx<'tcx> {
+    pub fn monomorphize<T>(&self, value: T) -> T
+    where
+        T: TypeFoldable<'tcx>,
+    {
+        // Instance is Some(..) only when current codegen unit is a function.
+        if let Some(current_fn) = &self.current_fn {
+            current_fn.instance().subst_mir_and_normalize_erasing_regions(
+                self.tcx,
+                ty::ParamEnv::reveal_all(),
+                value,
+            )
+        } else {
+            // TODO: confirm with rust team there is no way to monomorphize
+            // a global value.
+            value
+        }
+    }
+
+    pub fn local_ty(&self, l: Local) -> Ty<'tcx> {
+        self.monomorphize(self.current_fn().mir().local_decls()[l].ty)
+    }
+
+    pub fn rvalue_ty(&self, rv: &Rvalue<'tcx>) -> Ty<'tcx> {
+        self.monomorphize(rv.ty(self.current_fn().mir().local_decls(), self.tcx))
+    }
+
+    pub fn operand_ty(&self, o: &Operand<'tcx>) -> Ty<'tcx> {
+        self.monomorphize(o.ty(self.current_fn().mir().local_decls(), self.tcx))
+    }
+
+    pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
+        self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
+    }
+
     /// Is the MIR type an unsized type (i.e. one represented by a fat pointer?)
     pub fn is_unsized(&self, t: &'tcx TyS<'_>) -> bool {
         !self
