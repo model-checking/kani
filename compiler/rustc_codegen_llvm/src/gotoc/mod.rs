@@ -40,6 +40,12 @@ pub mod stubs;
 mod typ;
 mod utils;
 
+// #[derive(RustcEncodable, RustcDecodable)]
+pub struct GotocCodegenResult {
+    pub symtab: SymbolTable,
+    pub crate_name: rustc_span::Symbol,
+}
+
 // Use a thread-local global variable to track the current codegen item for debugging.
 // If RMC panics during codegen, we can grab this item to include the problematic
 // codegen item in the panic trace.

@@ -1,12 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
-use rustc_span::Span;
-
-use super::cbmc::goto_program::{Expr, Location, SymbolTable, Type};
+use super::cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
 use super::metadata::*;
-
 use crate::btree_string_map;
+use rustc_hir::def_id::DefId;
+use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
+use rustc_middle::ty::print::with_no_trimmed_paths;
+use rustc_middle::ty::Instance;
+use rustc_span::Span;
+use tracing::debug;
 
 pub fn slice_fat_ptr(typ: Type, data: Expr, len: Expr, symbol_table: &SymbolTable) -> Expr {
     Expr::struct_expr(typ, btree_string_map![("data", data), ("len", len)], symbol_table)
@@ -17,18 +19,55 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
 }
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// RMC does not currently support all MIR constructs.
+    /// When we hit a construct we don't handle, we have two choices:
+    /// We can use the `unimplemented!()` macro, which causes a compile time failure.
+    /// Or, we can use this function, which inserts an `assert(false, "FOO is not currently supported by RMC")` into the generated code.
+    /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
+    /// If it is not used, we the assertion will pass.
+    /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
+    ///
+    /// TODO: https://github.com/model-checking/rmc/issues/8 assume the required validity constraints for the nondet return
+    /// TODO: https://github.com/model-checking/rmc/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
+    pub fn codegen_unimplemented(
+        &mut self,
+        operation_name: &str,
+        t: Type,
+        loc: Location,
+        url: &str,
+    ) -> Expr {
+        let body = vec![
+            // Assert false to alert the user that there is a path that uses an unimplemented feature.
+            Stmt::assert_false(
+                &format!(
+                    "{} is not currently supported by RMC. Please post your example at {} ",
+                    operation_name, url
+                ),
+                loc.clone(),
+            ),
+            // Assume false to block any further exploration of this path.
+            Stmt::assume(Expr::bool_false(), loc.clone()),
+            t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
+        ];
+
+        Expr::statement_expression(body, t).with_location(loc)
+    }
+}
+
+/// Functions that make names for things
+impl<'tcx> GotocCtx<'tcx> {
+    pub fn codegen_var_base_name(&self, l: &Local) -> String {
+        match self.find_debug_info(l) {
+            None => format!("var_{}", l.index()),
+            Some(info) => format!("{}", info.name),
+        }
+    }
+
     pub fn codegen_var_name(&self, l: &Local) -> String {
         let fname = self.current_fn().name();
         match self.find_debug_info(l) {
             Some(info) => format!("{}::1::var{:?}::{}", fname, l, info.name),
             None => format!("{}::1::var{:?}", fname, l),
-        }
-    }
-
-    pub fn codegen_var_base_name(&self, l: &Local) -> String {
-        match self.find_debug_info(l) {
-            None => format!("var_{}", l.index()),
-            Some(info) => format!("{}", info.name),
         }
     }
 
@@ -42,6 +81,64 @@ impl<'tcx> GotocCtx<'tcx> {
         (name, base_name)
     }
 
+    pub fn initializer_fn_name(var_name: &str) -> String {
+        format!("{}_init", var_name)
+    }
+
+    /// A human readable name in Rust for reference, should not be used as a key.
+    pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
+        with_no_trimmed_paths(|| self.tcx.def_path_str(instance.def_id()))
+    }
+
+    /// The actual function name used in the symbol table
+    pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
+        let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
+        debug!(
+            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}, demangle: {}",
+            instance,
+            instance,
+            self.readable_instance_name(instance),
+            llvm_mangled,
+            rustc_demangle::demangle(&llvm_mangled).to_string()
+        );
+
+        let pretty = self.readable_instance_name(instance);
+
+        // Make main function a special case for easy CBMC entry
+        // TODO: probably need to edit for https://github.com/model-checking/rmc/issues/169
+        if pretty == "main" {
+            "main".to_string()
+        } else {
+            // TODO: llvm mangled string is not very readable. one way to tackle this is to
+            // demangle it. but the demangled string has no generic info.
+            // the best scenario is to use v0 mangler, but this is not default at this moment.
+            // this is the kind of tiny but annoying issue.
+            // c.f. https://github.com/rust-lang/rust/issues/60705
+            //
+            // the following solution won't work pretty:
+            // match self.tcx.sess.opts.debugging_opts.symbol_mangling_version {
+            //     SymbolManglingVersion::Legacy => llvm_mangled,
+            //     SymbolManglingVersion::V0 => rustc_demangle::demangle(llvm_mangled.as_str()).to_string(),
+            // }
+            llvm_mangled
+        }
+    }
+
+    /// The name for the struct field on a vtable for a given function. Because generic
+    /// functions can share the same name, we need to use the index of the entry in the
+    /// vtable. This is the same index that will be passed in virtual function calls as
+    /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
+    /// the vtable struct, but we add the method name for debugging readability.
+    ///     Example: 3_vol
+    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> String {
+        // format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.item_name(def_id)))
+        // TODO: use def_id https://github.com/model-checking/rmc/issues/364
+        idx.to_string()
+    }
+}
+
+/// MIR Span related functions
+impl<'tcx> GotocCtx<'tcx> {
     pub fn find_debug_info(&self, l: &Local) -> Option<&VarDebugInfo<'tcx>> {
         self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
             VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
