@@ -3,6 +3,12 @@
 
 //! This file contains functions related to codegenning MIR static variables into gotoc
 
+use super::cbmc::goto_program::Symbol;
+use super::metadata::*;
+use rustc_hir::def_id::DefId;
+use rustc_middle::mir::mono::MonoItem;
+use tracing::debug;
+
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {
         debug!("codegen_static");
@@ -11,7 +17,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_allocation(alloc, |_| symbol_name.clone(), Some(symbol_name.clone()));
     }
 
-    fn declare_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {
+    pub fn declare_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {
         debug!("declare_static {:?}", def_id);
         let symbol_name = item.symbol_name(self.tcx).to_string();
         let typ = self.codegen_ty(self.tcx.type_of(def_id));

@@ -2,34 +2,29 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
-use cbmc::goto_program::{Stmt, Symbol, SymbolTable};
+use cbmc::goto_program::{Stmt, SymbolTable};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;
-use rustc_hir::def_id::DefId;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::middle::cstore::{EncodedMetadata, MetadataLoaderDyn};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
-use rustc_middle::mir::Body;
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
 use rustc_target::abi::Endian;
-use std::cell::RefCell;
 use std::lazy::SyncLazy;
-use std::panic;
 use tracing::{debug, warn};
 
 mod assumptions;
-mod backend;
 mod block;
 pub mod cbmc;
 mod current_fn;
+mod debug;
 mod function;
 mod hooks;
 mod intrinsic;
@@ -49,8 +44,6 @@ pub struct GotocCodegenResult {
     pub symtab: SymbolTable,
     pub crate_name: rustc_span::Symbol,
 }
-
-
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend();
@@ -73,7 +66,6 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => false,
         }
     }
-
 }
 
 impl GotocCodegenBackend {
@@ -155,7 +147,7 @@ impl CodegenBackend for GotocCodegenBackend {
         use rustc_hir::def_id::LOCAL_CRATE;
 
         // Install panic hook
-        SyncLazy::force(&DEFAULT_HOOK); // Install ice hook
+        SyncLazy::force(&debug::DEFAULT_HOOK); // Install ice hook
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mm = machine_model_from_session(&tcx.sess);
