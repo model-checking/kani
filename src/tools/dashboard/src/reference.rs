@@ -4,18 +4,23 @@
 //! [The Rust Reference](https://doc.rust-lang.org/nightly/reference),
 //! run them through RMC, and display their results.
 
-use crate::{dashboard, litani::Litani, util};
+use crate::{
+    dashboard,
+    litani::Litani,
+    util::{self, FailStep, TestProps},
+};
 use pulldown_cmark::{Parser, Tag};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env,
-    fmt::{Debug, Formatter, Result},
+    fmt::{Debug, Formatter, Result, Write},
     fs::{self, File},
     hash::Hash,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use walkdir::WalkDir;
 
 /// Parses the chapter/section hierarchy in the markdown file specified by
 /// `summary_path` and returns a mapping from markdown files containing rust
@@ -151,72 +156,98 @@ fn extract(par_from: &Path, par_to: &Path) -> Vec<(Example, PathBuf)> {
     pairs
 }
 
-/// Prepends the text in `path` with the given `text`.
-fn prepend_text(path: &Path, text: &str) {
-    let code = fs::read_to_string(&path).unwrap();
-    let code = format!("{}\n{}", text, code);
-    fs::write(&path, code).unwrap();
+/// Returns a set of paths to the config files for examples in the Rust books.
+fn get_config_paths() -> HashSet<PathBuf> {
+    let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
+    let mut config_paths = HashSet::new();
+    for entry in WalkDir::new(config_dir) {
+        let entry = entry.unwrap().into_path();
+        if entry.is_file() {
+            config_paths.insert(entry);
+        }
+    }
+    config_paths
+}
+
+/// Prepends the given `props` to the test file in `props.test`.
+fn prepend_props(props: &TestProps) {
+    let code = fs::read_to_string(&props.path).unwrap();
+    let code = format!("{}{}", props, code);
+    fs::write(&props.path, code).unwrap();
+}
+
+/// Pretty prints the `paths` set.
+fn paths_to_string(paths: HashSet<PathBuf>) -> String {
+    let mut f = String::new();
+    for path in paths {
+        f.write_fmt(format_args!("    {:?}\n", path.to_str().unwrap())).unwrap();
+    }
+    f
 }
 
 /// Pre-processes the examples in `map` before running them with `compiletest`.
 fn preprocess_examples(map: &HashMap<Example, PathBuf>) {
-    // Copy compiler configurations specified in the original markdown code
-    // block.
+    let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
+    let test_dir: PathBuf = ["src", "test"].iter().collect();
+    let mut config_paths = get_config_paths();
+    // Copy compiler annotations specified in the original markdown code blocks
+    // and custom configurations under the `config` directory.
     for (from, to) in map.iter() {
+        // Path `to` has the following form:
+        // `src/test/ref/<hierarchy>/<line-num>.rs`
+        // If it has a custom props file, the path to the props file will have
+        // the following form:
+        // `src/tools/dashboard/configs/ref/<hierarchy>/<line-num>.props`
+        // where <hierarchy> and <line-num> are the same for both paths.
+        let mut props_path = config_dir.join(to.strip_prefix(&test_dir).unwrap());
+        props_path.set_extension("props");
+        let mut props = if props_path.exists() {
+            config_paths.remove(&props_path);
+            // Parse the properties in the file. The format follows the same
+            // conventions for the headers in RMC regressions.
+            let mut props = util::parse_test_header(&props_path);
+            // `util::parse_test_header` thinks `props_path` is the path to the
+            // test. That is not the case, `to` is the actual path to the
+            // test/example.
+            props.path = to.clone();
+            props
+        } else {
+            TestProps::new(to.clone(), None, Vec::new(), Vec::new())
+        };
         let file = File::open(&from.path).unwrap();
         // Skip to the first line of the example code block.
         // Line numbers in files start with 1 but `nth(...)` starts with 0.
         // Subtract 1 to account for the difference.
         let line = BufReader::new(file).lines().nth(from.line - 1).unwrap().unwrap();
-        if line.contains("edition2015") {
-            prepend_text(to, "// compile-flags: --edition 2015");
-        } else {
-            prepend_text(to, "// compile-flags: --edition 2018");
+        if !line.contains("edition2015") {
+            props.rustc_args.push(String::from("--edition"));
+            props.rustc_args.push(String::from("2018"));
         }
-        // Most examples with `compile_fail` configuration fail because of
-        // check errors.
-        if line.contains("compile_fail") {
-            prepend_text(to, "// rmc-check-fail");
+        // Most examples with `compile_fail` annotation fail because of check
+        // errors. This heuristic can be overridden by manually specifying the
+        // fail step in the corresponding config file.
+        if props.fail_step.is_none() && line.contains("compile_fail") {
+            props.fail_step = Some(FailStep::Check);
         }
         // RMC should catch run-time errors.
-        if line.contains("should_panic") {
-            prepend_text(to, "// rmc-verify-fail");
+        if props.fail_step.is_none() && line.contains("should_panic") {
+            props.fail_step = Some(FailStep::Verification);
         }
+        // Prepend those properties to test/example file.
+        prepend_props(&props);
     }
-    // For now, we will only manually pre-process the tests that cause infinite loops.
-    // TODO: Add support for manually adding options and assertions (see issue #324).
-    let loop_tests: [PathBuf; 4] = [
-        ["src", "test", "ref", "Appendices", "Glossary", "263.rs"].iter().collect(),
-        ["src", "test", "ref", "Linkage", "190.rs"].iter().collect(),
-        [
-            "src",
-            "test",
-            "ref",
-            "Statements and expressions",
-            "Expressions",
-            "Loop expressions",
-            "133.rs",
-        ]
-        .iter()
-        .collect(),
-        [
-            "src",
-            "test",
-            "ref",
-            "Statements and expressions",
-            "Expressions",
-            "Method call expressions",
-            "10.rs",
-        ]
-        .iter()
-        .collect(),
-    ];
-
-    for test in loop_tests {
-        let code = fs::read_to_string(&test).unwrap();
-        let code = format!("// rmc-flags: --cbmc-args --unwind 1\n{}", code);
-        fs::write(&test, code).unwrap();
+    if !config_paths.is_empty() {
+        panic!(
+            "Error: The examples corresponding to the following config files \
+             were not encountered in the pre-processing step:\n{}This is most \
+             likely because the line numbers of the config files are not in \
+             sync with the line numbers of the corresponding code blocks in \
+             the latest versions of the Rust books. Please update the line \
+             numbers of the config files and rerun the program.",
+            paths_to_string(config_paths)
+        );
     }
+    // TODO: Add support for manually adding assertions (see issue #324).
 }
 
 /// Runs `compiletest` on the `suite` and logs the results to `log_path`.
@@ -310,18 +341,12 @@ fn litani_run_tests() {
     let ref_dir: PathBuf = ["src", "test", "ref"].iter().collect();
     util::add_rmc_and_litani_to_path();
     let mut litani = Litani::init("RMC", &output_prefix, &output_symlink);
-    let mut stack = vec![ref_dir];
     // Run all tests under the `src/test/ref` directory.
-    while !stack.is_empty() {
-        let cur_dir = stack.pop().unwrap();
-        for child in cur_dir.read_dir().unwrap() {
-            let child = child.unwrap().path();
-            if child.is_file() {
-                let test_props = util::parse_test_header(&child);
-                util::add_test_pipeline(&mut litani, &test_props);
-            } else {
-                stack.push(child);
-            }
+    for entry in WalkDir::new(ref_dir) {
+        let entry = entry.unwrap().into_path();
+        if entry.is_file() {
+            let test_props = util::parse_test_header(&entry);
+            util::add_test_pipeline(&mut litani, &test_props);
         }
     }
     litani.run_build();

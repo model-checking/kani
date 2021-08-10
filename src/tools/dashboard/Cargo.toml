@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 pulldown-cmark = { version = "0.8.0", default-features = false }
+walkdir = "2.3.2"

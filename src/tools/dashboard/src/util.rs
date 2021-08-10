@@ -9,6 +9,7 @@
 use crate::litani::Litani;
 use std::{
     env,
+    fmt::{self, Display, Formatter, Write},
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -28,6 +29,17 @@ pub enum FailStep {
     /// RMC panics after the codegen step because of verification failures or
     /// other CBMC errors.
     Verification,
+}
+
+impl Display for FailStep {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let str = match self {
+            FailStep::Check => "check",
+            FailStep::Codegen => "codegen",
+            FailStep::Verification => "verify",
+        };
+        f.write_str(str)
+    }
 }
 
 /// Data structure representing properties specific to each test.
@@ -50,6 +62,29 @@ impl TestProps {
         rmc_args: Vec<String>,
     ) -> Self {
         Self { path, fail_step, rustc_args, rmc_args }
+    }
+}
+
+impl Display for TestProps {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Some(fail_step) = &self.fail_step {
+            f.write_fmt(format_args!("// rmc-{}-fail\n", fail_step))?;
+        }
+        if !self.rustc_args.is_empty() {
+            f.write_str("// compile-flags:")?;
+            for arg in &self.rustc_args {
+                f.write_fmt(format_args!(" {}", arg))?;
+            }
+            f.write_char('\n')?;
+        }
+        if !self.rmc_args.is_empty() {
+            f.write_str("// rmc-flags:")?;
+            for arg in &self.rmc_args {
+                f.write_fmt(format_args!(" {}", arg))?;
+            }
+            f.write_char('\n')?;
+        }
+        Ok(())
     }
 }
 
@@ -140,7 +175,7 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "build",
         exit_status,
-        1,
+        5,
     );
 }
 
@@ -166,7 +201,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "test",
         exit_status,
-        1,
+        5,
     );
 }
 
@@ -174,7 +209,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
 pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Verification) { 10 } else { 0 };
     let mut rmc = Command::new("rmc");
-    rmc.args(&test_props.rmc_args).arg(&test_props.path);
+    rmc.arg(&test_props.path).args(&test_props.rmc_args);
     if !test_props.rustc_args.is_empty() {
         rmc.env("RUSTFLAGS", test_props.rustc_args.join(" "));
     }
