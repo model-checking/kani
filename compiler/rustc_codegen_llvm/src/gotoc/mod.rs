@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
-use cbmc::goto_program::{Expr, Stmt, Symbol, SymbolTable};
+use cbmc::goto_program::{Stmt, Symbol, SymbolTable};
 use cbmc::{MachineModel, RoundingMode};
 use metadata::*;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -12,10 +12,10 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::middle::cstore::{EncodedMetadata, MetadataLoaderDyn};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
-use rustc_middle::mir::{BasicBlock, BasicBlockData, Body, HasLocalDecls, Local};
+use rustc_middle::mir::Body;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, Instance, TyCtxt, TyS};
+use rustc_middle::ty::{self, Instance, TyCtxt};
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
@@ -26,8 +26,11 @@ use std::panic;
 use tracing::{debug, warn};
 
 mod assumptions;
+mod backend;
+mod block;
 pub mod cbmc;
 mod current_fn;
+mod function;
 mod hooks;
 mod intrinsic;
 mod metadata;
@@ -110,147 +113,6 @@ impl<'tcx> GotocCtx<'tcx> {
             odb_cell.replace(None);
         });
     }
-    pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
-        self.current_fn_mut().set_current_bb(bb);
-        let label: String = self.current_fn().find_label(&bb);
-        // the first statement should be labelled. if there is no statements, then the
-        // terminator should be labelled.
-        match bbd.statements.len() {
-            0 => {
-                let term = bbd.terminator();
-                let tcode = self.codegen_terminator(term);
-                self.current_fn_mut().push_onto_block(tcode.with_label(label));
-            }
-            _ => {
-                let stmt = &bbd.statements[0];
-                let scode = self.codegen_statement(stmt);
-                self.current_fn_mut().push_onto_block(scode.with_label(label));
-
-                for s in &bbd.statements[1..] {
-                    let stmt = self.codegen_statement(s);
-                    self.current_fn_mut().push_onto_block(stmt);
-                }
-                let term = self.codegen_terminator(bbd.terminator());
-                self.current_fn_mut().push_onto_block(term);
-            }
-        }
-        self.current_fn_mut().reset_current_bb();
-    }
-
-    fn codegen_declare_variables(&mut self) {
-        let mir = self.current_fn().mir();
-        let ldecls = mir.local_decls();
-        ldecls.indices().for_each(|lc| {
-            if Some(lc) == mir.spread_arg {
-                // We have already added this local in the function prelude, so
-                // skip adding it again here.
-                return;
-            }
-            let base_name = self.codegen_var_base_name(&lc);
-            let name = self.codegen_var_name(&lc);
-            let ldata = &ldecls[lc];
-            let t = self.monomorphize(ldata.ty);
-            let t = self.codegen_ty(t);
-            let loc = self.codegen_span2(&ldata.source_info.span);
-            let sym =
-                Symbol::variable(name, base_name, t, self.codegen_span2(&ldata.source_info.span));
-            let sym_e = sym.to_expr();
-            self.symbol_table.insert(sym);
-
-            // Index 0 represents the return value, which does not need to be
-            // declared in the first block
-            if lc.index() < 1 || lc.index() > mir.arg_count {
-                self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, None, loc));
-            }
-        });
-    }
-
-    /// MIR functions have a `spread_arg` field that specifies whether the
-    /// final argument to the function is "spread" at the LLVM/codegen level
-    /// from a tuple into its individual components. (Used for the "rust-
-    /// call" ABI, necessary because dynamic trait closure cannot have an
-    /// argument list in MIR that is both generic and variadic, so Rust
-    /// allows a generic tuple).
-    ///
-    /// If `spread_arg` is Some, then the wrapped value is the local that is
-    /// to be "spread"/untupled. However, the MIR function body itself expects
-    /// the tuple instead of the individual components, so we need to generate
-    /// a function prelude that _retuples_, that is, writes the components
-    /// back to the tuple local for use in the body.
-    ///
-    /// See:
-    /// https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F
-    fn codegen_function_prelude(&mut self) {
-        let mir = self.current_fn().mir();
-        if mir.spread_arg.is_none() {
-            // No special tuple argument, no work to be done.
-            return;
-        }
-        let spread_arg = mir.spread_arg.unwrap();
-        let spread_data = &mir.local_decls()[spread_arg];
-        let loc = self.codegen_span2(&spread_data.source_info.span);
-
-        // When we codegen the function signature elsewhere, we will codegen the
-        // untupled version. So, the tuple argument itself needs to have a
-        // symbol declared for it outside of the function signature, we do that
-        // here.
-        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
-        let tup_sym = Symbol::variable(
-            self.codegen_var_name(&spread_arg),
-            self.codegen_var_base_name(&spread_arg),
-            tup_typ.clone(),
-            loc.clone(),
-        );
-        self.symbol_table.insert(tup_sym.clone());
-
-        // Get the function signature from MIR, _before_ we untuple
-        let fntyp = self.current_fn().instance().ty(self.tcx, ty::ParamEnv::reveal_all());
-        let sig = match fntyp.kind() {
-            ty::FnPtr(..) | ty::FnDef(..) => fntyp.fn_sig(self.tcx).skip_binder(),
-            // Closures themselves will have their arguments already untupled,
-            // see Zulip link above.
-            ty::Closure(..) => unreachable!(
-                "Unexpected `spread arg` set for closure, got: {:?}, {:?}",
-                fntyp,
-                self.current_fn().readable_name()
-            ),
-            _ => unreachable!(
-                "Expected function type for `spread arg` prelude, got: {:?}, {:?}",
-                fntyp,
-                self.current_fn().readable_name()
-            ),
-        };
-
-        // Now that we have the tuple, write the individual component locals
-        // back to it as a GotoC struct.
-        let tupe = sig.inputs().last().unwrap();
-        let args: Vec<&TyS<'tcx>> = match tupe.kind() {
-            ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()).collect(),
-            _ => unreachable!("a function's spread argument must be a tuple"),
-        };
-
-        // Convert each arg to a GotoC expression.
-        let mut arg_exprs = Vec::new();
-        let starting_idx = sig.inputs().len();
-        for (arg_i, arg_t) in args.iter().enumerate() {
-            // The components come at the end, so offset by the untupled length.
-            let lc = Local::from_usize(arg_i + starting_idx);
-            let (name, base_name) = self.codegen_spread_arg_name(&lc);
-            let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
-            self.symbol_table.insert(sym.clone());
-            arg_exprs.push(sym.to_expr());
-        }
-
-        // Finally, combine the expression into a struct.
-        let tuple_expr = Expr::struct_expr_from_values(tup_typ, arg_exprs, &self.symbol_table)
-            .with_location(loc.clone());
-        self.current_fn_mut().push_onto_block(Stmt::decl(tup_sym.to_expr(), Some(tuple_expr), loc));
-    }
-
-    /// collect all labels for goto
-    fn codegen_prepare_blocks(&self) -> Vec<String> {
-        self.current_fn().mir().basic_blocks().indices().map(|bb| format!("{:?}", bb)).collect()
-    }
 
     fn should_skip_current_fn(&self) -> bool {
         match self.current_fn().readable_name() {
@@ -268,42 +130,6 @@ impl<'tcx> GotocCtx<'tcx> {
             "bridge::closure::Closure::<'a, A, R>::call" => true,
             _ => false,
         }
-    }
-
-    pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
-        self.set_current_fn(instance);
-        let name = self.current_fn().name();
-        let old_sym = self.symbol_table.lookup(&name).unwrap();
-        assert!(old_sym.is_function());
-        if old_sym.is_function_definition() {
-            warn!("Double codegen of {:?}", old_sym);
-        } else if self.should_skip_current_fn() {
-            debug!("Skipping function {}", self.current_fn().readable_name());
-            let loc = self.codegen_span2(&self.current_fn().mir().span);
-            let body = Stmt::assert_false(
-                &format!(
-                    "The function {} is not currently supported by RMC",
-                    self.current_fn().readable_name()
-                ),
-                loc,
-            );
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
-        } else {
-            let mir = self.current_fn().mir();
-            self.print_instance(instance, mir);
-            let labels = self.codegen_prepare_blocks();
-            self.current_fn_mut().set_labels(labels);
-            self.codegen_function_prelude();
-            self.codegen_declare_variables();
-
-            mir.basic_blocks().iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
-
-            let loc = self.codegen_span2(&mir.span);
-            let stmts = self.current_fn_mut().extract_block();
-            let body = Stmt::block(stmts, loc);
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
-        }
-        self.reset_current_fn();
     }
 
     pub fn codegen_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {
@@ -342,22 +168,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let location = self.codegen_span2(&span);
         let symbol = Symbol::static_variable(symbol_name.to_string(), symbol_name, typ, location);
         self.symbol_table.insert(symbol);
-    }
-
-    fn declare_function(&mut self, instance: Instance<'tcx>) {
-        debug!("declaring {}; {:?}", instance, instance);
-        self.set_current_fn(instance);
-        self.ensure(&self.current_fn().name(), |ctx, fname| {
-            let mir = ctx.current_fn().mir();
-            Symbol::function(
-                fname,
-                ctx.fn_typ(),
-                None,
-                Some(ctx.current_fn().readable_name().to_string()),
-                ctx.codegen_span2(&mir.span),
-            )
-        });
-        self.reset_current_fn();
     }
 }
 
