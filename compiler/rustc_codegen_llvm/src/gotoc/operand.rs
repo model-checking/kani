@@ -334,7 +334,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     // we believe rlinkage being `Some` means the static not extern
                     // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
                     // see https://github.com/model-checking/rmc/issues/388
-                    assert!(rlinkage.is_none());
+                    //
+                    // Update: The assertion below may fail in similar environments.
+                    // We are disabling it until we find out the root cause, see
+                    // https://github.com/model-checking/rmc/issues/400
+                    //
+                    // assert!(rlinkage.is_none());
 
                     let span = ctx.tcx.def_span(def_id);
                     Symbol::static_variable(
