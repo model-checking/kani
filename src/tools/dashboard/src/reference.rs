@@ -20,6 +20,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use walkdir::WalkDir;
 
 /// Parses the chapter/section hierarchy in the markdown file specified by
 /// `summary_path` and returns a mapping from markdown files containing rust
@@ -159,16 +160,10 @@ fn extract(par_from: &Path, par_to: &Path) -> Vec<(Example, PathBuf)> {
 fn get_config_paths() -> HashSet<PathBuf> {
     let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
     let mut config_paths = HashSet::new();
-    let mut stack = vec![config_dir];
-    while !stack.is_empty() {
-        let curr = stack.pop().unwrap();
-        for child in curr.read_dir().unwrap() {
-            let child = child.unwrap().path();
-            if child.is_dir() {
-                stack.push(child);
-            } else {
-                config_paths.insert(child);
-            }
+    for entry in WalkDir::new(config_dir) {
+        let entry = entry.unwrap().into_path();
+        if entry.is_file() {
+            config_paths.insert(entry);
         }
     }
     config_paths
@@ -346,18 +341,12 @@ fn litani_run_tests() {
     let ref_dir: PathBuf = ["src", "test", "ref"].iter().collect();
     util::add_rmc_and_litani_to_path();
     let mut litani = Litani::init("RMC", &output_prefix, &output_symlink);
-    let mut stack = vec![ref_dir];
     // Run all tests under the `src/test/ref` directory.
-    while !stack.is_empty() {
-        let cur_dir = stack.pop().unwrap();
-        for child in cur_dir.read_dir().unwrap() {
-            let child = child.unwrap().path();
-            if child.is_file() {
-                let test_props = util::parse_test_header(&child);
-                util::add_test_pipeline(&mut litani, &test_props);
-            } else {
-                stack.push(child);
-            }
+    for entry in WalkDir::new(ref_dir) {
+        let entry = entry.unwrap().into_path();
+        if entry.is_file() {
+            let test_props = util::parse_test_header(&entry);
+            util::add_test_pipeline(&mut litani, &test_props);
         }
     }
     litani.run_build();
