@@ -217,7 +217,7 @@ impl Transformer for NameTransformer {
         new_symbol.base_name = new_symbol.base_name.map(|name| self.normalize_identifier(&name));
         new_symbol.pretty_name =
             new_symbol.pretty_name.map(|name| self.normalize_identifier(&name));
-            
+
         new_symbol
     }
 }

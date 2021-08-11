@@ -144,7 +144,9 @@ impl Transformer for ExprTransformer {
 
     /// Replace `extern` functions and values with `nondet` so linker doesn't break.
     fn transform_symbol(&mut self, symbol: &Symbol) -> Symbol {
-        let (new_typ, new_value) = if symbol.is_extern {
+        let mut new_symbol = symbol.clone();
+
+        if symbol.is_extern {
             if symbol.typ.is_code() || symbol.typ.is_variadic_code() {
                 // Replace `extern` function with one which returns `nondet`
                 assert!(symbol.value.is_none(), "Extern function should have no body.");
@@ -170,7 +172,9 @@ impl Transformer for ExprTransformer {
                 let body = Stmt::ret(ret_e, Location::none());
                 let new_value = SymbolValues::Stmt(body);
 
-                (new_typ, new_value)
+                new_symbol.is_extern = false;
+                new_symbol.typ = new_typ;
+                new_symbol.value = new_value;
             } else {
                 // Replace `extern static`s and initialize in `main`
                 assert!(
@@ -181,19 +185,20 @@ impl Transformer for ExprTransformer {
                 let new_value = SymbolValues::Expr(Expr::nondet(new_typ.clone()));
                 self.empty_statics.insert(symbol.name.clone(), Expr::nondet(new_typ.clone()));
 
-                (new_typ, new_value)
+                new_symbol.is_extern = false;
+                new_symbol.location = Location::none();
+                new_symbol.typ = new_typ;
+                new_symbol.value = SymbolValues::None;
             }
         } else {
             // Handle non-extern symbols normally
             let new_typ = self.transform_type(&symbol.typ);
             let new_value = self.transform_value(&symbol.value);
-            (new_typ, new_value)
-        };
+            new_symbol.typ = new_typ;
+            new_symbol.value = new_value;
+        }
 
-        let mut new_symbol = symbol.clone();
-        new_symbol.typ = new_typ;
-        new_symbol.value = new_value;
-        new_symbol.with_is_extern(false)
+        new_symbol
     }
 
     /// Move `main` to `main_`, and create a wrapper `main` to initialize statics and return `int`.
