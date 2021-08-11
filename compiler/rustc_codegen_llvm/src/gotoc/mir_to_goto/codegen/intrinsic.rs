@@ -217,6 +217,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
+        if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
+            let n: u64 = stripped.parse().unwrap();
+            return self.codegen_intrinsic_simd_shuffle(fargs, p, cbmc_ret_ty, n);
+        }
+
         match intrinsic {
             "abort" => Stmt::assert_false("abort intrinsic", loc),
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
@@ -401,6 +406,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     codegen_intrinsic_binop!(lshr)
                 }
             }
+            // "simd_shuffle#" => handled in an `if` preceding this match
             "simd_sub" => codegen_intrinsic_binop!(sub),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
@@ -828,5 +834,46 @@ impl<'tcx> GotocCtx<'tcx> {
             ],
             loc,
         )
+    }
+
+    /// simd_shuffle constructs a new vector from the elements of two input vectors,
+    /// choosing values according to an input array of indexes.
+    ///
+    /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
+    /// https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp
+    ///
+    /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
+    /// it's immediately lowered by the C frontend.
+    pub fn codegen_intrinsic_simd_shuffle(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        cbmc_ret_ty: Type,
+        n: u64,
+    ) -> Stmt {
+        // vector, size n: translated as vector types which cbmc treats as arrays
+        let vec1 = fargs.remove(0);
+        let vec2 = fargs.remove(0);
+        // [u32; n]: translated wrapped in a struct
+        let indexes = fargs.remove(0);
+
+        // TODO: Why is this signed? Unsigned causes an invariant violation in CBMC in my tests.
+        // But it doesn't make sense why an array index type should be signed?
+        let st_rep = Type::CInteger(CIntType::SSizeT);
+        let n_rep = Expr::int_constant(n, st_rep.clone());
+
+        // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
+        let elems = (0..n)
+            .map(|i| {
+                let i = Expr::int_constant(i, st_rep.clone());
+                // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
+                let v = self.codegen_idx_array(indexes.clone(), i).cast_to(st_rep.clone());
+                let cond = v.clone().lt(n_rep.clone());
+                let t = vec1.clone().index(v.clone());
+                let e = vec2.clone().index(v.sub(n_rep.clone()));
+                cond.ternary(t, e)
+            })
+            .collect();
+        self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
     }
 }
