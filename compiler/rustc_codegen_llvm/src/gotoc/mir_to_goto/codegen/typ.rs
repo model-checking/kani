@@ -1,9 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
-use super::cbmc::utils::aggr_name;
 use crate::btree_map;
-use crate::gotoc::mir_to_goto::metadata::GotocCtx;
+use crate::gotoc::cbmc::goto_program::{
+    DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type,
+};
+use crate::gotoc::cbmc::utils::aggr_name;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
