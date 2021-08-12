@@ -5,8 +5,6 @@ mod assumptions;
 mod backend;
 pub mod cbmc;
 mod debug;
-mod hooks;
 mod mir_to_goto;
-pub mod stubs;
 mod utils;
 pub use backend::GotocCodegenBackend;

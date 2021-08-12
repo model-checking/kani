@@ -8,10 +8,10 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use super::stubs::hash_map_stub::HashMapStub;
-use super::stubs::vec_stub::VecStub;
+use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use crate::gotoc::mir_to_goto::metadata::GotocCtx;
+use crate::gotoc::mir_to_goto::stubs::hash_map_stub::HashMapStub;
+use crate::gotoc::mir_to_goto::stubs::vec_stub::VecStub;
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;

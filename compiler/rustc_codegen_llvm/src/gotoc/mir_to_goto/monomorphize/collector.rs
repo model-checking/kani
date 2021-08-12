@@ -26,7 +26,7 @@ use rustc_session::config::EntryFnType;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
 use std::iter;
 
-use crate::gotoc::hooks::GotocHooks;
+use crate::gotoc::mir_to_goto::hooks::GotocHooks;
 
 pub fn custom_coerce_unsize_info<'tcx>(
     tcx: TyCtxt<'tcx>,

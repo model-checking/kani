@@ -9,8 +9,8 @@ use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use std::cell::{Cell, RefCell, RefMut};
 
-use super::super::cbmc::goto_program::{Expr, Location, Stmt};
 use super::super::hooks::GotocHook;
+use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt};
 use crate::gotoc::mir_to_goto::metadata::GotocCtx;
 
 pub struct HashMapStub<'tcx> {
