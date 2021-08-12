@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module defines functions which impose data invariant on generated data types.
 
-use super::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use crate::gotoc::mir_to_goto::codegen::typ::tuple_fld;
 use crate::gotoc::mir_to_goto::metadata::GotocCtx;
 use rustc_middle::mir::interpret::{ConstValue, Scalar};

@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
 use crate::btree_string_map;
-use crate::gotoc::mir_to_goto::metadata::*;
+use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
 use rustc_middle::ty::print::with_no_trimmed_paths;

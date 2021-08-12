@@ -6,7 +6,7 @@ use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, 
 use crate::gotoc::cbmc::utils::{aggr_name, BUG_REPORT_URL};
 use crate::gotoc::cbmc::MachineModel;
 use crate::gotoc::mir_to_goto::metadata::*;
-use crate::gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
+use crate::gotoc::mir_to_goto::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
