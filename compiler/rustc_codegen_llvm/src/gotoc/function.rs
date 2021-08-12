@@ -9,6 +9,28 @@ use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
 use tracing::{debug, warn};
 
+/// Utility to skip functions that can't currently be successfully codgenned.
+impl<'tcx> GotocCtx<'tcx> {
+    fn should_skip_current_fn(&self) -> bool {
+        match self.current_fn().readable_name() {
+            // https://github.com/model-checking/rmc/issues/202
+            "fmt::ArgumentV1::<'a>::as_usize" => true,
+            // https://github.com/model-checking/rmc/issues/204
+            name if name.ends_with("__getit") => true,
+            // https://github.com/model-checking/rmc/issues/205
+            "panic::Location::<'a>::caller" => true,
+            // https://github.com/model-checking/rmc/issues/207
+            "core::slice::<impl [T]>::split_first" => true,
+            // https://github.com/model-checking/rmc/issues/281
+            name if name.starts_with("bridge::client") => true,
+            // https://github.com/model-checking/rmc/issues/282
+            "bridge::closure::Closure::<'a, A, R>::call" => true,
+            _ => false,
+        }
+    }
+}
+
+/// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_declare_variables(&mut self) {
         let mir = self.current_fn().mir();
