@@ -681,6 +681,7 @@ pub struct GotocTypeHooks<'tcx> {
 }
 
 impl<'tcx> GotocTypeHooks<'tcx> {
+    #[allow(dead_code)]
     pub fn default() -> GotocTypeHooks<'tcx> {
         type_and_fn_hooks().0
     }

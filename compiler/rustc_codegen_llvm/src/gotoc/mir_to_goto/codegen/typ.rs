@@ -381,10 +381,12 @@ impl<'tcx> GotocCtx<'tcx> {
         name
     }
 
+    #[allow(dead_code)]
     pub fn enum_union_name(&self, ty: Ty<'tcx>) -> String {
         format!("{}-union", self.ty_mangled_name(ty))
     }
 
+    #[allow(dead_code)]
     pub fn enum_case_struct_name(&self, ty: Ty<'tcx>, case: &VariantDef) -> String {
         format!("{}::{}", self.ty_mangled_name(ty), case.ident.name)
     }

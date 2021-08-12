@@ -41,10 +41,12 @@ pub struct ProjectedPlace<'tcx> {
 }
 
 /// Getters
+#[allow(dead_code)]
 impl<'tcx> ProjectedPlace<'tcx> {
     pub fn goto_expr(&self) -> &Expr {
         &self.goto_expr
     }
+
     pub fn mir_typ_or_variant(&self) -> &TypeOrVariant<'tcx> {
         &self.mir_typ_or_variant
     }
@@ -56,6 +58,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
     pub fn fat_ptr_goto_expr(&self) -> &Option<Expr> {
         &self.fat_ptr_goto_expr
     }
+
     pub fn fat_ptr_mir_typ(&self) -> &Option<Ty<'tcx>> {
         &self.fat_ptr_mir_typ
     }
@@ -137,6 +140,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn expect_variant(&self) -> &'tcx VariantDef {
         match self {
             TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {:?}", t),
