@@ -11,7 +11,7 @@ mod function;
 mod hooks;
 mod intrinsic;
 mod metadata;
-mod monomorphize;
+mod mir_to_goto;
 mod operand;
 mod place;
 mod rvalue;
