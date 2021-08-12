@@ -768,8 +768,15 @@ impl<'tcx> GotocCtx<'tcx> {
         //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
         let temp_var = self.gen_temp_variable(ty.clone(), Location::none()).to_expr();
         let decl = Stmt::decl(temp_var.clone(), None, Location::none());
-        let cbmc_size = if ty.clone().is_empty() {
-            // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE, so just pass 0
+        let cbmc_size = if ty.is_empty() {
+            // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE.
+            // In practice, we have seen this with the Never type, which has size 0:
+            // https://play.rust-lang.org/?version=nightly&mode=debug&edition=2018&gist=0f6eef4f6abeb279031444735e73d2e1
+            assert!(
+                matches!(operand_type.kind(), ty::Never),
+                "Expected Never, got: {:?}",
+                operand_type
+            );
             Type::size_t().zero()
         } else {
             Expr::object_size(temp_var.address_of())
