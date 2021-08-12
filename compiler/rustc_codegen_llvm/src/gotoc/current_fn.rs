@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::gotoc::GotocCtx;
-use crate::gotoc::Stmt;
+use crate::gotoc::cbmc::goto_program::Stmt;
+use crate::gotoc::metadata::GotocCtx;
 use rustc_middle::mir::BasicBlock;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::Instance;
