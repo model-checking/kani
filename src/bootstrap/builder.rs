@@ -471,7 +471,7 @@ impl<'a> Builder<'a> {
                 test::SMACK,
                 test::CargoRMC,
                 test::Expected,
-                test::Ref,
+                test::Dashboard,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),

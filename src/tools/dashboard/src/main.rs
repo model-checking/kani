@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(command_access)]
 
+mod books;
 mod dashboard;
 mod litani;
-mod reference;
 mod util;
 
 fn main() {
-    reference::display_reference_dashboard();
+    books::generate_dashboard();
 }
