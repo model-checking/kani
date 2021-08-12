@@ -4,7 +4,7 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use super::cbmc::goto_program::symtab_transformer;
-use super::cbmc::goto_program::{Stmt, SymbolTable};
+use super::cbmc::goto_program::SymbolTable;
 use super::cbmc::{MachineModel, RoundingMode};
 use super::metadata::*;
 use super::monomorphize;
