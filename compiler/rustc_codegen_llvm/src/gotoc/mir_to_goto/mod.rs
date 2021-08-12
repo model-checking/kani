@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This module takes MIR and emits CBMC goto.
+
 pub mod assumptions;
 pub mod backend;
 pub mod codegen;
