@@ -1,22 +1,24 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Utilities to extract examples from
-//! [The Rust Reference](https://doc.rust-lang.org/nightly/reference),
-//! run them through RMC, and display their results.
+//! Utilities to extract examples from Rust books, run them through RMC, and
+//! display their results.
 
 use crate::{
     dashboard,
     litani::Litani,
     util::{self, FailStep, TestProps},
 };
-use pulldown_cmark::{Parser, Tag};
+use inflector::cases::{snakecase::to_snake_case, titlecase::to_title_case};
+use pulldown_cmark::{Event, Parser, Tag};
 use std::{
     collections::{HashMap, HashSet},
     env,
+    ffi::OsStr,
     fmt::{Debug, Formatter, Result, Write},
     fs::{self, File},
     hash::Hash,
     io::{BufRead, BufReader},
+    iter::FromIterator,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -26,27 +28,34 @@ use walkdir::WalkDir;
 /// `summary_path` and returns a mapping from markdown files containing rust
 /// code to corresponding directories where the extracted rust code should
 /// reside.
-fn parse_hierarchy(summary_path: &Path) -> HashMap<PathBuf, PathBuf> {
+fn parse_hierarchy(
+    book_name: &str,
+    summary_path: PathBuf,
+    summary_start: &str,
+    mut map: HashMap<PathBuf, PathBuf>,
+) -> HashMap<PathBuf, PathBuf> {
     let summary_dir = summary_path.parent().unwrap().to_path_buf();
-    let start = "# The Rust Reference\n\n[Introduction](introduction.md)";
     let summary = fs::read_to_string(summary_path).unwrap();
-    assert!(summary.starts_with(start), "Error: The start of the summary file changed.");
-    // Skip the title and introduction.
-    let n = Parser::new(start).count();
+    assert!(
+        summary.starts_with(summary_start),
+        "Error: The start of {} summary file changed.",
+        book_name
+    );
+    // Skip the `start` of the summary.
+    let n = Parser::new(summary_start).count();
     let parser = Parser::new(&summary).skip(n);
-    // Set "ref" as the root of the hierarchical path.
-    let mut hierarchy: PathBuf = ["src", "test", "ref"].iter().collect();
-    let mut map = HashMap::new();
-    // Introduction is a especial case, so handle it separately.
-    map.insert(summary_dir.join("introduction.md"), hierarchy.join("Introduction"));
+    // Set `book_name` as the root of the hierarchical path.
+    let mut hierarchy: PathBuf = ["src", "test", "dashboard", "books", book_name].iter().collect();
+    let mut prev_event_is_text_or_code = false;
     for event in parser {
         match event {
-            pulldown_cmark::Event::End(Tag::Item) => {
+            Event::End(Tag::Item) => {
                 // Pop the current chapter/section from the hierarchy once
                 // we are done processing it and its subsections.
                 hierarchy.pop();
+                prev_event_is_text_or_code = false;
             }
-            pulldown_cmark::Event::End(Tag::Link(_, path, _)) => {
+            Event::End(Tag::Link(_, path, _)) => {
                 // At the start of the link tag, the hierarchy does not yet
                 // contain the title of the current chapter/section. So, we wait
                 // for the end of the link tag before adding the path and
@@ -54,12 +63,119 @@ fn parse_hierarchy(summary_path: &Path) -> HashMap<PathBuf, PathBuf> {
                 let mut full_path = summary_dir.clone();
                 full_path.extend(path.split('/'));
                 map.insert(full_path, hierarchy.clone());
+                prev_event_is_text_or_code = false;
             }
-            pulldown_cmark::Event::Text(text) => {
-                // Add the current chapter/section title to the hierarchy.
-                hierarchy.push(text.to_string());
+            Event::Text(text) | Event::Code(text) => {
+                // Remove characters that are problematic to the file system or
+                // terminal.
+                let text = text.replace(&['/', '(', ')', '\''][..], "_");
+                // Does the chapter/section title contain normal text and inline
+                // code?
+                if prev_event_is_text_or_code {
+                    // If so, we combine them into one hierarchy level.
+                    let prev_text = hierarchy.file_name().unwrap().to_str().unwrap().to_string();
+                    hierarchy.pop();
+                    hierarchy.push(format!("{}{}", prev_text, text));
+                } else {
+                    // If not, add the current title to the hierarchy.
+                    hierarchy.push(text.to_string());
+                }
+                prev_event_is_text_or_code = true;
             }
             _ => (),
+        }
+    }
+    map
+}
+
+/// Parses [The Rust Reference](https://doc.rust-lang.org/nightly/reference)
+/// book.
+fn parse_reference_hierarchy() -> HashMap<PathBuf, PathBuf> {
+    parse_hierarchy(
+        "The Rust Reference",
+        ["src", "doc", "reference", "src", "SUMMARY.md"].iter().collect(),
+        "# The Rust Reference\n\n[Introduction](introduction.md)",
+        HashMap::from_iter([(
+            ["src", "doc", "reference", "src", "introduction.md"].iter().collect(),
+            ["src", "test", "dashboard", "books", "The Rust Reference", "Introduction"]
+                .iter()
+                .collect(),
+        )]),
+    )
+}
+
+/// Parses [The Rustonomicon](https://doc.rust-lang.org/nightly/nomicon) book.
+fn parse_nomicon_hierarchy() -> HashMap<PathBuf, PathBuf> {
+    parse_hierarchy(
+        "The Rustonomicon",
+        ["src", "doc", "nomicon", "src", "SUMMARY.md"].iter().collect(),
+        "# Summary\n\n[Introduction](intro.md)",
+        HashMap::from_iter([(
+            ["src", "doc", "nomicon", "src", "intro.md"].iter().collect(),
+            ["src", "test", "dashboard", "books", "The Rustonomicon", "Introduction"]
+                .iter()
+                .collect(),
+        )]),
+    )
+}
+
+/// Parses the
+/// [Rust by Example](https://doc.rust-lang.org/nightly/rust-by-example) book.
+fn parse_rust_by_example_hierarchy() -> HashMap<PathBuf, PathBuf> {
+    parse_hierarchy(
+        "Rust by Example",
+        ["src", "doc", "rust-by-example", "src", "SUMMARY.md"].iter().collect(),
+        "# Summary\n\n[Introduction](index.md)",
+        HashMap::from_iter([(
+            ["src", "doc", "rust-by-example", "src", "index.md"].iter().collect(),
+            ["src", "test", "dashboard", "books", "Rust by Example", "Introduction"]
+                .iter()
+                .collect(),
+        )]),
+    )
+}
+
+/// Parses [The Unstable Book](https://doc.rust-lang.org/nightly/unstable-book).
+/// Unlike the other books, this one does not have a `SUMMARY.md` file (i.e., a
+/// table of contents). So we parse it manually and make a "best effort" to make
+/// it look like the online version.
+fn parse_unstable_book_hierarchy() -> HashMap<PathBuf, PathBuf> {
+    // Keeps track of directory we are currently processing, starting from root
+    // of the book.
+    let mut src_prefix: PathBuf = ["src", "doc", "unstable-book", "src"].iter().collect();
+    // Corresponding directory where the examples extracted from the book should
+    // reside.
+    let mut dest_prefix: PathBuf =
+        ["src", "test", "dashboard", "books", "The Unstable Book"].iter().collect();
+    let mut map = HashMap::new();
+    for entry in WalkDir::new(&src_prefix) {
+        let entry = entry.unwrap().into_path();
+        // `WalkDir` returns entries in a depth-first fashion. Once we are done
+        // processing a directory, it will jump to a different child entry of a
+        // predecessor. To copy examples to the correct location, we need to
+        // know how far back we jumped and update `dest_prefix` accordingly.
+        while !entry.starts_with(&src_prefix) {
+            src_prefix.pop();
+            dest_prefix.pop();
+        }
+        if entry.is_dir() {
+            src_prefix.push(entry.file_name().unwrap());
+            // Follow the book's title case format for directories.
+            dest_prefix.push(to_title_case(entry.file_name().unwrap().to_str().unwrap()));
+        } else {
+            // Only process markdown files.
+            if entry.extension() == Some(OsStr::new("md")) {
+                let entry_stem = entry.file_stem().unwrap().to_str().unwrap();
+                // If a file has the stem name as a sibling directory...
+                if src_prefix.join(entry.file_stem().unwrap()).exists() {
+                    // Its extracted examples should reside under that
+                    // directory.
+                    map.insert(entry.clone(), dest_prefix.join(to_title_case(entry_stem)));
+                } else {
+                    // Otherwise, follow the book's snake case format for files.
+                    map.insert(entry.clone(), dest_prefix.join(to_snake_case(entry_stem)));
+                }
+            }
         }
     }
     map
@@ -110,7 +226,9 @@ fn extract(par_from: &Path, par_to: &Path) -> Vec<(Example, PathBuf)> {
     let build_dir = &env::var("BUILD_DIR").unwrap();
     let triple = &env::var("TRIPLE").unwrap();
     // Create a temporary directory to save the files generated by `rustdoc`.
-    let gen_dir: PathBuf = [build_dir, triple, "dashboard", "ref"].iter().collect();
+    let gen_dir: PathBuf = [build_dir, triple, "dashboard"].iter().collect();
+    // If `gen_dir` already exists, remove it.
+    fs::remove_dir_all(&gen_dir).unwrap_or_default();
     fs::create_dir_all(&gen_dir).unwrap();
     let mut cmd = Command::new("rustdoc");
     cmd.args([
@@ -188,16 +306,16 @@ fn paths_to_string(paths: HashSet<PathBuf>) -> String {
 /// Pre-processes the examples in `map` before running them with `compiletest`.
 fn preprocess_examples(map: &HashMap<Example, PathBuf>) {
     let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
-    let test_dir: PathBuf = ["src", "test"].iter().collect();
+    let test_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
     let mut config_paths = get_config_paths();
     // Copy compiler annotations specified in the original markdown code blocks
     // and custom configurations under the `config` directory.
     for (from, to) in map.iter() {
         // Path `to` has the following form:
-        // `src/test/ref/<hierarchy>/<line-num>.rs`
+        // `src/test/dashboard/books/<hierarchy>/<line-num>.rs`
         // If it has a custom props file, the path to the props file will have
         // the following form:
-        // `src/tools/dashboard/configs/ref/<hierarchy>/<line-num>.props`
+        // `src/tools/dashboard/configs/books//<hierarchy>/<line-num>.props`
         // where <hierarchy> and <line-num> are the same for both paths.
         let mut props_path = config_dir.join(to.strip_prefix(&test_dir).unwrap());
         props_path.set_extension("props");
@@ -260,6 +378,8 @@ fn run_examples(suite: &str, log_path: &Path) {
             !(k.contains("CARGO") || k.contains("LD_LIBRARY_PATH") || k.contains("RUST"))
         })
         .collect();
+    // Create the log's parent directory (if it does not exist).
+    fs::create_dir_all(log_path.parent().unwrap()).unwrap();
     let mut cmd = Command::new([".", "x.py"].iter().collect::<PathBuf>());
     cmd.args([
         "test",
@@ -302,7 +422,8 @@ fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
 fn parse_log(path: &Path) -> dashboard::Tree {
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
-    let mut tests = dashboard::Tree::new(dashboard::Node::new(String::from("ref"), 0, 0), vec![]);
+    let mut tests =
+        dashboard::Tree::new(dashboard::Node::new(String::from("dashboard"), 0, 0), vec![]);
     for line in reader.lines() {
         let (ns, l) = parse_log_line(&line.unwrap());
         tests = dashboard::Tree::merge(tests, tree_from_path(ns, l)).unwrap();
@@ -324,7 +445,7 @@ fn parse_log_line(line: &str) -> (Vec<String>, bool) {
 }
 
 /// Display the dashboard in the terminal.
-fn display_dashboard(dashboard: dashboard::Tree) {
+fn display_terminal_dashboard(dashboard: dashboard::Tree) {
     println!(
         "# of tests: {}\t✔️ {}\t❌ {}",
         dashboard.data.num_pass + dashboard.data.num_fail,
@@ -338,11 +459,11 @@ fn display_dashboard(dashboard: dashboard::Tree) {
 fn litani_run_tests() {
     let output_prefix: PathBuf = ["build", "output"].iter().collect();
     let output_symlink: PathBuf = output_prefix.join("latest");
-    let ref_dir: PathBuf = ["src", "test", "ref"].iter().collect();
+    let dashboard_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
     util::add_rmc_and_litani_to_path();
     let mut litani = Litani::init("RMC", &output_prefix, &output_symlink);
-    // Run all tests under the `src/test/ref` directory.
-    for entry in WalkDir::new(ref_dir) {
+    // Run all tests under the `src/test/dashboard` directory.
+    for entry in WalkDir::new(dashboard_dir) {
         let entry = entry.unwrap().into_path();
         if entry.is_file() {
             let test_props = util::parse_test_header(&entry);
@@ -352,27 +473,29 @@ fn litani_run_tests() {
     litani.run_build();
 }
 
-/// Extracts examples from The Rust Reference, run them through RMC, and
-/// displays their results in a terminal dashboard.
-pub fn display_reference_dashboard() {
-    let summary_path: PathBuf = ["src", "doc", "reference", "src", "SUMMARY.md"].iter().collect();
+/// Extracts examples from the Rust books, run them through RMC, and displays
+/// their results in a terminal dashboard.
+pub fn generate_dashboard() {
     let build_dir = &env::var("BUILD_DIR").unwrap();
     let triple = &env::var("TRIPLE").unwrap();
-    let log_path: PathBuf = [build_dir, triple, "dashboard", "ref.log"].iter().collect();
-    // Parse the chapter/section hierarchy from the table of contents in The
-    // Rust Reference.
-    let map = parse_hierarchy(&summary_path);
-    // Extract examples from The Rust Reference, organize them following the
-    // partial hierarchy in map, and return the full hierarchy map.
+    let log_path: PathBuf = [build_dir, triple, "dashboard", "log"].iter().collect();
+    // Parse the chapter/section hierarchy for the books.
+    let mut map = HashMap::new();
+    map.extend(parse_reference_hierarchy());
+    map.extend(parse_nomicon_hierarchy());
+    map.extend(parse_unstable_book_hierarchy());
+    map.extend(parse_rust_by_example_hierarchy());
+    // Extract examples from the books, organize them following the partial
+    // hierarchy in map, and return the full hierarchy map.
     let map = extract_examples(map);
     // Pre-process the examples before running them through `compiletest`.
     preprocess_examples(&map);
-    // Run `compiletest` on the reference examples.
-    run_examples("ref", &log_path);
+    // Run `compiletest` on the examples.
+    run_examples("dashboard", &log_path);
     // Parse `compiletest` log file.
     let dashboard = parse_log(&log_path);
-    // Display the reference dashboard.
-    display_dashboard(dashboard);
-    // Generate Litani's dashboard.
+    // Display the terminal dashboard.
+    display_terminal_dashboard(dashboard);
+    // Generate Litani's HTML dashboard.
     litani_run_tests();
 }

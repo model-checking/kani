@@ -79,4 +79,4 @@ src/test/rustdoc-gui/src/**.lock
 /.litani_cache_dir
 /.ninja_deps
 /.ninja_log
-/src/test/ref
+/src/test/dashboard
