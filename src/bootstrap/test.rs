@@ -1212,7 +1212,7 @@ default_test!(CargoRMC { path: "src/test/cargo-rmc", mode: "cargo-rmc", suite: "
 
 default_test!(Expected { path: "src/test/expected", mode: "expected", suite: "expected" });
 
-default_test!(Ref { path: "src/test/ref", mode: "rmc", suite: "ref" });
+default_test!(Dashboard { path: "src/test/dashboard", mode: "rmc", suite: "dashboard" });
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Compiletest {

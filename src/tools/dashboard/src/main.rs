@@ -4,9 +4,9 @@
 
 mod dashboard;
 mod litani;
-mod reference;
+mod books;
 mod util;
 
 fn main() {
-    reference::display_reference_dashboard();
+    books::generate_dashboard();
 }
