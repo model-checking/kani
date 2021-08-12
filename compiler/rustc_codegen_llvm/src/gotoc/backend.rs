@@ -6,8 +6,8 @@
 use crate::gotoc::cbmc::goto_program::symtab_transformer;
 use crate::gotoc::cbmc::goto_program::SymbolTable;
 use crate::gotoc::cbmc::{MachineModel, RoundingMode};
-use crate::gotoc::metadata::*;
 use crate::gotoc::mir_to_goto::monomorphize;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use bitflags::_core::any::Any;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;

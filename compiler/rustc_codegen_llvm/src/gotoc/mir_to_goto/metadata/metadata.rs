@@ -14,11 +14,11 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 
-use super::cbmc::goto_program::{
+use super::current_fn::CurrentFnCtx;
+use crate::gotoc::cbmc::goto_program::{
     DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type,
 };
-use super::cbmc::utils::aggr_name;
-use crate::gotoc::current_fn::CurrentFnCtx;
+use crate::gotoc::cbmc::utils::aggr_name;
 use crate::gotoc::hooks::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;

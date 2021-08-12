@@ -3,7 +3,7 @@
 //! this module defines functions which impose data invariant on generated data types.
 
 use super::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
-use super::metadata::GotocCtx;
+use crate::gotoc::mir_to_goto::metadata::GotocCtx;
 use crate::gotoc::typ::tuple_fld;
 use rustc_middle::mir::interpret::{ConstValue, Scalar};
 use rustc_middle::ty;

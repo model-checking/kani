@@ -6,8 +6,8 @@
 //! in [codegen_place] below.
 
 use super::cbmc::goto_program::{Expr, Type};
-use super::metadata::*;
 use super::typ::tuple_fld;
+use crate::gotoc::mir_to_goto::metadata::*;
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
     ty::{self, Ty, TyS, VariantDef},
