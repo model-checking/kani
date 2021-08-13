@@ -3,13 +3,15 @@
 
 //! This module takes MIR and emits CBMC goto.
 
-pub mod assumptions;
-pub mod backend;
-pub mod codegen;
-pub mod context;
-pub mod debug;
-pub mod hooks;
-pub mod monomorphize;
-pub mod stubs;
-pub mod utils;
+mod assumptions;
+mod backend;
+mod codegen;
+mod context;
+mod debug;
+mod hooks;
+mod monomorphize;
+mod stubs;
+mod utils;
+
+pub use backend::GotocCodegenBackend;
 pub use context::GotocCtx;

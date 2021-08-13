@@ -3,4 +3,4 @@
 
 pub mod cbmc;
 mod mir_to_goto;
-pub use mir_to_goto::backend::GotocCodegenBackend;
+pub use mir_to_goto::GotocCodegenBackend;
