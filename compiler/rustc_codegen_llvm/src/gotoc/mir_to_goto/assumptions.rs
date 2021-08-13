@@ -3,7 +3,6 @@
 //! this module defines functions which impose data invariant on generated data types.
 
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
-use crate::gotoc::mir_to_goto::codegen::typ::tuple_fld;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::interpret::{ConstValue, Scalar};
 use rustc_middle::ty;
@@ -559,7 +558,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let field = ptr
                         .clone()
                         .dereference()
-                        .member(&tuple_fld(i), &tcx.symbol_table) // x->i
+                        .member(&Self::tuple_fld_name(i), &tcx.symbol_table) // x->i
                         .address_of(); // &(x->i)
                     invariants.push(f.call(vec![field]));
                 }

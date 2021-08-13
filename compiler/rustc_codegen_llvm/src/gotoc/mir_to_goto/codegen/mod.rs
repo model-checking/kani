@@ -12,4 +12,4 @@ mod place;
 mod rvalue;
 mod statement;
 mod static_var;
-pub mod typ;
+mod typ;

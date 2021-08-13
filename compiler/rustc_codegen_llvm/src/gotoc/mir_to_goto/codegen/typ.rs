@@ -74,10 +74,6 @@ impl Expr {
     }
 }
 
-pub fn tuple_fld(n: usize) -> String {
-    format!("{}", n)
-}
-
 struct StructField<'tcx> {
     idx: u32,
     offset: u64,
@@ -641,7 +637,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_ty_tuple_like(&mut self, t: Ty<'tcx>, tys: Vec<Ty<'tcx>>) -> Vec<DatatypeComponent> {
         let layout = self.layout_of(t);
-        let flds: Vec<_> = tys.iter().enumerate().map(|(i, t)| (tuple_fld(i), *t)).collect();
+        let flds: Vec<_> =
+            tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
         self.codegen_struct_fields(flds, layout.layout, 0)
     }

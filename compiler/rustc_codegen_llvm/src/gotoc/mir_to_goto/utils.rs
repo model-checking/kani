@@ -124,6 +124,11 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// The name for a tuple field
+    pub fn tuple_fld_name(n: usize) -> String {
+        format!("{}", n)
+    }
+
     /// The name for the struct field on a vtable for a given function. Because generic
     /// functions can share the same name, we need to use the index of the entry in the
     /// vtable. This is the same index that will be passed in virtual function calls as
