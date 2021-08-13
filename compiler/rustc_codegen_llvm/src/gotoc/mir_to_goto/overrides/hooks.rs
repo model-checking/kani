@@ -10,14 +10,16 @@
 
 use super::stubs::{HashMapStub, VecStub};
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
+use crate::gotoc::mir_to_goto::utils::*;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, Ty, TyCtxt};
 use rustc_span::Span;
 use rustc_target::abi::LayoutOf;
 use std::rc::Rc;
+
 pub trait GotocTypeHook<'tcx> {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool;
     fn handle(&self, tcx: &mut GotocCtx<'tcx>, ty: Ty<'tcx>) -> Type;
@@ -36,44 +38,6 @@ pub trait GotocHook<'tcx> {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt;
-}
-
-// TODO, this doesn't belong here
-fn sig_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> ty::FnSig<'tcx> {
-    let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-    let sig = match ty.kind() {
-        ty::Closure(_, substs) => substs.as_closure().sig(),
-        _ => ty.fn_sig(tcx),
-    };
-    tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig)
-}
-
-// TODO this doesn't belong here
-/// Helper function to determine if the function name starts with `expected`
-// TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
-fn name_starts_with(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str) -> bool {
-    let def_path = tcx.def_path(instance.def.def_id());
-    if let Some(data) = def_path.data.last() {
-        match data.data.name() {
-            DefPathDataName::Named(name) => return name.to_string().starts_with(expected),
-            DefPathDataName::Anon { .. } => (),
-        }
-    }
-    false
-}
-
-// TODO this doesn't belong here
-/// Helper function to determine if the function is exactly `expected`
-// TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
-fn name_is(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str) -> bool {
-    let def_path = tcx.def_path(instance.def.def_id());
-    if let Some(data) = def_path.data.last() {
-        match data.data.name() {
-            DefPathDataName::Named(name) => return name.to_string() == expected,
-            DefPathDataName::Anon { .. } => (),
-        }
-    }
-    false
 }
 
 struct ExpectFail;
@@ -159,7 +123,7 @@ struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        name_starts_with(tcx, instance, "__nondet")
+        instance_name_starts_with(tcx, instance, "__nondet")
     }
 
     fn handle(
@@ -201,7 +165,8 @@ struct Panic;
 impl<'tcx> GotocHook<'tcx> for Panic {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         sig_of_instance(tcx, instance).output().is_never()
-            && (name_is(tcx, instance, "begin_panic") || name_is(tcx, instance, "panic"))
+            && (instance_name_is(tcx, instance, "begin_panic")
+                || instance_name_is(tcx, instance, "panic"))
     }
 
     fn handle(
