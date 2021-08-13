@@ -3,12 +3,12 @@
 
 //! This module takes MIR and emits CBMC goto.
 
-mod backend;
 mod codegen;
+mod compiler_interface;
 mod context;
 mod monomorphize;
 mod overrides;
 mod utils;
 
-pub use backend::GotocCodegenBackend;
+pub use compiler_interface::GotocCodegenBackend;
 pub use context::GotocCtx;
