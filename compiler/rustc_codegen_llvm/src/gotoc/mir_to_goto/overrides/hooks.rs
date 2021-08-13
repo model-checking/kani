@@ -10,7 +10,9 @@
 
 use super::stubs::{HashMapStub, VecStub};
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use crate::gotoc::mir_to_goto::utils::*;
+use crate::gotoc::mir_to_goto::utils::{
+    instance_name_is, instance_name_starts_with, sig_of_instance,
+};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
