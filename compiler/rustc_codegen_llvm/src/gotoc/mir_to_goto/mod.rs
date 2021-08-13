@@ -6,7 +6,6 @@
 mod backend;
 mod codegen;
 mod context;
-mod debug;
 mod monomorphize;
 mod overrides;
 mod utils;

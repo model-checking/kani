@@ -59,7 +59,7 @@ impl CodegenBackend for GotocCodegenBackend {
         use rustc_hir::def_id::LOCAL_CRATE;
 
         // Install panic hook
-        SyncLazy::force(&super::debug::DEFAULT_HOOK); // Install ice hook
+        SyncLazy::force(&super::utils::debug::DEFAULT_HOOK); // Install ice hook
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mm = machine_model_from_session(&tcx.sess);
