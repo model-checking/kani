@@ -8,8 +8,8 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
+use super::stubs::{HashMapStub, VecStub};
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use crate::gotoc::mir_to_goto::stubs::{HashMapStub, VecStub};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
@@ -38,6 +38,7 @@ pub trait GotocHook<'tcx> {
     ) -> Stmt;
 }
 
+// TODO, this doesn't belong here
 fn sig_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> ty::FnSig<'tcx> {
     let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
     let sig = match ty.kind() {
@@ -47,6 +48,7 @@ fn sig_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> ty::FnS
     tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig)
 }
 
+// TODO this doesn't belong here
 /// Helper function to determine if the function name starts with `expected`
 // TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
 fn name_starts_with(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str) -> bool {
@@ -60,6 +62,7 @@ fn name_starts_with(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str)
     false
 }
 
+// TODO this doesn't belong here
 /// Helper function to determine if the function is exactly `expected`
 // TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
 fn name_is(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str) -> bool {

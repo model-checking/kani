@@ -10,6 +10,8 @@ use rustc_middle::ty::Instance;
 use rustc_span::Span;
 use tracing::debug;
 
+// Should move into rvalue
+//make this a member function
 pub fn slice_fat_ptr(typ: Type, data: Expr, len: Expr, symbol_table: &SymbolTable) -> Expr {
     Expr::struct_expr(typ, btree_string_map![("data", data), ("len", len)], symbol_table)
 }

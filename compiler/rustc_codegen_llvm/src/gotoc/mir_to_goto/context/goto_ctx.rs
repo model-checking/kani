@@ -19,7 +19,7 @@ use crate::gotoc::cbmc::goto_program::{
     DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type,
 };
 use crate::gotoc::cbmc::utils::aggr_name;
-use crate::gotoc::mir_to_goto::hooks::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+use crate::gotoc::mir_to_goto::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;

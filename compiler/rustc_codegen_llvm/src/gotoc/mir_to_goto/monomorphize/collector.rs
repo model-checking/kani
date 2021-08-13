@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use smallvec::SmallVec;
 use tracing::{debug, trace};
-
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::{par_iter, MTLock, MTRef, ParallelIterator};
 use rustc_errors::{ErrorReported, FatalError};
@@ -25,8 +25,7 @@ use rustc_middle::ty::{self, GenericParamDefKind, Instance, Ty, TyCtxt, TypeFold
 use rustc_session::config::EntryFnType;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
 use std::iter;
-
-use crate::gotoc::mir_to_goto::hooks::GotocHooks;
+use crate::gotoc::mir_to_goto::overrides::GotocHooks;
 
 pub fn custom_coerce_unsize_info<'tcx>(
     tcx: TyCtxt<'tcx>,

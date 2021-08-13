@@ -8,9 +8,8 @@ mod backend;
 mod codegen;
 mod context;
 mod debug;
-mod hooks;
 mod monomorphize;
-mod stubs;
+mod overrides;
 mod utils;
 
 pub use backend::GotocCodegenBackend;
