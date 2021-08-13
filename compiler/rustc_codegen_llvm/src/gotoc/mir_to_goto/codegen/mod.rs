@@ -4,6 +4,7 @@
 //! This module does that actual translation of MIR constructs to goto constructs.
 //! Each subfile is named for the MIR construct it translates.
 
+mod assumptions;
 mod block;
 mod function;
 mod intrinsic;

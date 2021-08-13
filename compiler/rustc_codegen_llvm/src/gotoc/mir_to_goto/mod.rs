@@ -3,7 +3,6 @@
 
 //! This module takes MIR and emits CBMC goto.
 
-mod assumptions;
 mod backend;
 mod codegen;
 mod context;
