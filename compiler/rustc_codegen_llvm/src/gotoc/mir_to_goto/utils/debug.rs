@@ -21,8 +21,13 @@ thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<Option<String>> = RefCell::ne
 const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/rmc/issues/new?labels=bug&template=bug_report.md";
 
+pub fn init() {
+    // Install panic hook
+    SyncLazy::force(&DEFAULT_HOOK); // Install ice hook
+}
+
 // Custom panic hook.
-pub static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
     SyncLazy::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {

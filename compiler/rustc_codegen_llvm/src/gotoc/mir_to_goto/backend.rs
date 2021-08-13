@@ -21,7 +21,6 @@ use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
 use rustc_target::abi::Endian;
-use std::lazy::SyncLazy;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
@@ -58,8 +57,7 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
-        // Install panic hook
-        SyncLazy::force(&super::utils::debug::DEFAULT_HOOK); // Install ice hook
+        super::utils::init();
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mm = machine_model_from_session(&tcx.sess);
