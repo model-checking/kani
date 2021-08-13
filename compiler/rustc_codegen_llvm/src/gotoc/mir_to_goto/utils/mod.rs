@@ -4,10 +4,14 @@
 //! This module provides utils used across RMC
 
 mod debug;
+mod names;
 mod utils;
 
 // TODO clean this up
+
+pub use names::*;
 pub use utils::*;
+
 pub fn init() {
     debug::init()
 }
