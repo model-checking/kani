@@ -3,7 +3,7 @@
 
 //! This file contains functionality that makes RMC easier to debug
 
-use crate::gotoc::mir_to_goto::metadata::*;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::Instance;

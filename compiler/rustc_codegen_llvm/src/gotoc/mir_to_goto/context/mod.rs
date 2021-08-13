@@ -7,6 +7,6 @@
 //! See the file level comments for more details.
 
 mod current_fn;
-mod metadata;
+mod goto_ctx;
 
-pub use metadata::GotocCtx;
+pub use goto_ctx::GotocCtx;

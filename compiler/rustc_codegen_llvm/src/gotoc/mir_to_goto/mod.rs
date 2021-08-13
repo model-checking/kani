@@ -6,10 +6,10 @@
 pub mod assumptions;
 pub mod backend;
 pub mod codegen;
+pub mod context;
 pub mod debug;
 pub mod hooks;
-pub mod metadata;
 pub mod monomorphize;
 pub mod stubs;
 pub mod utils;
-pub use metadata::GotocCtx;
+pub use context::GotocCtx;

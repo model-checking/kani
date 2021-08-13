@@ -11,7 +11,7 @@ use std::cell::{Cell, RefCell, RefMut};
 
 use super::super::hooks::GotocHook;
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt};
-use crate::gotoc::mir_to_goto::metadata::GotocCtx;
+use crate::gotoc::mir_to_goto::GotocCtx;
 
 pub struct HashMapStub<'tcx> {
     ty_opt: Cell<Option<Option<Ty<'tcx>>>>,

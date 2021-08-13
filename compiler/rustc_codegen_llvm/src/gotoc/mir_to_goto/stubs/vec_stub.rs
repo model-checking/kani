@@ -11,7 +11,7 @@ use std::cell::{Cell, RefCell, RefMut};
 
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt};
 use crate::gotoc::mir_to_goto::hooks::GotocHook;
-use crate::gotoc::mir_to_goto::metadata::GotocCtx;
+use crate::gotoc::mir_to_goto::GotocCtx;
 
 pub struct VecStub<'tcx> {
     ty_opt: Cell<Option<Option<Ty<'tcx>>>>,
