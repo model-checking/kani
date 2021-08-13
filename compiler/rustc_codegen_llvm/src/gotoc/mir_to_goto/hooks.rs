@@ -9,8 +9,7 @@
 //! this module addresses this issue.
 
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use crate::gotoc::mir_to_goto::stubs::hash_map_stub::HashMapStub;
-use crate::gotoc::mir_to_goto::stubs::vec_stub::VecStub;
+use crate::gotoc::mir_to_goto::stubs::{HashMapStub, VecStub};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
