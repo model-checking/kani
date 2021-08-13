@@ -844,6 +844,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
     /// it's immediately lowered by the C frontend.
+    /// Issue: https://github.com/diffblue/cbmc/issues/6297
     pub fn codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -857,9 +858,9 @@ impl<'tcx> GotocCtx<'tcx> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        // TODO: Why is this signed? Unsigned causes an invariant violation in CBMC in my tests.
-        // But it doesn't make sense why an array index type should be signed?
-        let st_rep = Type::CInteger(CIntType::SSizeT);
+        // An unsigned type here causes an invariant violation in CBMC.
+        // Issue: https://github.com/diffblue/cbmc/issues/6298
+        let st_rep = Type::ssize_t();
         let n_rep = Expr::int_constant(n, st_rep.clone());
 
         // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
