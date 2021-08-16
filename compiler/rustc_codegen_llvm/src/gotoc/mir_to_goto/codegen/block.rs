@@ -3,7 +3,7 @@
 
 //! This file contains functions related to codegenning MIR blocks into gotoc
 
-use super::metadata::*;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::{BasicBlock, BasicBlockData};
 
 impl<'tcx> GotocCtx<'tcx> {

@@ -1,12 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use super::cbmc::utils::{aggr_name, BUG_REPORT_URL};
-use super::cbmc::MachineModel;
-use super::metadata::*;
 use super::typ::{is_pointer, pointee_type};
-use super::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::btree_string_map;
+use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
+use crate::gotoc::cbmc::utils::{aggr_name, BUG_REPORT_URL};
+use crate::gotoc::cbmc::MachineModel;
+use crate::gotoc::mir_to_goto::utils::{dynamic_fat_ptr, slice_fat_ptr};
+use crate::gotoc::mir_to_goto::GotocCtx;
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;

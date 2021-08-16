@@ -3,8 +3,8 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use super::cbmc::goto_program::{Expr, Stmt, Symbol};
-use super::metadata::*;
+use crate::gotoc::cbmc::goto_program::{Expr, Stmt, Symbol};
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
 use tracing::{debug, warn};
