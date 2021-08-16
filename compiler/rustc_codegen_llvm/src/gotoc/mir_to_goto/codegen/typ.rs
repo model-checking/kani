@@ -1,9 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
-use super::cbmc::utils::aggr_name;
-use super::metadata::GotocCtx;
 use crate::btree_map;
+use crate::gotoc::cbmc::goto_program::{
+    DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type,
+};
+use crate::gotoc::cbmc::utils::aggr_name;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
@@ -70,10 +72,6 @@ impl Expr {
     pub fn is_unit_pointer(&self) -> bool {
         self.typ().is_unit_pointer()
     }
-}
-
-pub fn tuple_fld(n: usize) -> String {
-    format!("{}", n)
 }
 
 struct StructField<'tcx> {
@@ -379,10 +377,12 @@ impl<'tcx> GotocCtx<'tcx> {
         name
     }
 
+    #[allow(dead_code)]
     pub fn enum_union_name(&self, ty: Ty<'tcx>) -> String {
         format!("{}-union", self.ty_mangled_name(ty))
     }
 
+    #[allow(dead_code)]
     pub fn enum_case_struct_name(&self, ty: Ty<'tcx>, case: &VariantDef) -> String {
         format!("{}::{}", self.ty_mangled_name(ty), case.ident.name)
     }
@@ -637,7 +637,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_ty_tuple_like(&mut self, t: Ty<'tcx>, tys: Vec<Ty<'tcx>>) -> Vec<DatatypeComponent> {
         let layout = self.layout_of(t);
-        let flds: Vec<_> = tys.iter().enumerate().map(|(i, t)| (tuple_fld(i), *t)).collect();
+        let flds: Vec<_> =
+            tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
         self.codegen_struct_fields(flds, layout.layout, 0)
     }

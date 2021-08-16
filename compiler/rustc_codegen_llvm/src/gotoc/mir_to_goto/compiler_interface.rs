@@ -3,11 +3,10 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use super::cbmc::goto_program::symtab_transformer;
-use super::cbmc::goto_program::SymbolTable;
-use super::cbmc::{MachineModel, RoundingMode};
-use super::metadata::*;
-use super::monomorphize;
+use crate::gotoc::cbmc::goto_program::symtab_transformer;
+use crate::gotoc::cbmc::goto_program::SymbolTable;
+use crate::gotoc::mir_to_goto::monomorphize;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use bitflags::_core::any::Any;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
@@ -20,8 +19,6 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
-use rustc_target::abi::Endian;
-use std::lazy::SyncLazy;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
@@ -58,12 +55,10 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
-        // Install panic hook
-        SyncLazy::force(&super::debug::DEFAULT_HOOK); // Install ice hook
+        super::utils::init();
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
-        let mm = machine_model_from_session(&tcx.sess);
-        let mut c = GotocCtx::new(tcx, SymbolTable::new(mm));
+        let mut c = GotocCtx::new(tcx);
 
         // we first declare all functions
         for cgu in codegen_units {
@@ -157,57 +152,4 @@ impl CodegenBackend for GotocCodegenBackend {
 
         Ok(())
     }
-}
-
-fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // TODO: Hardcoded values from from the ones currently used in env.rs
-    // We may wish to get more of them from the session.
-    let alignment = sess.target.options.min_global_align.unwrap_or(1);
-    let architecture = &sess.target.arch;
-    let bool_width = 8;
-    let char_is_unsigned = false;
-    let char_width = 8;
-    let double_width = 64;
-    let float_width = 32;
-    let int_width = 32;
-    let is_big_endian = match sess.target.options.endian {
-        Endian::Little => false,
-        Endian::Big => true,
-    };
-    let long_double_width = 128;
-    let long_int_width = 64;
-    let long_long_int_width = 64;
-    let memory_operand_size = 4;
-    let null_is_zero = true;
-    let pointer_width = sess.target.pointer_width.into();
-    let short_int_width = 16;
-    let single_width = 32;
-    let wchar_t_is_unsigned = false;
-    let wchar_t_width = 32;
-    let word_size = 32;
-    let rounding_mode = RoundingMode::ToNearest;
-
-    MachineModel::new(
-        alignment,
-        architecture,
-        bool_width,
-        char_is_unsigned,
-        char_width,
-        double_width,
-        float_width,
-        int_width,
-        is_big_endian,
-        long_double_width,
-        long_int_width,
-        long_long_int_width,
-        memory_operand_size,
-        null_is_zero,
-        pointer_width,
-        rounding_mode,
-        short_int_width,
-        single_width,
-        wchar_t_is_unsigned,
-        wchar_t_width,
-        word_size,
-    )
 }

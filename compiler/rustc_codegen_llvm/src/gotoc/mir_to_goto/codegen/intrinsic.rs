@@ -3,8 +3,8 @@
 //! this module handles intrinsics
 use tracing::{debug, warn};
 
-use super::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
-use super::metadata::GotocCtx;
+use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::Place;
 use rustc_middle::ty::Instance;
 use rustc_middle::ty::{self, Ty, TyS};
