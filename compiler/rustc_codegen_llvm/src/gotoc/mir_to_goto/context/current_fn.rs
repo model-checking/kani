@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::gotoc::cbmc::goto_program::Stmt;
-use crate::gotoc::metadata::GotocCtx;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::BasicBlock;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::Instance;

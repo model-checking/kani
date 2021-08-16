@@ -14,12 +14,13 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 
-use super::cbmc::goto_program::{
+use super::current_fn::CurrentFnCtx;
+use crate::gotoc::cbmc::goto_program::{
     DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type,
 };
-use super::cbmc::utils::aggr_name;
-use crate::gotoc::current_fn::CurrentFnCtx;
-use crate::gotoc::hooks::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+use crate::gotoc::cbmc::utils::aggr_name;
+use crate::gotoc::cbmc::{MachineModel, RoundingMode};
+use crate::gotoc::mir_to_goto::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;
@@ -29,6 +30,8 @@ use rustc_middle::middle::cstore::MetadataLoader;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
+use rustc_session::Session;
+use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
@@ -49,8 +52,10 @@ pub struct GotocCtx<'tcx> {
 
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, symbol_table: SymbolTable) -> GotocCtx<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> GotocCtx<'tcx> {
         let (thks, fhks) = type_and_fn_hooks();
+        let mm = machine_model_from_session(tcx.sess);
+        let symbol_table = SymbolTable::new(mm);
         GotocCtx {
             tcx,
             symbol_table,
@@ -261,4 +266,57 @@ impl MetadataLoader for GotocMetadataLoader {
     fn get_dylib_metadata(&self, target: &Target, filename: &Path) -> Result<MetadataRef, String> {
         self.get_rlib_metadata(target, filename)
     }
+}
+
+fn machine_model_from_session(sess: &Session) -> MachineModel {
+    // TODO: Hardcoded values from from the ones currently used in env.rs
+    // We may wish to get more of them from the session.
+    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    let architecture = &sess.target.arch;
+    let bool_width = 8;
+    let char_is_unsigned = false;
+    let char_width = 8;
+    let double_width = 64;
+    let float_width = 32;
+    let int_width = 32;
+    let is_big_endian = match sess.target.options.endian {
+        Endian::Little => false,
+        Endian::Big => true,
+    };
+    let long_double_width = 128;
+    let long_int_width = 64;
+    let long_long_int_width = 64;
+    let memory_operand_size = 4;
+    let null_is_zero = true;
+    let pointer_width = sess.target.pointer_width.into();
+    let short_int_width = 16;
+    let single_width = 32;
+    let wchar_t_is_unsigned = false;
+    let wchar_t_width = 32;
+    let word_size = 32;
+    let rounding_mode = RoundingMode::ToNearest;
+
+    MachineModel::new(
+        alignment,
+        architecture,
+        bool_width,
+        char_is_unsigned,
+        char_width,
+        double_width,
+        float_width,
+        int_width,
+        is_big_endian,
+        long_double_width,
+        long_int_width,
+        long_long_int_width,
+        memory_operand_size,
+        null_is_zero,
+        pointer_width,
+        rounding_mode,
+        short_int_width,
+        single_width,
+        wchar_t_is_unsigned,
+        wchar_t_width,
+        word_size,
+    )
 }

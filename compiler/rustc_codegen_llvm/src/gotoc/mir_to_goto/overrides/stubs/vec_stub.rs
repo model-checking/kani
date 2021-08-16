@@ -9,21 +9,21 @@ use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use std::cell::{Cell, RefCell, RefMut};
 
-use super::super::cbmc::goto_program::{Expr, Location, Stmt};
 use super::super::hooks::GotocHook;
-use super::super::metadata::GotocCtx;
+use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt};
+use crate::gotoc::mir_to_goto::GotocCtx;
 
-pub struct HashMapStub<'tcx> {
+pub struct VecStub<'tcx> {
     ty_opt: Cell<Option<Option<Ty<'tcx>>>>,
     stubbed_fns: RefCell<FxHashMap<String, Option<DefId>>>,
 }
 
-impl<'tcx> RustStubber<'tcx> for HashMapStub<'tcx> {
+impl<'tcx> RustStubber<'tcx> for VecStub<'tcx> {
     fn get_old_type_prefix(&self) -> &'static str {
-        "std::collections::HashMap<"
+        "std::vec::Vec<"
     }
     fn get_new_type_name(&self) -> &'static str {
-        "CbmcHashMap"
+        "CbmcVec"
     }
     fn get_ty_opt_field(&self) -> &Cell<Option<Option<Ty<'tcx>>>> {
         &self.ty_opt
@@ -33,13 +33,13 @@ impl<'tcx> RustStubber<'tcx> for HashMapStub<'tcx> {
     }
 }
 
-impl<'tcx> HashMapStub<'tcx> {
-    pub fn new() -> HashMapStub<'tcx> {
+impl<'tcx> VecStub<'tcx> {
+    pub fn new() -> VecStub<'tcx> {
         Self { ty_opt: Cell::new(None), stubbed_fns: RefCell::new(FxHashMap::default()) }
     }
 }
 
-impl<'tcx> GotocHook<'tcx> for HashMapStub<'tcx> {
+impl<'tcx> GotocHook<'tcx> for VecStub<'tcx> {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         if !self.stub_type_was_defined(tcx) {
             return false;
@@ -47,11 +47,11 @@ impl<'tcx> GotocHook<'tcx> for HashMapStub<'tcx> {
 
         let is_destructor = self.is_target_destructor(instance);
         let unmangled = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
-        println!("*** Unmangled was {} {} ", unmangled, is_destructor);
         let matched = match &unmangled[..] {
-            "std::collections::HashMap::<K, V>::new" => true,
-            "std::collections::HashMap::<K, V, S>::insert" => true,
-            "std::collections::HashMap::<K, V, S>::get" => true,
+            "std::vec::Vec::<T, A>::push"
+            | "std::vec::Vec::<T>::new"
+            | "std::vec::Vec::<T, A>::pop"
+            | "std::vec::Vec::<T, A>::len" => true,
             _ if is_destructor => true,
             _ => false,
         };
@@ -69,15 +69,19 @@ impl<'tcx> GotocHook<'tcx> for HashMapStub<'tcx> {
     ) -> Stmt {
         let old_unmangled = with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()));
         println!("Handeling {}", old_unmangled);
+
         match &old_unmangled[..] {
-            "std::collections::HashMap::<K, V>::new" => {
+            "std::vec::Vec::<T, A>::pop" => {
+                self.translate_to_stub(tcx, instance, fargs, assign_to, target, "pop")
+            }
+            "std::vec::Vec::<T, A>::len" => {
+                self.translate_to_stub(tcx, instance, fargs, assign_to, target, "len")
+            }
+            "std::vec::Vec::<T, A>::push" => {
+                self.translate_to_stub(tcx, instance, fargs, assign_to, target, "push")
+            }
+            "std::vec::Vec::<T>::new" => {
                 self.translate_to_stub(tcx, instance, fargs, assign_to, target, "new")
-            }
-            "std::collections::HashMap::<K, V, S>::insert" => {
-                self.translate_to_stub(tcx, instance, fargs, assign_to, target, "insert")
-            }
-            "std::collections::HashMap::<K, V, S>::get" => {
-                self.translate_to_stub(tcx, instance, fargs, assign_to, target, "get")
             }
             _ if self.is_target_destructor(instance) => {
                 Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), Location::none())
