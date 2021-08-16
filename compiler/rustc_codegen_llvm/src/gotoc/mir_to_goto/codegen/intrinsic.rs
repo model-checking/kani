@@ -820,6 +820,7 @@ impl<'tcx> GotocCtx<'tcx> {
         cbmc_ret_ty: Type,
         loc: Location,
     ) -> Stmt {
+        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {:?}", fargs);
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
         let newval = fargs.remove(0);
@@ -852,6 +853,7 @@ impl<'tcx> GotocCtx<'tcx> {
         cbmc_ret_ty: Type,
         n: u64,
     ) -> Stmt {
+        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {:?}", fargs);
         // vector, size n: translated as vector types which cbmc treats as arrays
         let vec1 = fargs.remove(0);
         let vec2 = fargs.remove(0);
