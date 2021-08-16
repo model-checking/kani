@@ -387,7 +387,7 @@ impl Expr {
                 elems
             );
         } else {
-            unreachable!("Can't make an vector_val with non-vector target type {:?}", typ);
+            unreachable!("Can't make a vector_val with non-vector target type {:?}", typ);
         }
         expr!(Vector { elems }, typ)
     }
