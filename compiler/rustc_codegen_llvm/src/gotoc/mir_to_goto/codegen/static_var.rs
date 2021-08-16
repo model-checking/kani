@@ -3,8 +3,8 @@
 
 //! This file contains functions related to codegenning MIR static variables into gotoc
 
-use super::cbmc::goto_program::Symbol;
-use super::metadata::*;
+use crate::gotoc::cbmc::goto_program::Symbol;
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::mono::MonoItem;
 use tracing::debug;

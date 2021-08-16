@@ -5,9 +5,8 @@
 //! a place is an expression of specifying a location in memory, like a left value. check the cases
 //! in [codegen_place] below.
 
-use super::cbmc::goto_program::{Expr, Type};
-use super::metadata::*;
-use super::typ::tuple_fld;
+use crate::gotoc::cbmc::goto_program::{Expr, Type};
+use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
     ty::{self, Ty, TyS, VariantDef},
@@ -41,10 +40,12 @@ pub struct ProjectedPlace<'tcx> {
 }
 
 /// Getters
+#[allow(dead_code)]
 impl<'tcx> ProjectedPlace<'tcx> {
     pub fn goto_expr(&self) -> &Expr {
         &self.goto_expr
     }
+
     pub fn mir_typ_or_variant(&self) -> &TypeOrVariant<'tcx> {
         &self.mir_typ_or_variant
     }
@@ -56,6 +57,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
     pub fn fat_ptr_goto_expr(&self) -> &Option<Expr> {
         &self.fat_ptr_goto_expr
     }
+
     pub fn fat_ptr_mir_typ(&self) -> &Option<Ty<'tcx>> {
         &self.fat_ptr_mir_typ
     }
@@ -137,6 +139,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn expect_variant(&self) -> &'tcx VariantDef {
         match self {
             TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {:?}", t),
@@ -168,7 +171,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Param(_)
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {:?} does not have a field", t),
-                    ty::Tuple(_) => res.member(&tuple_fld(f.index()), &self.symbol_table),
+                    ty::Tuple(_) => {
+                        res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table)
+                    }
                     ty::Adt(def, _) if def.repr.simd() => {
                         // this is a SIMD vector - the index represents one
                         // of the elements, so we want to index as an array
