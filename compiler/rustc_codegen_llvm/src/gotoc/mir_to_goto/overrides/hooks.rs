@@ -71,7 +71,7 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         let cond = fargs.remove(0).cast_to(Type::bool());
         //TODO: actually use the error message passed by the user.
         let msg = "EXPECTED FAIL";
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
                 Stmt::assert(cond, msg, loc.clone()),
@@ -109,7 +109,7 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         assert_eq!(fargs.len(), 1);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let target = target.unwrap();
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
 
         Stmt::block(
             vec![
@@ -138,7 +138,7 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         span: Option<Span>,
     ) -> Stmt {
         assert!(fargs.is_empty());
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let pt = tcx.place_ty(&p);
@@ -201,7 +201,7 @@ impl<'tcx> GotocHook<'tcx> for Nevers {
         _target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         // _target must be None due to how rust compiler considers it
         Stmt::assert_false(
             &format!(
@@ -232,7 +232,7 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         if tcx.symbol_name(instance) == "abort" {
             Stmt::assert_false("abort intrinsic reached", loc)
         } else {
@@ -266,7 +266,7 @@ impl<'tcx> GotocHook<'tcx> for MemReplace {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
         // Skip an assignment to a destination that has a zero-sized type
@@ -314,7 +314,7 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
         span: Option<Span>,
     ) -> Stmt {
         let ty = tcx.monomorphize(instance.substs.type_at(0));
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let target = target.unwrap();
         let x = fargs.remove(0);
         let y = fargs.remove(0);
@@ -377,7 +377,7 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let src = fargs.remove(0);
@@ -415,7 +415,7 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let target = target.unwrap();
         let dst = fargs.remove(0);
         let src = fargs.remove(0);
@@ -446,7 +446,7 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         match (assign_to, target) {
             (Some(p), Some(target)) => {
                 let size = fargs.remove(0);
@@ -485,7 +485,7 @@ impl<'tcx> GotocHook<'tcx> for RustDealloc {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         match target {
             Some(target) => {
                 let ptr = fargs.remove(0);
@@ -521,7 +521,7 @@ impl<'tcx> GotocHook<'tcx> for RustRealloc {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let ptr = fargs.remove(0).cast_to(Type::void_pointer());
@@ -560,7 +560,7 @@ impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let size = fargs.remove(0);
@@ -599,7 +599,7 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option2(span);
+        let loc = tcx.codegen_span_option(span);
         let p = assign_to.unwrap();
         let target = target.unwrap();
         let pt = tcx.codegen_ty(tcx.place_ty(&p));

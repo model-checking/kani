@@ -41,7 +41,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let intrinsic = self.symbol_name(instance);
         let intrinsic = intrinsic.as_str();
-        let loc = self.codegen_span_option2(span);
+        let loc = self.codegen_span_option(span);
         debug!(
             "codegen_intrinsic:\n\tinstance {:?}\n\tfargs {:?}\n\tp {:?}\n\tspan {:?}",
             instance, fargs, p, span
@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
                 warn!("RMC does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
-                let loc = self.codegen_span_option2(span);
+                let loc = self.codegen_span_option(span);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -225,7 +225,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let ty = instance.substs.type_at(0);
                 let layout = self.layout_of(ty);
                 if layout.abi.is_uninhabited() {
-                    let loc = self.codegen_span_option2(span);
+                    let loc = self.codegen_span_option(span);
                     Stmt::assert_false(&format!("type is uninhabited: {:?}", ty), loc)
                 } else {
                     Stmt::skip(loc)
