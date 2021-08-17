@@ -46,9 +46,9 @@ impl<'tcx> GotocCtx<'tcx> {
             let ldata = &ldecls[lc];
             let t = self.monomorphize(ldata.ty);
             let t = self.codegen_ty(t);
-            let loc = self.codegen_span2(&ldata.source_info.span);
+            let loc = self.codegen_span(&ldata.source_info.span);
             let sym =
-                Symbol::variable(name, base_name, t, self.codegen_span2(&ldata.source_info.span));
+                Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -69,7 +69,7 @@ impl<'tcx> GotocCtx<'tcx> {
             warn!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
             debug!("Skipping function {}", self.current_fn().readable_name());
-            let loc = self.codegen_span2(&self.current_fn().mir().span);
+            let loc = self.codegen_span(&self.current_fn().mir().span);
             let body = Stmt::assert_false(
                 &format!(
                     "The function {} is not currently supported by RMC",
@@ -94,7 +94,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             mir.basic_blocks().iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
 
-            let loc = self.codegen_span2(&mir.span);
+            let loc = self.codegen_span(&mir.span);
             let stmts = self.current_fn_mut().extract_block();
             let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
@@ -125,7 +125,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         let spread_arg = mir.spread_arg.unwrap();
         let spread_data = &mir.local_decls()[spread_arg];
-        let loc = self.codegen_span2(&spread_data.source_info.span);
+        let loc = self.codegen_span(&spread_data.source_info.span);
 
         // When we codegen the function signature elsewhere, we will codegen the
         // untupled version. So, the tuple argument itself needs to have a
@@ -194,7 +194,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ctx.fn_typ(),
                 None,
                 Some(ctx.current_fn().readable_name().to_string()),
-                ctx.codegen_span2(&mir.span),
+                ctx.codegen_span(&mir.span),
             )
         });
         self.reset_current_fn();
