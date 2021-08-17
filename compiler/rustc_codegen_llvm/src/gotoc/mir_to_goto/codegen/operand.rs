@@ -346,7 +346,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         name.to_string(),
                         name.to_string(),
                         ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
-                        ctx.codegen_span2(&span),
+                        ctx.codegen_span(&span),
                     )
                     .with_is_extern(rlinkage.is_none())
                 });
@@ -584,6 +584,6 @@ impl<'tcx> GotocCtx<'tcx> {
             )
             .with_is_extern(true)
         });
-        Expr::symbol_expression(func, funct).with_location(self.codegen_span_option2(span.cloned()))
+        Expr::symbol_expression(func, funct).with_location(self.codegen_span_option(span.cloned()))
     }
 }

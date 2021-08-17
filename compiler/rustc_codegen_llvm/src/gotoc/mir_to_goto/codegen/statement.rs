@@ -26,7 +26,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
-        let loc = self.codegen_span2(&term.source_info.span);
+        let loc = self.codegen_span(&term.source_info.span);
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
@@ -251,7 +251,7 @@ impl<'tcx> GotocCtx<'tcx> {
         destination: &Option<(Place<'tcx>, BasicBlock)>,
         span: Span,
     ) -> Stmt {
-        let loc = self.codegen_span2(&span);
+        let loc = self.codegen_span(&span);
         let funct = self.operand_ty(func);
         let mut fargs: Vec<_> = args
             .iter()
@@ -420,7 +420,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
         };
 
-        let loc = self.codegen_span_option2(span);
+        let loc = self.codegen_span_option(span);
         let cbb = self.current_fn().current_bb();
 
         // TODO: is it proper?
@@ -438,7 +438,7 @@ impl<'tcx> GotocCtx<'tcx> {
             match pterm.successors().find(|bb| **bb != cbb) {
                 None => self.codegen_assert_false(arg, loc),
                 Some(alt) => {
-                    let loc = self.codegen_span2(&pterm.source_info.span);
+                    let loc = self.codegen_span(&pterm.source_info.span);
                     Stmt::block(
                         vec![
                             self.codegen_assert_false(arg, loc.clone()),
@@ -575,6 +575,6 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Nop
             | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
         }
-        .with_location(self.codegen_span2(&stmt.source_info.span))
+        .with_location(self.codegen_span(&stmt.source_info.span))
     }
 }

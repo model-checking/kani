@@ -22,7 +22,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let symbol_name = item.symbol_name(self.tcx).to_string();
         let typ = self.codegen_ty(self.tcx.type_of(def_id));
         let span = self.tcx.def_span(def_id);
-        let location = self.codegen_span2(&span);
+        let location = self.codegen_span(&span);
         let symbol = Symbol::static_variable(symbol_name.to_string(), symbol_name, typ, location);
         self.symbol_table.insert(symbol);
     }
