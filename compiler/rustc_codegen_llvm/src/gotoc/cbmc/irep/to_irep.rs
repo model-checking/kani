@@ -175,7 +175,6 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm), Expr::int_constant(*offset, Type::ssize_t()).to_irep(mm)],
                 named_sub: btree_map![],
             },
-
             ExprValue::CBoolConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
@@ -292,6 +291,11 @@ impl ToIrep for ExprValue {
             ExprValue::UnOp { op, e } => {
                 Irep { id: op.to_irep_id(), sub: vec![e.to_irep(mm)], named_sub: btree_map![] }
             }
+            ExprValue::Vector { elems } => Irep {
+                id: IrepId::Vector,
+                sub: elems.iter().map(|x| x.to_irep(mm)).collect(),
+                named_sub: btree_map![],
+            },
         }
     }
 }
