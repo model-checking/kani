@@ -146,6 +146,10 @@ pub enum ExprValue {
         op: UnaryOperand,
         e: Expr,
     },
+    /// `vec_typ x = >>> {elems0, elems1 ...} <<<`
+    Vector {
+        elems: Vec<Expr>,
+    },
 }
 
 /// Binary operators. The names are the same as in the Irep representation.
@@ -371,6 +375,21 @@ impl Expr {
             unreachable!("Can't make an array_val with non-array target type {:?}", typ);
         }
         expr!(Array { elems }, typ)
+    }
+
+    pub fn vector_expr(typ: Type, elems: Vec<Expr>) -> Self {
+        if let Type::Vector { size, typ: value_typ } = typ.clone() {
+            assert_eq!(size as usize, elems.len());
+            assert!(
+                elems.iter().all(|x| x.typ == *value_typ),
+                "Vector type and value types don't match: \n{:?}\n{:?}",
+                typ,
+                elems
+            );
+        } else {
+            unreachable!("Can't make a vector_val with non-vector target type {:?}", typ);
+        }
+        expr!(Vector { elems }, typ)
     }
 
     /// `(__CPROVER_bool) >>> true/false <<<`. True/False as a single bit boolean.

@@ -266,6 +266,7 @@ pub trait Transformer: Sized {
             ExprValue::Typecast(child) => self.transform_expr_typecast(typ, child),
             ExprValue::Union { value, field } => self.transform_expr_union(typ, value, field),
             ExprValue::UnOp { op, e } => self.transform_expr_un_op(typ, op, e),
+            ExprValue::Vector { elems } => self.transform_expr_vector(typ, elems),
         }
         .with_location(e.location().clone())
     }
@@ -280,6 +281,13 @@ pub trait Transformer: Sized {
         let transformed_typ = self.transform_type(typ);
         let transformed_elems = elems.iter().map(|elem| self.transform_expr(elem)).collect();
         Expr::array_expr(transformed_typ, transformed_elems)
+    }
+
+    /// Transform a vector expr (`vec_typ x[] = >>> {elems0, elems1 ...} <<<`)
+    fn transform_expr_vector(&self, typ: &Type, elems: &[Expr]) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        let transformed_elems = elems.iter().map(|elem| self.transform_expr(elem)).collect();
+        Expr::vector_expr(transformed_typ, transformed_elems)
     }
 
     /// Transforms an array of expr (`typ x[width] = >>> {elem} <<<`)
