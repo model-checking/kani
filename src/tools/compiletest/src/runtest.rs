@@ -2435,7 +2435,14 @@ impl<'test> TestCx<'test> {
         let mut rustc = Command::new("rmc-rustc");
         rustc
             .args(self.props.compile_flags.clone())
-            .args(["-Z", "codegen-backend=gotoc", "--cfg=rmc", "--out-dir"])
+            .args([
+                "-Z",
+                "codegen-backend=gotoc",
+                "-Z",
+                "trim-diagnostic-paths=no",
+                "--cfg=rmc",
+                "--out-dir",
+            ])
             .arg(self.output_base_dir())
             .arg(&self.testpaths.file);
         self.add_rmc_dir_to_path(&mut rustc);
