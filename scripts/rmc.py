@@ -140,8 +140,9 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
         atexit.register(delete_file, output_filename)
         
     build_cmd = [RMC_RUSTC_EXE, 
-                 "-Z", "codegen-backend=gotoc", 
-                 "-Z", f"symbol-mangling-version={mangler}", 
+                 "-Z", "codegen-backend=gotoc",
+                 "-Z", "trim-diagnostic-paths=no",
+                 "-Z", f"symbol-mangling-version={mangler}",
                  "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
                  f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
     if "RUSTFLAGS" in os.environ:
@@ -157,8 +158,9 @@ def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler=
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     rustflags = [
-        "-Z", "codegen-backend=gotoc", 
-        "-Z", f"symbol-mangling-version={mangler}", 
+        "-Z", "codegen-backend=gotoc",
+        "-Z", "trim-diagnostic-paths=no",
+        "-Z", f"symbol-mangling-version={mangler}",
         "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}", 
         f"--cfg={RMC_CFG}"]
     rustflags = " ".join(rustflags)
