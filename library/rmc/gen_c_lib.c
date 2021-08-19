@@ -8,7 +8,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
 
 // By default, don't do anything;
 // user can add an assert if they so desire.
@@ -43,13 +42,13 @@ typedef bool __CPROVER_bool;
 #define POINTER_OBJECT(value) 0
 
 #define overflow(op, typ, var1, var2) \
-    (strcmp(op, "+") == 0) ? ( \
+    (op[0] == '+') ? ( \
         ((var1 < 0) && (var2 < 0) && (var1 + var2 > 0)) || \
         ((var1 > 0) && (var2 > 0) && (var1 + var2 < 0)) \
-    ) : (strcmp(op, "-") == 0) ? ( \
+    ) : (op[0] == '-') ? ( \
         ((var1 < 0) && (var2 > 0) && (var1 - var2 > 0)) || \
         ((var1 > 0) && (var2 < 0) && (var1 - var2 < 0)) \
-    ) : (strcmp(op, "*") == 0) ? ( \
+    ) : (op[0] == '*') ? ( \
         (var1 != 0) && ((var1 * var2) / var1 != var2) \
     ) : ( \
         1 \
