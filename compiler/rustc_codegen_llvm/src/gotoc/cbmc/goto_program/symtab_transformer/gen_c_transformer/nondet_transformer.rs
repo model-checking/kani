@@ -43,6 +43,16 @@ impl Transformer for NondetTransformer {
     }
 
     /// Transform nondets to create default values for the expected type.
+    /// Given: `let x: u32 = __nondet();`
+    /// Transformed:
+    /// ```
+    ///   unsigned int x = non_det_unsigned_bv_32();
+    /// ...
+    /// unsigned int non_det_unsigned_bv_32(void) {
+    ///     unsigned int ret;
+    ///     return ret;
+    /// }
+    /// ```
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
 
