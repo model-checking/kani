@@ -64,6 +64,10 @@ fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
 /// Struct for handling the expression replacement transformations for --gen-c-runnable.
 pub struct ExprTransformer {
     new_symbol_table: SymbolTable,
+    // The `empty_statics` field is used to track extern static variables;
+    // when such a symbol is encountered, we add it to this map;
+    // in postprocessing, we initialize each of these variables
+    // with a default value to emphasize that these are externally defined.
     empty_statics: FxHashMap<String, Expr>,
 }
 
@@ -76,12 +80,13 @@ impl ExprTransformer {
     }
 
     /// Extract `empty_statics` map for final processing.
-    pub fn empty_statics_owned(&mut self) -> FxHashMap<String, Expr> {
+    fn empty_statics_owned(&mut self) -> FxHashMap<String, Expr> {
         std::mem::replace(&mut self.empty_statics, FxHashMap::default())
     }
 
-    /// Add identifier to a transformed parameter if it's missing.
-    /// Necessary when function wasn't originally a definition.
+    /// Add identifier to a transformed parameter if it's missing;
+    /// necessary when function wasn't originally a definition, e.g. extern functions,
+    /// so that we can give them a function body.
     fn add_parameter_identifier(&mut self, parameter: &Parameter) -> Parameter {
         if parameter.identifier().is_some() {
             parameter.clone()
