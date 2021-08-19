@@ -30,7 +30,9 @@ impl NameTransformer {
     fn normalize_identifier(&mut self, orig_name: &str) -> String {
         assert!(!orig_name.is_empty(), "Received empty identifier.");
 
-        // If name already encountered, return same result
+        // If name already encountered, return same result;
+        // this is necessary for correctness to avoid a single name
+        // being mapped to two different names later on
         match self.mapped_names.get(orig_name) {
             Some(result) => return result.clone(),
             None => (),
