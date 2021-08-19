@@ -43,30 +43,55 @@ impl NameTransformer {
             ("", orig_name)
         };
 
-        // Convert non-(alphanumeric + underscore) characters to underscore
-        let valid_chars =
-            name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '$'), "_");
-
-        // If the first character is a number, prefix with underscore
-        let new_name = match valid_chars.chars().next() {
-            Some(first) => {
-                if first.is_numeric() {
-                    let mut name = "_".to_string();
-                    name.push_str(&valid_chars);
-                    name
-                } else {
-                    valid_chars
-                }
-            }
-            None => "_".to_string(),
+        // Separate function name from variable name for CBMC
+        let (name, suffix) = {
+            let mut parts = name.split("::1::");
+            let name = parts.next().unwrap();
+            let suffix = parts.next();
+            assert!(parts.next().is_none(), "Found multiple occurrences of '::1::' in identifier.");
+            (name, suffix)
         };
 
-        // Replace reserved names with alternatives
-        let mut illegal_names: FxHashMap<_, _> = [("case", "case_"), ("default", "_default")]
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect();
-        let result = illegal_names.remove(&new_name).unwrap_or(new_name);
+        fn fix_name(name: &str) -> String {
+            // Convert non-(alphanumeric + underscore) characters to underscore
+            let valid_chars =
+                name.replace(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '$'), "_");
+
+            // If the first character is a number, prefix with underscore
+            let new_name = match valid_chars.chars().next() {
+                Some(first) => {
+                    if first.is_numeric() {
+                        let mut name = "_".to_string();
+                        name.push_str(&valid_chars);
+                        name
+                    } else {
+                        valid_chars
+                    }
+                }
+                None => "".to_string(),
+            };
+
+            // Replace reserved names with alternatives
+            let mut illegal_names = [("case", "case_"), ("default", "default_")];
+            for (illegal, replacement) in illegal_names {
+                if new_name.ends_with(illegal) {
+                    return new_name.replace(illegal, replacement);
+                }
+            }
+            return new_name;
+        }
+
+        let name = fix_name(name);
+        let suffix = suffix.map(fix_name);
+
+        // Add `tag-` back in if it was present
+        let with_prefix = format!("{}{}", prefix, name);
+
+        // Reattach the variable name
+        let result = match suffix {
+            None => with_prefix,
+            Some(suffix) => format!("{}::{}", with_prefix, suffix),
+        };
 
         // Ensure result has not been used before
         let result = if self.used_names.contains(&result) {
@@ -80,13 +105,6 @@ impl NameTransformer {
             }
         } else {
             result
-        };
-
-        // Add `tag-` back in if it was present
-        let result = {
-            let mut prefix = prefix.to_string();
-            prefix.push_str(&result);
-            prefix
         };
 
         // Remember result and return

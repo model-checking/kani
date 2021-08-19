@@ -284,7 +284,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transform a vector expr (`vec_typ x[] = >>> {elems0, elems1 ...} <<<`)
-    fn transform_expr_vector(&self, typ: &Type, elems: &[Expr]) -> Expr {
+    fn transform_expr_vector(&mut self, typ: &Type, elems: &[Expr]) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_elems = elems.iter().map(|elem| self.transform_expr(elem)).collect();
         Expr::vector_expr(transformed_typ, transformed_elems)
