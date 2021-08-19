@@ -188,8 +188,19 @@ impl Transformer for ExprTransformer {
                 new_symbol.typ = new_typ;
                 new_symbol.value = SymbolValues::None;
             }
+        } else if &symbol.name == "main" {
+            // Replace `main` with `main_` since it has the wrong return type
+            new_symbol.name = "main_".to_string();
+            new_symbol.base_name = Some("main_".to_string());
+            new_symbol.pretty_name = Some("main_".to_string());
+
+            let new_typ = self.transform_type(&symbol.typ);
+            let new_value = self.transform_value(&symbol.value);
+
+            new_symbol.typ = new_typ;
+            new_symbol.value = new_value;
         } else {
-            // Handle non-extern symbols normally
+            // Handle all other symbols normally
             let new_typ = self.transform_type(&symbol.typ);
             let new_value = self.transform_value(&symbol.value);
             new_symbol.typ = new_typ;
@@ -201,20 +212,6 @@ impl Transformer for ExprTransformer {
 
     /// Move `main` to `main_`, and create a wrapper `main` to initialize statics and return `int`.
     fn postprocess(&mut self) {
-        // Rename `main` to `main_` if present
-        let call_old_main = self.mut_symbol_table().remove("main").map(|old_main| {
-            let mut main_ = old_main;
-            main_.name = "main_".to_string();
-            main_.base_name = Some("main_".to_string());
-            main_.pretty_name = Some("main_".to_string());
-
-            // Add `main_` to symbol table
-            self.mut_symbol_table().insert(main_.clone());
-
-            // `main_();`
-            Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none())
-        });
-
         // The body of the new `main` function
         let mut main_body = Vec::new();
 
@@ -224,9 +221,9 @@ impl Transformer for ExprTransformer {
             main_body.push(Stmt::assign(sym_expr, value, Location::none()));
         }
 
-        // `main_();`
-        if let Some(call_old_main) = call_old_main {
-            main_body.push(call_old_main);
+        // `main_();`, if it is present
+        if let Some(main_) = self.symbol_table().lookup("main_") {
+            main_body.push(Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none()));
         }
 
         // `return 0;`
