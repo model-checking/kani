@@ -114,36 +114,8 @@ impl Transformer for ExprTransformer {
         let rhs = self.transform_expr(rhs);
 
         match op {
-            BinaryOperand::And => lhs.and(rhs),
-            BinaryOperand::Ashr => lhs.ashr(rhs),
-            BinaryOperand::Bitand => lhs.bitand(rhs),
-            BinaryOperand::Bitor => lhs.bitor(rhs),
-            BinaryOperand::Bitxor => lhs.bitxor(rhs),
-            BinaryOperand::Div => lhs.div(rhs),
-            BinaryOperand::Equal => lhs.eq(rhs),
-            BinaryOperand::Ge => lhs.ge(rhs),
-            BinaryOperand::Gt => lhs.gt(rhs),
-            BinaryOperand::IeeeFloatEqual => lhs.feq(rhs),
-            BinaryOperand::IeeeFloatNotequal => lhs.fneq(rhs),
-            // `lhs ==> rhs` <==> `!lhs || rhs` <==> `!!(!lhs | rhs)`
-            // We use the bitor to prevent short-circuiting
             BinaryOperand::Implies => lhs.not().bitor(rhs).not().not(),
-            BinaryOperand::Le => lhs.le(rhs),
-            BinaryOperand::Lshr => lhs.lshr(rhs),
-            BinaryOperand::Lt => lhs.lt(rhs),
-            BinaryOperand::Minus => lhs.sub(rhs),
-            BinaryOperand::Mod => lhs.rem(rhs),
-            BinaryOperand::Mult => lhs.mul(rhs),
-            BinaryOperand::Notequal => lhs.neq(rhs),
-            BinaryOperand::Or => lhs.or(rhs),
-            BinaryOperand::OverflowMinus => lhs.sub_overflow_p(rhs),
-            BinaryOperand::OverflowMult => lhs.mul_overflow_p(rhs),
-            BinaryOperand::OverflowPlus => lhs.add_overflow_p(rhs),
-            BinaryOperand::Plus => lhs.plus(rhs),
-            BinaryOperand::Rol => lhs.rol(rhs),
-            BinaryOperand::Ror => lhs.ror(rhs),
-            BinaryOperand::Shl => lhs.shl(rhs),
-            BinaryOperand::Xor => lhs.xor(rhs),
+            _ => lhs.binop(*op, rhs),
         }
     }
 
