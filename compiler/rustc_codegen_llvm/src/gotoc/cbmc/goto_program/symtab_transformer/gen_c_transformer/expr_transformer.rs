@@ -183,11 +183,14 @@ impl Transformer for ExprTransformer {
                     "Extern objects that aren't functions should be static variables."
                 );
                 let new_typ = self.transform_type(&symbol.typ);
-                let new_value = SymbolValues::Expr(Expr::nondet(new_typ.clone()));
                 self.empty_statics.insert(symbol.name.clone(), Expr::nondet(new_typ.clone()));
 
+                // Symbol is no longer extern
                 new_symbol.is_extern = false;
+
+                // Set location to none so that it is a global static
                 new_symbol.location = Location::none();
+
                 new_symbol.typ = new_typ;
                 new_symbol.value = SymbolValues::None;
             }

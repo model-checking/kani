@@ -5,15 +5,18 @@ pub fn type_to_string(typ: &Type) -> String {
     match typ {
         Type::Array { typ, size } => format!("array_of_{}_{}", size, type_to_string(typ.as_ref())),
         Type::Bool => format!("bool"),
-        Type::CBitField { width, typ } => format!("cbitfield_of_{}_{}", width, type_to_string(typ.as_ref())),
+        Type::CBitField { width, typ } => {
+            format!("cbitfield_of_{}_{}", width, type_to_string(typ.as_ref()))
+        }
         Type::CInteger(int_kind) => format!("c_int_{:?}", int_kind),
         Type::Code { parameters, return_type } => {
-            let parameter_string = parameters.iter()
+            let parameter_string = parameters
+                .iter()
                 .map(|param| param.typ())
                 .map(type_to_string)
                 .collect::<Vec<_>>()
                 .join("_");
-            let return_string = type_to_string(ret_type.as_ref());
+            let return_string = type_to_string(return_type.as_ref());
             format!("code_from_{}_to_{}", parameter_string, return_string)
         }
         Type::Constructor => format!("constructor"),
@@ -34,14 +37,15 @@ pub fn type_to_string(typ: &Type) -> String {
         Type::UnionTag(tag) => format!("union_tag_{}", tag),
         Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
         Type::VariadicCode { parameters, return_type } => {
-            let parameter_string = parameters.iter()
+            let parameter_string = parameters
+                .iter()
                 .map(|param| param.typ())
                 .map(type_to_string)
                 .collect::<Vec<_>>()
                 .join("_");
-            let return_string = type_to_string(ret_type.as_ref());
+            let return_string = type_to_string(return_type.as_ref());
             format!("variadic_code_from_{}_to_{}", parameter_string, return_string)
-        },
+        }
         Type::Vector { size, typ } => format!("vec_of_{}_{}", size, type_to_string(typ.as_ref())),
     }
 }
