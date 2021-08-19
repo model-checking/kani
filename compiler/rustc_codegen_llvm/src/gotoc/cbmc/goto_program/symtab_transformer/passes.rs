@@ -10,6 +10,10 @@ pub fn do_passes(mut symtab: SymbolTable, pass_names: &[String]) -> SymbolTable 
     for pass_name in pass_names {
         symtab = match &pass_name[..] {
             "gen-c" => {
+                // Note: the order of these DOES matter;
+                // ExprTransformer expects the NondetTransformer to happen after, and
+                // NameTransformer should clean up any identifiers introduced by
+                // the other two identifiers
                 let symtab = ExprTransformer::transform(&symtab);
                 let symtab = NondetTransformer::transform(&symtab);
                 let symtab = NameTransformer::transform(&symtab);
