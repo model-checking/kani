@@ -252,8 +252,8 @@ def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property
 
 # Handler for calling goto-instrument
 def run_goto_instrument(input_filename, output_filename, args, verbose=False, dry_run=False):
-    cmd = ["goto-instrument"] + args + [input_filename]
-    return run_cmd(cmd, label="goto-instrument", verbose=verbose, output_to=output_filename, dry_run=dry_run)
+    cmd = ["goto-instrument"] + args + [input_filename, output_filename]
+    return run_cmd(cmd, label="goto-instrument", verbose=verbose, dry_run=dry_run)
 
 # Generates a C program from a goto program
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
@@ -264,9 +264,6 @@ def gen_c_postprocess(c_filename, dry_run=False):
     if not dry_run:
         with open(c_filename, "r") as f:
             lines = f.read().splitlines()
-
-        # Remove header line
-        lines.pop(0)
 
         # Import gen_c_lib.c
         lines.insert(0, f"#include \"{GEN_C_LIB}\"")
