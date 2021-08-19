@@ -8,16 +8,19 @@
 #include <stdbool.h>
 #include <string.h>
 
+// If a user assumes something, then it should hold
 void __CPROVER_assume(int condition) {
     assert(condition);
 }
 
+// We can ignore atomics for simplicity
 void __CPROVER_atomic_begin(void) {
 }
 
 void __CPROVER_atomic_end(void) {
 }
 
+// These need to be manually defined for some reason
 double powi(double base, int expt) {
     return pow(base, (double) expt);
 }
@@ -26,6 +29,7 @@ float powif(float base, int expt) {
     return (float) powi((double) base, expt);
 }
 
+// Used by cbmc invariants
 typedef bool __CPROVER_bool;
 
 #define OBJECT_SIZE(value) sizeof(*value)
