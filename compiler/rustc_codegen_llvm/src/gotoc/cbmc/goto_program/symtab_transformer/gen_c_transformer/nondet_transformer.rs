@@ -46,8 +46,8 @@ impl Transformer for NondetTransformer {
     /// Transform nondets to create default values for the expected type.
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
-        let typ_string = type_to_string(&transformed_typ);
-        let identifier = format!("non_det_{}", typ_string);
+
+        let identifier = format!("non_det_{}", type_to_string(&transformed_typ));
         let function_type = Type::code(vec![], transformed_typ);
 
         // Create non_det function which returns default value in postprocessing
@@ -68,14 +68,15 @@ impl Transformer for NondetTransformer {
         // Instead of just mapping `self.transform_expr` over the values,
         // only transform those which are true fields, not padding
         let fields = self.symbol_table().lookup_fields_in_type(&transformed_typ).unwrap().clone();
-        let mut transformed_values = Vec::new();
-        for (field, value) in fields.into_iter().zip(values.into_iter()) {
-            if field.is_padding() {
-                transformed_values.push(value.clone());
-            } else {
-                transformed_values.push(self.transform_expr(value));
-            }
-        }
+        let transformed_values: Vec<_> = fields
+            .into_iter()
+            .zip(values.into_iter())
+            .map(
+                |(field, value)| {
+                    if field.is_padding() { value.clone() } else { self.transform_expr(value) }
+                },
+            )
+            .collect();
 
         Expr::struct_expr_from_padded_values(
             transformed_typ,
