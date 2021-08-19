@@ -1,5 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//! This file contains stubs that we link to the produced C file
+//! from --gen-c-runnable to make it executable.
 
 #include <assert.h>
 #include <limits.h>
@@ -8,9 +10,9 @@
 #include <stdbool.h>
 #include <string.h>
 
-// If a user assumes something, then it should hold
+// By default, don't do anything;
+// user can add an assert if they so desire.
 void __CPROVER_assume(int condition) {
-    assert(condition);
 }
 
 // We can ignore atomics for simplicity
@@ -34,7 +36,10 @@ typedef bool __CPROVER_bool;
 
 #define OBJECT_SIZE(value) sizeof(*value)
 
-// A temporary definition to always cause checks to be true.
+// POINTER_OBJECT is used by Rust's offset_from to ensure
+// the two pointers are from the same object.
+// We can't do this in C.
+// Tracking issue: https://github.com/model-checking/rmc/issues/440
 #define POINTER_OBJECT(value) 0
 
 #define overflow(op, typ, var1, var2) \
@@ -50,6 +55,7 @@ typedef bool __CPROVER_bool;
         1 \
     )
 
+// Only works on little endian machines.
 #define byte_extract_little_endian(from_val, offset, to_type) \
     *((typeof(to_type)*) (((void*) &from_val) + (offset)))
 
