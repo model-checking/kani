@@ -47,7 +47,7 @@ If you encounter issues when using RMC we encourage you to
 
 ## Running RMC
 RMC currently supports command-line invocation on single files.
-We are actively working to integrate RMC into `cargo`.
+We are actively working to integrate RMC into `cargo` (see [experimental Cargo integration](#experimental-cargo-integration)).
 Until then, the easiest way to use RMC is as follows
 
 
@@ -115,6 +115,69 @@ For example, consider the `CopyIntrinsics` regression test:
    ```
    This generates a file `main.c` which contains a "C" like formatting of the CBMC IR.
 1. You can also view the raw CBMC internal representation using the `--keep-temps` option.
+
+### Experimental Cargo integration
+
+We are actively working to improve RMC's integration with Rust's Cargo package and build system. Currently, you can build projects with Cargo via a multi-step process.
+
+For example, we will describe using RMC as a backend to build the [`rand-core` crate](https://crates.io/crates/rand_core). These instructions have been tested on Ubuntu Linux with the `x86_64-unknown-linux-gnu` target.
+
+1. Build RMC
+   ```
+   ./x.py build -i --stage 1 library/std
+   ```
+
+2. Clone `rand` and navigate to the `rand-core` directory:
+   ```
+   git clone git@github.com:rust-random/rand.git
+   cd rand/rand-core
+   ```
+3. Next, we need to add an entry-point for CBMC to the crate's source. For now, we will just pick an existing unit test. Open `src/le.rs` and find the `test_read` function at the bottom of the file. Add the following attribute to keep the function name unmangled, so we can later pass it to CBMC. 
+
+   ```rust
+   // #[test]      <- Remove/comment out this
+   #[no_mangle] // <- Add this
+   fn test_read() {
+      let bytes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+      let mut buf = [0u32; 4];
+      read_u32_into(&bytes, &mut buf);
+      assert_eq!(buf[0], 0x04030201);
+      assert_eq!(buf[3], 0x100F0E0D);
+      // ...
+   }
+   ```
+
+4. Now, we can run Cargo and specify that RMC should be the backend. We also pass a location for the build artifacts (`rand-core-demo`) and a target (`x86_64-unknown-linux-gnu`). 
+   ```
+    CARGO_TARGET_DIR=rand-core-demo RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build --target x86_64-unknown-linux-gnu
+   ```
+
+5. Now, navigate to the output directory for the given target. 
+   ```
+    cd rand-core-demo/x86_64-unknown-linux-gnu/debug/deps/
+   ```
+   
+6. The output of Cargo with RMC is a series of JSON files that define CMBC symbols. We now can use CBMC commands to convert and link these files:
+   ```
+   symtab2gb rand_core-*.json --out a.out              // Convert from JSON to Gotoc 
+   goto-cc --function test_read a.out -o a.out         // Add the entry point we previously selected
+   goto-instrument --drop-unused-functions a.out a.out // Remove unused functions
+   cbmc a.out                                          // Run CBMC
+   ```
+
+You should then see verification succeed:
+```
+** 0 of 43 failed (1 iterations)
+VERIFICATION SUCCESSFUL
+```
+
+To sanity-check that verification is working, try changing ` assert_eq!(buf[0], 0x04030201);` to a different value and rerun these commands.
+
+For crates with multiple JSON files in the `deps` folder, we suggest running the first command in this step with [`parallel`](https://www.gnu.org/software/parallel/):
+   ```
+   ls *.json | parallel -j 16 symtab2gb {} --out {.}.out // Convert from JSON to Gotoc 
+   ```
 
 ## Security
 See [SECURITY](https://github.com/model-checking/rmc/security/policy) for more information.
