@@ -6,10 +6,12 @@
 //! in [codegen_place] below.
 
 use crate::gotoc::cbmc::goto_program::{Expr, Type};
+use crate::gotoc::mir_to_goto::utils::slice_fat_ptr;
 use crate::gotoc::mir_to_goto::GotocCtx;
+use rustc_hir::Mutability;
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
-    ty::{self, Ty, TyS, VariantDef},
+    ty::{self, Ty, TyS, TypeAndMut, VariantDef},
 };
 use rustc_target::abi::{LayoutOf, TagEncoding, Variants};
 use tracing::{debug, warn};
@@ -357,7 +359,45 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
                 self.codegen_constant_index(before, offset, min_length, from_end)
             }
-            ProjectionElem::Subslice { .. } => unimplemented!(),
+            ProjectionElem::Subslice { from, to, from_end } => {
+                // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
+                match before.mir_typ().kind() {
+                    ty::Array(..) => unimplemented!(),
+                    ty::Slice(elemt) => {
+                        let len = if from_end {
+                            let olen = before
+                                .fat_ptr_goto_expr
+                                .clone()
+                                .unwrap()
+                                .member("len", &self.symbol_table);
+                            let sum = Expr::int_constant(to + from, Type::size_t());
+                            dbg!(&olen);
+                            olen.sub(sum) // olen - (to + from) = olen - to - from
+                        } else {
+                            Expr::int_constant(to - from, Type::size_t())
+                        };
+                        let typ = self.tcx.mk_slice(elemt);
+                        let typ_and_mut = TypeAndMut { ty: typ, mutbl: Mutability::Mut };
+                        let ptr_typ = self.tcx.mk_ptr(typ_and_mut);
+                        let goto_type = self.codegen_ty(ptr_typ);
+
+                        let index = Expr::int_constant(from, Type::size_t());
+                        dbg!(&index);
+                        let from_elem = before.goto_expr.index(index);
+                        let data = from_elem.address_of();
+                        dbg!(&len);
+                        let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
+                        ProjectedPlace::new(
+                            fat_ptr.clone(),
+                            TypeOrVariant::Type(ptr_typ),
+                            Some(fat_ptr),
+                            Some(ptr_typ),
+                            self,
+                        )
+                    }
+                    _ => unreachable!("must be array or slice"),
+                }
+            }
             ProjectionElem::Downcast(_, idx) => {
                 // downcast converts a variable of an enum type to one of its discriminated cases
                 let t = before.mir_typ();
