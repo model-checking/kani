@@ -9,7 +9,6 @@ use super::super::super::{
     Type,
 };
 use super::super::Transformer;
-use super::common::type_to_string;
 use num::bigint::BigInt;
 use rustc_data_structures::fx::FxHashMap;
 
@@ -72,7 +71,7 @@ impl ExprTransformer {
         if parameter.identifier().is_some() {
             parameter.clone()
         } else {
-            let name = format!("__{}", type_to_string(parameter.typ()));
+            let name = format!("__{}", parameter.typ().to_identifier());
             let parameter_sym = self.mut_symbol_table().ensure(&name, |_symtab, name| {
                 Symbol::variable(
                     name.to_string(),
@@ -223,7 +222,8 @@ impl Transformer for ExprTransformer {
 
         // `main_();`, if it is present
         if let Some(main_) = self.symbol_table().lookup("main_") {
-            main_body.push(Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none()));
+            main_body
+                .push(Stmt::code_expression(main_.to_expr().call(Vec::new()), Location::none()));
         }
 
         // `return 0;`

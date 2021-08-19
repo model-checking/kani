@@ -3,7 +3,6 @@
 
 use super::super::super::{Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use super::super::Transformer;
-use super::common::type_to_string;
 use rustc_data_structures::fx::FxHashMap;
 
 /// Struct for handling the nondet transformations for --gen-c-runnable.
@@ -47,7 +46,7 @@ impl Transformer for NondetTransformer {
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
 
-        let identifier = format!("non_det_{}", type_to_string(&transformed_typ));
+        let identifier = format!("non_det_{}", transformed_typ.to_identifier());
         let function_type = Type::code(vec![], transformed_typ);
 
         // Create non_det function which returns default value in postprocessing
