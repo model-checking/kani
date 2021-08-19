@@ -259,6 +259,7 @@ def run_goto_instrument(input_filename, output_filename, args, verbose=False, dr
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
     
+# Fix remaining issues with output of --gen-c-runnable
 def gen_c_postprocess(c_filename, dry_run=False):
     if not dry_run:
         with open(c_filename, "r") as f:
