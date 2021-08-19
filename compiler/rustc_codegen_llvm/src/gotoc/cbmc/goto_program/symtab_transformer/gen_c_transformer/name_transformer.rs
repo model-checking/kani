@@ -10,6 +10,11 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 /// Struct for replacing names with valid C identifiers for --gen-c-runnable.
 pub struct NameTransformer {
     new_symbol_table: SymbolTable,
+    /// We want to ensure that the `normalize_identifier` function is both
+    /// functional (each Rust name always maps to the same C name) and
+    /// injective (two distinct Rust names map to two distinct C names).
+    /// To do this, `mapped_names` remembers what each Rust name gets transformed to,
+    /// and `used_names` keeps track of what C names have been used.
     mapped_names: FxHashMap<String, String>,
     used_names: FxHashSet<String>,
 }
