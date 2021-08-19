@@ -103,8 +103,9 @@ impl Transformer for ExprTransformer {
             BinaryOperand::Gt => lhs.gt(rhs),
             BinaryOperand::IeeeFloatEqual => lhs.feq(rhs),
             BinaryOperand::IeeeFloatNotequal => lhs.fneq(rhs),
-            // `lhs ==> rhs` <==> `!lhs || rhs`
-            BinaryOperand::Implies => lhs.not().or(rhs),
+            // `lhs ==> rhs` <==> `!lhs || rhs` <==> `!!(!lhs | rhs)`
+            // We use the bitor to prevent short-circuiting
+            BinaryOperand::Implies => lhs.not().bitor(rhs).not().not(),
             BinaryOperand::Le => lhs.le(rhs),
             BinaryOperand::Lshr => lhs.lshr(rhs),
             BinaryOperand::Lt => lhs.lt(rhs),
