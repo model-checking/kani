@@ -15,7 +15,7 @@ use rustc_data_structures::fx::FxHashMap;
 /// Create an expr from an int constant using only values <= u64::MAX.
 fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
     // CInteger types should already be valid in C
-    if matches!(typ, Type::CInteger(_)) {
+    if typ.is_c_integer() {
         return Expr::int_constant(num.clone(), typ.clone());
     }
 

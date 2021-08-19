@@ -401,6 +401,13 @@ impl Type {
         }
     }
 
+    pub fn is_c_integer(&self) -> bool {
+        match self {
+            CInteger(_) => true,
+            _ => false,
+        }
+    }
+
     /// Whether the current type is an integer with finite width
     pub fn is_integer(&self) -> bool {
         match self {
