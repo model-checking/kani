@@ -66,6 +66,14 @@ impl Transformer for NondetTransformer {
     }
 
     /// Don't transform padding fields so that they are ignored by CBMC --dump-c.
+    /// If we don't ignore padding fields, we get code that looks like
+    /// ```
+    ///   var_7 = size;
+    ///   var_8 = l;
+    ///   unsigned __CPROVER_bitvector[56] return_value_non_det_unsigned_bv_56=non_det_unsigned_bv_56();
+    ///   var_9 = (struct _usize__bool_){ ._0=var_7 * var_8, ._1=overflow("*", unsigned long int, var_7, var_8) };
+    /// ```
+    /// If we do ignore the padding fields, the third line is removed.
     fn transform_expr_struct(&mut self, typ: &Type, values: &[Expr]) -> Expr {
         let transformed_typ = self.transform_type(typ);
         assert!(
