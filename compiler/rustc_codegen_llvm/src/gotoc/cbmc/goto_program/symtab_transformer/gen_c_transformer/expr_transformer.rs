@@ -1,6 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use std::ops::{BitAnd, Shl, Shr};
+
+use super::super::super::super::MachineModel;
 use super::super::super::{
     BinaryOperand, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
     Type,
@@ -12,17 +15,36 @@ use rustc_data_structures::fx::FxHashMap;
 
 /// Create an expr from an int constant using only values <= u64::MAX.
 fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
-    let u64_bigint = BigInt::from(u64::MAX);
-    if num <= &u64_bigint {
-        Expr::int_constant(num.clone(), typ.clone())
-    } else {
-        let quotient = num / &u64_bigint;
-        let remainder = num % &u64_bigint;
-
-        let quotient_expr = bignum_to_expr(&quotient, typ);
-        let remainder_expr = bignum_to_expr(&remainder, typ);
-        Expr::int_constant(u64_bigint, typ.clone()).mul(quotient_expr).plus(remainder_expr)
+    // CInteger types should already be valid in C
+    if matches!(typ, Type::CInteger(_)) {
+        return Expr::int_constant(num.clone(), typ.clone());
     }
+
+    // Only need to handle type wider than 64 bits
+    if let Some(width) = typ.width() {
+        if width <= 64 {
+            return Expr::int_constant(num.clone(), typ.clone());
+        }
+    }
+
+    // Only types that should be left are i128 and u128
+    assert_eq!(typ.width(), Some(128), "Unexpected int width: {:?}", typ.width());
+
+    let left_mask = BigInt::from(u64::MAX).shl(64);
+    let right_mask = BigInt::from(u64::MAX);
+
+    let unsigned_typ = match typ {
+        Type::Unsignedbv { .. } => typ.clone(),
+        Type::Signedbv { width } => Type::unsigned_int(*width),
+        _ => panic!("Unexpected type in bignum_to_expr: {:?}", typ),
+    };
+    let left_half: BigInt = num.bitand(left_mask);
+    let right_half = num.bitand(right_mask);
+
+    Expr::int_constant(left_half.shr(64), unsigned_typ.clone())
+        .shl(Expr::int_constant(64, Type::c_int()))
+        .bitor(Expr::int_constant(right_half, unsigned_typ))
+        .cast_to(typ.clone())
 }
 
 /// Struct for handling the expression replacement transformations for --gen-c-runnable.
