@@ -31,7 +31,7 @@ impl NameTransformer {
         assert!(!orig_name.is_empty(), "Received empty identifier.");
 
         // If name already encountered, return same result
-        match self.mapped_names.get(orig_name).cloned() {
+        match self.mapped_names.get(orig_name) {
             Some(result) => return result.clone(),
             None => (),
         }
@@ -52,6 +52,10 @@ impl NameTransformer {
             (name, suffix)
         };
 
+        // We separately call fix_name on the main part of the name
+        // and the suffix. This allows us to use the :: separator
+        // between the two parts, and also ensure that the
+        // base name of a variable stays as the suffix of the unique name.
         fn fix_name(name: &str) -> String {
             // Convert non-(alphanumeric + underscore) characters to underscore
             let valid_chars =
