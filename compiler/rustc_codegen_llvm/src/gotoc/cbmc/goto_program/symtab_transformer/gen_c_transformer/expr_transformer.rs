@@ -12,7 +12,8 @@ use super::super::Transformer;
 use num::bigint::BigInt;
 use rustc_data_structures::fx::FxHashMap;
 
-/// Create an expr from an int constant using only values <= u64::MAX.
+/// Create an expr from an int constant using only values <= u64::MAX;
+/// this is needed because gcc allows 128 bit int variables, but not 128 bit constants
 fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
     // CInteger types should already be valid in C
     if typ.is_c_integer() {
@@ -29,20 +30,34 @@ fn bignum_to_expr(num: &BigInt, typ: &Type) -> Expr {
     // Only types that should be left are i128 and u128
     assert_eq!(typ.width(), Some(128), "Unexpected int width: {:?}", typ.width());
 
+    // Work with unsigned ints, and cast to original type at end
+    let unsigned_typ = Type::unsigned_int(128);
+
+    // To transform a 128 bit num, we break it into two 64 bit nums
+
+    // left_mask = 11..1100..00 (64 1's followed by 64 0's)
+    // left_mask = 00..0011..11 (64 0's followed by 64 1's)
     let left_mask = BigInt::from(u64::MAX).shl(64);
     let right_mask = BigInt::from(u64::MAX);
 
-    let unsigned_typ = match typ {
-        Type::Unsignedbv { .. } => typ.clone(),
-        Type::Signedbv { width } => Type::unsigned_int(*width),
-        _ => panic!("Unexpected type in bignum_to_expr: {:?}", typ),
+    // Construct the two 64 bit ints such that
+    // num = (left_half << 64) | right_half
+    //     = (left_half * 2^64) + right_half
+    let left_half = {
+        // Split into two parts to help type inference
+        let temp: BigInt = num.bitand(left_mask);
+        temp.shr(64)
     };
-    let left_half: BigInt = num.bitand(left_mask);
     let right_half = num.bitand(right_mask);
 
-    Expr::int_constant(left_half.shr(64), unsigned_typ.clone())
+    // Create CBMC constants for the left and right halfs
+    let left_constant = Expr::int_constant(left_half, unsigned_typ.clone());
+    let right_constant = Expr::int_constant(right_half, unsigned_typ);
+
+    // Construct CBMC expression: (typ) ((left << 64) | right)
+    left_constant
         .shl(Expr::int_constant(64, Type::c_int()))
-        .bitor(Expr::int_constant(right_half, unsigned_typ))
+        .bitor(right_constant)
         .cast_to(typ.clone())
 }
 
