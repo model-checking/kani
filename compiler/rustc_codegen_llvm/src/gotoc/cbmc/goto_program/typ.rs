@@ -858,6 +858,8 @@ impl Type {
                 format!("cbitfield_of_{}_{}", width, typ.to_identifier())
             }
             Type::CInteger(int_kind) => format!("c_int_{:?}", int_kind),
+            // e.g. `int my_func(double x, float_y) {`
+            // => "code_from_double_float_to_int"
             Type::Code { parameters, return_type } => {
                 let parameter_string = parameters
                     .iter()
@@ -884,6 +886,8 @@ impl Type {
             Type::Union { tag, .. } => format!("union_{}", tag),
             Type::UnionTag(tag) => format!("union_tag_{}", tag),
             Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
+            // e.g. `int my_func(double x, float_y, ..) {`
+            // => "variadic_code_from_double_float_to_int"
             Type::VariadicCode { parameters, return_type } => {
                 let parameter_string = parameters
                     .iter()
