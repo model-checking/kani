@@ -23,7 +23,7 @@ def main():
     rmc.ensure_dependencies_in_path(args.quiet)
 
     if args.gen_c_runnable:
-        rmc.cargo_build(args.crate, args.target_dir, False, [],
+        rmc.cargo_build(args.crate, args.target_dir,
                         args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
 
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
@@ -44,7 +44,7 @@ def main():
         
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    rmc.cargo_build(args.crate, args.target_dir, args.error_on_warning, args.suppress_rmc_warnings,
+    rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.save_logs, args.mangler, args.dry_run, [])
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
@@ -56,6 +56,9 @@ def main():
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
+
+    if args.error_on_warning:
+        rmc.check_rmc_logs_for_warnings(args.save_logs, args.suppress_rmc_warnings)
 
     args.c_lib.append(str(RMC_C_LIB))
 

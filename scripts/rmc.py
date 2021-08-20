@@ -3,6 +3,7 @@
 
 import subprocess
 import atexit
+import json
 import os
 import os.path
 import sys
@@ -59,7 +60,7 @@ def ensure_dependencies_in_path(quiet=False):
 # Assert a condition holds, or produce a user error message
 def ensure(condition, message, quiet=False, retcode=1):
     if not condition:
-        error(message, retcode, quiet)
+        error(message, quiet, retcode)
 
 # Print an error message and exit with retcode
 def error(message, quiet=False, retcode=1):
@@ -178,7 +179,7 @@ def create_rmc_warning_handler(ignore_types):
     return rmc_warning_handler
 
 # Generates a symbol table from a rust file
-def compile_single_rust_file(input_filename, output_filename, error_on_warning=False, ignore_types=[], verbose=False, debug=False, quiet=False, keep_temps=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, quiet=False, keep_temps=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
         
@@ -194,14 +195,10 @@ def compile_single_rust_file(input_filename, output_filename, error_on_warning=F
     if save_logs is not None:
         add_rmc_log_file_to_env(build_env, save_logs)
 
-    scanners = []
-    if error_on_warning:
-        scanners.append(Scanner("", create_rmc_warning_handler()))
-
-    return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, scanners=scanners, dry_run=dry_run)
+    return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir="target", error_on_warning=False, ignore_types=[], verbose=False, debug=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def cargo_build(crate, target_dir="target", verbose=False, debug=False, save_logs=None, mangler="v0", dry_run=False, symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
     rustflags = [
         "-Z", "codegen-backend=gotoc",
@@ -224,6 +221,13 @@ def cargo_build(crate, target_dir="target", error_on_warning=False, ignore_types
         add_rmc_log_file_to_env(build_env, save_logs)
 
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
+
+def check_rmc_logs_for_warnings(log_file, suppress_rmc_warnings):
+    with open(log_file, "r") as f:
+        logs = f.read().split()
+
+    for log_line in logs:
+        log_json = json.loads(log_line)
 
 # Adds information about unwinding to the RMC output
 def append_unwind_tip(text):
