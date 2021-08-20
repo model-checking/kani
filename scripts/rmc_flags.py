@@ -67,7 +67,7 @@ def add_warning_flags(make_group, add_flag, config):
              help="Raise an error when an unsuppressed warning is present")
     add_flag(group, "--suppress-cbmc-warnings", nargs="*", default=[], action="extend",
              help="Ignore warnings produced by cbmc by regex pattern match on the message")
-    add_flag(group, "--suppress-rmc-warnings", nargs="*", default=[], action="extend", choices=[],
+    add_flag(group, "--suppress-rmc-warnings", nargs="*", default=[], action="extend", choices=rmc.RMC_WARNING_TYPES,
              help="Ignore warnings produced by RMC by type")
 
 # Add flags which specify configurations for the proof.

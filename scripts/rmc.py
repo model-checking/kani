@@ -34,6 +34,12 @@ UNWINDING_CHECKS = ["--unwinding-assertions"]
 
 RMC_LOG_FILE = "rmc.log"
 
+RMC_WARNING_TYPES = ["Concurrency",
+                     "GlobalAsm",
+                     "MissingSymbol",
+                     "TypeMismatch",
+                     "Unsupported"]
+
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
 class Scanner:
@@ -276,7 +282,7 @@ def get_warnings(cbmc_filename, cbmc_args, ignore_patterns, verbose=False, quiet
         if message.attrib["type"] == "WARNING"
     ]
 
-    def ignore(warning, ignore_patterns):
+    def ignore(warning):
         return any([re.match(pattern, warning) is not None
             for pattern in ignore_patterns])
 
