@@ -51,7 +51,7 @@ def main():
         return 1
 
     if args.error_on_warning:
-        rmc.check_rmc_logs_for_warnings(args.save_logs, args.suppress_rmc_warnings)
+        rmc.check_rmc_logs_for_warnings(args.save_logs, args.suppress_rmc_warnings, args.quiet)
 
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1

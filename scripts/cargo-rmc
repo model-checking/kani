@@ -58,7 +58,7 @@ def main():
         return 1
 
     if args.error_on_warning:
-        rmc.check_rmc_logs_for_warnings(args.save_logs, args.suppress_rmc_warnings)
+        rmc.check_rmc_logs_for_warnings(args.save_logs, args.suppress_rmc_warnings, args.quiet)
 
     args.c_lib.append(str(RMC_C_LIB))
 

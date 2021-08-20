@@ -222,12 +222,23 @@ def cargo_build(crate, target_dir="target", verbose=False, debug=False, save_log
 
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
 
-def check_rmc_logs_for_warnings(log_file, suppress_rmc_warnings):
+# Look for warnings in the produced RMC log file
+def check_rmc_logs_for_warnings(log_file, suppress_rmc_warnings=[], quiet=False):
     with open(log_file, "r") as f:
-        logs = f.read().split()
+        logs = f.read().split("\n")[:-1]
 
+    found_warning = False
     for log_line in logs:
         log_json = json.loads(log_line)
+        if log_json["log_type"]["type"] != "WARNING":
+            continue
+        if log_json["log_type"]["warning_kind"] not in suppress_rmc_warnings:
+            warning_kind = log_json["log_type"]["warning_kind"]
+            message = log_json["message"]
+            if not quiet:
+                print(f"ERROR: Unsuppressed warning ({warning_kind}): {message}")
+            found_warning = True
+    ensure(not found_warning, None)
 
 # Adds information about unwinding to the RMC output
 def append_unwind_tip(text):
