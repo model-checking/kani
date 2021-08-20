@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::super::SymbolTable;
 use super::Transformer;
+use crate::gotoc::cbmc::goto_program::SymbolTable;
 
 /// Struct for performing the identity transformation on a symbol table.
 /// Mainly used as a demo/for testing.

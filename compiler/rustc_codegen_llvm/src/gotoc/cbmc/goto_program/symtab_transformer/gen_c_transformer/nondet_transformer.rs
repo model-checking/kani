@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::super::super::{Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use super::super::Transformer;
+use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use rustc_data_structures::fx::FxHashMap;
 
 /// Struct for handling the nondet transformations for --gen-c-runnable.

@@ -3,11 +3,11 @@
 
 use std::ops::{BitAnd, Shl, Shr};
 
-use super::super::super::{
+use super::super::Transformer;
+use crate::gotoc::cbmc::goto_program::{
     BinaryOperand, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
     Type,
 };
-use super::super::Transformer;
 use num::bigint::BigInt;
 use rustc_data_structures::fx::FxHashMap;
 

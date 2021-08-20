@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::super::SymbolTable;
 use super::gen_c_transformer::{ExprTransformer, NameTransformer, NondetTransformer};
 use super::identity_transformer::IdentityTransformer;
+use crate::gotoc::cbmc::goto_program::SymbolTable;
 
 /// Performs each pass provided on the given symbol table.
 pub fn do_passes(mut symtab: SymbolTable, pass_names: &[String]) -> SymbolTable {

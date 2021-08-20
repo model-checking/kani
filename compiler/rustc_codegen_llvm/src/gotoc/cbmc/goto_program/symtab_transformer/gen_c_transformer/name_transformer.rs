@@ -1,10 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::super::super::{
+use super::super::Transformer;
+use crate::gotoc::cbmc::goto_program::{
     DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
 };
-use super::super::Transformer;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 
 /// Struct for replacing names with valid C identifiers for --gen-c-runnable.
