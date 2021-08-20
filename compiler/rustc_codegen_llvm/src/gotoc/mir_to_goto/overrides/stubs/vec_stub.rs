@@ -11,6 +11,7 @@ use std::cell::{Cell, RefCell, RefMut};
 
 use super::super::hooks::GotocHook;
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt};
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::GotocCtx;
 
 pub struct VecStub<'tcx> {
@@ -68,7 +69,7 @@ impl<'tcx> GotocHook<'tcx> for VecStub<'tcx> {
         _span: Option<Span>,
     ) -> Stmt {
         let old_unmangled = with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()));
-        println!("Handeling {}", old_unmangled);
+        rmc_debug!("Handeling {}", old_unmangled);
 
         match &old_unmangled[..] {
             "std::vec::Vec::<T, A>::pop" => {

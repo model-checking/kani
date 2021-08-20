@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::hooks::GotocTypeHook;
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, Type};
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
@@ -115,7 +116,7 @@ pub trait RustStubber<'tcx> {
                 .unwrap();
 
         let new_name = tcx.symbol_name(new_fn_instance);
-        println!("translate_function: {} {:?}", new_name, new_fn_instance);
+        rmc_debug!("translate_function: {} {:?}", new_name, new_fn_instance);
         let fctn = tcx.find_function(&new_name).unwrap();
         let p = assign_to.unwrap();
         let fn_call = fctn.call(fargs);
@@ -132,13 +133,13 @@ pub trait RustStubber<'tcx> {
     fn find_cbmc_fn(&self, tcx: TyCtxt<'tcx>, stubbed_ty: Ty<'tcx>, name: &str) -> Option<DefId> {
         for def_id in tcx.mir_keys(()).iter().map(|def_id| def_id.to_def_id()) {
             let defpath = tcx.def_path(def_id);
-            println!("defpath is {:?}, name is {}", defpath, name);
+            rmc_debug!("defpath is {:?}, name is {}", defpath, name);
             match &defpath.data[..] {
                 [.., DisambiguatedDefPathData { data: DefPathData::Impl, .. }, dpdata] => {
                     let key = tcx.def_key(def_id);
                     let impl_def_id = DefId { index: key.parent.unwrap(), ..def_id };
                     let self_ty = tcx.type_of(impl_def_id);
-                    println!("self_ty is {:?}", self_ty);
+                    rmc_debug!("self_ty is {:?}", self_ty);
                     let subst = match self_ty.kind() {
                         ty::Adt(_, substs) => substs,
                         _ => unreachable!(),

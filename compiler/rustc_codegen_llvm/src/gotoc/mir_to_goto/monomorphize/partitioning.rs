@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::rmc_debug;
 
+use crate::gotoc::logging::rmc_debug;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync;
 use rustc_hir::def::DefKind;
@@ -898,7 +898,7 @@ fn collect_and_partition_mono_items(
         item_keys.sort();
 
         for item in item_keys {
-            println!("MONO_ITEM {}", item);
+            rmc_debug!("MONO_ITEM {}", item);
         }
     }
 

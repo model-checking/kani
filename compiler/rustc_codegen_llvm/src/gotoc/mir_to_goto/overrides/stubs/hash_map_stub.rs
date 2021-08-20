@@ -11,6 +11,7 @@ use std::cell::{Cell, RefCell, RefMut};
 
 use super::super::hooks::GotocHook;
 use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt};
+use crate::gotoc::logging::rmc_debug;
 use crate::gotoc::mir_to_goto::GotocCtx;
 
 pub struct HashMapStub<'tcx> {
@@ -47,7 +48,7 @@ impl<'tcx> GotocHook<'tcx> for HashMapStub<'tcx> {
 
         let is_destructor = self.is_target_destructor(instance);
         let unmangled = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
-        println!("*** Unmangled was {} {} ", unmangled, is_destructor);
+        rmc_debug!("*** Unmangled was {} {} ", unmangled, is_destructor);
         let matched = match &unmangled[..] {
             "std::collections::HashMap::<K, V>::new" => true,
             "std::collections::HashMap::<K, V, S>::insert" => true,
@@ -68,7 +69,7 @@ impl<'tcx> GotocHook<'tcx> for HashMapStub<'tcx> {
         _span: Option<Span>,
     ) -> Stmt {
         let old_unmangled = with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()));
-        println!("Handeling {}", old_unmangled);
+        rmc_debug!("Handeling {}", old_unmangled);
         match &old_unmangled[..] {
             "std::collections::HashMap::<K, V>::new" => {
                 self.translate_to_stub(tcx, instance, fargs, assign_to, target, "new")
