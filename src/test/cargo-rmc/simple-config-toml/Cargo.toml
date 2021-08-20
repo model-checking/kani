@@ -15,7 +15,7 @@ quiet = false
 [rmc.flags.artifacts.extra.suffixes]
 gen-c = true
 
-[rmc.flag]
+[rmc.flags]
 visualize = false
 mangler = "v0"
 cbmc-args = []
