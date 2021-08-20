@@ -73,6 +73,36 @@ Until then, the easiest way to use RMC is as follows
    ```
 1. Write your own test file, add your own assertions, and try it out!
 
+### Using your Config.toml to configure RMC
+
+When invoking RMC using `cargo rmc`, you can use your Config.toml to configure the flags for RMC.
+If you want to configure your project to use the following command:
+
+`cargo rmc --c-lib src/lib/harness.c src/lib/api.c src/lib/utils.c --function test_all_rmc --no-memory-safety-checks --verbose --target-dir dev/target --visualize`
+
+Then you could put the following into your Cargo.toml:
+
+```
+...
+[rmc.flags]
+c-lib = [
+   "src/lib/harness.c",
+   "src/lib/api.c"
+   "src/lib/utils.c"
+]
+function = "test_all_rmc"
+memory-safety-checks = false
+verbose = true
+target-dir = "dev/target"
+visualize = true
+...
+```
+and invoke RMC with `cargo rmc /path/to/project`.
+
+You can additionally specify a different toml file to use with the `--config-toml` or disable this feature with `--no-config-toml`.
+
+Lastly, you can override specific flags from command line, e.g. with `cargo rmc /path/to/project --function test_different_rmc`.
+
 ### Advanced flags
 RMC supports a set of advanced flags that give you control over the verification process.
 For example, consider the `CopyIntrinsics` regression test:
@@ -90,18 +120,18 @@ For example, consider the `CopyIntrinsics` regression test:
    ```
 1. You can pass additional arguments to the CBMC backend using the syntax:
    ```
-   rmc filename.rs -- <additional CBMC arguments>
+   rmc filename.rs --cbmc-args <additional CBMC arguments>
    ```
    To see which arguments CBMC supports, run `cbmc --help`.
    In this case, we want the `--unwind` argument to limit the unwinding.
    We also use the `--unwinding-assertions` argument to ensure that our unwind bounds are sufficient.
    Note that:
    ```
-   rmc main.rs -- --unwind 1 --unwinding-assertions
+   rmc main.rs --cbmc-args --unwind 1 --unwinding-assertions
    ```
    produces an unwinding failure, while
    ```
-   rmc main.rs -- --unwind 17 --unwinding-assertions
+   rmc main.rs --cbmc-args --unwind 17 --unwinding-assertions
    ```
    leads to all assertions passing.
 1. You can check for undefined behaviour using builtin checks from CBMC.
