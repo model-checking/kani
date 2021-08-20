@@ -253,7 +253,7 @@ def extract_flags_from_toml(path):
     for flag in flags:
         add_flag(flag, flags[flag])
     
-    rmc.ensure(success)
+    rmc.ensure(success, None)
     return flag_list
 
 if __name__ == "__main__":
