@@ -41,18 +41,16 @@ typedef bool __CPROVER_bool;
 // Tracking issue: https://github.com/model-checking/rmc/issues/440
 #define POINTER_OBJECT(value) 0
 
-#define overflow(op, typ, var1, var2) \
-    (op[0] == '+') ? ( \
-        ((var1 < 0) && (var2 < 0) && (var1 + var2 > 0)) || \
-        ((var1 > 0) && (var2 > 0) && (var1 + var2 < 0)) \
-    ) : (op[0] == '-') ? ( \
-        ((var1 < 0) && (var2 > 0) && (var1 - var2 > 0)) || \
-        ((var1 > 0) && (var2 < 0) && (var1 - var2 < 0)) \
-    ) : (op[0] == '*') ? ( \
-        (var1 != 0) && ((var1 * var2) / var1 != var2) \
-    ) : ( \
-        1 \
-    )
+// Use built-in overflow operators
+#define BUILTIN_ADD_OVERFLOW(var1, var2) ({int _tmp = 0; __builtin_add_overflow(var1, var2, &_tmp);})
+#define BUILTIN_SUB_OVERFLOW(var1, var2) ({int _tmp = 0; __builtin_sub_overflow(var1, var2, &_tmp);})
+#define BUILTIN_MUL_OVERFLOW(var1, var2) ({int _tmp = 0; __builtin_mul_overflow(var1, var2, &_tmp);})
+
+#define overflow(op, typ, var1, var2) (\
+    (op[0] == '+') ? BUILTIN_ADD_OVERFLOW(var1, var2) \
+    : (op[0] == '-') ? BUILTIN_SUB_OVERFLOW(var1, var2) \
+    : (op[0] == '*') ? BUILTIN_MUL_OVERFLOW(var1, var2) \
+    : 1)
 
 // Only works on little endian machines.
 #define byte_extract_little_endian(from_val, offset, to_type) \
