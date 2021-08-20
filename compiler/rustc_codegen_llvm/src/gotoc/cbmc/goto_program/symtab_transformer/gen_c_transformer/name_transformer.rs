@@ -38,9 +38,8 @@ impl NameTransformer {
         // If name already encountered, return same result;
         // this is necessary for correctness to avoid a single name
         // being mapped to two different names later on
-        match self.mapped_names.get(orig_name) {
-            Some(result) => return result.clone(),
-            None => (),
+        if let Some(result) = self.mapped_names.get(orig_name) {
+            return result.clone();
         }
 
         // Don't tranform the `tag-` prefix of identifiers
