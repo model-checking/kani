@@ -133,7 +133,7 @@ impl Transformer for ExprTransformer {
         let rhs = self.transform_expr(rhs);
 
         match op {
-            BinaryOperand::Implies => lhs.not().bitor(rhs).not().not(),
+            BinaryOperand::Implies => lhs.not().bitor(rhs).cast_to(Type::bool()),
             _ => lhs.binop(*op, rhs),
         }
     }
