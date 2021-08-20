@@ -90,18 +90,18 @@ For example, consider the `CopyIntrinsics` regression test:
    ```
 1. You can pass additional arguments to the CBMC backend using the syntax:
    ```
-   rmc filename.rs -- <additional CBMC arguments>
+   rmc filename.rs --cbmc-args <additional CBMC arguments>
    ```
    To see which arguments CBMC supports, run `cbmc --help`.
    In this case, we want the `--unwind` argument to limit the unwinding.
    We also use the `--unwinding-assertions` argument to ensure that our unwind bounds are sufficient.
    Note that:
    ```
-   rmc main.rs -- --unwind 1 --unwinding-assertions
+   rmc main.rs --cbmc-args --unwind 1 --unwinding-assertions
    ```
    produces an unwinding failure, while
    ```
-   rmc main.rs -- --unwind 17 --unwinding-assertions
+   rmc main.rs --cbmc-args --unwind 17 --unwinding-assertions
    ```
    leads to all assertions passing.
 1. You can check for undefined behaviour using builtin checks from CBMC.
