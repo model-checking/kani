@@ -401,6 +401,13 @@ impl Type {
         }
     }
 
+    pub fn is_c_integer(&self) -> bool {
+        match self {
+            CInteger(_) => true,
+            _ => false,
+        }
+    }
+
     /// Whether the current type is an integer with finite width
     pub fn is_integer(&self) -> bool {
         match self {
@@ -837,5 +844,62 @@ impl Type {
             types.insert(field.name().to_string(), field.typ());
         }
         types
+    }
+
+    /// Generate a string which uniquely identifies the given type
+    /// while also being a valid variable/funcion name
+    pub fn to_identifier(&self) -> String {
+        match self {
+            Type::Array { typ, size } => {
+                format!("array_of_{}_{}", size, typ.to_identifier())
+            }
+            Type::Bool => format!("bool"),
+            Type::CBitField { width, typ } => {
+                format!("cbitfield_of_{}_{}", width, typ.to_identifier())
+            }
+            Type::CInteger(int_kind) => format!("c_int_{:?}", int_kind),
+            // e.g. `int my_func(double x, float_y) {`
+            // => "code_from_double_float_to_int"
+            Type::Code { parameters, return_type } => {
+                let parameter_string = parameters
+                    .iter()
+                    .map(|param| param.typ().to_identifier())
+                    .collect::<Vec<_>>()
+                    .join("_");
+                let return_string = return_type.to_identifier();
+                format!("code_from_{}_to_{}", parameter_string, return_string)
+            }
+            Type::Constructor => format!("constructor"),
+            Type::Double => format!("double"),
+            Type::Empty => format!("empty"),
+            Type::FlexibleArray { typ } => format!("flexarray_of_{}", typ.to_identifier()),
+            Type::Float => format!("float"),
+            Type::IncompleteStruct { tag } => tag.clone(),
+            Type::IncompleteUnion { tag } => tag.clone(),
+            Type::InfiniteArray { typ } => {
+                format!("infinite_array_of_{}", typ.to_identifier())
+            }
+            Type::Pointer { typ } => format!("pointer_to_{}", typ.to_identifier()),
+            Type::Signedbv { width } => format!("signed_bv_{}", width),
+            Type::Struct { tag, .. } => format!("struct_{}", tag),
+            Type::StructTag(tag) => format!("struct_tag_{}", tag),
+            Type::Union { tag, .. } => format!("union_{}", tag),
+            Type::UnionTag(tag) => format!("union_tag_{}", tag),
+            Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
+            // e.g. `int my_func(double x, float_y, ..) {`
+            // => "variadic_code_from_double_float_to_int"
+            Type::VariadicCode { parameters, return_type } => {
+                let parameter_string = parameters
+                    .iter()
+                    .map(|param| param.typ().to_identifier())
+                    .collect::<Vec<_>>()
+                    .join("_");
+                let return_string = return_type.to_identifier();
+                format!("variadic_code_from_{}_to_{}", parameter_string, return_string)
+            }
+            Type::Vector { size, typ } => {
+                format!("vec_of_{}_{}", size, typ.to_identifier())
+            }
+        }
     }
 }
