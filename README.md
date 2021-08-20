@@ -144,6 +144,13 @@ For example, consider the `CopyIntrinsics` regression test:
    rmc --gen-c main.rs <other-args>
    ```
    This generates a file `main.c` which contains a "C" like formatting of the CBMC IR.
+1. The `--gen-c` flag does not produce runnable C code due to differences in the Rust and C languages.
+   To produce a runnable C program, try passing the `--gen-c-runnable` flag to RMC
+   ```
+   rmc --gen-c-runnable main.rs <other-args>
+   ```
+   This generates a file `main_runnable.c`. 
+   Note that this makes some compromises to produce runnable C code, so you should not expect exact semantic equivalence.
 1. You can also view the raw CBMC internal representation using the `--keep-temps` option.
 
 ### Experimental Cargo integration

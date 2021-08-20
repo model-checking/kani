@@ -7,10 +7,13 @@ import os
 import os.path
 import sys
 import re
+import pathlib
 
 
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
+MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
+GEN_C_LIB = MY_PATH / "library" / "rmc" / "gen_c_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -249,12 +252,86 @@ def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property
 
 # Handler for calling goto-instrument
 def run_goto_instrument(input_filename, output_filename, args, verbose=False, dry_run=False):
-    cmd = ["goto-instrument"] + args + [input_filename]
-    return run_cmd(cmd, label="goto-instrument", verbose=verbose, output_to=output_filename, dry_run=dry_run)
+    cmd = ["goto-instrument"] + args + [input_filename, output_filename]
+    return run_cmd(cmd, label="goto-instrument", verbose=verbose, dry_run=dry_run)
 
 # Generates a C program from a goto program
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
+    
+# Fix remaining issues with output of --gen-c-runnable
+def gen_c_postprocess(c_filename, dry_run=False):
+    if not dry_run:
+        with open(c_filename, "r") as f:
+            lines = f.read().splitlines()
+
+        # Import gen_c_lib.c
+        lines.insert(0, f"#include \"{GEN_C_LIB}\"")
+
+        # Convert back to string
+        string_contents = "\n".join(lines)
+
+        # Remove builtin macros
+        to_remove = [
+            # memcmp
+            """// memcmp
+// file <builtin-library-memcmp> function memcmp
+int memcmp(void *, void *, unsigned long int);""",
+
+            # memcpy
+            """// memcpy
+// file <builtin-library-memcpy> function memcpy
+void * memcpy(void *, void *, unsigned long int);""",
+
+            # memmove
+            """// memmove
+// file <builtin-library-memmove> function memmove
+void * memmove(void *, void *, unsigned long int);""",
+
+            # sputc
+            """// __sputc
+// file /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdio.h line 260
+inline signed int __sputc(signed int _c, FILE *_p);""",
+
+            """// __sputc
+// file /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdio.h line 260
+inline signed int __sputc(signed int _c, FILE *_p)
+{
+  signed int tmp_pre=_p->_w - 1;
+  _p->_w = tmp_pre;
+  __CPROVER_bool tmp_if_expr;
+  if(tmp_pre >= 0)
+    tmp_if_expr = 1;
+
+  else
+    tmp_if_expr = (_p->_w >= _p->_lbfsize ? ((signed int)(char)_c != 10 ? 1 : 0) : 0) ? 1 : 0;
+  unsigned char *tmp_post;
+  unsigned char tmp_assign;
+  signed int return_value___swbuf;
+  if(tmp_if_expr)
+  {
+    tmp_post = _p->_p;
+    _p->_p = _p->_p + 1l;
+    tmp_assign = (unsigned char)_c;
+    *tmp_post = tmp_assign;
+    return (signed int)tmp_assign;
+  }
+
+  else
+  {
+    return_value___swbuf=__swbuf(_c, _p);
+    return return_value___swbuf;
+  }
+}"""
+        ]
+
+        for block in to_remove:
+            string_contents = string_contents.replace(block, "")
+
+        # Print back to file
+        with open(c_filename, "w") as f:
+            f.write(string_contents)
+
 
 # Generates the CMBC symbol table from a goto program
 def goto_to_symbols(goto_filename, symbols_filename, verbose=False, dry_run=False):

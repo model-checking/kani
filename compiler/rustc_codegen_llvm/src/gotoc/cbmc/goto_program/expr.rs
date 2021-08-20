@@ -878,7 +878,7 @@ impl Expr {
         }
     }
     /// self op right;
-    fn binop(self, op: BinaryOperand, rhs: Expr) -> Expr {
+    pub fn binop(self, op: BinaryOperand, rhs: Expr) -> Expr {
         assert!(
             Expr::typecheck_binop_args(op, &self, &rhs),
             "BinaryOperation Expression does not typecheck {:?} {:?} {:?}",
