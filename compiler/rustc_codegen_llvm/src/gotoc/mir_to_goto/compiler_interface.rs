@@ -5,6 +5,7 @@
 
 use crate::gotoc::cbmc::goto_program::symtab_transformer;
 use crate::gotoc::cbmc::goto_program::SymbolTable;
+use crate::gotoc::logging::{rmc_debug, rmc_log, rmc_warn, WarningType};
 use crate::gotoc::mir_to_goto::monomorphize;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use bitflags::_core::any::Any;
@@ -19,7 +20,6 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::Session;
-use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
@@ -55,6 +55,8 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
+        rmc_log!("Beginning codegen_crate.");
+
         super::utils::init();
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
@@ -78,7 +80,8 @@ impl CodegenBackend for GotocCodegenBackend {
                         );
                     }
                     MonoItem::GlobalAsm(_) => {
-                        warn!(
+                        rmc_warn!(
+                            WarningType::GlobalAsm,
                             "Crate {} contains global ASM, which is not handled by RMC",
                             c.crate_name()
                         );
@@ -146,7 +149,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let pretty_json = json.pretty();
 
         let output_name = outputs.path(OutputType::Object).with_extension("json");
-        debug!("output to {:?}", output_name);
+        rmc_debug!("output to {:?}", output_name);
         let mut out_file = ::std::fs::File::create(output_name).unwrap();
         write!(out_file, "{}", pretty_json.to_string()).unwrap();
 
