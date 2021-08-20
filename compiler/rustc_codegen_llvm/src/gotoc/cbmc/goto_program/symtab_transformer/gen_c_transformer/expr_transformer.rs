@@ -3,7 +3,6 @@
 
 use std::ops::{BitAnd, Shl, Shr};
 
-use super::super::super::super::MachineModel;
 use super::super::super::{
     BinaryOperand, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
     Type,

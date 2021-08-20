@@ -84,7 +84,7 @@ impl NameTransformer {
             // Replace reserved names with alternatives
             // This should really handle *all* reserved C names.
             // Tracking issue: https://github.com/model-checking/rmc/issues/439
-            let mut illegal_names = [("case", "case_"), ("default", "default_")];
+            let illegal_names = [("case", "case_"), ("default", "default_")];
             for (illegal, replacement) in illegal_names {
                 if new_name.ends_with(illegal) {
                     return new_name.replace(illegal, replacement);
