@@ -704,7 +704,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .cast_to(field_type)
         } else {
             rmc_warn!(
-                WarningType::Other,
+                WarningType::MissingSymbol,
                 "Unable to find vtable symbol for virtual function {}, attempted lookup for symbol name: {}",
                 self.readable_instance_name(instance),
                 fn_name
@@ -735,7 +735,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             // TODO: check why in https://github.com/model-checking/rmc/issues/66
             rmc_warn!(
-                WarningType::Other,
+                WarningType::MissingSymbol,
                 "drop_in_place not found for {:?}",
                 self.readable_instance_name(drop_instance)
             );

@@ -156,7 +156,7 @@ impl Stmt {
         //assert_eq!(lhs.typ(), rhs.typ());
         if lhs.typ() != rhs.typ() {
             rmc_warn!(
-                WarningType::Other,
+                WarningType::TypeMismatch,
                 "Assign statement with unequal types lhs {:?} rhs {:?}",
                 lhs.typ(),
                 rhs.typ()

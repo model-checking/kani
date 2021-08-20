@@ -107,7 +107,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
         // https://github.com/model-checking/rmc/issues/277
         if !Self::check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx) {
             rmc_warn!(
-                WarningType::Other,
+                WarningType::TypeMismatch,
                 "Unexpected type mismatch in projection: \n{:?}\n{:?}",
                 &goto_expr,
                 &mir_typ_or_variant

@@ -61,8 +61,10 @@ impl ToJson for LogType {
 #[derive(Debug)]
 pub enum WarningType {
     Concurrency,
+    GlobalAsm,
+    MissingSymbol,
+    TypeMismatch,
     Unsupported,
-    Other,
 }
 
 impl ToJson for WarningType {
