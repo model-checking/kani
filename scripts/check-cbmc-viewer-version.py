@@ -6,6 +6,7 @@ import argparse
 import re
 import sys
 import subprocess
+from subprocess import PIPE
 
 
 EXIT_CODE_SUCCESS = 0
@@ -16,8 +17,8 @@ EXIT_CODE_FAIL = 2
 def cbmc_viewer_version():
     cmd = ["cbmc-viewer", "--version"]
     try:
-        version = subprocess.run(cmd,
-                                 capture_output=True, text=True, check=True)
+        version = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, check=True,
+                universal_newlines=True)
     except (OSError, subprocess.SubprocessError) as error:
         print(error)
         print(f"Can't run command '{' '.join(cmd)}'")
