@@ -8,6 +8,12 @@ import pathlib as pl
 # Taken from https://github.com/python/cpython/blob/3.9/Lib/argparse.py#L858
 # Cannot use `BooleanOptionalAction` with Python 3.8
 class BooleanOptionalAction(argparse.Action):
+    """ Implements argparse.BooleanOptionalAction introduced on Python 3.9
+
+        This allows us to define an action as well as its negation to control a
+        boolean option. For example, --default-checks and --no-default-checks
+        options to control the same boolean property.
+    """
     def __init__(self,
                  option_strings,
                  dest,
@@ -47,6 +53,33 @@ class BooleanOptionalAction(argparse.Action):
     def format_usage(self):
         return ' | '.join(self.option_strings)
 
+class ExtendAction(argparse.Action):
+    """ Implements the "extend" option added on Python 3.8.
+
+        Extend combines in one list all the arguments provided using the
+        same option. For example, --c-lib <libA> --c-lib <libB> <libC> will
+        generate a list [<libA>, <libB>, <libC>].
+    """
+    def __init__(self,
+                 option_strings,
+                 dest,
+                 default=[],
+                 **kwargs):
+
+        if type(default) is not list:
+            raise ValueError('default value for ExtendAction must be a list')
+
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        items = getattr(namespace, self.dest, [])
+        items.extend(values)
+        setattr(namespace, self.dest, items)
+
 # Add flags related to debugging output.
 def add_loudness_flags(make_group, add_flag, config):
     group = make_group(
@@ -62,7 +95,8 @@ def add_loudness_flags(make_group, add_flag, config):
 def add_linking_flags(make_group, add_flag, config):
     group = make_group("Linking flags",
                        "Provide information about how to link the prover for RMC.")
-    add_flag(group, "--c-lib", type=pl.Path, nargs="*", default=[], action="extend",
+    add_flag(group, "--c-lib", type=pl.Path, nargs="*", default=[],
+             action=ExtendAction,
              help="Link external C files referenced by Rust code")
     add_flag(group, "--function", default="main",
              help="Entry point for verification")

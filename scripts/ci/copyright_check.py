@@ -3,8 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 import re
 import sys
+import os.path as path
 
 def copyright_check(filename):
+    # Only check regular files (skip symbolic link to directories)
+    if not path.isfile(filename):
+        return True
+
     fo = open(filename)
     lines = fo.readlines()
 
