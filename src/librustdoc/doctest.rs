@@ -35,7 +35,7 @@ use crate::lint::init_lints;
 use crate::passes::span_of_attrs;
 
 #[derive(Clone, Default)]
-crate struct TestOptions {
+pub struct TestOptions {
     /// Whether to disable the default `extern crate my_crate;` when creating doctests.
     crate no_crate_inject: bool,
     /// Whether to emit compilation warnings when compiling doctests. Setting this will suppress
@@ -493,7 +493,7 @@ fn run_test(
 
 /// Transforms a test into code that can be compiled into a Rust binary, and returns the number of
 /// lines before the test code begins as well as if the output stream supports colors or not.
-crate fn make_test(
+pub fn make_test(
     s: &str,
     crate_name: Option<&str>,
     dont_insert_main: bool,
@@ -777,7 +777,7 @@ fn partition_source(s: &str) -> (String, String, String) {
     (before, after, crates)
 }
 
-crate trait Tester {
+pub trait Tester {
     fn add_test(&mut self, test: String, config: LangString, line: usize);
     fn get_line(&self) -> usize {
         0
