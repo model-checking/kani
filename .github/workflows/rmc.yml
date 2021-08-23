@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-10.15, ubuntu-20.04]
+        os: [macos-10.15, ubuntu-18.04, ubuntu-20.04]
     steps:
       - name: Checkout RMC
         uses: actions/checkout@v2
@@ -20,7 +20,7 @@ jobs:
 
       - name: Install CBMC
         run: ./scripts/setup/${{ matrix.os }}/install_cbmc.sh
-      
+
       - name: Install cbmc-viewer
         run: ./scripts/setup/install_viewer.sh 2.6
 

@@ -4,9 +4,8 @@
 
 set -eu
 
-# Install CBMC 5.30.1 for Ubuntu 20.04
-
-FILE="ubuntu-20.04-cbmc-5.30.1-Linux.deb"
+UBUNTU_VERSION=$(lsb_release -rs)
+FILE="ubuntu-${UBUNTU_VERSION}-cbmc-5.30.1-Linux.deb"
 URL="https://github.com/diffblue/cbmc/releases/download/cbmc-5.30.1/$FILE"
 
 set -x
