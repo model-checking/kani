@@ -198,7 +198,7 @@ struct Example {
 }
 
 /// Data structure representing a list of examples. Mainly for implementing the
-/// [`Tester`] trait
+/// [`Tester`] trait.
 struct Examples(Vec<Example>);
 
 impl Tester for Examples {
