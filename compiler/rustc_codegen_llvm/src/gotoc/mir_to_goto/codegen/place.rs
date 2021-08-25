@@ -384,7 +384,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         let ptr_typ = self.tcx.mk_ptr(typ_and_mut);
                         let goto_type = self.codegen_ty(ptr_typ);
 
-                        let index = Expr::int_constant(from, Type::size_t());
+                        let index = Expr::int_constant(from, Type::ssize_t());
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
                         let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
