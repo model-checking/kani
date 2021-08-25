@@ -375,7 +375,6 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .unwrap()
                                 .member("len", &self.symbol_table);
                             let sum = Expr::int_constant(to + from, Type::size_t());
-                            dbg!(&olen);
                             olen.sub(sum) // olen - (to + from) = olen - to - from
                         } else {
                             Expr::int_constant(to - from, Type::size_t())
@@ -386,10 +385,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         let goto_type = self.codegen_ty(ptr_typ);
 
                         let index = Expr::int_constant(from, Type::size_t());
-                        dbg!(&index);
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
-                        dbg!(&len);
                         let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
                         ProjectedPlace::new(
                             fat_ptr.clone(),
