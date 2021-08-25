@@ -21,11 +21,11 @@ use crate::gotoc::cbmc::goto_program::{
 use crate::gotoc::cbmc::utils::aggr_name;
 use crate::gotoc::cbmc::{MachineModel, RoundingMode};
 use crate::gotoc::mir_to_goto::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+use crate::gotoc::mir_to_goto::utils::full_crate_name;
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;
 use rustc_data_structures::sync::MetadataRef;
-use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::middle::cstore::MetadataLoader;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
@@ -43,6 +43,8 @@ pub struct GotocCtx<'tcx> {
     pub symbol_table: SymbolTable,
     pub hooks: GotocHooks<'tcx>,
     pub type_hooks: GotocTypeHooks<'tcx>,
+    /// the full crate name, including versioning info
+    pub full_crate_name: String,
     /// a global counter for generating unique names for global variables
     pub global_var_count: u64,
     /// map a global allocation to a name in the symbol table
@@ -61,6 +63,7 @@ impl<'tcx> GotocCtx<'tcx> {
             symbol_table,
             hooks: fhks,
             type_hooks: thks,
+            full_crate_name: full_crate_name(tcx),
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
             current_fn: None,
@@ -70,10 +73,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Getters
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn crate_name(&self) -> String {
-        self.tcx.crate_name(LOCAL_CRATE).to_string()
-    }
-
     pub fn current_fn(&self) -> &CurrentFnCtx<'tcx> {
         self.current_fn.as_ref().unwrap()
     }
@@ -225,7 +224,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn next_global_name(&mut self) -> String {
         let c = self.global_var_count;
         self.global_var_count += 1;
-        format!("{}::global::{}::", self.tcx.crate_name(LOCAL_CRATE), c)
+        format!("{}::global::{}::", self.full_crate_name(), c)
     }
 }
 
