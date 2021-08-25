@@ -109,6 +109,11 @@ impl<'tcx> GotocCtx<'tcx> {
          * Construct a fat pointer to the value of this place
          */
 
+        // skip constructing a fat ptr if this place is already one
+        if place_goto_expr.typ().is_rust_fat_ptr(&self.symbol_table) {
+            return place_goto_expr;
+        }
+
         // In the sequence of projections leading to this place, we dereferenced
         // this fat pointer.
         let intermediate_fat_pointer = projection.fat_ptr_goto_expr.unwrap();
