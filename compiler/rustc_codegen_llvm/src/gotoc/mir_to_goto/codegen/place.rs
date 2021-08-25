@@ -359,6 +359,10 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
                 self.codegen_constant_index(before, offset, min_length, from_end)
             }
+            // Best effort to codegen subslice projection.
+            // This is known to fail with a CBMC invariant violation
+            // in some cases. Full support to be added in
+            // https://github.com/model-checking/rmc/issues/357
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
