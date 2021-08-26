@@ -5,13 +5,25 @@
 
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::def_id::DefId;
+use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathDataName;
+use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance, TyCtxt};
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// The short crate name without versioning information.
+    pub fn short_crate_name(&self) -> String {
+        self.tcx.crate_name(LOCAL_CRATE).to_string()
+    }
+
+    /// The full crate name including versioning info
+    pub fn full_crate_name(&self) -> &str {
+        &self.full_crate_name
+    }
+
     pub fn codegen_var_base_name(&self, l: &Local) -> String {
         match self.find_debug_info(l) {
             None => format!("var_{}", l.index()),
@@ -96,6 +108,21 @@ impl<'tcx> GotocCtx<'tcx> {
         // TODO: use def_id https://github.com/model-checking/rmc/issues/364
         idx.to_string()
     }
+}
+
+/// The full crate name should use the Codegen Unit builder to include full name resolution,
+/// for example, the versioning information if a build requires two different versions
+/// of the same crate.
+pub fn full_crate_name(tcx: TyCtxt<'tcx>) -> String {
+    format!(
+        "{}::{}",
+        CodegenUnitNameBuilder::new(tcx).build_cgu_name(
+            LOCAL_CRATE,
+            &[] as &[String; 0],
+            None as Option<String>
+        ),
+        tcx.crate_name(LOCAL_CRATE)
+    )
 }
 
 //TODO: These were moved from hooks.rs, where they didn't have a goto context. Normalize them.

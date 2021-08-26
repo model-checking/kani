@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
@@ -30,3 +30,13 @@ $SCRIPT_DIR/std-lib-regression.sh
 
 # Check codegen of firecracker
 $SCRIPT_DIR/codegen-firecracker.sh
+
+# Check that we can use RMC on crates with a diamond dependency graph,
+# with two different versions of the same crate.
+#
+#         dependency1
+#        /           \ v0.1.0
+#   main             dependency3
+#        \           / v0.1.1
+#         dependency2
+./src/test/rmc-dependency-test/diamond-dependency/run-dependency-test.sh

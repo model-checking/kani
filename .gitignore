@@ -80,3 +80,5 @@ src/test/rustdoc-gui/src/**.lock
 /.ninja_deps
 /.ninja_log
 /src/test/dashboard
+*Cargo.lock
+src/test/rmc-dependency-test/diamond-dependency/build

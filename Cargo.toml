@@ -51,6 +51,8 @@ exclude = [
   "src/tools/x",
   # stdarch has its own Cargo workspace
   "library/stdarch",
+  # dependency tests have their own workspace
+  "src/test/rmc-dependency-test/dependency3"
 ]
 
 [profile.release.package.compiler_builtins]
