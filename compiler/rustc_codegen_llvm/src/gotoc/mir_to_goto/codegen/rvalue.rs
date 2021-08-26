@@ -733,7 +733,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .address_of()
                 .cast_to(trait_fn_ty)
         } else {
-            // We skip an entire submodule of the standard library, so drop is missing 
+            // We skip an entire submodule of the standard library, so drop is missing
             // for it.
             self.codegen_unimplemented(
                 format!("drop_in_place for {}", drop_sym_name).as_str(),
