@@ -374,7 +374,21 @@ impl<'tcx> GotocCtx<'tcx> {
         // code.  See the implementation of pretty_print_region on line 1720 in
         // compiler/rustc_middle/src/ty/print/pretty.rs.
         let name = name.replace(" + \'static", "").replace("\'static ", "");
-        name
+
+        // Crate resolution: mangled names need to be distinct across different versions
+        // of the same crate that could be pulled in by dependencies. However, RMC's
+        // treatment of FFI C calls asssumes that we generate the same name for structs
+        // as the C name, so don't mangle in that case.
+        // TODO: this is likely insufficient if a dependent crate has two versions of
+        // linked C libraries
+        // https://github.com/model-checking/rmc/issues/450
+        if is_repr_c_adt(t) {
+            return name;
+        }
+
+        // Add unique type id
+        let id_u64 = self.tcx.type_id_hash(t);
+        format!("{}::{}", name, id_u64)
     }
 
     #[allow(dead_code)]
@@ -1198,6 +1212,14 @@ pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
         ty::Ref(_, pointee_type, _) => Some(pointee_type),
         ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(pointee_type),
         _ => None,
+    }
+}
+
+/// Is the MIR type using a C representation (marked with #[repr(C)] at the source level)?
+pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
+    match mir_type.kind() {
+        ty::Adt(def, _) => def.repr.c(),
+        _ => false,
     }
 }
 

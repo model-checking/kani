@@ -80,7 +80,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     MonoItem::GlobalAsm(_) => {
                         warn!(
                             "Crate {} contains global ASM, which is not handled by RMC",
-                            c.crate_name()
+                            c.short_crate_name()
                         );
                     }
                 }
