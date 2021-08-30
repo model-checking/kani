@@ -721,26 +721,26 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         trait_ty: &'tcx ty::TyS<'tcx>,
     ) -> Expr {
-        let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty);
+        let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty).polymorphize(self.tcx);
         let drop_sym_name = self.symbol_name(drop_instance);
-        let param_types = vec![self.codegen_ty(trait_ty)];
 
         // The drop instance has the concrete object type, for consistency with
         // type codegen we need the trait type for the function parameter.
-        let trait_fn_ty =
-            Type::code_with_unnamed_parameters(param_types, Type::unit()).to_pointer();
+        let trait_fn_ty = self.trait_vtable_drop_type(trait_ty);
 
         if let Some(drop_sym) = self.symbol_table.lookup(&drop_sym_name) {
             Expr::symbol_expression(drop_sym_name, drop_sym.clone().typ)
                 .address_of()
                 .cast_to(trait_fn_ty)
         } else {
-            // TODO: check why in https://github.com/model-checking/rmc/issues/66
-            debug!(
-                "WARNING: drop_in_place not found for {:?}",
-                self.readable_instance_name(drop_instance),
-            );
-            Type::void_pointer().null().cast_to(trait_fn_ty)
+            // We skip an entire submodule of the standard library, so drop is missing
+            // for it.
+            self.codegen_unimplemented(
+                format!("drop_in_place for {}", drop_sym_name).as_str(),
+                trait_fn_ty,
+                Location::none(),
+                "https://github.com/model-checking/rmc/issues/281",
+            )
         }
     }
 

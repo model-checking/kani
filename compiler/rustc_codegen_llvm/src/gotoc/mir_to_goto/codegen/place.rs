@@ -67,10 +67,19 @@ impl<'tcx> ProjectedPlace<'tcx> {
 
 /// Constructor
 impl<'tcx> ProjectedPlace<'tcx> {
-    fn check_expr_typ(expr: &Expr, typ: &TypeOrVariant<'tcx>, ctx: &mut GotocCtx<'tcx>) -> bool {
+    fn check_expr_typ_mismatch(
+        expr: &Expr,
+        typ: &TypeOrVariant<'tcx>,
+        ctx: &mut GotocCtx<'tcx>,
+    ) -> Option<(Type, Type)> {
         match typ {
-            TypeOrVariant::Type(t) => &ctx.codegen_ty(t) == expr.typ(),
-            TypeOrVariant::Variant(_) => true, //TODO, what to do here?
+            TypeOrVariant::Type(t) => {
+                let expr_ty = expr.typ().clone();
+                let type_from_mir = ctx.codegen_ty(t);
+                if expr_ty != type_from_mir { Some((expr_ty, type_from_mir)) } else { None }
+            }
+            // TODO: handle Variant https://github.com/model-checking/rmc/issues/448
+            TypeOrVariant::Variant(_) => None,
         }
     }
 
@@ -107,12 +116,14 @@ impl<'tcx> ProjectedPlace<'tcx> {
         // TODO: these assertions fail on a few regressions. Figure out why.
         // I think it may have to do with boxed fat pointers.
         // https://github.com/model-checking/rmc/issues/277
-        if !Self::check_expr_typ(&goto_expr, &mir_typ_or_variant, ctx) {
+        if let Some((expr_ty, ty_from_mir)) =
+            Self::check_expr_typ_mismatch(&goto_expr, &mir_typ_or_variant, ctx)
+        {
             warn!(
-                "Unexpected type mismatch in projection: \n{:?}\n{:?}",
-                &goto_expr, &mir_typ_or_variant
+                "Unexpected type mismatch in projection:\n{:?}\nExpr type\n{:?}\nType from MIR\n{:?}",
+                goto_expr, expr_ty, ty_from_mir
             );
-        };
+        }
 
         assert!(
             Self::check_fat_ptr_typ(&fat_ptr_goto_expr, &fat_ptr_mir_typ, ctx),

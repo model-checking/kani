@@ -14,17 +14,21 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 RMC_DIR=$SCRIPT_DIR/..
 
 # Log output
-STD_LIB_LOG="/tmp/SizeAndAlignOfDstTest/log.txt"
-
-# Use a unit test that requires mutex and cell
+STD_LIB_LOG="/tmp/StdLibTest/log.txt"
 echo "Starting RMC codegen for the Rust standard library"
 cd /tmp
-if [ -d SizeAndAlignOfDstTest ]; then rm -rf SizeAndAlignOfDstTest; fi
-cargo new SizeAndAlignOfDstTest
-cd SizeAndAlignOfDstTest
-cp $RMC_DIR/src/test/cbmc/SizeAndAlignOfDst/main_fail.rs src/main.rs 
-rustup component add rust-src --toolchain nightly > /dev/null 2>&1
-RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo +nightly build -Z build-std --target x86_64-unknown-linux-gnu 2> $STD_LIB_LOG
+if [ -d StdLibTest ]; then rm -rf StdLibTest; fi
+cargo new StdLibTest
+cd StdLibTest
+
+# Check that we have the nighly toolchain, which is required for -Z build-std
+if ! rustup toolchain list | grep -q nightly; then
+  echo "Installing nightly toolchain"
+  rustup toolchain install nightly
+fi
+
+echo "Starting cargo build with RMC"
+RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo +nightly build -Z build-std --target x86_64-unknown-linux-gnu &> $STD_LIB_LOG
 
 # For now, we expect a linker error, but no modules should fail with a compiler
 # panic. 
@@ -32,7 +36,9 @@ RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC
 # With https://github.com/model-checking/rmc/issues/109, this check can be
 # removed to just allow the success of the previous line to determine the 
 # success of this script (with no $STD_LIB_LOG needed)
-RESULT=$?
+
+# TODO: this check is insufficient if the failure is before codegen
+# https://github.com/model-checking/rmc/issues/375
 if grep -q "error: internal compiler error: unexpected panic" $STD_LIB_LOG; then
   echo "Panic on building standard library"
   cat $STD_LIB_LOG

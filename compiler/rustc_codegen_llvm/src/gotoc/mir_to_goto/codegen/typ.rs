@@ -293,19 +293,21 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
+    /// `drop_in_place` is a function with type &self -> (), the vtable for
+    /// dynamic trait objects needs a pointer to it
+    pub fn trait_vtable_drop_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
+        Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
+            .to_pointer()
+    }
+
     /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.
     ///
     /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
     /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
     /// `get_vtable`.
     fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
-        // `drop_in_place` is a function with type t -> (), the vtable needs a
-        // pointer to it
-        let drop_ty =
-            Type::code_with_unnamed_parameters(vec![self.codegen_ty(t)], Type::unit()).to_pointer();
-
         let mut vtable_base = vec![
-            Type::datatype_component("drop", drop_ty),
+            Type::datatype_component("drop", self.trait_vtable_drop_type(t)),
             Type::datatype_component("size", Type::size_t()),
             Type::datatype_component("align", Type::size_t()),
         ];
@@ -365,6 +367,12 @@ impl<'tcx> GotocCtx<'tcx> {
         use rustc_middle::ty::print::Printer;
         let mut name = String::new();
         let printer = FmtPrinter::new(self.tcx, &mut name, Namespace::TypeNS);
+
+        // Monomorphizing the type ensures we get a cannonical form for dynamic trait
+        // objects with auto traits, such as:
+        //   StructTag("tag-std::boxed::Box<(dyn std::error::Error + std::marker::Send + std::marker::Sync)>") }
+        //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
+        let t = self.monomorphize(t);
         with_no_trimmed_paths(|| printer.print_type(t).unwrap());
         // TODO: The following line is a temporary measure to remove the static lifetime
         // appearing as \'static in mangled type names.  This should be done using regular

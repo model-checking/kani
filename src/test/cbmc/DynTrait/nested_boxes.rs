@@ -4,6 +4,8 @@
 // This test checks the size and align fields for 3-deep nested trait pointers. The
 // outter 2 dynamic trait objects have fat pointers as their backing data.
 
+// cbmc-flags: --unwind 2 --unwinding-assertions
+
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 
