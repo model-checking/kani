@@ -138,16 +138,24 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     return process.returncode
 
 # Generates a symbol table from a rust file
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, use_abs=False, abs_type="std", symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
-        
+
     build_cmd = [RMC_RUSTC_EXE, 
-                 "-Z", "codegen-backend=gotoc",
-                 "-Z", "trim-diagnostic-paths=no",
-                 "-Z", f"symbol-mangling-version={mangler}",
-                 "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-                 f"--cfg={RMC_CFG}", "-o", output_filename, input_filename]
+            "-Z", "codegen-backend=gotoc", 
+            "-Z", "trim-diagnostic-paths=no",
+            "-Z", f"symbol-mangling-version={mangler}", 
+            "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
+            f"--cfg={RMC_CFG}"]
+
+    if use_abs:
+        build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
+                "--cfg=use_abs",
+                "--cfg", f'abs_type="{abs_type}"']
+
+    build_cmd += ["-o", output_filename, input_filename]
+
     if "RUSTFLAGS" in os.environ:
         build_cmd += os.environ["RUSTFLAGS"].split(" ")
     build_env = os.environ

@@ -11,6 +11,7 @@ import pathlib
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
 RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
+RMC_C_STUB = MY_PATH / "library" / "rmc" / "rmc_stub.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -45,13 +46,16 @@ def main():
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, []):
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, args.use_abs, args.abs_type, []):
         return 1
 
     if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
     args.c_lib.append(str(RMC_C_LIB))
+
+    if args.use_abs and args.abs_type == "c-ffi":
+        args.c_lib.append(str(RMC_C_STUB))
 
     if EXIT_CODE_SUCCESS != rmc.link_c_lib(goto_filename, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
         return 1
