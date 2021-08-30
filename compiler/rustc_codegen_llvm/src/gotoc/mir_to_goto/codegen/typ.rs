@@ -271,7 +271,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      ...
     ///   }
     /// Ensures that the vtable is added to the symbol table.
-    fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
+    pub fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
         self.ensure_struct(&self.vtable_name(t), |ctx, _| ctx.trait_vtable_field_types(t))
     }
 

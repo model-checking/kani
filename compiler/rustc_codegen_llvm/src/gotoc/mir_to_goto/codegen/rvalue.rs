@@ -134,7 +134,32 @@ impl<'tcx> GotocCtx<'tcx> {
         let metadata = if self.use_slice_fat_pointer(place_mir_type) {
             intermediate_fat_pointer.member("len", &self.symbol_table)
         } else if self.use_vtable_fat_pointer(place_mir_type) {
-            intermediate_fat_pointer.member("vtable", &self.symbol_table)
+            if self.is_unsized(place_mir_type) {
+                let vtable_name = match place_mir_type.kind() {
+                    ty::Dynamic(..) => self.vtable_name(place_mir_type),
+                    _ => {
+                        let (_, trait_type) = self
+                            .nested_pair_of_concrete_and_trait_types(place_mir_type, place_mir_type)
+                            .unwrap();
+                        let trait_vtable_type = self.codegen_trait_vtable_type(trait_type);
+                        let mir_codegen_ty = self.codegen_ty(place_mir_type);
+                        let place_mir_mangled_name = self.ty_mangled_name(place_mir_type);
+                        let mir_ref_type_name = format!("&{}", &place_mir_mangled_name);
+                        self.ensure_struct(&mir_ref_type_name, |_, _| {
+                            vec![
+                                Type::datatype_component("data", mir_codegen_ty.to_pointer()),
+                                Type::datatype_component("vtable", trait_vtable_type.to_pointer()),
+                            ]
+                        });
+                        format!("{}", &self.vtable_name(trait_type))
+                    }
+                };
+                intermediate_fat_pointer
+                    .member("vtable", &self.symbol_table)
+                    .cast_to(Type::struct_tag(&vtable_name).to_pointer())
+            } else {
+                intermediate_fat_pointer.member("vtable", &self.symbol_table)
+            }
         } else {
             unreachable!()
         };
@@ -142,12 +167,17 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.use_slice_fat_pointer(place_mir_type) {
             slice_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
         } else if self.use_vtable_fat_pointer(place_mir_type) {
-            dynamic_fat_ptr(
-                result_goto_type,
-                thin_pointer.cast_to(Type::void_pointer()),
-                metadata,
-                &self.symbol_table,
-            )
+            match place_mir_type.kind() {
+                ty::Adt(..) => {
+                    dynamic_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
+                }
+                _ => dynamic_fat_ptr(
+                    result_goto_type,
+                    thin_pointer.cast_to(Type::void_pointer()),
+                    metadata,
+                    &self.symbol_table,
+                ),
+            }
         } else {
             unreachable!();
         }

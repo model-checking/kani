@@ -154,17 +154,17 @@ impl<'tcx> GotocCtx<'tcx> {
                             // for calls that fail the typecheck.
                             // https://github.com/model-checking/rmc/issues/426
                             // Unblocks: https://github.com/model-checking/rmc/issues/435
-                            if Expr::typecheck_call(&func, &args) {
-                                func.call(args)
-                            } else {
-                                self.codegen_unimplemented(
-                                    format!("drop_in_place call for {:?}", func).as_str(),
-                                    func.typ().return_type().unwrap().clone(),
-                                    Location::none(),
-                                    "https://github.com/model-checking/rmc/issues/426",
-                                )
-                            }
-                            .as_stmt(Location::none())
+                            // if Expr::typecheck_call(&func, &args) {
+                            //     func.call(args)
+                            // } else {
+                            //     self.codegen_unimplemented(
+                            //         format!("drop_in_place call for {:?}", func).as_str(),
+                            //         func.typ().return_type().unwrap().clone(),
+                            //         Location::none(),
+                            //         "https://github.com/model-checking/rmc/issues/426",
+                            //     )
+                            // }
+                            func.call(args).as_stmt(Location::none())
                         }
                     }
                 }

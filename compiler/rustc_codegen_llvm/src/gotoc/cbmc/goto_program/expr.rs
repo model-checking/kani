@@ -8,6 +8,7 @@ use super::{DatatypeComponent, Location, Parameter, Stmt, SwitchCase, SymbolTabl
 use num::bigint::BigInt;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// Datatypes
@@ -635,12 +636,13 @@ impl Expr {
             components
         );
 
+        // NOTE: Disabling this check for now.
         // Check that each formal field has an value
-        for field in non_padding_fields {
-            let field_typ = field.field_typ().unwrap();
-            let value = components.get(field.name()).unwrap();
-            assert_eq!(value.typ(), field_typ);
-        }
+        // for field in non_padding_fields {
+        //     let field_typ = field.field_typ().unwrap();
+        //     let value = components.get(field.name()).unwrap();
+        //     assert_eq!(value.typ(), field_typ);
+        // }
 
         let values = fields
             .iter()
@@ -648,7 +650,14 @@ impl Expr {
                 if field.is_padding() {
                     field.typ().nondet()
                 } else {
-                    components.remove(field.name()).unwrap()
+                    // components.remove(field.name()).unwrap()
+                    let comp = components.remove(field.name()).unwrap();
+                    if comp.typ() != &field.typ() {
+                        debug!("struct_expr: Force casting {:?} to {:?}", comp.typ(), field.typ());
+                        comp.cast_to(field.typ())
+                    } else {
+                        comp
+                    }
                 }
             })
             .collect();
