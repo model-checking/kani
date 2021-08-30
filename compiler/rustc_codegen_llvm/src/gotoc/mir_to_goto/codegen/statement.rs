@@ -99,27 +99,74 @@ impl<'tcx> GotocCtx<'tcx> {
     // TODO: this function doesn't handle unwinding which begins if the destructor panics
     // https://github.com/model-checking/rmc/issues/221
     fn codegen_drop(&mut self, location: &Place<'tcx>, target: &BasicBlock) -> Stmt {
-        // instance for drop function
         let loc_ty = self.place_ty(location);
-        let instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
-        if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
+        let drop_instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
+        if let Some(hk) = self.hooks.hook_applies(self.tcx, drop_instance) {
             let le = self.codegen_place(location).goto_expr;
-            hk.handle(self, instance, vec![le], None, Some(*target), None)
+            hk.handle(self, drop_instance, vec![le], None, Some(*target), None)
         } else {
-            let drop_implementation = match instance.def {
-                InstanceDef::Virtual(..) => self
-                    .codegen_unimplemented(
-                        "drop_in_place for dynamic argument",
-                        Type::Empty,
-                        Location::none(),
-                        "https://github.com/model-checking/rmc/issues/11",
-                    )
-                    .as_stmt(Location::none()),
-                InstanceDef::DropGlue(..) => Stmt::skip(Location::none()),
+            let drop_implementation = match drop_instance.def {
+                InstanceDef::DropGlue(_, None) => {
+                    // We can skip empty DropGlue functions
+                    Stmt::skip(Location::none())
+                }
                 _ => {
-                    let func = self.codegen_func_expr(instance, None);
-                    func.call(vec![self.codegen_place(location).goto_expr.address_of()])
-                        .as_stmt(Location::none())
+                    match loc_ty.kind() {
+                        ty::Dynamic(..) => {
+                            // Virtual drop via a vtable lookup
+                            let trait_fat_ptr =
+                                self.codegen_place(location).fat_ptr_goto_expr.unwrap();
+
+                            // Pull the function off of the fat pointer's vtable pointer
+                            let vtable_ref =
+                                trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
+                            let vtable = vtable_ref.dereference();
+                            let fn_ptr = vtable.member("drop", &self.symbol_table);
+
+                            // Pull the self argument off of the fat pointer's data pointer
+                            let self_ref =
+                                trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+                            let self_ref =
+                                self_ref.cast_to(trait_fat_ptr.typ().clone().to_pointer());
+
+                            let func_exp: Expr = fn_ptr.dereference();
+                            func_exp.call(vec![self_ref]).as_stmt(Location::none())
+                        }
+                        _ => {
+                            // Non-virtual, direct drop call
+                            assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
+
+                            let func = self.codegen_func_expr(drop_instance, None);
+                            let place = self.codegen_place(location);
+                            let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
+                                // Drop takes the fat pointer if it exists
+                                fat_ptr
+                            } else {
+                                place.goto_expr.address_of()
+                            };
+                            // The only argument should be a self reference
+                            let args = vec![arg];
+
+                            // We have a known issue where nested Arc and Mutex objects result in
+                            // drop_in_place call implementations that fail to typecheck. Skipping
+                            // drop entirely causes unsound verification results in common cases
+                            // like vector extend, so for now, add a sound special case workaround
+                            // for calls that fail the typecheck.
+                            // https://github.com/model-checking/rmc/issues/426
+                            // Unblocks: https://github.com/model-checking/rmc/issues/435
+                            if Expr::typecheck_call(&func, &args) {
+                                func.call(args)
+                            } else {
+                                self.codegen_unimplemented(
+                                    format!("drop_in_place call for {:?}", func).as_str(),
+                                    func.typ().return_type().unwrap().clone(),
+                                    Location::none(),
+                                    "https://github.com/model-checking/rmc/issues/426",
+                                )
+                            }
+                            .as_stmt(Location::none())
+                        }
+                    }
                 }
             };
             let goto_target = Stmt::goto(self.current_fn().find_label(target), Location::none());
@@ -310,7 +357,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // should be a fat pointer for the trait
                         let trait_fat_ptr = fargs[0].to_owned();
 
-                        //Check the Gotoc-level fat pointer type
+                        // Check the Gotoc-level fat pointer type
                         assert!(trait_fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table));
 
                         self.codegen_virtual_funcall(

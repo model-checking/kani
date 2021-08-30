@@ -95,7 +95,11 @@ impl CodegenBackend for GotocCodegenBackend {
                     MonoItem::Fn(instance) => {
                         c.call_with_panic_debug_info(
                             |ctx| ctx.codegen_function(instance),
-                            format!("codegen_function: {}", c.readable_instance_name(instance)),
+                            format!(
+                                "codegen_function: {}\n{}",
+                                c.readable_instance_name(instance),
+                                c.symbol_name(instance)
+                            ),
                         );
                     }
                     MonoItem::Static(def_id) => {
