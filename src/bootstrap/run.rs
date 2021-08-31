@@ -1,11 +1,14 @@
 use crate::builder::{Builder, RunConfig, ShouldRun, Step};
 use crate::dist::distdir;
 use crate::tool::Tool;
+use crate::{compile, tool, Compiler};
 use build_helper::output;
 use std::process::Command;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Dashboard;
+pub struct Dashboard {
+    pub compiler: Compiler,
+}
 
 impl Step for Dashboard {
     type Output = ();
@@ -15,11 +18,15 @@ impl Step for Dashboard {
     /// This tool in `src/tools` extracts examples from books, runs them through
     /// RMC, and displays their results.
     fn run(self, builder: &Builder<'_>) {
+        // Before running the dashboard, we need to ensure that it is already
+        // built.
+        let dashboard = builder.ensure(tool::Dashboard { compiler: self.compiler });
+        // We also need to ensure that stage n standard library is built for
+        // rmc-rustc.
+        builder.ensure(compile::Std { compiler: self.compiler, target: self.compiler.host });
+        let target = builder.config.build.triple;
         builder.info("Generating confidence dashboard");
-        try_run(
-            builder,
-            &mut builder.tool_cmd(Tool::Dashboard).env("TRIPLE", builder.config.build.triple),
-        );
+        try_run(builder, Command::new(dashboard).env("TRIPLE", target));
     }
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
@@ -27,7 +34,9 @@ impl Step for Dashboard {
     }
 
     fn make_run(run: RunConfig<'_>) {
-        run.builder.ensure(Dashboard);
+        run.builder.ensure(Dashboard {
+            compiler: run.builder.compiler(run.builder.top_stage, run.target),
+        });
     }
 }
 
