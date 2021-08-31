@@ -573,7 +573,7 @@ fn check_type_length_limit<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
     let type_length = instance
         .substs
         .iter()
-        .flat_map(|arg| arg.walk())
+        .flat_map(|arg| arg.walk(tcx))
         .filter(|arg| match arg.unpack() {
             GenericArgKind::Type(_) | GenericArgKind::Const(_) => true,
             GenericArgKind::Lifetime(_) => false,
@@ -1149,6 +1149,7 @@ impl ItemLikeVisitor<'v> for RootCollector<'_, 'v> {
         match item.kind {
             hir::ItemKind::ExternCrate(..)
             | hir::ItemKind::Use(..)
+            | hir::ItemKind::Macro(..)
             | hir::ItemKind::ForeignMod { .. }
             | hir::ItemKind::TyAlias(..)
             | hir::ItemKind::Trait(..)

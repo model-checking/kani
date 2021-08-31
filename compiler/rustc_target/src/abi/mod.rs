@@ -5,6 +5,7 @@ use crate::spec::Target;
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use std::iter::Step;
 use std::num::NonZeroUsize;
 use std::ops::{Add, AddAssign, Deref, Mul, Range, RangeInclusive, Sub};
 use std::str::FromStr;
@@ -193,6 +194,7 @@ impl TargetDataLayout {
     /// to represent object size in bits. It would need to be 1 << 61 to account for this, but is
     /// currently conservatively bounded to 1 << 47 as that is enough to cover the current usable
     /// address space on 64-bit ARMv8 and x86_64.
+    #[inline]
     pub fn obj_size_bound(&self) -> u64 {
         match self.pointer_size.bits() {
             16 => 1 << 15,
@@ -202,6 +204,7 @@ impl TargetDataLayout {
         }
     }
 
+    #[inline]
     pub fn ptr_sized_integer(&self) -> Integer {
         match self.pointer_size.bits() {
             16 => I16,
@@ -211,6 +214,7 @@ impl TargetDataLayout {
         }
     }
 
+    #[inline]
     pub fn vector_align(&self, vec_size: Size) -> AbiAndPrefAlign {
         for &(size, align) in &self.vector_align {
             if size == vec_size {
@@ -440,6 +444,43 @@ impl AddAssign for Size {
     }
 }
 
+impl Step for Size {
+    #[inline]
+    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+        u64::steps_between(&start.bytes(), &end.bytes())
+    }
+
+    #[inline]
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        u64::forward_checked(start.bytes(), count).map(Self::from_bytes)
+    }
+
+    #[inline]
+    fn forward(start: Self, count: usize) -> Self {
+        Self::from_bytes(u64::forward(start.bytes(), count))
+    }
+
+    #[inline]
+    unsafe fn forward_unchecked(start: Self, count: usize) -> Self {
+        Self::from_bytes(u64::forward_unchecked(start.bytes(), count))
+    }
+
+    #[inline]
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        u64::backward_checked(start.bytes(), count).map(Self::from_bytes)
+    }
+
+    #[inline]
+    fn backward(start: Self, count: usize) -> Self {
+        Self::from_bytes(u64::backward(start.bytes(), count))
+    }
+
+    #[inline]
+    unsafe fn backward_unchecked(start: Self, count: usize) -> Self {
+        Self::from_bytes(u64::backward_unchecked(start.bytes(), count))
+    }
+}
+
 /// Alignment of a type in bytes (always a power of two).
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Encodable, Decodable)]
 #[derive(HashStable_Generic)]
@@ -524,14 +565,17 @@ pub struct AbiAndPrefAlign {
 }
 
 impl AbiAndPrefAlign {
+    #[inline]
     pub fn new(align: Align) -> AbiAndPrefAlign {
         AbiAndPrefAlign { abi: align, pref: align }
     }
 
+    #[inline]
     pub fn min(self, other: AbiAndPrefAlign) -> AbiAndPrefAlign {
         AbiAndPrefAlign { abi: self.abi.min(other.abi), pref: self.pref.min(other.pref) }
     }
 
+    #[inline]
     pub fn max(self, other: AbiAndPrefAlign) -> AbiAndPrefAlign {
         AbiAndPrefAlign { abi: self.abi.max(other.abi), pref: self.pref.max(other.pref) }
     }
@@ -548,6 +592,7 @@ pub enum Integer {
 }
 
 impl Integer {
+    #[inline]
     pub fn size(self) -> Size {
         match self {
             I8 => Size::from_bytes(1),
@@ -571,6 +616,7 @@ impl Integer {
     }
 
     /// Finds the smallest Integer type which can represent the signed value.
+    #[inline]
     pub fn fit_signed(x: i128) -> Integer {
         match x {
             -0x0000_0000_0000_0080..=0x0000_0000_0000_007f => I8,
@@ -582,6 +628,7 @@ impl Integer {
     }
 
     /// Finds the smallest Integer type which can represent the unsigned value.
+    #[inline]
     pub fn fit_unsigned(x: u128) -> Integer {
         match x {
             0..=0x0000_0000_0000_00ff => I8,
@@ -617,6 +664,9 @@ impl Integer {
         I8
     }
 
+    // FIXME(eddyb) consolidate this and other methods that find the appropriate
+    // `Integer` given some requirements.
+    #[inline]
     fn from_size(size: Size) -> Result<Self, String> {
         match size.bits() {
             8 => Ok(Integer::I8),
@@ -668,12 +718,74 @@ impl Primitive {
         }
     }
 
+    // FIXME(eddyb) remove, it's trivial thanks to `matches!`.
+    #[inline]
     pub fn is_float(self) -> bool {
         matches!(self, F32 | F64)
     }
 
+    // FIXME(eddyb) remove, it's completely unused.
+    #[inline]
     pub fn is_int(self) -> bool {
         matches!(self, Int(..))
+    }
+}
+
+/// Inclusive wrap-around range of valid values, that is, if
+/// start > end, it represents `start..=MAX`,
+/// followed by `0..=end`.
+///
+/// That is, for an i8 primitive, a range of `254..=2` means following
+/// sequence:
+///
+///    254 (-2), 255 (-1), 0, 1, 2
+///
+/// This is intended specifically to mirror LLVM’s `!range` metadata,
+/// semantics.
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(HashStable_Generic)]
+pub struct WrappingRange {
+    pub start: u128,
+    pub end: u128,
+}
+
+impl WrappingRange {
+    /// Returns `true` if `v` is contained in the range.
+    #[inline(always)]
+    pub fn contains(&self, v: u128) -> bool {
+        if self.start <= self.end {
+            self.start <= v && v <= self.end
+        } else {
+            self.start <= v || v <= self.end
+        }
+    }
+
+    /// Returns `true` if zero is contained in the range.
+    /// Equal to `range.contains(0)` but should be faster.
+    #[inline(always)]
+    pub fn contains_zero(&self) -> bool {
+        self.start > self.end || self.start == 0
+    }
+
+    /// Returns `self` with replaced `start`
+    #[inline(always)]
+    pub fn with_start(mut self, start: u128) -> Self {
+        self.start = start;
+        self
+    }
+
+    /// Returns `self` with replaced `end`
+    #[inline(always)]
+    pub fn with_end(mut self, end: u128) -> Self {
+        self.end = end;
+        self
+    }
+}
+
+impl fmt::Debug for WrappingRange {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{}..={}", self.start, self.end)?;
+        Ok(())
     }
 }
 
@@ -683,26 +795,17 @@ impl Primitive {
 pub struct Scalar {
     pub value: Primitive,
 
-    /// Inclusive wrap-around range of valid values, that is, if
-    /// start > end, it represents `start..=MAX`,
-    /// followed by `0..=end`.
-    ///
-    /// That is, for an i8 primitive, a range of `254..=2` means following
-    /// sequence:
-    ///
-    ///    254 (-2), 255 (-1), 0, 1, 2
-    ///
-    /// This is intended specifically to mirror LLVM’s `!range` metadata,
-    /// semantics.
     // FIXME(eddyb) always use the shortest range, e.g., by finding
     // the largest space between two consecutive valid values and
     // taking everything else as the (shortest) valid range.
-    pub valid_range: RangeInclusive<u128>,
+    pub valid_range: WrappingRange,
 }
 
 impl Scalar {
+    #[inline]
     pub fn is_bool(&self) -> bool {
-        matches!(self.value, Int(I8, false)) && self.valid_range == (0..=1)
+        matches!(self.value, Int(I8, false))
+            && matches!(self.valid_range, WrappingRange { start: 0, end: 1 })
     }
 
     /// Returns the valid range as a `x..y` range.
@@ -715,8 +818,8 @@ impl Scalar {
         let bits = self.value.size(cx).bits();
         assert!(bits <= 128);
         let mask = !0u128 >> (128 - bits);
-        let start = *self.valid_range.start();
-        let end = *self.valid_range.end();
+        let start = self.valid_range.start;
+        let end = self.valid_range.end;
         assert_eq!(start, start & mask);
         assert_eq!(end, end & mask);
         start..(end.wrapping_add(1) & mask)
@@ -766,6 +869,7 @@ pub enum FieldsShape {
 }
 
 impl FieldsShape {
+    #[inline]
     pub fn count(&self) -> usize {
         match *self {
             FieldsShape::Primitive => 0,
@@ -775,6 +879,7 @@ impl FieldsShape {
         }
     }
 
+    #[inline]
     pub fn offset(&self, i: usize) -> Size {
         match *self {
             FieldsShape::Primitive => {
@@ -798,6 +903,7 @@ impl FieldsShape {
         }
     }
 
+    #[inline]
     pub fn memory_index(&self, i: usize) -> usize {
         match *self {
             FieldsShape::Primitive => {
@@ -881,6 +987,7 @@ impl Abi {
     }
 
     /// Returns `true` if this is a single signed integer scalar
+    #[inline]
     pub fn is_signed(&self) -> bool {
         match *self {
             Abi::Scalar(ref scal) => match scal.value {
@@ -971,14 +1078,14 @@ impl Niche {
         let max_value = !0u128 >> (128 - bits);
 
         // Find out how many values are outside the valid range.
-        let niche = v.end().wrapping_add(1)..*v.start();
+        let niche = v.end.wrapping_add(1)..v.start;
         niche.end.wrapping_sub(niche.start) & max_value
     }
 
     pub fn reserve<C: HasDataLayout>(&self, cx: &C, count: u128) -> Option<(u128, Scalar)> {
         assert!(count > 0);
 
-        let Scalar { value, valid_range: ref v } = self.scalar;
+        let Scalar { value, valid_range: v } = self.scalar.clone();
         let bits = value.size(cx).bits();
         assert!(bits <= 128);
         let max_value = !0u128 >> (128 - bits);
@@ -988,24 +1095,14 @@ impl Niche {
         }
 
         // Compute the range of invalid values being reserved.
-        let start = v.end().wrapping_add(1) & max_value;
-        let end = v.end().wrapping_add(count) & max_value;
+        let start = v.end.wrapping_add(1) & max_value;
+        let end = v.end.wrapping_add(count) & max_value;
 
-        // If the `end` of our range is inside the valid range,
-        // then we ran out of invalid values.
-        // FIXME(eddyb) abstract this with a wraparound range type.
-        let valid_range_contains = |x| {
-            if v.start() <= v.end() {
-                *v.start() <= x && x <= *v.end()
-            } else {
-                *v.start() <= x || x <= *v.end()
-            }
-        };
-        if valid_range_contains(end) {
+        if v.contains(end) {
             return None;
         }
 
-        Some((start, Scalar { value, valid_range: *v.start()..=end }))
+        Some((start, Scalar { value, valid_range: v.with_end(end) }))
     }
 }
 
@@ -1063,7 +1160,7 @@ impl Layout {
 /// to that obtained from `layout_of(ty)`, as we need to produce
 /// layouts for which Rust types do not exist, such as enum variants
 /// or synthetic fields of enums (i.e., discriminants) and fat pointers.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, HashStable_Generic)]
 pub struct TyAndLayout<'a, Ty> {
     pub ty: Ty,
     pub layout: &'a Layout,
@@ -1077,9 +1174,9 @@ impl<'a, Ty> Deref for TyAndLayout<'a, Ty> {
 }
 
 /// Trait for context types that can compute layouts of things.
-pub trait LayoutOf {
-    type Ty;
-    type TyAndLayout;
+pub trait LayoutOf<'a>: Sized {
+    type Ty: TyAbiInterface<'a, Self>;
+    type TyAndLayout: MaybeResult<TyAndLayout<'a, Self::Ty>>;
 
     fn layout_of(&self, ty: Self::Ty) -> Self::TyAndLayout;
     fn spanned_layout_of(&self, ty: Self::Ty, _span: Span) -> Self::TyAndLayout {
@@ -1087,9 +1184,6 @@ pub trait LayoutOf {
     }
 }
 
-/// The `TyAndLayout` above will always be a `MaybeResult<TyAndLayout<'_, Self>>`.
-/// We can't add the bound due to the lifetime, but this trait is still useful when
-/// writing code that's generic over the `LayoutOf` impl.
 pub trait MaybeResult<T> {
     type Error;
 
@@ -1142,41 +1236,42 @@ pub struct PointeeInfo {
     pub address_space: AddressSpace,
 }
 
-pub trait TyAndLayoutMethods<'a, C: LayoutOf<Ty = Self>>: Sized {
-    fn for_variant(
+/// Trait that needs to be implemented by the higher-level type representation
+/// (e.g. `rustc_middle::ty::Ty`), to provide `rustc_target::abi` functionality.
+pub trait TyAbiInterface<'a, C>: Sized {
+    fn ty_and_layout_for_variant(
         this: TyAndLayout<'a, Self>,
         cx: &C,
         variant_index: VariantIdx,
     ) -> TyAndLayout<'a, Self>;
-    fn field(this: TyAndLayout<'a, Self>, cx: &C, i: usize) -> C::TyAndLayout;
-    fn pointee_info_at(this: TyAndLayout<'a, Self>, cx: &C, offset: Size) -> Option<PointeeInfo>;
+    fn ty_and_layout_field(this: TyAndLayout<'a, Self>, cx: &C, i: usize) -> TyAndLayout<'a, Self>;
+    fn ty_and_layout_pointee_info_at(
+        this: TyAndLayout<'a, Self>,
+        cx: &C,
+        offset: Size,
+    ) -> Option<PointeeInfo>;
 }
 
 impl<'a, Ty> TyAndLayout<'a, Ty> {
     pub fn for_variant<C>(self, cx: &C, variant_index: VariantIdx) -> Self
     where
-        Ty: TyAndLayoutMethods<'a, C>,
-        C: LayoutOf<Ty = Ty>,
+        Ty: TyAbiInterface<'a, C>,
     {
-        Ty::for_variant(self, cx, variant_index)
+        Ty::ty_and_layout_for_variant(self, cx, variant_index)
     }
 
-    /// Callers might want to use `C: LayoutOf<Ty=Ty, TyAndLayout: MaybeResult<Self>>`
-    /// to allow recursion (see `might_permit_zero_init` below for an example).
-    pub fn field<C>(self, cx: &C, i: usize) -> C::TyAndLayout
+    pub fn field<C>(self, cx: &C, i: usize) -> Self
     where
-        Ty: TyAndLayoutMethods<'a, C>,
-        C: LayoutOf<Ty = Ty>,
+        Ty: TyAbiInterface<'a, C>,
     {
-        Ty::field(self, cx, i)
+        Ty::ty_and_layout_field(self, cx, i)
     }
 
     pub fn pointee_info_at<C>(self, cx: &C, offset: Size) -> Option<PointeeInfo>
     where
-        Ty: TyAndLayoutMethods<'a, C>,
-        C: LayoutOf<Ty = Ty>,
+        Ty: TyAbiInterface<'a, C>,
     {
-        Ty::pointee_info_at(self, cx, offset)
+        Ty::ty_and_layout_pointee_info_at(self, cx, offset)
     }
 }
 
@@ -1204,17 +1299,16 @@ impl<'a, Ty> TyAndLayout<'a, Ty> {
     /// FIXME: Once we removed all the conservatism, we could alternatively
     /// create an all-0/all-undef constant and run the const value validator to see if
     /// this is a valid value for the given type.
-    pub fn might_permit_raw_init<C, E>(self, cx: &C, zero: bool) -> Result<bool, E>
+    pub fn might_permit_raw_init<C>(self, cx: &C, zero: bool) -> bool
     where
         Self: Copy,
-        Ty: TyAndLayoutMethods<'a, C>,
-        C: LayoutOf<Ty = Ty, TyAndLayout: MaybeResult<Self, Error = E>> + HasDataLayout,
+        Ty: TyAbiInterface<'a, C>,
+        C: HasDataLayout,
     {
         let scalar_allows_raw_init = move |s: &Scalar| -> bool {
             if zero {
-                let range = &s.valid_range;
                 // The range must contain 0.
-                range.contains(&0) || (*range.start() > *range.end()) // wrap-around allows 0
+                s.valid_range.contains_zero()
             } else {
                 // The range must include all values. `valid_range_exclusive` handles
                 // the wrap-around using target arithmetic; with wrap-around then the full
@@ -1234,7 +1328,7 @@ impl<'a, Ty> TyAndLayout<'a, Ty> {
         };
         if !valid {
             // This is definitely not okay.
-            return Ok(false);
+            return false;
         }
 
         // If we have not found an error yet, we need to recursively descend into fields.
@@ -1245,16 +1339,15 @@ impl<'a, Ty> TyAndLayout<'a, Ty> {
             }
             FieldsShape::Arbitrary { offsets, .. } => {
                 for idx in 0..offsets.len() {
-                    let field = self.field(cx, idx).to_result()?;
-                    if !field.might_permit_raw_init(cx, zero)? {
+                    if !self.field(cx, idx).might_permit_raw_init(cx, zero) {
                         // We found a field that is unhappy with this kind of initialization.
-                        return Ok(false);
+                        return false;
                     }
                 }
             }
         }
 
         // FIXME(#66151): For now, we are conservative and do not check `self.variants`.
-        Ok(true)
+        true
     }
 }

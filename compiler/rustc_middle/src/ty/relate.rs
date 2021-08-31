@@ -200,12 +200,12 @@ impl<'tcx> Relate<'tcx> for ty::FnSig<'tcx> {
     }
 }
 
-impl<'tcx> Relate<'tcx> for ast::Constness {
+impl<'tcx> Relate<'tcx> for ty::BoundConstness {
     fn relate<R: TypeRelation<'tcx>>(
         relation: &mut R,
-        a: ast::Constness,
-        b: ast::Constness,
-    ) -> RelateResult<'tcx, ast::Constness> {
+        a: ty::BoundConstness,
+        b: ty::BoundConstness,
+    ) -> RelateResult<'tcx, ty::BoundConstness> {
         if a != b {
             Err(TypeError::ConstnessMismatch(expected_found(relation, a, b)))
         } else {
@@ -577,13 +577,13 @@ pub fn super_relate_consts<R: TypeRelation<'tcx>>(
         }
 
         (ty::ConstKind::Unevaluated(au), ty::ConstKind::Unevaluated(bu))
-            if tcx.features().const_evaluatable_checked =>
+            if tcx.features().generic_const_exprs =>
         {
-            tcx.try_unify_abstract_consts(((au.def, au.substs), (bu.def, bu.substs)))
+            tcx.try_unify_abstract_consts((au.shrink(), bu.shrink()))
         }
 
         // While this is slightly incorrect, it shouldn't matter for `min_const_generics`
-        // and is the better alternative to waiting until `const_evaluatable_checked` can
+        // and is the better alternative to waiting until `generic_const_exprs` can
         // be stabilized.
         (ty::ConstKind::Unevaluated(au), ty::ConstKind::Unevaluated(bu))
             if au.def == bu.def && au.promoted == bu.promoted =>
@@ -591,13 +591,13 @@ pub fn super_relate_consts<R: TypeRelation<'tcx>>(
             let substs = relation.relate_with_variance(
                 ty::Variance::Invariant,
                 ty::VarianceDiagInfo::default(),
-                au.substs,
-                bu.substs,
+                au.substs(tcx),
+                bu.substs(tcx),
             )?;
             return Ok(tcx.mk_const(ty::Const {
                 val: ty::ConstKind::Unevaluated(ty::Unevaluated {
                     def: au.def,
-                    substs,
+                    substs_: Some(substs),
                     promoted: au.promoted,
                 }),
                 ty: a.ty,

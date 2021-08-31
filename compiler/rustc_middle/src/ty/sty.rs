@@ -878,7 +878,7 @@ impl<'tcx> PolyTraitRef<'tcx> {
     pub fn to_poly_trait_predicate(&self) -> ty::PolyTraitPredicate<'tcx> {
         self.map_bound(|trait_ref| ty::TraitPredicate {
             trait_ref,
-            constness: hir::Constness::NotConst,
+            constness: ty::BoundConstness::NotConst,
         })
     }
 }
@@ -1565,26 +1565,26 @@ impl RegionKind {
 
         match *self {
             ty::ReVar(..) => {
-                flags = flags | TypeFlags::HAS_FREE_REGIONS;
-                flags = flags | TypeFlags::HAS_FREE_LOCAL_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_LOCAL_REGIONS;
                 flags = flags | TypeFlags::HAS_RE_INFER;
             }
             ty::RePlaceholder(..) => {
-                flags = flags | TypeFlags::HAS_FREE_REGIONS;
-                flags = flags | TypeFlags::HAS_FREE_LOCAL_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_LOCAL_REGIONS;
                 flags = flags | TypeFlags::HAS_RE_PLACEHOLDER;
             }
             ty::ReEarlyBound(..) => {
-                flags = flags | TypeFlags::HAS_FREE_REGIONS;
-                flags = flags | TypeFlags::HAS_FREE_LOCAL_REGIONS;
-                flags = flags | TypeFlags::HAS_RE_PARAM;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_LOCAL_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_RE_PARAM;
             }
             ty::ReFree { .. } => {
-                flags = flags | TypeFlags::HAS_FREE_REGIONS;
-                flags = flags | TypeFlags::HAS_FREE_LOCAL_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_LOCAL_REGIONS;
             }
             ty::ReEmpty(_) | ty::ReStatic => {
-                flags = flags | TypeFlags::HAS_FREE_REGIONS;
+                flags = flags | TypeFlags::HAS_KNOWN_FREE_REGIONS;
             }
             ty::ReLateBound(..) => {
                 flags = flags | TypeFlags::HAS_RE_LATE_BOUND;

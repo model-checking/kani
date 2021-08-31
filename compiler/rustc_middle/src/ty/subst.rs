@@ -234,7 +234,7 @@ impl<'a, 'tcx> InternalSubsts<'tcx> {
         })
     }
 
-    fn fill_item<F>(
+    pub fn fill_item<F>(
         substs: &mut SmallVec<[GenericArg<'tcx>; 8]>,
         tcx: TyCtxt<'tcx>,
         defs: &ty::Generics,
@@ -249,7 +249,7 @@ impl<'a, 'tcx> InternalSubsts<'tcx> {
         Self::fill_single(substs, defs, mk_kind)
     }
 
-    fn fill_single<F>(
+    pub fn fill_single<F>(
         substs: &mut SmallVec<[GenericArg<'tcx>; 8]>,
         defs: &ty::Generics,
         mk_kind: &mut F,
@@ -486,7 +486,7 @@ impl<'a, 'tcx> TypeFolder<'tcx> for SubstFolder<'a, 'tcx> {
     }
 
     fn fold_ty(&mut self, t: Ty<'tcx>) -> Ty<'tcx> {
-        if !t.needs_subst() {
+        if !t.potentially_needs_subst() {
             return t;
         }
 
@@ -497,10 +497,6 @@ impl<'a, 'tcx> TypeFolder<'tcx> for SubstFolder<'a, 'tcx> {
     }
 
     fn fold_const(&mut self, c: &'tcx ty::Const<'tcx>) -> &'tcx ty::Const<'tcx> {
-        if !c.needs_subst() {
-            return c;
-        }
-
         if let ty::ConstKind::Param(p) = c.val {
             self.const_for_param(p, c)
         } else {

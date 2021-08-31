@@ -8,7 +8,6 @@
 //! https://rustc-dev-guide.rust-lang.org/traits/resolution.html#confirmation
 use rustc_data_structures::stack::ensure_sufficient_stack;
 use rustc_hir::lang_items::LangItem;
-use rustc_hir::Constness;
 use rustc_index::bit_set::GrowableBitSet;
 use rustc_infer::infer::InferOk;
 use rustc_infer::infer::LateBoundRegionConversionTime::HigherRankedType;
@@ -75,7 +74,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             ProjectionCandidate(idx) => {
                 let obligations = self.confirm_projection_candidate(obligation, idx)?;
                 // FIXME(jschievink): constness
-                Ok(ImplSource::Param(obligations, Constness::NotConst))
+                Ok(ImplSource::Param(obligations, ty::BoundConstness::NotConst))
             }
 
             ObjectCandidate(idx) => {
@@ -113,7 +112,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 // This indicates something like `Trait + Send: Send`. In this case, we know that
                 // this holds because that's what the object type is telling us, and there's really
                 // no additional obligations to prove and no types in particular to unify, etc.
-                Ok(ImplSource::Param(Vec::new(), Constness::NotConst))
+                Ok(ImplSource::Param(Vec::new(), ty::BoundConstness::NotConst))
             }
 
             BuiltinUnsizeCandidate => {
@@ -947,7 +946,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
 
                 let mut unsizing_params = GrowableBitSet::new_empty();
                 if tcx.features().relaxed_struct_unsize {
-                    for arg in tail_field_ty.walk() {
+                    for arg in tail_field_ty.walk(tcx) {
                         if let Some(i) = maybe_unsizing_param_idx(arg) {
                             unsizing_params.insert(i);
                         }
@@ -956,7 +955,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     // Ensure none of the other fields mention the parameters used
                     // in unsizing.
                     for field in prefix_fields {
-                        for arg in tcx.type_of(field.did).walk() {
+                        for arg in tcx.type_of(field.did).walk(tcx) {
                             if let Some(i) = maybe_unsizing_param_idx(arg) {
                                 unsizing_params.remove(i);
                             }
@@ -968,7 +967,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     }
                 } else {
                     let mut found = false;
-                    for arg in tail_field_ty.walk() {
+                    for arg in tail_field_ty.walk(tcx) {
                         if let Some(i) = maybe_unsizing_param_idx(arg) {
                             unsizing_params.insert(i);
                             found = true;
@@ -984,7 +983,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     // by putting it in a query; it would only need the `DefId` as it
                     // looks at declared field types, not anything substituted.
                     for field in prefix_fields {
-                        for arg in tcx.type_of(field.did).walk() {
+                        for arg in tcx.type_of(field.did).walk(tcx) {
                             if let Some(i) = maybe_unsizing_param_idx(arg) {
                                 if unsizing_params.contains(i) {
                                     return Err(Unimplemented);

@@ -1,7 +1,7 @@
 line 18 unreachable code: SUCCESS
-line 19 assertion failed: false: SUCCESS
+line 18 assertion failed: false: SUCCESS
 line 19 assertion failed: x == 10: SUCCESS
 line 22 unreachable code: SUCCESS
-line 23 assertion failed: false: SUCCESS
+line 22 assertion failed: false: SUCCESS
 line 25 assertion failed: x == 30 && y == 60.0: SUCCESS
 line 26 assertion failed: x == 31: FAILURE

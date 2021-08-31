@@ -228,7 +228,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> LayoutOf for GotocCtx<'tcx> {
+impl LayoutOf<'tcx> for GotocCtx<'tcx> {
     type Ty = Ty<'tcx>;
     type TyAndLayout = TyAndLayout<'tcx>;
 

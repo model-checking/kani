@@ -7,7 +7,7 @@ use rustc_hir::intravisit;
 use rustc_hir::intravisit::Visitor;
 use rustc_hir::{HirId, Node};
 use rustc_middle::hir::map::Map;
-use rustc_middle::ty::subst::{GenericArgKind, InternalSubsts};
+use rustc_middle::ty::subst::{GenericArgKind, InternalSubsts, SubstsRef};
 use rustc_middle::ty::util::IntTypeExt;
 use rustc_middle::ty::{self, DefIdTree, Ty, TyCtxt, TypeFoldable, TypeFolder};
 use rustc_span::symbol::Ident;
@@ -274,6 +274,31 @@ fn get_path_containing_arg_in_pat<'hir>(
     arg_path
 }
 
+pub(super) fn default_anon_const_substs(tcx: TyCtxt<'_>, def_id: DefId) -> SubstsRef<'_> {
+    let generics = tcx.generics_of(def_id);
+    if let Some(parent) = generics.parent {
+        // This is the reason we bother with having optional anon const substs.
+        //
+        // In the future the substs of an anon const will depend on its parents predicates
+        // at which point eagerly looking at them will cause a query cycle.
+        //
+        // So for now this is only an assurance that this approach won't cause cycle errors in
+        // the future.
+        let _cycle_check = tcx.predicates_of(parent);
+    }
+
+    let substs = InternalSubsts::identity_for_item(tcx, def_id);
+    // We only expect substs with the following type flags as default substs.
+    //
+    // Getting this wrong can lead to ICE and unsoundness, so we assert it here.
+    for arg in substs.iter() {
+        let allowed_flags = ty::TypeFlags::MAY_NEED_DEFAULT_CONST_SUBSTS
+            | ty::TypeFlags::STILL_FURTHER_SPECIALIZABLE;
+        assert!(!arg.has_type_flags(!allowed_flags));
+    }
+    substs
+}
+
 pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
     let def_id = def_id.expect_local();
     use rustc_hir::*;
@@ -402,6 +427,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                 }
                 ItemKind::Trait(..)
                 | ItemKind::TraitAlias(..)
+                | ItemKind::Macro(..)
                 | ItemKind::Mod(..)
                 | ItemKind::ForeignMod { .. }
                 | ItemKind::GlobalAsm(..)
@@ -446,13 +472,13 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
             }
         }
 
-        Node::AnonConst(_) => {
-            if let Some(param) = tcx.opt_const_param_of(def_id) {
-                // We defer to `type_of` of the corresponding parameter
-                // for generic arguments.
-                return tcx.type_of(param);
-            }
+        Node::AnonConst(_) if let Some(param) = tcx.opt_const_param_of(def_id) => {
+            // We defer to `type_of` of the corresponding parameter
+            // for generic arguments.
+            tcx.type_of(param)
+        }
 
+        Node::AnonConst(_) => {
             let parent_node = tcx.hir().get(tcx.hir().get_parent_node(hir_id));
             match parent_node {
                 Node::Ty(&Ty { kind: TyKind::Array(_, ref constant), .. })

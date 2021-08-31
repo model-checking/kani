@@ -17,7 +17,7 @@ use rustc_middle::mir::{
     Location, Operand, Place, Rvalue, SourceInfo, SourceScope, SourceScopeData, Statement,
     StatementKind, Terminator, TerminatorKind, UnOp, RETURN_PLACE,
 };
-use rustc_middle::ty::layout::{HasTyCtxt, LayoutError, TyAndLayout};
+use rustc_middle::ty::layout::{LayoutError, TyAndLayout};
 use rustc_middle::ty::subst::{InternalSubsts, Subst};
 use rustc_middle::ty::{
     self, ConstInt, ConstKind, Instance, ParamEnv, ScalarInt, Ty, TyCtxt, TypeFoldable,
@@ -120,7 +120,7 @@ impl<'tcx> MirPass<'tcx> for ConstProp {
             .predicates_of(def_id.to_def_id())
             .predicates
             .iter()
-            .filter_map(|(p, _)| if p.is_global() { Some(*p) } else { None });
+            .filter_map(|(p, _)| if p.is_global(tcx) { Some(*p) } else { None });
         if traits::impossible_predicates(
             tcx,
             traits::elaborate_predicates(tcx, predicates).map(|o| o.predicate).collect(),
@@ -132,6 +132,7 @@ impl<'tcx> MirPass<'tcx> for ConstProp {
         trace!("ConstProp starting for {:?}", def_id);
 
         let dummy_body = &Body::new(
+            tcx,
             body.source,
             body.basic_blocks().clone(),
             body.source_scopes.clone(),
@@ -329,7 +330,7 @@ struct ConstPropagator<'mir, 'tcx> {
     source_info: Option<SourceInfo>,
 }
 
-impl<'mir, 'tcx> LayoutOf for ConstPropagator<'mir, 'tcx> {
+impl<'mir, 'tcx> LayoutOf<'tcx> for ConstPropagator<'mir, 'tcx> {
     type Ty = Ty<'tcx>;
     type TyAndLayout = Result<TyAndLayout<'tcx>, LayoutError<'tcx>>;
 
@@ -345,10 +346,17 @@ impl<'mir, 'tcx> HasDataLayout for ConstPropagator<'mir, 'tcx> {
     }
 }
 
-impl<'mir, 'tcx> HasTyCtxt<'tcx> for ConstPropagator<'mir, 'tcx> {
+impl<'mir, 'tcx> ty::layout::HasTyCtxt<'tcx> for ConstPropagator<'mir, 'tcx> {
     #[inline]
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
+    }
+}
+
+impl<'mir, 'tcx> ty::layout::HasParamEnv<'tcx> for ConstPropagator<'mir, 'tcx> {
+    #[inline]
+    fn param_env(&self) -> ty::ParamEnv<'tcx> {
+        self.param_env
     }
 }
 
@@ -468,7 +476,7 @@ impl<'mir, 'tcx> ConstPropagator<'mir, 'tcx> {
     /// Returns the value, if any, of evaluating `c`.
     fn eval_constant(&mut self, c: &Constant<'tcx>, source_info: SourceInfo) -> Option<OpTy<'tcx>> {
         // FIXME we need to revisit this for #67176
-        if c.needs_subst() {
+        if c.definitely_needs_subst(self.tcx) {
             return None;
         }
 
@@ -483,14 +491,14 @@ impl<'mir, 'tcx> ConstPropagator<'mir, 'tcx> {
                             // Promoteds must lint and not error as the user didn't ask for them
                             ConstKind::Unevaluated(ty::Unevaluated {
                                 def: _,
-                                substs: _,
+                                substs_: _,
                                 promoted: Some(_),
                             }) => true,
                             // Out of backwards compatibility we cannot report hard errors in unused
                             // generic functions using associated constants of the generic parameters.
-                            _ => c.literal.needs_subst(),
+                            _ => c.literal.definitely_needs_subst(*tcx),
                         },
-                        ConstantKind::Val(_, ty) => ty.needs_subst(),
+                        ConstantKind::Val(_, ty) => ty.definitely_needs_subst(*tcx),
                     };
                     if lint_only {
                         // Out of backwards compatibility we cannot report hard errors in unused
@@ -720,7 +728,7 @@ impl<'mir, 'tcx> ConstPropagator<'mir, 'tcx> {
         }
 
         // FIXME we need to revisit this for #67176
-        if rvalue.needs_subst() {
+        if rvalue.definitely_needs_subst(self.tcx) {
             return None;
         }
 

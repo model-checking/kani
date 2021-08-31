@@ -223,7 +223,18 @@ fn associated_items(tcx: TyCtxt<'_>, def_id: DefId) -> ty::AssocItems<'_> {
 }
 
 fn def_ident_span(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Span> {
-    tcx.hir().get_if_local(def_id).and_then(|node| node.ident()).map(|ident| ident.span)
+    tcx.hir()
+        .get_if_local(def_id)
+        .and_then(|node| match node {
+            // A `Ctor` doesn't have an identifier itself, but its parent
+            // struct/variant does. Compare with `hir::Map::opt_span`.
+            hir::Node::Ctor(ctor) => ctor
+                .ctor_hir_id()
+                .and_then(|ctor_id| tcx.hir().find(tcx.hir().get_parent_node(ctor_id)))
+                .and_then(|parent| parent.ident()),
+            _ => node.ident(),
+        })
+        .map(|ident| ident.span)
 }
 
 /// If the given `DefId` describes an item belonging to a trait,
@@ -361,7 +372,7 @@ fn well_formed_types_in_env<'tcx>(
         // constituents are well-formed.
         NodeKind::InherentImpl => {
             let self_ty = tcx.type_of(def_id);
-            inputs.extend(self_ty.walk());
+            inputs.extend(self_ty.walk(tcx));
         }
 
         // In an fn, we assume that the arguments and all their constituents are
@@ -370,7 +381,7 @@ fn well_formed_types_in_env<'tcx>(
             let fn_sig = tcx.fn_sig(def_id);
             let fn_sig = tcx.liberate_late_bound_regions(def_id, fn_sig);
 
-            inputs.extend(fn_sig.inputs().iter().flat_map(|ty| ty.walk()));
+            inputs.extend(fn_sig.inputs().iter().flat_map(|ty| ty.walk(tcx)));
         }
 
         NodeKind::Other => (),

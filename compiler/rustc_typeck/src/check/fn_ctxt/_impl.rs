@@ -239,7 +239,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             self.tag(),
         );
 
-        if Self::can_contain_user_lifetime_bounds((substs, user_self_ty)) {
+        if self.can_contain_user_lifetime_bounds((substs, user_self_ty)) {
             let canonicalized = self.infcx.canonicalize_user_type_annotation(UserType::TypeOf(
                 def_id,
                 UserSubsts { substs, user_self_ty },
@@ -481,7 +481,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let ty = self.to_ty(ast_ty);
         debug!("to_ty_saving_user_provided_ty: ty={:?}", ty);
 
-        if Self::can_contain_user_lifetime_bounds(ty) {
+        if self.can_contain_user_lifetime_bounds(ty) {
             let c_ty = self.infcx.canonicalize_response(UserType::Ty(ty));
             debug!("to_ty_saving_user_provided_ty: c_ty={:?}", c_ty);
             self.typeck_results.borrow_mut().user_provided_types_mut().insert(ast_ty.hir_id, c_ty);
@@ -526,11 +526,11 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     // reader, although I have my doubts). Also pass in types with inference
     // types, because they may be repeated. Other sorts of things are already
     // sufficiently enforced with erased regions. =)
-    fn can_contain_user_lifetime_bounds<T>(t: T) -> bool
+    fn can_contain_user_lifetime_bounds<T>(&self, t: T) -> bool
     where
         T: TypeFoldable<'tcx>,
     {
-        t.has_free_regions() || t.has_projections() || t.has_infer_types()
+        t.has_free_regions(self.tcx) || t.has_projections() || t.has_infer_types()
     }
 
     pub fn node_ty(&self, id: hir::HirId) -> Ty<'tcx> {
@@ -858,13 +858,25 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     path.segments,
                 );
             }
-            QPath::TypeRelative(ref qself, ref segment) => (self.to_ty(qself), qself, segment),
+            QPath::TypeRelative(ref qself, ref segment) => {
+                // Don't use `self.to_ty`, since this will register a WF obligation.
+                // If we're trying to call a non-existent method on a trait
+                // (e.g. `MyTrait::missing_method`), then resolution will
+                // give us a `QPath::TypeRelative` with a trait object as
+                // `qself`. In that case, we want to avoid registering a WF obligation
+                // for `dyn MyTrait`, since we don't actually need the trait
+                // to be object-safe.
+                // We manually call `register_wf_obligation` in the success path
+                // below.
+                (<dyn AstConv<'_>>::ast_ty_to_ty(self, qself), qself, segment)
+            }
             QPath::LangItem(..) => {
                 bug!("`resolve_ty_and_res_fully_qualified_call` called on `LangItem`")
             }
         };
         if let Some(&cached_result) = self.typeck_results.borrow().type_dependent_defs().get(hir_id)
         {
+            self.register_wf_obligation(ty.into(), qself.span, traits::WellFormed(None));
             // Return directly on cache hit. This is useful to avoid doubly reporting
             // errors with default match binding modes. See #44614.
             let def = cached_result.map_or(Res::Err, |(kind, def_id)| Res::Def(kind, def_id));
@@ -878,6 +890,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     method::MethodError::PrivateMatch(kind, def_id, _) => Ok((kind, def_id)),
                     _ => Err(ErrorReported),
                 };
+
+                // If we have a path like `MyTrait::missing_method`, then don't register
+                // a WF obligation for `dyn MyTrait` when method lookup fails. Otherwise,
+                // register a WF obligation so that we can detect any additional
+                // errors in the self type.
+                if !(matches!(error, method::MethodError::NoMatch(_)) && ty.is_trait()) {
+                    self.register_wf_obligation(ty.into(), qself.span, traits::WellFormed(None));
+                }
                 if item_name.name != kw::Empty {
                     if let Some(mut e) = self.report_method_error(
                         span,
@@ -894,7 +914,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             });
 
         if result.is_ok() {
-            self.maybe_lint_bare_trait(qpath, hir_id);
+            self.maybe_lint_bare_trait(qpath, hir_id, span);
+            self.register_wf_obligation(ty.into(), qself.span, traits::WellFormed(None));
         }
 
         // Write back the new resolution.
@@ -906,7 +927,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         )
     }
 
-    fn maybe_lint_bare_trait(&self, qpath: &QPath<'_>, hir_id: hir::HirId) {
+    fn maybe_lint_bare_trait(&self, qpath: &QPath<'_>, hir_id: hir::HirId, span: Span) {
         if let QPath::TypeRelative(self_ty, _) = qpath {
             if let TyKind::TraitObject([poly_trait_ref, ..], _, TraitObjectSyntax::None) =
                 self_ty.kind
@@ -914,10 +935,15 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 let msg = "trait objects without an explicit `dyn` are deprecated";
                 let (sugg, app) = match self.tcx.sess.source_map().span_to_snippet(self_ty.span) {
                     Ok(s) if poly_trait_ref.trait_ref.path.is_global() => {
-                        (format!("<dyn ({})>", s), Applicability::MachineApplicable)
+                        (format!("dyn ({})", s), Applicability::MachineApplicable)
                     }
-                    Ok(s) => (format!("<dyn {}>", s), Applicability::MachineApplicable),
-                    Err(_) => ("<dyn <type>>".to_string(), Applicability::HasPlaceholders),
+                    Ok(s) => (format!("dyn {}", s), Applicability::MachineApplicable),
+                    Err(_) => ("dyn <type>".to_string(), Applicability::HasPlaceholders),
+                };
+                // Wrap in `<..>` if it isn't already.
+                let sugg = match self.tcx.sess.source_map().span_to_snippet(span) {
+                    Ok(s) if s.starts_with('<') => sugg,
+                    _ => format!("<{}>", sugg),
                 };
                 let replace = String::from("use `dyn`");
                 if self.sess().edition() >= Edition::Edition2021 {
@@ -1178,12 +1204,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let mut user_self_ty = None;
         let mut is_alias_variant_ctor = false;
         match res {
-            Res::Def(DefKind::Ctor(CtorOf::Variant, _), _) => {
-                if let Some(self_ty) = self_ty {
-                    let adt_def = self_ty.ty_adt_def().unwrap();
-                    user_self_ty = Some(UserSelfTy { impl_def_id: adt_def.did, self_ty });
-                    is_alias_variant_ctor = true;
-                }
+            Res::Def(DefKind::Ctor(CtorOf::Variant, _), _)
+                if let Some(self_ty) = self_ty =>
+            {
+                let adt_def = self_ty.ty_adt_def().unwrap();
+                user_self_ty = Some(UserSelfTy { impl_def_id: adt_def.did, self_ty });
+                is_alias_variant_ctor = true;
             }
             Res::Def(DefKind::AssocFn | DefKind::AssocConst, def_id) => {
                 let container = tcx.associated_item(def_id).container;

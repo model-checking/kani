@@ -284,7 +284,7 @@ impl ParenthesizedArgs {
 
 pub use crate::node_id::{NodeId, CRATE_NODE_ID, DUMMY_NODE_ID};
 
-/// A modifier on a bound, e.g., `?Sized` or `?const Trait`.
+/// A modifier on a bound, e.g., `?Sized` or `~const Trait`.
 ///
 /// Negative bounds should also be handled here.
 #[derive(Copy, Clone, PartialEq, Eq, Encodable, Decodable, Debug)]
@@ -295,10 +295,10 @@ pub enum TraitBoundModifier {
     /// `?Trait`
     Maybe,
 
-    /// `?const Trait`
+    /// `~const Trait`
     MaybeConst,
 
-    /// `?const ?Trait`
+    /// `~const ?Trait`
     //
     // This parses but will be rejected during AST validation.
     MaybeConstMaybe,
@@ -332,8 +332,8 @@ pub type GenericBounds = Vec<GenericBound>;
 pub enum ParamKindOrd {
     Lifetime,
     Type,
-    // `unordered` is only `true` if `sess.has_features().const_generics`
-    // is active. Specifically, if it's only `min_const_generics`, it will still require
+    // `unordered` is only `true` if `sess.unordered_const_ty_params()`
+    // returns true. Specifically, if it's only `min_const_generics`, it will still require
     // ordering consts after types.
     Const { unordered: bool },
     // `Infer` is not actually constructed directly from the AST, but is implicitly constructed
@@ -2028,6 +2028,7 @@ pub enum InlineAsmOperand {
 #[derive(Clone, Encodable, Decodable, Debug)]
 pub struct InlineAsm {
     pub template: Vec<InlineAsmTemplatePiece>,
+    pub template_strs: Box<[(Symbol, Option<Symbol>, Span)]>,
     pub operands: Vec<(InlineAsmOperand, Span)>,
     pub clobber_abi: Option<(Symbol, Span)>,
     pub options: InlineAsmOptions,

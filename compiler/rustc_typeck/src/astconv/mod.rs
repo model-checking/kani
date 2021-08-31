@@ -20,7 +20,7 @@ use rustc_hir::def::{CtorOf, DefKind, Namespace, Res};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::{walk_generics, Visitor as _};
 use rustc_hir::lang_items::LangItem;
-use rustc_hir::{Constness, GenericArg, GenericArgs};
+use rustc_hir::{GenericArg, GenericArgs};
 use rustc_middle::ty::subst::{self, GenericArgKind, InternalSubsts, Subst, SubstsRef};
 use rustc_middle::ty::GenericParamDefKind;
 use rustc_middle::ty::{self, Const, DefIdTree, Ty, TyCtxt, TypeFoldable};
@@ -46,8 +46,6 @@ pub trait AstConv<'tcx> {
     fn tcx<'a>(&'a self) -> TyCtxt<'tcx>;
 
     fn item_def_id(&self) -> Option<DefId>;
-
-    fn default_constness_for_trait_bounds(&self) -> Constness;
 
     /// Returns predicates in scope of the form `X: Foo<T>`, where `X`
     /// is a type parameter `X` with the given id `def_id` and T
@@ -394,7 +392,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                     if self.is_object && has_default {
                         let default_ty = tcx.at(self.span).type_of(param.def_id);
                         let self_param = tcx.types.self_param;
-                        if default_ty.walk().any(|arg| arg == self_param.into()) {
+                        if default_ty.walk(tcx).any(|arg| arg == self_param.into()) {
                             // There is no suitable inference default for a type parameter
                             // that references self, in an object type.
                             return true;
@@ -724,7 +722,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
         &self,
         trait_ref: &hir::TraitRef<'_>,
         span: Span,
-        constness: Constness,
+        constness: ty::BoundConstness,
         self_ty: Ty<'tcx>,
         bounds: &mut Bounds<'tcx>,
         speculative: bool,
@@ -795,7 +793,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
         let bound_vars = tcx.late_bound_vars(hir_id);
         let poly_trait_ref =
             ty::Binder::bind_with_vars(ty::TraitRef::new(trait_def_id, substs), bound_vars);
-        bounds.trait_bounds.push((poly_trait_ref, span, Constness::NotConst));
+        bounds.trait_bounds.push((poly_trait_ref, span, ty::BoundConstness::NotConst));
 
         let mut dup_bindings = FxHashMap::default();
         for binding in assoc_bindings {
@@ -920,14 +918,13 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
         bounds: &mut Bounds<'tcx>,
         bound_vars: &'tcx ty::List<ty::BoundVariableKind>,
     ) {
-        let constness = self.default_constness_for_trait_bounds();
         for ast_bound in ast_bounds {
             match *ast_bound {
                 hir::GenericBound::Trait(ref b, hir::TraitBoundModifier::None) => {
                     self.instantiate_poly_trait_ref(
                         &b.trait_ref,
                         b.span,
-                        constness,
+                        ty::BoundConstness::NotConst,
                         param_ty,
                         bounds,
                         false,
@@ -937,7 +934,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                     self.instantiate_poly_trait_ref(
                         &b.trait_ref,
                         b.span,
-                        Constness::NotConst,
+                        ty::BoundConstness::ConstIfConst,
                         param_ty,
                         bounds,
                         false,
@@ -1251,7 +1248,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
             } = self.instantiate_poly_trait_ref(
                 &trait_bound.trait_ref,
                 trait_bound.span,
-                Constness::NotConst,
+                ty::BoundConstness::NotConst,
                 dummy_self,
                 &mut bounds,
                 false,
@@ -1330,7 +1327,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
             .filter(|(trait_ref, _, _)| !tcx.trait_is_auto(trait_ref.def_id()));
 
         for (base_trait_ref, span, constness) in regular_traits_refs_spans {
-            assert_eq!(constness, Constness::NotConst);
+            assert_eq!(constness, ty::BoundConstness::NotConst);
 
             for obligation in traits::elaborate_trait_ref(tcx, base_trait_ref) {
                 debug!(
@@ -1354,7 +1351,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                         // A `Self` within the original bound will be substituted with a
                         // `trait_object_dummy_self`, so check for that.
                         let references_self =
-                            pred.skip_binder().ty.walk().any(|arg| arg == dummy_self.into());
+                            pred.skip_binder().ty.walk(tcx).any(|arg| arg == dummy_self.into());
 
                         // If the projection output contains `Self`, force the user to
                         // elaborate it explicitly to avoid a lot of complexity.
@@ -2204,7 +2201,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                 self.prohibit_generics(path.segments);
                 // Try to evaluate any array length constants.
                 let normalized_ty = self.normalize_ty(span, tcx.at(span).type_of(def_id));
-                if forbid_generic && normalized_ty.needs_subst() {
+                if forbid_generic && normalized_ty.definitely_needs_subst(tcx) {
                     let mut err = tcx.sess.struct_span_err(
                         path.span,
                         "generic `Self` types are currently not permitted in anonymous constants",
@@ -2380,12 +2377,10 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
             if let Some(i) = (param.index as usize).checked_sub(generics.parent_count) {
                 // Our own parameters are the resolved lifetimes.
                 match param.kind {
-                    GenericParamDefKind::Lifetime => {
-                        if let hir::GenericArg::Lifetime(lifetime) = &lifetimes[i] {
-                            self.ast_region_to_region(lifetime, None).into()
-                        } else {
-                            bug!()
-                        }
+                    GenericParamDefKind::Lifetime
+                        if let hir::GenericArg::Lifetime(lifetime) = &lifetimes[i] =>
+                    {
+                        self.ast_region_to_region(lifetime, None).into()
                     }
                     _ => bug!(),
                 }
