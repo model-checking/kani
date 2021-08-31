@@ -29,6 +29,7 @@ use std::slice;
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     pub(in super::super) fn check_casts(&self) {
         let mut deferred_cast_checks = self.deferred_cast_checks.borrow_mut();
+        debug!("FnCtxt::check_casts: {} deferred checks", deferred_cast_checks.len());
         for cast in deferred_cast_checks.drain(..) {
             cast.check(self);
         }
@@ -936,7 +937,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         let ty = self.resolve_vars_if_possible(ty);
                         // We walk the argument type because the argument's type could have
                         // been `Option<T>`, but the `FulfillmentError` references `T`.
-                        if ty.walk().any(|arg| arg == predicate.self_ty().into()) {
+                        if ty.walk(self.tcx).any(|arg| arg == predicate.self_ty().into()) {
                             Some(i)
                         } else {
                             None

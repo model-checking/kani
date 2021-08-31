@@ -19,20 +19,20 @@ use crate::token;
 use rustc_span::symbol::{Ident, Symbol};
 use rustc_span::Span;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AssocCtxt {
     Trait,
     Impl,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum FnCtxt {
     Free,
     Foreign,
     Assoc(AssocCtxt),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum FnKind<'a> {
     /// E.g., `fn foo()`, `fn foo(&self)`, or `extern "Abi" fn foo()`.
     Fn(FnCtxt, Ident, &'a FnSig, &'a Visibility, Option<&'a Block>),
@@ -714,13 +714,10 @@ fn walk_inline_asm<'a, V: Visitor<'a>>(visitor: &mut V, asm: &'a InlineAsm) {
     for (op, _) in &asm.operands {
         match op {
             InlineAsmOperand::In { expr, .. }
+            | InlineAsmOperand::Out { expr: Some(expr), .. }
             | InlineAsmOperand::InOut { expr, .. }
             | InlineAsmOperand::Sym { expr, .. } => visitor.visit_expr(expr),
-            InlineAsmOperand::Out { expr, .. } => {
-                if let Some(expr) = expr {
-                    visitor.visit_expr(expr);
-                }
-            }
+            InlineAsmOperand::Out { expr: None, .. } => {}
             InlineAsmOperand::SplitInOut { in_expr, out_expr, .. } => {
                 visitor.visit_expr(in_expr);
                 if let Some(out_expr) = out_expr {

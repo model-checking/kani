@@ -60,6 +60,7 @@ This API is completely unstable and subject to change.
 #![feature(bool_to_option)]
 #![feature(crate_visibility_modifier)]
 #![feature(format_args_capture)]
+#![feature(if_let_guard)]
 #![feature(in_band_lifetimes)]
 #![feature(is_sorted)]
 #![feature(iter_zip)]
@@ -68,6 +69,7 @@ This API is completely unstable and subject to change.
 #![feature(never_type)]
 #![feature(slice_partition_dedup)]
 #![feature(control_flow_enum)]
+#![cfg_attr(bootstrap, allow(incomplete_features))] // if_let_guard
 #![recursion_limit = "256"]
 
 #[macro_use]
@@ -546,7 +548,7 @@ pub fn hir_trait_to_predicates<'tcx>(
         &item_cx,
         hir_trait,
         DUMMY_SP,
-        hir::Constness::NotConst,
+        ty::BoundConstness::NotConst,
         self_ty,
         &mut bounds,
         true,

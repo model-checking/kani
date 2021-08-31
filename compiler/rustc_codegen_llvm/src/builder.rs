@@ -88,7 +88,7 @@ impl HasTargetSpec for Builder<'_, '_, 'tcx> {
     }
 }
 
-impl abi::LayoutOf for Builder<'_, '_, 'tcx> {
+impl abi::LayoutOf<'tcx> for Builder<'_, '_, 'tcx> {
     type Ty = Ty<'tcx>;
     type TyAndLayout = TyAndLayout<'tcx>;
 
@@ -462,7 +462,6 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             load: &'ll Value,
             scalar: &abi::Scalar,
         ) {
-            let vr = scalar.valid_range.clone();
             match scalar.value {
                 abi::Int(..) => {
                     let range = scalar.valid_range_exclusive(bx);
@@ -470,7 +469,7 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                         bx.range_metadata(load, range);
                     }
                 }
-                abi::Pointer if vr.start() < vr.end() && !vr.contains(&0) => {
+                abi::Pointer if !scalar.valid_range.contains_zero() => {
                     bx.nonnull_metadata(load);
                 }
                 _ => {}

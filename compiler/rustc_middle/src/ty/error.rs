@@ -33,7 +33,7 @@ impl<T> ExpectedFound<T> {
 #[derive(Clone, Debug, TypeFoldable)]
 pub enum TypeError<'tcx> {
     Mismatch,
-    ConstnessMismatch(ExpectedFound<hir::Constness>),
+    ConstnessMismatch(ExpectedFound<ty::BoundConstness>),
     UnsafetyMismatch(ExpectedFound<hir::Unsafety>),
     AbiMismatch(ExpectedFound<abi::Abi>),
     Mutability,
@@ -102,7 +102,7 @@ impl<'tcx> fmt::Display for TypeError<'tcx> {
             CyclicConst(_) => write!(f, "encountered a self-referencing constant"),
             Mismatch => write!(f, "types differ"),
             ConstnessMismatch(values) => {
-                write!(f, "expected {} fn, found {} fn", values.expected, values.found)
+                write!(f, "expected {} bound, found {} bound", values.expected, values.found)
             }
             UnsafetyMismatch(values) => {
                 write!(f, "expected {} fn, found {} fn", values.expected, values.found)
@@ -279,13 +279,10 @@ impl<'tcx> ty::TyS<'tcx> {
             }
             ty::FnDef(..) => "fn item".into(),
             ty::FnPtr(_) => "fn pointer".into(),
-            ty::Dynamic(ref inner, ..) => {
-                if let Some(principal) = inner.principal() {
-                    format!("trait object `dyn {}`", tcx.def_path_str(principal.def_id())).into()
-                } else {
-                    "trait object".into()
-                }
+            ty::Dynamic(ref inner, ..) if let Some(principal) = inner.principal() => {
+                format!("trait object `dyn {}`", tcx.def_path_str(principal.def_id())).into()
             }
+            ty::Dynamic(..) => "trait object".into(),
             ty::Closure(..) => "closure".into(),
             ty::Generator(def_id, ..) => tcx.generator_kind(def_id).unwrap().descr().into(),
             ty::GeneratorWitness(..) => "generator witness".into(),
@@ -365,20 +362,19 @@ impl<'tcx> TyCtxt<'tcx> {
                         // Issue #63167
                         db.note("distinct uses of `impl Trait` result in different opaque types");
                     }
-                    (ty::Float(_), ty::Infer(ty::IntVar(_))) => {
+                    (ty::Float(_), ty::Infer(ty::IntVar(_)))
                         if let Ok(
                             // Issue #53280
                             snippet,
-                        ) = self.sess.source_map().span_to_snippet(sp)
-                        {
-                            if snippet.chars().all(|c| c.is_digit(10) || c == '-' || c == '_') {
-                                db.span_suggestion(
-                                    sp,
-                                    "use a float literal",
-                                    format!("{}.0", snippet),
-                                    MachineApplicable,
-                                );
-                            }
+                        ) = self.sess.source_map().span_to_snippet(sp) =>
+                    {
+                        if snippet.chars().all(|c| c.is_digit(10) || c == '-' || c == '_') {
+                            db.span_suggestion(
+                                sp,
+                                "use a float literal",
+                                format!("{}.0", snippet),
+                                MachineApplicable,
+                            );
                         }
                     }
                     (ty::Param(expected), ty::Param(found)) => {

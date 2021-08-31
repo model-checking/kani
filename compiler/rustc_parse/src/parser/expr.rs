@@ -41,7 +41,7 @@ macro_rules! maybe_whole_expr {
                     let path = path.clone();
                     $p.bump();
                     return Ok($p.mk_expr(
-                        $p.token.span,
+                        $p.prev_token.span,
                         ExprKind::Path(None, path),
                         AttrVec::new(),
                     ));
@@ -50,7 +50,7 @@ macro_rules! maybe_whole_expr {
                     let block = block.clone();
                     $p.bump();
                     return Ok($p.mk_expr(
-                        $p.token.span,
+                        $p.prev_token.span,
                         ExprKind::Block(block, None),
                         AttrVec::new(),
                     ));
@@ -1528,7 +1528,7 @@ impl<'a> Parser<'a> {
             .span_suggestion(
                 token.span,
                 "must have an integer part",
-                pprust::token_to_string(token),
+                pprust::token_to_string(token).into(),
                 Applicability::MachineApplicable,
             )
             .emit();

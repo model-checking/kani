@@ -8,7 +8,6 @@ use crate::ty::fold::{TypeFoldable, TypeFolder, TypeVisitor};
 use crate::ty::print::{with_no_trimmed_paths, FmtPrinter, Printer};
 use crate::ty::{self, InferConst, Lift, Ty, TyCtxt};
 use rustc_data_structures::functor::IdFunctor;
-use rustc_hir as hir;
 use rustc_hir::def::Namespace;
 use rustc_hir::def_id::CRATE_DEF_INDEX;
 use rustc_index::vec::{Idx, IndexVec};
@@ -155,8 +154,8 @@ impl fmt::Debug for ty::ParamConst {
 
 impl fmt::Debug for ty::TraitPredicate<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let hir::Constness::Const = self.constness {
-            write!(f, "const ")?;
+        if let ty::BoundConstness::ConstIfConst = self.constness {
+            write!(f, "~const ")?;
         }
         write!(f, "TraitPredicate({:?})", self.trait_ref)
     }
@@ -190,8 +189,8 @@ impl fmt::Debug for ty::PredicateKind<'tcx> {
             ty::PredicateKind::ClosureKind(closure_def_id, closure_substs, kind) => {
                 write!(f, "ClosureKind({:?}, {:?}, {:?})", closure_def_id, closure_substs, kind)
             }
-            ty::PredicateKind::ConstEvaluatable(def_id, substs) => {
-                write!(f, "ConstEvaluatable({:?}, {:?})", def_id, substs)
+            ty::PredicateKind::ConstEvaluatable(uv) => {
+                write!(f, "ConstEvaluatable({:?}, {:?})", uv.def, uv.substs_)
             }
             ty::PredicateKind::ConstEquate(c1, c2) => write!(f, "ConstEquate({:?}, {:?})", c1, c2),
             ty::PredicateKind::TypeWellFormedFromEnv(ty) => {
@@ -241,6 +240,7 @@ TrivialTypeFoldableAndLiftImpls! {
     crate::traits::Reveal,
     crate::ty::adjustment::AutoBorrowMutability,
     crate::ty::AdtKind,
+    crate::ty::BoundConstness,
     // Including `BoundRegionKind` is a *bit* dubious, but direct
     // references to bound region appear in `ty::Error`, and aren't
     // really meant to be folded. In general, we can only fold a fully
@@ -447,8 +447,8 @@ impl<'a, 'tcx> Lift<'tcx> for ty::PredicateKind<'a> {
             ty::PredicateKind::ObjectSafe(trait_def_id) => {
                 Some(ty::PredicateKind::ObjectSafe(trait_def_id))
             }
-            ty::PredicateKind::ConstEvaluatable(def_id, substs) => {
-                tcx.lift(substs).map(|substs| ty::PredicateKind::ConstEvaluatable(def_id, substs))
+            ty::PredicateKind::ConstEvaluatable(uv) => {
+                tcx.lift(uv).map(|uv| ty::PredicateKind::ConstEvaluatable(uv))
             }
             ty::PredicateKind::ConstEquate(c1, c2) => {
                 tcx.lift((c1, c2)).map(|(c1, c2)| ty::PredicateKind::ConstEquate(c1, c2))
@@ -974,6 +974,10 @@ impl<'tcx> TypeFoldable<'tcx> for ty::Region<'tcx> {
 }
 
 impl<'tcx> TypeFoldable<'tcx> for ty::Predicate<'tcx> {
+    fn fold_with<F: TypeFolder<'tcx>>(self, folder: &mut F) -> Self {
+        folder.fold_predicate(self)
+    }
+
     fn super_fold_with<F: TypeFolder<'tcx>>(self, folder: &mut F) -> Self {
         let new = self.inner.kind.fold_with(folder);
         folder.tcx().reuse_or_mk_predicate(self, new)
@@ -1046,13 +1050,7 @@ impl<'tcx> TypeFoldable<'tcx> for ty::ConstKind<'tcx> {
         match self {
             ty::ConstKind::Infer(ic) => ty::ConstKind::Infer(ic.fold_with(folder)),
             ty::ConstKind::Param(p) => ty::ConstKind::Param(p.fold_with(folder)),
-            ty::ConstKind::Unevaluated(ty::Unevaluated { def, substs, promoted }) => {
-                ty::ConstKind::Unevaluated(ty::Unevaluated {
-                    def,
-                    substs: substs.fold_with(folder),
-                    promoted,
-                })
-            }
+            ty::ConstKind::Unevaluated(uv) => ty::ConstKind::Unevaluated(uv.fold_with(folder)),
             ty::ConstKind::Value(_)
             | ty::ConstKind::Bound(..)
             | ty::ConstKind::Placeholder(..)
@@ -1064,7 +1062,7 @@ impl<'tcx> TypeFoldable<'tcx> for ty::ConstKind<'tcx> {
         match *self {
             ty::ConstKind::Infer(ic) => ic.visit_with(visitor),
             ty::ConstKind::Param(p) => p.visit_with(visitor),
-            ty::ConstKind::Unevaluated(ct) => ct.substs.visit_with(visitor),
+            ty::ConstKind::Unevaluated(uv) => uv.visit_with(visitor),
             ty::ConstKind::Value(_)
             | ty::ConstKind::Bound(..)
             | ty::ConstKind::Placeholder(_)
@@ -1080,5 +1078,55 @@ impl<'tcx> TypeFoldable<'tcx> for InferConst<'tcx> {
 
     fn super_visit_with<V: TypeVisitor<'tcx>>(&self, _visitor: &mut V) -> ControlFlow<V::BreakTy> {
         ControlFlow::CONTINUE
+    }
+}
+
+impl<'tcx> TypeFoldable<'tcx> for ty::Unevaluated<'tcx> {
+    fn super_fold_with<F: TypeFolder<'tcx>>(self, folder: &mut F) -> Self {
+        ty::Unevaluated {
+            def: self.def,
+            substs_: Some(self.substs(folder.tcx()).fold_with(folder)),
+            promoted: self.promoted,
+        }
+    }
+
+    fn visit_with<V: TypeVisitor<'tcx>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
+        visitor.visit_unevaluated_const(*self)
+    }
+
+    fn super_visit_with<V: TypeVisitor<'tcx>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
+        if let Some(tcx) = visitor.tcx_for_anon_const_substs() {
+            self.substs(tcx).visit_with(visitor)
+        } else if let Some(substs) = self.substs_ {
+            substs.visit_with(visitor)
+        } else {
+            debug!("ignoring default substs of `{:?}`", self.def);
+            ControlFlow::CONTINUE
+        }
+    }
+}
+
+impl<'tcx> TypeFoldable<'tcx> for ty::Unevaluated<'tcx, ()> {
+    fn super_fold_with<F: TypeFolder<'tcx>>(self, folder: &mut F) -> Self {
+        ty::Unevaluated {
+            def: self.def,
+            substs_: Some(self.substs(folder.tcx()).fold_with(folder)),
+            promoted: self.promoted,
+        }
+    }
+
+    fn visit_with<V: TypeVisitor<'tcx>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
+        visitor.visit_unevaluated_const(self.expand())
+    }
+
+    fn super_visit_with<V: TypeVisitor<'tcx>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
+        if let Some(tcx) = visitor.tcx_for_anon_const_substs() {
+            self.substs(tcx).visit_with(visitor)
+        } else if let Some(substs) = self.substs_ {
+            substs.visit_with(visitor)
+        } else {
+            debug!("ignoring default substs of `{:?}`", self.def);
+            ControlFlow::CONTINUE
+        }
     }
 }

@@ -448,9 +448,6 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         }
 
         krate.visit_all_item_likes(&mut self.as_deep_visitor());
-        for macro_def in krate.exported_macros() {
-            self.visit_macro_def(macro_def);
-        }
     }
 
     fn encode_def_path_table(&mut self) {
@@ -509,11 +506,20 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
                                 let working_dir = &self.tcx.sess.opts.working_dir;
                                 match working_dir {
                                     RealFileName::LocalPath(absolute) => {
-                                        // If working_dir has not been remapped, then we emit a
-                                        // LocalPath variant as it's likely to be a valid path
-                                        RealFileName::LocalPath(
-                                            Path::new(absolute).join(path_to_file),
-                                        )
+                                        // Although neither working_dir or the file name were subject
+                                        // to path remapping, the concatenation between the two may
+                                        // be. Hence we need to do a remapping here.
+                                        let joined = Path::new(absolute).join(path_to_file);
+                                        let (joined, remapped) =
+                                            source_map.path_mapping().map_prefix(joined);
+                                        if remapped {
+                                            RealFileName::Remapped {
+                                                local_path: None,
+                                                virtual_name: joined,
+                                            }
+                                        } else {
+                                            RealFileName::LocalPath(joined)
+                                        }
                                     }
                                     RealFileName::Remapped { local_path: _, virtual_name } => {
                                         // If working_dir has been remapped, then we emit
@@ -1376,6 +1382,9 @@ impl EncodeContext<'a, 'tcx> {
 
                 EntryKind::Fn(self.lazy(data))
             }
+            hir::ItemKind::Macro(ref macro_def) => {
+                EntryKind::MacroDef(self.lazy(macro_def.clone()))
+            }
             hir::ItemKind::Mod(ref m) => {
                 return self.encode_info_for_mod(item.def_id, m);
             }
@@ -1528,13 +1537,6 @@ impl EncodeContext<'a, 'tcx> {
                 record!(self.tables.impl_trait_ref[def_id] <- trait_ref);
             }
         }
-    }
-
-    /// Serialize the text of exported macros
-    fn encode_info_for_macro_def(&mut self, macro_def: &hir::MacroDef<'_>) {
-        let def_id = macro_def.def_id.to_def_id();
-        record!(self.tables.kind[def_id] <- EntryKind::MacroDef(self.lazy(macro_def.ast.clone())));
-        self.encode_ident_span(def_id, macro_def.ident);
     }
 
     fn encode_info_for_generic_param(&mut self, def_id: DefId, kind: EntryKind, encode_type: bool) {
@@ -1906,9 +1908,6 @@ impl Visitor<'tcx> for EncodeContext<'a, 'tcx> {
         intravisit::walk_generics(self, generics);
         self.encode_info_for_generics(generics);
     }
-    fn visit_macro_def(&mut self, macro_def: &'tcx hir::MacroDef<'tcx>) {
-        self.encode_info_for_macro_def(macro_def);
-    }
 }
 
 impl EncodeContext<'a, 'tcx> {
@@ -1963,6 +1962,7 @@ impl EncodeContext<'a, 'tcx> {
             hir::ItemKind::Static(..)
             | hir::ItemKind::Const(..)
             | hir::ItemKind::Fn(..)
+            | hir::ItemKind::Macro(..)
             | hir::ItemKind::Mod(..)
             | hir::ItemKind::ForeignMod { .. }
             | hir::ItemKind::GlobalAsm(..)
