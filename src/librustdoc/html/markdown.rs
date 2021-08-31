@@ -645,7 +645,7 @@ impl<'a, I: Iterator<Item = SpannedEvent<'a>>> Iterator for Footnotes<'a, I> {
     }
 }
 
-crate fn find_testable_code<T: doctest::Tester>(
+pub fn find_testable_code<T: doctest::Tester>(
     doc: &str,
     tests: &mut T,
     error_codes: ErrorCodes,
@@ -711,7 +711,7 @@ crate fn find_testable_code<T: doctest::Tester>(
     }
 }
 
-crate struct ExtraInfo<'tcx> {
+pub struct ExtraInfo<'tcx> {
     id: ExtraInfoId,
     sp: Span,
     tcx: TyCtxt<'tcx>,
@@ -758,21 +758,21 @@ impl<'tcx> ExtraInfo<'tcx> {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-crate struct LangString {
+pub struct LangString {
     original: String,
-    crate should_panic: bool,
+    pub should_panic: bool,
     crate no_run: bool,
-    crate ignore: Ignore,
+    pub ignore: Ignore,
     crate rust: bool,
     crate test_harness: bool,
-    crate compile_fail: bool,
+    pub compile_fail: bool,
     crate error_codes: Vec<String>,
     crate allow_fail: bool,
-    crate edition: Option<Edition>,
+    pub edition: Option<Edition>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-crate enum Ignore {
+pub enum Ignore {
     All,
     None,
     Some(Vec<String>),

@@ -109,7 +109,7 @@ mod docfs;
 mod doctree;
 #[macro_use]
 mod error;
-mod doctest;
+pub mod doctest;
 mod fold;
 mod formats;
 // used by the error-index generator, so it needs to be public
