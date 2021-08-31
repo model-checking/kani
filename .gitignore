@@ -82,3 +82,5 @@ src/test/rustdoc-gui/src/**.lock
 /src/test/dashboard
 *Cargo.lock
 src/test/rmc-dependency-test/diamond-dependency/build
+/rmc-docs/book
+/rmc-docs/mdbook*
