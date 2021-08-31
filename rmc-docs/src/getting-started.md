@@ -2,7 +2,7 @@
 
 Hello, World!
 
-```
+```rust
 fn main() {
     assert!(1 == 1);
 }

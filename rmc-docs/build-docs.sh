@@ -10,9 +10,11 @@ cd $SCRIPT_DIR
 # Download mdbook release (vs spending time building it via cargo install)
 FILE="mdbook-v0.4.12-x86_64-unknown-linux-gnu.tar.gz"
 URL="https://github.com/rust-lang/mdBook/releases/download/v0.4.12/$FILE"
+EXPECTED_HASH="2a0953c50d8156e84f193f15a506ef0adbac66f1942b794de5210ca9ca73dd33"
 if [ ! -x mdbook ]; then
-    wget -O "$FILE" "$URL"
-    tar zxvf $FILE
+    curl -sSL -o "$FILE" "$URL"
+    echo "$EXPECTED_HASH $FILE" | sha256sum -c -
+    tar zxf $FILE
 fi
 
 # Build the book into ./book/
