@@ -5,7 +5,8 @@ use crate::common::{
 };
 use crate::common::{output_base_dir, output_base_name, output_testname_unique};
 use crate::common::{
-    Assembly, CargoRMC, Expected, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Ui, RMC,
+    Assembly, CargoRMC, Expected, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Stub, Ui,
+    RMC,
 };
 use crate::common::{Codegen, CodegenUnits, DebugInfo, Debugger, Rustdoc};
 use crate::common::{CompareMode, FailMode, PassMode};
@@ -358,6 +359,7 @@ impl<'test> TestCx<'test> {
             RMC => self.run_rmc_test(),
             CargoRMC => self.run_cargo_rmc_test(),
             Expected => self.run_expected_test(),
+            Stub => self.run_stub_test(),
         }
     }
 
@@ -2028,7 +2030,7 @@ impl<'test> TestCx<'test> {
                 rustc.arg(dir_opt);
             }
             RunPassValgrind | Pretty | DebugInfo | Codegen | Rustdoc | RustdocJson | RunMake
-            | CodegenUnits | JsDocTest | Assembly | RMC | CargoRMC | Expected => {
+            | CodegenUnits | JsDocTest | Assembly | RMC | CargoRMC | Expected | Stub => {
                 // do not use JSON output
             }
         }
@@ -2601,6 +2603,29 @@ impl<'test> TestCx<'test> {
         let expected =
             fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
         self.verify_output(&proc_res, &expected);
+    }
+
+    /// Runs RMC with stub implementations of various data structures.
+    /// Currently, it only runs tests for the Vec module with the (RMC)Vec
+    /// abstraction. At a later stage, it should be possible to add command-line
+    /// arguments to test specific abstractions and modules.
+    fn run_stub_test(&self) {
+        let mut rmc = Command::new("rmc");
+        // Arguments to choose specific abstraction are currently provided as
+        // as rmc-flags in the test file
+        rmc.args(&self.props.rmc_flags)
+            .arg("--input")
+            .arg(&self.testpaths.file)
+            .arg("--cbmc-args")
+            .args(&self.props.cbmc_flags);
+        self.add_rmc_dir_to_path(&mut rmc);
+        let proc_res = self.compose_and_run_compiler(rmc, None);
+        if !proc_res.status.success() {
+            self.fatal_proc_rec(
+                "test failed: expected verification success, got failure",
+                &proc_res,
+            );
+        }
     }
 
     /// Print an error if the verification output does not contain the expected

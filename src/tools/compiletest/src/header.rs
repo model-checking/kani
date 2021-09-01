@@ -916,7 +916,7 @@ pub fn make_test_description<R: Read>(
         .join(if config.host.contains("windows") { "ld.exe" } else { "ld" })
         .exists();
 
-    if config.mode == Mode::RMC {
+    if config.mode == Mode::RMC || config.mode == Mode::Stub {
         // If the path to the test contains "fixme" or "ignore", skip it.
         let file_path = path.to_str().unwrap();
         ignore |= file_path.contains("fixme") || file_path.contains("ignore");
