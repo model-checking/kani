@@ -1,22 +1,21 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+mod utils;
+
 // This is the default vector abstraction which supports all methods and is generic
 // over the type of the elements it can contain.
 //
- // The implementation is heavily inspired from the Rustonomicon and the Smack library.
-extern crate libc;
-
+// The implementation is heavily inspired from the Rustonomicon and the Smack library.
 use std::mem;
 use std::marker::PhantomData;
-use std::ptr::{drop_in_place, read, replace};
+use std::ptr::{drop_in_place, read};
 use std::ops::{Index, Deref, DerefMut, FnMut, RangeBounds, IndexMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
 use std::slice;
 use std::cmp;
-use std::borrow::Cow;
 use std::convert::TryFrom;
 
 // TODO: CBMC MAX_MALLOC?

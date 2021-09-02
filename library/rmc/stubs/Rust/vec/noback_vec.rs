@@ -1,11 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-extern crate libc;
-
 use std::marker::PhantomData;
 use std::mem;
-use __nondet;
+
+fn __nondet<T>() -> T {
+    unimplemented!()
+}
 
 // Abstraction which tracks only the length of the vector and does not contain
 // a backing store.

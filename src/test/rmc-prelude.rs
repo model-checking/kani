@@ -19,23 +19,20 @@
 use std::vec::Vec;
 
 #[cfg(use_abs)]
-mod stub;
+#[cfg(abs_type = "rmc")]
+include!{"../../library/rmc/stubs/Rust/vec/rmc_vec.rs"}
 
 #[cfg(use_abs)]
 #[cfg(abs_type = "no-back")]
-use stub::noback_vec::Vec;
+include!{"../../library/rmc/stubs/Rust/vec/noback_vec.rs"}
 
 #[cfg(use_abs)]
 #[cfg(abs_type = "c-ffi")]
-use stub::c_vec::Vec;
-
+include!{"../../library/rmc/stubs/Rust/vec/c_vec.rs"}
+ 
 #[cfg(use_abs)]
 #[cfg(abs_type = "rmc")]
-use stub::rmc_vec::Vec;
-
-#[cfg(use_abs)]
-#[cfg(abs_type = "rmc")]
-use stub::hashset::HashSet;
+include!{"../../library/rmc/stubs/Rust/hashset/c_hashset.rs"}
 
 fn __VERIFIER_assume(cond: bool) {
     unimplemented!()

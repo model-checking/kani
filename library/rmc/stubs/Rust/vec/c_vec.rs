@@ -1,9 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-extern crate libc;
-
-use self::libc::{c_uint, size_t};
+mod utils;
+use libc::{c_uint, size_t};
 
 // Abstraction which implements Vec operations using CBMC C primitives by only
 // implementing skeleton functions in Rust and exporting all core functionality
