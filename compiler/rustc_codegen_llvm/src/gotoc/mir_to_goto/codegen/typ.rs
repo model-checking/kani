@@ -1009,7 +1009,15 @@ impl<'tcx> GotocCtx<'tcx> {
         variants
             .iter()
             .filter_map(|lo| {
-                if lo.fields.count() == 0 { None } else { Some(lo.fields.offset(0).bits_usize()) }
+                if lo.fields.count() == 0 {
+                    None
+                } else {
+                    Some(
+                        lo.fields
+                            .offset(lo.fields.index_by_increasing_offset().nth(0).unwrap())
+                            .bits_usize(),
+                    )
+                }
             })
             .min()
     }
