@@ -7,7 +7,7 @@
 // This is currently only implemented for the Vec abstractionbut a PoC code for
 // HashSet is given too.
 //
-// Eventually we wouldd want to move to a more stable method of performing
+// Eventually we would want to move to a more stable method of performing
 // stubbing.
 // Tracking issue: https://github.com/model-checking/rmc/issues/455
 //
@@ -20,19 +20,19 @@ use std::vec::Vec;
 
 #[cfg(use_abs)]
 #[cfg(abs_type = "rmc")]
-include!{"../../library/rmc/stubs/Rust/vec/rmc_vec.rs"}
+include! {"../../library/rmc/stubs/Rust/vec/rmc_vec.rs"}
 
 #[cfg(use_abs)]
 #[cfg(abs_type = "no-back")]
-include!{"../../library/rmc/stubs/Rust/vec/noback_vec.rs"}
+include! {"../../library/rmc/stubs/Rust/vec/noback_vec.rs"}
 
 #[cfg(use_abs)]
 #[cfg(abs_type = "c-ffi")]
-include!{"../../library/rmc/stubs/Rust/vec/c_vec.rs"}
- 
+include! {"../../library/rmc/stubs/Rust/vec/c_vec.rs"}
+
 #[cfg(use_abs)]
-#[cfg(abs_type = "rmc")]
-include!{"../../library/rmc/stubs/Rust/hashset/c_hashset.rs"}
+#[cfg(abs_type = "c-ffi")]
+include! {"../../library/rmc/stubs/Rust/hashset/c_hashset.rs"}
 
 fn __VERIFIER_assume(cond: bool) {
     unimplemented!()

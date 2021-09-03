@@ -5,88 +5,99 @@
 #include <assert.h>
 #include <stdlib.h>
 
-////////////////////////////////////////////////////////////////////////
-// HashSet stub implementation
+// This HashSet stub implementation is supposed to work with c_hashset.rs.
+// Please refer to that file for an introduction to the idea of a HashSet and
+// some other implemenntation details. Public methods defined in c_hashset.rs
+// act as wrappers around methods implemented here.
+
+// As noted before, this HashSet implementation is specifically for inputs which
+// are u16. The details below can be extended to larger sets if necessary. The 
+// domain of the output is i16.
 //
-// PoC code which implements a HashSet stub for HashSet<u32>
-// Functions in this module are exported as FFI to work with c_vec.rs which 
-// acts like the Rust frontend.
-////////////////////////////////////////////////////////////////////////
-
-// It should have been possible to implement the stub using uninterpreted 
-// functions. But we run into issues when the consumer of this API needs to 
-// dynamically initialize HashSets. This would involve a verification problem
-// with an unknown number of uninterpreted functions which is not valid.
+// The hash function that we choose is the identity function.
+// For all input x, hasher(x) = x. For our case, this satisfies all the
+// requirements of an ideal hash function - it is 1:1, and the range is a subset
+// of the chosen output domain - which allows us access to SENTINEL values.
 //
-// For the sake of documentation, below is a possible way to implement this
-// idea.
+// An important thing to note here is that the hash function can be
+// appropriately modified depending on the type of the input value which is
+// stored in the hashset. As an example, if the HashSet needs to store a tuple
+// of integers, say <u32, u32>, the hash function can be modified to be:
+//
+// hash((x, y)) = prime * x + y;
+//
+// Although this value can be greater than the chosen output domain, the
+// function is still sound if the value wraps around because it guarantees a
+// unique output for a given pair of x and y.
+//
+// Another way to think about this problem could be through the lens of
+// uninterpreted functions where : if x == y => f(x) == f(y). Exploring this can
+// be future work. The idea would be to implement a HashSet similar to that seen
+// in functional programming languages.
+//
+// For the purpose of a HashSet, we dont necessarily need a SENTINEL outside the
+// range of the hashing function because of the way we design the HashSet
+// operations.
+const int16_t SENTINEL = 1;
 
-// uint32_t __CPROVER_uninterpreted_f(uint32_t);
-// 
-// struct set {
-// 	int counter;
-// };
-// 
-// struct set g_s = { 0 };
-// 
-// uint32_t ffi_insert(uint32_t value) {
-// 	__CPROVER_assume(__CPROVER_uninterpreted_f(g_s.counter) == value);
-// 	g_s.counter += 1;
-// 
-// 	return 1;
-// }
-// 
-// uint32_t ffi_contains(uint32_t value) {
-// 	__CPROVER_bool condition = 0;
-// 	for (int i = 0; i < g_s.counter; i++) {
-// 		condition = condition || (__CPROVER_uninterpreted_f(i) == value);
-// 	}
-// 
-// 	return condition;
-// }
-
-// The SENTINEL value is chosen to be outside the range of the hash function
-// For this HashSet, the domain is uint32_t and the range is uint32_t. The 
-// SENTINEL value is -1 which is in the range int32_t.
-const SENTINEL = -1;
-
-// This function needs to be reimplemented depending on the value being 
-// stored in the hashset.
-uint32_t hasher(uint32_t value) {
+uint16_t hasher(uint16_t value) {
 	return value;
 }
 
-// Here the domain is in the range of uint32_t but we store the hash value range
-// as part of a larger domain.
+// We initialize all values of the domain to be 0 by initializing it with
+// calloc. This lets us get around the problem of looping through all elements
+// to initialize them individually with a special value.
+//
+// The domain array is to be interpreted such that 
+// if domain[index] != 0, value such that hash(value) = index is present.
+//
+// However, this logic does not work for the value 0. For this, we choose the
+// SENTINEL value to initialize that element. 
 typedef struct {
-	int32_t* domain;
-	uint32_t counter;
+	int16_t* domain;
 } hashset;
 
+// Ideally, this approach is much more suitable if we can work with arrays of
+// arbitrary size, specifically infinity. This would allow us to define hash
+// functions for any type because the output domain can be considered to be
+// infinite. However, CBMC currently does not handle unbounded arrays correctly.
+// Please see: https://github.com/diffblue/cbmc/issues/6261. Even in that case,
+// we might run into theoretical limitations of how solvers handle uninterpreted
+// symbols such as unbounded arrays. For the case of this API, the consumer can
+// request for an arbitrary number of HashSets which can be dynamically chosen.
+// As a result, the solver cannot know apriori how many unbounded arrays it
+// needs to initialize which might lead to errors.
+//
+// Firecracker uses HashSet<u32> (src/devices/src/virtio/vsock/unix/muxer.rs).
+// But for working with u32s, we run into the problem that the entire domain
+// cannot be allocated through malloc. We run into the error "array too large
+// for flattening". For that reason, we choose to work with u16 to demonstrate
+// the feasability of this approach. However, it should be extensible to other
+// integer types.
 hashset* hashset_new() {
 	hashset* set = (hashset *) malloc(sizeof(hashset));
-	
-	// Ideally, we should be able to work with arrays of arbitrary size but
-	// 1. CBMC does not currently handle unbounded arrays correctly.
-	//	  Issue: https://github.com/diffblue/cbmc/issues/6261
-	//
-	// 2. With UINT32_MAX we get error "array too large for flattening"
-	//
-	// Currently working with 4096 as the size. 
-	// NOTE: This is unsound.
-	//
-	// set->domain = calloc(UINT32_MAX, sizeof(int32_t));
-	set->domain = calloc(4096, sizeof(int32_t));
-
+	// Initializes value all indexes to be 0, indicating that those elements are
+	// not present in the HashSet.
+	set->domain = calloc(UINT16_MAX, sizeof(uint16_t));
+	// For 0, choose another value to achieve the same.
 	set->domain[0] = SENTINEL;
-
 	return set;
 }
 
-uint32_t hashset_insert(hashset* s, uint32_t value) {
-	uint32_t hash = hasher(value);
+// For insert, we need to first check if the value exists in the HashSet. If it
+// does, we immediately return a 0 (false) value back.
+//
+// If it doesnt, then we mark that element of the domain array with the value to 
+// indicate that this element has been inserted. For element 0, we mark it with
+// the SENTINEL.
+//
+// To check if a value exists, we simply check if domain[hash] != 0 and
+// in the case of 0 if domain[0] != SENTINEL.
+uint32_t hashset_insert(hashset* s, uint16_t value) {
+	uint16_t hash = hasher(value);
 
-	if ((hash == 0 && s->domain[hash] != SENTINEL) || s->domain[hash] != 0) {
+	if ((hash == 0 && s->domain[hash] != SENTINEL) || 
+		(hash !=0 && s->domain[hash] != 0)) {
 		return 0;
 	}
 
@@ -94,20 +105,27 @@ uint32_t hashset_insert(hashset* s, uint32_t value) {
 	return 1;
 }
 
-uint32_t hashset_contains(hashset* s, uint32_t value) {
-	uint32_t hash = hasher(value);
+// We perform a similar check here as described in hashset_insert(). We do not
+// duplicate code so as to not compute the hash twice. This can be improved.
+uint32_t hashset_contains(hashset* s, uint16_t value) {
+	uint16_t hash = hasher(value);
 
-	if ((hash == 0 && s->domain[hash] != SENTINEL) || s->domain[hash] != 0) {
+	if ((hash == 0 && s->domain[hash] != SENTINEL) || 
+		(hash != 0 && s->domain[hash] != 0)) {
 		return 1;
 	}
 
 	return 0;
 }
 
-uint32_t hashset_remove(hashset* s, uint32_t value) {
-	uint32_t hash = hasher(value);
+// We check if the element exists in the array. If it does not, we return a 0
+// (false) value back. If it does, we mark it with 0 and in the case of 0, we
+// mark it with the SENTINEL and return 1.
+uint32_t hashset_remove(hashset* s, uint16_t value) {
+	uint16_t hash = hasher(value);
 
-	if ((hash == 0 && s->domain[hash] == SENTINEL) || s->domain[hash] == 0) {
+	if ((hash == 0 && s->domain[hash] == SENTINEL) || 
+		(hash !=0 && s->domain[hash] == 0)) {
 		return 0;
 	}
 
