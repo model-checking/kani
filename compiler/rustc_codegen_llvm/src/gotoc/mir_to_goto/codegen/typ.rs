@@ -74,13 +74,6 @@ impl Expr {
     }
 }
 
-struct StructField<'tcx> {
-    idx: u32,
-    offset: u64,
-    name: String,
-    ty: Ty<'tcx>,
-}
-
 /// Function signatures
 impl<'tcx> GotocCtx<'tcx> {
     /// Closures expect their last arg untupled at call site, see comment at
@@ -604,35 +597,23 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
             FieldsShape::Arbitrary { offsets, memory_index } => {
-                let mut fields: Vec<_> = memory_index
-                    .iter()
-                    .zip(flds)
-                    .zip(offsets)
-                    .map(|((idx, (n, t)), ofs)| StructField {
-                        idx: *idx,
-                        offset: ofs.bits(),
-                        name: n,
-                        ty: t,
-                    })
-                    .collect();
-                // first we determine the order of the fields
-                fields.sort_by(|a, b| a.idx.cmp(&b.idx));
-                // then we organize all the fields
-                let mut final_fields = Vec::with_capacity(fields.len());
+                assert_eq!(flds.len(), offsets.len());
+                assert_eq!(offsets.len(), memory_index.len());
+                let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset: u64 = initial_offset.try_into().unwrap();
-                while !fields.is_empty() {
-                    let fld = fields.remove(0);
-                    // We insert padding, if necessary
+                for idx in layout.fields.index_by_increasing_offset() {
+                    let fld_offset = offsets[idx].bits();
+                    let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
-                        self.codegen_struct_padding(offset, fld.offset, final_fields.len())
+                        self.codegen_struct_padding(offset, fld_offset, final_fields.len())
                     {
                         final_fields.push(padding)
                     }
                     // we insert the actual field
-                    final_fields.push(Type::datatype_component(&fld.name, self.codegen_ty(fld.ty)));
-                    let layout = self.layout_of(fld.ty);
+                    final_fields.push(Type::datatype_component(fld_name, self.codegen_ty(fld_ty)));
+                    let layout = self.layout_of(fld_ty);
                     // we compute the overall offset of the end of the current struct
-                    offset = fld.offset + layout.size.bits();
+                    offset = fld_offset + layout.size.bits();
                 }
 
                 // If we don't meet our expected alignment, pad until we do
