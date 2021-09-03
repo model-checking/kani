@@ -46,3 +46,16 @@ jobs:
 
       - name: Execute RMC regression
         run: ./scripts/rmc-regression.sh
+
+      # On one OS only, build the documentation, too.
+      - name: Build Documentation
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
+        run: ./rmc-docs/build-docs.sh
+
+      # When we're pushed to main branch, only then actually publish the docs.
+      - name: Publish Documentation
+        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
+        uses: JamesIves/github-pages-deploy-action@4.1.4
+        with:
+          branch: gh-pages
+          folder: rmc-docs/book/
