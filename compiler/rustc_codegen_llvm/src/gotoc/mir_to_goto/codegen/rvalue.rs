@@ -734,13 +734,40 @@ impl<'tcx> GotocCtx<'tcx> {
                 .cast_to(trait_fn_ty)
         } else {
             // We skip an entire submodule of the standard library, so drop is missing
-            // for it.
-            self.codegen_unimplemented(
-                format!("drop_in_place for {}", drop_sym_name).as_str(),
-                trait_fn_ty,
+            // for it. Build and insert a function that just calls an unimplemented block
+            // to maintain soundness.
+            let drop_sym_name = format!("{}_unimplemented", self.symbol_name(drop_instance));
+
+            // Function body
+            let unimplemented = self
+                .codegen_unimplemented(
+                    format!("drop_in_place for {}", drop_sym_name).as_str(),
+                    Type::empty(),
+                    Location::none(),
+                    "https://github.com/model-checking/rmc/issues/281",
+                )
+                .as_stmt(Location::none());
+
+            // Declare symbol for the single, self parameter
+            let param_name = format!("{}::1::var{:?}", drop_sym_name, 0);
+            let param_sym = Symbol::variable(
+                param_name.clone(),
+                param_name,
+                self.codegen_ty(trait_ty).to_pointer(),
                 Location::none(),
-                "https://github.com/model-checking/rmc/issues/281",
-            )
+            );
+            self.symbol_table.insert(param_sym.clone());
+
+            // Build and insert the function itself
+            let sym = Symbol::function(
+                &drop_sym_name,
+                Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
+                Some(Stmt::block(vec![unimplemented], Location::none())),
+                None,
+                Location::none(),
+            );
+            self.symbol_table.insert(sym.clone());
+            Expr::symbol_expression(drop_sym_name, sym.typ).address_of().cast_to(trait_fn_ty)
         }
     }
 
