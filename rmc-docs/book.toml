@@ -1,0 +1,15 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[book]
+title = "The Rust Model Checker"
+description = "Documentation for the Rust Model Checker (RMC)"
+authors = ["RMC Developers"]
+src = "src"
+language = "en"
+multilingual = false
+
+[output.html]
+site-url = "/rmc/"
+git-repository-url = "https://github.com/model-checking/rmc"
+# If we get a stable default branch, we can use this feature, but HEAD doesn't work
+#edit-url-template = "https://github.com/model-checking/rmc/edit/HEAD/rmc-docs/{path}"
