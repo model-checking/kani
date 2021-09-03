@@ -1014,7 +1014,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     // get the offset of the leftmost field, which is the one
                     // with the least offset since we codegen fields in a struct
-                    // in the order of increasing offsets
+                    // in the order of increasing offsets. Note that this is not
+                    // necessarily the 0th field since the compiler may reorder
+                    // fields.
                     Some(
                         lo.fields
                             .offset(lo.fields.index_by_increasing_offset().nth(0).unwrap())
