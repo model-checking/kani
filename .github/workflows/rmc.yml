@@ -9,6 +9,8 @@ jobs:
     strategy:
       matrix:
         os: [macos-10.15, ubuntu-18.04, ubuntu-20.04]
+    permissions:
+      contents: write
     steps:
       - name: Checkout RMC
         uses: actions/checkout@v2
@@ -56,8 +58,6 @@ jobs:
       - name: Publish Documentation
         if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
         uses: JamesIves/github-pages-deploy-action@4.1.4
-        permissions:
-          contents: write
         with:
           branch: gh-pages
           folder: rmc-docs/book/
