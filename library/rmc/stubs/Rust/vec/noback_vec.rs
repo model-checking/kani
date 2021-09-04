@@ -92,7 +92,12 @@ impl<T> Vec<T> {
     // otherwise we return a nondeterministic value since we dont track any concrete
     // values in the Vector.
     pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 { None } else { Some(__nondet::<T>()) }
+        if self.len == 0 {
+            None
+        } else {
+            self.len -= 1;
+            Some(__nondet::<T>())
+        }
     }
 
     pub fn append(&mut self, other: &mut Vec<T>) {
