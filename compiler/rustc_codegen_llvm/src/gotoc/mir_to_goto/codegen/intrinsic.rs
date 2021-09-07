@@ -6,10 +6,10 @@ use tracing::{debug, warn};
 use crate::gotoc::cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::Place;
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Instance;
 use rustc_middle::ty::{self, Ty, TyS};
 use rustc_span::Span;
-use rustc_target::abi::LayoutOf;
 
 struct SizeAlign {
     size: Expr,

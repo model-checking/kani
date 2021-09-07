@@ -6,10 +6,11 @@ use crate::gotoc::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_middle::mir::interpret::{ConstValue, Scalar};
 use rustc_middle::ty;
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::ScalarInt;
 use rustc_middle::ty::Ty;
 use rustc_middle::ty::{IntTy, UintTy};
-use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 
 fn fold_invariants_gen<F: Fn(Expr, Expr) -> Expr>(mut iv: Vec<Expr>, dfl: Expr, comb: F) -> Expr {
     let mut res: Option<Expr> = None;

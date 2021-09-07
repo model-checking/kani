@@ -16,10 +16,10 @@ use crate::gotoc::mir_to_goto::utils::{
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, InstanceDef, Ty, TyCtxt};
 use rustc_span::Span;
-use rustc_target::abi::LayoutOf;
 use std::rc::Rc;
 
 pub trait GotocTypeHook<'tcx> {
