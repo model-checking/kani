@@ -9,11 +9,12 @@ use crate::gotoc::cbmc::goto_program::{Expr, Type};
 use crate::gotoc::mir_to_goto::utils::slice_fat_ptr;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_hir::Mutability;
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
     ty::{self, Ty, TyS, TypeAndMut, VariantDef},
 };
-use rustc_target::abi::{LayoutOf, TagEncoding, Variants};
+use rustc_target::abi::{TagEncoding, Variants};
 use tracing::{debug, warn};
 
 /// A projection in RMC can either be to a type (the normal case),

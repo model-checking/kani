@@ -28,11 +28,13 @@ use rustc_data_structures::stable_map::FxHashMap;
 use rustc_data_structures::sync::MetadataRef;
 use rustc_middle::middle::cstore::MetadataLoader;
 use rustc_middle::mir::interpret::Allocation;
-use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, TyAndLayout};
+use rustc_middle::span_bug;
+use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers, TyAndLayout};
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
 use rustc_session::Session;
+use rustc_span::source_map::Span;
 use rustc_target::abi::Endian;
-use rustc_target::abi::{HasDataLayout, LayoutOf, TargetDataLayout};
+use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
 
@@ -228,12 +230,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-impl LayoutOf<'tcx> for GotocCtx<'tcx> {
-    type Ty = Ty<'tcx>;
-    type TyAndLayout = TyAndLayout<'tcx>;
+impl LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
+    type LayoutOfResult = TyAndLayout<'tcx>;
 
-    fn layout_of(&self, ty: Self::Ty) -> Self::TyAndLayout {
-        self.tcx.layout_of(ty::ParamEnv::reveal_all().and(ty)).unwrap()
+    #[inline]
+    fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: Ty<'tcx>) -> ! {
+        span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
     }
 }
 

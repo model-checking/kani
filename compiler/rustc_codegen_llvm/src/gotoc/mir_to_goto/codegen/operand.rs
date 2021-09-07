@@ -8,12 +8,13 @@ use rustc_middle::mir::interpret::{
     read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,
 };
 use rustc_middle::mir::{Constant, ConstantKind, Operand};
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{
     self, Const, ConstKind, FloatTy, Instance, IntTy, ScalarInt, Ty, Uint, UintTy,
 };
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, LayoutOf, Size, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
 use tracing::debug;
 
 enum AllocData<'a> {
