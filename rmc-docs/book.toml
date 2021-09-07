@@ -11,5 +11,4 @@ multilingual = false
 [output.html]
 site-url = "/rmc/"
 git-repository-url = "https://github.com/model-checking/rmc"
-# If we get a stable default branch, we can use this feature, but HEAD doesn't work
-#edit-url-template = "https://github.com/model-checking/rmc/edit/HEAD/rmc-docs/{path}"
+edit-url-template = "https://github.com/model-checking/rmc/edit/main/rmc-docs/{path}"
