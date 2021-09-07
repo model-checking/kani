@@ -197,6 +197,7 @@ pub const SOCK_DGRAM: c_int = 2;
 pub const SOCK_STREAM: c_int = 1;
 pub const SOCKET_ERROR: c_int = -1;
 pub const SOL_SOCKET: c_int = 0xffff;
+pub const SO_LINGER: c_int = 0x0080;
 pub const SO_RCVTIMEO: c_int = 0x1006;
 pub const SO_SNDTIMEO: c_int = 0x1005;
 pub const IPPROTO_IP: c_int = 0;
@@ -215,6 +216,13 @@ pub const IP_DROP_MEMBERSHIP: c_int = 13;
 pub const IPV6_ADD_MEMBERSHIP: c_int = 12;
 pub const IPV6_DROP_MEMBERSHIP: c_int = 13;
 pub const MSG_PEEK: c_int = 0x2;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct linger {
+    pub l_onoff: c_ushort,
+    pub l_linger: c_ushort,
+}
 
 #[repr(C)]
 pub struct ip_mreq {
@@ -781,7 +789,7 @@ extern "system" {
     pub fn RemoveDirectoryW(lpPathName: LPCWSTR) -> BOOL;
     pub fn SetFileAttributesW(lpFileName: LPCWSTR, dwFileAttributes: DWORD) -> BOOL;
     pub fn SetLastError(dwErrCode: DWORD);
-    pub fn GetCommandLineW() -> *mut LPCWSTR;
+    pub fn GetCommandLineW() -> LPWSTR;
     pub fn GetTempPathW(nBufferLength: DWORD, lpBuffer: LPCWSTR) -> DWORD;
     pub fn GetCurrentProcess() -> HANDLE;
     pub fn GetCurrentThread() -> HANDLE;

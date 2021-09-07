@@ -1,6 +1,7 @@
 // This is pretty much entirely stolen from TreeSet, since BTreeMap has an identical interface
 // to TreeMap
 
+use crate::vec::Vec;
 use core::borrow::Borrow;
 use core::cmp::Ordering::{Equal, Greater, Less};
 use core::cmp::{max, min};
@@ -246,10 +247,7 @@ impl<T> BTreeSet<T> {
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_unstable(feature = "const_btree_new", issue = "71835")]
-    pub const fn new() -> BTreeSet<T>
-    where
-        T: Ord,
-    {
+    pub const fn new() -> BTreeSet<T> {
         BTreeSet { map: BTreeMap::new() }
     }
 
@@ -1059,9 +1057,17 @@ impl<T> BTreeSet<T> {
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<T: Ord> FromIterator<T> for BTreeSet<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> BTreeSet<T> {
-        let mut set = BTreeSet::new();
-        set.extend(iter);
-        set
+        let mut inputs: Vec<_> = iter.into_iter().collect();
+
+        if inputs.is_empty() {
+            return BTreeSet::new();
+        }
+
+        // use stable sort to preserve the insertion order.
+        inputs.sort();
+        let iter = inputs.into_iter().map(|k| (k, ()));
+        let map = BTreeMap::bulk_build_from_sorted_iter(iter);
+        BTreeSet { map }
     }
 }
 
@@ -1074,8 +1080,16 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
     /// let set2: BTreeSet<_> = [1, 2, 3, 4].into();
     /// assert_eq!(set1, set2);
     /// ```
-    fn from(arr: [T; N]) -> Self {
-        core::array::IntoIter::new(arr).collect()
+    fn from(mut arr: [T; N]) -> Self {
+        if N == 0 {
+            return BTreeSet::new();
+        }
+
+        // use stable sort to preserve the insertion order.
+        arr.sort();
+        let iter = core::array::IntoIter::new(arr).map(|k| (k, ()));
+        let map = BTreeMap::bulk_build_from_sorted_iter(iter);
+        BTreeSet { map }
     }
 }
 
@@ -1192,7 +1206,7 @@ impl<'a, T: 'a + Ord + Copy> Extend<&'a T> for BTreeSet<T> {
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
-impl<T: Ord> Default for BTreeSet<T> {
+impl<T> Default for BTreeSet<T> {
     /// Creates an empty `BTreeSet`.
     fn default() -> BTreeSet<T> {
         BTreeSet::new()

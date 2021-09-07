@@ -660,7 +660,7 @@ macro_rules! uint_impl {
         #[track_caller]
         #[rustc_inherit_overflow_checks]
         #[allow(arithmetic_overflow)]
-        pub const fn log(self, base: Self) -> Self {
+        pub const fn log(self, base: Self) -> u32 {
             match self.checked_log(base) {
                 Some(n) => n,
                 None => {
@@ -694,7 +694,7 @@ macro_rules! uint_impl {
         #[track_caller]
         #[rustc_inherit_overflow_checks]
         #[allow(arithmetic_overflow)]
-        pub const fn log2(self) -> Self {
+        pub const fn log2(self) -> u32 {
             match self.checked_log2() {
                 Some(n) => n,
                 None => {
@@ -728,7 +728,7 @@ macro_rules! uint_impl {
         #[track_caller]
         #[rustc_inherit_overflow_checks]
         #[allow(arithmetic_overflow)]
-        pub const fn log10(self) -> Self {
+        pub const fn log10(self) -> u32 {
             match self.checked_log10() {
                 Some(n) => n,
                 None => {
@@ -759,7 +759,7 @@ macro_rules! uint_impl {
         #[must_use = "this returns the result of the operation, \
                         without modifying the original"]
         #[inline]
-        pub const fn checked_log(self, base: Self) -> Option<Self> {
+        pub const fn checked_log(self, base: Self) -> Option<u32> {
             if self <= 0 || base <= 1 {
                 None
             } else {
@@ -795,12 +795,12 @@ macro_rules! uint_impl {
         #[must_use = "this returns the result of the operation, \
                         without modifying the original"]
         #[inline]
-        pub const fn checked_log2(self) -> Option<Self> {
+        pub const fn checked_log2(self) -> Option<u32> {
             if self <= 0 {
                 None
             } else {
                 // SAFETY: We just checked that this number is positive
-                let log = (Self::BITS - 1) as Self - unsafe { intrinsics::ctlz_nonzero(self) };
+                let log = (Self::BITS - 1) - unsafe { intrinsics::ctlz_nonzero(self) as u32 };
                 Some(log)
             }
         }
@@ -819,11 +819,8 @@ macro_rules! uint_impl {
         #[must_use = "this returns the result of the operation, \
                         without modifying the original"]
         #[inline]
-        pub const fn checked_log10(self) -> Option<Self> {
-            match int_log10::$ActualT(self as $ActualT) {
-                Some(s) => Some(s as Self),
-                None => None,
-            }
+        pub const fn checked_log10(self) -> Option<u32> {
+            int_log10::$ActualT(self as $ActualT)
         }
 
         /// Checked negation. Computes `-self`, returning `None` unless `self ==
@@ -1408,6 +1405,36 @@ macro_rules! uint_impl {
             (a as Self, b)
         }
 
+        /// Calculates `self + rhs + carry` without the ability to overflow.
+        ///
+        /// Performs "ternary addition" which takes in an extra bit to add, and may return an
+        /// additional bit of overflow. This allows for chaining together multiple additions
+        /// to create "big integers" which represent larger values.
+        ///
+        /// # Examples
+        ///
+        /// Basic usage
+        ///
+        /// ```
+        /// #![feature(bigint_helper_methods)]
+        #[doc = concat!("assert_eq!(5", stringify!($SelfT), ".carrying_add(2, false), (7, false));")]
+        #[doc = concat!("assert_eq!(5", stringify!($SelfT), ".carrying_add(2, true), (8, false));")]
+        #[doc = concat!("assert_eq!(", stringify!($SelfT), "::MAX.carrying_add(1, false), (0, true));")]
+        #[doc = concat!("assert_eq!(", stringify!($SelfT), "::MAX.carrying_add(1, true), (1, true));")]
+        /// ```
+        #[unstable(feature = "bigint_helper_methods", issue = "85532")]
+        #[rustc_const_unstable(feature = "const_bigint_helper_methods", issue = "85532")]
+        #[must_use = "this returns the result of the operation, \
+                      without modifying the original"]
+        #[inline]
+        pub const fn carrying_add(self, rhs: Self, carry: bool) -> (Self, bool) {
+            // note: longer-term this should be done via an intrinsic, but this has been shown
+            //   to generate optimal code for now, and LLVM doesn't have an equivalent intrinsic
+            let (a, b) = self.overflowing_add(rhs);
+            let (c, d) = a.overflowing_add(carry as $SelfT);
+            (c, b | d)
+        }
+
         /// Calculates `self` - `rhs`
         ///
         /// Returns a tuple of the subtraction along with a boolean indicating
@@ -1431,6 +1458,36 @@ macro_rules! uint_impl {
         pub const fn overflowing_sub(self, rhs: Self) -> (Self, bool) {
             let (a, b) = intrinsics::sub_with_overflow(self as $ActualT, rhs as $ActualT);
             (a as Self, b)
+        }
+
+        /// Calculates `self - rhs - borrow` without the ability to overflow.
+        ///
+        /// Performs "ternary subtraction" which takes in an extra bit to subtract, and may return
+        /// an additional bit of overflow. This allows for chaining together multiple subtractions
+        /// to create "big integers" which represent larger values.
+        ///
+        /// # Examples
+        ///
+        /// Basic usage
+        ///
+        /// ```
+        /// #![feature(bigint_helper_methods)]
+        #[doc = concat!("assert_eq!(5", stringify!($SelfT), ".borrowing_sub(2, false), (3, false));")]
+        #[doc = concat!("assert_eq!(5", stringify!($SelfT), ".borrowing_sub(2, true), (2, false));")]
+        #[doc = concat!("assert_eq!(0", stringify!($SelfT), ".borrowing_sub(1, false), (", stringify!($SelfT), "::MAX, true));")]
+        #[doc = concat!("assert_eq!(0", stringify!($SelfT), ".borrowing_sub(1, true), (", stringify!($SelfT), "::MAX - 1, true));")]
+        /// ```
+        #[unstable(feature = "bigint_helper_methods", issue = "85532")]
+        #[rustc_const_unstable(feature = "const_bigint_helper_methods", issue = "85532")]
+        #[must_use = "this returns the result of the operation, \
+                      without modifying the original"]
+        #[inline]
+        pub const fn borrowing_sub(self, rhs: Self, borrow: bool) -> (Self, bool) {
+            // note: longer-term this should be done via an intrinsic, but this has been shown
+            //   to generate optimal code for now, and LLVM doesn't have an equivalent intrinsic
+            let (a, b) = self.overflowing_sub(rhs);
+            let (c, d) = a.overflowing_sub(borrow as $SelfT);
+            (c, b | d)
         }
 
         /// Calculates the multiplication of `self` and `rhs`.
@@ -1786,6 +1843,110 @@ macro_rules! uint_impl {
         #[rustc_inherit_overflow_checks]
         pub const fn rem_euclid(self, rhs: Self) -> Self {
             self % rhs
+        }
+
+        /// Calculates the quotient of `self` and `rhs`, rounding the result towards negative infinity.
+        ///
+        /// This is the same as performing `self / rhs` for all unsigned integers.
+        ///
+        /// # Panics
+        ///
+        /// This function will panic if `rhs` is 0.
+        ///
+        /// # Examples
+        ///
+        /// Basic usage:
+        ///
+        /// ```
+        /// #![feature(int_roundings)]
+        #[doc = concat!("assert_eq!(7_", stringify!($SelfT), ".div_floor(4), 1);")]
+        /// ```
+        #[unstable(feature = "int_roundings", issue = "88581")]
+        #[inline(always)]
+        #[rustc_inherit_overflow_checks]
+        pub const fn div_floor(self, rhs: Self) -> Self {
+            self / rhs
+        }
+
+        /// Calculates the quotient of `self` and `rhs`, rounding the result towards positive infinity.
+        ///
+        /// # Panics
+        ///
+        /// This function will panic if `rhs` is 0.
+        ///
+        /// # Examples
+        ///
+        /// Basic usage:
+        ///
+        /// ```
+        /// #![feature(int_roundings)]
+        #[doc = concat!("assert_eq!(7_", stringify!($SelfT), ".div_ceil(4), 2);")]
+        /// ```
+        #[unstable(feature = "int_roundings", issue = "88581")]
+        #[inline]
+        #[rustc_inherit_overflow_checks]
+        pub const fn div_ceil(self, rhs: Self) -> Self {
+            let d = self / rhs;
+            let r = self % rhs;
+            if r > 0 && rhs > 0 {
+                d + 1
+            } else {
+                d
+            }
+        }
+
+        /// Calculates the smallest value greater than or equal to `self` that
+        /// is a multiple of `rhs`.
+        ///
+        /// # Panics
+        ///
+        /// This function will panic if `rhs` is 0 or the operation results in overflow.
+        ///
+        /// # Examples
+        ///
+        /// Basic usage:
+        ///
+        /// ```
+        /// #![feature(int_roundings)]
+        #[doc = concat!("assert_eq!(16_", stringify!($SelfT), ".next_multiple_of(8), 16);")]
+        #[doc = concat!("assert_eq!(23_", stringify!($SelfT), ".next_multiple_of(8), 24);")]
+        /// ```
+        #[unstable(feature = "int_roundings", issue = "88581")]
+        #[must_use = "this returns the result of the operation, \
+                      without modifying the original"]
+        #[inline]
+        #[rustc_inherit_overflow_checks]
+        pub const fn next_multiple_of(self, rhs: Self) -> Self {
+            match self % rhs {
+                0 => self,
+                r => self + (rhs - r)
+            }
+        }
+
+        /// Calculates the smallest value greater than or equal to `self` that
+        /// is a multiple of `rhs`. If `rhs` is negative,
+        ///
+        /// # Examples
+        ///
+        /// Basic usage:
+        ///
+        /// ```
+        /// #![feature(int_roundings)]
+        #[doc = concat!("assert_eq!(16_", stringify!($SelfT), ".checked_next_multiple_of(8), Some(16));")]
+        #[doc = concat!("assert_eq!(23_", stringify!($SelfT), ".checked_next_multiple_of(8), Some(24));")]
+        #[doc = concat!("assert_eq!(1_", stringify!($SelfT), ".checked_next_multiple_of(0), None);")]
+        #[doc = concat!("assert_eq!(", stringify!($SelfT), "::MAX.checked_next_multiple_of(2), None);")]
+        /// ```
+        #[unstable(feature = "int_roundings", issue = "88581")]
+        #[must_use = "this returns the result of the operation, \
+                      without modifying the original"]
+        #[inline]
+        #[rustc_inherit_overflow_checks]
+        pub const fn checked_next_multiple_of(self, rhs: Self) -> Option<Self> {
+            match try_opt!(self.checked_rem(rhs)) {
+                0 => Some(self),
+                r => self.checked_add(try_opt!(rhs.checked_sub(r)))
+            }
         }
 
         /// Returns `true` if and only if `self == 2^k` for some `k`.
