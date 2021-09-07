@@ -116,7 +116,6 @@ crate fn run(options: Options) -> Result<(), ErrorReported> {
             let mut global_ctxt = queries.global_ctxt()?.take();
 
             let collector = global_ctxt.enter(|tcx| {
-                let krate = tcx.hir().krate();
                 let crate_attrs = tcx.hir().attrs(CRATE_HIR_ID);
 
                 let mut opts = scrape_test_config(crate_attrs);
@@ -144,10 +143,8 @@ crate fn run(options: Options) -> Result<(), ErrorReported> {
                 hir_collector.visit_testable(
                     "".to_string(),
                     CRATE_HIR_ID,
-                    krate.module().inner,
-                    |this| {
-                        intravisit::walk_crate(this, krate);
-                    },
+                    tcx.hir().span(CRATE_HIR_ID),
+                    |this| tcx.hir().walk_toplevel_module(this),
                 );
 
                 collector
@@ -361,7 +358,7 @@ fn run_test(
     for debugging_option_str in &options.debugging_opts_strs {
         compiler.arg("-Z").arg(&debugging_option_str);
     }
-    if no_run && !compile_fail {
+    if no_run && !compile_fail && options.persist_doctests.is_none() {
         compiler.arg("--emit=metadata");
     }
     compiler.arg("--target").arg(match target {

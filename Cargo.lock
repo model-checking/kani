@@ -231,6 +231,18 @@ name = "build_helper"
 version = "0.1.0"
 
 [[package]]
+name = "bump-stage0"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "curl",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "byte-tools"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,7 +568,7 @@ version = "0.1.56"
 dependencies = [
  "cargo_metadata 0.12.0",
  "clippy_lints",
- "compiletest_rs",
+ "compiletest_rs 0.6.0",
  "derive-new",
  "filetime",
  "quote",
@@ -691,6 +703,29 @@ name = "compiletest_rs"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0086d6ad78cf409c3061618cd98e2789d5c9ce598fc9651611cf62eae0a599cb"
+dependencies = [
+ "diff",
+ "filetime",
+ "getopts",
+ "lazy_static",
+ "libc",
+ "log",
+ "miow",
+ "regex",
+ "rustfix 0.5.1",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tempfile",
+ "tester",
+ "winapi",
+]
+
+[[package]]
+name = "compiletest_rs"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64698e5e2435db061a85e6320af12c30c5fd88eb84b35d2c1e03ce4f143255ca"
 dependencies = [
  "diff",
  "filetime",
@@ -1683,6 +1718,7 @@ checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]
@@ -2257,7 +2293,7 @@ name = "miri"
 version = "0.1.0"
 dependencies = [
  "colored",
- "compiletest_rs",
+ "compiletest_rs 0.7.0",
  "env_logger 0.8.1",
  "getrandom 0.2.0",
  "hex 0.4.2",
@@ -2374,9 +2410,9 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee2766204889d09937d00bfbb7fec56bb2a199e2ade963cab19185d8a6104c7c"
+checksum = "39f37e50073ccad23b6d09bcb5b263f4e76d3bb6038e4a3c08e52162ffa8abc2"
 dependencies = [
  "compiler_builtins",
  "crc32fast",
@@ -3633,6 +3669,7 @@ dependencies = [
  "rustc_parse",
  "rustc_session",
  "rustc_span",
+ "rustc_target",
  "tracing",
 ]
 

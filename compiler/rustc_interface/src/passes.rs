@@ -324,7 +324,7 @@ pub fn configure_and_expand(
         };
 
         let extern_mod_loaded = |ident: Ident, attrs, items, span| {
-            let krate = ast::Crate { attrs, items, span, proc_macros: vec![] };
+            let krate = ast::Crate { attrs, items, span };
             pre_expansion_lint(sess, lint_store, &krate, &ident.name.as_str());
             (krate.attrs, krate.items)
         };
@@ -463,10 +463,6 @@ pub fn lower_to_hir<'res, 'tcx>(
         rustc_parse::nt_to_tokenstream,
         arena,
     );
-
-    if sess.opts.debugging_opts.hir_stats {
-        hir_stats::print_hir_stats(&hir_crate);
-    }
 
     sess.time("early_lint_checks", || {
         rustc_lint::check_ast_crate(

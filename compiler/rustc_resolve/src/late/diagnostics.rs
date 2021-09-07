@@ -207,6 +207,16 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
         let code = source.error_code(res.is_some());
         let mut err = self.r.session.struct_span_err_with_code(base_span, &base_msg, code);
 
+        if let Some(span) = self.diagnostic_metadata.current_block_could_be_bare_struct_literal {
+            err.multipart_suggestion(
+                "you might have meant to write a `struct` literal",
+                vec![
+                    (span.shrink_to_lo(), "{ SomeStruct ".to_string()),
+                    (span.shrink_to_hi(), "}".to_string()),
+                ],
+                Applicability::HasPlaceholders,
+            );
+        }
         match (source, self.diagnostic_metadata.in_if_condition) {
             (PathSource::Expr(_), Some(Expr { span, kind: ExprKind::Assign(..), .. })) => {
                 err.span_suggestion_verbose(
@@ -2090,7 +2100,7 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
                                 self.is_unnamed(),
                                 self.is_underscore(),
                                 self.is_named(),
-                                sugg.starts_with("&"),
+                                sugg.starts_with('&'),
                             ) {
                                 (true, _, _, false) => (self.span_unnamed_borrow(), sugg),
                                 (true, _, _, true) => {

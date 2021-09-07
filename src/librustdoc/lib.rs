@@ -4,6 +4,7 @@
 )]
 #![feature(rustc_private)]
 #![feature(array_methods)]
+#![feature(assert_matches)]
 #![feature(box_patterns)]
 #![feature(control_flow_enum)]
 #![feature(in_band_lifetimes)]
@@ -13,7 +14,6 @@
 #![feature(never_type)]
 #![feature(once_cell)]
 #![feature(type_ascription)]
-#![feature(iter_intersperse)]
 #![recursion_limit = "256"]
 #![warn(rustc::internal)]
 

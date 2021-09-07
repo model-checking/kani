@@ -396,7 +396,7 @@ impl<T, const N: usize> [T; N] {
     ///
     /// This method is particularly useful if combined with other methods, like
     /// [`map`](#method.map). This way, you can avoid moving the original
-    /// array if its elements are not `Copy`.
+    /// array if its elements are not [`Copy`].
     ///
     /// ```
     /// #![feature(array_methods)]
@@ -459,11 +459,8 @@ where
     debug_assert!(N <= iter.size_hint().1.unwrap_or(usize::MAX));
     debug_assert!(N <= iter.size_hint().0);
 
-    match collect_into_array(iter) {
-        Some(array) => array,
-        // SAFETY: covered by the function contract.
-        None => unsafe { crate::hint::unreachable_unchecked() },
-    }
+    // SAFETY: covered by the function contract.
+    unsafe { collect_into_array(iter).unwrap_unchecked() }
 }
 
 /// Pulls `N` items from `iter` and returns them as an array. If the iterator
