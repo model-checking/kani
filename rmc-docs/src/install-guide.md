@@ -1,20 +1,20 @@
 # RMC Installation Guide
 
-RMC has not yet reached the point where releases are available, and so to use RMC you must currently build from source.
+RMC must currently be built from source.
 
 In general, the following dependencies are required:
 
 1. The dependencies needed to built `rustc`. RMC is a fork of the Rust compiler, and so we have the same minimum requirements.
-2. CBMC (>= 5.30.1)
-3. CBMC Viewer (>= 2.6)
+2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.30.1)
+3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.6)
 
 ## Installing on Ubuntu 20.04
 
-We recommend trying out RMC with Ubuntu 20.04.
-The simplest way to install is following our CI scripts:
+The simplest way to install (especially if you're using a fresh VM) is following our CI scripts:
 
 ```
-git clone git@github.com:model-checking/rmc.git
+# git clone git@github.com:model-checking/rmc.git
+git clone https://github.com/model-checking/rmc.git
 cd rmc
 git submodule update --init
 ./scripts/setup/ubuntu-20.04/install_deps.sh
@@ -22,6 +22,23 @@ git submodule update --init
 ./scripts/setup/install_viewer.sh 2.6
 ./scripts/setup/install_rustup.sh
 ```
+
+## Installing on Mac OS
+
+You need to have [Homebrew](https://brew.sh/) installed already.
+
+```
+# git clone git@github.com:model-checking/rmc.git
+git clone https://github.com/model-checking/rmc.git
+cd rmc
+git submodule update --init
+./scripts/setup/macos-10.15/install_deps.sh
+./scripts/setup/macos-10.15/install_cbmc.sh
+./scripts/setup/install_viewer.sh 2.6
+./scripts/setup/install_rustup.sh
+```
+
+## Building and testing RMC
 
 Perform one-time build configuration:
 
@@ -33,7 +50,7 @@ Perform one-time build configuration:
     --set=rust.deny-warnings=false
 ```
 
-**NOTE: If you skip the above, builds may take a long time as all of LLVM would need to be built from scratch.**
+**NOTE: If you skip the above (`llvm.download-ci-llvm=true` specifically), builds may take a long time as all of LLVM would need to be built from scratch.**
 
 Then build RMC:
 
@@ -45,6 +62,12 @@ Then, optionally, run the regression tests:
 
 ```
 ./scripts/rmc-regression.sh
+```
+
+This script has a lot of noisy output, but on a successful run you will see:
+
+```
+All RMC regression tests completed successfully.
 ```
 
 ## Try running RMC
