@@ -18,14 +18,14 @@ use std::slice;
 // represent a pointer variable. By default, this is chosen to be 56, in which
 // case the max_malloc_size is 2 ** (offset_bits - 1). We could go as far as to
 // assign the default capacity to be the max_malloc_size but that would be overkill.
-// Instead, we choose a high-enough value 2 ** (15 - 1). Another reason to do
+// Instead, we choose a high-enough value 2 ** 10. Another reason to do
 // this is that it would be easier for the solver to reason about memory if multiple
 // Vectors are initialized by the abstraction consumer.
 //
-// We encounter a "array size too large for flattening" error for capacity
-// 2 ** (31 - 1). In theory, for most tests, any large value should work just fine.
-const DEFAULT_CAPACITY: usize = 16384;
-// const CBMC_MAX_MALLOC_SIZE: usize = 18014398509481984;
+// For larger array sizes such as 2 ** (31 - 1) we encounter "array size too large
+// for flattening" error.
+const DEFAULT_CAPACITY: usize = 1024;
+const CBMC_MAX_MALLOC_SIZE: usize = 18014398509481984;
 
 // We choose a constant which will ensure that we dont allocate small vectors.
 // Small vectors will lead to more resizing operations and hence slowdown in
@@ -34,7 +34,7 @@ const DEFAULT_CAPACITY: usize = 16384;
 // are no guarantees made about the allocation once it is full. Even then, the
 // user can then choose to shrink_to_fit() if they want to play around with
 // tight bounds on the Vec capacity.
-const MIN_NON_ZERO_CAP: usize = 16384;
+const MIN_NON_ZERO_CAP: usize = 1024;
 
 // RmcVec implements a fine-grained abstraction of the Vector library for Rust.
 // It is aimed to provide a lot more functionality than the other two available
@@ -501,7 +501,7 @@ impl<T, A: Allocator> Vec<T, A> {
         // Create a temporary drain vector and add elements in reverse order so
         // that the next time we pop, they are in increasing order of their
         // original index
-        let mut drain = Vec::new();
+        let mut drain = Vec::with_capacity(olen);
         while i < olen {
             drain.push(other.pop().unwrap());
             i += 1;
@@ -813,9 +813,9 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for Vec<T, A> {
 // Create a new Vec from a slice reference
 impl<T: Clone> From<&[T]> for Vec<T> {
     fn from(s: &[T]) -> Vec<T> {
-        let mut v = Vec::new();
         let s_len = s.len();
-        v.reserve(s_len);
+        // Reserve space for atleast s.len() elements to avoid resizing
+        let mut v = Vec::with_capacity(s_len);
         for i in 0..s_len {
             // This push is cheap as we reserve enough space earlier.
             v.push(s[i].clone());
@@ -827,9 +827,9 @@ impl<T: Clone> From<&[T]> for Vec<T> {
 // Create a new Vec from a slice mut reference
 impl<T: Clone> From<&mut [T]> for Vec<T> {
     fn from(s: &mut [T]) -> Vec<T> {
-        let mut v = Vec::new();
         let s_len = s.len();
-        v.reserve(s_len);
+        // Reserve space for atleast s.len() elements to avoid resizing
+        let mut v = Vec::with_capacity(s_len);
         for i in 0..s_len {
             // This push is cheap as we reserve enough space earlier.
             v.push(s[i].clone());
@@ -841,8 +841,8 @@ impl<T: Clone> From<&mut [T]> for Vec<T> {
 // Create a new Vec from an array
 impl<T, const N: usize> From<[T; N]> for Vec<T> {
     fn from(s: [T; N]) -> Vec<T> {
-        let mut v = Vec::new();
-        v.reserve(s.len());
+        // Reserve space for atleast s.len() elements to avoid resizing
+        let mut v = Vec::with_capacity(s.len());
         for elem in s {
             // This push is cheap as we reserve enough space earlier.
             v.push(elem);
@@ -1064,9 +1064,8 @@ impl<'a, T, A: Allocator> IntoIterator for &'a mut Vec<T, A> {
 macro_rules! rmc_vec {
   ( $val:expr ; $count:expr ) =>
     ({
-      let mut result = Vec::new();
-      // Reserve space for atleast count elements
-      result.reserve($count);
+      // Reserve space for atleast $count elements to avoid resizing operations
+      let mut result = Vec::with_capacity($count);
       let mut i: usize = 0;
       while i < $count {
         result.push($val);

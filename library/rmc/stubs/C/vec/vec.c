@@ -14,13 +14,13 @@
 // represent a pointer variable. By default, this is chosen to be 56, in which
 // case the max_malloc_size is 2 ** (offset_bits - 1). We could go as far as to
 // assign the default capacity to be the max_malloc_size but that would be overkill.
-// Instead, we choose a high-enough value 2 ** (15 - 1). Another reason to do
+// Instead, we choose a high-enough value 2 ** 10. Another reason to do
 // this is that it would be easier for the solver to reason about memory if multiple
 // Vectors are initialized by the abstraction consumer.
 //
-// We encounter a "array size too large for flattening" error for capacity
-// 2 ** (31 - 1). In theory, for most tests, any large value should work just fine.
-#define DEFAULT_CAPACITY 16384 
+// For larger array sizes such as 2 ** (31 - 1) we encounter "array size too large
+// for flattening" error.
+#define DEFAULT_CAPACITY 1024
 #define MAX_MALLOC_SIZE 18014398509481984
 
 // A Vector is a dynamically growing array type with contiguous memory. We track
