@@ -82,7 +82,7 @@ extern "C" {
     // additional elements. This is similar in behavior to the implementation of
     // the Rust Standard Library. Please refer to vec.c for more details.
     fn vec_sized_grow(ptr: *mut c_vec, additional: size_t);
-    
+
     // Free allocated memory for the Vec
     fn vec_free(ptr: *mut c_vec);
 }
