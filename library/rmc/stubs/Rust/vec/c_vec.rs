@@ -82,6 +82,9 @@ extern "C" {
     // additional elements. This is similar in behavior to the implementation of
     // the Rust Standard Library. Please refer to vec.c for more details.
     fn vec_sized_grow(ptr: *mut c_vec, additional: size_t);
+    
+    // Free allocated memory for the Vec
+    fn vec_free(ptr: *mut c_vec);
 }
 
 // The Vec interface which is exposed to the user only tracks the pointer to the
@@ -139,6 +142,17 @@ impl<T> Vec<T> {
     pub fn reserve(&mut self, additional: usize) {
         unsafe {
             vec_sized_grow(self.ptr, additional);
+        }
+    }
+}
+
+impl<T> Drop for Vec<T> {
+    // We have implemented Vec for u32 which does not have any drop semantics
+    // associated with it. We are only responsible for deallocating the space
+    // allocated on the C backend for the Vec and the c_vec structure.
+    fn drop(&mut self) {
+        unsafe {
+            vec_free(self.ptr);
         }
     }
 }
