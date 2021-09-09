@@ -9,4 +9,4 @@
 mod hooks;
 mod stubs;
 
-pub use hooks::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+pub use hooks::{skip_monomorphize, type_and_fn_hooks, GotocHooks, GotocTypeHooks};

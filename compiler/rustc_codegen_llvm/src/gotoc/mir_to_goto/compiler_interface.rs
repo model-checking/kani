@@ -5,7 +5,7 @@
 
 use crate::gotoc::cbmc::goto_program::symtab_transformer;
 use crate::gotoc::cbmc::goto_program::SymbolTable;
-use crate::gotoc::mir_to_goto::monomorphize;
+use crate::gotoc::mir_to_goto::overrides::skip_monomorphize;
 use crate::gotoc::mir_to_goto::GotocCtx;
 use bitflags::_core::any::Any;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -42,7 +42,7 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide(&self, providers: &mut Providers) {
-        monomorphize::partitioning::provide(providers);
+        providers.skip_monomorphize = skip_monomorphize;
     }
 
     fn provide_extern(&self, _providers: &mut ty::query::Providers) {}
