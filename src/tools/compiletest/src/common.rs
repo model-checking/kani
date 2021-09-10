@@ -26,6 +26,7 @@ pub enum Mode {
     RMC,
     CargoRMC,
     Expected,
+    Stub,
 }
 
 impl Mode {
@@ -59,6 +60,7 @@ impl FromStr for Mode {
             "rmc" => Ok(RMC),
             "cargo-rmc" => Ok(CargoRMC),
             "expected" => Ok(Expected),
+            "stub-tests" => Ok(Stub),
             _ => Err(()),
         }
     }
@@ -83,6 +85,7 @@ impl fmt::Display for Mode {
             RMC => "rmc",
             CargoRMC => "cargo-rmc",
             Expected => "expected",
+            Stub => "stub-tests",
         };
         fmt::Display::fmt(s, f)
     }

@@ -1216,6 +1216,8 @@ default_test!(Expected { path: "src/test/expected", mode: "expected", suite: "ex
 
 default_test!(Dashboard { path: "src/test/dashboard", mode: "rmc", suite: "dashboard" });
 
+default_test!(Stub { path: "src/test/stub-tests", mode: "stub-tests", suite: "stub-tests" });
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Compiletest {
     compiler: Compiler,
