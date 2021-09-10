@@ -165,6 +165,10 @@ def add_developer_flags(make_group, add_flag, config):
              help="Pass through directly to CBMC; must be the last flag")
     add_flag(group, "--mangler", default="v0", choices=["v0", "legacy"],
              help="Change what mangler is used by the Rust compiler")
+    add_flag(group, "--use-abs", default=False, action=BooleanOptionalAction,
+             help="Use abstractions for the standard library")
+    add_flag(group, "--abs-type", default="std", choices=["std", "rmc", "c-ffi", "no-back"],
+             help="Choose abstraction for modules of standard library if available")
 
 # Adds the flags common to both rmc and cargo-rmc.
 # Allows you to specify flags/groups of flags to not add.
