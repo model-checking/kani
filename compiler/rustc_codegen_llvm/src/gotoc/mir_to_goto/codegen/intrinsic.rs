@@ -307,6 +307,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_xsub_acqrel" => codegen_atomic_binop!(sub),
             "atomic_xsub_rel" => codegen_atomic_binop!(sub),
             "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
+            // black_box is an identity function that hints to the compiler
+            // to be maximally pessimistic to limit optimizations
+            "black_box" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "breakpoint" => Stmt::skip(loc),
             "bswap" => self.codegen_expr_to_place(p, fargs.remove(0).bswap()),
             "caller_location" => {
