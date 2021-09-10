@@ -37,7 +37,7 @@ mod tests {
         assert_eq!(estimate_size(1024), 7);
     }
 
-// ANCHOR: proptest
+    // ANCHOR: proptest
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(10000))]
         #[test]
@@ -45,7 +45,7 @@ mod tests {
             estimate_size(x);
         }
     }
-// ANCHOR_END: proptest
+    // ANCHOR_END: proptest
 }
 
 fn __nondet() -> u32 {
