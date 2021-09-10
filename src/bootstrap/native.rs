@@ -189,6 +189,11 @@ impl Step for Llvm {
             .define("LLVM_TARGET_ARCH", target_native.split('-').next().unwrap())
             .define("LLVM_DEFAULT_TARGET_TRIPLE", target_native);
 
+        // Parts of our test suite rely on the `FileCheck` tool, which is built by default in
+        // `build/$TARGET/llvm/build/bin` is but *not* then installed to `build/$TARGET/llvm/bin`.
+        // This flag makes sure `FileCheck` is copied in the final binaries directory.
+        cfg.define("LLVM_INSTALL_UTILS", "ON");
+
         if builder.config.llvm_profile_generate {
             cfg.define("LLVM_BUILD_INSTRUMENTED", "IR");
             cfg.define("LLVM_BUILD_RUNTIME", "No");
@@ -839,6 +844,8 @@ fn supported_sanitizers(
         "x86_64-unknown-netbsd" => {
             common_libs("netbsd", "x86_64", &["asan", "lsan", "msan", "tsan"])
         }
+        "x86_64-unknown-illumos" => common_libs("illumos", "x86_64", &["asan"]),
+        "x86_64-pc-solaris" => common_libs("solaris", "x86_64", &["asan"]),
         "x86_64-unknown-linux-gnu" => {
             common_libs("linux", "x86_64", &["asan", "lsan", "msan", "tsan"])
         }

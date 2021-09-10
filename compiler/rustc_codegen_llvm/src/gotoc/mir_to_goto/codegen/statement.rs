@@ -9,9 +9,10 @@ use rustc_middle::mir::{
     BasicBlock, Operand, Place, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use rustc_middle::ty;
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use smallvec::SmallVec;
 use std::convert::TryInto;
 use tracing::debug;

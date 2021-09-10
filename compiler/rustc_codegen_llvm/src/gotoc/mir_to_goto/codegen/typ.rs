@@ -9,6 +9,7 @@ use crate::gotoc::mir_to_goto::GotocCtx;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
@@ -19,8 +20,7 @@ use rustc_middle::ty::{
 use rustc_span;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, Layout, LayoutOf, Primitive, TagEncoding, VariantIdx,
-    Variants,
+    Abi::Vector, FieldsShape, Integer, Layout, Primitive, TagEncoding, VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
 use std::collections::BTreeMap;

@@ -165,7 +165,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         if self.tcx().sess.verbose() {
             // make this code only run with -Zverbose because it is probably slow
             if let Ok(lint_str) = self.tcx.sess.source_map().span_to_snippet(expr.span) {
-                if !lint_str.contains("\n") {
+                if !lint_str.contains('\n') {
                     debug!("expr text: {}", lint_str);
                 } else {
                     let mut lines = lint_str.lines();
@@ -849,7 +849,26 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         coerce.coerce(self, &self.misc(sp), then_expr, then_ty);
 
         if let Some(else_expr) = opt_else_expr {
-            let else_ty = self.check_expr_with_expectation(else_expr, expected);
+            let else_ty = if sp.desugaring_kind() == Some(DesugaringKind::LetElse) {
+                // todo introduce `check_expr_with_expectation(.., Expectation::LetElse)`
+                //   for errors that point to the offending expression rather than the entire block.
+                //   We could use `check_expr_eq_type(.., tcx.types.never)`, but then there is no
+                //   way to detect that the expected type originated from let-else and provide
+                //   a customized error.
+                let else_ty = self.check_expr(else_expr);
+                let cause = self.cause(else_expr.span, ObligationCauseCode::LetElse);
+
+                if let Some(mut err) =
+                    self.demand_eqtype_with_origin(&cause, self.tcx.types.never, else_ty)
+                {
+                    err.emit();
+                    self.tcx.ty_error()
+                } else {
+                    else_ty
+                }
+            } else {
+                self.check_expr_with_expectation(else_expr, expected)
+            };
             let else_diverges = self.diverges.get();
 
             let opt_suggest_box_span =
@@ -1217,6 +1236,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             variant,
             fields,
             base_expr.is_none(),
+            expr.span,
         );
         if let Some(base_expr) = base_expr {
             // If check_expr_struct_fields hit an error, do not attempt to populate
@@ -1264,6 +1284,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         variant: &'tcx ty::VariantDef,
         ast_fields: &'tcx [hir::ExprField<'tcx>],
         check_completeness: bool,
+        expr_span: Span,
     ) -> bool {
         let tcx = self.tcx;
 
@@ -1315,7 +1336,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         ident,
                     });
                 } else {
-                    self.report_unknown_field(adt_ty, variant, field, ast_fields, kind_name, span);
+                    self.report_unknown_field(
+                        adt_ty, variant, field, ast_fields, kind_name, expr_span,
+                    );
                 }
 
                 tcx.ty_error()
@@ -1448,7 +1471,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         field: &hir::ExprField<'_>,
         skip_fields: &[hir::ExprField<'_>],
         kind_name: &str,
-        ty_span: Span,
+        expr_span: Span,
     ) {
         if variant.is_recovered() {
             self.set_tainted_by_errors();
@@ -1491,8 +1514,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         ),
                     );
                     err.span_label(field.ident.span, "field does not exist");
-                    err.span_suggestion(
-                        ty_span,
+                    err.span_suggestion_verbose(
+                        expr_span,
                         &format!(
                             "`{adt}::{variant}` is a tuple {kind_name}, use the appropriate syntax",
                             adt = ty,
@@ -1509,8 +1532,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 _ => {
                     err.span_label(variant.ident.span, format!("`{adt}` defined here", adt = ty));
                     err.span_label(field.ident.span, "field does not exist");
-                    err.span_suggestion(
-                        ty_span,
+                    err.span_suggestion_verbose(
+                        expr_span,
                         &format!(
                             "`{adt}` is a tuple {kind_name}, use the appropriate syntax",
                             adt = ty,

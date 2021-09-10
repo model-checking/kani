@@ -40,3 +40,7 @@ $SCRIPT_DIR/codegen-firecracker.sh
 #        \           / v0.1.1
 #         dependency2
 ./src/test/rmc-dependency-test/diamond-dependency/run-dependency-test.sh
+
+echo
+echo "All RMC regression tests completed successfully."
+echo

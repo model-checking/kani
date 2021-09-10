@@ -39,7 +39,6 @@ use rustc_ast::node_id::NodeMap;
 use rustc_ast::token::{self, Token};
 use rustc_ast::tokenstream::{CanSynthesizeMissingTokens, TokenStream, TokenTree};
 use rustc_ast::visit::{self, AssocCtxt, Visitor};
-use rustc_ast::walk_list;
 use rustc_ast::{self as ast, *};
 use rustc_ast_pretty::pprust;
 use rustc_data_structures::captures::Captures;
@@ -48,12 +47,12 @@ use rustc_data_structures::sync::Lrc;
 use rustc_errors::{struct_span_err, Applicability};
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Namespace, PartialRes, PerNS, Res};
-use rustc_hir::def_id::{DefId, DefIdMap, DefPathHash, LocalDefId, CRATE_DEF_ID};
+use rustc_hir::def_id::{DefId, DefPathHash, LocalDefId, CRATE_DEF_ID};
 use rustc_hir::definitions::{DefKey, DefPathData, Definitions};
 use rustc_hir::intravisit;
 use rustc_hir::{ConstArg, GenericArg, InferKind, ParamName};
 use rustc_index::vec::{Idx, IndexVec};
-use rustc_session::lint::builtin::{BARE_TRAIT_OBJECTS, MISSING_ABI};
+use rustc_session::lint::builtin::BARE_TRAIT_OBJECTS;
 use rustc_session::lint::{BuiltinLintDiagnostics, LintBuffer};
 use rustc_session::utils::{FlattenNonterminals, NtToTokenstream};
 use rustc_session::Session;
@@ -62,11 +61,9 @@ use rustc_span::hygiene::ExpnId;
 use rustc_span::source_map::{respan, CachingSourceMapView, DesugaringKind};
 use rustc_span::symbol::{kw, sym, Ident, Symbol};
 use rustc_span::{Span, DUMMY_SP};
-use rustc_target::spec::abi::Abi;
 
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 use std::collections::BTreeMap;
-use std::mem;
 use tracing::{debug, trace};
 
 macro_rules! arena_vec {
@@ -77,6 +74,7 @@ macro_rules! arena_vec {
 }
 
 mod asm;
+mod block;
 mod expr;
 mod item;
 mod pat;
@@ -104,8 +102,6 @@ struct LoweringContext<'a, 'hir: 'a> {
     owners: IndexVec<LocalDefId, Option<hir::OwnerNode<'hir>>>,
     bodies: BTreeMap<hir::BodyId, hir::Body<'hir>>,
 
-    trait_impls: BTreeMap<DefId, Vec<LocalDefId>>,
-
     modules: BTreeMap<LocalDefId, hir::ModuleItems>,
 
     generator_kind: Option<hir::GeneratorKind>,
@@ -120,8 +116,8 @@ struct LoweringContext<'a, 'hir: 'a> {
     /// outside of an `async fn`.
     current_item: Option<Span>,
 
-    catch_scopes: Vec<NodeId>,
-    loop_scopes: Vec<NodeId>,
+    catch_scope: Option<NodeId>,
+    loop_scope: Option<NodeId>,
     is_in_loop_condition: bool,
     is_in_trait_impl: bool,
     is_in_dyn_type: bool,
@@ -158,8 +154,6 @@ struct LoweringContext<'a, 'hir: 'a> {
 
     current_module: LocalDefId,
 
-    type_def_lifetime_params: DefIdMap<usize>,
-
     current_hir_id_owner: (LocalDefId, u32),
     item_local_id_counters: NodeMap<u32>,
     node_id_to_hir_id: IndexVec<NodeId, Option<hir::HirId>>,
@@ -171,7 +165,7 @@ struct LoweringContext<'a, 'hir: 'a> {
 pub trait ResolverAstLowering {
     fn def_key(&mut self, id: DefId) -> DefKey;
 
-    fn item_generics_num_lifetimes(&self, def: DefId, sess: &Session) -> usize;
+    fn item_generics_num_lifetimes(&self, def: DefId) -> usize;
 
     fn legacy_const_generic_args(&mut self, expr: &Expr) -> Option<Vec<usize>>;
 
@@ -326,16 +320,14 @@ pub fn lower_crate<'a, 'hir>(
         arena,
         owners: IndexVec::default(),
         bodies: BTreeMap::new(),
-        trait_impls: BTreeMap::new(),
         modules: BTreeMap::new(),
         attrs: BTreeMap::default(),
-        catch_scopes: Vec::new(),
-        loop_scopes: Vec::new(),
+        catch_scope: None,
+        loop_scope: None,
         is_in_loop_condition: false,
         is_in_trait_impl: false,
         is_in_dyn_type: false,
         anonymous_lifetime_mode: AnonymousLifetimeMode::PassThrough,
-        type_def_lifetime_params: Default::default(),
         current_module: CRATE_DEF_ID,
         current_hir_id_owner: (CRATE_DEF_ID, 0),
         item_local_id_counters: Default::default(),
@@ -451,26 +443,8 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             fn visit_item(&mut self, item: &'tcx Item) {
                 self.lctx.allocate_hir_id_counter(item.id);
 
-                match item.kind {
-                    ItemKind::Struct(_, ref generics)
-                    | ItemKind::Union(_, ref generics)
-                    | ItemKind::Enum(_, ref generics)
-                    | ItemKind::TyAlias(box TyAliasKind(_, ref generics, ..))
-                    | ItemKind::Trait(box TraitKind(_, _, ref generics, ..)) => {
-                        let def_id = self.lctx.resolver.local_def_id(item.id);
-                        let count = generics
-                            .params
-                            .iter()
-                            .filter(|param| {
-                                matches!(param.kind, ast::GenericParamKind::Lifetime { .. })
-                            })
-                            .count();
-                        self.lctx.type_def_lifetime_params.insert(def_id.to_def_id(), count);
-                    }
-                    ItemKind::Use(ref use_tree) => {
-                        self.allocate_use_tree_hir_id_counters(use_tree);
-                    }
-                    _ => {}
+                if let ItemKind::Use(ref use_tree) = item.kind {
+                    self.allocate_use_tree_hir_id_counters(use_tree);
                 }
 
                 visit::walk_item(self, item);
@@ -485,23 +459,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 self.lctx.allocate_hir_id_counter(item.id);
                 visit::walk_foreign_item(self, item);
             }
-
-            fn visit_ty(&mut self, t: &'tcx Ty) {
-                match t.kind {
-                    // Mirrors the case in visit::walk_ty
-                    TyKind::BareFn(ref f) => {
-                        walk_list!(self, visit_generic_param, &f.generic_params);
-                        // Mirrors visit::walk_fn_decl
-                        for parameter in &f.decl.inputs {
-                            // We don't lower the ids of argument patterns
-                            self.visit_pat(&parameter.pat);
-                            self.visit_ty(&parameter.ty)
-                        }
-                        self.visit_fn_ret_ty(&f.decl.output)
-                    }
-                    _ => visit::walk_ty(self, t),
-                }
-            }
         }
 
         self.lower_node_id(CRATE_NODE_ID);
@@ -514,10 +471,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         self.lower_attrs(hir::CRATE_HIR_ID, &c.attrs);
         self.owners.ensure_contains_elem(CRATE_DEF_ID, || None);
         self.owners[CRATE_DEF_ID] = Some(hir::OwnerNode::Crate(module));
-
-        let body_ids = body_ids(&self.bodies);
-        let proc_macros =
-            c.proc_macros.iter().map(|id| self.node_id_to_hir_id[*id].unwrap()).collect();
 
         let mut trait_map: FxHashMap<_, FxHashMap<_, _>> = FxHashMap::default();
         for (k, v) in self.resolver.take_trait_map().into_iter() {
@@ -551,10 +504,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         let krate = hir::Crate {
             owners: self.owners,
             bodies: self.bodies,
-            body_ids,
-            trait_impls: self.trait_impls,
             modules: self.modules,
-            proc_macros,
             trait_map,
             attrs: self.attrs,
         };
@@ -960,11 +910,11 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         let was_in_loop_condition = self.is_in_loop_condition;
         self.is_in_loop_condition = false;
 
-        let catch_scopes = mem::take(&mut self.catch_scopes);
-        let loop_scopes = mem::take(&mut self.loop_scopes);
+        let catch_scope = self.catch_scope.take();
+        let loop_scope = self.loop_scope.take();
         let ret = f(self);
-        self.catch_scopes = catch_scopes;
-        self.loop_scopes = loop_scopes;
+        self.catch_scope = catch_scope;
+        self.loop_scope = loop_scope;
 
         self.is_in_loop_condition = was_in_loop_condition;
 
@@ -1360,7 +1310,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             }
             TyKind::BareFn(ref f) => self.with_in_scope_lifetime_defs(&f.generic_params, |this| {
                 this.with_anonymous_lifetime_mode(AnonymousLifetimeMode::PassThrough, |this| {
-                    let span = this.sess.source_map().next_point(t.span.shrink_to_lo());
                     hir::TyKind::BareFn(this.arena.alloc(hir::BareFnTy {
                         generic_params: this.lower_generic_params(
                             &f.generic_params,
@@ -1368,7 +1317,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                             ImplTraitContext::disallowed(),
                         ),
                         unsafety: this.lower_unsafety(f.unsafety),
-                        abi: this.lower_extern(f.ext, span, t.id),
+                        abi: this.lower_extern(f.ext),
                         decl: this.lower_fn_decl(&f.decl, None, false, None),
                         param_names: this.lower_fn_params_to_names(&f.decl),
                     }))
@@ -1547,20 +1496,50 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
 
         self.allocate_hir_id_counter(opaque_ty_node_id);
 
-        let hir_bounds = self.with_hir_id_owner(opaque_ty_node_id, lower_bounds);
+        let collected_lifetimes = self.with_hir_id_owner(opaque_ty_node_id, move |lctx| {
+            let hir_bounds = lower_bounds(lctx);
 
-        let (lifetimes, lifetime_defs) = self.lifetimes_from_impl_trait_bounds(
-            opaque_ty_node_id,
-            opaque_ty_def_id,
-            &hir_bounds,
-            capturable_lifetimes,
-        );
+            let collected_lifetimes = lifetimes_from_impl_trait_bounds(
+                opaque_ty_node_id,
+                &hir_bounds,
+                capturable_lifetimes,
+            );
 
-        debug!("lower_opaque_impl_trait: lifetimes={:#?}", lifetimes);
+            let lifetime_defs =
+                lctx.arena.alloc_from_iter(collected_lifetimes.iter().map(|&(name, span)| {
+                    let def_node_id = lctx.resolver.next_node_id();
+                    let hir_id = lctx.lower_node_id(def_node_id);
+                    lctx.resolver.create_def(
+                        opaque_ty_def_id,
+                        def_node_id,
+                        DefPathData::LifetimeNs(name.ident().name),
+                        ExpnId::root(),
+                        span,
+                    );
 
-        debug!("lower_opaque_impl_trait: lifetime_defs={:#?}", lifetime_defs);
+                    let (name, kind) = match name {
+                        hir::LifetimeName::Underscore => (
+                            hir::ParamName::Plain(Ident::with_dummy_span(kw::UnderscoreLifetime)),
+                            hir::LifetimeParamKind::Elided,
+                        ),
+                        hir::LifetimeName::Param(param_name) => {
+                            (param_name, hir::LifetimeParamKind::Explicit)
+                        }
+                        _ => panic!("expected `LifetimeName::Param` or `ParamName::Plain`"),
+                    };
 
-        self.with_hir_id_owner(opaque_ty_node_id, move |lctx| {
+                    hir::GenericParam {
+                        hir_id,
+                        name,
+                        span,
+                        pure_wrt_drop: false,
+                        bounds: &[],
+                        kind: hir::GenericParamKind::Lifetime { kind },
+                    }
+                }));
+
+            debug!("lower_opaque_impl_trait: lifetime_defs={:#?}", lifetime_defs);
+
             let opaque_ty_item = hir::OpaqueTy {
                 generics: hir::Generics {
                     params: lifetime_defs,
@@ -1575,9 +1554,18 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             trace!("lower_opaque_impl_trait: {:#?}", opaque_ty_def_id);
             lctx.generate_opaque_type(opaque_ty_def_id, opaque_ty_item, span, opaque_ty_span);
 
-            // `impl Trait` now just becomes `Foo<'a, 'b, ..>`.
-            hir::TyKind::OpaqueDef(hir::ItemId { def_id: opaque_ty_def_id }, lifetimes)
-        })
+            collected_lifetimes
+        });
+
+        let lifetimes =
+            self.arena.alloc_from_iter(collected_lifetimes.into_iter().map(|(name, span)| {
+                hir::GenericArg::Lifetime(hir::Lifetime { hir_id: self.next_id(), span, name })
+            }));
+
+        debug!("lower_opaque_impl_trait: lifetimes={:#?}", lifetimes);
+
+        // `impl Trait` now just becomes `Foo<'a, 'b, ..>`.
+        hir::TyKind::OpaqueDef(hir::ItemId { def_id: opaque_ty_def_id }, lifetimes)
     }
 
     /// Registers a new opaque type with the proper `NodeId`s and
@@ -1604,211 +1592,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         // automatically for all AST items. But this opaque type item
         // does not actually exist in the AST.
         self.insert_item(opaque_ty_item);
-    }
-
-    fn lifetimes_from_impl_trait_bounds(
-        &mut self,
-        opaque_ty_id: NodeId,
-        parent_def_id: LocalDefId,
-        bounds: hir::GenericBounds<'hir>,
-        lifetimes_to_include: Option<&FxHashSet<hir::LifetimeName>>,
-    ) -> (&'hir [hir::GenericArg<'hir>], &'hir [hir::GenericParam<'hir>]) {
-        debug!(
-            "lifetimes_from_impl_trait_bounds(opaque_ty_id={:?}, \
-             parent_def_id={:?}, \
-             bounds={:#?})",
-            opaque_ty_id, parent_def_id, bounds,
-        );
-
-        // This visitor walks over `impl Trait` bounds and creates defs for all lifetimes that
-        // appear in the bounds, excluding lifetimes that are created within the bounds.
-        // E.g., `'a`, `'b`, but not `'c` in `impl for<'c> SomeTrait<'a, 'b, 'c>`.
-        struct ImplTraitLifetimeCollector<'r, 'a, 'hir> {
-            context: &'r mut LoweringContext<'a, 'hir>,
-            parent: LocalDefId,
-            opaque_ty_id: NodeId,
-            collect_elided_lifetimes: bool,
-            currently_bound_lifetimes: Vec<hir::LifetimeName>,
-            already_defined_lifetimes: FxHashSet<hir::LifetimeName>,
-            output_lifetimes: Vec<hir::GenericArg<'hir>>,
-            output_lifetime_params: Vec<hir::GenericParam<'hir>>,
-            lifetimes_to_include: Option<&'r FxHashSet<hir::LifetimeName>>,
-        }
-
-        impl<'r, 'a, 'v, 'hir> intravisit::Visitor<'v> for ImplTraitLifetimeCollector<'r, 'a, 'hir> {
-            type Map = intravisit::ErasedMap<'v>;
-
-            fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-                intravisit::NestedVisitorMap::None
-            }
-
-            fn visit_generic_args(&mut self, span: Span, parameters: &'v hir::GenericArgs<'v>) {
-                // Don't collect elided lifetimes used inside of `Fn()` syntax.
-                if parameters.parenthesized {
-                    let old_collect_elided_lifetimes = self.collect_elided_lifetimes;
-                    self.collect_elided_lifetimes = false;
-                    intravisit::walk_generic_args(self, span, parameters);
-                    self.collect_elided_lifetimes = old_collect_elided_lifetimes;
-                } else {
-                    intravisit::walk_generic_args(self, span, parameters);
-                }
-            }
-
-            fn visit_ty(&mut self, t: &'v hir::Ty<'v>) {
-                // Don't collect elided lifetimes used inside of `fn()` syntax.
-                if let hir::TyKind::BareFn(_) = t.kind {
-                    let old_collect_elided_lifetimes = self.collect_elided_lifetimes;
-                    self.collect_elided_lifetimes = false;
-
-                    // Record the "stack height" of `for<'a>` lifetime bindings
-                    // to be able to later fully undo their introduction.
-                    let old_len = self.currently_bound_lifetimes.len();
-                    intravisit::walk_ty(self, t);
-                    self.currently_bound_lifetimes.truncate(old_len);
-
-                    self.collect_elided_lifetimes = old_collect_elided_lifetimes;
-                } else {
-                    intravisit::walk_ty(self, t)
-                }
-            }
-
-            fn visit_poly_trait_ref(
-                &mut self,
-                trait_ref: &'v hir::PolyTraitRef<'v>,
-                modifier: hir::TraitBoundModifier,
-            ) {
-                // Record the "stack height" of `for<'a>` lifetime bindings
-                // to be able to later fully undo their introduction.
-                let old_len = self.currently_bound_lifetimes.len();
-                intravisit::walk_poly_trait_ref(self, trait_ref, modifier);
-                self.currently_bound_lifetimes.truncate(old_len);
-            }
-
-            fn visit_generic_param(&mut self, param: &'v hir::GenericParam<'v>) {
-                // Record the introduction of 'a in `for<'a> ...`.
-                if let hir::GenericParamKind::Lifetime { .. } = param.kind {
-                    // Introduce lifetimes one at a time so that we can handle
-                    // cases like `fn foo<'d>() -> impl for<'a, 'b: 'a, 'c: 'b + 'd>`.
-                    let lt_name = hir::LifetimeName::Param(param.name);
-                    self.currently_bound_lifetimes.push(lt_name);
-                }
-
-                intravisit::walk_generic_param(self, param);
-            }
-
-            fn visit_lifetime(&mut self, lifetime: &'v hir::Lifetime) {
-                let name = match lifetime.name {
-                    hir::LifetimeName::Implicit | hir::LifetimeName::Underscore => {
-                        if self.collect_elided_lifetimes {
-                            // Use `'_` for both implicit and underscore lifetimes in
-                            // `type Foo<'_> = impl SomeTrait<'_>;`.
-                            hir::LifetimeName::Underscore
-                        } else {
-                            return;
-                        }
-                    }
-                    hir::LifetimeName::Param(_) => lifetime.name,
-
-                    // Refers to some other lifetime that is "in
-                    // scope" within the type.
-                    hir::LifetimeName::ImplicitObjectLifetimeDefault => return,
-
-                    hir::LifetimeName::Error | hir::LifetimeName::Static => return,
-                };
-
-                if !self.currently_bound_lifetimes.contains(&name)
-                    && !self.already_defined_lifetimes.contains(&name)
-                    && self.lifetimes_to_include.map_or(true, |lifetimes| lifetimes.contains(&name))
-                {
-                    self.already_defined_lifetimes.insert(name);
-
-                    self.output_lifetimes.push(hir::GenericArg::Lifetime(hir::Lifetime {
-                        hir_id: self.context.next_id(),
-                        span: self.context.lower_span(lifetime.span),
-                        name,
-                    }));
-
-                    let def_node_id = self.context.resolver.next_node_id();
-                    let hir_id =
-                        self.context.lower_node_id_with_owner(def_node_id, self.opaque_ty_id);
-                    self.context.resolver.create_def(
-                        self.parent,
-                        def_node_id,
-                        DefPathData::LifetimeNs(name.ident().name),
-                        ExpnId::root(),
-                        lifetime.span,
-                    );
-
-                    let (name, kind) = match name {
-                        hir::LifetimeName::Underscore => (
-                            hir::ParamName::Plain(Ident::with_dummy_span(kw::UnderscoreLifetime)),
-                            hir::LifetimeParamKind::Elided,
-                        ),
-                        hir::LifetimeName::Param(param_name) => {
-                            (param_name, hir::LifetimeParamKind::Explicit)
-                        }
-                        _ => panic!("expected `LifetimeName::Param` or `ParamName::Plain`"),
-                    };
-                    let name = match name {
-                        hir::ParamName::Plain(ident) => {
-                            hir::ParamName::Plain(self.context.lower_ident(ident))
-                        }
-                        name => name,
-                    };
-
-                    self.output_lifetime_params.push(hir::GenericParam {
-                        hir_id,
-                        name,
-                        span: self.context.lower_span(lifetime.span),
-                        pure_wrt_drop: false,
-                        bounds: &[],
-                        kind: hir::GenericParamKind::Lifetime { kind },
-                    });
-                }
-            }
-        }
-
-        let mut lifetime_collector = ImplTraitLifetimeCollector {
-            context: self,
-            parent: parent_def_id,
-            opaque_ty_id,
-            collect_elided_lifetimes: true,
-            currently_bound_lifetimes: Vec::new(),
-            already_defined_lifetimes: FxHashSet::default(),
-            output_lifetimes: Vec::new(),
-            output_lifetime_params: Vec::new(),
-            lifetimes_to_include,
-        };
-
-        for bound in bounds {
-            intravisit::walk_param_bound(&mut lifetime_collector, &bound);
-        }
-
-        let ImplTraitLifetimeCollector { output_lifetimes, output_lifetime_params, .. } =
-            lifetime_collector;
-
-        (
-            self.arena.alloc_from_iter(output_lifetimes),
-            self.arena.alloc_from_iter(output_lifetime_params),
-        )
-    }
-
-    fn lower_local(&mut self, l: &Local) -> hir::Local<'hir> {
-        let ty = l
-            .ty
-            .as_ref()
-            .map(|t| self.lower_ty(t, ImplTraitContext::Disallowed(ImplTraitPosition::Binding)));
-        let init = l.init.as_ref().map(|e| self.lower_expr(e));
-        let hir_id = self.lower_node_id(l.id);
-        self.lower_attrs(hir_id, &l.attrs);
-        hir::Local {
-            hir_id,
-            ty,
-            pat: self.lower_pat(&l.pat),
-            init,
-            span: self.lower_span(l.span),
-            source: hir::LocalSource::Normal,
-        }
     }
 
     fn lower_fn_params_to_names(&mut self, decl: &FnDecl) -> &'hir [Ident] {
@@ -2396,23 +2179,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         bounds.iter().map(move |bound| self.lower_param_bound(bound, itctx.reborrow()))
     }
 
-    fn lower_block(&mut self, b: &Block, targeted_by_break: bool) -> &'hir hir::Block<'hir> {
-        self.arena.alloc(self.lower_block_noalloc(b, targeted_by_break))
-    }
-
-    fn lower_block_noalloc(&mut self, b: &Block, targeted_by_break: bool) -> hir::Block<'hir> {
-        let (stmts, expr) = match &*b.stmts {
-            [stmts @ .., Stmt { kind: StmtKind::Expr(e), .. }] => (stmts, Some(&*e)),
-            stmts => (stmts, None),
-        };
-        let stmts = self.arena.alloc_from_iter(stmts.iter().flat_map(|stmt| self.lower_stmt(stmt)));
-        let expr = expr.map(|e| self.lower_expr(e));
-        let rules = self.lower_block_check_mode(&b.rules);
-        let hir_id = self.lower_node_id(b.id);
-
-        hir::Block { hir_id, stmts, expr, rules, span: self.lower_span(b.span), targeted_by_break }
-    }
-
     /// Lowers a block directly to an expression, presuming that it
     /// has no attributes and is not targeted by a `break`.
     fn lower_block_expr(&mut self, b: &Block) -> hir::Expr<'hir> {
@@ -2425,65 +2191,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             hir_id: this.lower_node_id(c.id),
             body: this.lower_const_body(c.value.span, Some(&c.value)),
         })
-    }
-
-    fn lower_stmt(&mut self, s: &Stmt) -> SmallVec<[hir::Stmt<'hir>; 1]> {
-        let (hir_id, kind) = match s.kind {
-            StmtKind::Local(ref l) => {
-                let l = self.lower_local(l);
-                let hir_id = self.lower_node_id(s.id);
-                self.alias_attrs(hir_id, l.hir_id);
-                return smallvec![hir::Stmt {
-                    hir_id,
-                    kind: hir::StmtKind::Local(self.arena.alloc(l)),
-                    span: self.lower_span(s.span),
-                }];
-            }
-            StmtKind::Item(ref it) => {
-                // Can only use the ID once.
-                let mut id = Some(s.id);
-                return self
-                    .lower_item_id(it)
-                    .into_iter()
-                    .map(|item_id| {
-                        let hir_id = id
-                            .take()
-                            .map(|id| self.lower_node_id(id))
-                            .unwrap_or_else(|| self.next_id());
-
-                        hir::Stmt {
-                            hir_id,
-                            kind: hir::StmtKind::Item(item_id),
-                            span: self.lower_span(s.span),
-                        }
-                    })
-                    .collect();
-            }
-            StmtKind::Expr(ref e) => {
-                let e = self.lower_expr(e);
-                let hir_id = self.lower_node_id(s.id);
-                self.alias_attrs(hir_id, e.hir_id);
-                (hir_id, hir::StmtKind::Expr(e))
-            }
-            StmtKind::Semi(ref e) => {
-                let e = self.lower_expr(e);
-                let hir_id = self.lower_node_id(s.id);
-                self.alias_attrs(hir_id, e.hir_id);
-                (hir_id, hir::StmtKind::Semi(e))
-            }
-            StmtKind::Empty => return smallvec![],
-            StmtKind::MacCall(..) => panic!("shouldn't exist here"),
-        };
-        smallvec![hir::Stmt { hir_id, kind, span: self.lower_span(s.span) }]
-    }
-
-    fn lower_block_check_mode(&mut self, b: &BlockCheckMode) -> hir::BlockCheckMode {
-        match *b {
-            BlockCheckMode::Default => hir::BlockCheckMode::DefaultBlock,
-            BlockCheckMode::Unsafe(u) => {
-                hir::BlockCheckMode::UnsafeBlock(self.lower_unsafe_source(u))
-            }
-        }
     }
 
     fn lower_unsafe_source(&mut self, u: UnsafeSource) -> hir::UnsafeSource {
@@ -2842,34 +2549,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             }
         }
     }
-
-    fn maybe_lint_missing_abi(&mut self, span: Span, id: NodeId, default: Abi) {
-        // FIXME(davidtwco): This is a hack to detect macros which produce spans of the
-        // call site which do not have a macro backtrace. See #61963.
-        let is_macro_callsite = self
-            .sess
-            .source_map()
-            .span_to_snippet(span)
-            .map(|snippet| snippet.starts_with("#["))
-            .unwrap_or(true);
-        if !is_macro_callsite {
-            self.resolver.lint_buffer().buffer_lint_with_diagnostic(
-                MISSING_ABI,
-                id,
-                span,
-                "extern declarations without an explicit ABI are deprecated",
-                BuiltinLintDiagnostics::MissingAbi(span, default),
-            )
-        }
-    }
-}
-
-fn body_ids(bodies: &BTreeMap<hir::BodyId, hir::Body<'_>>) -> Vec<hir::BodyId> {
-    // Sorting by span ensures that we get things in order within a
-    // file, and also puts the files in a sensible order.
-    let mut body_ids: Vec<_> = bodies.keys().cloned().collect();
-    body_ids.sort_by_key(|b| bodies[b].value.span);
-    body_ids
 }
 
 /// Helper struct for delayed construction of GenericArgs.
@@ -2894,4 +2573,133 @@ impl<'hir> GenericArgsCtor<'hir> {
         };
         this.arena.alloc(ga)
     }
+}
+
+fn lifetimes_from_impl_trait_bounds(
+    opaque_ty_id: NodeId,
+    bounds: hir::GenericBounds<'_>,
+    lifetimes_to_include: Option<&FxHashSet<hir::LifetimeName>>,
+) -> Vec<(hir::LifetimeName, Span)> {
+    debug!(
+        "lifetimes_from_impl_trait_bounds(opaque_ty_id={:?}, \
+             bounds={:#?})",
+        opaque_ty_id, bounds,
+    );
+
+    // This visitor walks over `impl Trait` bounds and creates defs for all lifetimes that
+    // appear in the bounds, excluding lifetimes that are created within the bounds.
+    // E.g., `'a`, `'b`, but not `'c` in `impl for<'c> SomeTrait<'a, 'b, 'c>`.
+    struct ImplTraitLifetimeCollector<'r> {
+        collect_elided_lifetimes: bool,
+        currently_bound_lifetimes: Vec<hir::LifetimeName>,
+        already_defined_lifetimes: FxHashSet<hir::LifetimeName>,
+        lifetimes: Vec<(hir::LifetimeName, Span)>,
+        lifetimes_to_include: Option<&'r FxHashSet<hir::LifetimeName>>,
+    }
+
+    impl<'r, 'v> intravisit::Visitor<'v> for ImplTraitLifetimeCollector<'r> {
+        type Map = intravisit::ErasedMap<'v>;
+
+        fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
+            intravisit::NestedVisitorMap::None
+        }
+
+        fn visit_generic_args(&mut self, span: Span, parameters: &'v hir::GenericArgs<'v>) {
+            // Don't collect elided lifetimes used inside of `Fn()` syntax.
+            if parameters.parenthesized {
+                let old_collect_elided_lifetimes = self.collect_elided_lifetimes;
+                self.collect_elided_lifetimes = false;
+                intravisit::walk_generic_args(self, span, parameters);
+                self.collect_elided_lifetimes = old_collect_elided_lifetimes;
+            } else {
+                intravisit::walk_generic_args(self, span, parameters);
+            }
+        }
+
+        fn visit_ty(&mut self, t: &'v hir::Ty<'v>) {
+            // Don't collect elided lifetimes used inside of `fn()` syntax.
+            if let hir::TyKind::BareFn(_) = t.kind {
+                let old_collect_elided_lifetimes = self.collect_elided_lifetimes;
+                self.collect_elided_lifetimes = false;
+
+                // Record the "stack height" of `for<'a>` lifetime bindings
+                // to be able to later fully undo their introduction.
+                let old_len = self.currently_bound_lifetimes.len();
+                intravisit::walk_ty(self, t);
+                self.currently_bound_lifetimes.truncate(old_len);
+
+                self.collect_elided_lifetimes = old_collect_elided_lifetimes;
+            } else {
+                intravisit::walk_ty(self, t)
+            }
+        }
+
+        fn visit_poly_trait_ref(
+            &mut self,
+            trait_ref: &'v hir::PolyTraitRef<'v>,
+            modifier: hir::TraitBoundModifier,
+        ) {
+            // Record the "stack height" of `for<'a>` lifetime bindings
+            // to be able to later fully undo their introduction.
+            let old_len = self.currently_bound_lifetimes.len();
+            intravisit::walk_poly_trait_ref(self, trait_ref, modifier);
+            self.currently_bound_lifetimes.truncate(old_len);
+        }
+
+        fn visit_generic_param(&mut self, param: &'v hir::GenericParam<'v>) {
+            // Record the introduction of 'a in `for<'a> ...`.
+            if let hir::GenericParamKind::Lifetime { .. } = param.kind {
+                // Introduce lifetimes one at a time so that we can handle
+                // cases like `fn foo<'d>() -> impl for<'a, 'b: 'a, 'c: 'b + 'd>`.
+                let lt_name = hir::LifetimeName::Param(param.name);
+                self.currently_bound_lifetimes.push(lt_name);
+            }
+
+            intravisit::walk_generic_param(self, param);
+        }
+
+        fn visit_lifetime(&mut self, lifetime: &'v hir::Lifetime) {
+            let name = match lifetime.name {
+                hir::LifetimeName::Implicit | hir::LifetimeName::Underscore => {
+                    if self.collect_elided_lifetimes {
+                        // Use `'_` for both implicit and underscore lifetimes in
+                        // `type Foo<'_> = impl SomeTrait<'_>;`.
+                        hir::LifetimeName::Underscore
+                    } else {
+                        return;
+                    }
+                }
+                hir::LifetimeName::Param(_) => lifetime.name,
+
+                // Refers to some other lifetime that is "in
+                // scope" within the type.
+                hir::LifetimeName::ImplicitObjectLifetimeDefault => return,
+
+                hir::LifetimeName::Error | hir::LifetimeName::Static => return,
+            };
+
+            if !self.currently_bound_lifetimes.contains(&name)
+                && !self.already_defined_lifetimes.contains(&name)
+                && self.lifetimes_to_include.map_or(true, |lifetimes| lifetimes.contains(&name))
+            {
+                self.already_defined_lifetimes.insert(name);
+
+                self.lifetimes.push((name, lifetime.span));
+            }
+        }
+    }
+
+    let mut lifetime_collector = ImplTraitLifetimeCollector {
+        collect_elided_lifetimes: true,
+        currently_bound_lifetimes: Vec::new(),
+        already_defined_lifetimes: FxHashSet::default(),
+        lifetimes: Vec::new(),
+        lifetimes_to_include,
+    };
+
+    for bound in bounds {
+        intravisit::walk_param_bound(&mut lifetime_collector, &bound);
+    }
+
+    lifetime_collector.lifetimes
 }

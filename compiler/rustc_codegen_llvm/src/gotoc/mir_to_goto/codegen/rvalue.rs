@@ -10,8 +10,9 @@ use crate::gotoc::mir_to_goto::GotocCtx;
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
+use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, COMMON_VTABLE_ENTRIES};
-use rustc_target::abi::{FieldsShape, LayoutOf, Primitive, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {

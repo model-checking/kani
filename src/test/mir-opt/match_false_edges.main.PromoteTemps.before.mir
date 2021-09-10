@@ -78,7 +78,7 @@ fn main() -> () {
     }
 
     bb7: {
-        StorageDead(_8);                 // scope 0 at $DIR/match_false_edges.rs:36:32: 36:33
+        StorageDead(_8);                 // scope 0 at $DIR/match_false_edges.rs:36:27: 36:28
         FakeRead(ForMatchGuard, _5);     // scope 0 at $DIR/match_false_edges.rs:36:27: 36:28
         FakeRead(ForGuardBinding, _7);   // scope 0 at $DIR/match_false_edges.rs:36:27: 36:28
         StorageLive(_6);                 // scope 0 at $DIR/match_false_edges.rs:36:14: 36:16
@@ -90,7 +90,7 @@ fn main() -> () {
     }
 
     bb8: {
-        StorageDead(_8);                 // scope 0 at $DIR/match_false_edges.rs:36:32: 36:33
+        StorageDead(_8);                 // scope 0 at $DIR/match_false_edges.rs:36:27: 36:28
         StorageDead(_7);                 // scope 0 at $DIR/match_false_edges.rs:36:32: 36:33
         falseEdge -> [real: bb1, imaginary: bb1]; // scope 0 at $DIR/match_false_edges.rs:36:21: 36:28
     }
@@ -117,12 +117,12 @@ fn main() -> () {
     }
 
     bb11: {
-        StorageDead(_13);                // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
         switchInt(move _12) -> [false: bb13, otherwise: bb12]; // scope 0 at $DIR/match_false_edges.rs:38:20: 38:29
     }
 
     bb12: {
-        StorageDead(_12);                // scope 0 at $DIR/match_false_edges.rs:38:33: 38:34
+        StorageDead(_13);                // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
+        StorageDead(_12);                // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
         FakeRead(ForMatchGuard, _5);     // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
         FakeRead(ForGuardBinding, _11);  // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
         StorageLive(_10);                // scope 0 at $DIR/match_false_edges.rs:38:14: 38:15
@@ -134,7 +134,8 @@ fn main() -> () {
     }
 
     bb13: {
-        StorageDead(_12);                // scope 0 at $DIR/match_false_edges.rs:38:33: 38:34
+        StorageDead(_13);                // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
+        StorageDead(_12);                // scope 0 at $DIR/match_false_edges.rs:38:28: 38:29
         StorageDead(_11);                // scope 0 at $DIR/match_false_edges.rs:38:33: 38:34
         falseEdge -> [real: bb3, imaginary: bb3]; // scope 0 at $DIR/match_false_edges.rs:38:20: 38:29
     }

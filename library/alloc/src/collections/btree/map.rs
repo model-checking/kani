@@ -1,3 +1,4 @@
+use crate::vec::Vec;
 use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::fmt::{self, Debug};
@@ -9,6 +10,7 @@ use core::ops::{Index, RangeBounds};
 use core::ptr;
 
 use super::borrow::DormantMutRef;
+use super::dedup_sorted_iter::DedupSortedIter;
 use super::navigate::{LazyLeafRange, LeafRange};
 use super::node::{self, marker, ForceResult::*, Handle, NodeRef, Root};
 use super::search::SearchResult::*;
@@ -233,9 +235,7 @@ impl<K: Clone, V: Clone> Clone for BTreeMap<K, V> {
         }
 
         if self.is_empty() {
-            // Ideally we'd call `BTreeMap::new` here, but that has the `K:
-            // Ord` constraint, which this method lacks.
-            BTreeMap { root: None, length: 0 }
+            BTreeMap::new()
         } else {
             clone_subtree(self.root.as_ref().unwrap().reborrow()) // unwrap succeeds because not empty
         }
@@ -499,10 +499,7 @@ impl<K, V> BTreeMap<K, V> {
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_unstable(feature = "const_btree_new", issue = "71835")]
-    pub const fn new() -> BTreeMap<K, V>
-    where
-        K: Ord,
-    {
+    pub const fn new() -> BTreeMap<K, V> {
         BTreeMap { root: None, length: 0 }
     }
 
@@ -522,7 +519,7 @@ impl<K, V> BTreeMap<K, V> {
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn clear(&mut self) {
-        *self = BTreeMap { root: None, length: 0 };
+        *self = BTreeMap::new();
     }
 
     /// Returns a reference to the value corresponding to the key.
@@ -1290,6 +1287,18 @@ impl<K, V> BTreeMap<K, V> {
     pub fn into_values(self) -> IntoValues<K, V> {
         IntoValues { inner: self.into_iter() }
     }
+
+    /// Makes a `BTreeMap` from a sorted iterator.
+    pub(crate) fn bulk_build_from_sorted_iter<I>(iter: I) -> Self
+    where
+        K: Ord,
+        I: Iterator<Item = (K, V)>,
+    {
+        let mut root = Root::new();
+        let mut length = 0;
+        root.bulk_push(DedupSortedIter::new(iter), &mut length);
+        BTreeMap { root: Some(root), length }
+    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -1914,9 +1923,15 @@ impl<K, V> FusedIterator for RangeMut<'_, K, V> {}
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<K: Ord, V> FromIterator<(K, V)> for BTreeMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> BTreeMap<K, V> {
-        let mut map = BTreeMap::new();
-        map.extend(iter);
-        map
+        let mut inputs: Vec<_> = iter.into_iter().collect();
+
+        if inputs.is_empty() {
+            return BTreeMap::new();
+        }
+
+        // use stable sort to preserve the insertion order.
+        inputs.sort_by(|a, b| a.0.cmp(&b.0));
+        BTreeMap::bulk_build_from_sorted_iter(inputs.into_iter())
     }
 }
 
@@ -1957,7 +1972,7 @@ impl<K: Hash, V: Hash> Hash for BTreeMap<K, V> {
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
-impl<K: Ord, V> Default for BTreeMap<K, V> {
+impl<K, V> Default for BTreeMap<K, V> {
     /// Creates an empty `BTreeMap`.
     fn default() -> BTreeMap<K, V> {
         BTreeMap::new()
@@ -2025,8 +2040,14 @@ impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMap<K, V> {
     /// let map2: BTreeMap<_, _> = [(1, 2), (3, 4)].into();
     /// assert_eq!(map1, map2);
     /// ```
-    fn from(arr: [(K, V); N]) -> Self {
-        core::array::IntoIter::new(arr).collect()
+    fn from(mut arr: [(K, V); N]) -> Self {
+        if N == 0 {
+            return BTreeMap::new();
+        }
+
+        // use stable sort to preserve the insertion order.
+        arr.sort_by(|a, b| a.0.cmp(&b.0));
+        BTreeMap::bulk_build_from_sorted_iter(core::array::IntoIter::new(arr))
     }
 }
 

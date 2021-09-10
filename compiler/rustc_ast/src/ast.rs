@@ -502,13 +502,6 @@ pub struct Crate {
     pub attrs: Vec<Attribute>,
     pub items: Vec<P<Item>>,
     pub span: Span,
-    /// The order of items in the HIR is unrelated to the order of
-    /// items in the AST. However, we generate proc macro harnesses
-    /// based on the AST order, and later refer to these harnesses
-    /// from the HIR. This field keeps track of the order in which
-    /// we generated proc macros harnesses, so that we can map
-    /// HIR proc macros items back to their harness items.
-    pub proc_macros: Vec<NodeId>,
 }
 
 /// Possible values inside of compile-time attribute lists.
@@ -565,6 +558,14 @@ pub struct Block {
     pub rules: BlockCheckMode,
     pub span: Span,
     pub tokens: Option<LazyTokenStream>,
+    /// The following *isn't* a parse error, but will cause multiple errors in following stages.
+    /// ```
+    /// let x = {
+    ///     foo: var
+    /// };
+    /// ```
+    /// #34255
+    pub could_be_bare_literal: bool,
 }
 
 /// A match pattern.
@@ -1005,11 +1006,40 @@ pub struct Local {
     pub id: NodeId,
     pub pat: P<Pat>,
     pub ty: Option<P<Ty>>,
-    /// Initializer expression to set the value, if any.
-    pub init: Option<P<Expr>>,
+    pub kind: LocalKind,
     pub span: Span,
     pub attrs: AttrVec,
     pub tokens: Option<LazyTokenStream>,
+}
+
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub enum LocalKind {
+    /// Local declaration.
+    /// Example: `let x;`
+    Decl,
+    /// Local declaration with an initializer.
+    /// Example: `let x = y;`
+    Init(P<Expr>),
+    /// Local declaration with an initializer and an `else` clause.
+    /// Example: `let Some(x) = y else { return };`
+    InitElse(P<Expr>, P<Block>),
+}
+
+impl LocalKind {
+    pub fn init(&self) -> Option<&Expr> {
+        match self {
+            Self::Decl => None,
+            Self::Init(i) | Self::InitElse(i, _) => Some(i),
+        }
+    }
+
+    pub fn init_else_opt(&self) -> Option<(&Expr, Option<&Block>)> {
+        match self {
+            Self::Decl => None,
+            Self::Init(init) => Some((init, None)),
+            Self::InitElse(init, els) => Some((init, Some(els))),
+        }
+    }
 }
 
 /// An arm of a 'match'.

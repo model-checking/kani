@@ -664,7 +664,7 @@ impl ToJson for SanitizerSet {
         self.into_iter()
             .map(|v| Some(v.as_str()?.to_json()))
             .collect::<Option<Vec<_>>>()
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
             .to_json()
     }
 }
@@ -1501,7 +1501,8 @@ impl Target {
             | Cdecl
             | EfiApi => true,
             X86Interrupt => ["x86", "x86_64"].contains(&&self.arch[..]),
-            Aapcs | CCmseNonSecureCall => ["arm", "aarch64"].contains(&&self.arch[..]),
+            Aapcs => "arm" == self.arch,
+            CCmseNonSecureCall => ["arm", "aarch64"].contains(&&self.arch[..]),
             Win64 | SysV64 => self.arch == "x86_64",
             PtxKernel => self.arch == "nvptx64",
             Msp430Interrupt => self.arch == "msp430",
