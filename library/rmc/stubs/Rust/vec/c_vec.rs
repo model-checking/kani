@@ -151,7 +151,7 @@ impl<T> Drop for Vec<T> {
     // associated with it. We are only responsible for deallocating the space
     // allocated on the C backend for the Vec and the c_vec structure.
     //
-    // For elements of the Vector which need a custom drop, the ideal behavior 
+    // For elements of the Vector which need a custom drop, the ideal behavior
     // here would be to pop each element from the Vector and call drop_in_place().
     // Refer: https://doc.rust-lang.org/std/ptr/fn.drop_in_place.html
     fn drop(&mut self) {

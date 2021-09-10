@@ -295,7 +295,7 @@ impl<T> Vec<T> {
         assert_eq!(mem::align_of::<T>(), mem::align_of_val(&ptr));
         // Assert that the length is less than or equal to the capacity
         assert!(length <= capacity);
-        // We cannot check if the capacity of the memory pointer to by ptr is 
+        // We cannot check if the capacity of the memory pointer to by ptr is
         // atleast "capacity", this is to be assumed.
         let mut v = Vec {
             buf: RmcRawVec::new_with_capacity(capacity),
@@ -459,7 +459,7 @@ impl<T, A: Allocator> Vec<T, A> {
         self.truncate(0);
     }
 
-    // Removes an element from the Vector and returns it. The removed element is 
+    // Removes an element from the Vector and returns it. The removed element is
     // replaced by the last element of the Vector. This does not preserve ordering,
     // but is O(1) - because we dont perform memory resizing operations.
     pub fn swap_remove(&mut self, index: usize) -> T {
