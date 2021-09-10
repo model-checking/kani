@@ -4,7 +4,7 @@
 
 RMC is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
-With RMC, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something managable for the checker.
+With RMC, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.
 
 Consider this first program (which can be found under [`rmc-docs/src/tutorial/rmc-first-steps`](https://github.com/model-checking/rmc/tree/main/rmc-docs/src/tutorial/rmc-first-steps/)):
 
@@ -13,7 +13,7 @@ Consider this first program (which can be found under [`rmc-docs/src/tutorial/rm
 ```
 
 Think about the test harness you would need to write to test this function.
-You would need figure a whole set of arguments to call the function with that would exercise each branch.
+You would need figure out a whole set of arguments to call the function with that would exercise each branch.
 You would need to keep that test harness up-to-date with the code, in case some of the branches change.
 And if this function was more complicated—for example, if some of the branches depended on global state—the test harness would be even more onerous to write.
 
@@ -60,10 +60,12 @@ Here, we've just got some nondeterministic inputs up front, but that's something
 To see traces, run:
 
 ```
-rmc --visualize src/lib.rc
+rmc --visualize src/lib.rs
 open report/html/index.html
 ```
 
+The first command runs RMC and generates the html-based report in `report/`.
+The second command opens that report in your default browser (on mac, on linux desktops try `xdg-open`).
 From this report, we can find the trace of the failure and filter through it to find the relevant line (at present time, an unfortunate amount of generated code is present in the trace):
 
 ```
@@ -86,7 +88,7 @@ For example, instead of panicking we could try explicitly dereferencing a null p
 unsafe { return *(0 as *const u32) };
 ```
 
-Notably, however, Rust emits a warning here:
+Notably, however, the Rust compiler emits a warning here:
 
 ```
 warning: dereferencing a null pointer
@@ -110,7 +112,7 @@ But RMC still catches the issue:
 VERIFICATION FAILED
 ```
 
-**Can you find an example where Rust will not complain, and RMC will?**
+**Can you find an example where the Rust compiler will not complain, and RMC will?**
 
 <details>
 <summary>Click to show one possible answer</summary>
@@ -181,7 +183,7 @@ The beginning of the report includes coverage information.
 Clicking through to the file will show fully-covered lines in green.
 Lines not covered by our proof harness will show in red.
 
-1. Try changing the assumption in the proof harness to `x < 2048`. Now the harness won't be testing all posssible cases.
+1. Try changing the assumption in the proof harness to `x < 2048`. Now the harness won't be testing all possible cases.
 2. Rerun `rmc --visualize` on the file
 3. Look at the report: you'll see we no longer have 100% coverage of the function.
 

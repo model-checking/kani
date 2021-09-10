@@ -1,3 +1,6 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 // ANCHOR: code
 fn estimate_size(x: u32) -> u32 {
     if x < 256 {
