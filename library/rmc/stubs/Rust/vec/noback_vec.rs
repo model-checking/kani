@@ -17,6 +17,9 @@ use std::mem;
 // memory, defining general methods which operate on the values of the vector is
 // hard and in some cases, unsound. Please see the README.md for a more in-depth
 // discussion of potential improvements to this abstraction.
+//
+// NOTE: It would also be difficult to soundly model a Vector where the contained
+// type has a non-trivial drop method defined for it.
 
 // __CPROVER_max_malloc_size is dependent on the number of offset bits used to
 // represent a pointer variable. By default, this is chosen to be 56, in which
@@ -203,9 +206,19 @@ impl<T> IntoIterator for Vec<T> {
     }
 }
 
-// We define the `rmc_vec!` macro which aims to be similar in functionality to
-// the `vec!` macro from the Rust Standard Library. We support two types of
-// initialization expressions:
+// Here, we define the rmc_vec! macro which behaves similar to the vec! macro
+// found in the std prelude. If we try to override the vec! macro, we get error:
+//
+//     = note: `vec` could refer to a macro from prelude
+//     note: `vec` could also refer to the macro defined here
+//
+// Relevant Zulip stream:
+// https://rust-lang.zulipchat.com/#narrow/stream/122651-general/topic/Override.20prelude.20macro
+//
+// The workaround for now is to define a new macro. rmc_vec! will initialize a new
+// Vec based on its definition in this file. We support two types of initialization
+// expressions:
+//
 // [ elem; count] -  initialize a Vector with element value `elem` occurring count times.
 // [ elem1, elem2, ...] - initialize a Vector with elements elem1, elem2...
 #[cfg(abs_type = "no-back")]

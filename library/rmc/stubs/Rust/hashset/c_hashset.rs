@@ -39,7 +39,7 @@
 // using the C-FFI to leverage CBMC constructs.
 //
 // But it important to note here that RMC currently does not support unbounded
-// structures anda arrays;
+// structures and arrays;
 // Tracking issue: https://github.com/model-checking/rmc/issues/311
 #[repr(C)]
 pub struct c_hashset {

@@ -16,8 +16,8 @@
 //
 // The hash function that we choose is the identity function.
 // For all input x, hasher(x) = x. For our case, this satisfies all the
-// requirements of an ideal hash function - it is 1:1, and the range is a subset
-// of the chosen output domain - which allows us access to SENTINEL values.
+// requirements of an ideal hash function, it is 1:1 and there exists only one
+// element in the input domain for each value in the output domain.
 //
 // An important thing to note here is that the hash function can be
 // appropriately modified depending on the type of the input value which is
@@ -38,7 +38,7 @@
 // For the purpose of a HashSet, we dont necessarily need a SENTINEL outside the
 // range of the hashing function because of the way we design the HashSet
 // operations.
-const int16_t SENTINEL = 1;
+const uint16_t SENTINEL = 1;
 
 uint16_t hasher(uint16_t value) {
 	return value;
@@ -54,7 +54,7 @@ uint16_t hasher(uint16_t value) {
 // However, this logic does not work for the value 0. For this, we choose the
 // SENTINEL value to initialize that element. 
 typedef struct {
-	int16_t* domain;
+	uint16_t* domain;
 } hashset;
 
 // Ideally, this approach is much more suitable if we can work with arrays of
@@ -74,6 +74,9 @@ typedef struct {
 // for flattening". For that reason, we choose to work with u16 to demonstrate
 // the feasability of this approach. However, it should be extensible to other
 // integer types.
+//
+// Returns: pointer to a hashset instance which tracks the domain memory. This
+// pointer is used in later callbacks such as insert() and remove().
 hashset* hashset_new() {
 	hashset* set = (hashset *) malloc(sizeof(hashset));
 	// Initializes value all indexes to be 0, indicating that those elements are
@@ -93,6 +96,10 @@ hashset* hashset_new() {
 //
 // To check if a value exists, we simply check if domain[hash] != 0 and
 // in the case of 0 if domain[0] != SENTINEL.
+//
+// Returns: an integer value 1 or 0. If the value is already present in the
+// hashset, this function returns a 0. If the value is sucessfully inserted, we
+// return a 1.
 uint32_t hashset_insert(hashset* s, uint16_t value) {
 	uint16_t hash = hasher(value);
 
@@ -107,6 +114,9 @@ uint32_t hashset_insert(hashset* s, uint16_t value) {
 
 // We perform a similar check here as described in hashset_insert(). We do not
 // duplicate code so as to not compute the hash twice. This can be improved.
+//
+// Returns: an integer value 1 or 0. If the value is present in the hashset,
+// this function returns a 1, otherwise 0.
 uint32_t hashset_contains(hashset* s, uint16_t value) {
 	uint16_t hash = hasher(value);
 
@@ -121,6 +131,10 @@ uint32_t hashset_contains(hashset* s, uint16_t value) {
 // We check if the element exists in the array. If it does not, we return a 0
 // (false) value back. If it does, we mark it with 0 and in the case of 0, we
 // mark it with the SENTINEL and return 1.
+//
+// Returns: an integer value 1 or 0. If the value is not present in the hashset,
+// this function returns a 0. If the value is sucessfully removed from the
+// hashset, it returns a 1.
 uint32_t hashset_remove(hashset* s, uint16_t value) {
 	uint16_t hash = hasher(value);
 

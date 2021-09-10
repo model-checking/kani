@@ -86,6 +86,9 @@ struct RmcRawVec<T> {
 impl<T> RmcRawVec<T> {
     fn new() -> Self {
         let elem_size = mem::size_of::<T>();
+        // NOTE: Currently, this abstraction is not tested against code which has
+        // zero-sized types.
+        assert!(elem_size != 0);
         // We choose to allocate a Vector of DEFAULT_CAPACITY which is chosen
         // to be a very high value. This way, for most tests, the trace will not
         // generate any resizing operations.
@@ -132,6 +135,9 @@ impl<T> RmcRawVec<T> {
     //
     // For the purpose of this implementation, we follow the specifics implemented
     // in raw_vec.rs -> grow_amortized(). We choose:
+    //
+    // Reference: https://doc.rust-lang.org/src/alloc/raw_vec.rs.html#421
+    //
     // max ( current_capacity * 2 , current_length + additional ).
     // This ensures exponential growth of the allocated memory and also reduces
     // the number of resizing operations required.
@@ -285,6 +291,12 @@ impl<T> Vec<T> {
     // * length needs to be less than or equal to the capacity.
     // * capacity needs to be capacity that the pointer was allocated with.
     pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Self {
+        // Assert that the alignment of T and the allocated pointer are the same.
+        assert_eq!(mem::align_of::<T>(), mem::align_of_val(&ptr));
+        // Assert that the length is less than or equal to the capacity
+        assert!(length <= capacity);
+        // We cannot check if the capacity of the memory pointer to by ptr is 
+        // atleast "capacity", this is to be assumed.
         let mut v = Vec {
             buf: RmcRawVec::new_with_capacity(capacity),
             len: 0,
@@ -295,7 +307,7 @@ impl<T> Vec<T> {
             while curr_idx < length as isize {
                 // The push performed here is cheap as we have already allocated
                 // enough capacity to hold the data.
-                v.push(read(ptr.offset(curr_idx)));
+                v.push_unsafe(read(ptr.offset(curr_idx)));
                 curr_idx += 1;
             }
         }
@@ -317,7 +329,13 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe {
             *self.ptr().offset(self.len as isize) = elem;
         }
+        self.len += 1;
+    }
 
+    pub fn push_unsafe(&mut self, elem: T) {
+        unsafe {
+            *self.ptr().offset(self.len as isize) = elem;
+        }
         self.len += 1;
     }
 
@@ -441,6 +459,9 @@ impl<T, A: Allocator> Vec<T, A> {
         self.truncate(0);
     }
 
+    // Removes an element from the Vector and returns it. The removed element is 
+    // replaced by the last element of the Vector. This does not preserve ordering,
+    // but is O(1) - because we dont perform memory resizing operations.
     pub fn swap_remove(&mut self, index: usize) -> T {
         let len = self.len;
         assert!(index < len);
@@ -496,21 +517,14 @@ impl<T, A: Allocator> Vec<T, A> {
     pub fn append(&mut self, other: &mut Vec<T, A>) {
         // Reserve enough space to reduce the number of resizing operations
         self.reserve(other.len());
-        let mut i: usize = 0;
-        let olen = other.len();
-        // Create a temporary drain vector and add elements in reverse order so
-        // that the next time we pop, they are in increasing order of their
-        // original index
-        let mut drain = Vec::with_capacity(olen);
-        while i < olen {
-            drain.push(other.pop().unwrap());
-            i += 1;
-        }
-        // Empty other
-        i = 0;
-        while i < olen {
-            self.push(drain.pop().unwrap());
-            i += 1;
+        unsafe {
+            libc::memmove(
+                self.as_ptr().offset(self.len as isize) as *mut libc::c_void,
+                other.as_ptr() as *mut libc::c_void,
+                other.len() * mem::size_of::<T>(),
+            );
+            self.len += other.len();
+            other.set_len(0);
         }
     }
 
@@ -525,7 +539,7 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         F: FnMut() -> T,
     {
-        let len = self.len();
+        let len = self.len;
 
         if new_len > len {
             let additional = new_len - len;
@@ -533,7 +547,7 @@ impl<T, A: Allocator> Vec<T, A> {
             let mut closure = f;
             for _ in 0..additional {
                 // This push is cheap as we have already reserved enough space.
-                self.push(closure());
+                self.push_unsafe(closure());
             }
         } else {
             self.truncate(new_len);
@@ -568,7 +582,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.len == 0
     }
 
     pub fn new_in(alloc: A) -> Self {
@@ -584,14 +598,14 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
     //
     // This method requires T to implement Clone, in order to be able to clone the passed value.
     pub fn resize(&mut self, new_len: usize, value: T) {
-        let len = self.len();
+        let len = self.len;
 
         if new_len > len {
             let additional = new_len - len;
             self.reserve(additional);
             for _ in 0..additional {
                 // This push is cheap as we have already reserved enough space.
-                self.push(value.clone());
+                self.push_unsafe(value.clone());
             }
         } else {
             self.truncate(new_len);
@@ -607,13 +621,12 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
         self.reserve(other_len);
         for i in 0..other_len {
             // This push is cheap as we have already reserved enough space.
-            self.push(other[i].clone());
+            self.push_unsafe(other[i].clone());
         }
     }
 }
 
 // Drop is codegen for most types, no need to perform any action here.
-// TODO: Check here.
 impl<T, A: Allocator> Drop for Vec<T, A> {
     fn drop(&mut self) {}
 }
@@ -629,7 +642,7 @@ impl<T> Default for Vec<T> {
 
 impl<T: PartialEq, A: Allocator> PartialEq for Vec<T, A> {
     fn eq(&self, other: &Self) -> bool {
-        if self.len() != other.len() {
+        if self.len != other.len() {
             return false;
         }
 
@@ -698,9 +711,9 @@ impl<T, A: Allocator> DerefMut for Vec<T, A> {
 // Clone
 impl<T: Clone, A: Allocator + Clone> Clone for Vec<T, A> {
     fn clone(&self) -> Self {
-        let mut v = Self::with_capacity_in(self.len(), self.allocator.clone());
-        for idx in 0..self.len() {
-            v.push(self[idx].clone());
+        let mut v = Self::with_capacity_in(self.len, self.allocator.clone());
+        for idx in 0..self.len {
+            v.push_unsafe(self[idx].clone());
         }
         v
     }
@@ -746,7 +759,7 @@ impl<T, I: ::std::slice::SliceIndex<[T]>, A: Allocator> IndexMut<I> for Vec<T, A
 // We cannot reserve space for the elements which are added as we dont know
 // the size of the iterator. In this case, we perform sequential push operations.
 // However because our underlying Vector grows exponential in size, we can be
-// sure that we wont perform too many resizing operations.
+// sure that we won't perform too many resizing operations.
 impl<T, A: Allocator> Extend<T> for Vec<T, A> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for elem in iter.into_iter() {
@@ -805,8 +818,10 @@ impl<T, A: Allocator> AsMut<[T]> for Vec<T, A> {
 
 // Debug
 impl<T: fmt::Debug, A: Allocator> fmt::Debug for Vec<T, A> {
+    // fmt implementation left empty since we dont care about debug messages
+    // and such in the verification case
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&**self, f)
+        Ok(())
     }
 }
 
@@ -818,7 +833,7 @@ impl<T: Clone> From<&[T]> for Vec<T> {
         let mut v = Vec::with_capacity(s_len);
         for i in 0..s_len {
             // This push is cheap as we reserve enough space earlier.
-            v.push(s[i].clone());
+            v.push_unsafe(s[i].clone());
         }
         v
     }
@@ -832,7 +847,7 @@ impl<T: Clone> From<&mut [T]> for Vec<T> {
         let mut v = Vec::with_capacity(s_len);
         for i in 0..s_len {
             // This push is cheap as we reserve enough space earlier.
-            v.push(s[i].clone());
+            v.push_unsafe(s[i].clone());
         }
         v
     }
@@ -845,7 +860,7 @@ impl<T, const N: usize> From<[T; N]> for Vec<T> {
         let mut v = Vec::with_capacity(s.len());
         for elem in s {
             // This push is cheap as we reserve enough space earlier.
-            v.push(elem);
+            v.push_unsafe(elem);
         }
         v
     }
@@ -1018,7 +1033,7 @@ impl<T> FromIterator<T> for Vec<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Vec<T> {
         let mut v = Vec::new();
         for elem in iter.into_iter() {
-            v.push(elem);
+            v.push_unsafe(elem);
         }
         v
     }

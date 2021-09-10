@@ -150,6 +150,10 @@ impl<T> Drop for Vec<T> {
     // We have implemented Vec for u32 which does not have any drop semantics
     // associated with it. We are only responsible for deallocating the space
     // allocated on the C backend for the Vec and the c_vec structure.
+    //
+    // For elements of the Vector which need a custom drop, the ideal behavior 
+    // here would be to pop each element from the Vector and call drop_in_place().
+    // Refer: https://doc.rust-lang.org/std/ptr/fn.drop_in_place.html
     fn drop(&mut self) {
         unsafe {
             vec_free(self.ptr);
@@ -157,6 +161,21 @@ impl<T> Drop for Vec<T> {
     }
 }
 
+// Here, we define the rmc_vec! macro which behaves similar to the vec! macro
+// found in the std prelude. If we try to override the vec! macro, we get error:
+//
+//     = note: `vec` could refer to a macro from prelude
+//     note: `vec` could also refer to the macro defined here
+//
+// Relevant Zulip stream:
+// https://rust-lang.zulipchat.com/#narrow/stream/122651-general/topic/Override.20prelude.20macro
+//
+// The workaround for now is to define a new macro. rmc_vec! will initialize a new
+// Vec based on its definition in this file. We support two types of initialization
+// expressions:
+//
+// [ elem; count] -  initialize a Vector with element value `elem` occurring count times.
+// [ elem1, elem2, ...] - initialize a Vector with elements elem1, elem2...
 #[cfg(abs_type = "c-ffi")]
 #[macro_export]
 macro_rules! rmc_vec {

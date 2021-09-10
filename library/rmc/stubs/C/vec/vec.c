@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 // This Vector stub implementation is supposed to work with c_vec.rs. Please
 // refer to that file for a detailed explanation about the workings of this 
@@ -76,6 +77,13 @@ typedef struct {
 // copying over elements, we can track only the end pointer of the memory and
 // shift it to track the new length. Since this behavior is that of the
 // allocator, the consumer of the API is blind to it.
+void vec_grow_exact(vec* v, size_t new_cap) {
+	uint32_t* new_mem = (uint32_t* ) realloc(v->mem, new_cap * sizeof(*v->mem));
+
+	v->mem = new_mem;
+	v->capacity = new_cap;
+}
+
 void vec_grow(vec* v) {
 	size_t new_cap = v->capacity * 2;
 	if (new_cap > MAX_MALLOC_SIZE) {
@@ -84,15 +92,17 @@ void vec_grow(vec* v) {
 		assert(0);
 	}
 
-	uint32_t* new_mem = (uint32_t *) realloc(v->mem, new_cap * sizeof(*v->mem));
-	v->mem = new_mem;
-	v->capacity = new_cap;
+	vec_grow_exact(v, new_cap);
 }
 
 void vec_sized_grow(vec* v, size_t additional) {
 	size_t min_cap = v->capacity + additional;
 	size_t grow_cap = v->capacity * 2;
-	// This resembles the Rust Standard Library behavior.
+
+	// This resembles the Rust Standard Library behavior - amortized_grow in
+	// alloc/raw_vec.rs
+	// 
+	// Reference: https://doc.rust-lang.org/src/alloc/raw_vec.rs.html#421
 	size_t new_cap = min_cap > grow_cap ? min_cap : grow_cap;
 	if (new_cap > MAX_MALLOC_SIZE) {
 		// Panic if the new size requirement is greater than max size that can
@@ -100,9 +110,7 @@ void vec_sized_grow(vec* v, size_t additional) {
 		assert(0);
 	}
 
-	uint32_t* new_mem = (uint32_t *) realloc(v->mem, new_cap * sizeof(*v->mem));
-	v->mem = new_mem;
-	v->capacity = new_cap;
+	vec_grow_exact(v, new_cap);
 }
 
 vec* vec_new() {
@@ -154,10 +162,9 @@ uint32_t vec_pop(vec* v) {
 void vec_append(vec* v1, vec* v2) {
 	// Reserve enough space before adding in new elements.
 	vec_sized_grow(v1, v2->len);
-	size_t i = 0;
-	for (i = 0; i < v2->len; i++) {
-		vec_push(v1, v2->mem[i]);
-	}
+	// Perform a memcpy of elements which is cheaper than pushing each element
+	// at once.
+	memcpy(v1->mem + v1->len, v2->mem, v2->len * sizeof(*v2->mem));
 	v1->len = v1->len + v2->len;
 }
 
