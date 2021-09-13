@@ -17,5 +17,5 @@ It will also teach you the basics of "debugging" proof harnesses, which mainly c
 
 1. [Begin with RMC installation.](./install-guide.md) This will take through to running `rmc` on your first Rust program.
 2. Consider reading our [tool comparison](./tool-comparison.md) to understand what RMC is.
-3. Coming soon: the tutorial.
+3. [Work through the tutorial.](./tutorial-first-steps.md)
 4. Consider returning to the [tool comparison](./tool-comparison.md) after trying the tutorial to see if any of the abstract ideas have become more concrete.
