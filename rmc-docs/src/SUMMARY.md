@@ -8,5 +8,6 @@
   - [Debugging failures]()
   
 - [RMC tutorial](./rmc-tutorial.md)
+  - [First steps with RMC](./tutorial-first-steps.md)
 
 - [RMC developer documentation]()
