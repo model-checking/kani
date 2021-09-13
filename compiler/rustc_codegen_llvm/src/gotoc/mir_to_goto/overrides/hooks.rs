@@ -677,10 +677,6 @@ pub struct GotocHooks<'tcx> {
 }
 
 impl<'tcx> GotocHooks<'tcx> {
-    pub fn default() -> GotocHooks<'tcx> {
-        type_and_fn_hooks().1
-    }
-
     pub fn hook_applies(
         &self,
         tcx: TyCtxt<'tcx>,
