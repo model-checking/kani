@@ -26,6 +26,7 @@ use rustc_middle::middle::cstore::{ForeignModule, LinkagePreference, NativeLib};
 use rustc_middle::middle::exported_symbols::{ExportedSymbol, SymbolExportLevel};
 use rustc_middle::mir::interpret::{AllocDecodingSession, AllocDecodingState};
 use rustc_middle::mir::{self, Body, Promoted};
+use rustc_middle::thir;
 use rustc_middle::ty::codec::TyDecoder;
 use rustc_middle::ty::{self, Ty, TyCtxt, Visibility};
 use rustc_serialize::{opaque, Decodable, Decoder};
@@ -536,11 +537,12 @@ impl<'a, 'tcx> Decodable<DecodeContext<'a, 'tcx>> for Span {
         let hi =
             (hi + source_file.translated_source_file.start_pos) - source_file.original_start_pos;
 
-        Ok(Span::new(lo, hi, ctxt))
+        // Do not try to decode parent for foreign spans.
+        Ok(Span::new(lo, hi, ctxt, None))
     }
 }
 
-impl<'a, 'tcx> Decodable<DecodeContext<'a, 'tcx>> for &'tcx [mir::abstract_const::Node<'tcx>] {
+impl<'a, 'tcx> Decodable<DecodeContext<'a, 'tcx>> for &'tcx [thir::abstract_const::Node<'tcx>] {
     fn decode(d: &mut DecodeContext<'a, 'tcx>) -> Result<Self, String> {
         ty::codec::RefDecodable::decode(d)
     }
@@ -1019,10 +1021,7 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
     }
 
     /// Iterates over each child of the given item.
-    fn each_child_of_item<F>(&self, id: DefIndex, mut callback: F, sess: &Session)
-    where
-        F: FnMut(Export<hir::HirId>),
-    {
+    fn each_child_of_item(&self, id: DefIndex, mut callback: impl FnMut(Export), sess: &Session) {
         if let Some(data) = &self.root.proc_macro_data {
             /* If we are loading as a proc macro, we want to return the view of this crate
              * as a proc macro crate.
@@ -1198,14 +1197,14 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
             .decode((self, tcx))
     }
 
-    fn get_mir_abstract_const(
+    fn get_thir_abstract_const(
         &self,
         tcx: TyCtxt<'tcx>,
         id: DefIndex,
-    ) -> Result<Option<&'tcx [mir::abstract_const::Node<'tcx>]>, ErrorReported> {
+    ) -> Result<Option<&'tcx [thir::abstract_const::Node<'tcx>]>, ErrorReported> {
         self.root
             .tables
-            .mir_abstract_consts
+            .thir_abstract_consts
             .get(self, id)
             .map_or(Ok(None), |v| Ok(Some(v.decode((self, tcx)))))
     }

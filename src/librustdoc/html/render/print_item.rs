@@ -8,10 +8,12 @@ use rustc_hir as hir;
 use rustc_hir::def::CtorKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::middle::stability;
+use rustc_middle::span_bug;
 use rustc_middle::ty::layout::LayoutError;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{Adt, TyCtxt};
 use rustc_span::hygiene::MacroKind;
 use rustc_span::symbol::{kw, sym, Symbol};
+use rustc_target::abi::{Layout, Primitive, TagEncoding, Variants};
 
 use super::{
     collect_paths_for_type, document, ensure_trailing_slash, item_ty_to_strs, notable_traits_decl,
@@ -254,6 +256,10 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
 
     debug!("{:?}", indices);
     let mut curty = None;
+    // See: https://github.com/rust-lang/rust/issues/88545
+    let item_table_block_size = 900usize;
+    let mut item_table_nth_element = 0usize;
+
     for &idx in &indices {
         let myitem = &items[idx];
         if myitem.is_stripped() {
@@ -273,11 +279,13 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
             write!(
                 w,
                 "<h2 id=\"{id}\" class=\"section-header\">\
-                       <a href=\"#{id}\">{name}</a></h2>\n{}",
+                    <a href=\"#{id}\">{name}</a>\
+                 </h2>\n{}",
                 ITEM_TABLE_OPEN,
                 id = cx.derive_id(short.to_owned()),
                 name = name
             );
+            item_table_nth_element = 0;
         }
 
         match *myitem.kind {
@@ -383,6 +391,13 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
                         .join(" "),
                 );
             }
+        }
+
+        item_table_nth_element += 1;
+        if item_table_nth_element > item_table_block_size {
+            w.write_str(ITEM_TABLE_CLOSE);
+            w.write_str(ITEM_TABLE_OPEN);
+            item_table_nth_element = 0;
         }
     }
 
@@ -942,15 +957,15 @@ fn item_union(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, s: &clean::Uni
 }
 
 fn print_tuple_struct_fields(w: &mut Buffer, cx: &Context<'_>, s: &[clean::Item]) {
-    for (i, ty) in s
-        .iter()
-        .map(|f| if let clean::StructFieldItem(ref ty) = *f.kind { ty } else { unreachable!() })
-        .enumerate()
-    {
+    for (i, ty) in s.iter().enumerate() {
         if i > 0 {
             w.write_str(",&nbsp;");
         }
-        write!(w, "{}", ty.print(cx));
+        match *ty.kind {
+            clean::StrippedItem(box clean::StructFieldItem(_)) => w.write_str("_"),
+            clean::StructFieldItem(ref ty) => write!(w, "{}", ty.print(cx)),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -1066,24 +1081,27 @@ fn item_enum(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, e: &clean::Enum
                     name = variant.name.as_ref().unwrap(),
                 );
                 for field in fields {
-                    use crate::clean::StructFieldItem;
-                    if let StructFieldItem(ref ty) = *field.kind {
-                        let id = cx.derive_id(format!(
-                            "variant.{}.field.{}",
-                            variant.name.as_ref().unwrap(),
-                            field.name.as_ref().unwrap()
-                        ));
-                        write!(
-                            w,
-                            "<span id=\"{id}\" class=\"variant small-section-header\">\
-                                 <a href=\"#{id}\" class=\"anchor field\"></a>\
-                                 <code>{f}:&nbsp;{t}</code>\
-                             </span>",
-                            id = id,
-                            f = field.name.as_ref().unwrap(),
-                            t = ty.print(cx)
-                        );
-                        document(w, cx, field, Some(variant));
+                    match *field.kind {
+                        clean::StrippedItem(box clean::StructFieldItem(_)) => {}
+                        clean::StructFieldItem(ref ty) => {
+                            let id = cx.derive_id(format!(
+                                "variant.{}.field.{}",
+                                variant.name.as_ref().unwrap(),
+                                field.name.as_ref().unwrap()
+                            ));
+                            write!(
+                                w,
+                                "<span id=\"{id}\" class=\"variant small-section-header\">\
+                                    <a href=\"#{id}\" class=\"anchor field\"></a>\
+                                    <code>{f}:&nbsp;{t}</code>\
+                                </span>",
+                                id = id,
+                                f = field.name.as_ref().unwrap(),
+                                t = ty.print(cx)
+                            );
+                            document(w, cx, field, Some(variant));
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 w.write_str("</div></div>");
@@ -1621,6 +1639,15 @@ fn document_non_exhaustive(w: &mut Buffer, item: &clean::Item) {
 }
 
 fn document_type_layout(w: &mut Buffer, cx: &Context<'_>, ty_def_id: DefId) {
+    fn write_size_of_layout(w: &mut Buffer, layout: &Layout, tag_size: u64) {
+        if layout.abi.is_unsized() {
+            write!(w, "(unsized)");
+        } else {
+            let bytes = layout.size.bytes() - tag_size;
+            write!(w, "{size} byte{pl}", size = bytes, pl = if bytes == 1 { "" } else { "s" },);
+        }
+    }
+
     if !cx.shared.show_type_layout {
         return;
     }
@@ -1642,16 +1669,40 @@ fn document_type_layout(w: &mut Buffer, cx: &Context<'_>, ty_def_id: DefId) {
                  <a href=\"https://doc.rust-lang.org/reference/type-layout.html\">“Type Layout”</a> \
                  chapter for details on type layout guarantees.</p></div>"
             );
-            if ty_layout.layout.abi.is_unsized() {
-                writeln!(w, "<p><strong>Size:</strong> (unsized)</p>");
-            } else {
-                let bytes = ty_layout.layout.size.bytes();
-                writeln!(
-                    w,
-                    "<p><strong>Size:</strong> {size} byte{pl}</p>",
-                    size = bytes,
-                    pl = if bytes == 1 { "" } else { "s" },
-                );
+            w.write_str("<p><strong>Size:</strong> ");
+            write_size_of_layout(w, ty_layout.layout, 0);
+            writeln!(w, "</p>");
+            if let Variants::Multiple { variants, tag, tag_encoding, .. } =
+                &ty_layout.layout.variants
+            {
+                if !variants.is_empty() {
+                    w.write_str(
+                        "<p><strong>Size for each variant:</strong></p>\
+                            <ul>",
+                    );
+
+                    let adt = if let Adt(adt, _) = ty_layout.ty.kind() {
+                        adt
+                    } else {
+                        span_bug!(tcx.def_span(ty_def_id), "not an adt")
+                    };
+
+                    let tag_size = if let TagEncoding::Niche { .. } = tag_encoding {
+                        0
+                    } else if let Primitive::Int(i, _) = tag.value {
+                        i.size().bytes()
+                    } else {
+                        span_bug!(tcx.def_span(ty_def_id), "tag is neither niche nor int")
+                    };
+
+                    for (index, layout) in variants.iter_enumerated() {
+                        let ident = adt.variants[index].ident;
+                        write!(w, "<li><code>{name}</code>: ", name = ident);
+                        write_size_of_layout(w, layout, tag_size);
+                        writeln!(w, "</li>");
+                    }
+                    w.write_str("</ul>");
+                }
             }
         }
         // This kind of layout error can occur with valid code, e.g. if you try to

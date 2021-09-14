@@ -447,9 +447,9 @@ crate fn build_impl(
     }
 
     let (merged_attrs, cfg) = merge_attrs(cx, parent_module.into(), load_attrs(cx, did), attrs);
-    debug!("merged_attrs={:?}", merged_attrs);
+    trace!("merged_attrs={:?}", merged_attrs);
 
-    debug!("build_impl: impl {:?} for {:?}", trait_.def_id(), for_.def_id());
+    trace!("build_impl: impl {:?} for {:?}", trait_.def_id(), for_.def_id());
     ret.push(clean::Item::from_def_id_and_attrs_and_parts(
         did,
         None,
@@ -482,12 +482,13 @@ fn build_module(
     // visit each node at most once.
     for &item in cx.tcx.item_children(did).iter() {
         if item.vis == ty::Visibility::Public {
-            if let Some(def_id) = item.res.mod_def_id() {
+            let res = item.res.expect_non_local();
+            if let Some(def_id) = res.mod_def_id() {
                 if did == def_id || !visited.insert(def_id) {
                     continue;
                 }
             }
-            if let Res::PrimTy(p) = item.res {
+            if let Res::PrimTy(p) = res {
                 // Primitive types can't be inlined so generate an import instead.
                 let prim_ty = clean::PrimitiveType::from(p);
                 items.push(clean::Item {
@@ -500,7 +501,7 @@ fn build_module(
                         clean::ImportSource {
                             path: clean::Path {
                                 global: false,
-                                res: item.res,
+                                res,
                                 segments: vec![clean::PathSegment {
                                     name: prim_ty.as_sym(),
                                     args: clean::GenericArgs::AngleBracketed {
@@ -515,9 +516,7 @@ fn build_module(
                     ))),
                     cfg: None,
                 });
-            } else if let Some(i) =
-                try_inline(cx, did, None, item.res, item.ident.name, None, visited)
-            {
+            } else if let Some(i) = try_inline(cx, did, None, res, item.ident.name, None, visited) {
                 items.extend(i)
             }
         }
@@ -557,7 +556,6 @@ fn build_macro(
     name: Symbol,
     import_def_id: Option<DefId>,
 ) -> clean::ItemKind {
-    let imported_from = cx.tcx.crate_name(def_id.krate);
     match CStore::from_tcx(cx.tcx).load_macro_untracked(def_id, cx.sess()) {
         LoadedMacro::MacroDef(item_def, _) => {
             if let ast::ItemKind::MacroDef(ref def) = item_def.kind {
@@ -569,7 +567,6 @@ fn build_macro(
                         def_id,
                         cx.tcx.visibility(import_def_id.unwrap_or(def_id)),
                     ),
-                    imported_from: Some(imported_from),
                 })
             } else {
                 unreachable!()

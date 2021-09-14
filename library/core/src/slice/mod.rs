@@ -98,7 +98,6 @@ impl<T> [T] {
     #[rustc_const_stable(feature = "const_slice_len", since = "1.39.0")]
     #[inline]
     // SAFETY: const sound because we transmute out the length field as a usize (which it must be)
-    #[cfg_attr(bootstrap, rustc_allow_const_fn_unstable(const_fn_union))]
     pub const fn len(&self) -> usize {
         // FIXME: Replace with `crate::ptr::metadata(self)` when that is const-stable.
         // As of this writing this causes a "Const-stable functions can only call other
@@ -2258,9 +2257,9 @@ impl<T> [T] {
     /// assert!(match r { Ok(1..=4) => true, _ => false, });
     /// ```
     // Lint rustdoc::broken_intra_doc_links is allowed as `slice::sort_by_key` is
-    // in crate `alloc`, and as such doesn't exists yet when building `core`.
-    // links to downstream crate: #74481. Since primitives are only documented in
-    // libstd (#73423), this never leads to broken links in practice.
+    // in crate `alloc`, and as such doesn't exists yet when building `core`: #74481.
+    // This breaks links when slice is displayed in core, but changing it to use relative links
+    // would break when the item is re-exported. So allow the core links to be broken for now.
     #[allow(rustdoc::broken_intra_doc_links)]
     #[stable(feature = "slice_binary_search_by_key", since = "1.10.0")]
     #[inline]
