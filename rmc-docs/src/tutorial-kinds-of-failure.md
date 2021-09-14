@@ -49,8 +49,9 @@ But we're able to check this unsafe code with RMC:
 VERIFICATION FAILED
 ```
 
-Notice there were a *lot* of verification conditions being checked: 468!
+Notice there were a *lot* of verification conditions being checked: in the above output, 468! (It may change for you.)
 This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
+RMC is inserting a lot more checks than appear as asserts in our code, so the output can be large.
 Let's narrow that output down a bit:
 
 ```
@@ -60,7 +61,7 @@ VERIFICATION FAILED
 ```
 
 Notice that, for RMC, this has gone from a simple bounds-checking problem to a pointer-checking problem.
-RMC will check arbitrary operations on pointers to ensure they're not potentially invalid memory accesses.
+RMC will check operations on pointers to ensure they're not potentially invalid memory accesses.
 Any unsafe code that manipulates pointers will, as we see here, raise failures if its behavior is actually unsafe. 
 
 Consider trying a few more small exercises with this example:
@@ -69,6 +70,25 @@ Consider trying a few more small exercises with this example:
 (Try predicting the answer, then seeing if you got it right.)
 2. Exercise: Remember how to get a trace from RMC? Find out what inputs it failed on.
 3. Exercise: Fix the error, run RMC, and see a successful verification.
+4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run RMC. It should still successfully verify.
+
+<details>
+<summary>Click to see explanation for exercise 1</summary>
+
+Having switched back to the safe indexing operation, RMC reports two failures instead of just one:
+
+```
+# rmc tests/bounds-check.rs | grep FAIL
+[get_wrapped.assertion.3] line 9 index out of bounds: the length is move _12 but the index is _5: FAILURE
+[get_wrapped.pointer_dereference.5] line 9 dereference failure: pointer outside object bounds in a.data[var_5]: FAILURE
+VERIFICATION FAILED
+```
+
+The first is Rust's implicit assertion for the safe indexing operation.
+The second is RMC's check to ensure the pointer operation is actually safe.
+This pattern (two checks for similar issues in safe Rust code) is common, and we'll see it again in the next section.
+
+</details>
 
 ## Overflow and math errors
 
@@ -93,6 +113,7 @@ Consider this code (from `tests/overflow.rs`):
 ```
 
 A trivial function, but if we write a property test for it, we immediately find inputs where it fails, thanks to Rust's dynamic checks.
+RMC will find these failures as well.
 Here's the output from RMC:
 
 ```
@@ -115,8 +136,6 @@ For instance, instead of `a + b` write `a.wrapping_add(b)`.
 > However, [at the present time](https://github.com/model-checking/rmc/issues/480), while this disables the dynamic assertion that Rust inserts, it does not disable the additional RMC overflow check.
 > As a result, this currently still fails in RMC.
 
-</quote>
-
 ### Exercise: Classic overflow failure
 
 One of the classic subtle bugs that persisted in many implementations for a very long time is finding the midpoint in quick sort.
@@ -132,6 +151,33 @@ RMC immediately spots the bug in the above code.
 (Hint: depending on which approach you take, you may need to add the assumption that `high > low` to your proof harness.
 Don't add that right away, see what happens if you don't. Just keep it in mind.)
 2. Exercise: Prove your new implementation actually finds the midpoint correctly by adding an assertion to the test harness.
+
+<details>
+<summary>Click to see solutions for these exercises</summary>
+
+A very common approach for resolving the overflow issue looks like this:
+
+```rust
+return low + (high - low) / 2;
+```
+
+But if you naively try this (try it!), you'll find a new underflow error: `high - low` might result in a negative number, but has type `u32`.
+Hence, the need to add an assumption that would make that impossible.
+(Adding an assumption, though, means there's a new way to "use it wrong." Perhaps we'd like to avoid that!)
+
+After that, you might wonder how to "prove your new implementation correct."
+After all, what does "correct" even mean?
+Often we're using a good approximation of correct, such as the equivalence of two implementations (often one much "simpler" than the other somehow).
+Here's one possible asssertion to make that obvious:
+
+```rust
+assert!(result as u64 == (a as u64 + b as u64) / 2);
+```
+
+Since this implementation is just the original one, but cast to a wider unsigned integer type, it should have the same result but without overflowing.
+When RMC tells us both of these methods yield the same exact result, that gives us additional confidence that we haven't overlooked something.
+
+</details>
 
 ## Future work
 
