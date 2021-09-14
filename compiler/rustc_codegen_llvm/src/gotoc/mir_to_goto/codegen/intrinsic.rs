@@ -60,7 +60,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let dst = fargs.remove(0).cast_to(Type::void_pointer());
                 let count = fargs.remove(0);
                 let sz = {
-                    match self.fn_sig_of_instance(instance).skip_binder().inputs()[0].kind() {
+                    match self.fn_sig_of_instance(instance).unwrap().skip_binder().inputs()[0]
+                        .kind()
+                    {
                         ty::RawPtr(t) => {
                             let layout = self.layout_of(t.ty);
                             Expr::int_constant(layout.size.bytes(), Type::size_t())
@@ -259,17 +261,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_and_acqrel" => codegen_atomic_binop!(bitand),
             "atomic_and_rel" => codegen_atomic_binop!(bitand),
             "atomic_and_relaxed" => codegen_atomic_binop!(bitand),
-            "atomic_cxchg" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_acq" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_acq_failrelaxed" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_acqrel" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_acqrel_failrelaxed" => {
+            name if name.starts_with("atomic_cxchg") => {
                 self.codegen_atomic_cxchg(intrinsic, fargs, p, loc)
             }
-            "atomic_cxchg_failacq" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_failrelaxed" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_rel" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
-            "atomic_cxchg_relaxed" => self.codegen_atomic_cxchg(intrinsic, fargs, p, loc),
             "atomic_fence" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_fence_acq" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_fence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),

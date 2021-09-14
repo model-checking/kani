@@ -351,7 +351,7 @@ macro_rules! expr {
 impl Expr {
     /// `&self`
     pub fn address_of(self) -> Self {
-        assert!(self.can_take_address_of());
+        assert!(self.can_take_address_of(), "Can't take address of {:?}", self);
         expr!(AddressOf(self), self.typ.clone().to_pointer())
     }
 
@@ -566,9 +566,11 @@ impl Expr {
             self,
             field,
         );
-
-        let typ = symbol_table.lookup_field_type_in_type(self.typ(), field).unwrap().clone();
-        expr!(Member { lhs: self, field: field.to_string() }, typ)
+        if let Some(ty) = symbol_table.lookup_field_type_in_type(self.typ(), field) {
+            expr!(Member { lhs: self, field: field.to_string() }, ty.clone())
+        } else {
+            unreachable!("unable to find field {:?} for type {:?}", field, self.typ())
+        }
     }
 
     /// `__nondet_typ()`
@@ -603,8 +605,9 @@ impl Expr {
         // Check that each formal field has an value
         assert!(
             fields.iter().zip(values.iter()).all(|(f, v)| f.typ() == *v.typ()),
-            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}\n\t{:?}",
             typ,
+            fields,
             values
         );
         expr!(Struct { values }, typ)
@@ -709,8 +712,9 @@ impl Expr {
                 .iter()
                 .zip(non_padding_values.iter())
                 .all(|(f, v)| f.field_typ().unwrap() == v.typ()),
-            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}\n\t{:?}",
             typ,
+            non_padding_fields,
             non_padding_values
         );
 
@@ -748,8 +752,9 @@ impl Expr {
         );
         assert!(
             fields.iter().zip(values.iter()).all(|(f, v)| &f.typ() == v.typ()),
-            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}",
+            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}\n\t{:?}",
             typ,
+            fields,
             values
         );
 

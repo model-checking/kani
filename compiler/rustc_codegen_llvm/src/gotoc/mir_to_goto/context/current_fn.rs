@@ -25,7 +25,7 @@ pub struct CurrentFnCtx<'tcx> {
     /// A human readable pretty name for the current function
     readable_name: String,
     /// The signature of the current function
-    sig: PolyFnSig<'tcx>,
+    sig: Option<PolyFnSig<'tcx>>,
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
 }
@@ -111,7 +111,7 @@ impl CurrentFnCtx<'tcx> {
     }
 
     /// The signature of the function we are currently compiling
-    pub fn sig(&self) -> PolyFnSig<'tcx> {
+    pub fn sig(&self) -> Option<PolyFnSig<'tcx>> {
         self.sig
     }
 }

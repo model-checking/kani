@@ -148,20 +148,21 @@ impl<'tcx> GotocCtx<'tcx> {
         self.sig_with_closure_untupled(sig)
     }
 
-    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> ty::PolyFnSig<'tcx> {
+    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> Option<ty::PolyFnSig<'tcx>> {
         let fntyp = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         self.monomorphize(match fntyp.kind() {
-            ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
+            ty::Closure(def_id, subst) => Some(self.closure_sig(*def_id, subst)),
             ty::FnPtr(..) | ty::FnDef(..) => {
                 let sig = fntyp.fn_sig(self.tcx);
                 // Some virtual calls through a vtable may actually be closures
                 // or shims that also need the arguments untupled, even though
                 // the kind of the trait type is not a ty::Closure.
                 if self.ty_needs_closure_untupled(fntyp) {
-                    return self.sig_with_closure_untupled(sig);
+                    return Some(self.sig_with_closure_untupled(sig));
                 }
-                sig
+                Some(sig)
             }
+            ty::Generator(_def_id, _substs, _movability) => None,
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -243,7 +244,7 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> DatatypeComponent {
         // Gives a binder with function signature
-        let sig = self.fn_sig_of_instance(instance);
+        let sig = self.fn_sig_of_instance(instance).unwrap();
 
         // Gives an Irep Pointer object for the signature
         let fn_ty = self.codegen_dynamic_function_sig(sig);
@@ -367,14 +368,6 @@ impl<'tcx> GotocCtx<'tcx> {
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
         with_no_trimmed_paths(|| printer.print_type(t).unwrap());
-        // TODO: The following line is a temporary measure to remove the static lifetime
-        // appearing as \'static in mangled type names.  This should be done using regular
-        // expressions to handle more or less whitespace around the lifetime, but this
-        // requires adding the regex module to the dependencies in Cargo.toml.  This should
-        // probably be done modifying the rustc pretty printer, but that is deep in the rustc
-        // code.  See the implementation of pretty_print_region on line 1720 in
-        // compiler/rustc_middle/src/ty/print/pretty.rs.
-        let name = name.replace(" + \'static", "").replace("\'static ", "");
 
         // Crate resolution: mangled names need to be distinct across different versions
         // of the same crate that could be pulled in by dependencies. However, RMC's
@@ -493,7 +486,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
-            ty::Generator(_, _, _) => unimplemented!(),
+            ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
             ty::Never =>
             // unfortunately, there is no bottom in C. We must pick a type
             {
@@ -679,6 +672,15 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(&self.ty_mangled_name(t), |ctx, _| {
             ctx.codegen_ty_tuple_like(t, substs.as_closure().upvar_tys().collect())
         })
+    }
+
+    /// Preliminary support for the Generator type kind. The core functionality remains
+    /// unimplemented, but this way we fail at verification time only if paths that
+    /// rely on Generator types are used.
+    fn codegen_ty_generator(&mut self, substs: ty::subst::SubstsRef<'tcx>) -> Type {
+        let tys = substs.as_generator().upvar_tys().map(|t| self.codegen_ty(t)).collect();
+        let output = self.codegen_ty(substs.as_generator().return_ty());
+        Type::code_with_unnamed_parameters(tys, output)
     }
 
     pub fn codegen_fat_ptr(&mut self, mir_type: Ty<'tcx>) -> Type {
@@ -1125,7 +1127,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the function type of the current instance
     pub fn fn_typ(&mut self) -> Type {
         let sig = self.current_fn().sig();
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+        let sig =
+            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig.unwrap());
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
         let mut params: Vec<Parameter> = sig
             .inputs()

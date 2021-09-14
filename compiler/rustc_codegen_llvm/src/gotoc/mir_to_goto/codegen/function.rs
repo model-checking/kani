@@ -25,6 +25,10 @@ impl<'tcx> GotocCtx<'tcx> {
             name if name.starts_with("bridge::client") => true,
             // https://github.com/model-checking/rmc/issues/282
             "bridge::closure::Closure::<'a, A, R>::call" => true,
+            // Generators
+            name if name.starts_with("<std::future::from_generator::GenFuture<T>") => true,
+            name if name.contains("reusable_box::ReusableBoxFuture") => true,
+            "tokio::sync::Semaphore::acquire_owned::{closure#0}" => true,
             _ => false,
         }
     }
@@ -64,7 +68,6 @@ impl<'tcx> GotocCtx<'tcx> {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
-        assert!(old_sym.is_function());
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
@@ -79,6 +82,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {
+            assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
             self.print_instance(instance, mir);
             let labels = self
