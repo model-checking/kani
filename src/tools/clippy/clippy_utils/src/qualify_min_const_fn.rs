@@ -36,9 +36,7 @@ pub fn is_min_const_fn(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, msrv: Option<&Ru
                 ty::PredicateKind::ObjectSafe(_) => panic!("object safe predicate on function: {:#?}", predicate),
                 ty::PredicateKind::ClosureKind(..) => panic!("closure kind predicate on function: {:#?}", predicate),
                 ty::PredicateKind::Subtype(_) => panic!("subtype predicate on function: {:#?}", predicate),
-                ty::PredicateKind::Coerce(_) => {
-                    panic!("coerce predicate on function: {:#?}", predicate)
-                },
+                ty::PredicateKind::Coerce(_) => panic!("coerce predicate on function: {:#?}", predicate),
                 ty::PredicateKind::Trait(pred) => {
                     if Some(pred.def_id()) == tcx.lang_items().sized_trait() {
                         continue;
@@ -194,7 +192,7 @@ fn check_rvalue(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, def_id: DefId, rvalue: &Rv
                 ))
             }
         },
-        Rvalue::NullaryOp(NullOp::SizeOf, _) => Ok(()),
+        Rvalue::NullaryOp(NullOp::SizeOf | NullOp::AlignOf, _) => Ok(()),
         Rvalue::NullaryOp(NullOp::Box, _) => Err((span, "heap allocations are not allowed in const fn".into())),
         Rvalue::UnaryOp(_, operand) => {
             let ty = operand.ty(body, tcx);
@@ -366,7 +364,7 @@ fn check_terminator(
 }
 
 fn is_const_fn(tcx: TyCtxt<'_>, def_id: DefId, msrv: Option<&RustcVersion>) -> bool {
-    rustc_mir::const_eval::is_const_fn(tcx, def_id)
+    rustc_const_eval::const_eval::is_const_fn(tcx, def_id)
         && tcx.lookup_const_stability(def_id).map_or(true, |const_stab| {
             if let rustc_attr::StabilityLevel::Stable { since } = const_stab.level {
                 // Checking MSRV is manually necessary because `rustc` has no such concept. This entire

@@ -36,9 +36,9 @@ dependencies = [
 
 [[package]]
 name = "aho-corasick"
-version = "0.7.13"
+version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043164d8ba5c4c3035fec9bbee8647c0261d788f3474306f93bb65901cae0e86"
+checksum = "1e37cfd5e7657ada45f742d6e99ca5788580b5c529dc78faf11ece6dc702656f"
 dependencies = [
  "memchr",
 ]
@@ -303,7 +303,7 @@ dependencies = [
  "humantime 2.0.1",
  "ignore",
  "im-rc",
- "itertools 0.10.0",
+ "itertools 0.10.1",
  "jobserver",
  "lazy_static",
  "lazycell",
@@ -398,7 +398,7 @@ dependencies = [
  "flate2",
  "git2",
  "glob",
- "itertools 0.10.0",
+ "itertools 0.10.1",
  "lazy_static",
  "remove_dir_all",
  "serde_json",
@@ -564,13 +564,16 @@ dependencies = [
 
 [[package]]
 name = "clippy"
-version = "0.1.56"
+version = "0.1.57"
 dependencies = [
  "cargo_metadata 0.12.0",
  "clippy_lints",
- "compiletest_rs 0.6.0",
+ "clippy_utils",
+ "compiletest_rs",
  "derive-new",
  "filetime",
+ "if_chain",
+ "itertools 0.10.1",
  "quote",
  "regex",
  "rustc-workspace-hack",
@@ -588,7 +591,7 @@ version = "0.0.1"
 dependencies = [
  "bytecount",
  "clap",
- "itertools 0.9.0",
+ "itertools 0.10.1",
  "opener",
  "regex",
  "shell-escape",
@@ -597,12 +600,12 @@ dependencies = [
 
 [[package]]
 name = "clippy_lints"
-version = "0.1.56"
+version = "0.1.57"
 dependencies = [
  "cargo_metadata 0.12.0",
  "clippy_utils",
  "if_chain",
- "itertools 0.9.0",
+ "itertools 0.10.1",
  "pulldown-cmark 0.8.0",
  "quine-mc_cluskey",
  "regex-syntax",
@@ -618,14 +621,10 @@ dependencies = [
 
 [[package]]
 name = "clippy_utils"
-version = "0.1.56"
+version = "0.1.57"
 dependencies = [
  "if_chain",
- "itertools 0.9.0",
- "regex-syntax",
  "rustc-semver",
- "serde",
- "unicode-normalization",
 ]
 
 [[package]]
@@ -695,29 +694,6 @@ dependencies = [
  "tracing-subscriber",
  "unified-diff",
  "walkdir",
- "winapi",
-]
-
-[[package]]
-name = "compiletest_rs"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0086d6ad78cf409c3061618cd98e2789d5c9ce598fc9651611cf62eae0a599cb"
-dependencies = [
- "diff",
- "filetime",
- "getopts",
- "lazy_static",
- "libc",
- "log",
- "miow",
- "regex",
- "rustfix 0.5.1",
- "serde",
- "serde_derive",
- "serde_json",
- "tempfile",
- "tester",
  "winapi",
 ]
 
@@ -1764,9 +1740,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37d572918e350e82412fe766d24b15e6682fb2ed2bbe018280caa810397cb319"
+checksum = "69ddb889f9d0d08a67338271fa9b62996bc788c7796a5c18cf057420aaed5eaf"
 dependencies = [
  "either",
 ]
@@ -2293,7 +2269,7 @@ name = "miri"
 version = "0.1.0"
 dependencies = [
  "colored",
- "compiletest_rs 0.7.0",
+ "compiletest_rs",
  "env_logger 0.8.1",
  "getrandom 0.2.0",
  "hex 0.4.2",
@@ -3083,9 +3059,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.4.6"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a26af418b574bd56588335b3a3659a65725d4e636eb1016c2f9e3b38c7cc759"
+checksum = "d07a8629359eb56f1e2fb1652bb04212c072a87ba68546a04065d525673ac461"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3699,6 +3675,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_borrowck"
+version = "0.0.0"
+dependencies = [
+ "either",
+ "itertools 0.9.0",
+ "polonius-engine",
+ "rustc_const_eval",
+ "rustc_data_structures",
+ "rustc_errors",
+ "rustc_graphviz",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_infer",
+ "rustc_lexer",
+ "rustc_middle",
+ "rustc_mir_dataflow",
+ "rustc_serialize",
+ "rustc_session",
+ "rustc_span",
+ "rustc_target",
+ "rustc_trait_selection",
+ "rustc_traits",
+ "smallvec",
+ "tracing",
+]
+
+[[package]]
 name = "rustc_builtin_macros"
 version = "0.0.0"
 dependencies = [
@@ -3783,6 +3786,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_const_eval"
+version = "0.0.0"
+dependencies = [
+ "either",
+ "gsgdt",
+ "rustc_apfloat",
+ "rustc_ast",
+ "rustc_attr",
+ "rustc_data_structures",
+ "rustc_errors",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_infer",
+ "rustc_macros",
+ "rustc_middle",
+ "rustc_mir_dataflow",
+ "rustc_session",
+ "rustc_span",
+ "rustc_target",
+ "rustc_trait_selection",
+ "tracing",
+]
+
+[[package]]
 name = "rustc_data_structures"
 version = "0.0.0"
 dependencies = [
@@ -3820,6 +3847,7 @@ dependencies = [
  "rustc_ast",
  "rustc_ast_pretty",
  "rustc_codegen_ssa",
+ "rustc_const_eval",
  "rustc_data_structures",
  "rustc_error_codes",
  "rustc_errors",
@@ -3830,7 +3858,6 @@ dependencies = [
  "rustc_lint",
  "rustc_metadata",
  "rustc_middle",
- "rustc_mir",
  "rustc_parse",
  "rustc_plugin_impl",
  "rustc_save_analysis",
@@ -3989,9 +4016,11 @@ dependencies = [
  "rustc_ast_lowering",
  "rustc_ast_passes",
  "rustc_attr",
+ "rustc_borrowck",
  "rustc_builtin_macros",
  "rustc_codegen_llvm",
  "rustc_codegen_ssa",
+ "rustc_const_eval",
  "rustc_data_structures",
  "rustc_errors",
  "rustc_expand",
@@ -4000,8 +4029,9 @@ dependencies = [
  "rustc_lint",
  "rustc_metadata",
  "rustc_middle",
- "rustc_mir",
  "rustc_mir_build",
+ "rustc_mir_transform",
+ "rustc_monomorphize",
  "rustc_parse",
  "rustc_passes",
  "rustc_plugin_impl",
@@ -4119,6 +4149,8 @@ version = "0.0.0"
 dependencies = [
  "bitflags",
  "chalk-ir",
+ "either",
+ "gsgdt",
  "polonius-engine",
  "rustc-rayon-core",
  "rustc_apfloat",
@@ -4128,6 +4160,7 @@ dependencies = [
  "rustc_data_structures",
  "rustc_errors",
  "rustc_feature",
+ "rustc_graphviz",
  "rustc_hir",
  "rustc_index",
  "rustc_macros",
@@ -4137,38 +4170,6 @@ dependencies = [
  "rustc_span",
  "rustc_target",
  "rustc_type_ir",
- "smallvec",
- "tracing",
-]
-
-[[package]]
-name = "rustc_mir"
-version = "0.0.0"
-dependencies = [
- "coverage_test_macros",
- "either",
- "gsgdt",
- "itertools 0.9.0",
- "polonius-engine",
- "regex",
- "rustc_apfloat",
- "rustc_ast",
- "rustc_attr",
- "rustc_data_structures",
- "rustc_errors",
- "rustc_graphviz",
- "rustc_hir",
- "rustc_index",
- "rustc_infer",
- "rustc_lexer",
- "rustc_macros",
- "rustc_middle",
- "rustc_serialize",
- "rustc_session",
- "rustc_span",
- "rustc_target",
- "rustc_trait_selection",
- "rustc_traits",
  "smallvec",
  "tracing",
 ]
@@ -4192,6 +4193,66 @@ dependencies = [
  "rustc_span",
  "rustc_target",
  "rustc_trait_selection",
+ "smallvec",
+ "tracing",
+]
+
+[[package]]
+name = "rustc_mir_dataflow"
+version = "0.0.0"
+dependencies = [
+ "polonius-engine",
+ "regex",
+ "rustc_ast",
+ "rustc_data_structures",
+ "rustc_graphviz",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_middle",
+ "rustc_serialize",
+ "rustc_session",
+ "rustc_span",
+ "rustc_target",
+ "smallvec",
+ "tracing",
+]
+
+[[package]]
+name = "rustc_mir_transform"
+version = "0.0.0"
+dependencies = [
+ "coverage_test_macros",
+ "itertools 0.9.0",
+ "rustc_ast",
+ "rustc_attr",
+ "rustc_const_eval",
+ "rustc_data_structures",
+ "rustc_errors",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_middle",
+ "rustc_mir_dataflow",
+ "rustc_serialize",
+ "rustc_session",
+ "rustc_span",
+ "rustc_target",
+ "rustc_trait_selection",
+ "smallvec",
+ "tracing",
+]
+
+[[package]]
+name = "rustc_monomorphize"
+version = "0.0.0"
+dependencies = [
+ "rustc_data_structures",
+ "rustc_errors",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_middle",
+ "rustc_session",
+ "rustc_span",
+ "rustc_target",
  "smallvec",
  "tracing",
 ]

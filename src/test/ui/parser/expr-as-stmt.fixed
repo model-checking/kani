@@ -10,7 +10,7 @@ fn foo() -> i32 {
 }
 
 fn bar() -> i32 {
-    ({2}) + 2 //~ ERROR expected expression, found `+`
+    ({2}) + 2 //~ ERROR leading `+` is not supported
     //~^ ERROR mismatched types
 }
 
@@ -30,6 +30,11 @@ fn moo(x: u32) -> bool {
     (match x {
         _ => 1,
     }) > 0 //~ ERROR expected expression
+}
+
+fn qux() -> u32 {
+    ({2}) - 2 //~ ERROR cannot apply unary operator `-` to type `u32`
+    //~^ ERROR mismatched types
 }
 
 fn main() {}

@@ -143,8 +143,8 @@ macro validate_simd_type($fx:ident, $intrinsic:ident, $span:ident, $ty:expr) {
 }
 
 pub(crate) fn clif_vector_type<'tcx>(tcx: TyCtxt<'tcx>, layout: TyAndLayout<'tcx>) -> Option<Type> {
-    let (element, count) = match &layout.abi {
-        Abi::Vector { element, count } => (element.clone(), *count),
+    let (element, count) = match layout.abi {
+        Abi::Vector { element, count } => (element, count),
         _ => unreachable!(),
     };
 
@@ -823,7 +823,7 @@ pub(crate) fn codegen_intrinsic_call<'tcx>(
             dest.write_cvalue(fx, val);
         };
 
-        pref_align_of | min_align_of | needs_drop | type_id | type_name | variant_count, () {
+        pref_align_of | needs_drop | type_id | type_name | variant_count, () {
             let const_val =
                 fx.tcx.const_eval_instance(ParamEnv::reveal_all(), instance, None).unwrap();
             let val = crate::constant::codegen_const_value(
