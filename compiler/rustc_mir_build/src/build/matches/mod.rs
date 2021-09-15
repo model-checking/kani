@@ -900,10 +900,7 @@ fn traverse_candidate<'pat, 'tcx: 'pat, C, T, I>(
 struct Binding<'tcx> {
     span: Span,
     source: Place<'tcx>,
-    name: Symbol,
     var_id: HirId,
-    var_ty: Ty<'tcx>,
-    mutability: Mutability,
     binding_mode: BindingMode,
 }
 
@@ -2063,7 +2060,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 source_info.span, ascription.source, ascription.user_ty,
             );
 
-            let user_ty = ascription.user_ty.clone().user_ty(
+            let user_ty = ascription.user_ty.user_ty(
                 &mut self.canonical_user_type_annotations,
                 ascription.source.ty(&self.local_decls, self.tcx).ty,
                 source_info.span,

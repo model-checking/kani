@@ -19,7 +19,7 @@ use rustc_hir::intravisit::Visitor;
 use rustc_hir::GenericParam;
 use rustc_hir::Item;
 use rustc_hir::Node;
-use rustc_middle::mir::abstract_const::NotConstEvaluatable;
+use rustc_middle::thir::abstract_const::NotConstEvaluatable;
 use rustc_middle::ty::error::ExpectedFound;
 use rustc_middle::ty::fold::TypeFolder;
 use rustc_middle::ty::{
@@ -249,10 +249,10 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                 if let ObligationCauseCode::WellFormed(Some(wf_loc)) =
                     root_obligation.cause.code.peel_derives()
                 {
-                    if let Some(cause) = self.tcx.diagnostic_hir_wf_check((
-                        tcx.erase_regions(obligation.predicate),
-                        wf_loc.clone(),
-                    )) {
+                    if let Some(cause) = self
+                        .tcx
+                        .diagnostic_hir_wf_check((tcx.erase_regions(obligation.predicate), *wf_loc))
+                    {
                         obligation.cause = cause;
                         span = obligation.cause.span;
                     }

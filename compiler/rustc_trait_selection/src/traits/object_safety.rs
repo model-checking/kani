@@ -465,9 +465,9 @@ fn virtual_call_violation_for_method<'tcx>(
 
             let param_env = tcx.param_env(method.def_id);
 
-            let abi_of_ty = |ty: Ty<'tcx>| -> Option<&Abi> {
+            let abi_of_ty = |ty: Ty<'tcx>| -> Option<Abi> {
                 match tcx.layout_of(param_env.and(ty)) {
-                    Ok(layout) => Some(&layout.abi),
+                    Ok(layout) => Some(layout.abi),
                     Err(err) => {
                         // #78372
                         tcx.sess.delay_span_bug(
@@ -836,7 +836,7 @@ fn contains_illegal_self_type_reference<'tcx, T: TypeFoldable<'tcx>>(
             //
             // This shouldn't really matter though as we can't really use any
             // constants which are not considered const evaluatable.
-            use rustc_middle::mir::abstract_const::Node;
+            use rustc_middle::thir::abstract_const::Node;
             if let Ok(Some(ct)) = AbstractConst::new(self.tcx, uv.shrink()) {
                 const_evaluatable::walk_abstract_const(self.tcx, ct, |node| match node.root() {
                     Node::Leaf(leaf) => {

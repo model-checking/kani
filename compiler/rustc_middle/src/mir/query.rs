@@ -1,6 +1,6 @@
 //! Values computed by queries that use MIR.
 
-use crate::mir::{abstract_const, Body, Promoted};
+use crate::mir::{Body, Promoted};
 use crate::ty::{self, Ty, TyCtxt};
 use rustc_data_structures::sync::Lrc;
 use rustc_data_structures::vec_map::VecMap;
@@ -219,7 +219,7 @@ pub struct BorrowCheckResult<'tcx> {
 /// The result of the `mir_const_qualif` query.
 ///
 /// Each field (except `error_occured`) corresponds to an implementer of the `Qualif` trait in
-/// `rustc_mir/src/transform/check_consts/qualifs.rs`. See that file for more information on each
+/// `rustc_const_eval/src/transform/check_consts/qualifs.rs`. See that file for more information on each
 /// `Qualif`.
 #[derive(Clone, Copy, Debug, Default, TyEncodable, TyDecodable, HashStable)]
 pub struct ConstQualifs {
@@ -313,7 +313,7 @@ pub struct ClosureOutlivesRequirement<'tcx> {
 /// are interesting (for error reporting). Order of variants indicates sort
 /// order of the category, thereby influencing diagnostic output.
 ///
-/// See also `rustc_mir::borrow_check::constraints`.
+/// See also `rustc_const_eval::borrow_check::constraints`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[derive(TyEncodable, TyDecodable, HashStable)]
 pub enum ConstraintCategory {
@@ -429,18 +429,6 @@ impl<'tcx> TyCtxt<'tcx> {
             self.mir_for_ctfe_of_const_arg((did, param_did))
         } else {
             self.mir_for_ctfe(def.did)
-        }
-    }
-
-    #[inline]
-    pub fn mir_abstract_const_opt_const_arg(
-        self,
-        def: ty::WithOptConstParam<DefId>,
-    ) -> Result<Option<&'tcx [abstract_const::Node<'tcx>]>, ErrorReported> {
-        if let Some((did, param_did)) = def.as_const_arg() {
-            self.mir_abstract_const_of_const_arg((did, param_did))
-        } else {
-            self.mir_abstract_const(def.did)
         }
     }
 }
