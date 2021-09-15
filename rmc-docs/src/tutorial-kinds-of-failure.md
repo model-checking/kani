@@ -181,7 +181,7 @@ When RMC tells us both of these methods yield the same exact result, that gives 
 
 ## Future work
 
-RMC notably does not check the following:
+RMC notably does not currently check the following:
 
 1. Concurrency bugs, deadlocks, or data races.
 It's possible RMC may be extended in the future to find such issues.
