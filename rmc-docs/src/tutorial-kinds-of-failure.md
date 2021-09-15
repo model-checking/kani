@@ -168,7 +168,7 @@ Hence, the need to add an assumption that would make that impossible.
 After that, you might wonder how to "prove your new implementation correct."
 After all, what does "correct" even mean?
 Often we're using a good approximation of correct, such as the equivalence of two implementations (often one much "simpler" than the other somehow).
-Here's one possible asssertion to make that obvious:
+Here's one possible assertion to make that obvious:
 
 ```rust
 assert!(result as u64 == (a as u64 + b as u64) / 2);
