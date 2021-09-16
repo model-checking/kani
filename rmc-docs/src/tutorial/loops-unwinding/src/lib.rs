@@ -25,11 +25,11 @@ fn __VERIFIER_assume(cond: bool) {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    const limit: usize = 10;
-    let mut buffer: [u8; limit] = [1; limit];
+    const LIMIT: usize = 10;
+    let mut buffer: [u8; LIMIT] = [1; LIMIT];
 
     let length = __nondet();
-    __VERIFIER_assume(length <= limit);
+    __VERIFIER_assume(length <= LIMIT);
 
     initialize_prefix(length, &mut buffer);
 }
