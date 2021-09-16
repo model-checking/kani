@@ -68,7 +68,7 @@ Consider trying a few more small exercises with this example:
 
 1. Exercise: Switch back to the normal/safe indexing operation and re-try RMC. What changes compared to the unsafe operation and why?
 (Try predicting the answer, then seeing if you got it right.)
-2. Exercise: Remember how to get a trace from RMC? Find out what inputs it failed on.
+2. Exercise: [Remember how to get a trace from RMC?](./tutorial-first-steps.md#getting-a-trace) Find out what inputs it failed on.
 3. Exercise: Fix the error, run RMC, and see a successful verification.
 4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run RMC. It should still successfully verify.
 
@@ -87,6 +87,52 @@ VERIFICATION FAILED
 The first is Rust's implicit assertion for the safe indexing operation.
 The second is RMC's check to ensure the pointer operation is actually safe.
 This pattern (two checks for similar issues in safe Rust code) is common, and we'll see it again in the next section.
+
+</details>
+
+<details>
+<summary>Click to see explanation for exercise 2</summary>
+
+Having run `rmc --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
+
+1. This trace is huge. The standard library `Vec` is involved, there's a lot going on.
+2. The top of the trace file contains some "trace navigation tips" that might be helpful in navigating the trace.
+3. There's a lot of generated code and it's really hard to just read the trace itself.
+
+To navigate this trace to find the information you need, we recommend searching for things you expect to be somewhere in the trace:
+
+1. Search the document for `__nondet` or `variable_of_interest =` such as `size =`.
+We can use this to find out what example values lead to a problem.
+In this case, where we just have a couple of `__nondet` values in our proof harness, we can learn a lot just by seeing what these are.
+In this trace we find (and the values you get may be different):
+
+```
+Step 23: Function main, File tests/bounds-check.rs, Line 43
+let size: usize = __nondet();
+size = 0ul
+
+Step 27: Function main, File tests/bounds-check.rs, Line 45
+let index: usize = __nondet();
+index = 0ul
+
+Step 36: Function main, File tests/bounds-check.rs, Line 43
+let size: usize = __nondet();
+size = 2464ul
+
+Step 39: Function main, File tests/bounds-check.rs, Line 45
+let index: usize = __nondet();
+index = 2463ul
+```
+
+Try not to be fooled by the first assignments: we're seeing zero-initialization there.
+They get overridden by the later assignments.
+You may see different values here, as it depends on the solver's behavior.
+
+2. Try searching for "failure:". This will be near the end of the document.
+Now you can try reverse-searching for assignments to the variables involved.
+For example, search upwards from the failure for `i =`.
+
+These two techniques should help you find both the nondeterministic inputs, and see what values were involved in the failing assertion.
 
 </details>
 
