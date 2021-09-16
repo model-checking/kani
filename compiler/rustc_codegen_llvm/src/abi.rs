@@ -511,7 +511,12 @@ impl<'tcx> FnAbiLlvmExt<'tcx> for FnAbi<'tcx, Ty<'tcx>> {
     }
 
     fn apply_attrs_callsite(&self, bx: &mut Builder<'a, 'll, 'tcx>, callsite: &'ll Value) {
-        // FIXME(wesleywiser, eddyb): We should apply `nounwind` and `noreturn` as appropriate to this callsite.
+        if self.ret.layout.abi.is_uninhabited() {
+            llvm::Attribute::NoReturn.apply_callsite(llvm::AttributePlace::Function, callsite);
+        }
+        if !self.can_unwind {
+            llvm::Attribute::NoUnwind.apply_callsite(llvm::AttributePlace::Function, callsite);
+        }
 
         let mut i = 0;
         let mut apply = |cx: &CodegenCx<'_, '_>, attrs: &ArgAttributes| {
@@ -536,16 +541,13 @@ impl<'tcx> FnAbiLlvmExt<'tcx> for FnAbi<'tcx, Ty<'tcx>> {
             }
             _ => {}
         }
-        if let abi::Abi::Scalar(ref scalar) = self.ret.layout.abi {
+        if let abi::Abi::Scalar(scalar) = self.ret.layout.abi {
             // If the value is a boolean, the range is 0..2 and that ultimately
             // become 0..0 when the type becomes i1, which would be rejected
             // by the LLVM verifier.
             if let Int(..) = scalar.value {
-                if !scalar.is_bool() {
-                    let range = scalar.valid_range_exclusive(bx);
-                    if range.start != range.end {
-                        bx.range_metadata(callsite, range);
-                    }
+                if !scalar.is_bool() && !scalar.is_always_valid(bx) {
+                    bx.range_metadata(callsite, scalar.valid_range);
                 }
             }
         }

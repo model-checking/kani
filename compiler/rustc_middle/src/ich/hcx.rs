@@ -12,7 +12,7 @@ use rustc_hir::definitions::{DefPathHash, Definitions};
 use rustc_session::Session;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Symbol;
-use rustc_span::{BytePos, CachingSourceMapView, SourceFile, SpanData};
+use rustc_span::{BytePos, CachingSourceMapView, SourceFile, Span, SpanData};
 
 use smallvec::SmallVec;
 use std::cmp::Ord;
@@ -28,7 +28,6 @@ fn compute_ignored_attr_names() -> FxHashSet<Symbol> {
 /// things (e.g., each `DefId`/`DefPath` is only hashed once).
 #[derive(Clone)]
 pub struct StableHashingContext<'a> {
-    sess: &'a Session,
     definitions: &'a Definitions,
     cstore: &'a dyn CrateStore,
     pub(super) body_resolver: BodyResolver<'a>,
@@ -78,7 +77,6 @@ impl<'a> StableHashingContext<'a> {
             !always_ignore_spans && !sess.opts.debugging_opts.incremental_ignore_spans;
 
         StableHashingContext {
-            sess,
             body_resolver: BodyResolver(krate),
             definitions,
             cstore,
@@ -227,6 +225,11 @@ impl<'a> rustc_span::HashStableContext for StableHashingContext<'a> {
     #[inline]
     fn def_path_hash(&self, def_id: DefId) -> DefPathHash {
         self.def_path_hash(def_id)
+    }
+
+    #[inline]
+    fn def_span(&self, def_id: LocalDefId) -> Span {
+        self.definitions.def_span(def_id)
     }
 
     fn span_data_to_lines_and_cols(

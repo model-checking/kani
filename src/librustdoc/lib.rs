@@ -34,6 +34,7 @@ extern crate rustc_ast;
 extern crate rustc_ast_lowering;
 extern crate rustc_ast_pretty;
 extern crate rustc_attr;
+extern crate rustc_const_eval;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_errors;
@@ -49,7 +50,6 @@ extern crate rustc_lint;
 extern crate rustc_lint_defs;
 extern crate rustc_metadata;
 extern crate rustc_middle;
-extern crate rustc_mir;
 extern crate rustc_parse;
 extern crate rustc_passes;
 extern crate rustc_resolve;
@@ -419,8 +419,12 @@ fn opts() -> Vec<RustcOptGroup> {
                 "URL",
             )
         }),
-        unstable("display-warnings", |o| {
-            o.optflagmulti("", "display-warnings", "to print code warnings when testing doc")
+        unstable("display-doctest-warnings", |o| {
+            o.optflagmulti(
+                "",
+                "display-doctest-warnings",
+                "show warnings that originate in doctests",
+            )
         }),
         stable("crate-version", |o| {
             o.optopt("", "crate-version", "crate version to print into documentation", "VERSION")

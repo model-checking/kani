@@ -422,7 +422,9 @@ impl<'hir> LoweringContext<'_, 'hir> {
         let if_kind = hir::ExprKind::If(new_cond, self.arena.alloc(then), Some(else_expr));
         let if_expr = self.expr(span, if_kind, ThinVec::new());
         let block = self.block_expr(self.arena.alloc(if_expr));
-        hir::ExprKind::Loop(block, opt_label, hir::LoopSource::While, span.with_hi(cond.span.hi()))
+        let span = self.lower_span(span.with_hi(cond.span.hi()));
+        let opt_label = self.lower_label(opt_label);
+        hir::ExprKind::Loop(block, opt_label, hir::LoopSource::While, span)
     }
 
     /// Desugar `try { <stmts>; <expr> }` into `{ <stmts>; ::std::ops::Try::from_output(<expr>) }`,
@@ -1450,8 +1452,13 @@ impl<'hir> LoweringContext<'_, 'hir> {
             )
         };
 
+        // #82462: to correctly diagnose borrow errors, the block that contains
+        // the iter expr needs to have a span that covers the loop body.
+        let desugared_full_span =
+            self.mark_span_with_reason(DesugaringKind::ForLoop(ForLoopLoc::Head), e.span, None);
+
         let match_expr = self.arena.alloc(self.expr_match(
-            desugared_span,
+            desugared_full_span,
             into_iter_expr,
             arena_vec![self; iter_arm],
             hir::MatchSource::ForLoopDesugar,
@@ -1465,7 +1472,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
         // surrounding scope of the `match` since the `match` is not a terminating scope.
         //
         // Also, add the attributes to the outer returned expr node.
-        self.expr_drop_temps_mut(desugared_span, match_expr, attrs.into())
+        self.expr_drop_temps_mut(desugared_full_span, match_expr, attrs.into())
     }
 
     /// Desugar `ExprKind::Try` from: `<expr>?` into:

@@ -300,7 +300,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                         let llval = operand.immediate();
 
                         let mut signed = false;
-                        if let Abi::Scalar(ref scalar) = operand.layout.abi {
+                        if let Abi::Scalar(scalar) = operand.layout.abi {
                             if let Int(_, s) = scalar.value {
                                 // We use `i1` for bytes that are always `0` or `1`,
                                 // e.g., `#[repr(i8)] enum E { A, B }`, but we can't
@@ -308,8 +308,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                                 // then `i1 1` (i.e., E::B) is effectively `i8 -1`.
                                 signed = !scalar.is_bool() && s;
 
-                                let er = scalar.valid_range_exclusive(bx.cx());
-                                if er.end != er.start
+                                if !scalar.is_always_valid(bx.cx())
                                     && scalar.valid_range.end >= scalar.valid_range.start
                                 {
                                     // We want `table[e as usize ± k]` to not
@@ -487,20 +486,6 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 )
             }
 
-            mir::Rvalue::NullaryOp(mir::NullOp::SizeOf, ty) => {
-                let ty = self.monomorphize(ty);
-                assert!(bx.cx().type_is_sized(ty));
-                let val = bx.cx().const_usize(bx.cx().layout_of(ty).size.bytes());
-                let tcx = self.cx.tcx();
-                (
-                    bx,
-                    OperandRef {
-                        val: OperandValue::Immediate(val),
-                        layout: self.cx.layout_of(tcx.types.usize),
-                    },
-                )
-            }
-
             mir::Rvalue::NullaryOp(mir::NullOp::Box, content_ty) => {
                 let content_ty = self.monomorphize(content_ty);
                 let content_layout = bx.cx().layout_of(content_ty);
@@ -525,6 +510,27 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 let operand = OperandRef { val: OperandValue::Immediate(val), layout: box_layout };
                 (bx, operand)
             }
+
+            mir::Rvalue::NullaryOp(null_op, ty) => {
+                let ty = self.monomorphize(ty);
+                assert!(bx.cx().type_is_sized(ty));
+                let layout = bx.cx().layout_of(ty);
+                let val = match null_op {
+                    mir::NullOp::SizeOf => layout.size.bytes(),
+                    mir::NullOp::AlignOf => layout.align.abi.bytes(),
+                    mir::NullOp::Box => unreachable!(),
+                };
+                let val = bx.cx().const_usize(val);
+                let tcx = self.cx.tcx();
+                (
+                    bx,
+                    OperandRef {
+                        val: OperandValue::Immediate(val),
+                        layout: self.cx.layout_of(tcx.types.usize),
+                    },
+                )
+            }
+
             mir::Rvalue::ThreadLocalRef(def_id) => {
                 assert!(bx.cx().tcx().is_static(def_id));
                 let static_ = bx.get_static(def_id);

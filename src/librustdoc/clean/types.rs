@@ -212,7 +212,7 @@ impl ExternalCrate {
     crate fn keywords(&self, tcx: TyCtxt<'_>) -> ThinVec<(DefId, Symbol)> {
         let root = self.def_id();
 
-        let as_keyword = |res: Res| {
+        let as_keyword = |res: Res<!>| {
             if let Res::Def(DefKind::Mod, def_id) = res {
                 let attrs = tcx.get_attrs(def_id);
                 let mut keyword = None;
@@ -243,7 +243,8 @@ impl ExternalCrate {
                         hir::ItemKind::Use(ref path, hir::UseKind::Single)
                             if item.vis.node.is_pub() =>
                         {
-                            as_keyword(path.res).map(|(_, prim)| (id.def_id.to_def_id(), prim))
+                            as_keyword(path.res.expect_non_local())
+                                .map(|(_, prim)| (id.def_id.to_def_id(), prim))
                         }
                         _ => None,
                     }
@@ -274,7 +275,7 @@ impl ExternalCrate {
         // Also note that this does not attempt to deal with modules tagged
         // duplicately for the same primitive. This is handled later on when
         // rendering by delegating everything to a hash map.
-        let as_primitive = |res: Res| {
+        let as_primitive = |res: Res<!>| {
             if let Res::Def(DefKind::Mod, def_id) = res {
                 let attrs = tcx.get_attrs(def_id);
                 let mut prim = None;
@@ -309,7 +310,7 @@ impl ExternalCrate {
                         hir::ItemKind::Use(ref path, hir::UseKind::Single)
                             if item.vis.node.is_pub() =>
                         {
-                            as_primitive(path.res).map(|(_, prim)| {
+                            as_primitive(path.res.expect_non_local()).map(|(_, prim)| {
                                 // Pretend the primitive is local.
                                 (id.def_id.to_def_id(), prim)
                             })
@@ -461,60 +462,20 @@ impl Item {
             .map_or(&[][..], |v| v.as_slice())
             .iter()
             .filter_map(|ItemLink { link: s, link_text, did, ref fragment }| {
-                match did {
-                    Some(did) => {
-                        if let Ok((mut href, ..)) = href(did.clone(), cx) {
-                            if let Some(ref fragment) = *fragment {
-                                href.push('#');
-                                href.push_str(fragment);
-                            }
-                            Some(RenderedLink {
-                                original_text: s.clone(),
-                                new_text: link_text.clone(),
-                                href,
-                            })
-                        } else {
-                            None
-                        }
+                debug!(?did);
+                if let Ok((mut href, ..)) = href(*did, cx) {
+                    debug!(?href);
+                    if let Some(ref fragment) = *fragment {
+                        href.push('#');
+                        href.push_str(fragment);
                     }
-                    // FIXME(83083): using fragments as a side-channel for
-                    // primitive names is very unfortunate
-                    None => {
-                        let relative_to = &cx.current;
-                        if let Some(ref fragment) = *fragment {
-                            let url = match cx.cache().extern_locations.get(&self.def_id.krate()) {
-                                Some(&ExternalLocation::Local) => {
-                                    if relative_to[0] == "std" {
-                                        let depth = relative_to.len() - 1;
-                                        "../".repeat(depth)
-                                    } else {
-                                        let depth = relative_to.len();
-                                        format!("{}std/", "../".repeat(depth))
-                                    }
-                                }
-                                Some(ExternalLocation::Remote(ref s)) => {
-                                    format!("{}/std/", s.trim_end_matches('/'))
-                                }
-                                Some(ExternalLocation::Unknown) | None => {
-                                    format!("{}/std/", crate::DOC_RUST_LANG_ORG_CHANNEL)
-                                }
-                            };
-                            // This is a primitive so the url is done "by hand".
-                            let tail = fragment.find('#').unwrap_or_else(|| fragment.len());
-                            Some(RenderedLink {
-                                original_text: s.clone(),
-                                new_text: link_text.clone(),
-                                href: format!(
-                                    "{}primitive.{}.html{}",
-                                    url,
-                                    &fragment[..tail],
-                                    &fragment[tail..]
-                                ),
-                            })
-                        } else {
-                            panic!("This isn't a primitive?!");
-                        }
-                    }
+                    Some(RenderedLink {
+                        original_text: s.clone(),
+                        new_text: link_text.clone(),
+                        href,
+                    })
+                } else {
+                    None
                 }
             })
             .collect()
@@ -531,18 +492,10 @@ impl Item {
             .get(&self.def_id)
             .map_or(&[][..], |v| v.as_slice())
             .iter()
-            .filter_map(|ItemLink { link: s, link_text, did, fragment }| {
-                // FIXME(83083): using fragments as a side-channel for
-                // primitive names is very unfortunate
-                if did.is_some() || fragment.is_some() {
-                    Some(RenderedLink {
-                        original_text: s.clone(),
-                        new_text: link_text.clone(),
-                        href: String::new(),
-                    })
-                } else {
-                    None
-                }
+            .map(|ItemLink { link: s, link_text, .. }| RenderedLink {
+                original_text: s.clone(),
+                new_text: link_text.clone(),
+                href: String::new(),
             })
             .collect()
     }
@@ -963,7 +916,7 @@ crate struct Attributes {
     crate other_attrs: Vec<ast::Attribute>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// A link that has not yet been rendered.
 ///
 /// This link will be turned into a rendered link by [`Item::links`].
@@ -975,7 +928,7 @@ crate struct ItemLink {
     /// This may not be the same as `link` if there was a disambiguator
     /// in an intra-doc link (e.g. \[`fn@f`\])
     pub(crate) link_text: String,
-    pub(crate) did: Option<DefId>,
+    pub(crate) did: DefId,
     /// The url fragment to append to the link
     pub(crate) fragment: Option<String>,
 }
@@ -1158,7 +1111,7 @@ impl GenericBound {
     crate fn maybe_sized(cx: &mut DocContext<'_>) -> GenericBound {
         let did = cx.tcx.require_lang_item(LangItem::Sized, None);
         let empty = cx.tcx.intern_substs(&[]);
-        let path = external_path(cx, cx.tcx.item_name(did), Some(did), false, vec![], empty);
+        let path = external_path(cx, did, false, vec![], empty);
         inline::record_extern_fqn(cx, did, ItemType::Trait);
         GenericBound::TraitBound(
             PolyTrait {
@@ -1802,6 +1755,39 @@ impl PrimitiveType {
             Never => sym::never,
         }
     }
+
+    /// Returns the DefId of the module with `doc(primitive)` for this primitive type.
+    /// Panics if there is no such module.
+    ///
+    /// This gives precedence to primitives defined in the current crate, and deprioritizes primitives defined in `core`,
+    /// but otherwise, if multiple crates define the same primitive, there is no guarantee of which will be picked.
+    /// In particular, if a crate depends on both `std` and another crate that also defines `doc(primitive)`, then
+    /// it's entirely random whether `std` or the other crate is picked. (no_std crates are usually fine unless multiple dependencies define a primitive.)
+    crate fn primitive_locations(tcx: TyCtxt<'_>) -> &FxHashMap<PrimitiveType, DefId> {
+        static PRIMITIVE_LOCATIONS: OnceCell<FxHashMap<PrimitiveType, DefId>> = OnceCell::new();
+        PRIMITIVE_LOCATIONS.get_or_init(|| {
+            let mut primitive_locations = FxHashMap::default();
+            // NOTE: technically this misses crates that are only passed with `--extern` and not loaded when checking the crate.
+            // This is a degenerate case that I don't plan to support.
+            for &crate_num in tcx.crates(()) {
+                let e = ExternalCrate { crate_num };
+                let crate_name = e.name(tcx);
+                debug!(?crate_num, ?crate_name);
+                for &(def_id, prim) in &e.primitives(tcx) {
+                    // HACK: try to link to std instead where possible
+                    if crate_name == sym::core && primitive_locations.contains_key(&prim) {
+                        continue;
+                    }
+                    primitive_locations.insert(prim, def_id);
+                }
+            }
+            let local_primitives = ExternalCrate { crate_num: LOCAL_CRATE }.primitives(tcx);
+            for (def_id, prim) in local_primitives {
+                primitive_locations.insert(prim, def_id);
+            }
+            primitive_locations
+        })
+    }
 }
 
 impl From<ast::IntTy> for PrimitiveType {
@@ -2202,7 +2188,6 @@ crate struct ImportSource {
 #[derive(Clone, Debug)]
 crate struct Macro {
     crate source: String,
-    crate imported_from: Option<Symbol>,
 }
 
 #[derive(Clone, Debug)]

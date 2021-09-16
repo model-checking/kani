@@ -34,8 +34,8 @@ use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_infer::infer::LateBoundRegionConversionTime;
 use rustc_middle::dep_graph::{DepKind, DepNodeIndex};
-use rustc_middle::mir::abstract_const::NotConstEvaluatable;
 use rustc_middle::mir::interpret::ErrorHandled;
+use rustc_middle::thir::abstract_const::NotConstEvaluatable;
 use rustc_middle::ty::fast_reject;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::relate::TypeRelation;
@@ -1487,10 +1487,11 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             ) => false,
 
             (ParamCandidate(other), ParamCandidate(victim)) => {
-                let value_same_except_bound_vars = other.value.skip_binder()
+                let same_except_bound_vars = other.value.skip_binder()
                     == victim.value.skip_binder()
+                    && other.constness == victim.constness
                     && !other.value.skip_binder().has_escaping_bound_vars();
-                if value_same_except_bound_vars {
+                if same_except_bound_vars {
                     // See issue #84398. In short, we can generate multiple ParamCandidates which are
                     // the same except for unused bound vars. Just pick the one with the fewest bound vars
                     // or the current one if tied (they should both evaluate to the same answer). This is
@@ -2445,7 +2446,7 @@ impl<'tcx> ProvisionalEvaluationCache<'tcx> {
             "get_provisional = {:#?}",
             self.map.borrow().get(&fresh_trait_ref),
         );
-        Some(self.map.borrow().get(&fresh_trait_ref)?.clone())
+        Some(*self.map.borrow().get(&fresh_trait_ref)?)
     }
 
     /// Insert a provisional result into the cache. The result came

@@ -397,6 +397,21 @@ declare_clippy_lint! {
     /// ### Why is this bad?
     /// One might think that modifying the mutable variable changes the loop bounds
     ///
+    /// ### Known problems
+    /// False positive when mutation is followed by a `break`, but the `break` is not immediately
+    /// after the mutation:
+    ///
+    /// ```rust
+    /// let mut x = 5;
+    /// for _ in 0..x {
+    ///     x += 1; // x is a range bound that is mutated
+    ///     ..; // some other expression
+    ///     break; // leaves the loop, so mutation is not an issue
+    /// }
+    /// ```
+    ///
+    /// False positive on nested loops ([#6072](https://github.com/rust-lang/rust-clippy/issues/6072))
+    ///
     /// ### Example
     /// ```rust
     /// let mut foo = 42;
@@ -580,8 +595,8 @@ impl<'tcx> LateLintPass<'tcx> for Loops {
 
         while_let_on_iterator::check(cx, expr);
 
-        if let Some(higher::While { if_cond, if_then, .. }) = higher::While::hir(&expr) {
-            while_immutable_condition::check(cx, if_cond, if_then);
+        if let Some(higher::While { condition, body }) = higher::While::hir(expr) {
+            while_immutable_condition::check(cx, condition, body);
         }
 
         needless_collect::check(expr, cx);
@@ -601,15 +616,15 @@ fn check_for_loop<'tcx>(
         needless_range_loop::check(cx, pat, arg, body, expr);
         explicit_counter_loop::check(cx, pat, arg, body, expr);
     }
-    check_for_loop_arg(cx, pat, arg, expr);
-    for_kv_map::check(cx, pat, arg, body, expr);
+    check_for_loop_arg(cx, pat, arg);
+    for_kv_map::check(cx, pat, arg, body);
     mut_range_bound::check(cx, arg, body);
     single_element_loop::check(cx, pat, arg, body, expr);
     same_item_push::check(cx, pat, arg, body, expr);
     manual_flatten::check(cx, pat, arg, body, span);
 }
 
-fn check_for_loop_arg(cx: &LateContext<'_>, pat: &Pat<'_>, arg: &Expr<'_>, expr: &Expr<'_>) {
+fn check_for_loop_arg(cx: &LateContext<'_>, pat: &Pat<'_>, arg: &Expr<'_>) {
     let mut next_loop_linted = false; // whether or not ITER_NEXT_LOOP lint was used
 
     if let ExprKind::MethodCall(method, _, [self_arg], _) = arg.kind {
@@ -622,7 +637,7 @@ fn check_for_loop_arg(cx: &LateContext<'_>, pat: &Pat<'_>, arg: &Expr<'_>, expr:
                 explicit_into_iter_loop::check(cx, self_arg, arg);
             },
             "next" => {
-                next_loop_linted = iter_next_loop::check(cx, arg, expr);
+                next_loop_linted = iter_next_loop::check(cx, arg);
             },
             _ => {},
         }

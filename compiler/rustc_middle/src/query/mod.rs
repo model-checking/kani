@@ -20,6 +20,14 @@ rustc_queries! {
         desc { "get the resolver outputs" }
     }
 
+    /// Return the span for a definition.
+    /// Contrary to `def_span` below, this query returns the full absolute span of the definition.
+    /// This span is meant for dep-tracking rather than diagnostics. It should not be used outside
+    /// of rustc_middle::hir::source_map.
+    query source_span(key: LocalDefId) -> Span {
+        desc { "get the source span" }
+    }
+
     /// Represents crate as a whole (as distinct from the top-level crate module).
     /// If you call `hir_crate` (e.g., indirectly by calling `tcx.hir().krate()`),
     /// we will have to assume that any change means that you need to be recompiled.
@@ -295,17 +303,17 @@ rustc_queries! {
     }
 
     /// Try to build an abstract representation of the given constant.
-    query mir_abstract_const(
+    query thir_abstract_const(
         key: DefId
-    ) -> Result<Option<&'tcx [mir::abstract_const::Node<'tcx>]>, ErrorReported> {
+    ) -> Result<Option<&'tcx [thir::abstract_const::Node<'tcx>]>, ErrorReported> {
         desc {
             |tcx| "building an abstract representation for {}", tcx.def_path_str(key),
         }
     }
     /// Try to build an abstract representation of the given constant.
-    query mir_abstract_const_of_const_arg(
+    query thir_abstract_const_of_const_arg(
         key: (LocalDefId, DefId)
-    ) -> Result<Option<&'tcx [mir::abstract_const::Node<'tcx>]>, ErrorReported> {
+    ) -> Result<Option<&'tcx [thir::abstract_const::Node<'tcx>]>, ErrorReported> {
         desc {
             |tcx|
             "building an abstract representation for the const argument {}",
@@ -1159,6 +1167,10 @@ rustc_queries! {
         fatal_cycle
         desc { "query a crate's configured panic strategy" }
     }
+    query panic_in_drop_strategy(_: CrateNum) -> PanicStrategy {
+        fatal_cycle
+        desc { "query a crate's configured panic-in-drop strategy" }
+    }
     query is_no_builtins(_: CrateNum) -> bool {
         fatal_cycle
         desc { "test whether a crate has `#![no_builtins]`" }
@@ -1181,7 +1193,7 @@ rustc_queries! {
         desc { "traits in scope at a block" }
     }
 
-    query module_exports(def_id: LocalDefId) -> Option<&'tcx [Export<LocalDefId>]> {
+    query module_exports(def_id: LocalDefId) -> Option<&'tcx [Export]> {
         desc { |tcx| "looking up items exported by `{}`", tcx.def_path_str(def_id.to_def_id()) }
     }
 
@@ -1393,7 +1405,7 @@ rustc_queries! {
         eval_always
         desc { "fetching what a crate is named" }
     }
-    query item_children(def_id: DefId) -> &'tcx [Export<hir::HirId>] {
+    query item_children(def_id: DefId) -> &'tcx [Export] {
         desc { |tcx| "collecting child items of `{}`", tcx.def_path_str(def_id) }
     }
     query extern_mod_stmt_cnum(def_id: LocalDefId) -> Option<CrateNum> {

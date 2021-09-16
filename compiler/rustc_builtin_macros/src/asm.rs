@@ -117,6 +117,10 @@ fn parse_args<'a>(
         let mut explicit_reg = false;
         let op = if !is_global_asm && p.eat_keyword(kw::In) {
             let reg = parse_reg(&mut p, &mut explicit_reg)?;
+            if p.eat_keyword(kw::Underscore) {
+                let err = ecx.struct_span_err(p.token.span, "_ cannot be used for input operands");
+                return Err(err);
+            }
             let expr = p.parse_expr()?;
             ast::InlineAsmOperand::In { reg, expr }
         } else if !is_global_asm && p.eat_keyword(sym::out) {
@@ -129,6 +133,10 @@ fn parse_args<'a>(
             ast::InlineAsmOperand::Out { reg, expr, late: true }
         } else if !is_global_asm && p.eat_keyword(sym::inout) {
             let reg = parse_reg(&mut p, &mut explicit_reg)?;
+            if p.eat_keyword(kw::Underscore) {
+                let err = ecx.struct_span_err(p.token.span, "_ cannot be used for input operands");
+                return Err(err);
+            }
             let expr = p.parse_expr()?;
             if p.eat(&token::FatArrow) {
                 let out_expr =
@@ -139,6 +147,10 @@ fn parse_args<'a>(
             }
         } else if !is_global_asm && p.eat_keyword(sym::inlateout) {
             let reg = parse_reg(&mut p, &mut explicit_reg)?;
+            if p.eat_keyword(kw::Underscore) {
+                let err = ecx.struct_span_err(p.token.span, "_ cannot be used for input operands");
+                return Err(err);
+            }
             let expr = p.parse_expr()?;
             if p.eat(&token::FatArrow) {
                 let out_expr =
@@ -510,7 +522,7 @@ fn expand_preparsed_asm(ecx: &mut ExtCtxt<'_>, args: AsmArgs) -> Option<ast::Inl
             match expr_to_spanned_string(ecx, template_expr, msg) {
                 Ok(template_part) => template_part,
                 Err(err) => {
-                    if let Some(mut err) = err {
+                    if let Some((mut err, _)) = err {
                         err.emit();
                     }
                     return None;
