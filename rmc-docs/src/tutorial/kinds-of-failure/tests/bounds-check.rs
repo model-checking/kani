@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // ANCHOR: code
+/// Wrap "too-large" indexes back into a valid range for the array
 fn get_wrapped(i: usize, a: &[u32]) -> u32 {
     if a.len() == 0 {
         return 0;

@@ -53,6 +53,8 @@ VERIFICATION FAILED
 RMC has immediately found a failure.
 Notably, we haven't had to write explicit assertions in our "proof harness": by default, RMC will find a host of erroneous conditions which include a reachable call to `panic` or a failing `assert`.
 
+### Getting a trace
+
 By default, RMC only reports failures, not how the failure happened.
 This is because, in its full generality, understanding how a failure happened requires exploring a full (potentially large) execution trace.
 Here, we've just got some nondeterministic inputs up front, but that's something of a special case that has a "simpler" explanation (just the choice of nondeterministic input).
