@@ -45,7 +45,7 @@ VERIFICATION FAILED
 ```
 
 > **NOTE:** `--unwind` is a flag to the underlying model checker, CBMC, and so it needs to appear after `--cbmc-args`.
-> This flag `--cmbc-args` "switches modes" in the command line from RMC flags to CBMC flags, so we place all RMC flags and arguments before it.
+> This flag `--cbmc-args` "switches modes" in the command line from RMC flags to CBMC flags, so we place all RMC flags and arguments before it.
 
 This output is showing us two things:
 
