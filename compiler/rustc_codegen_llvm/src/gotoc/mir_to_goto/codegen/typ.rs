@@ -356,7 +356,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.normalized_trait_name(t) + "::vtable"
     }
 
-    pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> String {
+    pub fn ty_pretty_name(&self, t: Ty<'tcx>) -> String {
         use rustc_hir::def::Namespace;
         use rustc_middle::ty::print::Printer;
         let mut name = String::new();
@@ -368,7 +368,10 @@ impl<'tcx> GotocCtx<'tcx> {
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
         with_no_trimmed_paths(|| printer.print_type(t).unwrap());
+        name
+    }
 
+    pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> String {
         // Crate resolution: mangled names need to be distinct across different versions
         // of the same crate that could be pulled in by dependencies. However, RMC's
         // treatment of FFI C calls asssumes that we generate the same name for structs
@@ -377,12 +380,12 @@ impl<'tcx> GotocCtx<'tcx> {
         // linked C libraries
         // https://github.com/model-checking/rmc/issues/450
         if is_repr_c_adt(t) {
-            return name;
+            self.ty_pretty_name(t)
+        } else {
+            // This hash is documented to be the same no matter the crate context
+            let id_u64 = self.tcx.type_id_hash(t);
+            format!("_{}", id_u64)
         }
-
-        // Add unique type id
-        let id_u64 = self.tcx.type_id_hash(t);
-        format!("{}::{}", name, id_u64)
     }
 
     #[allow(dead_code)]
