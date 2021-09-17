@@ -573,7 +573,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let func = self.symbol_name(instance);
-        let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
+        let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
         // make sure the functions imported from other modules are in the symbol table
         self.ensure(&func, |ctx, _| {
             Symbol::function(
