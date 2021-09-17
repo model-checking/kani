@@ -42,7 +42,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
             TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
             TerminatorKind::Return => {
-                let rty = self.current_fn().sig().skip_binder().output();
+                let rty = self.current_fn().sig().unwrap().skip_binder().output();
                 if rty.is_unit() {
                     self.codegen_ret_unit()
                 } else {
@@ -358,8 +358,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         // should be a fat pointer for the trait
                         let trait_fat_ptr = fargs[0].to_owned();
 
-                        // Check the Gotoc-level fat pointer type
-                        assert!(trait_fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table));
+                        //Check the Gotoc-level fat pointer type
+                        assert!(
+                            trait_fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table),
+                            "Expected fat pointer, got:\n{:?}",
+                            trait_fat_ptr,
+                        );
 
                         self.codegen_virtual_funcall(
                             trait_fat_ptr,
@@ -537,6 +541,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 let pt = self.place_ty(place);
                 let (def, _) = match pt.kind() {
                     ty::Adt(def, substs) => (def, substs),
+                    ty::Generator(..) => {
+                        return self
+                            .codegen_unimplemented(
+                                "ty::Generator",
+                                Type::code(vec![], Type::empty()),
+                                Location::none(),
+                                "https://github.com/model-checking/rmc/issues/416",
+                            )
+                            .as_stmt(Location::none());
+                    }
                     _ => unreachable!(),
                 };
                 let layout = self.layout_of(pt);

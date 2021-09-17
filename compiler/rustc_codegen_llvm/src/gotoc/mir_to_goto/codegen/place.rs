@@ -207,6 +207,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         res.member(&field.ident.name.to_string(), &self.symbol_table)
                     }
                     ty::Closure(..) => res.member(&f.index().to_string(), &self.symbol_table),
+                    ty::Generator(..) => self.codegen_unimplemented(
+                        "ty::Generator",
+                        Type::code(vec![], Type::empty()),
+                        res.location().clone(),
+                        "https://github.com/model-checking/rmc/issues/416",
+                    ),
                     _ => unimplemented!(),
                 }
             }
@@ -235,7 +241,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // A local that is itself a FnDef, like Fn::call_once
             ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
             // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
-            ty::RawPtr(inner) => self.codegen_local_fndef(inner.ty).map(|f| f.address_of()),
+            ty::RawPtr(inner) => self
+                .codegen_local_fndef(inner.ty)
+                .map(|f| if f.can_take_address_of() { f.address_of() } else { f }),
             // A local can be a boxed function pointer
             ty::Adt(def, _) if def.is_box() => {
                 let boxed_ty = self.codegen_ty(ty);

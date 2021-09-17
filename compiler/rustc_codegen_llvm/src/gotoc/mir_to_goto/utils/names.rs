@@ -10,7 +10,7 @@ use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{Instance, TyCtxt};
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -126,14 +126,6 @@ pub fn full_crate_name(tcx: TyCtxt<'tcx>) -> String {
 }
 
 //TODO: These were moved from hooks.rs, where they didn't have a goto context. Normalize them.
-pub fn sig_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> ty::FnSig<'tcx> {
-    let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-    let sig = match ty.kind() {
-        ty::Closure(_, substs) => substs.as_closure().sig(),
-        _ => ty.fn_sig(tcx),
-    };
-    tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig)
-}
 
 /// Helper function to determine if the function name starts with `expected`
 // TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
