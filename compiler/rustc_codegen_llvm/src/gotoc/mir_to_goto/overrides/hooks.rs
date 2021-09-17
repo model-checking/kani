@@ -691,23 +691,6 @@ impl<'tcx> GotocHooks<'tcx> {
     }
 }
 
-fn is_rmc(tcx: TyCtxt<'_>) -> bool {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Once;
-
-    static DUMMY: Once = Once::new();
-    static IS_RMC: AtomicBool = AtomicBool::new(false);
-    const RMC_STR: &'static str = "rmc";
-
-    DUMMY.call_once(|| {
-        IS_RMC.store(
-            tcx.sess.parse_sess.config.iter().any(|(s, _)| s == &RustSymbol::intern(RMC_STR)),
-            Ordering::Relaxed,
-        );
-    });
-    IS_RMC.load(Ordering::Relaxed)
-}
-
 pub fn skip_monomorphize<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-    is_rmc(tcx) && fn_hooks().hooks.iter().any(|hook| hook.hook_applies(tcx, instance))
+    fn_hooks().hooks.iter().any(|hook| hook.hook_applies(tcx, instance))
 }
