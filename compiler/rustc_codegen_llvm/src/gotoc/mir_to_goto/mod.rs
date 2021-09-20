@@ -6,7 +6,6 @@
 mod codegen;
 mod compiler_interface;
 mod context;
-mod monomorphize;
 mod overrides;
 mod utils;
 

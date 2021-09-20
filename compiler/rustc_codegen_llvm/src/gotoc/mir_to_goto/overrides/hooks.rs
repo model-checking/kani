@@ -18,6 +18,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
 use rustc_span::Span;
+use rustc_span::Symbol as RustSymbol;
 use std::rc::Rc;
 
 pub trait GotocTypeHook<'tcx> {
@@ -639,11 +640,8 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
     }
 }
 
-pub fn type_and_fn_hooks<'tcx>() -> (GotocTypeHooks<'tcx>, GotocHooks<'tcx>) {
-    let vec_stub = Rc::new(VecStub::new());
-    let hash_map_stub = Rc::new(HashMapStub::new());
-    let thks = GotocTypeHooks { hooks: vec![hash_map_stub.clone(), vec_stub.clone()] };
-    let fhks = GotocHooks {
+fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
+    GotocHooks {
         hooks: vec![
             Rc::new(Panic), //Must go first, so it overrides Nevers
             Rc::new(Assume),
@@ -660,10 +658,15 @@ pub fn type_and_fn_hooks<'tcx>() -> (GotocTypeHooks<'tcx>, GotocHooks<'tcx>) {
             Rc::new(RustDealloc),
             Rc::new(RustRealloc),
             Rc::new(SliceFromRawPart),
-            hash_map_stub.clone(),
-            vec_stub.clone(),
+            Rc::new(VecStub::new()),
+            Rc::new(HashMapStub::new()),
         ],
-    };
+    }
+}
+
+pub fn type_and_fn_hooks<'tcx>() -> (GotocTypeHooks<'tcx>, GotocHooks<'tcx>) {
+    let thks = GotocTypeHooks { hooks: vec![Rc::new(HashMapStub::new()), Rc::new(VecStub::new())] };
+    let fhks = fn_hooks();
     (thks, fhks)
 }
 
@@ -696,10 +699,6 @@ pub struct GotocHooks<'tcx> {
 }
 
 impl<'tcx> GotocHooks<'tcx> {
-    pub fn default() -> GotocHooks<'tcx> {
-        type_and_fn_hooks().1
-    }
-
     pub fn hook_applies(
         &self,
         tcx: TyCtxt<'tcx>,
@@ -712,4 +711,8 @@ impl<'tcx> GotocHooks<'tcx> {
         }
         None
     }
+}
+
+pub fn skip_monomorphize<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+    fn_hooks().hooks.iter().any(|hook| hook.hook_applies(tcx, instance))
 }
