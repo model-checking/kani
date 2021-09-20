@@ -200,6 +200,7 @@ use rustc_session::config::EntryFnType;
 use rustc_session::lint::builtin::LARGE_ASSIGNMENTS;
 use rustc_session::Limit;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
+use rustc_span::Symbol;
 use rustc_target::abi::Size;
 use smallvec::SmallVec;
 use std::iter;
@@ -317,6 +318,12 @@ pub fn collect_crate_mono_items(
     (visited.into_inner(), inlining_map.into_inner())
 }
 
+// Temporary function that allow us to skip monomorphizing lang_start.
+fn is_rmc(tcx: TyCtxt<'_>) -> bool {
+    const RMC_STR: &'static str = "rmc";
+    tcx.sess.parse_sess.config.iter().any(|(s, _)| s == &Symbol::intern(RMC_STR))
+}
+
 // Find all non-generic items by walking the HIR. These items serve as roots to
 // start monomorphizing from.
 fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<'_>> {
@@ -332,7 +339,15 @@ fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<
 
         tcx.hir().krate().visit_all_item_likes(&mut visitor);
 
-        visitor.push_extra_entry_roots();
+        // When building an executable that starts from a main function, the monomorphizer will
+        // generate a function that wraps main and initializes rust "runtime" as well as handle
+        // the executable error code based on main's return value.
+        //
+        // For RMC, we don't need the start function, and we also can't handle it. Thus, skip
+        // this for now.
+        if !is_rmc(tcx) {
+            visitor.push_extra_entry_roots();
+        }
     }
 
     // We can only codegen items that are instantiable - items all of
@@ -907,6 +922,10 @@ fn visit_instance_use<'tcx>(
 ) {
     debug!("visit_item_use({:?}, is_direct_call={:?})", instance, is_direct_call);
     if !should_codegen_locally(tcx, &instance) {
+        return;
+    }
+
+    if tcx.skip_monomorphize(instance) {
         return;
     }
 
