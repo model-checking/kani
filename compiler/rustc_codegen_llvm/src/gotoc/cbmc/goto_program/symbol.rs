@@ -209,7 +209,7 @@ impl Symbol {
 /// Setters
 impl Symbol {
     pub fn update_fn_declaration_with_definition(&mut self, body: Stmt) {
-        assert!(self.is_function_declaration());
+        assert!(self.is_function_declaration(), "Expected function declaration, got {:?}", self);
         self.value = SymbolValues::Stmt(body);
     }
 
