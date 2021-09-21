@@ -52,8 +52,8 @@ rustc_queries! {
     ///
     /// This can be conveniently accessed by `tcx.hir().visit_item_likes_in_module`.
     /// Avoid calling this query directly.
-    query hir_module_items(key: LocalDefId) -> &'tcx hir::ModuleItems {
-        eval_always
+    query hir_module_items(key: LocalDefId) -> rustc_middle::hir::ModuleItems {
+        storage(ArenaCacheSelector<'tcx>)
         desc { |tcx| "HIR module items in `{}`", tcx.def_path_str(key.to_def_id()) }
     }
 
@@ -550,14 +550,6 @@ rustc_queries! {
     /// `is_const_fn` function.
     query is_const_fn_raw(key: DefId) -> bool {
         desc { |tcx| "checking if item is const fn: `{}`", tcx.def_path_str(key) }
-    }
-
-    /// Returns `true` if this is a const `impl`. **Do not call this function manually.**
-    ///
-    /// This query caches the base data for the `is_const_impl` helper function, which also
-    /// takes into account stability attributes (e.g., `#[rustc_const_unstable]`).
-    query is_const_impl_raw(key: DefId) -> bool {
-        desc { |tcx| "checking if item is const impl: `{}`", tcx.def_path_str(key) }
     }
 
     query asyncness(key: DefId) -> hir::IsAsync {
@@ -1134,6 +1126,27 @@ rustc_queries! {
         key: ty::ParamEnvAnd<'tcx, Ty<'tcx>>
     ) -> Result<ty::layout::TyAndLayout<'tcx>, ty::layout::LayoutError<'tcx>> {
         desc { "computing layout of `{}`", key.value }
+    }
+
+    /// Compute a `FnAbi` suitable for indirect calls, i.e. to `fn` pointers.
+    ///
+    /// NB: this doesn't handle virtual calls - those should use `fn_abi_of_instance`
+    /// instead, where the instance is an `InstanceDef::Virtual`.
+    query fn_abi_of_fn_ptr(
+        key: ty::ParamEnvAnd<'tcx, (ty::PolyFnSig<'tcx>, &'tcx ty::List<Ty<'tcx>>)>
+    ) -> Result<&'tcx abi::call::FnAbi<'tcx, Ty<'tcx>>, ty::layout::FnAbiError<'tcx>> {
+        desc { "computing call ABI of `{}` function pointers", key.value.0 }
+    }
+
+    /// Compute a `FnAbi` suitable for declaring/defining an `fn` instance, and for
+    /// direct calls to an `fn`.
+    ///
+    /// NB: that includes virtual calls, which are represented by "direct calls"
+    /// to an `InstanceDef::Virtual` instance (of `<dyn Trait as Trait>::fn`).
+    query fn_abi_of_instance(
+        key: ty::ParamEnvAnd<'tcx, (ty::Instance<'tcx>, &'tcx ty::List<Ty<'tcx>>)>
+    ) -> Result<&'tcx abi::call::FnAbi<'tcx, Ty<'tcx>>, ty::layout::FnAbiError<'tcx>> {
+        desc { "computing call ABI of `{}`", key.value.0 }
     }
 
     query dylib_dependency_formats(_: CrateNum)

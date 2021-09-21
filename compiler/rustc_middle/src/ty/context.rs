@@ -1,7 +1,7 @@
 //! Type context book-keeping.
 
 use crate::arena::Arena;
-use crate::dep_graph::{DepGraph, DepNode};
+use crate::dep_graph::DepGraph;
 use crate::hir::place::Place as HirPlace;
 use crate::ich::{NodeIdHashingMode, StableHashingContext};
 use crate::infer::canonical::{Canonical, CanonicalVarInfo, CanonicalVarInfos};
@@ -83,23 +83,7 @@ pub trait OnDiskCache<'tcx>: rustc_data_structures::sync::Sync {
     /// Converts a `DefPathHash` to its corresponding `DefId` in the current compilation
     /// session, if it still exists. This is used during incremental compilation to
     /// turn a deserialized `DefPathHash` into its current `DefId`.
-    fn def_path_hash_to_def_id(
-        &self,
-        tcx: TyCtxt<'tcx>,
-        def_path_hash: DefPathHash,
-    ) -> Option<DefId>;
-
-    /// If the given `dep_node`'s hash still exists in the current compilation,
-    /// and its current `DefId` is foreign, calls `store_foreign_def_id` with it.
-    ///
-    /// Normally, `store_foreign_def_id_hash` can be called directly by
-    /// the dependency graph when we construct a `DepNode`. However,
-    /// when we re-use a deserialized `DepNode` from the previous compilation
-    /// session, we only have the `DefPathHash` available. This method is used
-    /// to that any `DepNode` that we re-use has a `DefPathHash` -> `RawId` written
-    /// out for usage in the next compilation session.
-    fn register_reused_dep_node(&self, tcx: TyCtxt<'tcx>, dep_node: &DepNode);
-    fn store_foreign_def_id_hash(&self, def_id: DefId, hash: DefPathHash);
+    fn def_path_hash_to_def_id(&self, tcx: TyCtxt<'tcx>, def_path_hash: DefPathHash) -> DefId;
 
     fn drop_serialized_data(&self, tcx: TyCtxt<'tcx>);
 
@@ -118,8 +102,8 @@ pub struct CtxtInterners<'tcx> {
     /// The arena that types, regions, etc. are allocated from.
     arena: &'tcx WorkerLocal<Arena<'tcx>>,
 
-    /// Specifically use a speedy hash algorithm for these hash sets, since
-    /// they're accessed quite often.
+    // Specifically use a speedy hash algorithm for these hash sets, since
+    // they're accessed quite often.
     type_: InternedSet<'tcx, TyS<'tcx>>,
     type_list: InternedSet<'tcx, List<Ty<'tcx>>>,
     substs: InternedSet<'tcx, InternalSubsts<'tcx>>,
@@ -132,9 +116,9 @@ pub struct CtxtInterners<'tcx> {
     projs: InternedSet<'tcx, List<ProjectionKind>>,
     place_elems: InternedSet<'tcx, List<PlaceElem<'tcx>>>,
     const_: InternedSet<'tcx, Const<'tcx>>,
-    /// Const allocations.
-    allocation: InternedSet<'tcx, Allocation>,
+    const_allocation: InternedSet<'tcx, Allocation>,
     bound_variable_kinds: InternedSet<'tcx, List<ty::BoundVariableKind>>,
+    layout: InternedSet<'tcx, Layout>,
 }
 
 impl<'tcx> CtxtInterners<'tcx> {
@@ -152,8 +136,9 @@ impl<'tcx> CtxtInterners<'tcx> {
             projs: Default::default(),
             place_elems: Default::default(),
             const_: Default::default(),
-            allocation: Default::default(),
+            const_allocation: Default::default(),
             bound_variable_kinds: Default::default(),
+            layout: Default::default(),
         }
     }
 
@@ -1062,10 +1047,9 @@ pub struct GlobalCtxt<'tcx> {
     /// Stores memory for globals (statics/consts).
     pub(crate) alloc_map: Lock<interpret::AllocMap<'tcx>>,
 
-    layout_interner: ShardedHashMap<&'tcx Layout, ()>,
-
     output_filenames: Arc<OutputFilenames>,
 
+    // FIXME(eddyb) this doesn't belong here and should be using a query.
     pub(super) vtables_cache:
         Lock<FxHashMap<(Ty<'tcx>, Option<ty::PolyExistentialTraitRef<'tcx>>), AllocId>>,
 }
@@ -1107,13 +1091,6 @@ impl<'tcx> TyCtxt<'tcx> {
         self.arena.alloc(ty::AdtDef::new(self, did, kind, variants, repr))
     }
 
-    pub fn intern_const_alloc(self, alloc: Allocation) -> &'tcx Allocation {
-        self.interners
-            .allocation
-            .intern(alloc, |alloc| Interned(self.interners.arena.alloc(alloc)))
-            .0
-    }
-
     /// Allocates a read-only byte or string literal for `mir::interpret`.
     pub fn allocate_bytes(self, bytes: &[u8]) -> interpret::AllocId {
         // Create an allocation that just contains these bytes.
@@ -1122,20 +1099,19 @@ impl<'tcx> TyCtxt<'tcx> {
         self.create_memory_alloc(alloc)
     }
 
+    // FIXME(eddyb) move to `direct_interners!`.
     pub fn intern_stability(self, stab: attr::Stability) -> &'tcx attr::Stability {
         self.stability_interner.intern(stab, |stab| self.arena.alloc(stab))
     }
 
+    // FIXME(eddyb) move to `direct_interners!`.
     pub fn intern_const_stability(self, stab: attr::ConstStability) -> &'tcx attr::ConstStability {
         self.const_stability_interner.intern(stab, |stab| self.arena.alloc(stab))
     }
 
-    pub fn intern_layout(self, layout: Layout) -> &'tcx Layout {
-        self.layout_interner.intern(layout, |layout| self.arena.alloc(layout))
-    }
-
     /// Returns a range of the start/end indices specified with the
     /// `rustc_layout_scalar_valid_range` attribute.
+    // FIXME(eddyb) this is an awkward spot for this method, maybe move it?
     pub fn layout_scalar_valid_range(self, def_id: DefId) -> (Bound<u128>, Bound<u128>) {
         let attrs = self.get_attrs(def_id);
         let get = |name| {
@@ -1210,7 +1186,6 @@ impl<'tcx> TyCtxt<'tcx> {
             evaluation_cache: Default::default(),
             crate_name: Symbol::intern(crate_name),
             data_layout,
-            layout_interner: Default::default(),
             stability_interner: Default::default(),
             const_stability_interner: Default::default(),
             alloc_map: Lock::new(interpret::AllocMap::new()),
@@ -1313,6 +1288,17 @@ impl<'tcx> TyCtxt<'tcx> {
             self.sess.local_stable_crate_id()
         } else {
             self.untracked_resolutions.cstore.stable_crate_id(crate_num)
+        }
+    }
+
+    /// Maps a StableCrateId to the corresponding CrateNum. This method assumes
+    /// that the crate in question has already been loaded by the CrateStore.
+    #[inline]
+    pub fn stable_crate_id_to_crate_num(self, stable_crate_id: StableCrateId) -> CrateNum {
+        if stable_crate_id == self.sess.local_stable_crate_id() {
+            LOCAL_CRATE
+        } else {
+            self.untracked_resolutions.cstore.stable_crate_id_to_crate_num(stable_crate_id)
         }
     }
 
@@ -1670,7 +1656,7 @@ macro_rules! nop_list_lift {
 nop_lift! {type_; Ty<'a> => Ty<'tcx>}
 nop_lift! {region; Region<'a> => Region<'tcx>}
 nop_lift! {const_; &'a Const<'a> => &'tcx Const<'tcx>}
-nop_lift! {allocation; &'a Allocation => &'tcx Allocation}
+nop_lift! {const_allocation; &'a Allocation => &'tcx Allocation}
 nop_lift! {predicate; &'a PredicateInner<'a> => &'tcx PredicateInner<'tcx>}
 
 nop_list_lift! {type_list; Ty<'a> => Ty<'tcx>}
@@ -1962,8 +1948,12 @@ impl<'tcx> TyCtxt<'tcx> {
                     "Const Stability interner: #{}",
                     self.0.const_stability_interner.len()
                 )?;
-                writeln!(fmt, "Allocation interner: #{}", self.0.interners.allocation.len())?;
-                writeln!(fmt, "Layout interner: #{}", self.0.layout_interner.len())?;
+                writeln!(
+                    fmt,
+                    "Const Allocation interner: #{}",
+                    self.0.interners.const_allocation.len()
+                )?;
+                writeln!(fmt, "Layout interner: #{}", self.0.interners.layout.len())?;
 
                 Ok(())
             }
@@ -2051,38 +2041,6 @@ impl<'tcx, T> Borrow<[T]> for Interned<'tcx, List<T>> {
     }
 }
 
-impl<'tcx> Borrow<RegionKind> for Interned<'tcx, RegionKind> {
-    fn borrow(&self) -> &RegionKind {
-        &self.0
-    }
-}
-
-impl<'tcx> Borrow<Const<'tcx>> for Interned<'tcx, Const<'tcx>> {
-    fn borrow<'a>(&'a self) -> &'a Const<'tcx> {
-        &self.0
-    }
-}
-
-impl<'tcx> Borrow<Allocation> for Interned<'tcx, Allocation> {
-    fn borrow<'a>(&'a self) -> &'a Allocation {
-        &self.0
-    }
-}
-
-impl<'tcx> PartialEq for Interned<'tcx, Allocation> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl<'tcx> Eq for Interned<'tcx, Allocation> {}
-
-impl<'tcx> Hash for Interned<'tcx, Allocation> {
-    fn hash<H: Hasher>(&self, s: &mut H) {
-        self.0.hash(s)
-    }
-}
-
 macro_rules! direct_interners {
     ($($name:ident: $method:ident($ty:ty),)+) => {
         $(impl<'tcx> PartialEq for Interned<'tcx, $ty> {
@@ -2099,9 +2057,15 @@ macro_rules! direct_interners {
             }
         }
 
+        impl<'tcx> Borrow<$ty> for Interned<'tcx, $ty> {
+            fn borrow<'a>(&'a self) -> &'a $ty {
+                &self.0
+            }
+        }
+
         impl<'tcx> TyCtxt<'tcx> {
             pub fn $method(self, v: $ty) -> &'tcx $ty {
-                self.interners.$name.intern_ref(&v, || {
+                self.interners.$name.intern(v, |v| {
                     Interned(self.interners.arena.alloc(v))
                 }).0
             }
@@ -2112,6 +2076,8 @@ macro_rules! direct_interners {
 direct_interners! {
     region: mk_region(RegionKind),
     const_: mk_const(Const<'tcx>),
+    const_allocation: intern_const_alloc(Allocation),
+    layout: intern_layout(Layout),
 }
 
 macro_rules! slice_interners {

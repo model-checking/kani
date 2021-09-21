@@ -277,7 +277,7 @@ checksum = "81a18687293a1546b67c246452202bbbf143d239cb43494cc163da14979082da"
 
 [[package]]
 name = "cargo"
-version = "0.57.0"
+version = "0.58.0"
 dependencies = [
  "anyhow",
  "atty",
@@ -2399,6 +2399,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "odht"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2504d29fda40b3f2f9ef525392435ab660e407c188196cb664b116ebcca0142"
+dependencies = [
+ "cfg-if 1.0.0",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3732,6 +3741,7 @@ dependencies = [
  "measureme",
  "num",
  "rustc-demangle",
+ "rustc_arena",
  "rustc_ast",
  "rustc_attr",
  "rustc_codegen_ssa",
@@ -3936,6 +3946,7 @@ version = "0.0.0"
 name = "rustc_hir"
 version = "0.0.0"
 dependencies = [
+ "odht",
  "rustc_ast",
  "rustc_data_structures",
  "rustc_feature",
@@ -4122,6 +4133,7 @@ name = "rustc_metadata"
 version = "0.0.0"
 dependencies = [
  "libc",
+ "odht",
  "rustc_ast",
  "rustc_attr",
  "rustc_data_structures",
