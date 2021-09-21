@@ -707,13 +707,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
 
                 // Object safety violations or miscellaneous.
                 Err(err) => {
-                    self.report_selection_error(
-                        obligation.clone(),
-                        &obligation,
-                        &err,
-                        false,
-                        false,
-                    );
+                    self.report_selection_error(obligation.clone(), &obligation, &err, false);
                     // Treat this like an obligation and follow through
                     // with the unsizing - the lack of a coercion should
                     // be silent, as it causes a type mismatch later.
@@ -941,11 +935,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         expr_ty: Ty<'tcx>,
         target: Ty<'tcx>,
         allow_two_phase: AllowTwoPhase,
+        cause: Option<ObligationCause<'tcx>>,
     ) -> RelateResult<'tcx, Ty<'tcx>> {
         let source = self.resolve_vars_with_obligations(expr_ty);
         debug!("coercion::try({:?}: {:?} -> {:?})", expr, source, target);
 
-        let cause = self.cause(expr.span, ObligationCauseCode::ExprAssignable);
+        let cause =
+            cause.unwrap_or_else(|| self.cause(expr.span, ObligationCauseCode::ExprAssignable));
         let coerce = Coerce::new(self, cause, allow_two_phase);
         let ok = self.commit_if_ok(|_| coerce.coerce(source, target))?;
 
@@ -1369,7 +1365,13 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                 // Special-case the first expression we are coercing.
                 // To be honest, I'm not entirely sure why we do this.
                 // We don't allow two-phase borrows, see comment in try_find_coercion_lub for why
-                fcx.try_coerce(expression, expression_ty, self.expected_ty, AllowTwoPhase::No)
+                fcx.try_coerce(
+                    expression,
+                    expression_ty,
+                    self.expected_ty,
+                    AllowTwoPhase::No,
+                    Some(cause.clone()),
+                )
             } else {
                 match self.expressions {
                     Expressions::Dynamic(ref exprs) => fcx.try_find_coercion_lub(

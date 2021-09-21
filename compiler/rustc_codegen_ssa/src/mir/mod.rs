@@ -2,7 +2,7 @@ use crate::traits::*;
 use rustc_errors::ErrorReported;
 use rustc_middle::mir;
 use rustc_middle::mir::interpret::ErrorHandled;
-use rustc_middle::ty::layout::{FnAbiExt, HasTyCtxt, TyAndLayout};
+use rustc_middle::ty::layout::{FnAbiOf, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::{self, Instance, Ty, TypeFoldable};
 use rustc_target::abi::call::{FnAbi, PassMode};
 
@@ -29,7 +29,7 @@ pub struct FunctionCx<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
 
     cx: &'a Bx::CodegenCx,
 
-    fn_abi: FnAbi<'tcx, Ty<'tcx>>,
+    fn_abi: &'tcx FnAbi<'tcx, Ty<'tcx>>,
 
     /// When unwinding is initiated, we have to store this personality
     /// value somewhere so that we can load it and re-use it in the
@@ -139,7 +139,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 
     let mir = cx.tcx().instance_mir(instance.def);
 
-    let fn_abi = FnAbi::of_instance(cx, instance, &[]);
+    let fn_abi = cx.fn_abi_of_instance(instance, ty::List::empty());
     debug!("fn_abi: {:?}", fn_abi);
 
     let debug_context = cx.create_function_debug_context(instance, &fn_abi, llfn, &mir);
@@ -152,20 +152,11 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     }
 
     let cleanup_kinds = analyze::cleanup_kinds(&mir);
-    // Allocate a `Block` for every basic block, except
-    // the start block, if nothing loops back to it.
-    let reentrant_start_block = !mir.predecessors()[mir::START_BLOCK].is_empty();
-    let cached_llbbs: IndexVec<mir::BasicBlock, Option<Bx::BasicBlock>> =
-        mir.basic_blocks()
-            .indices()
-            .map(|bb| {
-                if bb == mir::START_BLOCK && !reentrant_start_block {
-                    Some(start_llbb)
-                } else {
-                    None
-                }
-            })
-            .collect();
+    let cached_llbbs: IndexVec<mir::BasicBlock, Option<Bx::BasicBlock>> = mir
+        .basic_blocks()
+        .indices()
+        .map(|bb| if bb == mir::START_BLOCK { Some(start_llbb) } else { None })
+        .collect();
 
     let mut fx = FunctionCx {
         instance,
@@ -246,11 +237,6 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 
     // Apply debuginfo to the newly allocated locals.
     fx.debug_introduce_locals(&mut bx);
-
-    // Branch to the START block, if it's not the entry block.
-    if reentrant_start_block {
-        bx.br(fx.llbb(mir::START_BLOCK));
-    }
 
     // Codegen the body of each block using reverse postorder
     // FIXME(eddyb) reuse RPO iterator between `analysis` and this.

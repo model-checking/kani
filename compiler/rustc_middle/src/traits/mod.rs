@@ -253,6 +253,15 @@ pub enum ObligationCauseCode<'tcx> {
 
     DerivedObligation(DerivedObligationCause<'tcx>),
 
+    FunctionArgumentObligation {
+        /// The node of the relevant argument in the function call.
+        arg_hir_id: hir::HirId,
+        /// The node of the function call.
+        call_hir_id: hir::HirId,
+        /// The obligation introduced by this argument.
+        parent_code: Lrc<ObligationCauseCode<'tcx>>,
+    },
+
     /// Error derived when matching traits/impls; see ObligationCause for more details
     CompareImplConstObligation,
 
@@ -340,7 +349,7 @@ pub enum ObligationCauseCode<'tcx> {
     WellFormed(Option<WellFormedLoc>),
 
     /// From `match_impl`. The cause for us having to match an impl, and the DefId we are matching against.
-    MatchImpl(Lrc<ObligationCauseCode<'tcx>>, DefId),
+    MatchImpl(ObligationCause<'tcx>, DefId),
 }
 
 /// The 'location' at which we try to perform HIR-based wf checking.
@@ -368,11 +377,12 @@ impl ObligationCauseCode<'_> {
     // Return the base obligation, ignoring derived obligations.
     pub fn peel_derives(&self) -> &Self {
         let mut base_cause = self;
-        while let BuiltinDerivedObligation(cause)
-        | ImplDerivedObligation(cause)
-        | DerivedObligation(cause) = base_cause
+        while let BuiltinDerivedObligation(DerivedObligationCause { parent_code, .. })
+        | ImplDerivedObligation(DerivedObligationCause { parent_code, .. })
+        | DerivedObligation(DerivedObligationCause { parent_code, .. })
+        | FunctionArgumentObligation { parent_code, .. } = base_cause
         {
-            base_cause = &cause.parent_code;
+            base_cause = &parent_code;
         }
         base_cause
     }
@@ -529,6 +539,9 @@ pub enum ImplSource<'tcx, N> {
 
     /// ImplSource for a trait alias.
     TraitAlias(ImplSourceTraitAliasData<'tcx, N>),
+
+    /// ImplSource for a `const Drop` implementation.
+    ConstDrop(ImplSourceConstDropData),
 }
 
 impl<'tcx, N> ImplSource<'tcx, N> {
@@ -543,7 +556,8 @@ impl<'tcx, N> ImplSource<'tcx, N> {
             ImplSource::Object(d) => d.nested,
             ImplSource::FnPointer(d) => d.nested,
             ImplSource::DiscriminantKind(ImplSourceDiscriminantKindData)
-            | ImplSource::Pointee(ImplSourcePointeeData) => Vec::new(),
+            | ImplSource::Pointee(ImplSourcePointeeData)
+            | ImplSource::ConstDrop(ImplSourceConstDropData) => Vec::new(),
             ImplSource::TraitAlias(d) => d.nested,
             ImplSource::TraitUpcasting(d) => d.nested,
         }
@@ -560,7 +574,8 @@ impl<'tcx, N> ImplSource<'tcx, N> {
             ImplSource::Object(d) => &d.nested[..],
             ImplSource::FnPointer(d) => &d.nested[..],
             ImplSource::DiscriminantKind(ImplSourceDiscriminantKindData)
-            | ImplSource::Pointee(ImplSourcePointeeData) => &[],
+            | ImplSource::Pointee(ImplSourcePointeeData)
+            | ImplSource::ConstDrop(ImplSourceConstDropData) => &[],
             ImplSource::TraitAlias(d) => &d.nested[..],
             ImplSource::TraitUpcasting(d) => &d.nested[..],
         }
@@ -620,6 +635,9 @@ impl<'tcx, N> ImplSource<'tcx, N> {
                     vtable_vptr_slot: d.vtable_vptr_slot,
                     nested: d.nested.into_iter().map(f).collect(),
                 })
+            }
+            ImplSource::ConstDrop(ImplSourceConstDropData) => {
+                ImplSource::ConstDrop(ImplSourceConstDropData)
             }
         }
     }
@@ -712,6 +730,9 @@ pub struct ImplSourceDiscriminantKindData;
 #[derive(Clone, Debug, PartialEq, Eq, TyEncodable, TyDecodable, HashStable)]
 pub struct ImplSourcePointeeData;
 
+#[derive(Clone, Debug, PartialEq, Eq, TyEncodable, TyDecodable, HashStable)]
+pub struct ImplSourceConstDropData;
+
 #[derive(Clone, PartialEq, Eq, TyEncodable, TyDecodable, HashStable, TypeFoldable, Lift)]
 pub struct ImplSourceTraitAliasData<'tcx, N> {
     pub alias_def_id: DefId,
@@ -719,7 +740,7 @@ pub struct ImplSourceTraitAliasData<'tcx, N> {
     pub nested: Vec<N>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, HashStable)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, HashStable, PartialOrd, Ord)]
 pub enum ObjectSafetyViolation {
     /// `Self: Sized` declared on the trait.
     SizedSelf(SmallVec<[Span; 1]>),
@@ -868,7 +889,7 @@ impl ObjectSafetyViolation {
 }
 
 /// Reasons a method might not be object-safe.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, HashStable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, HashStable, PartialOrd, Ord)]
 pub enum MethodViolationCode {
     /// e.g., `fn foo()`
     StaticMethod(Option<(&'static str, Span)>, Span, bool /* has args */),

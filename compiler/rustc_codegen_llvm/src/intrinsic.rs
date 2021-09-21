@@ -15,7 +15,7 @@ use rustc_codegen_ssa::mir::operand::OperandRef;
 use rustc_codegen_ssa::mir::place::PlaceRef;
 use rustc_codegen_ssa::traits::*;
 use rustc_hir as hir;
-use rustc_middle::ty::layout::{FnAbiExt, HasTyCtxt, LayoutOf};
+use rustc_middle::ty::layout::{FnAbiOf, HasTyCtxt, LayoutOf};
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::{bug, span_bug};
 use rustc_span::{sym, symbol::kw, Span, Symbol};
@@ -737,7 +737,7 @@ fn gen_fn<'ll, 'tcx>(
     rust_fn_sig: ty::PolyFnSig<'tcx>,
     codegen: &mut dyn FnMut(Builder<'_, 'll, 'tcx>),
 ) -> (&'ll Type, &'ll Value) {
-    let fn_abi = FnAbi::of_fn_ptr(cx, rust_fn_sig, &[]);
+    let fn_abi = cx.fn_abi_of_fn_ptr(rust_fn_sig, ty::List::empty());
     let llty = fn_abi.llvm_type(cx);
     let llfn = cx.declare_fn(name, &fn_abi);
     cx.set_frame_pointer_type(llfn);
@@ -918,12 +918,29 @@ fn generic_simd_intrinsic(
     }
 
     if let Some(stripped) = name_str.strip_prefix("simd_shuffle") {
-        let n: u64 = stripped.parse().unwrap_or_else(|_| {
-            span_bug!(span, "bad `simd_shuffle` instruction only caught in codegen?")
-        });
+        // If this intrinsic is the older "simd_shuffleN" form, simply parse the integer.
+        // If there is no suffix, use the index array length.
+        let n: u64 = if stripped.is_empty() {
+            // Make sure this is actually an array, since typeck only checks the length-suffixed
+            // version of this intrinsic.
+            match args[2].layout.ty.kind() {
+                ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => {
+                    len.try_eval_usize(bx.cx.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(|| {
+                        span_bug!(span, "could not evaluate shuffle index array length")
+                    })
+                }
+                _ => return_error!(
+                    "simd_shuffle index must be an array of `u32`, got `{}`",
+                    args[2].layout.ty
+                ),
+            }
+        } else {
+            stripped.parse().unwrap_or_else(|_| {
+                span_bug!(span, "bad `simd_shuffle` instruction only caught in codegen?")
+            })
+        };
 
         require_simd!(ret_ty, "return");
-
         let (out_len, out_ty) = ret_ty.simd_size_and_type(bx.tcx());
         require!(
             out_len == n,

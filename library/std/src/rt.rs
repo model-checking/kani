@@ -16,6 +16,7 @@
 
 // Re-export some of our utilities which are expected by other crates.
 pub use crate::panicking::{begin_panic, begin_panic_fmt, panic_count};
+pub use core::panicking::panic_display;
 
 // To reduce the generated code of the new `lang_start`, this function is doing
 // the real work.
@@ -59,10 +60,10 @@ fn lang_start<T: crate::process::Termination + 'static>(
     argc: isize,
     argv: *const *const u8,
 ) -> isize {
-    lang_start_internal(
+    let Ok(v) = lang_start_internal(
         &move || crate::sys_common::backtrace::__rust_begin_short_backtrace(main).report(),
         argc,
         argv,
-    )
-    .into_ok()
+    );
+    v
 }

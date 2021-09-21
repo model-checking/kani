@@ -58,9 +58,7 @@ pub fn impl_wf_check(tcx: TyCtxt<'_>) {
     // We will tag this as part of the WF check -- logically, it is,
     // but it's one that we must perform earlier than the rest of
     // WfCheck.
-    for &module in tcx.hir().krate().modules.keys() {
-        tcx.ensure().check_mod_impl_wf(module);
-    }
+    tcx.hir().for_each_module(|module| tcx.ensure().check_mod_impl_wf(module))
 }
 
 fn check_mod_impl_wf(tcx: TyCtxt<'_>, module_def_id: LocalDefId) {
@@ -99,7 +97,7 @@ impl ItemLikeVisitor<'tcx> for ImplWfCheck<'tcx> {
 fn enforce_impl_params_are_constrained(
     tcx: TyCtxt<'_>,
     impl_def_id: LocalDefId,
-    impl_item_refs: &[hir::ImplItemRef<'_>],
+    impl_item_refs: &[hir::ImplItemRef],
 ) {
     // Every lifetime used in an associated type must be constrained.
     let impl_self_ty = tcx.type_of(impl_def_id);
@@ -230,7 +228,7 @@ fn report_unused_parameter(tcx: TyCtxt<'_>, span: Span, kind: &str, name: &str) 
 }
 
 /// Enforce that we do not have two items in an impl with the same name.
-fn enforce_impl_items_are_distinct(tcx: TyCtxt<'_>, impl_item_refs: &[hir::ImplItemRef<'_>]) {
+fn enforce_impl_items_are_distinct(tcx: TyCtxt<'_>, impl_item_refs: &[hir::ImplItemRef]) {
     let mut seen_type_items = FxHashMap::default();
     let mut seen_value_items = FxHashMap::default();
     for impl_item_ref in impl_item_refs {
