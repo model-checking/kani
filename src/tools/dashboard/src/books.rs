@@ -449,7 +449,7 @@ fn litani_run_tests() {
         if entry.is_file() {
             // Ensure that we parse only Rust files by checking their extension
             let entry_ext = &entry.extension().and_then(OsStr::to_str);
-            if entry_ext.is_some() && entry_ext.unwrap() == "rs" {
+            if let Some("rs") = entry_ext {
                 let test_props = util::parse_test_header(&entry);
                 util::add_test_pipeline(&mut litani, &test_props);
             }
