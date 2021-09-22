@@ -285,8 +285,6 @@ fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<
 /// pre-processes those examples, and saves them in the directory specified by
 /// `par_to`.
 fn extract(par_from: &Path, par_to: &Path, config_paths: &mut HashSet<PathBuf>) {
-    let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
-    let test_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
     let code = fs::read_to_string(&par_from).unwrap();
     let mut examples = Examples(Vec::new());
     rustdoc::html::markdown::find_testable_code(&code, &mut examples, ErrorCodes::No, false, None);
@@ -449,8 +447,12 @@ fn litani_run_tests() {
     for entry in WalkDir::new(dashboard_dir) {
         let entry = entry.unwrap().into_path();
         if entry.is_file() {
-            let test_props = util::parse_test_header(&entry);
-            util::add_test_pipeline(&mut litani, &test_props);
+            // Ensure that we parse only Rust files by checking their extension
+            let entry_ext = &entry.extension().and_then(OsStr::to_str);
+            if let Some("rs") = entry_ext {
+                let test_props = util::parse_test_header(&entry);
+                util::add_test_pipeline(&mut litani, &test_props);
+            }
         }
     }
     litani.run_build();
