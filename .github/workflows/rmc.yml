@@ -49,6 +49,9 @@ jobs:
       - name: Execute RMC regression
         run: ./scripts/rmc-regression.sh
 
+      - name: Generate RMC dashboard
+        run: ./x.py run -i --stage 1 dashboard
+
       # On one OS only, build the documentation, too.
       - name: Build Documentation
         if: ${{ matrix.os == 'ubuntu-20.04' }}
