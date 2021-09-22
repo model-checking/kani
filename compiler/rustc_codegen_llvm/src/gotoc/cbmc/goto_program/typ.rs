@@ -387,6 +387,13 @@ impl Type {
         }
     }
 
+    pub fn is_flexible_array(&self) -> bool {
+        match self {
+            FlexibleArray { .. } => true,
+            _ => false,
+        }
+    }
+
     pub fn is_float(&self) -> bool {
         match self {
             Float => true,
@@ -453,10 +460,9 @@ impl Type {
         }
     }
 
-    /// This is a union (and not an incomplete union or union tag)
-    pub fn is_union(&self) -> bool {
+    pub fn is_struct_like(&self) -> bool {
         match self {
-            Union { .. } => true,
+            IncompleteStruct { .. } | Struct { .. } | StructTag(_) => true,
             _ => false,
         }
     }
@@ -465,6 +471,14 @@ impl Type {
     pub fn is_struct_tag(&self) -> bool {
         match self {
             StructTag(_) => true,
+            _ => false,
+        }
+    }
+
+    /// This is a union (and not an incomplete union or union tag)
+    pub fn is_union(&self) -> bool {
+        match self {
+            Union { .. } => true,
             _ => false,
         }
     }
