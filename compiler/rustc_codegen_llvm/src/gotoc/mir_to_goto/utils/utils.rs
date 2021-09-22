@@ -85,7 +85,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // };
         // ```
         // And notice that its `.pointer` field is exactly what we want.
-        self.assert_is_rust_box(e.typ());
+        self.assert_is_rust_box_like(e.typ());
         e.member("0", &self.symbol_table).member("pointer", &self.symbol_table)
     }
 
@@ -93,12 +93,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `boxed_type the_box = >>> { .0=nondet(), .1={ ._marker=nondet(), .pointer=boxed_value } } <<<`
     /// `boxed_type` is the type of the resulting expression
     pub fn box_value(&self, boxed_value: Expr, boxed_type: Type) -> Expr {
-        self.assert_is_rust_box(&boxed_type);
+        self.assert_is_rust_box_like(&boxed_type);
         let get_field_type = |struct_typ, field| {
             self.symbol_table.lookup_field_type_in_type(struct_typ, field).unwrap().clone()
         };
         let unique_ptr_typ = get_field_type(&boxed_type, "0");
-        self.assert_is_rust_unique_pointer(&unique_ptr_typ);
+        self.assert_is_rust_unique_pointer_like(&unique_ptr_typ);
         let unique_ptr_pointer_typ = get_field_type(&unique_ptr_typ, "pointer");
         assert_eq!(&unique_ptr_pointer_typ, boxed_value.typ());
         let unique_ptr_val = Expr::struct_expr_with_nondet_fields(
@@ -115,7 +115,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a rust "std::alloc::Global".
-    pub fn assert_is_rust_global_alloc(&self, t: &Type) {
+    pub fn assert_is_rust_global_alloc_like(&self, t: &Type) {
         // TODO: A std::alloc::Global appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
@@ -124,7 +124,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a rust "std::marker::PhantomData".
-    pub fn assert_is_rust_phantom_data(&self, t: &Type) {
+    pub fn assert_is_rust_phantom_data_like(&self, t: &Type) {
         // TODO: A std::marker::PhantomData appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
@@ -133,7 +133,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a Rust "Box". May return false positives.
-    pub fn assert_is_rust_box(&self, t: &Type) {
+    pub fn assert_is_rust_box_like(&self, t: &Type) {
         // struct std::boxed::Box<[u8; 8]>::15334369982748499855
         // {
         //   // 1
@@ -146,15 +146,15 @@ impl<'tcx> GotocCtx<'tcx> {
         assert_eq!(components.len(), 2);
         for c in components {
             match c.name() {
-                "0" => self.assert_is_rust_unique_pointer(&c.typ()),
-                "1" => self.assert_is_rust_global_alloc(&c.typ()),
+                "0" => self.assert_is_rust_unique_pointer_like(&c.typ()),
+                "1" => self.assert_is_rust_global_alloc_like(&c.typ()),
                 _ => panic!("Unexpected component {} in {:?}", c.name(), t),
             }
         }
     }
 
     /// Checks if the struct represents a Rust "std::ptr::Unique"
-    pub fn assert_is_rust_unique_pointer(&self, t: &Type) {
+    pub fn assert_is_rust_unique_pointer_like(&self, t: &Type) {
         // struct std::ptr::Unique<[u8; 8]>::14713681870393313245
         // {
         //   // _marker
@@ -167,7 +167,7 @@ impl<'tcx> GotocCtx<'tcx> {
         assert_eq!(components.len(), 2);
         for c in components {
             match c.name() {
-                "_marker" => self.assert_is_rust_phantom_data(&c.typ()),
+                "_marker" => self.assert_is_rust_phantom_data_like(&c.typ()),
                 "pointer" => {
                     assert!(c.typ().is_pointer() || c.typ().is_rust_fat_ptr(&self.symbol_table))
                 }
