@@ -29,6 +29,10 @@ jobs:
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
 
+      - name: Install dashboard dependencies
+        if: ${{ matrix.os == 'ubuntu-20.04' }} # && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
+        run: ./scripts/setup/${{ matrix.os }}/install_dashboard_deps.sh
+
       - name: Set config.toml file
         run: |
           ./configure \

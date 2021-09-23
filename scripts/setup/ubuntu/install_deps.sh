@@ -14,9 +14,7 @@ DEPS=(
   g++
   gcc
   git
-  gnuplot # Litani (recommended) dependency
   gpg-agent
-  graphviz # Litani dependency
   libssl-dev
   lsb-release
   make
@@ -52,7 +50,7 @@ fi
 # Add Python package dependencies
 PYTHON_DEPS=(
   jinja2     # Litani dependency
-  toml       # Used for parsing `cargo-rmc` config toml
+  toml # Used for parsing `cargo-rmc` config toml
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"
