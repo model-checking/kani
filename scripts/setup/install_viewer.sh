@@ -17,4 +17,4 @@ URL="https://github.com/awslabs/aws-viewer-for-cbmc/releases/download/viewer-$1/
 set -x
 
 wget -O "$FILE" "$URL"
-sudo python3 -m pip install --upgrade "$FILE"
+sudo -H python3 -m pip install --upgrade "$FILE"
