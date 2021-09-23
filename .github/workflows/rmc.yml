@@ -50,7 +50,7 @@ jobs:
         run: ./scripts/rmc-regression.sh
 
       - name: Generate RMC dashboard
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
+        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
         run: ./x.py run -i --stage 1 dashboard
 
       # On one OS only, build the documentation, too.

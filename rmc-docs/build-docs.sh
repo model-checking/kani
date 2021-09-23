@@ -28,7 +28,7 @@ if [ -d $HTML_DIR ]; then
     rm -r src/dashboard/artifacts
     rm -r src/dashboard/run.json
 else
-    echo "ERROR: Could not find the latest dashboard run"
+    echo "WARNING: Could not find the latest dashboard run."
 fi
 
 # Build the book into ./book/

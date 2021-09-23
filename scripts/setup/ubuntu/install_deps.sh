@@ -51,9 +51,9 @@ fi
 
 # Add Python package dependencies
 PYTHON_DEPS=(
-  jinja2 # Litani dependency
-  setuptools
-  toml   # Used for parsing `cargo-rmc` config toml
+  jinja2     # Litani dependency
+  setuptools # cbmc-viewer dependency
+  toml       # Used for parsing `cargo-rmc` config toml
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"
