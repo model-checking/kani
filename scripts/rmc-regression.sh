@@ -41,6 +41,9 @@ $SCRIPT_DIR/codegen-firecracker.sh
 #         dependency2
 ./src/test/rmc-dependency-test/diamond-dependency/run-dependency-test.sh
 
+# Check that we don't have type mismatches across different crates
+./src/test/rmc-multicrate/type-mismatch/run-mismatch-test.sh
+
 echo
 echo "All RMC regression tests completed successfully."
 echo
