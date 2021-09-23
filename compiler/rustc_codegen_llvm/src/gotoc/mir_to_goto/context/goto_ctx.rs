@@ -161,14 +161,15 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ensure_struct<F: FnOnce(&mut GotocCtx<'tcx>, &str) -> Vec<DatatypeComponent>>(
         &mut self,
         struct_name: &str,
+        pretty_name: Option<String>,
         f: F,
     ) -> Type {
         assert!(!struct_name.starts_with("tag-"));
         if !self.symbol_table.contains(&aggr_name(struct_name)) {
             // Prevent recursion by inserting an incomplete value.
-            self.symbol_table.insert(Symbol::incomplete_struct(struct_name));
+            self.symbol_table.insert(Symbol::incomplete_struct(struct_name, pretty_name.clone()));
             let components = f(self, struct_name);
-            let sym = Symbol::struct_type(struct_name, components);
+            let sym = Symbol::struct_type(struct_name, pretty_name, components);
             self.symbol_table.replace_with_completion(sym);
         }
         Type::struct_tag(struct_name)
@@ -180,14 +181,15 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ensure_union<F: FnOnce(&mut GotocCtx<'tcx>, &str) -> Vec<DatatypeComponent>>(
         &mut self,
         union_name: &str,
+        pretty_name: Option<String>,
         f: F,
     ) -> Type {
         assert!(!union_name.starts_with("tag-"));
         if !self.symbol_table.contains(&aggr_name(union_name)) {
             // Prevent recursion by inserting an incomplete value.
-            self.symbol_table.insert(Symbol::incomplete_union(union_name));
+            self.symbol_table.insert(Symbol::incomplete_union(union_name, pretty_name.clone()));
             let components = f(self, union_name);
-            let sym = Symbol::union_type(union_name, components);
+            let sym = Symbol::union_type(union_name, pretty_name, components);
             self.symbol_table.replace_with_completion(sym);
         }
         Type::union_tag(union_name)

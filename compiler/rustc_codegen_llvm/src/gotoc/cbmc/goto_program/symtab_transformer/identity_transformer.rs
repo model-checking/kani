@@ -273,6 +273,7 @@ mod tests {
 
         let struct_type = Symbol::struct_type(
             "s",
+            None,
             vec![
                 DatatypeComponent::Field { name: "a".to_string(), typ: Type::float() },
                 DatatypeComponent::Padding { name: "b".to_string(), bits: 4 },
@@ -308,6 +309,7 @@ mod tests {
 
         let union_type = Symbol::union_type(
             "u",
+            None,
             vec![
                 DatatypeComponent::Field { name: "a".to_string(), typ: Type::float() },
                 DatatypeComponent::Field { name: "c".to_string(), typ: Type::double() },
