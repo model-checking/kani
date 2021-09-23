@@ -1,5 +1,5 @@
 [package]
-name = "rustc_codegen_goto"
+name = "rustc_codegen_rmc"
 version = "0.0.0"
 edition = "2018"
 

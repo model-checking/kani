@@ -3732,7 +3732,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc_codegen_goto"
+name = "rustc_codegen_llvm"
 version = "0.0.0"
 dependencies = [
  "bitflags",
@@ -3763,7 +3763,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc_codegen_llvm"
+name = "rustc_codegen_rmc"
 version = "0.0.0"
 dependencies = [
  "bitflags",
@@ -4060,8 +4060,8 @@ dependencies = [
  "rustc_attr",
  "rustc_borrowck",
  "rustc_builtin_macros",
- "rustc_codegen_goto",
  "rustc_codegen_llvm",
+ "rustc_codegen_rmc",
  "rustc_codegen_ssa",
  "rustc_const_eval",
  "rustc_data_structures",
