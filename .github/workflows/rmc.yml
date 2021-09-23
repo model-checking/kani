@@ -30,7 +30,7 @@ jobs:
         run: ./scripts/setup/install_rustup.sh
 
       - name: Install dashboard dependencies
-        if: ${{ matrix.os == 'ubuntu-20.04' }} # && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
+        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
         run: ./scripts/setup/install_dashboard_deps.sh
 
       - name: Set config.toml file
@@ -54,7 +54,7 @@ jobs:
         run: ./scripts/rmc-regression.sh
 
       - name: Generate RMC dashboard
-        if: ${{ matrix.os == 'ubuntu-20.04' }} # && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
+        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
         run: ./x.py run -i --stage 1 dashboard
 
       # On one OS only, build the documentation, too.
