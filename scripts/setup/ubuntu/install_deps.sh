@@ -49,7 +49,6 @@ fi
 
 # Add Python package dependencies
 PYTHON_DEPS=(
-  jinja2     # Litani dependency
   toml # Used for parsing `cargo-rmc` config toml
 )
 
