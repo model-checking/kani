@@ -100,11 +100,11 @@ impl Symbol {
 
     /// The symbol that defines the type of the struct or union.
     /// For a struct foo this is the symbol "tag-foo" that maps to the type struct foo.
-    pub fn aggr_ty(t: Type) -> Symbol {
+    pub fn aggr_ty(t: Type, pretty_name: Option<String>) -> Symbol {
         //TODO take location
         let base_name = t.tag().unwrap().to_string();
         let name = aggr_name(&base_name);
-        Symbol::new(name, Location::none(), t, SymbolValues::None, Some(base_name), None)
+        Symbol::new(name, Location::none(), t, SymbolValues::None, Some(base_name), pretty_name)
             .with_is_type(true)
     }
 
@@ -181,28 +181,36 @@ impl Symbol {
             .with_is_static_lifetime(true)
     }
 
-    pub fn struct_type(name: &str, components: Vec<DatatypeComponent>) -> Symbol {
-        Symbol::aggr_ty(Type::struct_type(name, components))
+    pub fn struct_type(
+        name: &str,
+        pretty_name: Option<String>,
+        components: Vec<DatatypeComponent>,
+    ) -> Symbol {
+        Symbol::aggr_ty(Type::struct_type(name, components), pretty_name)
     }
 
-    pub fn union_type(name: &str, components: Vec<DatatypeComponent>) -> Symbol {
-        Symbol::aggr_ty(Type::union_type(name, components))
+    pub fn union_type(
+        name: &str,
+        pretty_name: Option<String>,
+        components: Vec<DatatypeComponent>,
+    ) -> Symbol {
+        Symbol::aggr_ty(Type::union_type(name, components), pretty_name)
     }
 
-    pub fn empty_struct(name: &str) -> Symbol {
-        Symbol::aggr_ty(Type::empty_struct(name))
+    pub fn empty_struct(name: &str, pretty_name: Option<String>) -> Symbol {
+        Symbol::aggr_ty(Type::empty_struct(name), pretty_name)
     }
 
-    pub fn empty_union(name: &str) -> Symbol {
-        Symbol::aggr_ty(Type::empty_union(name))
+    pub fn empty_union(name: &str, pretty_name: Option<String>) -> Symbol {
+        Symbol::aggr_ty(Type::empty_union(name), pretty_name)
     }
 
-    pub fn incomplete_struct(name: &str) -> Symbol {
-        Symbol::aggr_ty(Type::incomplete_struct(name))
+    pub fn incomplete_struct(name: &str, pretty_name: Option<String>) -> Symbol {
+        Symbol::aggr_ty(Type::incomplete_struct(name), pretty_name)
     }
 
-    pub fn incomplete_union(name: &str) -> Symbol {
-        Symbol::aggr_ty(Type::incomplete_union(name))
+    pub fn incomplete_union(name: &str, pretty_name: Option<String>) -> Symbol {
+        Symbol::aggr_ty(Type::incomplete_union(name), pretty_name)
     }
 }
 

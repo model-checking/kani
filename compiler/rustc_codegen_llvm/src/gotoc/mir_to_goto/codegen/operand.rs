@@ -453,7 +453,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // initializers. For example, for a boolean static variable, the variable will have type
         // CBool and the initializer will be a single byte (a one-character array) representing the
         // bit pattern for the boolean value.
-        let alloc_typ_ref = self.ensure_struct(&format!("{}::struct", name), |ctx, _| {
+        let alloc_typ_ref = self.ensure_struct(&format!("{}::struct", name), None, |ctx, _| {
             ctx.codegen_allocation_data(alloc)
                 .iter()
                 .enumerate()
