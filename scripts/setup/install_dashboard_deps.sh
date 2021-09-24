@@ -12,6 +12,8 @@ DEPS=(
   graphviz
 )
 
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}"
+
 PYTHON_DEPS=(
   jinja2
 )
