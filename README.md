@@ -15,7 +15,7 @@ If you encounter issues when using RMC we encourage you to
    [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc/releases/latest).
 
    The [RMC Installation Guide](https://model-checking.github.io/rmc/install-guide.html)
-   shows how to quickly install all them using our setup scripts.
+   shows how to quickly install them using our setup scripts.
 
 1. Configure RMC. 
    We recommend using the following options:
