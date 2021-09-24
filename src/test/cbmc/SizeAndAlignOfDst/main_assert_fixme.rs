@@ -60,7 +60,7 @@ impl Subscriber for DummySubscriber {
     }
 }
 
-fn main() {
+pub fn main() {
     let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
     let mut data = s.lock().unwrap();
     data.increment();

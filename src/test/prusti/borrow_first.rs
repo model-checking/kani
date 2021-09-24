@@ -14,7 +14,7 @@ fn foo(vec: &mut Vec<i32>) -> &i32 {
     &vec[last]
 }
 
-fn main() {
+pub fn main() {
     let mut v = vec![-1, 2, 3];
     let r = foo(&mut v);
     assert!(*r > 0);

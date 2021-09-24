@@ -48,7 +48,7 @@ class Scanner:
 def is_exe(name):
     from shutil import which
     return which(name) is not None
-    
+
 def ensure_dependencies_in_path():
     for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
         ensure(is_exe(program), f"Could not find {program} in PATH")
@@ -116,11 +116,11 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
         process = subprocess.run(
             cmd, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             env=env, cwd=cwd)
-    
+
     # Print status
     if label != None:
         print_rmc_step_status(label, process, verbose)
-    
+
     stdout = process.stdout
     for scanner in scanners:
         if scanner.match(stdout):
@@ -129,12 +129,12 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
         print(stdout)
-    
+
     # Write to file if given
     if output_to != None and output_to != "stdout":
         with open(output_to, "w") as f:
             f.write(stdout)
-    
+
     return process.returncode
 
 # Generates a symbol table from a rust file
@@ -142,11 +142,13 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     if not keep_temps:
         atexit.register(delete_file, output_filename)
 
-    build_cmd = [RMC_RUSTC_EXE, 
-            "-Z", "codegen-backend=gotoc", 
+    build_cmd = [RMC_RUSTC_EXE,
+            "-Z", "codegen-backend=gotoc",
             "-Z", "trim-diagnostic-paths=no",
-            "-Z", f"symbol-mangling-version={mangler}", 
+            "-Z", f"symbol-mangling-version={mangler}",
             "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
+            "--crate-type=lib",
+            "-Z", "human_readable_cgu_names",
             f"--cfg={RMC_CFG}"]
 
     if use_abs:
@@ -165,20 +167,21 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir="target", verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     rustflags = [
         "-Z", "codegen-backend=gotoc",
         "-Z", "trim-diagnostic-paths=no",
         "-Z", f"symbol-mangling-version={mangler}",
-        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}", 
+        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
+        "-Z", "human_readable_cgu_names",
         f"--cfg={RMC_CFG}"]
     rustflags = " ".join(rustflags)
     if "RUSTFLAGS" in os.environ:
         rustflags = os.environ["RUSTFLAGS"] + " " + rustflags
 
-    build_cmd = ["cargo", "build", "--target-dir", target_dir]
+    build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
     build_env = {"RUSTFLAGS": rustflags,
                  "RUSTC": RMC_RUSTC_EXE,
                  "PATH": os.environ["PATH"],
@@ -229,7 +232,7 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
     # 2) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > coverage.xml
     # 3) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > property.xml
     # 4) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto <cbmc_filename> --reportdir report
-    
+
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
         cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
         return run_cmd(cbmc_cmd, label="cbmc", output_to=output_to, verbose=verbose, quiet=quiet, dry_run=dry_run)
@@ -266,7 +269,7 @@ def run_goto_instrument(input_filename, output_filename, args, verbose=False, dr
 # Generates a C program from a goto program
 def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
     return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
-    
+
 # Fix remaining issues with output of --gen-c-runnable
 def gen_c_postprocess(c_filename, dry_run=False):
     if not dry_run:

@@ -3,7 +3,7 @@
 
 // cbmc-flags: --unwind 6
 
-fn main() {
+pub fn main() {
     let name: &str = "hello";
     assert!(name == "hello");
 }

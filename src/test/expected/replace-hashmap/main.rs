@@ -60,6 +60,6 @@ fn test_actual_map<K: Eq + Copy + Hash, V: Copy>(key: K, value: V) {
     assert!(b.is_none());
 }
 
-fn main() {
+pub fn main() {
     test_actual_map::<i32, i32>(1, 3);
 }

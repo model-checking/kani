@@ -5,6 +5,9 @@ name = "empty-main"
 version = "0.1.0"
 edition = "2018"
 
+[lib]
+path="src/main.rs"
+
 [dependencies]
 
 [workspace]

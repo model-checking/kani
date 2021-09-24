@@ -27,7 +27,7 @@ impl Trait for Concrete {
     }
 }
 
-fn main() {
+pub fn main() {
     let mut x: Box<dyn Trait> = Box::new(Concrete::new());
     x.increment();
     assert!(x.get() == 1);

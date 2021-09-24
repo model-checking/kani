@@ -324,7 +324,7 @@ fn is_nonzero_pow2(x: u16) -> bool {
     unsafe { (x != 0) && ((x & (x - 1)) == 0) }
 }
 
-fn main() {
+pub fn main() {
     let mem = GuestMemoryMmap {};
     let queue_size: u16 = __nondet();
     if !is_nonzero_pow2(queue_size) {

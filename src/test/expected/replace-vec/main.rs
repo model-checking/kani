@@ -59,7 +59,7 @@ fn test_actual_vec<T: PartialEq + Copy>(to_push: T, not_pushed: T) {
     assert!(p == Some(not_pushed));
 }
 
-fn main() {
+pub fn main() {
     test_actual_vec::<char>('a', 'b');
     test_actual_vec::<bool>(true, false);
     test_actual_vec::<i8>(1, 3);

@@ -3,7 +3,7 @@
 const FIFO_SIZE: usize = 2;
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let len: usize = __nondet();
     if !(len <= FIFO_SIZE) {
         return;

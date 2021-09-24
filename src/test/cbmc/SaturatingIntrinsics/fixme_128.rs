@@ -7,7 +7,7 @@ use std::intrinsics;
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let v: u128 = __nondet();
     let w: u128 = __nondet();
     intrinsics::saturating_add(v, w);

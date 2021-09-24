@@ -4,7 +4,7 @@ fn foo() -> Option<i32> {
     None
 }
 
-fn main() {
+pub fn main() {
     assert!(foo() == None);
     let x = foo();
     let y: Option<i32> = None;

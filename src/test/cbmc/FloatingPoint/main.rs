@@ -23,7 +23,7 @@ macro_rules! test_floats {
     };
 }
 
-fn main() {
+pub fn main() {
     assert!(1.1 == 1.1 * 1.0);
     assert!(1.1 != 1.11 / 1.0);
 

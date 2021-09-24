@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let a: i32 = __nondet();
     if -100000 < a && a < 100000 {
         let b = -a;

@@ -35,7 +35,7 @@ impl Drop for Concrete2 {
     }
 }
 
-fn main() {
+pub fn main() {
     {
         let x: Box<dyn T>;
         if __nondet() {

@@ -25,7 +25,7 @@ impl Subscriber for DummySubscriber {
     }
 }
 
-fn main() {
+pub fn main() {
     let _d = DummySubscriber::new();
     let _s = &_d as *const dyn Subscriber;
     assert!(unsafe { _s.as_ref().unwrap().process() } == 3); // Should be == 1

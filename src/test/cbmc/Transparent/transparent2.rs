@@ -23,7 +23,7 @@ where
     }
 }
 
-fn main() {
+pub fn main() {
     let mut x: u32 = 4;
     let container = Container::new(&mut x);
     let _y = container.get();

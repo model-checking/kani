@@ -17,7 +17,7 @@ impl fmt::Display for OneOf {
     }
 }
 
-fn main() {
+pub fn main() {
     let v = OneOf { names: &["one"] };
     println!("{}", v);
 }

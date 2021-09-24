@@ -30,7 +30,7 @@ impl<T> Foo<T> for () {
 
 impl Bar for () {}
 
-fn main() {
+pub fn main() {
     let b: &dyn Bar = &();
     // The vtable for b will now have two Foo::method entries,
     // one for Foo<u32> and one for Foo<i32>. Both follow the

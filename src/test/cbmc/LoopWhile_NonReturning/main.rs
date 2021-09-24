@@ -5,7 +5,7 @@
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let mut a: u32 = __nondet();
 
     if a < 1024 {
