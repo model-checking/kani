@@ -13,6 +13,5 @@
 #![feature(box_patterns)]
 #![feature(once_cell)]
 
-pub mod cbmc;
 mod mir_to_goto;
 pub use mir_to_goto::GotocCodegenBackend;

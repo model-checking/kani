@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::btree_map;
-use crate::cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
-use crate::cbmc::utils::aggr_name;
 use crate::mir_to_goto::GotocCtx;
+use cbmc::btree_map;
+use cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
+use cbmc::utils::aggr_name;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
@@ -36,38 +36,82 @@ use ty::layout::HasParamEnv;
 const UNIT_TYPE_EMPTY_STRUCT_NAME: &str = "Unit";
 pub const FN_RETURN_VOID_VAR_NAME: &str = "VoidUnit";
 
-impl Type {
-    pub fn unit() -> Self {
+pub trait TypeExt {
+    fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
+    fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool;
+    fn is_rust_trait_fat_ptr(&self, st: &SymbolTable) -> bool;
+    fn is_unit(&self) -> bool;
+    fn is_unit_pointer(&self) -> bool;
+    fn unit() -> Self;
+}
+
+impl TypeExt for Type {
+    fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool {
+        match self {
+            Type::Struct { components, .. } => {
+                components.len() == 2
+                    && components.iter().any(|x| x.name() == "data" && x.typ().is_pointer())
+                    && components.iter().any(|x| x.name() == "len" && x.typ().is_integer())
+            }
+            Type::StructTag(tag) => st.lookup(tag).unwrap().typ.is_rust_slice_fat_ptr(st),
+            _ => false,
+        }
+    }
+
+    fn is_rust_trait_fat_ptr(&self, st: &SymbolTable) -> bool {
+        match self {
+            Type::Struct { components, .. } => {
+                components.len() == 2
+                    && components.iter().any(|x| x.name() == "data" && x.typ().is_pointer())
+                    && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
+            }
+            Type::StructTag(tag) => st.lookup(tag).unwrap().typ.is_rust_trait_fat_ptr(st),
+            _ => false,
+        }
+    }
+
+    fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool {
+        self.is_rust_slice_fat_ptr(st) || self.is_rust_trait_fat_ptr(st)
+    }
+
+    fn unit() -> Self {
         // We depend on GotocCtx::codegen_ty_unit() to put the type in the symbol table.
         // We don't have access to the symbol table here to do it ourselves.
         Type::struct_tag(UNIT_TYPE_EMPTY_STRUCT_NAME)
     }
 
-    pub fn is_unit(&self) -> bool {
+    fn is_unit(&self) -> bool {
         match self {
             Type::StructTag(name) => *name == aggr_name(UNIT_TYPE_EMPTY_STRUCT_NAME),
             _ => false,
         }
     }
 
-    pub fn is_unit_pointer(&self) -> bool {
+    fn is_unit_pointer(&self) -> bool {
         match self {
             Type::Pointer { typ } => typ.is_unit(),
             _ => false,
         }
     }
 }
+trait ExprExt {
+    fn unit(symbol_table: &SymbolTable) -> Self;
 
-impl Expr {
-    pub fn unit(symbol_table: &SymbolTable) -> Self {
+    fn is_unit(&self) -> bool;
+
+    fn is_unit_pointer(&self) -> bool;
+}
+
+impl ExprExt for Expr {
+    fn unit(symbol_table: &SymbolTable) -> Self {
         Expr::struct_expr(Type::unit(), btree_map![], symbol_table)
     }
 
-    pub fn is_unit(&self) -> bool {
+    fn is_unit(&self) -> bool {
         self.typ().is_unit()
     }
 
-    pub fn is_unit_pointer(&self) -> bool {
+    fn is_unit_pointer(&self) -> bool {
         self.typ().is_unit_pointer()
     }
 }

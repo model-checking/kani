@@ -1,8 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::btree_string_map;
-use crate::cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
+use super::super::codegen::TypeExt;
 use crate::mir_to_goto::GotocCtx;
+use cbmc::btree_string_map;
+use cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
 
 // Should move into rvalue
 //make this a member function
@@ -174,35 +175,5 @@ impl<'tcx> GotocCtx<'tcx> {
                 _ => panic!("Unexpected component {} in {:?}", c.name(), t),
             }
         }
-    }
-}
-
-impl Type {
-    pub fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool {
-        match self {
-            Type::Struct { components, .. } => {
-                components.len() == 2
-                    && components.iter().any(|x| x.name() == "data" && x.typ().is_pointer())
-                    && components.iter().any(|x| x.name() == "len" && x.typ().is_integer())
-            }
-            Type::StructTag(tag) => st.lookup(tag).unwrap().typ.is_rust_slice_fat_ptr(st),
-            _ => false,
-        }
-    }
-
-    pub fn is_rust_trait_fat_ptr(&self, st: &SymbolTable) -> bool {
-        match self {
-            Type::Struct { components, .. } => {
-                components.len() == 2
-                    && components.iter().any(|x| x.name() == "data" && x.typ().is_pointer())
-                    && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
-            }
-            Type::StructTag(tag) => st.lookup(tag).unwrap().typ.is_rust_trait_fat_ptr(st),
-            _ => false,
-        }
-    }
-
-    pub fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool {
-        self.is_rust_slice_fat_ptr(st) || self.is_rust_trait_fat_ptr(st)
     }
 }

@@ -4,7 +4,7 @@
 use std::ops::{BitAnd, Shl, Shr};
 
 use super::super::Transformer;
-use crate::cbmc::goto_program::{
+use crate::goto_program::{
     BinaryOperand, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
     Type,
 };

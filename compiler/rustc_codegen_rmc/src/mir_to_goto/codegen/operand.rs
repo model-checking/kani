@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use crate::mir_to_goto::utils::slice_fat_ptr;
 use crate::mir_to_goto::GotocCtx;
+use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
     read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,

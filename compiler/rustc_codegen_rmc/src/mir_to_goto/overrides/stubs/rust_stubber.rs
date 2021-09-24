@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::hooks::GotocTypeHook;
-use crate::cbmc::goto_program::{Expr, Location, Stmt, Type};
 use crate::mir_to_goto::GotocCtx;
+use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
 use rustc_hir::itemlikevisit::ItemLikeVisitor;

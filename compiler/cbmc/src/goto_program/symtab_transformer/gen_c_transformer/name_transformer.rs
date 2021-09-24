@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::super::Transformer;
-use crate::cbmc::goto_program::{
+use crate::goto_program::{
     DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
 };
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};

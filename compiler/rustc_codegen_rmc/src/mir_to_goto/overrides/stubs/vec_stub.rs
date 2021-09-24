@@ -10,8 +10,8 @@ use rustc_span::Span;
 use std::cell::{Cell, RefCell, RefMut};
 
 use super::super::hooks::GotocHook;
-use crate::cbmc::goto_program::{Expr, Location, Stmt};
 use crate::mir_to_goto::GotocCtx;
+use cbmc::goto_program::{Expr, Location, Stmt};
 
 pub struct VecStub<'tcx> {
     ty_opt: Cell<Option<Option<Ty<'tcx>>>>,

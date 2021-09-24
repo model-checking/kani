@@ -3,11 +3,11 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::cbmc::goto_program::symtab_transformer;
-use crate::cbmc::goto_program::SymbolTable;
 use crate::mir_to_goto::overrides::skip_monomorphize;
 use crate::mir_to_goto::GotocCtx;
 use bitflags::_core::any::Any;
+use cbmc::goto_program::symtab_transformer;
+use cbmc::goto_program::SymbolTable;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::Transformer;
-use crate::cbmc::goto_program::SymbolTable;
+use crate::goto_program::SymbolTable;
 
 /// Struct for performing the identity transformation on a symbol table.
 /// Mainly used as a demo/for testing.

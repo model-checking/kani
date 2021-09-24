@@ -15,3 +15,5 @@ mod span;
 mod statement;
 mod static_var;
 mod typ;
+
+pub use typ::TypeExt;

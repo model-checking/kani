@@ -15,13 +15,11 @@
 //! this structure as input.
 
 use super::current_fn::CurrentFnCtx;
-use crate::cbmc::goto_program::{
-    DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type,
-};
-use crate::cbmc::utils::aggr_name;
-use crate::cbmc::{MachineModel, RoundingMode};
 use crate::mir_to_goto::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
 use crate::mir_to_goto::utils::full_crate_name;
+use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
+use cbmc::utils::aggr_name;
+use cbmc::{MachineModel, RoundingMode};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;

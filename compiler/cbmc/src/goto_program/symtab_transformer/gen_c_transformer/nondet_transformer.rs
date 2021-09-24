@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::super::Transformer;
-use crate::cbmc::goto_program::{Expr, Location, Stmt, Symbol, SymbolTable, Type};
+use crate::goto_program::{Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use rustc_data_structures::fx::FxHashMap;
 
 /// Struct for handling the nondet transformations for --gen-c-runnable.

@@ -5,9 +5,10 @@
 //! a place is an expression of specifying a location in memory, like a left value. check the cases
 //! in [codegen_place] below.
 
-use crate::cbmc::goto_program::{Expr, Type};
+use super::typ::TypeExt;
 use crate::mir_to_goto::utils::slice_fat_ptr;
 use crate::mir_to_goto::GotocCtx;
+use cbmc::goto_program::{Expr, Type};
 use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::{

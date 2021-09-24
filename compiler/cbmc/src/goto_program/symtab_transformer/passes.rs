@@ -3,7 +3,7 @@
 
 use super::gen_c_transformer::{ExprTransformer, NameTransformer, NondetTransformer};
 use super::identity_transformer::IdentityTransformer;
-use crate::cbmc::goto_program::SymbolTable;
+use crate::goto_program::SymbolTable;
 
 /// Performs each pass provided on the given symbol table.
 pub fn do_passes(mut symtab: SymbolTable, pass_names: &[String]) -> SymbolTable {
