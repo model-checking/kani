@@ -1,10 +1,13 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
 [package]
-name = "rustc_codegen_llvm"
+name = "rustc_codegen_rmc"
 version = "0.0.0"
 edition = "2018"
 
 [lib]
-test = false
+test = true
 doctest = false
 
 [dependencies]
@@ -12,6 +15,7 @@ bitflags = "1.0"
 cstr = "0.2"
 libc = "0.2"
 measureme = "9.1.0"
+num = "0.4.0"
 snap = "1"
 tracing = "0.1"
 rustc_middle = { path = "../rustc_middle" }
