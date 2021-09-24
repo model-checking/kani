@@ -14,3 +14,5 @@
   - [Loops, unwinding, and bounds](./tutorial-loops-unwinding.md)
 
 - [RMC developer documentation]()
+
+- [RMC dashboard](./dashboard.md)

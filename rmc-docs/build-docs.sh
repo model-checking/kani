@@ -17,12 +17,25 @@ if [ ! -x mdbook ]; then
     tar zxf $FILE
 fi
 
+# Publish dashboard into our documentation
+RMC_DIR=$SCRIPT_DIR/..
+HTML_DIR=$RMC_DIR/build/output/latest/html/
+
+if [ -d $HTML_DIR ]; then
+    # Litani run is copied into `src` to avoid deletion by `mdbook`
+    cp -r $HTML_DIR src/dashboard/
+    # Remove unnecessary artifacts to save space
+    rm -r src/dashboard/artifacts
+    rm -r src/dashboard/run.json
+else
+    echo "WARNING: Could not find the latest dashboard run."
+fi
+
 # Build the book into ./book/
 mkdir -p book
 ./mdbook build
 touch book/.nojekyll
 
 # TODO: Test all the code examples from our documentation
-# TODO: Build the dashboard and publish into our documentation
 
 echo "Finished documentation build successfully."
