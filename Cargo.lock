@@ -456,6 +456,37 @@ name = "cargotest2"
 version = "0.1.0"
 
 [[package]]
+name = "cbmc"
+version = "0.0.0"
+dependencies = [
+ "bitflags",
+ "cstr",
+ "libc",
+ "measureme",
+ "num",
+ "rustc-demangle",
+ "rustc_arena",
+ "rustc_ast",
+ "rustc_attr",
+ "rustc_codegen_ssa",
+ "rustc_data_structures",
+ "rustc_errors",
+ "rustc_fs_util",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_llvm",
+ "rustc_metadata",
+ "rustc_middle",
+ "rustc_serialize",
+ "rustc_session",
+ "rustc_span",
+ "rustc_target",
+ "smallvec",
+ "snap",
+ "tracing",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3766,6 +3797,7 @@ name = "rustc_codegen_rmc"
 version = "0.0.0"
 dependencies = [
  "bitflags",
+ "cbmc",
  "cstr",
  "libc",
  "measureme",
