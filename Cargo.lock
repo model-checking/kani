@@ -3739,7 +3739,6 @@ dependencies = [
  "cstr",
  "libc",
  "measureme",
- "num",
  "rustc-demangle",
  "rustc_arena",
  "rustc_ast",
