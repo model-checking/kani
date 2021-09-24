@@ -13,9 +13,6 @@
 #![feature(iter_zip)]
 #![feature(nll)]
 #![recursion_limit = "256"]
-#![feature(destructuring_assignment)]
-#![feature(box_patterns)]
-#![feature(once_cell)]
 
 use back::write::{create_informational_target_machine, create_target_machine};
 
@@ -75,8 +72,6 @@ mod type_;
 mod type_of;
 mod va_arg;
 mod value;
-
-pub mod gotoc;
 
 #[derive(Clone)]
 pub struct LlvmCodegenBackend(());
