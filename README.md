@@ -3,36 +3,28 @@ The Rust Model Checker (RMC) aims to be a bit-precise model-checker for Rust.
 
 ## Project Status
 RMC is currently in the initial development phase.
-It **does not yet support all rust language features**.
+It **does not yet support all Rust language features**.
 We are working to extend our support of language features.
 If you encounter issues when using RMC we encourage you to 
 [report them to us](https://github.com/model-checking/rmc/issues/new/choose).
 
 ## Quickstart
 
-1. Install all dependencies required for upstream-rust, as per the 
-   [README](UPSTREAM-README.md#building-on-a-unix-like-system).
+1. Install the dependencies needed for [`rustc`](https://github.com/rust-lang/rust),
+   [CBMC](https://github.com/diffblue/cbmc) and
+   [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc/releases/latest).
 
-1. Install CBMC.
-   CBMC has prebuilt releases 
-   [available for major platforms](https://github.com/diffblue/cbmc/releases).
-   RMC currently works with CBMC versions 5.26 or greater.
-   If you want to build CBMC from source, follow 
-   [the cmake instructions from the CBMC repo](https://github.com/diffblue/cbmc/blob/develop/COMPILING.md#working-with-cmake).
-   We recommend using `ninja` as the CBMC build system.
-
-1. Install [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc/releases/latest).
+   The [RMC Installation Guide](https://model-checking.github.io/rmc/install-guide.html)
+   shows how to quickly install them using our setup scripts.
 
 1. Configure RMC. 
    We recommend using the following options:
    ```
    ./configure \
-      --debuginfo-level-rustc=2 \
       --enable-debug \
       --set=llvm.download-ci-llvm=true \
       --set=rust.debug-assertions-std=false \
-      --set=rust.deny-warnings=false \
-      --set=rust.incremental=true
+      --set=rust.deny-warnings=false
    ```
 
 1. Build RMC
