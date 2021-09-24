@@ -6,8 +6,8 @@
 //! in [codegen_place] below.
 
 use super::typ::TypeExt;
-use crate::mir_to_goto::utils::slice_fat_ptr;
-use crate::mir_to_goto::GotocCtx;
+use crate::utils::slice_fat_ptr;
+use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Type};
 use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;

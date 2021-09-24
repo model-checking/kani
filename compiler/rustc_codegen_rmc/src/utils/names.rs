@@ -3,7 +3,7 @@
 
 //! Functions that make names for things
 
-use crate::mir_to_goto::GotocCtx;
+use crate::GotocCtx;
 use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathDataName;

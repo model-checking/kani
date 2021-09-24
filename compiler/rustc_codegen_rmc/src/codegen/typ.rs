@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::mir_to_goto::GotocCtx;
+use crate::GotocCtx;
 use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_name;

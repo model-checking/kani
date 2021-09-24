@@ -10,7 +10,7 @@ use rustc_span::Span;
 use std::cell::{Cell, RefCell, RefMut};
 
 use super::super::hooks::GotocHook;
-use crate::mir_to_goto::GotocCtx;
+use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt};
 
 pub struct HashMapStub<'tcx> {

@@ -3,7 +3,7 @@
 //! this module handles intrinsics
 use tracing::{debug, warn};
 
-use crate::mir_to_goto::GotocCtx;
+use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::mir::Place;
 use rustc_middle::ty::layout::LayoutOf;

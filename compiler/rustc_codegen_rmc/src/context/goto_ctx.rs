@@ -15,8 +15,8 @@
 //! this structure as input.
 
 use super::current_fn::CurrentFnCtx;
-use crate::mir_to_goto::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
-use crate::mir_to_goto::utils::full_crate_name;
+use crate::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+use crate::utils::full_crate_name;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_name;
 use cbmc::{MachineModel, RoundingMode};

@@ -13,5 +13,11 @@
 #![feature(box_patterns)]
 #![feature(once_cell)]
 
-mod mir_to_goto;
-pub use mir_to_goto::GotocCodegenBackend;
+mod codegen;
+mod compiler_interface;
+mod context;
+mod overrides;
+mod utils;
+
+pub use compiler_interface::GotocCodegenBackend;
+pub use context::GotocCtx;
