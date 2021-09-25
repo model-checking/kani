@@ -48,13 +48,13 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
                 let t = cell.borrow().clone();
                 if let Some(current_item) = t.0 {
                     eprintln!("[RMC] current codegen item: {}", current_item);
-                    if let Some(current_loc) = t.1 {
-                        eprintln!("[RMC] current codegen location: {:?}", current_loc);
-                    } else {
-                        eprintln!("[RMC] no current codegen location.");
-                    }
                 } else {
                     eprintln!("[RMC] no current codegen item.");
+                }
+                if let Some(current_loc) = t.1 {
+                    eprintln!("[RMC] current codegen location: {:?}", current_loc);
+                } else {
+                    eprintln!("[RMC] no current codegen location.");
                 }
             });
 
