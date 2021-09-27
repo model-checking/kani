@@ -22,3 +22,6 @@ jobs:
       - name: Execute copyright check
         if: ${{ steps.git-diff.outputs.paths }}
         run: ./scripts/ci/copyright_check.py ${{ steps.git-diff.outputs.paths }}
+
+      - name: Check clang formatting
+        run: ./scripts/run-clang-format.sh -d 
