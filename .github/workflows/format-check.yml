@@ -4,7 +4,7 @@ name: RMC CI
 on: pull_request
 
 jobs:
-  copyright-check:
+  format-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout RMC
@@ -15,10 +15,13 @@ jobs:
       - name: Get paths for files added
         id: git-diff
         run: |
-          ignore='(.diff|.md|.props|expected|ignore|gitignore)$'
+          ignore='(.clang-format|.diff|.md|.props|expected|ignore|gitignore)$'
           files=$(git diff --ignore-submodules=all --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -v -E $ignore | xargs)
           echo "::set-output name=paths::$files"
 
       - name: Execute copyright check
         if: ${{ steps.git-diff.outputs.paths }}
         run: ./scripts/ci/copyright_check.py ${{ steps.git-diff.outputs.paths }}
+
+      - name: Check C code formatting
+        run: ./scripts/run-clang-format.sh -d

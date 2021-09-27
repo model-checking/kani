@@ -1,14 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-#include <stdint.h>
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 // This Vector stub implementation is supposed to work with c_vec.rs. Please
-// refer to that file for a detailed explanation about the workings of this 
-// abstraction. Public methods implemented in c_vec.rs act as wrappers around 
+// refer to that file for a detailed explanation about the workings of this
+// abstraction. Public methods implemented in c_vec.rs act as wrappers around
 // methods implemented here.
 
 // __CPROVER_max_malloc_size is dependent on the number of offset bits used to
@@ -30,7 +30,7 @@
 
 // As can be seen from the pointer to mem (unint32_t*), we track memory in terms
 // of words. The current implementation works only if the containing type is
-// u32. This was specifically chosen due to a use case seen in the Firecracker 
+// u32. This was specifically chosen due to a use case seen in the Firecracker
 // codebase. This structure is used to communicate over the FFI boundary.
 // Future work:
 // Ideally, the pointer to memory would be uint8_t* - representing that we treat
@@ -38,9 +38,9 @@
 // of the element contained in the Vector. In that case, we would have to treat
 // every sizeof(T) bytes as an indivdual element and cast memory accordingly.
 typedef struct {
-	uint32_t* mem;
-	size_t len;
-	size_t capacity;
+    uint32_t *mem;
+    size_t    len;
+    size_t    capacity;
 } vec;
 
 // The grow operation resizes the vector and copies its original contents into a
@@ -68,7 +68,7 @@ typedef struct {
 // CBMC supports unbounded arrays. In that case, we would allocate memory of
 // size infinity and work with that. For program verification, this would
 // optimize a lot of operations since the solver does not really have to worry
-// about the bounds of memory. The appropriate constant for capacity would be 
+// about the bounds of memory. The appropriate constant for capacity would be
 // __CPROVER_constant_infinity_uint but this is currently blocked due to
 // incorrect translation of the constant: https://github.com/diffblue/cbmc/issues/6261.
 //
@@ -77,106 +77,111 @@ typedef struct {
 // copying over elements, we can track only the end pointer of the memory and
 // shift it to track the new length. Since this behavior is that of the
 // allocator, the consumer of the API is blind to it.
-void vec_grow_exact(vec* v, size_t new_cap) {
-	uint32_t* new_mem = (uint32_t* ) realloc(v->mem, new_cap * sizeof(*v->mem));
+void vec_grow_exact(vec *v, size_t new_cap)
+{
+    uint32_t *new_mem = ( uint32_t * )realloc(v->mem, new_cap * sizeof(*v->mem));
 
-	v->mem = new_mem;
-	v->capacity = new_cap;
+    v->mem      = new_mem;
+    v->capacity = new_cap;
 }
 
-void vec_grow(vec* v) {
-	size_t new_cap = v->capacity * 2;
-	if (new_cap > MAX_MALLOC_SIZE) {
-		// Panic if the new size requirement is greater than max size that can
-		// be allocated through malloc.
-		assert(0);
-	}
+void vec_grow(vec *v)
+{
+    size_t new_cap = v->capacity * 2;
+    if (new_cap > MAX_MALLOC_SIZE) {
+        // Panic if the new size requirement is greater than max size that can
+        // be allocated through malloc.
+        assert(0);
+    }
 
-	vec_grow_exact(v, new_cap);
+    vec_grow_exact(v, new_cap);
 }
 
-void vec_sized_grow(vec* v, size_t additional) {
-	size_t min_cap = v->capacity + additional;
-	size_t grow_cap = v->capacity * 2;
+void vec_sized_grow(vec *v, size_t additional)
+{
+    size_t min_cap  = v->capacity + additional;
+    size_t grow_cap = v->capacity * 2;
 
-	// This resembles the Rust Standard Library behavior - amortized_grow in
-	// alloc/raw_vec.rs
-	// 
-	// Reference: https://doc.rust-lang.org/src/alloc/raw_vec.rs.html#421
-	size_t new_cap = min_cap > grow_cap ? min_cap : grow_cap;
-	if (new_cap > MAX_MALLOC_SIZE) {
-		// Panic if the new size requirement is greater than max size that can
-		// be allocated through malloc.
-		assert(0);
-	}
+    // This resembles the Rust Standard Library behavior - amortized_grow in
+    // alloc/raw_vec.rs
+    //
+    // Reference: https://doc.rust-lang.org/src/alloc/raw_vec.rs.html#421
+    size_t new_cap = min_cap > grow_cap ? min_cap : grow_cap;
+    if (new_cap > MAX_MALLOC_SIZE) {
+        // Panic if the new size requirement is greater than max size that can
+        // be allocated through malloc.
+        assert(0);
+    }
 
-	vec_grow_exact(v, new_cap);
+    vec_grow_exact(v, new_cap);
 }
 
-vec* vec_new() {
-	vec *v = (vec *) malloc(sizeof(vec));
-	// Default size is DEFAULT_CAPACITY. We compute the maximum number of
-	// elements to ensure that allocation size is aligned.
-	size_t max_elements = DEFAULT_CAPACITY / sizeof(*v->mem);
-	v->mem = (uint32_t *) malloc(max_elements * sizeof(*v->mem));
-	v->len = 0;
-	v->capacity = max_elements;
-	// Return a pointer to the allocated vec structure, which is used in future
-	// callbacks.
-	return v;
+vec *vec_new()
+{
+    vec *v = ( vec * )malloc(sizeof(vec));
+    // Default size is DEFAULT_CAPACITY. We compute the maximum number of
+    // elements to ensure that allocation size is aligned.
+    size_t max_elements = DEFAULT_CAPACITY / sizeof(*v->mem);
+    v->mem              = ( uint32_t * )malloc(max_elements * sizeof(*v->mem));
+    v->len              = 0;
+    v->capacity         = max_elements;
+    // Return a pointer to the allocated vec structure, which is used in future
+    // callbacks.
+    return v;
 }
 
-vec* vec_with_capacity(size_t capacity) {
-	vec *v = (vec *) malloc(sizeof(vec));
-	if (capacity > MAX_MALLOC_SIZE) {
-		// Panic if the new size requirement is greater than max size that can
-		// be allocated through malloc.
-		assert(0);
-	}
+vec *vec_with_capacity(size_t capacity)
+{
+    vec *v = ( vec * )malloc(sizeof(vec));
+    if (capacity > MAX_MALLOC_SIZE) {
+        // Panic if the new size requirement is greater than max size that can
+        // be allocated through malloc.
+        assert(0);
+    }
 
-	v->mem = (uint32_t *) malloc(capacity * sizeof(*v->mem));
-	v->len = 0;
-	v->capacity = capacity;
-	return v;
+    v->mem      = ( uint32_t * )malloc(capacity * sizeof(*v->mem));
+    v->len      = 0;
+    v->capacity = capacity;
+    return v;
 }
 
-void vec_push(vec* v, uint32_t elem) {
-	// If we have already reached capacity, resize the Vector before
-	// pushing in new elements.
-	if (v->len == v->capacity) {
-		// Ensure that we have capacity to hold atleast one more element
-		vec_sized_grow(v, 1);
-	}
+void vec_push(vec *v, uint32_t elem)
+{
+    // If we have already reached capacity, resize the Vector before
+    // pushing in new elements.
+    if (v->len == v->capacity) {
+        // Ensure that we have capacity to hold atleast one more element
+        vec_sized_grow(v, 1);
+    }
 
-	v->mem[v->len] = elem;
-	v->len += 1;
+    v->mem[ v->len ] = elem;
+    v->len += 1;
 }
 
-uint32_t vec_pop(vec* v) {
-	assert(v->len > 0);
-	v->len -= 1;
+uint32_t vec_pop(vec *v)
+{
+    assert(v->len > 0);
+    v->len -= 1;
 
-	return v->mem[v->len];
+    return v->mem[ v->len ];
 }
 
-void vec_append(vec* v1, vec* v2) {
-	// Reserve enough space before adding in new elements.
-	vec_sized_grow(v1, v2->len);
-	// Perform a memcpy of elements which is cheaper than pushing each element
-	// at once.
-	memcpy(v1->mem + v1->len, v2->mem, v2->len * sizeof(*v2->mem));
-	v1->len = v1->len + v2->len;
+void vec_append(vec *v1, vec *v2)
+{
+    // Reserve enough space before adding in new elements.
+    vec_sized_grow(v1, v2->len);
+    // Perform a memcpy of elements which is cheaper than pushing each element
+    // at once.
+    memcpy(v1->mem + v1->len, v2->mem, v2->len * sizeof(*v2->mem));
+    v1->len = v1->len + v2->len;
 }
 
-size_t vec_len(vec* v) {
-	return v->len;
-}
+size_t vec_len(vec *v) { return v->len; }
 
-size_t vec_cap(vec* v) {
-	return v->capacity;
-}
+size_t vec_cap(vec *v) { return v->capacity; }
 
-void vec_free(vec* v) {
-	free(v->mem);
-	free(v);
+void vec_free(vec *v)
+{
+    free(v->mem);
+    free(v);
 }
