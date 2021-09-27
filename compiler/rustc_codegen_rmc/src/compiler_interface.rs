@@ -76,7 +76,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         c.call_with_panic_debug_info(
                             |ctx| ctx.declare_static(def_id, item),
                             format!("declare_static: {:?}", def_id),
-                            None,
+                            Some(c.codegen_span(&tcx.def_span(def_id))),
                         );
                     }
                     MonoItem::GlobalAsm(_) => {
@@ -109,7 +109,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         c.call_with_panic_debug_info(
                             |ctx| ctx.codegen_static(def_id, item),
                             format!("codegen_static: {:?}", def_id),
-                            None,
+                            Some(c.codegen_span(&tcx.def_span(def_id))),
                         );
                     }
                     MonoItem::GlobalAsm(_) => {} // We have already warned above
