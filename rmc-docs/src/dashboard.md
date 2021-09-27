@@ -7,13 +7,22 @@ To this end, we use Rust code snippet examples from the following general Rust d
  * The Rust Reference
  * The Rustonomicon
  * The Rust Unstable Book
- * Rust by Example
+ * Rust By Example
 
 However, not all examples from these books are suited for verification.
-Because of that, we run three different types of jobs when generating the dashboard:
- * `check` jobs (`BUILD`): This check only uses the Rust front-end to detect if the example is valid Rust code.
- * `codegen` jobs (`TEST`): This check uses the Rust front-end and the RMC back-end to determine if we can generate GotoC code.
- * `verification` jobs (`REPORT`): This check uses all of above and CBMC to obtain a verification result.
+For instance, some of them are only included to show what is valid Rust code (or what is not).
+
+Because of that, we run up to three different types of jobs when generating the dashboard:
+ * `check` jobs (`BUILD` stage): This check uses the Rust front-end to detect if the example is valid Rust code.
+ * `codegen` jobs (`TEST` stage): This check uses the RMC back-end to determine if we can generate GotoC code.
+ * `verification` jobs (`REPORT` stage): This check uses CBMC to obtain a verification result.
+
+Note that these are incremental: A `verification` job depends on a previous `codegen` job.
+Similary, a `codegen` job depends on a `check` job.
+
+> **Warning:** [Litani](https://github.com/awslabs/aws-build-accumulator) does not support
+> hierarchical views nor custom stages at the moment. For this reason, the results are
+> displayed for each example using Litani's default stages (`BUILD`, `TEST` and `REPORT`).
 
 Before running the above mentioned jobs, we pre-process the examples to:
  1. Set the expected output according to flags present in the code snippet.
@@ -21,5 +30,9 @@ Before running the above mentioned jobs, we pre-process the examples to:
  3. Include custom assertions for verification (only in the case of `verification` jobs).
 
 Finally, we run all jobs, collect their outputs and compare them against the expected outputs.
+The results are summarized as follows: If the obtained and expected outputs differ,
+the color of the stage bar will be red. Otherwise, it will be blue.
+If an example shows one red bar, it is considered a failed example that cannot be handled by RMC.
 
-The [RMC Dashboard](./dashboard/index.html) displays a summary of the obtained results.
+The [RMC Dashboard](./dashboard/index.html) is automatically updated whenever
+a PR gets merged into RMC.
