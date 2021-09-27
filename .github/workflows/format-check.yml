@@ -25,6 +25,3 @@ jobs:
 
       - name: Check C code formatting
         run: ./scripts/run-clang-format.sh -d
-
-      - name: Check Rust code formatting
-        run: ./x.py fmt --check
