@@ -69,14 +69,14 @@ impl CodegenBackend for GotocCodegenBackend {
                         c.call_with_panic_debug_info(
                             |ctx| ctx.declare_function(instance),
                             format!("declare_function: {}", c.readable_instance_name(instance)),
-                            Some(c.codegen_span(&tcx.instance_mir(instance.def).span)),
+                            instance.def_id(),
                         );
                     }
                     MonoItem::Static(def_id) => {
                         c.call_with_panic_debug_info(
                             |ctx| ctx.declare_static(def_id, item),
                             format!("declare_static: {:?}", def_id),
-                            Some(c.codegen_span(&tcx.def_span(def_id))),
+                            def_id,
                         );
                     }
                     MonoItem::GlobalAsm(_) => {
@@ -102,14 +102,14 @@ impl CodegenBackend for GotocCodegenBackend {
                                 c.readable_instance_name(instance),
                                 c.symbol_name(instance)
                             ),
-                            Some(c.codegen_span(&tcx.instance_mir(instance.def).span)),
+                            instance.def_id(),
                         );
                     }
                     MonoItem::Static(def_id) => {
                         c.call_with_panic_debug_info(
                             |ctx| ctx.codegen_static(def_id, item),
                             format!("codegen_static: {:?}", def_id),
-                            Some(c.codegen_span(&tcx.def_span(def_id))),
+                            def_id,
                         );
                     }
                     MonoItem::GlobalAsm(_) => {} // We have already warned above

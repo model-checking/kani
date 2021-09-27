@@ -8,6 +8,7 @@ use cbmc::goto_program::Location;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::Instance;
+use rustc_span::def_id::DefId;
 use std::cell::RefCell;
 use std::lazy::SyncLazy;
 use std::panic;
@@ -78,10 +79,11 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         call: F,
         panic_debug: String,
-        loc: Option<Location>,
+        def_id: DefId,
     ) {
         CURRENT_CODEGEN_ITEM.with(|odb_cell| {
-            odb_cell.replace((Some(panic_debug), loc));
+            odb_cell
+                .replace((Some(panic_debug), Some(self.codegen_span(&self.tcx.def_span(def_id)))));
             call(self);
             odb_cell.replace((None, None));
         });
