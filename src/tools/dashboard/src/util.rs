@@ -193,7 +193,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
             "build/tmp",
             "-Z",
             "human_readable_cgu_names",
-            "-crate-type=lib",
+            "--crate-type=lib",
         ])
         .arg(&test_props.path);
     // TODO: replace `test` with `codegen` when Litani adds support for custom
