@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-#include <stdint.h>
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 // This HashSet stub implementation is supposed to work with c_hashset.rs.
@@ -11,7 +11,7 @@
 // act as wrappers around methods implemented here.
 
 // As noted before, this HashSet implementation is specifically for inputs which
-// are u16. The details below can be extended to larger sets if necessary. The 
+// are u16. The details below can be extended to larger sets if necessary. The
 // domain of the output is i16.
 //
 // The hash function that we choose is the identity function.
@@ -40,21 +40,19 @@
 // operations.
 const uint16_t SENTINEL = 1;
 
-uint16_t hasher(uint16_t value) {
-	return value;
-}
+uint16_t hasher(uint16_t value) { return value; }
 
 // We initialize all values of the domain to be 0 by initializing it with
 // calloc. This lets us get around the problem of looping through all elements
 // to initialize them individually with a special value.
 //
-// The domain array is to be interpreted such that 
+// The domain array is to be interpreted such that
 // if domain[index] != 0, value such that hash(value) = index is present.
 //
 // However, this logic does not work for the value 0. For this, we choose the
-// SENTINEL value to initialize that element. 
+// SENTINEL value to initialize that element.
 typedef struct {
-	uint16_t* domain;
+    uint16_t *domain;
 } hashset;
 
 // Ideally, this approach is much more suitable if we can work with arrays of
@@ -77,20 +75,21 @@ typedef struct {
 //
 // Returns: pointer to a hashset instance which tracks the domain memory. This
 // pointer is used in later callbacks such as insert() and remove().
-hashset* hashset_new() {
-	hashset* set = (hashset *) malloc(sizeof(hashset));
-	// Initializes value all indexes to be 0, indicating that those elements are
-	// not present in the HashSet.
-	set->domain = calloc(UINT16_MAX, sizeof(uint16_t));
-	// For 0, choose another value to achieve the same.
-	set->domain[0] = SENTINEL;
-	return set;
+hashset *hashset_new()
+{
+    hashset *set = ( hashset * )malloc(sizeof(hashset));
+    // Initializes value all indexes to be 0, indicating that those elements are
+    // not present in the HashSet.
+    set->domain = calloc(UINT16_MAX, sizeof(uint16_t));
+    // For 0, choose another value to achieve the same.
+    set->domain[ 0 ] = SENTINEL;
+    return set;
 }
 
 // For insert, we need to first check if the value exists in the HashSet. If it
 // does, we immediately return a 0 (false) value back.
 //
-// If it doesnt, then we mark that element of the domain array with the value to 
+// If it doesnt, then we mark that element of the domain array with the value to
 // indicate that this element has been inserted. For element 0, we mark it with
 // the SENTINEL.
 //
@@ -100,16 +99,14 @@ hashset* hashset_new() {
 // Returns: an integer value 1 or 0. If the value is already present in the
 // hashset, this function returns a 0. If the value is sucessfully inserted, we
 // return a 1.
-uint32_t hashset_insert(hashset* s, uint16_t value) {
-	uint16_t hash = hasher(value);
+uint32_t hashset_insert(hashset *s, uint16_t value)
+{
+    uint16_t hash = hasher(value);
 
-	if ((hash == 0 && s->domain[hash] != SENTINEL) || 
-		(hash !=0 && s->domain[hash] != 0)) {
-		return 0;
-	}
+    if ((hash == 0 && s->domain[ hash ] != SENTINEL) || (hash != 0 && s->domain[ hash ] != 0)) { return 0; }
 
-	s->domain[hash] = value;
-	return 1;
+    s->domain[ hash ] = value;
+    return 1;
 }
 
 // We perform a similar check here as described in hashset_insert(). We do not
@@ -117,15 +114,13 @@ uint32_t hashset_insert(hashset* s, uint16_t value) {
 //
 // Returns: an integer value 1 or 0. If the value is present in the hashset,
 // this function returns a 1, otherwise 0.
-uint32_t hashset_contains(hashset* s, uint16_t value) {
-	uint16_t hash = hasher(value);
+uint32_t hashset_contains(hashset *s, uint16_t value)
+{
+    uint16_t hash = hasher(value);
 
-	if ((hash == 0 && s->domain[hash] != SENTINEL) || 
-		(hash != 0 && s->domain[hash] != 0)) {
-		return 1;
-	}
+    if ((hash == 0 && s->domain[ hash ] != SENTINEL) || (hash != 0 && s->domain[ hash ] != 0)) { return 1; }
 
-	return 0;
+    return 0;
 }
 
 // We check if the element exists in the array. If it does not, we return a 0
@@ -135,19 +130,17 @@ uint32_t hashset_contains(hashset* s, uint16_t value) {
 // Returns: an integer value 1 or 0. If the value is not present in the hashset,
 // this function returns a 0. If the value is sucessfully removed from the
 // hashset, it returns a 1.
-uint32_t hashset_remove(hashset* s, uint16_t value) {
-	uint16_t hash = hasher(value);
+uint32_t hashset_remove(hashset *s, uint16_t value)
+{
+    uint16_t hash = hasher(value);
 
-	if ((hash == 0 && s->domain[hash] == SENTINEL) || 
-		(hash !=0 && s->domain[hash] == 0)) {
-		return 0;
-	}
+    if ((hash == 0 && s->domain[ hash ] == SENTINEL) || (hash != 0 && s->domain[ hash ] == 0)) { return 0; }
 
-	if (hash == 0) {
-		s->domain[hash] = SENTINEL;
-	} else {
-		s->domain[hash] = 0;
-	}
+    if (hash == 0) {
+        s->domain[ hash ] = SENTINEL;
+    } else {
+        s->domain[ hash ] = 0;
+    }
 
-	return 1;
+    return 1;
 }
