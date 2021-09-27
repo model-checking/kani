@@ -4,7 +4,7 @@ name: RMC CI
 on: pull_request
 
 jobs:
-  copyright-check:
+  format-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout RMC
@@ -23,5 +23,8 @@ jobs:
         if: ${{ steps.git-diff.outputs.paths }}
         run: ./scripts/ci/copyright_check.py ${{ steps.git-diff.outputs.paths }}
 
-      - name: Check clang formatting
-        run: ./scripts/run-clang-format.sh -d 
+      - name: Check C code formatting
+        run: ./scripts/run-clang-format.sh -d
+
+      - name: Check Rust code formatting
+        run: ./x.py fmt --check
