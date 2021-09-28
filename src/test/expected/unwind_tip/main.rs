@@ -6,7 +6,7 @@
 include!("../../rmc-prelude.rs");
 
 // This example is a copy of the `cbmc` test in
-// `src/test/cbmc/LoopLoop_NonReturning/main_no_unwind_asserts.rs`
+// `src/test/rmc/LoopLoop_NonReturning/main_no_unwind_asserts.rs`
 //
 // The verification output should show an unwinding assertion failure.
 //

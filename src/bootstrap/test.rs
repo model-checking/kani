@@ -1205,7 +1205,7 @@ host_test!(RunMakeFullDeps {
 
 default_test!(Assembly { path: "src/test/assembly", mode: "assembly", suite: "assembly" });
 
-default_test!(CBMC { path: "src/test/cbmc", mode: "rmc", suite: "cbmc" });
+default_test!(RMC { path: "src/test/rmc", mode: "rmc", suite: "rmc" });
 
 default_test!(Firecracker { path: "src/test/firecracker", mode: "rmc", suite: "firecracker" });
 
