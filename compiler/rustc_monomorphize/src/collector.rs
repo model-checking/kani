@@ -319,11 +319,6 @@ pub fn collect_crate_mono_items(
 }
 
 // Temporary function that allow us to skip monomorphizing lang_start.
-fn is_rmc(tcx: TyCtxt<'_>) -> bool {
-    const RMC_STR: &'static str = "rmc";
-    tcx.sess.parse_sess.config.iter().any(|(s, _)| s == &Symbol::intern(RMC_STR))
-}
-
 // Find all non-generic items by walking the HIR. These items serve as roots to
 // start monomorphizing from.
 fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<'_>> {
@@ -339,15 +334,7 @@ fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<
 
         tcx.hir().krate().visit_all_item_likes(&mut visitor);
 
-        // When building an executable that starts from a main function, the monomorphizer will
-        // generate a function that wraps main and initializes rust "runtime" as well as handle
-        // the executable error code based on main's return value.
-        //
-        // For RMC, we don't need the start function, and we also can't handle it. Thus, skip
-        // this for now.
-        if !is_rmc(tcx) {
-            visitor.push_extra_entry_roots();
-        }
+        visitor.push_extra_entry_roots();
     }
 
     // We can only codegen items that are instantiable - items all of
