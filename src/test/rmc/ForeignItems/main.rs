@@ -3,7 +3,7 @@
 //! To run this test, do
 //! rmc main.rs -- lib.c
 
-// rmc-flags: --c-lib src/test/cbmc/ForeignItems/lib.c
+// rmc-flags: --c-lib src/test/rmc/ForeignItems/lib.c
 
 #[repr(C)]
 pub struct Foo {
