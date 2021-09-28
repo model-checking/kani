@@ -464,7 +464,7 @@ impl<'a> Builder<'a> {
                 // Run bootstrap close to the end as it's unlikely to fail
                 test::Bootstrap,
                 // RMC regression tests
-                test::CBMC,
+                test::RMC,
                 test::Firecracker,
                 test::Prusti,
                 test::Serial,
