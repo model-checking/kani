@@ -15,7 +15,7 @@ ignore = [
     # (and generally rustfmt can move around comments in UI-testing incompatible ways)
     "src/test/*",
     "!src/test/cargo-rmc",
-    "!src/test/cbmc",
+    "!src/test/rmc",
     "!src/test/expected",
     "!src/test/firecracker",
     "!src/test/prusti",
