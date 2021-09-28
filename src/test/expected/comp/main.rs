@@ -14,7 +14,7 @@ fn eq2(a: i32, b: i32) {
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let a = __nondet();
     let b = __nondet();
     if a > -400 && a < 100 && b < 200 && b > 0 {

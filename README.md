@@ -45,7 +45,7 @@ Until then, the easiest way to use RMC is as follows
 
 1. Add `rmc/scripts` to your path
 1. Go to a folder that contains a rust file you would like to verify with RMC.
-   For example, `cd rmc/src/test/cbmc/Parenths`.
+   For example, `cd rmc/src/test/rmc/Parenths`.
    By default, `rmc` uses `main()` as the entry point.
 1. Execute RMC on the file
    ```
@@ -98,7 +98,7 @@ Lastly, you can override specific flags from command line, e.g. with `cargo rmc 
 ### Advanced flags
 RMC supports a set of advanced flags that give you control over the verification process.
 For example, consider the `CopyIntrinsics` regression test:
-1. `cd rmc/src/test/cbmc/CopyIntrinsics`
+1. `cd rmc/src/test/rmc/CopyIntrinsics`
 1. Execute RMC on the file
    `rmc main.rs`
 1. Note that this will unwind forever

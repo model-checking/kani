@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let x = __nondet();
     let y = __nondet();
     let mut q: VecDeque<i32> = VecDeque::new();

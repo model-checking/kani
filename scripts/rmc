@@ -38,7 +38,7 @@ def main():
 
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
             return 1
-        
+
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     json_filename = base + ".json"
@@ -76,7 +76,7 @@ def main():
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
-    
+
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
@@ -100,14 +100,8 @@ def parse_args():
         input_group.add_argument("input", help="Rust file to verify", nargs="?")
         input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
 
-        exclude_flags = [
-            # In the future we hope to make this configurable in the command line.
-            # For now, however, changing this from "main" breaks rmc.
-            # Issue: https://github.com/model-checking/rmc/issues/169
-            "--function"
-        ]
-        rmc_flags.add_flags(parser, {"default-target": "."}, exclude_flags=exclude_flags)
-        
+        rmc_flags.add_flags(parser, {"default-target": "."})
+
         return parser
 
     # Check for conflicting flags
@@ -123,11 +117,6 @@ def parse_args():
         # --quiet overrides --verbose
         if args.quiet:
             args.verbose = False
-
-        # In the future we hope to make this configurable in the command line.
-        # For now, however, changing this from "main" breaks rmc.
-        # Issue: https://github.com/model-checking/rmc/issues/169
-        args.function = "main"
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:
