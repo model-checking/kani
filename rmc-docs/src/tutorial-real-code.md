@@ -54,7 +54,7 @@ Much like needing to put bounds on loops, these can be hard to model since you n
 
 3. I/O code.
 RMC doesn't model I/O, so if you're depending on behavior like reading/writing to a file, you won't be able to prove anything.
-This is one obvious area where testability help provability: often we separate I/O and "pure" computation into different functions, so we can unit test the later.
+This is one obvious area where testability helps provability: often we separate I/O and "pure" computation into different functions, so we can unit test the latter.
 
 4. Deeper call graphs.
 Functions that call a lot of other functions can require more investment to make tractable.
@@ -93,6 +93,6 @@ In this section:
 
 1. We got some advice on how to choose a higher-value starting point for a first proof.
 2. We got some advice on how to choose an easier starting point for a first proof.
-3. We got some advice on hwo to structure our first proof, at least initially.
+3. We got some advice on how to structure our first proof, at least initially.
 
 > TODO: This section is incomplete. We should probably add an example session of finding a proof to write for, perhaps, Firecracker.

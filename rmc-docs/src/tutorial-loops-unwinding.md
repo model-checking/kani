@@ -122,7 +122,7 @@ Then we can specify the bound for specific loops by name, from the command line:
 rmc src/lib.rs --cbmc-args --unwindset _RNvCs6JP7pnlEvdt_3lib17initialize_prefix.0:12
 ```
 
-The general format of the `--unwindset` option is: `label_1:bound_1,label_2:bound_1,...`.
+The general format of the `--unwindset` option is: `label_1:bound_1,label_2:bound_2,...`.
 The label is revealed by the output of `--show-loops` as we saw above.
 
 ## Summary
