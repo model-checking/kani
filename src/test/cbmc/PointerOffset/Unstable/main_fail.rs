@@ -5,7 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::ptr_offset_from;
 
-fn main() {
+pub fn main() {
     let a = [0; 5];
     let b = [0; 5];
     let ptr1: *const i32 = &a[1];

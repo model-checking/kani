@@ -40,7 +40,7 @@ def main():
 
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
             return 1
-        
+
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     rmc.cargo_build(args.crate, args.target_dir,
@@ -48,7 +48,12 @@ def main():
 
     pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
     jsons = glob.glob(pattern)
-    rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+
+    if not args.dry_run:
+        rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+    else:
+        # Add a dummy value so dry-run works.
+        jsons = ["dry-run.json"]
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
@@ -101,7 +106,7 @@ def parse_args():
 
         exclude_flags = []
         rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
-        
+
         return parser
 
     # Determine what crate to analyze from flags
@@ -109,7 +114,7 @@ def parse_args():
         validate(args)
         return args.crate or args.crate_flag or "."
 
-    # Combine the command line parameter to get a config file; 
+    # Combine the command line parameter to get a config file;
     # return None if no_config_toml is set
     def get_config_toml(no_config_toml, config_toml, args):
         crate = get_crate_from_args(args)
@@ -154,7 +159,7 @@ def parse_args():
 
     # Check for conflicting flags
     def validate(args):
-        rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")   
+        rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")
         rmc.ensure(not (args.no_config_toml and args.config_toml), "Incompatible flags: --config-toml, --no-config-toml")
 
     # Fix up args before returning
@@ -239,7 +244,7 @@ def extract_flags_from_toml(path):
             success = False
     for flag in flags:
         add_flag(flag, flags[flag])
-    
+
     rmc.ensure(success)
     return flag_list
 

@@ -14,7 +14,7 @@ pub unsafe extern "C" fn my_add(num: c_long, mut args: ...) -> c_long {
     accum
 }
 
-fn main() {
+pub fn main() {
     let arg0: c_long = 2;
     let arg1: c_long = 3;
     let arg1: c_long = 4;

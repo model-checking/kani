@@ -31,7 +31,7 @@ macro_rules! assert_cmp {
 // Vectors are compared element-wise producing:
 //  * 0 when comparison is false
 //  * -1 (all bits set) otherwise
-fn main() {
+pub fn main() {
     let x = i64x2(0, 0);
     let y = i64x2(0, 1);
 

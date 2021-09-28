@@ -44,7 +44,7 @@ impl OsStr {
     }
 }
 
-fn main() {
+pub fn main() {
     let x = OsStr::new("hi");
     x.as_bytes();
 }

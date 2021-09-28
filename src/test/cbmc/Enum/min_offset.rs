@@ -12,7 +12,7 @@ enum E {
     Bar,
 }
 
-fn main() {
+pub fn main() {
     let e = E::Foo { a: 32, b: 100 };
     match e {
         E::Foo { a, b } => {

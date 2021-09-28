@@ -18,7 +18,7 @@ fn selection_sort(array: &mut [i32]) {
     }
 }
 
-fn main() {
+pub fn main() {
     let mut array = [9, 4, 8, 3];
     selection_sort(&mut array);
     assert!(array == [3, 4, 8, 9]);

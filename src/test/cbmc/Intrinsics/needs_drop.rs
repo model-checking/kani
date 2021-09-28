@@ -15,7 +15,7 @@ impl<T> Foo<T> {
     }
 }
 
-fn main() {
+pub fn main() {
     // Integers don't need to be dropped
     let int_foo = Foo::<i32> { _foo: 0 };
     assert!(!int_foo.call_needs_drop());

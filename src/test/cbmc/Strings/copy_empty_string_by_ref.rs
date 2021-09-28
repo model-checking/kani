@@ -7,7 +7,7 @@ fn take_string_ref(s: &str, l: usize) {
     assert!(s.len() == l)
 }
 
-fn main() {
+pub fn main() {
     take_string_ref(&"x".to_string(), 1);
     take_string_ref(&"".to_string(), 0);
 }

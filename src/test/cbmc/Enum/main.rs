@@ -7,7 +7,7 @@ fn foo() -> Result<i64, MyInfallible> {
     Ok(1)
 }
 
-fn main() {
+pub fn main() {
     let v = foo().unwrap();
     assert!(v == 1);
 }

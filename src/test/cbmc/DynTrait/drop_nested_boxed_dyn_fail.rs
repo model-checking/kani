@@ -18,7 +18,7 @@ impl Drop for Concrete {
     }
 }
 
-fn main() {
+pub fn main() {
     // Check normal box
     {
         let _x: Box<dyn Send> = Box::new(Concrete {});
