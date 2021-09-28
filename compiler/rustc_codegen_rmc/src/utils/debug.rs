@@ -4,9 +4,11 @@
 //! This file contains functionality that makes RMC easier to debug
 
 use crate::GotocCtx;
+use cbmc::goto_program::Location;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::Instance;
+use rustc_span::def_id::DefId;
 use std::cell::RefCell;
 use std::lazy::SyncLazy;
 use std::panic;
@@ -15,7 +17,7 @@ use tracing::debug;
 // Use a thread-local global variable to track the current codegen item for debugging.
 // If RMC panics during codegen, we can grab this item to include the problematic
 // codegen item in the panic trace.
-thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<Option<String>> = RefCell::new(None));
+thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Location>)> = RefCell::new((None, None)));
 
 // Include RMC's bug reporting URL in our panics.
 const BUG_REPORT_URL: &str =
@@ -44,10 +46,16 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
 
             // Print the current function if available
             CURRENT_CODEGEN_ITEM.with(|cell| {
-                if let Some(current_item) = cell.borrow().clone() {
+                let t = cell.borrow().clone();
+                if let Some(current_item) = t.0 {
                     eprintln!("[RMC] current codegen item: {}", current_item);
                 } else {
                     eprintln!("[RMC] no current codegen item.");
+                }
+                if let Some(current_loc) = t.1 {
+                    eprintln!("[RMC] current codegen location: {:?}", current_loc);
+                } else {
+                    eprintln!("[RMC] no current codegen location.");
                 }
             });
 
@@ -71,11 +79,13 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         call: F,
         panic_debug: String,
+        def_id: DefId,
     ) {
         CURRENT_CODEGEN_ITEM.with(|odb_cell| {
-            odb_cell.replace(Some(panic_debug));
+            odb_cell
+                .replace((Some(panic_debug), Some(self.codegen_span(&self.tcx.def_span(def_id)))));
             call(self);
-            odb_cell.replace(None);
+            odb_cell.replace((None, None));
         });
     }
 
