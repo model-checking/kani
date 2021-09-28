@@ -24,6 +24,6 @@ export PATH=$SCRIPT_DIR:$PATH
 RMC_DIR=$SCRIPT_DIR/..
 
 find $RMC_DIR/library/rmc -name "*.c" | xargs clang-format $FLAGS
-find $RMC_DIR/src/test/cbmc -name "*.c" | xargs clang-format $FLAGS
+find $RMC_DIR/src/test/rmc -name "*.c" | xargs clang-format $FLAGS
 find $RMC_DIR/src/test/cargo-rmc -name "*.c" | xargs clang-format $FLAGS
 
