@@ -3,7 +3,7 @@
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let i: i32 = __nondet();
     __VERIFIER_assume(i < 10);
     assert!(i < 20);

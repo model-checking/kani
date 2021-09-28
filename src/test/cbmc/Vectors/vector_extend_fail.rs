@@ -5,7 +5,7 @@
 
 // rmc-verify-fail
 
-fn main() {
+pub fn main() {
     let mut v: Vec<u32> = Vec::new();
     v.extend(42..=42);
     assert!(v[0] == 41); // Incorrect value

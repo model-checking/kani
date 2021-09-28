@@ -10,7 +10,7 @@
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let x: u32 = __nondet();
     let pi = 3.14159265359;
 

@@ -36,7 +36,7 @@ fn doswitch_bytes() -> i32 {
     return 2;
 }
 
-fn main() {
+pub fn main() {
     let v = doswitch_int();
     assert!(v == 1);
     let v = doswitch_chars();

@@ -10,7 +10,7 @@
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let mut x = 1;
     add_two(&mut x);
     assert!(x == 3);

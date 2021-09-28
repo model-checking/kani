@@ -114,7 +114,7 @@ fn test_copy_volatile_nonoverlapping() {
     }
 }
 
-fn main() {
+pub fn main() {
     test_volatile_store();
     test_copy_volatile();
     test_copy_volatile_nonoverlapping();

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     assert!(3 | 5 == 7);
     assert!(7 & 9 == 1);
     assert!(9 ^ 7 == 14);

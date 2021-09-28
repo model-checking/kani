@@ -20,6 +20,6 @@ fn test1() {
     assert!(string.len() == 3);
 }
 
-fn main() {
+pub fn main() {
     test1();
 }

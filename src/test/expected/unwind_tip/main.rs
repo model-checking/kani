@@ -12,7 +12,7 @@ include!("../../rmc-prelude.rs");
 //
 // In this test, we check that RMC warns the user about unwinding failures
 // and makes a recommendation to fix the issue.
-fn main() {
+pub fn main() {
     let mut a: u32 = __nondet();
 
     if a < 1024 {

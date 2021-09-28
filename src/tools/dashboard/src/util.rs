@@ -185,7 +185,16 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
     let mut rmc_rustc = Command::new("rmc-rustc");
     rmc_rustc
         .args(&test_props.rustc_args)
-        .args(["-Z", "codegen-backend=gotoc", "--cfg=rmc", "--out-dir", "build/tmp"])
+        .args([
+            "-Z",
+            "codegen-backend=gotoc",
+            "--cfg=rmc",
+            "--out-dir",
+            "build/tmp",
+            "-Z",
+            "human_readable_cgu_names",
+            "--crate-type=lib",
+        ])
         .arg(&test_props.path);
     // TODO: replace `test` with `codegen` when Litani adds support for custom
     // stages (see https://github.com/model-checking/rmc/issues/391).

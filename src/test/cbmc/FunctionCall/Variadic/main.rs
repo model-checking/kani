@@ -8,7 +8,7 @@ type c_long = i64;
 
 pub unsafe extern "C" fn syscall(_num: c_long, _: ...) {}
 
-fn main() {
+pub fn main() {
     let arg0: c_long = 0;
     let arg1: c_long = 1;
     let _x = unsafe { syscall(0, arg0, arg1) };

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 static STATIC: [&str; 1] = ["FOO"];
-fn main() {
+pub fn main() {
     let x = STATIC[0];
     let bytes = x.as_bytes();
     assert!(bytes.len() == 3);

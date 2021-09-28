@@ -21,7 +21,7 @@ impl Iterator for Fib {
     }
 }
 
-fn main() {
+pub fn main() {
     let mut fib = Fib::new();
     assert!(fib.nth(10).unwrap() == 55);
 }

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-fn main() {
+pub fn main() {
     check_u32(4);
     check_u32(123);
     check_u32(119);

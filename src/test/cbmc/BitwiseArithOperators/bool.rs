@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let a: bool = __nondet();
     let b: bool = __nondet();
     let c = a ^ b;

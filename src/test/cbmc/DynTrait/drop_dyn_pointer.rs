@@ -33,7 +33,7 @@ impl Drop for Concrete2 {
     }
 }
 
-fn main() {
+pub fn main() {
     {
         let _x1: &dyn T = &Concrete1 {};
     }

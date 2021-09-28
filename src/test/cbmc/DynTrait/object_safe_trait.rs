@@ -40,7 +40,7 @@ impl NonDispatchable for S {
     }
 }
 
-fn main() {
+pub fn main() {
     let s = S {};
     S::foo();
     let t = s.returns();

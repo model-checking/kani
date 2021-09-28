@@ -2442,7 +2442,10 @@ impl<'test> TestCx<'test> {
                 "codegen-backend=gotoc",
                 "-Z",
                 "trim-diagnostic-paths=no",
+                "-Z",
+                "human_readable_cgu_names",
                 "--cfg=rmc",
+                "--crate-type=lib",
                 "--out-dir",
             ])
             .arg(self.output_base_dir())

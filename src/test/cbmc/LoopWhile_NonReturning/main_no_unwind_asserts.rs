@@ -24,7 +24,7 @@ include!("../../rmc-prelude.rs");
 //
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
-fn main() {
+pub fn main() {
     let mut a: u32 = __nondet();
 
     if a < 1024 {

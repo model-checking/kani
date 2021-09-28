@@ -23,6 +23,6 @@ pub fn unit_to_u32() -> u32 {
     5 as u32
 }
 
-fn main() {
+pub fn main() {
     takes_dyn_fun(&unit_to_u32)
 }

@@ -15,7 +15,7 @@ impl Drop for Concrete1 {
     }
 }
 
-fn main() {
+pub fn main() {
     {
         let _x1 = Concrete1 {};
     }

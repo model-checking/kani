@@ -4,7 +4,7 @@ use std::convert::TryInto;
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     let input: &[u8] = &vec![
         __nondet(),
         __nondet(),

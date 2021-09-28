@@ -12,7 +12,7 @@ fn mutate_the_thing(new: i32) {
     }
 }
 
-fn main() {
+pub fn main() {
     assert!(10 == foo());
     assert!(12 == foo());
     mutate_the_thing(10);

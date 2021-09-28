@@ -18,7 +18,7 @@ fn ret_unit() {
     ()
 }
 
-fn main() {
+pub fn main() {
     assert!(() == ());
     let u = ret_unit();
     assert!(u == ());

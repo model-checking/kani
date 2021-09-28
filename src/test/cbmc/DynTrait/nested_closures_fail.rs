@@ -8,7 +8,7 @@
 
 include!("../../rmc-prelude.rs");
 
-fn main() {
+pub fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> =
         Box::new(Box::new(|x| __VERIFIER_expect_fail(x != 1, "wrong int")));

@@ -6,6 +6,6 @@ pub enum EnumMultiple {
     Multiple2,
 }
 
-fn main() {
+pub fn main() {
     let e = EnumMultiple::Multiple1;
 }

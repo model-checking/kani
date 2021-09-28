@@ -5,7 +5,7 @@ pub enum EnumSingle {
     MySingle,
 }
 
-fn main() {
+pub fn main() {
     let e = EnumSingle::MySingle;
     assert!(e == EnumSingle::MySingle);
 }
