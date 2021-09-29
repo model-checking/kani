@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Checkout RMC
         uses: actions/checkout@v2
+        # https://github.com/rust-lang/rust/issues/87890
+        # A non-shallow clone is unfortunately necessary, as bootstrap.py searches commit history
+        # to find the correct LLVM artifacts to download. (0 below indicates non-shallow)
         with:
           fetch-depth: 0
 
@@ -29,10 +32,6 @@ jobs:
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
 
-      - name: Install dashboard dependencies
-        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
-        run: ./scripts/setup/install_dashboard_deps.sh
-
       - name: Set config.toml file
         run: |
           ./configure \
@@ -42,16 +41,23 @@ jobs:
             --set=rust.deny-warnings=false
 
       - name: Update submodules
-        run: git submodule update --init
-
-      - name: Export backtrace flags
-        run: export RUST_BACKTRACE=1
+        run: |
+          # Since we download cached artifacts, we can skip checking out llvm locally in CI
+          git config submodule."src/llvm-project".update none
+          git submodule update --init --depth 1
 
       - name: Build RMC
-        run: ./x.py build -i --stage 1 library/std
+        run: |
+          export RUST_BACKTRACE=1
+          ./x.py build -i --stage 1 library/std
 
       - name: Execute RMC regression
         run: ./scripts/rmc-regression.sh
+
+
+      - name: Install dashboard dependencies
+        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
+        run: ./scripts/setup/install_dashboard_deps.sh
 
       - name: Generate RMC dashboard
         if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}

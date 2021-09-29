@@ -2,6 +2,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# We're explicitly checking output rather than failing if the test fails
+#set -eu
+
+echo
+echo "Starting Diamond Dependency Test..."
+echo
+
 # Compile crates with RMC backend
 cd $(dirname $0)
 rm -rf build
@@ -18,12 +25,14 @@ goto-instrument --drop-unused-functions a.out b.out
 # Run the solver
 RESULT="/tmp/dependency_test_result.txt"
 cbmc b.out &> $RESULT
-if grep -q "VERIFICATION SUCCESSFUL" $RESULT; then
+if ! grep -q "VERIFICATION SUCCESSFUL" $RESULT; then
   cat $RESULT
-  echo "Successful dependency test"
-  exit 0
-else 
-  cat $RESULT
+  echo
   echo "Failed dependency test"
+  echo
   exit 1
 fi
+
+echo
+echo "Finished Diamond Dependency Test successfully..."
+echo
