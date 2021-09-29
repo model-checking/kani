@@ -70,6 +70,7 @@ pub(super) fn check_abi(tcx: TyCtxt<'_>, hir_id: hir::HirId, span: Span, abi: Ab
 ///
 /// * ...
 /// * inherited: other fields inherited from the enclosing fn (if any)
+#[instrument(skip(inherited, body), level = "debug")]
 pub(super) fn check_fn<'a, 'tcx>(
     inherited: &'a Inherited<'a, 'tcx>,
     param_env: ty::ParamEnv<'tcx>,
@@ -81,8 +82,6 @@ pub(super) fn check_fn<'a, 'tcx>(
     return_type_pre_known: bool,
 ) -> (FnCtxt<'a, 'tcx>, Option<GeneratorTypes<'tcx>>) {
     let mut fn_sig = fn_sig;
-
-    debug!("check_fn(sig={:?}, fn_id={}, param_env={:?})", fn_sig, fn_id, param_env);
 
     // Create the function context. This is either derived from scratch or,
     // in the case of closures, based on the outer context.
@@ -241,32 +240,16 @@ pub(super) fn check_fn<'a, 'tcx>(
     // we saw and assigning it to the expected return type. This isn't
     // really expected to fail, since the coercions would have failed
     // earlier when trying to find a LUB.
-    //
-    // However, the behavior around `!` is sort of complex. In the
-    // event that the `actual_return_ty` comes back as `!`, that
-    // indicates that the fn either does not return or "returns" only
-    // values of type `!`. In this case, if there is an expected
-    // return type that is *not* `!`, that should be ok. But if the
-    // return type is being inferred, we want to "fallback" to `!`:
-    //
-    //     let x = move || panic!();
-    //
-    // To allow for that, I am creating a type variable with diverging
-    // fallback. This was deemed ever so slightly better than unifying
-    // the return value with `!` because it allows for the caller to
-    // make more assumptions about the return type (e.g., they could do
-    //
-    //     let y: Option<u32> = Some(x());
-    //
-    // which would then cause this return type to become `u32`, not
-    // `!`).
     let coercion = fcx.ret_coercion.take().unwrap().into_inner();
     let mut actual_return_ty = coercion.complete(&fcx);
-    if actual_return_ty.is_never() {
-        actual_return_ty = fcx.next_diverging_ty_var(TypeVariableOrigin {
-            kind: TypeVariableOriginKind::DivergingFn,
-            span,
-        });
+    debug!("actual_return_ty = {:?}", actual_return_ty);
+    if let ty::Dynamic(..) = declared_ret_ty.kind() {
+        // We have special-cased the case where the function is declared
+        // `-> dyn Foo` and we don't actually relate it to the
+        // `fcx.ret_coercion`, so just substitute a type variable.
+        actual_return_ty =
+            fcx.next_ty_var(TypeVariableOrigin { kind: TypeVariableOriginKind::DynReturnFn, span });
+        debug!("actual_return_ty replaced with {:?}", actual_return_ty);
     }
     fcx.demand_suptype(span, revealed_ret_ty, actual_return_ty);
 

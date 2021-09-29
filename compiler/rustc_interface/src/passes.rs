@@ -23,7 +23,7 @@ use rustc_middle::middle::cstore::{MetadataLoader, MetadataLoaderDyn};
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, GlobalCtxt, ResolverOutputs, TyCtxt};
 use rustc_mir_build as mir_build;
-use rustc_parse::{parse_crate_from_file, parse_crate_from_source_str};
+use rustc_parse::{parse_crate_from_file, parse_crate_from_source_str, validate_attr};
 use rustc_passes::{self, hir_stats, layout_test};
 use rustc_plugin_impl as plugin;
 use rustc_query_impl::{OnDiskCache, Queries as TcxQueries};
@@ -33,8 +33,8 @@ use rustc_session::config::{CrateType, Input, OutputFilenames, OutputType, PpMod
 use rustc_session::lint;
 use rustc_session::output::{filename_for_input, filename_for_metadata};
 use rustc_session::search_paths::PathKind;
-use rustc_session::Session;
-use rustc_span::symbol::{Ident, Symbol};
+use rustc_session::{Limit, Session};
+use rustc_span::symbol::{sym, Ident, Symbol};
 use rustc_span::FileName;
 use rustc_trait_selection::traits;
 use rustc_typeck as typeck;
@@ -240,6 +240,7 @@ fn pre_expansion_lint(
     sess: &Session,
     lint_store: &LintStore,
     krate: &ast::Crate,
+    crate_attrs: &[ast::Attribute],
     crate_name: &str,
 ) {
     sess.prof.generic_activity_with_arg("pre_AST_expansion_lint_checks", crate_name).run(|| {
@@ -247,6 +248,7 @@ fn pre_expansion_lint(
             sess,
             lint_store,
             &krate,
+            crate_attrs,
             true,
             None,
             rustc_lint::BuiltinCombinedPreExpansionLintPass::new(),
@@ -266,7 +268,7 @@ pub fn configure_and_expand(
     resolver: &mut Resolver<'_>,
 ) -> Result<ast::Crate> {
     tracing::trace!("configure_and_expand");
-    pre_expansion_lint(sess, lint_store, &krate, crate_name);
+    pre_expansion_lint(sess, lint_store, &krate, &krate.attrs, crate_name);
     rustc_builtin_macros::register_builtin_macros(resolver);
 
     krate = sess.time("crate_injection", || {
@@ -311,8 +313,7 @@ pub fn configure_and_expand(
 
         // Create the config for macro expansion
         let features = sess.features_untracked();
-        let recursion_limit =
-            rustc_middle::middle::limits::get_recursion_limit(&krate.attrs, &sess);
+        let recursion_limit = get_recursion_limit(&krate.attrs, &sess);
         let cfg = rustc_expand::expand::ExpansionConfig {
             features: Some(&features),
             recursion_limit,
@@ -323,9 +324,10 @@ pub fn configure_and_expand(
             ..rustc_expand::expand::ExpansionConfig::default(crate_name.to_string())
         };
 
+        let crate_attrs = krate.attrs.clone();
         let extern_mod_loaded = |ident: Ident, attrs, items, span| {
             let krate = ast::Crate { attrs, items, span };
-            pre_expansion_lint(sess, lint_store, &krate, &ident.name.as_str());
+            pre_expansion_lint(sess, lint_store, &krate, &crate_attrs, &ident.name.as_str());
             (krate.attrs, krate.items)
         };
         let mut ecx = ExtCtxt::new(&sess, cfg, resolver, Some(&extern_mod_loaded));
@@ -469,6 +471,7 @@ pub fn lower_to_hir<'res, 'tcx>(
             sess,
             lint_store,
             &krate,
+            &krate.attrs,
             false,
             Some(std::mem::take(resolver.lint_buffer())),
             rustc_lint::BuiltinCombinedEarlyLintPass::new(),
@@ -1069,4 +1072,25 @@ pub fn start_codegen<'tcx>(
     }
 
     codegen
+}
+
+fn get_recursion_limit(krate_attrs: &[ast::Attribute], sess: &Session) -> Limit {
+    if let Some(attr) = krate_attrs
+        .iter()
+        .find(|attr| attr.has_name(sym::recursion_limit) && attr.value_str().is_none())
+    {
+        // This is here mainly to check for using a macro, such as
+        // #![recursion_limit = foo!()]. That is not supported since that
+        // would require expanding this while in the middle of expansion,
+        // which needs to know the limit before expanding. Otherwise,
+        // validation would normally be caught in AstValidator (via
+        // `check_builtin_attribute`), but by the time that runs the macro
+        // is expanded, and it doesn't give an error.
+        validate_attr::emit_fatal_malformed_builtin_attribute(
+            &sess.parse_sess,
+            attr,
+            sym::recursion_limit,
+        );
+    }
+    rustc_middle::middle::limits::get_recursion_limit(krate_attrs, sess)
 }

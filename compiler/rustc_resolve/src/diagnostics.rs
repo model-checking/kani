@@ -915,8 +915,7 @@ impl<'a> Resolver<'a> {
                     continue;
                 }
                 if let Some(crate_id) = self.crate_loader.maybe_process_path_extern(ident.name) {
-                    let crate_root =
-                        self.get_module(DefId { krate: crate_id, index: CRATE_DEF_INDEX });
+                    let crate_root = self.expect_module(crate_id.as_def_id());
                     suggestions.extend(self.lookup_import_candidates_from_module(
                         lookup_ident,
                         namespace,
@@ -1707,6 +1706,9 @@ crate fn show_candidates(
         candidates.iter().map(|c| path_names_to_string(&c.path)).collect();
 
     path_strings.sort();
+    let core_path_strings =
+        path_strings.drain_filter(|p| p.starts_with("core::")).collect::<Vec<String>>();
+    path_strings.extend(core_path_strings);
     path_strings.dedup();
 
     let (determiner, kind) = if candidates.len() == 1 {
