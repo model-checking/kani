@@ -43,7 +43,7 @@ jobs:
       - name: Update submodules
         run: |
           # Since we download cached artifacts, we can skip checking out llvm locally in CI
-          git config submodule."src/llvm-project".update=none
+          git config submodule."src/llvm-project".update none
           git submodule update --init --depth 1
 
       - name: Build RMC
