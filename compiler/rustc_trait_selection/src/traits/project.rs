@@ -27,7 +27,7 @@ use rustc_hir::lang_items::LangItem;
 use rustc_infer::infer::resolve::OpportunisticRegionResolver;
 use rustc_middle::ty::fold::{TypeFoldable, TypeFolder};
 use rustc_middle::ty::subst::Subst;
-use rustc_middle::ty::{self, ToPolyTraitRef, ToPredicate, Ty, TyCtxt, WithConstness};
+use rustc_middle::ty::{self, ToPredicate, Ty, TyCtxt, WithConstness};
 use rustc_span::symbol::sym;
 
 use std::collections::BTreeMap;
@@ -388,15 +388,15 @@ impl<'a, 'b, 'tcx> TypeFolder<'tcx> for AssocTypeNormalizer<'a, 'b, 'tcx> {
         // to make sure we don't forget to fold the substs regardless.
 
         match *ty.kind() {
-            ty::Opaque(def_id, substs) => {
+            // This is really important. While we *can* handle this, this has
+            // severe performance implications for large opaque types with
+            // late-bound regions. See `issue-88862` benchmark.
+            ty::Opaque(def_id, substs) if !substs.has_escaping_bound_vars() => {
                 // Only normalize `impl Trait` after type-checking, usually in codegen.
                 match self.param_env.reveal() {
                     Reveal::UserFacing => ty.super_fold_with(self),
 
                     Reveal::All => {
-                        // N.b. there is an assumption here all this code can handle
-                        // escaping bound vars.
-
                         let recursion_limit = self.tcx().recursion_limit();
                         if !recursion_limit.value_within_limit(self.depth) {
                             let obligation = Obligation::with_depth(
@@ -1028,7 +1028,7 @@ fn normalize_to_error<'a, 'tcx>(
     cause: ObligationCause<'tcx>,
     depth: usize,
 ) -> NormalizedTy<'tcx> {
-    let trait_ref = projection_ty.trait_ref(selcx.tcx()).to_poly_trait_ref();
+    let trait_ref = ty::Binder::dummy(projection_ty.trait_ref(selcx.tcx()));
     let trait_obligation = Obligation {
         cause,
         recursion_depth: depth,
@@ -1290,7 +1290,7 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
 
     // If we are resolving `<T as TraitRef<...>>::Item == Type`,
     // start out by selecting the predicate `T as TraitRef<...>`:
-    let poly_trait_ref = obligation.predicate.trait_ref(selcx.tcx()).to_poly_trait_ref();
+    let poly_trait_ref = ty::Binder::dummy(obligation.predicate.trait_ref(selcx.tcx()));
     let trait_obligation = obligation.with(poly_trait_ref.to_poly_trait_predicate());
     let _ = selcx.infcx().commit_if_ok(|_| {
         let impl_source = match selcx.select(&trait_obligation) {

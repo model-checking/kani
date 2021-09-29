@@ -769,12 +769,6 @@ pub trait ToPolyTraitRef<'tcx> {
     fn to_poly_trait_ref(&self) -> PolyTraitRef<'tcx>;
 }
 
-impl<'tcx> ToPolyTraitRef<'tcx> for TraitRef<'tcx> {
-    fn to_poly_trait_ref(&self) -> PolyTraitRef<'tcx> {
-        ty::Binder::dummy(*self)
-    }
-}
-
 impl<'tcx> ToPolyTraitRef<'tcx> for PolyTraitPredicate<'tcx> {
     fn to_poly_trait_ref(&self) -> PolyTraitRef<'tcx> {
         self.map_bound_ref(|trait_pred| trait_pred.trait_ref)
@@ -789,23 +783,6 @@ impl ToPredicate<'tcx> for Binder<'tcx, PredicateKind<'tcx>> {
     #[inline(always)]
     fn to_predicate(self, tcx: TyCtxt<'tcx>) -> Predicate<'tcx> {
         tcx.mk_predicate(self)
-    }
-}
-
-impl ToPredicate<'tcx> for PredicateKind<'tcx> {
-    #[inline(always)]
-    fn to_predicate(self, tcx: TyCtxt<'tcx>) -> Predicate<'tcx> {
-        tcx.mk_predicate(Binder::dummy(self))
-    }
-}
-
-impl<'tcx> ToPredicate<'tcx> for ConstnessAnd<TraitRef<'tcx>> {
-    fn to_predicate(self, tcx: TyCtxt<'tcx>) -> Predicate<'tcx> {
-        PredicateKind::Trait(ty::TraitPredicate {
-            trait_ref: self.value,
-            constness: self.constness,
-        })
-        .to_predicate(tcx)
     }
 }
 
@@ -2089,4 +2066,17 @@ impl<'tcx> fmt::Debug for SymbolName<'tcx> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.name, fmt)
     }
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct FoundRelationships {
+    /// This is true if we identified that this Ty (`?T`) is found in a `?T: Foo`
+    /// obligation, where:
+    ///
+    ///  * `Foo` is not `Sized`
+    ///  * `(): Foo` may be satisfied
+    pub self_in_trait: bool,
+    /// This is true if we identified that this Ty (`?T`) is found in a `<_ as
+    /// _>::AssocType = ?T`
+    pub output: bool,
 }

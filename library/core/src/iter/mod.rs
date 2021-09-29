@@ -39,7 +39,7 @@
 //! ```
 //!
 //! An iterator has a method, [`next`], which when called, returns an
-//! [`Option`]`<Item>`. [`next`] will return [`Some(Item)`] as long as there
+//! <code>[Option]\<Item></code>. Calling [`next`] will return [`Some(Item)`] as long as there
 //! are elements, and once they've all been exhausted, will return `None` to
 //! indicate that iteration is finished. Individual iterators may choose to
 //! resume iteration, and so calling [`next`] again may or may not eventually
@@ -399,7 +399,7 @@ pub use self::adapters::Cloned;
 pub use self::adapters::Copied;
 #[stable(feature = "iterator_flatten", since = "1.29.0")]
 pub use self::adapters::Flatten;
-#[unstable(feature = "iter_map_while", reason = "recently added", issue = "68537")]
+#[stable(feature = "iter_map_while", since = "1.57.0")]
 pub use self::adapters::MapWhile;
 #[unstable(feature = "inplace_iteration", issue = "none")]
 pub use self::adapters::SourceIter;

@@ -4,6 +4,7 @@ use rustc_infer::infer::canonical::Canonical;
 use rustc_infer::traits::query::NoSolution;
 use rustc_middle::mir::ConstraintCategory;
 use rustc_middle::ty::{self, ToPredicate, TypeFoldable};
+use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_trait_selection::traits::query::type_op::{self, TypeOpOutput};
 use rustc_trait_selection::traits::query::Fallible;
@@ -23,6 +24,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
     /// **Any `rustc_infer::infer` operations that might generate region
     /// constraints should occur within this method so that those
     /// constraints can be properly localized!**
+    #[instrument(skip(self, category, op), level = "trace")]
     pub(super) fn fully_perform_op<R, Op>(
         &mut self,
         locations: Locations,
@@ -89,10 +91,10 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
         category: ConstraintCategory,
     ) {
         self.prove_predicates(
-            Some(ty::PredicateKind::Trait(ty::TraitPredicate {
+            Some(ty::Binder::dummy(ty::PredicateKind::Trait(ty::TraitPredicate {
                 trait_ref,
                 constness: ty::BoundConstness::NotConst,
-            })),
+            }))),
             locations,
             category,
         );
@@ -100,12 +102,19 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
 
     pub(super) fn normalize_and_prove_instantiated_predicates(
         &mut self,
+        // Keep this parameter for now, in case we start using
+        // it in `ConstraintCategory` at some point.
+        _def_id: DefId,
         instantiated_predicates: ty::InstantiatedPredicates<'tcx>,
         locations: Locations,
     ) {
-        for predicate in instantiated_predicates.predicates {
+        for (predicate, span) in instantiated_predicates
+            .predicates
+            .into_iter()
+            .zip(instantiated_predicates.spans.into_iter())
+        {
             let predicate = self.normalize(predicate, locations);
-            self.prove_predicate(predicate, locations, ConstraintCategory::Boring);
+            self.prove_predicate(predicate, locations, ConstraintCategory::Predicate(span));
         }
     }
 
@@ -123,14 +132,13 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
         }
     }
 
+    #[instrument(skip(self), level = "debug")]
     pub(super) fn prove_predicate(
         &mut self,
         predicate: ty::Predicate<'tcx>,
         locations: Locations,
         category: ConstraintCategory,
     ) {
-        debug!("prove_predicate(predicate={:?}, location={:?})", predicate, locations,);
-
         let param_env = self.param_env;
         self.fully_perform_op(
             locations,
@@ -142,11 +150,11 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
         })
     }
 
+    #[instrument(skip(self), level = "debug")]
     pub(super) fn normalize<T>(&mut self, value: T, location: impl NormalizeLocation) -> T
     where
         T: type_op::normalize::Normalizable<'tcx> + fmt::Display + Copy + 'tcx,
     {
-        debug!("normalize(value={:?}, location={:?})", value, location);
         let param_env = self.param_env;
         self.fully_perform_op(
             location.to_locations(),

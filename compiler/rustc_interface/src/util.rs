@@ -10,6 +10,7 @@ use rustc_errors::registry::Registry;
 use rustc_metadata::dynamic_lib::DynamicLibrary;
 #[cfg(parallel_compiler)]
 use rustc_middle::ty::tls;
+use rustc_parse::validate_attr;
 #[cfg(parallel_compiler)]
 use rustc_query_impl::QueryCtxt;
 use rustc_resolve::{self, Resolver};
@@ -115,24 +116,11 @@ fn get_stack_size() -> Option<usize> {
 /// for `'static` bounds.
 #[cfg(not(parallel_compiler))]
 pub fn scoped_thread<F: FnOnce() -> R + Send, R: Send>(cfg: thread::Builder, f: F) -> R {
-    struct Ptr(*mut ());
-    unsafe impl Send for Ptr {}
-    unsafe impl Sync for Ptr {}
-
-    let mut f = Some(f);
-    let run = Ptr(&mut f as *mut _ as *mut ());
-    let mut result = None;
-    let result_ptr = Ptr(&mut result as *mut _ as *mut ());
-
-    let thread = cfg.spawn(move || {
-        let run = unsafe { (*(run.0 as *mut Option<F>)).take().unwrap() };
-        let result = unsafe { &mut *(result_ptr.0 as *mut Option<R>) };
-        *result = Some(run());
-    });
-
-    match thread.unwrap().join() {
-        Ok(()) => result.unwrap(),
-        Err(p) => panic::resume_unwind(p),
+    // SAFETY: join() is called immediately, so any closure captures are still
+    // alive.
+    match unsafe { cfg.spawn_unchecked(f) }.unwrap().join() {
+        Ok(v) => v,
+        Err(e) => panic::resume_unwind(e),
     }
 }
 
@@ -489,7 +477,7 @@ pub fn get_codegen_sysroot(
 }
 
 pub(crate) fn check_attr_crate_type(
-    _sess: &Session,
+    sess: &Session,
     attrs: &[ast::Attribute],
     lint_buffer: &mut LintBuffer,
 ) {
@@ -529,6 +517,19 @@ pub(crate) fn check_attr_crate_type(
                         );
                     }
                 }
+            } else {
+                // This is here mainly to check for using a macro, such as
+                // #![crate_type = foo!()]. That is not supported since the
+                // crate type needs to be known very early in compilation long
+                // before expansion. Otherwise, validation would normally be
+                // caught in AstValidator (via `check_builtin_attribute`), but
+                // by the time that runs the macro is expanded, and it doesn't
+                // give an error.
+                validate_attr::emit_fatal_malformed_builtin_attribute(
+                    &sess.parse_sess,
+                    a,
+                    sym::crate_type,
+                );
             }
         }
     }

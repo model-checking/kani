@@ -592,9 +592,6 @@ declare_features! (
     /// Lessens the requirements for structs to implement `Unsize`.
     (active, relaxed_struct_unsize, "1.51.0", Some(81793), None),
 
-    /// Allows macro attributes to observe output of `#[derive]`.
-    (active, macro_attributes_in_derive_output, "1.51.0", Some(81119), None),
-
     /// Allows associated types in inherent impls.
     (incomplete, inherent_associated_types, "1.52.0", Some(8995), None),
 
@@ -674,6 +671,12 @@ declare_features! (
 
     /// Allows `let...else` statements.
     (active, let_else, "1.56.0", Some(87335), None),
+
+    /// Allows the `#[must_not_suspend]` attribute.
+    (active, must_not_suspend, "1.57.0", Some(83310), None),
+
+    /// Allows `#[track_caller]` on closures and generators.
+    (active, closure_track_caller, "1.57.0", Some(87417), None),
 
     // -------------------------------------------------------------------------
     // feature-group-end: actual feature gates

@@ -315,6 +315,44 @@ declare_lint! {
 }
 
 declare_lint! {
+    /// The `must_not_suspend` lint guards against values that shouldn't be held across suspend points
+    /// (`.await`)
+    ///
+    /// ### Example
+    ///
+    /// ```rust
+    /// #![feature(must_not_suspend)]
+    ///
+    /// #[must_not_suspend]
+    /// struct SyncThing {}
+    ///
+    /// async fn yield_now() {}
+    ///
+    /// pub async fn uhoh() {
+    ///     let guard = SyncThing {};
+    ///     yield_now().await;
+    /// }
+    /// ```
+    ///
+    /// {{produces}}
+    ///
+    /// ### Explanation
+    ///
+    /// The `must_not_suspend` lint detects values that are marked with the `#[must_not_suspend]`
+    /// attribute being held across suspend points. A "suspend" point is usually a `.await` in an async
+    /// function.
+    ///
+    /// This attribute can be used to mark values that are semantically incorrect across suspends
+    /// (like certain types of timers), values that have async alternatives, and values that
+    /// regularly cause problems with the `Send`-ness of async fn's returned futures (like
+    /// `MutexGuard`'s)
+    ///
+    pub MUST_NOT_SUSPEND,
+    Warn,
+    "use of a `#[must_not_suspend]` value across a yield point",
+}
+
+declare_lint! {
     /// The `unused_extern_crates` lint guards against `extern crate` items
     /// that are never used.
     ///
@@ -1584,7 +1622,7 @@ declare_lint! {
     ///
     /// ### Example
     ///
-    /// ```rust
+    /// ```rust,edition2018
     /// trait Trait { }
     ///
     /// fn takes_trait_object(_: Box<Trait>) {
@@ -2993,6 +3031,7 @@ declare_lint_pass! {
         CENUM_IMPL_DROP_CAST,
         CONST_EVALUATABLE_UNCHECKED,
         INEFFECTIVE_UNSTABLE_TRAIT_IMPL,
+        MUST_NOT_SUSPEND,
         UNINHABITED_STATIC,
         FUNCTION_ITEM_REFERENCES,
         USELESS_DEPRECATED,
@@ -3313,7 +3352,7 @@ declare_lint! {
     ///
     /// ### Example
     ///
-    /// ```rust,compile_fail
+    /// ```rust,edition2018,compile_fail
     /// #![deny(rust_2021_prefixes_incompatible_syntax)]
     ///
     /// macro_rules! m {
@@ -3333,6 +3372,8 @@ declare_lint! {
     ///
     /// This lint suggests to add whitespace between the `z` and `"hey"` tokens
     /// to keep them separated in Rust 2021.
+    // Allow this lint -- rustdoc doesn't yet support threading edition into this lint's parser.
+    #[allow(rustdoc::invalid_rust_codeblocks)]
     pub RUST_2021_PREFIXES_INCOMPATIBLE_SYNTAX,
     Allow,
     "identifiers that will be parsed as a prefix in Rust 2021",
