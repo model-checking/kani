@@ -401,6 +401,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                 }
             }
+            Rvalue::ShallowInitBox(ref operand, content_ty) => {
+                // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
+                // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
+                let operand = self.codegen_operand(operand);
+                let t = self.monomorphize(*content_ty);
+                let box_ty = self.tcx.mk_box(t);
+                let box_ty = self.codegen_ty(box_ty);
+                let cbmc_t = self.codegen_ty(t);
+                let box_contents = operand.cast_to(cbmc_t.to_pointer());
+                self.box_value(box_contents, box_ty)
+            }
             Rvalue::UnaryOp(op, e) => match op {
                 UnOp::Not => {
                     if self.operand_ty(e).is_bool() {
