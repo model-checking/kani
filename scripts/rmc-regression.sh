@@ -26,10 +26,10 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 ./x.py test -i --stage 0 compiler/cbmc
 
 # Check codegen for the standard library
-$SCRIPT_DIR/std-lib-regression.sh
+time "$SCRIPT_DIR"/std-lib-regression.sh
 
 # Check codegen of firecracker
-$SCRIPT_DIR/codegen-firecracker.sh
+time "$SCRIPT_DIR"/codegen-firecracker.sh
 
 # Check that we can use RMC on crates with a diamond dependency graph,
 # with two different versions of the same crate.
@@ -39,10 +39,10 @@ $SCRIPT_DIR/codegen-firecracker.sh
 #   main             dependency3
 #        \           / v0.1.1
 #         dependency2
-./src/test/rmc-dependency-test/diamond-dependency/run-dependency-test.sh
+time "$RMC_DIR"/src/test/rmc-dependency-test/diamond-dependency/run-dependency-test.sh
 
 # Check that we don't have type mismatches across different crates
-./src/test/rmc-multicrate/type-mismatch/run-mismatch-test.sh
+time "$RMC_DIR"/src/test/rmc-multicrate/type-mismatch/run-mismatch-test.sh
 
 echo
 echo "All RMC regression tests completed successfully."
