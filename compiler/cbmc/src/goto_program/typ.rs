@@ -423,6 +423,36 @@ impl Type {
         }
     }
 
+    pub fn is_lvalue(&self) -> bool {
+        match self {
+            Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Struct { .. }
+            | StructTag(_)
+            | Union { .. }
+            | UnionTag(_)
+            | Unsignedbv { .. }
+            | Vector { .. } => true,
+
+            Empty => true,
+
+            Array { .. }
+            | Code { .. }
+            | Constructor
+         //   | Empty
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | VariadicCode { .. } => false,
+        }
+    }
+
     /// Is the current type either an integer or a floating point?
     pub fn is_numeric(&self) -> bool {
         self.is_floating_point() || self.is_integer()
@@ -543,6 +573,21 @@ impl Type {
         CBitField { width, typ: Box::new(self) }
     }
 
+    /// A formal function parameter.
+    /// identifier: The unique identifier that refers to this parameter `foo12_bar17_x@1`
+    /// base_name: the local name of the parameter within the function `x`
+    /// typ: The type of the parameter
+    pub fn as_parameter(self, identifier: Option<String>, base_name: Option<String>) -> Parameter {
+        assert!(
+            self.is_lvalue(),
+            "Expected lvalue from {:?} {:?} {:?}",
+            self,
+            identifier,
+            base_name
+        );
+        Parameter { identifier, base_name, typ: self }
+    }
+
     pub fn bool() -> Self {
         Bool
     }
@@ -568,10 +613,7 @@ impl Type {
     /// CBMC, like c, allows function types to have unnamed formal paramaters
     /// `int foo(int, char, double)`
     pub fn code_with_unnamed_parameters(param_types: Vec<Type>, return_type: Type) -> Self {
-        let parameters = param_types
-            .into_iter()
-            .map(|t| Parameter { identifier: None, base_name: None, typ: t })
-            .collect();
+        let parameters = param_types.into_iter().map(|t| t.as_parameter(None, None)).collect();
         Type::code(parameters, return_type)
     }
 
@@ -616,18 +658,6 @@ impl Type {
 
     pub fn float() -> Self {
         Float
-    }
-
-    /// A formal function parameter.
-    /// identifier: The unique identifier that refers to this parameter `foo12_bar17_x@1`
-    /// base_name: the local name of the parameter within the function `x`
-    /// typ: The type of the parameter
-    pub fn parameter(
-        identifier: Option<String>,
-        base_name: Option<String>,
-        typ: Type,
-    ) -> Parameter {
-        Parameter { identifier, base_name, typ }
     }
 
     /// A forward declared struct.

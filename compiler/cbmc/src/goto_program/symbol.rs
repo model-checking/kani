@@ -289,7 +289,7 @@ impl Symbol {
 impl Symbol {
     /// Makes a formal function parameter from a symbol.
     pub fn to_function_parameter(&self) -> Parameter {
-        Type::parameter(Some(self.name.to_string()), self.base_name.clone(), self.typ.clone())
+        self.typ.clone().as_parameter(Some(self.name.to_string()), self.base_name.clone())
     }
 
     /// Makes an expression from a symbol.

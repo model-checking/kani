@@ -124,8 +124,8 @@ impl FromIrep for Parameter {
         assert!(i.sub.is_empty());
         let identifier = i.lookup_as_string(IrepId::CIdentifier);
         let base_name = i.lookup_as_string(IrepId::CBaseName);
-        let typ = FromIrep::from_irep(i.lookup(IrepId::Type).unwrap());
-        Type::parameter(identifier, base_name, typ)
+        let typ: Type = FromIrep::from_irep(i.lookup(IrepId::Type).unwrap());
+        typ.as_parameter(identifier, base_name)
     }
 }
 
