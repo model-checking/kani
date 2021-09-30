@@ -18,8 +18,8 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
 use rustc_span::Span;
-use rustc_span::Symbol as RustSymbol;
 use std::rc::Rc;
+use tracing::debug;
 
 pub trait GotocTypeHook<'tcx> {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool;
@@ -457,18 +457,20 @@ struct RustAlloc;
 impl<'tcx> GotocHook<'tcx> for RustAlloc {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         let name = tcx.symbol_name(instance).name.to_string();
-        name == "__rust_alloc"
+        let full_name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        name == "__rust_alloc" || full_name == "alloc::alloc::exchange_malloc"
     }
 
     fn handle(
         &self,
         tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
+        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         assign_to: Option<Place<'tcx>>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
+        debug!(?instance, "Replace allocation");
         let loc = tcx.codegen_span_option(span);
         match (assign_to, target) {
             (Some(p), Some(target)) => {

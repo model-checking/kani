@@ -1,5 +1,6 @@
 use crate::infer::InferCtxt;
 use crate::traits::Obligation;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{self, ToPredicate, Ty, WithConstness};
@@ -34,7 +35,7 @@ pub trait TraitEngine<'tcx>: 'tcx {
                 cause,
                 recursion_depth: 0,
                 param_env,
-                predicate: trait_ref.without_const().to_predicate(infcx.tcx),
+                predicate: ty::Binder::dummy(trait_ref).without_const().to_predicate(infcx.tcx),
             },
         );
     }
@@ -73,6 +74,8 @@ pub trait TraitEngine<'tcx>: 'tcx {
     }
 
     fn pending_obligations(&self) -> Vec<PredicateObligation<'tcx>>;
+
+    fn relationships(&mut self) -> &mut FxHashMap<ty::TyVid, ty::FoundRelationships>;
 }
 
 pub trait TraitEngineExt<'tcx> {

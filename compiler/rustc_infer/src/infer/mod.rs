@@ -46,7 +46,7 @@ use self::region_constraints::{GenericKind, RegionConstraintData, VarInfos, Veri
 use self::region_constraints::{
     RegionConstraintCollector, RegionConstraintStorage, RegionSnapshot,
 };
-use self::type_variable::{Diverging, TypeVariableOrigin, TypeVariableOriginKind};
+use self::type_variable::{TypeVariableOrigin, TypeVariableOriginKind};
 
 pub mod at;
 pub mod canonical;
@@ -702,17 +702,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         t.fold_with(&mut self.freshener())
     }
 
-    /// Returns whether `ty` is a diverging type variable or not.
-    /// (If `ty` is not a type variable at all, returns not diverging.)
-    ///
-    /// No attempt is made to resolve `ty`.
-    pub fn type_var_diverges(&'a self, ty: Ty<'_>) -> Diverging {
-        match *ty.kind() {
-            ty::Infer(ty::TyVar(vid)) => self.inner.borrow_mut().type_variables().var_diverges(vid),
-            _ => Diverging::NotDiverging,
-        }
-    }
-
     /// Returns the origin of the type variable identified by `vid`, or `None`
     /// if this is not a type variable.
     ///
@@ -818,8 +807,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         }
     }
 
+    #[instrument(skip(self, snapshot), level = "debug")]
     fn rollback_to(&self, cause: &str, snapshot: CombinedSnapshot<'a, 'tcx>) {
-        debug!("rollback_to(cause={})", cause);
         let CombinedSnapshot {
             undo_snapshot,
             region_constraints_snapshot,
@@ -836,8 +825,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         inner.unwrap_region_constraints().rollback_to(region_constraints_snapshot);
     }
 
+    #[instrument(skip(self, snapshot), level = "debug")]
     fn commit_from(&self, snapshot: CombinedSnapshot<'a, 'tcx>) {
-        debug!("commit_from()");
         let CombinedSnapshot {
             undo_snapshot,
             region_constraints_snapshot: _,
@@ -852,11 +841,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     /// Executes `f` and commit the bindings.
+    #[instrument(skip(self, f), level = "debug")]
     pub fn commit_unconditionally<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&CombinedSnapshot<'a, 'tcx>) -> R,
     {
-        debug!("commit_unconditionally()");
         let snapshot = self.start_snapshot();
         let r = f(&snapshot);
         self.commit_from(snapshot);
@@ -864,11 +853,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     /// Execute `f` and commit the bindings if closure `f` returns `Ok(_)`.
+    #[instrument(skip(self, f), level = "debug")]
     pub fn commit_if_ok<T, E, F>(&self, f: F) -> Result<T, E>
     where
         F: FnOnce(&CombinedSnapshot<'a, 'tcx>) -> Result<T, E>,
     {
-        debug!("commit_if_ok()");
         let snapshot = self.start_snapshot();
         let r = f(&snapshot);
         debug!("commit_if_ok() -- r.is_ok() = {}", r.is_ok());
@@ -884,11 +873,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     /// Execute `f` then unroll any bindings it creates.
+    #[instrument(skip(self, f), level = "debug")]
     pub fn probe<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&CombinedSnapshot<'a, 'tcx>) -> R,
     {
-        debug!("probe()");
         let snapshot = self.start_snapshot();
         let r = f(&snapshot);
         self.rollback_to("probe", snapshot);
@@ -896,11 +885,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     /// If `should_skip` is true, then execute `f` then unroll any bindings it creates.
+    #[instrument(skip(self, f), level = "debug")]
     pub fn probe_maybe_skip_leak_check<R, F>(&self, should_skip: bool, f: F) -> R
     where
         F: FnOnce(&CombinedSnapshot<'a, 'tcx>) -> R,
     {
-        debug!("probe()");
         let snapshot = self.start_snapshot();
         let was_skip_leak_check = self.skip_leak_check.get();
         if should_skip {
@@ -957,18 +946,19 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         })
     }
 
+    #[instrument(skip(self), level = "debug")]
     pub fn sub_regions(
         &self,
         origin: SubregionOrigin<'tcx>,
         a: ty::Region<'tcx>,
         b: ty::Region<'tcx>,
     ) {
-        debug!("sub_regions({:?} <: {:?})", a, b);
         self.inner.borrow_mut().unwrap_region_constraints().make_subregion(origin, a, b);
     }
 
     /// Require that the region `r` be equal to one of the regions in
     /// the set `regions`.
+    #[instrument(skip(self), level = "debug")]
     pub fn member_constraint(
         &self,
         opaque_type_def_id: DefId,
@@ -977,7 +967,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         region: ty::Region<'tcx>,
         in_regions: &Lrc<Vec<ty::Region<'tcx>>>,
     ) {
-        debug!("member_constraint({:?} <: {:?})", region, in_regions);
         self.inner.borrow_mut().unwrap_region_constraints().member_constraint(
             opaque_type_def_id,
             definition_span,
@@ -1071,12 +1060,17 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         })
     }
 
-    pub fn next_ty_var_id(&self, diverging: Diverging, origin: TypeVariableOrigin) -> TyVid {
-        self.inner.borrow_mut().type_variables().new_var(self.universe(), diverging, origin)
+    /// Number of type variables created so far.
+    pub fn num_ty_vars(&self) -> usize {
+        self.inner.borrow_mut().type_variables().num_vars()
+    }
+
+    pub fn next_ty_var_id(&self, origin: TypeVariableOrigin) -> TyVid {
+        self.inner.borrow_mut().type_variables().new_var(self.universe(), origin)
     }
 
     pub fn next_ty_var(&self, origin: TypeVariableOrigin) -> Ty<'tcx> {
-        self.tcx.mk_ty_var(self.next_ty_var_id(Diverging::NotDiverging, origin))
+        self.tcx.mk_ty_var(self.next_ty_var_id(origin))
     }
 
     pub fn next_ty_var_in_universe(
@@ -1084,16 +1078,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         origin: TypeVariableOrigin,
         universe: ty::UniverseIndex,
     ) -> Ty<'tcx> {
-        let vid = self.inner.borrow_mut().type_variables().new_var(
-            universe,
-            Diverging::NotDiverging,
-            origin,
-        );
+        let vid = self.inner.borrow_mut().type_variables().new_var(universe, origin);
         self.tcx.mk_ty_var(vid)
-    }
-
-    pub fn next_diverging_ty_var(&self, origin: TypeVariableOrigin) -> Ty<'tcx> {
-        self.tcx.mk_ty_var(self.next_ty_var_id(Diverging::Diverges, origin))
     }
 
     pub fn next_const_var(
@@ -1207,7 +1193,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 // as the substitutions for the default, `(T, U)`.
                 let ty_var_id = self.inner.borrow_mut().type_variables().new_var(
                     self.universe(),
-                    Diverging::NotDiverging,
                     TypeVariableOrigin {
                         kind: TypeVariableOriginKind::TypeParameterDefinition(
                             param.name,

@@ -265,6 +265,26 @@ pub struct ArgumentV1<'a> {
     formatter: fn(&Opaque, &mut Formatter<'_>) -> Result,
 }
 
+/// This struct represents the unsafety of constructing an `Arguments`.
+/// It exists, rather than an unsafe function, in order to simplify the expansion
+/// of `format_args!(..)` and reduce the scope of the `unsafe` block.
+#[allow(missing_debug_implementations)]
+#[doc(hidden)]
+#[non_exhaustive]
+#[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
+pub struct UnsafeArg;
+
+impl UnsafeArg {
+    /// See documentation where `UnsafeArg` is required to know when it is safe to
+    /// create and use `UnsafeArg`.
+    #[doc(hidden)]
+    #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
+    #[inline(always)]
+    pub unsafe fn new() -> Self {
+        Self
+    }
+}
+
 // This guarantees a single stable value for the function pointer associated with
 // indices/counts in the formatting infrastructure.
 //
@@ -337,10 +357,7 @@ impl<'a> Arguments<'a> {
     #[inline]
     #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
     #[rustc_const_unstable(feature = "const_fmt_arguments_new", issue = "none")]
-    pub const unsafe fn new_v1(
-        pieces: &'a [&'static str],
-        args: &'a [ArgumentV1<'a>],
-    ) -> Arguments<'a> {
+    pub const fn new_v1(pieces: &'a [&'static str], args: &'a [ArgumentV1<'a>]) -> Arguments<'a> {
         if pieces.len() < args.len() || pieces.len() > args.len() + 1 {
             panic!("invalid args");
         }
@@ -348,11 +365,29 @@ impl<'a> Arguments<'a> {
     }
 
     /// This function is used to specify nonstandard formatting parameters.
-    /// The `pieces` array must be at least as long as `fmt` to construct
-    /// a valid Arguments structure. Also, any `Count` within `fmt` that is
-    /// `CountIsParam` or `CountIsNextParam` has to point to an argument
-    /// created with `argumentusize`. However, failing to do so doesn't cause
-    /// unsafety, but will ignore invalid .
+    ///
+    /// An `UnsafeArg` is required because the following invariants must be held
+    /// in order for this function to be safe:
+    /// 1. The `pieces` slice must be at least as long as `fmt`.
+    /// 2. Every [`rt::v1::Argument::position`] value within `fmt` must be a
+    ///    valid index of `args`.
+    /// 3. Every [`Count::Param`] within `fmt` must contain a valid index of
+    ///    `args`.
+    #[cfg(not(bootstrap))]
+    #[doc(hidden)]
+    #[inline]
+    #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
+    #[rustc_const_unstable(feature = "const_fmt_arguments_new", issue = "none")]
+    pub const fn new_v1_formatted(
+        pieces: &'a [&'static str],
+        args: &'a [ArgumentV1<'a>],
+        fmt: &'a [rt::v1::Argument],
+        _unsafe_arg: UnsafeArg,
+    ) -> Arguments<'a> {
+        Arguments { pieces, fmt: Some(fmt), args }
+    }
+
+    #[cfg(bootstrap)]
     #[doc(hidden)]
     #[inline]
     #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
@@ -1189,7 +1224,7 @@ unsafe fn getcount(args: &[ArgumentV1<'_>], cnt: &rt::v1::Count) -> Option<usize
 
 /// Padding after the end of something. Returned by `Formatter::padding`.
 #[must_use = "don't forget to write the post padding"]
-struct PostPadding {
+pub(crate) struct PostPadding {
     fill: char,
     padding: usize,
 }
@@ -1200,9 +1235,9 @@ impl PostPadding {
     }
 
     /// Write this post padding.
-    fn write(self, buf: &mut dyn Write) -> Result {
+    pub(crate) fn write(self, f: &mut Formatter<'_>) -> Result {
         for _ in 0..self.padding {
-            buf.write_char(self.fill)?;
+            f.buf.write_char(self.fill)?;
         }
         Ok(())
     }
@@ -1325,7 +1360,7 @@ impl<'a> Formatter<'a> {
                 write_prefix(self, sign, prefix)?;
                 let post_padding = self.padding(min - width, rt::v1::Alignment::Right)?;
                 self.buf.write_str(buf)?;
-                post_padding.write(self.buf)?;
+                post_padding.write(self)?;
                 self.fill = old_fill;
                 self.align = old_align;
                 Ok(())
@@ -1335,7 +1370,7 @@ impl<'a> Formatter<'a> {
                 let post_padding = self.padding(min - width, rt::v1::Alignment::Right)?;
                 write_prefix(self, sign, prefix)?;
                 self.buf.write_str(buf)?;
-                post_padding.write(self.buf)
+                post_padding.write(self)
             }
         }
     }
@@ -1410,7 +1445,7 @@ impl<'a> Formatter<'a> {
                     let align = rt::v1::Alignment::Left;
                     let post_padding = self.padding(width - chars_count, align)?;
                     self.buf.write_str(s)?;
-                    post_padding.write(self.buf)
+                    post_padding.write(self)
                 }
             }
         }
@@ -1419,7 +1454,7 @@ impl<'a> Formatter<'a> {
     /// Write the pre-padding and return the unwritten post-padding. Callers are
     /// responsible for ensuring post-padding is written after the thing that is
     /// being padded.
-    fn padding(
+    pub(crate) fn padding(
         &mut self,
         padding: usize,
         default: rt::v1::Alignment,
@@ -1474,7 +1509,7 @@ impl<'a> Formatter<'a> {
             } else {
                 let post_padding = self.padding(width - len, align)?;
                 self.write_formatted_parts(&formatted)?;
-                post_padding.write(self.buf)
+                post_padding.write(self)
             };
             self.fill = old_fill;
             self.align = old_align;

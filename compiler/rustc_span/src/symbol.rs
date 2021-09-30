@@ -253,6 +253,7 @@ symbols! {
         TyCtxt,
         TyKind,
         Unknown,
+        UnsafeArg,
         Vec,
         Yield,
         _DECLS,
@@ -407,6 +408,7 @@ symbols! {
         clone_from,
         closure,
         closure_to_fn_coercion,
+        closure_track_caller,
         cmp,
         cmp_max,
         cmp_min,
@@ -837,6 +839,7 @@ symbols! {
         mul,
         mul_assign,
         mul_with_overflow,
+        must_not_suspend,
         must_use,
         mut_ptr,
         mut_slice_ptr,
@@ -1615,7 +1618,7 @@ impl fmt::Display for MacroRulesNormalizedIdent {
 pub struct Symbol(SymbolIndex);
 
 rustc_index::newtype_index! {
-    pub struct SymbolIndex { .. }
+    struct SymbolIndex { .. }
 }
 
 impl Symbol {
@@ -1639,10 +1642,6 @@ impl Symbol {
 
     pub fn as_u32(self) -> u32 {
         self.0.as_u32()
-    }
-
-    pub fn len(self) -> usize {
-        with_session_globals(|session_globals| session_globals.symbol_interner.get(self).len())
     }
 
     pub fn is_empty(self) -> bool {
