@@ -5,7 +5,7 @@ RMC must currently be built from source.
 In general, the following dependencies are required:
 
 1. The dependencies needed to built `rustc`. RMC is a fork of the Rust compiler, and so we have the same minimum requirements.
-2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.30.1)
+2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.36.0)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.6)
 
 ## Installing on Ubuntu 20.04
