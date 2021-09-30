@@ -1,0 +1,15 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "unknown-lang-mode"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+getrandom = "0.2"
+rand = "0.8.0"
+
+[workspace]
