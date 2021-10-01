@@ -44,6 +44,10 @@ time "$RMC_DIR"/src/test/rmc-dependency-test/diamond-dependency/run-dependency-t
 # Check that we don't have type mismatches across different crates
 time "$RMC_DIR"/src/test/rmc-multicrate/type-mismatch/run-mismatch-test.sh
 
+# Check that CBMC issue #6341 is fixed
+# Disabled till https://github.com/model-checking/rmc/issues/533 is fixed
+#time "$RMC_DIR"/src/test/rmc-multicrate/cbmc-unknown-lang-mode/run-cbmc-unknown-lang-mode.sh
+
 echo
 echo "All RMC regression tests completed successfully."
 echo
