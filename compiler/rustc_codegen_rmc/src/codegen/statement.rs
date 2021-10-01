@@ -382,7 +382,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::FnPtrShim(.., _)
                     | InstanceDef::VtableShim(..)
                     | InstanceDef::ReifyShim(..)
-                    | InstanceDef::ClosureOnceShim { call_once: _ }
+                    | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
                         let func_exp = self.codegen_operand(func);
                         vec![

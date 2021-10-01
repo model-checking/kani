@@ -124,14 +124,8 @@ crate fn try_inline(
 
     let (attrs, cfg) = merge_attrs(cx, Some(parent_module), load_attrs(cx, did), attrs_clone);
     cx.inlined.insert(did.into());
-    let mut item = clean::Item::from_def_id_and_attrs_and_parts(
-        did,
-        Some(name),
-        kind,
-        Box::new(attrs),
-        cx,
-        cfg,
-    );
+    let mut item =
+        clean::Item::from_def_id_and_attrs_and_parts(did, Some(name), kind, box attrs, cx, cfg);
     if let Some(import_def_id) = import_def_id {
         // The visibility needs to reflect the one from the reexport and not from the "source" DefId.
         item.visibility = cx.tcx.visibility(import_def_id).clean(cx);
@@ -395,13 +389,45 @@ crate fn build_impl(
         }
     }
 
+    let document_hidden = cx.render_options.document_hidden;
     let predicates = tcx.explicit_predicates_of(did);
     let (trait_items, generics) = match impl_item {
         Some(impl_) => (
             impl_
                 .items
                 .iter()
-                .map(|item| tcx.hir().impl_item(item.id).clean(cx))
+                .map(|item| tcx.hir().impl_item(item.id))
+                .filter(|item| {
+                    // Filter out impl items whose corresponding trait item has `doc(hidden)`
+                    // not to document such impl items.
+                    // For inherent impls, we don't do any filtering, because that's already done in strip_hidden.rs.
+
+                    // When `--document-hidden-items` is passed, we don't
+                    // do any filtering, too.
+                    if document_hidden {
+                        return true;
+                    }
+                    if let Some(associated_trait) = associated_trait {
+                        let assoc_kind = match item.kind {
+                            hir::ImplItemKind::Const(..) => ty::AssocKind::Const,
+                            hir::ImplItemKind::Fn(..) => ty::AssocKind::Fn,
+                            hir::ImplItemKind::TyAlias(..) => ty::AssocKind::Type,
+                        };
+                        let trait_item = tcx
+                            .associated_items(associated_trait.def_id)
+                            .find_by_name_and_kind(
+                                tcx,
+                                item.ident,
+                                assoc_kind,
+                                associated_trait.def_id,
+                            )
+                            .unwrap(); // SAFETY: For all impl items there exists trait item that has the same name.
+                        !tcx.get_attrs(trait_item.def_id).lists(sym::doc).has_word(sym::hidden)
+                    } else {
+                        true
+                    }
+                })
+                .map(|item| item.clean(cx))
                 .collect::<Vec<_>>(),
             impl_.generics.clean(cx),
         ),
@@ -464,7 +490,7 @@ crate fn build_impl(
             synthetic: false,
             blanket_impl: None,
         }),
-        Box::new(merged_attrs),
+        box merged_attrs,
         cx,
         cfg,
     ));
@@ -493,10 +519,10 @@ fn build_module(
                 let prim_ty = clean::PrimitiveType::from(p);
                 items.push(clean::Item {
                     name: None,
-                    attrs: Box::new(clean::Attributes::default()),
+                    attrs: box clean::Attributes::default(),
                     def_id: ItemId::Primitive(prim_ty, did.krate),
                     visibility: clean::Public,
-                    kind: Box::new(clean::ImportItem(clean::Import::new_simple(
+                    kind: box clean::ImportItem(clean::Import::new_simple(
                         item.ident.name,
                         clean::ImportSource {
                             path: clean::Path {
@@ -513,7 +539,7 @@ fn build_module(
                             did: None,
                         },
                         true,
-                    ))),
+                    )),
                     cfg: None,
                 });
             } else if let Some(i) = try_inline(cx, did, None, res, item.ident.name, None, visited) {

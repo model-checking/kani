@@ -77,7 +77,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 !self.typeck_results.borrow().adjustments().contains_key(expr.hir_id),
                 "expression with never type wound up being adjusted"
             );
-            let adj_ty = self.next_diverging_ty_var(TypeVariableOrigin {
+            let adj_ty = self.next_ty_var(TypeVariableOrigin {
                 kind: TypeVariableOriginKind::AdjustmentType,
                 span: expr.span,
             });
@@ -156,7 +156,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     /// Note that inspecting a type's structure *directly* may expose the fact
     /// that there are actually multiple representations for `Error`, so avoid
     /// that when err needs to be handled differently.
-    #[instrument(skip(self), level = "debug")]
+    #[instrument(skip(self, expr), level = "debug")]
     pub(super) fn check_expr_with_expectation(
         &self,
         expr: &'tcx hir::Expr<'tcx>,
@@ -254,12 +254,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         ty
     }
 
+    #[instrument(skip(self, expr), level = "debug")]
     fn check_expr_kind(
         &self,
         expr: &'tcx hir::Expr<'tcx>,
         expected: Expectation<'tcx>,
     ) -> Ty<'tcx> {
-        debug!("check_expr_kind(expected={:?}, expr={:?})", expected, expr);
+        trace!("expr={:#?}", expr);
 
         let tcx = self.tcx;
         match expr.kind {

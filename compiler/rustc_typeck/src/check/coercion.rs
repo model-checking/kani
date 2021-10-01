@@ -159,24 +159,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
 
         // Coercing from `!` to any type is allowed:
         if a.is_never() {
-            // Subtle: If we are coercing from `!` to `?T`, where `?T` is an unbound
-            // type variable, we want `?T` to fallback to `!` if not
-            // otherwise constrained. An example where this arises:
-            //
-            //     let _: Option<?T> = Some({ return; });
-            //
-            // here, we would coerce from `!` to `?T`.
-            return if b.is_ty_var() {
-                // Micro-optimization: no need for this if `b` is
-                // already resolved in some way.
-                let diverging_ty = self.next_diverging_ty_var(TypeVariableOrigin {
-                    kind: TypeVariableOriginKind::AdjustmentType,
-                    span: self.cause.span,
-                });
-                self.coerce_from_inference_variable(diverging_ty, b, simple(Adjust::NeverToAny))
-            } else {
-                success(simple(Adjust::NeverToAny)(b), b, vec![])
-            };
+            return success(simple(Adjust::NeverToAny)(b), b, vec![]);
         }
 
         // Coercing *from* an unresolved inference variable means that
@@ -273,10 +256,10 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
                     obligations.push(Obligation::new(
                         self.cause.clone(),
                         self.param_env,
-                        ty::PredicateKind::Coerce(ty::CoercePredicate {
+                        ty::Binder::dummy(ty::PredicateKind::Coerce(ty::CoercePredicate {
                             a: source_ty,
                             b: target_ty,
-                        })
+                        }))
                         .to_predicate(self.tcx()),
                     ));
                 }
@@ -499,12 +482,11 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
     // &[T; n] or &mut [T; n] -> &[T]
     // or &mut [T; n] -> &mut [T]
     // or &Concrete -> &Trait, etc.
+    #[instrument(skip(self), level = "debug")]
     fn coerce_unsized(&self, mut source: Ty<'tcx>, mut target: Ty<'tcx>) -> CoerceResult<'tcx> {
-        debug!("coerce_unsized(source={:?}, target={:?})", source, target);
-
         source = self.shallow_resolve(source);
         target = self.shallow_resolve(target);
-        debug!("coerce_unsized: resolved source={:?} target={:?}", source, target);
+        debug!(?source, ?target);
 
         // These 'if' statements require some explanation.
         // The `CoerceUnsized` trait is special - it is only

@@ -13,9 +13,11 @@
 #[macro_use]
 extern crate rustc_macros;
 
+#[macro_use]
+extern crate tracing;
+
 pub use emitter::ColorConfig;
 
-use tracing::debug;
 use Level::*;
 
 use emitter::{is_case_difference, Emitter, EmitterWriter};
@@ -1028,15 +1030,13 @@ impl HandlerInner {
             let mut error_codes = self
                 .emitted_diagnostic_codes
                 .iter()
-                .filter_map(|x| {
-                    match &x {
+                .filter_map(|x| match &x {
                     DiagnosticId::Error(s)
-                        if let Ok(Some(_explanation)) = registry.try_find_description(s) =>
+                        if registry.try_find_description(s).map_or(false, |o| o.is_some()) =>
                     {
                         Some(s.clone())
                     }
                     _ => None,
-                }
                 })
                 .collect::<Vec<_>>();
             if !error_codes.is_empty() {

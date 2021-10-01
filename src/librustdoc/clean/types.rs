@@ -421,7 +421,7 @@ impl Item {
             def_id,
             name,
             kind,
-            Box::new(ast_attrs.clean(cx)),
+            box ast_attrs.clean(cx),
             cx,
             ast_attrs.cfg(cx.sess()),
         )
@@ -439,7 +439,7 @@ impl Item {
 
         Item {
             def_id: def_id.into(),
-            kind: Box::new(kind),
+            kind: box kind,
             name,
             attrs,
             visibility: cx.tcx.visibility(def_id).clean(cx),
@@ -908,18 +908,10 @@ impl<'a> FromIterator<&'a DocFragment> for String {
     }
 }
 
-/// The attributes on an [`Item`], including attributes like `#[derive(...)]` and `#[inline]`,
-/// as well as doc comments.
-#[derive(Clone, Debug, Default)]
-crate struct Attributes {
-    crate doc_strings: Vec<DocFragment>,
-    crate other_attrs: Vec<ast::Attribute>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// A link that has not yet been rendered.
 ///
 /// This link will be turned into a rendered link by [`Item::links`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 crate struct ItemLink {
     /// The original link written in the markdown
     pub(crate) link: String,
@@ -942,6 +934,14 @@ pub struct RenderedLink {
     pub(crate) new_text: String,
     /// The URL to put in the `href`
     pub(crate) href: String,
+}
+
+/// The attributes on an [`Item`], including attributes like `#[derive(...)]` and `#[inline]`,
+/// as well as doc comments.
+#[derive(Clone, Debug, Default)]
+crate struct Attributes {
+    crate doc_strings: Vec<DocFragment>,
+    crate other_attrs: Vec<ast::Attribute>,
 }
 
 impl Attributes {
@@ -1114,10 +1114,7 @@ impl GenericBound {
         let path = external_path(cx, did, false, vec![], empty);
         inline::record_extern_fqn(cx, did, ItemType::Trait);
         GenericBound::TraitBound(
-            PolyTrait {
-                trait_: ResolvedPath { path, did, is_generic: false },
-                generic_params: Vec::new(),
-            },
+            PolyTrait { trait_: ResolvedPath { path, did }, generic_params: Vec::new() },
             hir::TraitBoundModifier::Maybe,
         )
     }
@@ -1384,8 +1381,6 @@ crate enum Type {
     ResolvedPath {
         path: Path,
         did: DefId,
-        /// `true` if is a `T::Name` path for associated types.
-        is_generic: bool,
     },
     /// `dyn for<'a> Trait<'a> + Send + 'static`
     DynTrait(Vec<PolyTrait>, Option<Lifetime>),
@@ -1422,37 +1417,6 @@ crate enum Type {
 
     // `impl TraitA + TraitB + ...`
     ImplTrait(Vec<GenericBound>),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Copy, Debug)]
-/// N.B. this has to be different from `hir::PrimTy` because it also includes types that aren't
-/// paths, like `Unit`.
-crate enum PrimitiveType {
-    Isize,
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    Usize,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    F32,
-    F64,
-    Char,
-    Bool,
-    Str,
-    Slice,
-    Array,
-    Tuple,
-    Unit,
-    RawPointer,
-    Reference,
-    Fn,
-    Never,
 }
 
 crate trait GetDefId {
@@ -1503,9 +1467,10 @@ impl Type {
         }
     }
 
-    crate fn is_generic(&self) -> bool {
-        match *self {
-            ResolvedPath { is_generic, .. } => is_generic,
+    /// Checks if this is a `T::Name` path for an associated type.
+    crate fn is_assoc_ty(&self) -> bool {
+        match self {
+            ResolvedPath { path, .. } => path.is_assoc_ty(),
             _ => false,
         }
     }
@@ -1569,9 +1534,7 @@ impl Type {
         };
         Some((&self_, trait_did, *name))
     }
-}
 
-impl Type {
     fn inner_def_id(&self, cache: Option<&Cache>) -> Option<DefId> {
         let t: PrimitiveType = match *self {
             ResolvedPath { did, .. } => return Some(did),
@@ -1606,6 +1569,37 @@ impl GetDefId for Type {
     fn def_id_full(&self, cache: &Cache) -> Option<DefId> {
         self.inner_def_id(Some(cache))
     }
+}
+
+/// N.B. this has to be different from `hir::PrimTy` because it also includes types that aren't
+/// paths, like `Unit`.
+#[derive(Clone, PartialEq, Eq, Hash, Copy, Debug)]
+crate enum PrimitiveType {
+    Isize,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    Usize,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    F32,
+    F64,
+    Char,
+    Bool,
+    Str,
+    Slice,
+    Array,
+    Tuple,
+    Unit,
+    RawPointer,
+    Reference,
+    Fn,
+    Never,
 }
 
 impl PrimitiveType {
@@ -1993,6 +1987,16 @@ impl Path {
     crate fn whole_name(&self) -> String {
         String::from(if self.global { "::" } else { "" })
             + &self.segments.iter().map(|s| s.name.to_string()).collect::<Vec<_>>().join("::")
+    }
+
+    /// Checks if this is a `T::Name` path for an associated type.
+    crate fn is_assoc_ty(&self) -> bool {
+        match self.res {
+            Res::SelfTy(..) if self.segments.len() != 1 => true,
+            Res::Def(DefKind::TyParam, _) if self.segments.len() != 1 => true,
+            Res::Def(DefKind::AssocTy, _) => true,
+            _ => false,
+        }
     }
 }
 
