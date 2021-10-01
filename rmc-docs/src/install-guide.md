@@ -8,6 +8,8 @@ In general, the following dependencies are required:
 2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.36.0)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.6)
 
+Note: These dependencies may be installed by running the CI scripts shown below and there is no need to install them separately, for their respective OS.
+
 ## Installing on Ubuntu 20.04
 
 The simplest way to install (especially if you're using a fresh VM) is following our CI scripts:
