@@ -26,5 +26,5 @@ cd $RMC_DIR/firecracker/src/devices/src/virtio/
 RUST_BACKTRACE=1 RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build --target x86_64-unknown-linux-gnu
 
 echo
-echo "Finished Firefracker codegen regression successfully..."
+echo "Finished Firecracker codegen regression successfully..."
 echo
