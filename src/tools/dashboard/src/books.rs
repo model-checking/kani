@@ -28,6 +28,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use serde_json;
 use walkdir::WalkDir;
 
 /// Parses the chapter/section hierarchy in the markdown file specified by
@@ -405,29 +406,32 @@ fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
     tree
 }
 
-/// Parses and generates a dashboard from the log output of `compiletest` in
-/// `path`.
-fn parse_log(path: &Path) -> dashboard::Tree {
+
+/// Parses a `litani` run and generates a dashboard tree from it
+fn parse_litani_output(path: &Path) -> dashboard::Tree {
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
+    let run: LitaniRun = serde_json::from_reader(reader).unwrap();
     let mut tests =
         dashboard::Tree::new(dashboard::Node::new(String::from("dashboard"), 0, 0), vec![]);
-    for line in reader.lines() {
-        let (ns, l) = parse_log_line(&line.unwrap());
+    let pipelines = run.get_pipelines();
+    for pipeline in pipelines {
+        let (ns, l) = parse_log_line(&pipeline);
         tests = dashboard::Tree::merge(tests, tree_from_path(ns, l)).unwrap();
     }
     tests
 }
 
-/// Parses a line in the log output of `compiletest` and returns a pair containing
+/// Parses a `litani` pipeline and returns a pair containing
 /// the path to a test and its result.
-fn parse_log_line(line: &str) -> (Vec<String>, bool) {
-    // Each line has the format `<result> [rmc] <path>`. Extract <result> and
-    // <path>.
-    let splits: Vec<_> = line.split(" [rmc] ").map(String::from).collect();
-    let l = if splits[0].as_str() == "ok" { true } else { false };
-    let mut ns: Vec<_> = splits[1].split(&['/', '.'][..]).map(String::from).collect();
-    // Remove unnecessary `.rs` suffix.
+fn parse_log_line(pipeline: &LitaniPipeline) -> (Vec<String>, bool) {
+    let l = pipeline.get_status();
+    let name = pipeline.get_name();
+    let mut ns: Vec<String> = name.split(&['/', '.'][..]).map(String::from).collect();
+    // Remove unnecessary items from the path until "dashboard"
+    let dash_index = ns.iter().position(|item| item == "dashboard").unwrap();
+    ns.drain(..dash_index);
+    // Remove unnecessary "rs" suffix.
     ns.pop();
     (ns, l)
 }
@@ -468,9 +472,8 @@ fn litani_run_tests() {
 /// Extracts examples from the Rust books, run them through RMC, and displays
 /// their results in a terminal dashboard.
 pub fn generate_dashboard() {
-    let build_dir = &env::var("BUILD_DIR").unwrap();
-    let triple = &env::var("TRIPLE").unwrap();
-    let log_path: PathBuf = [build_dir, triple, "dashboard", "log"].iter().collect();
+    let litani_log: PathBuf = ["build", "output", "latest", "run.json"].iter().collect();
+    let text_dash: PathBuf = ["build", "output", "latest", "html", "dashboard.txt"].iter().collect();
     // Parse the chapter/section hierarchy for the books.
     let mut map = HashMap::new();
     map.extend(parse_reference_hierarchy());
