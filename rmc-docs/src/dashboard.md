@@ -1,6 +1,6 @@
 # RMC Dashboard
 
-The [RMC Dashboard](./dashboard/index.html) is a testing tool based on [Compiletest](https://rustc-dev-guide.rust-lang.org/tests/intro.html) and [Litani](https://github.com/awslabs/aws-build-accumulator).
+The [RMC Dashboard](./dashboard/index.html) is a testing tool based on [Litani](https://github.com/awslabs/aws-build-accumulator).
 
 The purpose of the dashboard to show the level of support in RMC for all Rust features.
 To this end, we use Rust code snippet examples from the following general Rust documentation books:
@@ -36,3 +36,7 @@ If an example shows one red bar, it is considered a failed example that cannot b
 
 The [RMC Dashboard](./dashboard/index.html) is automatically updated whenever
 a PR gets merged into RMC.
+
+> **Tip:** In addition, we publish a [text version of the dashboard](./dashboard/dashboard.txt)
+> while we work on adding more features to [Litani](https://github.com/awslabs/aws-build-accumulator).
+> The [text-based dashboard](./dashboard/dashboard.txt) displays the same results in hierarchical way.
