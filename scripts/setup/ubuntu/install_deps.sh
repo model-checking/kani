@@ -34,18 +34,17 @@ declare -A VERSION_DEPS
 VERSION_DEPS["20.04"]="python-is-python3"
 VERSION_DEPS["18.04"]=""
 
-set -x
-
-sudo apt-get --yes update
-sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}"
-
 UBUNTU_VERSION=$(lsb_release -rs)
 OTHER_DEPS="${VERSION_DEPS[${UBUNTU_VERSION}]:-""}"
-if [[ ! -z ${OTHER_DEPS} ]]
-then
-    # This package was added on ubuntu 20.04.
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${OTHER_DEPS[@]}"
-fi
+
+set -x
+
+# Github promises weekly build image updates, so we can skip the update step and
+# worst case we should only be 1-2 weeks behind upstream repos.
+# https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#supported-software
+#sudo apt-get --yes update
+
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}" "${OTHER_DEPS[@]}"
 
 # Add Python package dependencies
 PYTHON_DEPS=(
