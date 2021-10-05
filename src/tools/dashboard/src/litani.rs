@@ -3,10 +3,10 @@
 //! Utilities to interact with the `Litani` build accumulator.
 
 use pulldown_cmark::escape::StrWrite;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Child, Command};
-use serde::Deserialize;
 
 /// Data structure representing a full `litani` run.
 /// The same representation is used to represent a run
@@ -70,7 +70,7 @@ impl LitaniPipeline {
         match self.status.as_str() {
             "fail" => false,
             "success" => true,
-            _ => panic!("pipeline status is not \"fail\" nor \"success\"")
+            _ => panic!("pipeline status is not \"fail\" nor \"success\""),
         }
     }
 }

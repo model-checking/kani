@@ -7,7 +7,7 @@ extern crate rustc_span;
 
 use crate::{
     dashboard,
-    litani::{Litani, LitaniRun, LitaniPipeline},
+    litani::{Litani, LitaniPipeline, LitaniRun},
     util::{self, FailStep, TestProps},
 };
 use inflector::cases::{snakecase::to_snake_case, titlecase::to_title_case};
@@ -17,6 +17,7 @@ use rustdoc::{
     doctest::Tester,
     html::markdown::{ErrorCodes, Ignore, LangString},
 };
+use serde_json;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -26,7 +27,6 @@ use std::{
     iter::FromIterator,
     path::{Path, PathBuf},
 };
-use serde_json;
 use walkdir::WalkDir;
 
 /// Parses the chapter/section hierarchy in the markdown file specified by
@@ -375,7 +375,6 @@ fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
     tree
 }
 
-
 /// Parses a `litani` run and generates a dashboard tree from it
 fn parse_litani_output(path: &Path) -> dashboard::Tree {
     let file = fs::File::open(path).unwrap();
@@ -407,12 +406,12 @@ fn parse_log_line(pipeline: &LitaniPipeline) -> (Vec<String>, bool) {
 
 /// Format and write a text version of the dashboard
 fn generate_text_dashboard(dashboard: dashboard::Tree, path: &Path) {
-    let dashboard_str =
-        format!("# of tests: {}\t✔️ {}\t❌ {}\n{}",
-                dashboard.data.num_pass + dashboard.data.num_fail,
-                dashboard.data.num_pass,
-                dashboard.data.num_fail,
-                dashboard
+    let dashboard_str = format!(
+        "# of tests: {}\t✔️ {}\t❌ {}\n{}",
+        dashboard.data.num_pass + dashboard.data.num_fail,
+        dashboard.data.num_pass,
+        dashboard.data.num_fail,
+        dashboard
     );
     fs::write(&path, dashboard_str).expect("Error: Unable to write dashboard results");
 }
@@ -443,7 +442,8 @@ fn litani_run_tests() {
 /// their results in a terminal dashboard.
 pub fn generate_dashboard() {
     let litani_log: PathBuf = ["build", "output", "latest", "run.json"].iter().collect();
-    let text_dash: PathBuf = ["build", "output", "latest", "html", "dashboard.txt"].iter().collect();
+    let text_dash: PathBuf =
+        ["build", "output", "latest", "html", "dashboard.txt"].iter().collect();
     // Parse the chapter/section hierarchy for the books.
     let mut map = HashMap::new();
     map.extend(parse_reference_hierarchy());
