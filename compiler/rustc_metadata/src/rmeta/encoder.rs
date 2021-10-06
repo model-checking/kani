@@ -18,7 +18,6 @@ use rustc_hir::{AnonConst, GenericParamKind};
 use rustc_index::bit_set::GrowableBitSet;
 use rustc_index::vec::Idx;
 use rustc_middle::hir::map::Map;
-use rustc_middle::middle::cstore::{EncodedMetadata, ForeignModule, LinkagePreference, NativeLib};
 use rustc_middle::middle::dependency_format::Linkage;
 use rustc_middle::middle::exported_symbols::{
     metadata_symbol_name, ExportedSymbol, SymbolExportLevel,
@@ -30,6 +29,7 @@ use rustc_middle::ty::codec::TyEncoder;
 use rustc_middle::ty::{self, SymbolName, Ty, TyCtxt};
 use rustc_serialize::{opaque, Encodable, Encoder};
 use rustc_session::config::CrateType;
+use rustc_session::cstore::{ForeignModule, LinkagePreference, NativeLib};
 use rustc_span::symbol::{sym, Ident, Symbol};
 use rustc_span::{self, ExternalSource, FileName, SourceFile, Span, SyntaxContext};
 use rustc_span::{
@@ -440,8 +440,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
     }
 
     fn encode_info_for_items(&mut self) {
-        let krate = self.tcx.hir().krate();
-        self.encode_info_for_mod(CRATE_DEF_ID, krate.module());
+        self.encode_info_for_mod(CRATE_DEF_ID, self.tcx.hir().root_module());
 
         // Proc-macro crates only export proc-macro items, which are looked
         // up using `proc_macro_data`
@@ -449,7 +448,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
             return;
         }
 
-        krate.visit_all_item_likes(&mut self.as_deep_visitor());
+        self.tcx.hir().visit_all_item_likes(&mut self.as_deep_visitor());
     }
 
     fn encode_def_path_table(&mut self) {
@@ -1782,7 +1781,7 @@ impl EncodeContext<'a, 'tcx> {
         debug!("EncodeContext::encode_impls()");
         let tcx = self.tcx;
         let mut visitor = ImplVisitor { tcx, impls: FxHashMap::default() };
-        tcx.hir().krate().visit_all_item_likes(&mut visitor);
+        tcx.hir().visit_all_item_likes(&mut visitor);
 
         let mut all_impls: Vec<_> = visitor.impls.into_iter().collect();
 
@@ -2101,7 +2100,26 @@ fn prefetch_mir(tcx: TyCtxt<'_>) {
 // will allow us to slice the metadata to the precise length that we just
 // generated regardless of trailing bytes that end up in it.
 
-pub(super) fn encode_metadata(tcx: TyCtxt<'_>) -> EncodedMetadata {
+#[derive(Encodable, Decodable)]
+pub struct EncodedMetadata {
+    raw_data: Vec<u8>,
+}
+
+impl EncodedMetadata {
+    #[inline]
+    pub fn new() -> EncodedMetadata {
+        EncodedMetadata { raw_data: Vec::new() }
+    }
+
+    #[inline]
+    pub fn raw_data(&self) -> &[u8] {
+        &self.raw_data[..]
+    }
+}
+
+pub fn encode_metadata(tcx: TyCtxt<'_>) -> EncodedMetadata {
+    let _prof_timer = tcx.prof.verbose_generic_activity("generate_crate_metadata");
+
     // Since encoding metadata is not in a query, and nothing is cached,
     // there's no need to do dep-graph tracking for any of it.
     tcx.dep_graph.assert_ignored();

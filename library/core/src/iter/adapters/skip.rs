@@ -114,6 +114,38 @@ where
         }
         self.iter.fold(init, fold)
     }
+
+    #[inline]
+    #[rustc_inherit_overflow_checks]
+    fn advance_by(&mut self, n: usize) -> Result<(), usize> {
+        let mut rem = n;
+
+        let step_one = self.n.saturating_add(rem);
+        match self.iter.advance_by(step_one) {
+            Ok(_) => {
+                rem -= step_one - self.n;
+                self.n = 0;
+            }
+            Err(advanced) => {
+                let advanced_without_skip = advanced.saturating_sub(self.n);
+                self.n = self.n.saturating_sub(advanced);
+                return Err(advanced_without_skip);
+            }
+        }
+
+        // step_one calculation may have saturated
+        if unlikely(rem > 0) {
+            return match self.iter.advance_by(rem) {
+                ret @ Ok(_) => ret,
+                Err(advanced) => {
+                    rem -= advanced;
+                    Err(n - rem)
+                }
+            };
+        }
+
+        Ok(())
+    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -174,20 +206,30 @@ where
 
         self.try_rfold(init, ok(fold)).unwrap()
     }
+
+    #[inline]
+    fn advance_back_by(&mut self, n: usize) -> Result<(), usize> {
+        let min = crate::cmp::min(self.len(), n);
+        return match self.iter.advance_back_by(min) {
+            ret @ Ok(_) if n <= min => ret,
+            Ok(_) => Err(min),
+            _ => panic!("ExactSizeIterator contract violation"),
+        };
+    }
 }
 
 #[stable(feature = "fused", since = "1.26.0")]
 impl<I> FusedIterator for Skip<I> where I: FusedIterator {}
 
 #[unstable(issue = "none", feature = "inplace_iteration")]
-unsafe impl<S: Iterator, I: Iterator> SourceIter for Skip<I>
+unsafe impl<I> SourceIter for Skip<I>
 where
-    I: SourceIter<Source = S>,
+    I: SourceIter,
 {
-    type Source = S;
+    type Source = I::Source;
 
     #[inline]
-    unsafe fn as_inner(&mut self) -> &mut S {
+    unsafe fn as_inner(&mut self) -> &mut I::Source {
         // SAFETY: unsafe function forwarding to unsafe function with the same requirements
         unsafe { SourceIter::as_inner(&mut self.iter) }
     }

@@ -200,7 +200,6 @@ use rustc_session::config::EntryFnType;
 use rustc_session::lint::builtin::LARGE_ASSIGNMENTS;
 use rustc_session::Limit;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
-use rustc_span::Symbol;
 use rustc_target::abi::Size;
 use smallvec::SmallVec;
 use std::iter;
@@ -332,7 +331,7 @@ fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<
 
         let mut visitor = RootCollector { tcx, mode, entry_fn, output: &mut roots };
 
-        tcx.hir().krate().visit_all_item_likes(&mut visitor);
+        tcx.hir().visit_all_item_likes(&mut visitor);
 
         visitor.push_extra_entry_roots();
     }

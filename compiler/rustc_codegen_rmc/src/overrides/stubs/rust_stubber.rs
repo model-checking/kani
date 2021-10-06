@@ -60,7 +60,7 @@ pub trait RustStubber<'tcx> {
     fn ty_opt(&self, tcx: TyCtxt<'tcx>) -> Option<Ty<'tcx>> {
         if self.get_ty_opt_field().get().is_none() {
             let mut visitor = CbmcTypeVisitor::new(self.get_new_type_name().to_string(), tcx);
-            tcx.hir().krate().visit_all_item_likes(&mut visitor);
+            tcx.hir().visit_all_item_likes(&mut visitor);
             self.get_ty_opt_field().set(Some(visitor.ty_opt.take()));
         }
         // here ty_opt must be Some, so we just unwrap

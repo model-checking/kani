@@ -19,11 +19,11 @@ use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::Node;
 use rustc_hir_pretty::{enum_def_to_string, fn_to_string, ty_to_string};
 use rustc_middle::hir::map::Map;
-use rustc_middle::middle::cstore::ExternCrate;
 use rustc_middle::middle::privacy::AccessLevels;
 use rustc_middle::ty::{self, print::with_no_trimmed_paths, DefIdTree, TyCtxt};
 use rustc_middle::{bug, span_bug};
 use rustc_session::config::{CrateType, Input, OutputType};
+use rustc_session::cstore::ExternCrate;
 use rustc_session::output::{filename_for_metadata, out_filename};
 use rustc_span::source_map::Spanned;
 use rustc_span::symbol::Ident;
@@ -1003,9 +1003,9 @@ pub fn process_crate<'l, 'tcx, H: SaveHandler>(
 
             let mut visitor = DumpVisitor::new(save_ctxt);
 
-            visitor.dump_crate_info(cratename, tcx.hir().krate());
+            visitor.dump_crate_info(cratename);
             visitor.dump_compilation_options(input, cratename);
-            visitor.process_crate(tcx.hir().krate());
+            visitor.process_crate();
 
             handler.save(&visitor.save_ctxt, &visitor.analysis())
         })

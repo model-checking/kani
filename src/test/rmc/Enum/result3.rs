@@ -1,6 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// There is an implicit loop inside PartialEq, so we need an explicit unwind
+// cbmc-flags: --unwind 3 --unwinding-assertions
+
 include!("../../rmc-prelude.rs");
 
 #[derive(Debug, PartialEq)]

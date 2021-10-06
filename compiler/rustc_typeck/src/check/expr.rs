@@ -92,8 +92,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             let expr = expr.peel_drop_temps();
             self.suggest_deref_ref_or_into(&mut err, expr, expected_ty, ty, None);
             extend_err(&mut err);
-            // Error possibly reported in `check_assign` so avoid emitting error again.
-            err.emit_unless(self.is_assign_to_bool(expr, expected_ty));
+            err.emit();
         }
         ty
     }
@@ -2137,7 +2136,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             idx_t
         } else {
             let base_t = self.structurally_resolved_type(base.span, base_t);
-            match self.lookup_indexing(expr, base, base_t, idx_t) {
+            match self.lookup_indexing(expr, base, base_t, idx, idx_t) {
                 Some((index_ty, element_ty)) => {
                     // two-phase not needed because index_ty is never mutable
                     self.demand_coerce(idx, idx_t, index_ty, None, AllowTwoPhase::No);

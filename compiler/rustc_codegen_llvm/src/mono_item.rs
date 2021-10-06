@@ -53,10 +53,10 @@ impl PreDefineMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         assert!(!instance.substs.needs_infer());
 
         let fn_abi = self.fn_abi_of_instance(instance, ty::List::empty());
-        let lldecl = self.declare_fn(symbol_name, &fn_abi);
+        let lldecl = self.declare_fn(symbol_name, fn_abi);
         unsafe { llvm::LLVMRustSetLinkage(lldecl, base::linkage_to_llvm(linkage)) };
         let attrs = self.tcx.codegen_fn_attrs(instance.def_id());
-        base::set_link_section(lldecl, &attrs);
+        base::set_link_section(lldecl, attrs);
         if linkage == Linkage::LinkOnceODR || linkage == Linkage::WeakODR {
             llvm::SetUniqueComdat(self.llmod, lldecl);
         }
@@ -143,6 +143,8 @@ impl CodegenCx<'ll, 'tcx> {
             return true;
         }
 
-        return false;
+        // With pie relocation model calls of functions defined in the translation
+        // unit can use copy relocations.
+        self.tcx.sess.relocation_model() == RelocModel::Pie && !is_declaration
     }
 }
