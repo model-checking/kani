@@ -56,7 +56,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
-            TerminatorKind::Unreachable => Stmt::assert_false("unreachable code", loc),
+            TerminatorKind::Unreachable => Stmt::block(
+                vec![
+                    Stmt::assert_false("unreachable code", loc.clone()),
+                    Stmt::assume(Expr::bool_false(), loc.clone()),
+                ],
+                loc,
+            ),
             TerminatorKind::Drop { place, target, unwind: _ } => self.codegen_drop(place, target),
             TerminatorKind::DropAndReplace { .. } => {
                 unreachable!("this instruction is unreachable")
