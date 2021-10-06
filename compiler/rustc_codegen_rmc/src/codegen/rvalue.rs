@@ -430,7 +430,15 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Aggregate(ref k, operands) => {
                 self.codegen_rvalue_aggregate(&*k, operands, res_ty)
             }
-            Rvalue::ThreadLocalRef(_) => unimplemented!(),
+            Rvalue::ThreadLocalRef(_) => {
+                let typ = self.codegen_ty(res_ty);
+                self.codegen_unimplemented(
+                    "Rvalue::ThreadLocalRef",
+                    typ,
+                    Location::none(),
+                    "https://github.com/model-checking/rmc/issues/541",
+                )
+            }
         }
     }
 
