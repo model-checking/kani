@@ -10,7 +10,9 @@ use crate::traits::normalize_projection_type;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stack::ensure_sufficient_stack;
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{error_code, struct_span_err, Applicability, DiagnosticBuilder, Style};
+use rustc_errors::{
+    error_code, pluralize, struct_span_err, Applicability, DiagnosticBuilder, Style,
+};
 use rustc_hir as hir;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
@@ -22,6 +24,7 @@ use rustc_middle::ty::{
     Infer, InferTy, ToPredicate, Ty, TyCtxt, TypeFoldable, WithConstness,
 };
 use rustc_middle::ty::{TypeAndMut, TypeckResults};
+use rustc_session::Limit;
 use rustc_span::def_id::LOCAL_CRATE;
 use rustc_span::symbol::{kw, sym, Ident, Symbol};
 use rustc_span::{BytePos, DesugaringKind, ExpnKind, ForLoopLoc, MultiSpan, Span, DUMMY_SP};
@@ -675,7 +678,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         &self,
         obligation: &PredicateObligation<'tcx>,
         err: &mut DiagnosticBuilder<'_>,
-        trait_ref: &ty::Binder<'tcx, ty::TraitRef<'tcx>>,
+        poly_trait_ref: &ty::Binder<'tcx, ty::TraitRef<'tcx>>,
         has_custom_message: bool,
     ) -> bool {
         let span = obligation.cause.span;
@@ -701,10 +704,10 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                 .filter_map(|lang_item| self.tcx.lang_items().require(*lang_item).ok())
                 .collect();
 
-        never_suggest_borrow.push(self.tcx.get_diagnostic_item(sym::send_trait).unwrap());
+        never_suggest_borrow.push(self.tcx.get_diagnostic_item(sym::Send).unwrap());
 
         let param_env = obligation.param_env;
-        let trait_ref = trait_ref.skip_binder();
+        let trait_ref = poly_trait_ref.skip_binder();
 
         let found_ty = trait_ref.self_ty();
         let found_ty_str = found_ty.to_string();
@@ -714,25 +717,25 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         let mut_substs = self.tcx.mk_substs_trait(mut_borrowed_found_ty, &[]);
 
         // Try to apply the original trait binding obligation by borrowing.
-        let mut try_borrowing = |new_imm_trait_ref: ty::TraitRef<'tcx>,
-                                 new_mut_trait_ref: ty::TraitRef<'tcx>,
-                                 expected_trait_ref: ty::TraitRef<'tcx>,
+        let mut try_borrowing = |new_imm_trait_ref: ty::Binder<'tcx, ty::TraitRef<'tcx>>,
+                                 new_mut_trait_ref: ty::Binder<'tcx, ty::TraitRef<'tcx>>,
+                                 expected_trait_ref: ty::Binder<'tcx, ty::TraitRef<'tcx>>,
                                  blacklist: &[DefId]|
          -> bool {
-            if blacklist.contains(&expected_trait_ref.def_id) {
+            if blacklist.contains(&expected_trait_ref.def_id()) {
                 return false;
             }
 
             let imm_result = self.predicate_must_hold_modulo_regions(&Obligation::new(
                 ObligationCause::dummy(),
                 param_env,
-                ty::Binder::dummy(new_imm_trait_ref).without_const().to_predicate(self.tcx),
+                new_imm_trait_ref.without_const().to_predicate(self.tcx),
             ));
 
             let mut_result = self.predicate_must_hold_modulo_regions(&Obligation::new(
                 ObligationCause::dummy(),
                 param_env,
-                ty::Binder::dummy(new_mut_trait_ref).without_const().to_predicate(self.tcx),
+                new_mut_trait_ref.without_const().to_predicate(self.tcx),
             ));
 
             if imm_result || mut_result {
@@ -805,19 +808,19 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         };
 
         if let ObligationCauseCode::ImplDerivedObligation(obligation) = &*code {
-            let expected_trait_ref = obligation.parent_trait_ref.skip_binder();
-            let new_imm_trait_ref =
-                ty::TraitRef::new(obligation.parent_trait_ref.def_id(), imm_substs);
-            let new_mut_trait_ref =
-                ty::TraitRef::new(obligation.parent_trait_ref.def_id(), mut_substs);
+            let expected_trait_ref = obligation.parent_trait_ref;
+            let new_imm_trait_ref = poly_trait_ref
+                .rebind(ty::TraitRef::new(obligation.parent_trait_ref.def_id(), imm_substs));
+            let new_mut_trait_ref = poly_trait_ref
+                .rebind(ty::TraitRef::new(obligation.parent_trait_ref.def_id(), mut_substs));
             return try_borrowing(new_imm_trait_ref, new_mut_trait_ref, expected_trait_ref, &[]);
         } else if let ObligationCauseCode::BindingObligation(_, _)
         | ObligationCauseCode::ItemObligation(_) = &*code
         {
             return try_borrowing(
-                ty::TraitRef::new(trait_ref.def_id, imm_substs),
-                ty::TraitRef::new(trait_ref.def_id, mut_substs),
-                trait_ref,
+                poly_trait_ref.rebind(ty::TraitRef::new(trait_ref.def_id, imm_substs)),
+                poly_trait_ref.rebind(ty::TraitRef::new(trait_ref.def_id, mut_substs)),
+                *poly_trait_ref,
                 &never_suggest_borrow[..],
             );
         } else {
@@ -1633,8 +1636,8 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
 
         // Special case the primary error message when send or sync is the trait that was
         // not implemented.
-        let is_send = self.tcx.is_diagnostic_item(sym::send_trait, trait_ref.def_id);
-        let is_sync = self.tcx.is_diagnostic_item(sym::sync_trait, trait_ref.def_id);
+        let is_send = self.tcx.is_diagnostic_item(sym::Send, trait_ref.def_id);
+        let is_sync = self.tcx.is_diagnostic_item(sym::Sync, trait_ref.def_id);
         let hir = self.tcx.hir();
         let trait_explanation = if is_send || is_sync {
             let (trait_name, trait_verb) =
@@ -2272,7 +2275,11 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                     parent_trait_ref = child_trait_ref;
                 }
                 if count > 0 {
-                    err.note(&format!("{} redundant requirements hidden", count));
+                    err.note(&format!(
+                        "{} redundant requirement{} hidden",
+                        count,
+                        pluralize!(count)
+                    ));
                     err.note(&format!(
                         "required because of the requirements on the impl of `{}` for `{}`",
                         parent_trait_ref.print_only_trait_path(),
@@ -2426,10 +2433,13 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
     }
 
     fn suggest_new_overflow_limit(&self, err: &mut DiagnosticBuilder<'_>) {
-        let current_limit = self.tcx.recursion_limit();
-        let suggested_limit = current_limit * 2;
+        let suggested_limit = match self.tcx.recursion_limit() {
+            Limit(0) => Limit(2),
+            limit => limit * 2,
+        };
         err.help(&format!(
-            "consider adding a `#![recursion_limit=\"{}\"]` attribute to your crate (`{}`)",
+            "consider increasing the recursion limit by adding a \
+             `#![recursion_limit = \"{}\"]` attribute to your crate (`{}`)",
             suggested_limit,
             self.tcx.crate_name(LOCAL_CRATE),
         ));

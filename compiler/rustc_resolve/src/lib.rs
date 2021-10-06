@@ -51,10 +51,10 @@ use rustc_hir::TraitCandidate;
 use rustc_index::vec::IndexVec;
 use rustc_metadata::creader::{CStore, CrateLoader};
 use rustc_middle::hir::exports::ExportMap;
-use rustc_middle::middle::cstore::{CrateStore, MetadataLoaderDyn};
 use rustc_middle::span_bug;
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, DefIdTree, MainDefinition, ResolverOutputs};
+use rustc_session::cstore::{CrateStore, MetadataLoaderDyn};
 use rustc_session::lint;
 use rustc_session::lint::{BuiltinLintDiagnostics, LintBuffer};
 use rustc_session::Session;
@@ -206,11 +206,11 @@ enum ResolutionError<'a> {
     /// parameter list.
     NameAlreadyUsedInParameterList(Symbol, Span),
     /// Error E0407: method is not a member of trait.
-    MethodNotMemberOfTrait(Symbol, &'a str),
+    MethodNotMemberOfTrait(Ident, &'a str, Option<Symbol>),
     /// Error E0437: type is not a member of trait.
-    TypeNotMemberOfTrait(Symbol, &'a str),
+    TypeNotMemberOfTrait(Ident, &'a str, Option<Symbol>),
     /// Error E0438: const is not a member of trait.
-    ConstNotMemberOfTrait(Symbol, &'a str),
+    ConstNotMemberOfTrait(Ident, &'a str, Option<Symbol>),
     /// Error E0408: variable `{}` is not bound in all patterns.
     VariableNotBoundInPattern(&'a BindingError),
     /// Error E0409: variable `{}` is bound in inconsistent ways within the same match arm.
@@ -413,7 +413,7 @@ impl ModuleOrUniformRoot<'_> {
     fn same_def(lhs: Self, rhs: Self) -> bool {
         match (lhs, rhs) {
             (ModuleOrUniformRoot::Module(lhs), ModuleOrUniformRoot::Module(rhs)) => {
-                lhs.def_id() == rhs.def_id()
+                ptr::eq(lhs, rhs)
             }
             (
                 ModuleOrUniformRoot::CrateRootAndExternPrelude,
@@ -602,7 +602,11 @@ impl<'a> ModuleData<'a> {
         }
     }
 
-    fn def_id(&self) -> Option<DefId> {
+    fn def_id(&self) -> DefId {
+        self.opt_def_id().expect("`ModuleData::def_id` is called on a block module")
+    }
+
+    fn opt_def_id(&self) -> Option<DefId> {
         match self.kind {
             ModuleKind::Def(_, def_id, _) => Some(def_id),
             _ => None,
@@ -1071,11 +1075,16 @@ impl<'a> ResolverArenas<'a> {
         expn_id: ExpnId,
         span: Span,
         no_implicit_prelude: bool,
+        module_map: &mut FxHashMap<DefId, Module<'a>>,
     ) -> Module<'a> {
         let module =
             self.modules.alloc(ModuleData::new(parent, kind, expn_id, span, no_implicit_prelude));
-        if module.def_id().map_or(true, |def_id| def_id.is_local()) {
+        let def_id = module.opt_def_id();
+        if def_id.map_or(true, |def_id| def_id.is_local()) {
             self.local_modules.borrow_mut().push(module);
+        }
+        if let Some(def_id) = def_id {
+            module_map.insert(def_id, module);
         }
         module
     }
@@ -1152,7 +1161,7 @@ impl ResolverAstLowering for Resolver<'_> {
         self.legacy_const_generic_args(expr)
     }
 
-    fn get_partial_res(&mut self, id: NodeId) -> Option<PartialRes> {
+    fn get_partial_res(&self, id: NodeId) -> Option<PartialRes> {
         self.partial_res_map.get(&id).cloned()
     }
 
@@ -1276,12 +1285,14 @@ impl<'a> Resolver<'a> {
         arenas: &'a ResolverArenas<'a>,
     ) -> Resolver<'a> {
         let root_def_id = CRATE_DEF_ID.to_def_id();
+        let mut module_map = FxHashMap::default();
         let graph_root = arenas.new_module(
             None,
             ModuleKind::Def(DefKind::Mod, root_def_id, kw::Empty),
             ExpnId::root(),
             krate.span,
             session.contains_name(&krate.attrs, sym::no_implicit_prelude),
+            &mut module_map,
         );
         let empty_module = arenas.new_module(
             None,
@@ -1289,9 +1300,8 @@ impl<'a> Resolver<'a> {
             ExpnId::root(),
             DUMMY_SP,
             true,
+            &mut FxHashMap::default(),
         );
-        let mut module_map = FxHashMap::default();
-        module_map.insert(root_def_id, graph_root);
 
         let definitions = Definitions::new(session.local_stable_crate_id(), krate.span);
         let root = definitions.get_root_def();
@@ -1434,6 +1444,18 @@ impl<'a> Resolver<'a> {
         resolver
     }
 
+    fn new_module(
+        &mut self,
+        parent: Option<Module<'a>>,
+        kind: ModuleKind,
+        expn_id: ExpnId,
+        span: Span,
+        no_implicit_prelude: bool,
+    ) -> Module<'a> {
+        let module_map = &mut self.module_map;
+        self.arenas.new_module(parent, kind, expn_id, span, no_implicit_prelude, module_map)
+    }
+
     fn create_stable_hashing_context(&self) -> ExpandHasher<'_, 'a> {
         ExpandHasher {
             source_map: CachingSourceMapView::new(self.session.source_map()),
@@ -1570,7 +1592,7 @@ impl<'a> Resolver<'a> {
 
         if let Some(module) = current_trait {
             if self.trait_may_have_item(Some(module), assoc_item) {
-                let def_id = module.def_id().unwrap();
+                let def_id = module.def_id();
                 found_traits.push(TraitCandidate { def_id, import_ids: smallvec![] });
             }
         }
@@ -2171,8 +2193,9 @@ impl<'a> Resolver<'a> {
                 return self.graph_root;
             }
         };
-        let module = self
-            .expect_module(module.def_id().map_or(LOCAL_CRATE, |def_id| def_id.krate).as_def_id());
+        let module = self.expect_module(
+            module.opt_def_id().map_or(LOCAL_CRATE, |def_id| def_id.krate).as_def_id(),
+        );
         debug!(
             "resolve_crate_root({:?}): got module {:?} ({:?}) (ident.span = {:?})",
             ident,
@@ -2969,7 +2992,15 @@ impl<'a> Resolver<'a> {
                 (None, false)
             };
             if !candidates.is_empty() {
-                diagnostics::show_candidates(&mut err, span, &candidates, instead, found_use);
+                diagnostics::show_candidates(
+                    &self.definitions,
+                    self.session,
+                    &mut err,
+                    span,
+                    &candidates,
+                    instead,
+                    found_use,
+                );
             } else if let Some((span, msg, sugg, appl)) = suggestion {
                 err.span_suggestion(span, msg, sugg, appl);
             }
@@ -2991,7 +3022,7 @@ impl<'a> Resolver<'a> {
         }
 
         let container = match parent.kind {
-            ModuleKind::Def(kind, _, _) => kind.descr(parent.def_id().unwrap()),
+            ModuleKind::Def(kind, _, _) => kind.descr(parent.def_id()),
             ModuleKind::Block(..) => "block",
         };
 

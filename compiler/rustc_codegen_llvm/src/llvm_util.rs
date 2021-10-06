@@ -298,7 +298,7 @@ fn print_target_features(sess: &Session, tm: &llvm::TargetMachine) {
     for (feature, desc) in &target_features {
         println!("    {1:0$} - {2}.", max_feature_len, feature, desc);
     }
-    if target_features.len() == 0 {
+    if target_features.is_empty() {
         println!("    Target features listing is not supported by this LLVM version.");
     }
     println!("\nUse +feature to enable a feature, or -feature to disable it.");
@@ -415,6 +415,11 @@ pub fn llvm_global_features(sess: &Session) -> Vec<String> {
 
     // -Ctarget-features
     features.extend(sess.opts.cg.target_feature.split(',').flat_map(&filter));
+
+    // FIXME: Move outline-atomics to target definition when earliest supported LLVM is 12.
+    if get_version() >= (12, 0, 0) && sess.target.llvm_target.contains("aarch64-unknown-linux") {
+        features.push("+outline-atomics".to_string());
+    }
 
     features
 }

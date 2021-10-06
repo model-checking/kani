@@ -3,11 +3,9 @@
 use crate::arena::Arena;
 use crate::dep_graph::DepGraph;
 use crate::hir::place::Place as HirPlace;
-use crate::ich::{NodeIdHashingMode, StableHashingContext};
 use crate::infer::canonical::{Canonical, CanonicalVarInfo, CanonicalVarInfos};
 use crate::lint::{struct_lint_level, LintDiagnosticBuilder, LintLevelSource};
 use crate::middle;
-use crate::middle::cstore::EncodedMetadata;
 use crate::middle::resolve_lifetime::{self, LifetimeScopeForPath, ObjectLifetimeDefault};
 use crate::middle::stability;
 use crate::mir::interpret::{self, AllocId, Allocation, ConstValue, Scalar};
@@ -46,6 +44,7 @@ use rustc_hir::{
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_macros::HashStable;
 use rustc_middle::mir::FakeReadCause;
+use rustc_query_system::ich::{NodeIdHashingMode, StableHashingContext};
 use rustc_serialize::opaque::{FileEncodeResult, FileEncoder};
 use rustc_session::config::{BorrowckMode, CrateType, OutputFilenames};
 use rustc_session::lint::{Level, Lint};
@@ -1324,11 +1323,6 @@ impl<'tcx> TyCtxt<'tcx> {
         )
     }
 
-    pub fn encode_metadata(self) -> EncodedMetadata {
-        let _prof_timer = self.prof.verbose_generic_activity("generate_crate_metadata");
-        self.untracked_resolutions.cstore.encode_metadata(self)
-    }
-
     /// Note that this is *untracked* and should only be used within the query
     /// system if the result is otherwise tracked through queries
     pub fn cstore_untracked(self) -> &'tcx ty::CrateStoreDyn {
@@ -2123,7 +2117,7 @@ impl<'tcx> TyCtxt<'tcx> {
         })
     }
 
-    /// Computes the def-ids of the transitive super-traits of `trait_def_id`. This (intentionally)
+    /// Computes the def-ids of the transitive supertraits of `trait_def_id`. This (intentionally)
     /// does not compute the full elaborated super-predicates but just the set of def-ids. It is used
     /// to identify which traits may define a given associated type to help avoid cycle errors.
     /// Returns a `DefId` iterator.
@@ -2706,6 +2700,29 @@ impl<'tcx> TyCtxt<'tcx> {
 
     pub fn lifetime_scope(self, id: HirId) -> Option<LifetimeScopeForPath> {
         self.lifetime_scope_map(id.owner).and_then(|mut map| map.remove(&id.local_id))
+    }
+
+    /// Whether the `def_id` counts as const fn in the current crate, considering all active
+    /// feature gates
+    pub fn is_const_fn(self, def_id: DefId) -> bool {
+        if self.is_const_fn_raw(def_id) {
+            match self.lookup_const_stability(def_id) {
+                Some(stability) if stability.level.is_unstable() => {
+                    // has a `rustc_const_unstable` attribute, check whether the user enabled the
+                    // corresponding feature gate.
+                    self.features()
+                        .declared_lib_features
+                        .iter()
+                        .any(|&(sym, _)| sym == stability.feature)
+                }
+                // functions without const stability are either stable user written
+                // const fn or the user is using feature gates and we thus don't
+                // care what they do
+                _ => true,
+            }
+        } else {
+            false
+        }
     }
 }
 

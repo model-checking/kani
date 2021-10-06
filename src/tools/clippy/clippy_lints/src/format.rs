@@ -65,12 +65,12 @@ impl<'tcx> LateLintPass<'tcx> for UselessFormat {
             if_chain! {
                 if format_args.format_string_symbols == [kw::Empty];
                 if match cx.typeck_results().expr_ty(value).peel_refs().kind() {
-                    ty::Adt(adt, _) => cx.tcx.is_diagnostic_item(sym::string_type, adt.did),
+                    ty::Adt(adt, _) => cx.tcx.is_diagnostic_item(sym::String, adt.did),
                     ty::Str => true,
                     _ => false,
                 };
-                if format_args.args.iter().all(|e| is_display_arg(e));
-                if format_args.fmt_expr.map_or(true, |e| check_unformatted(e));
+                if format_args.args.iter().all(is_display_arg);
+                if format_args.fmt_expr.map_or(true, check_unformatted);
                 then {
                     let is_new_string = match value.kind {
                         ExprKind::Binary(..) => true,

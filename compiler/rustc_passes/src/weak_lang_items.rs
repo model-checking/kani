@@ -33,7 +33,7 @@ pub fn check_crate<'tcx>(tcx: TyCtxt<'tcx>, items: &mut lang_items::LanguageItem
 
     {
         let mut cx = Context { tcx, items };
-        tcx.hir().krate().visit_all_item_likes(&mut cx.as_deep_visitor());
+        tcx.hir().visit_all_item_likes(&mut cx.as_deep_visitor());
     }
     verify(tcx, items);
 }
@@ -66,8 +66,8 @@ fn verify<'tcx>(tcx: TyCtxt<'tcx>, items: &lang_items::LanguageItems) {
                 tcx.sess.err("`#[panic_handler]` function required, but not found");
             } else if item == LangItem::Oom {
                 if !tcx.features().default_alloc_error_handler {
-                    tcx.sess.err("`#[alloc_error_handler]` function required, but not found.");
-                    tcx.sess.note_without_error("Use `#![feature(default_alloc_error_handler)]` for a default error handler.");
+                    tcx.sess.err("`#[alloc_error_handler]` function required, but not found");
+                    tcx.sess.note_without_error("Use `#![feature(default_alloc_error_handler)]` for a default error handler");
                 }
             } else {
                 tcx.sess.err(&format!("language item required, but not found: `{}`", name));

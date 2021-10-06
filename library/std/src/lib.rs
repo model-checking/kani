@@ -297,6 +297,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(min_specialization)]
+#![cfg_attr(not(bootstrap), feature(must_not_suspend))]
 #![feature(needs_panic_runtime)]
 #![feature(negative_impls)]
 #![feature(never_type)]
@@ -330,7 +331,6 @@
 #![feature(total_cmp)]
 #![feature(trace_macros)]
 #![feature(try_blocks)]
-#![feature(try_reserve)]
 #![feature(try_reserve_kind)]
 #![feature(unboxed_closures)]
 #![feature(unwrap_infallible)]
@@ -520,19 +520,19 @@ pub mod task {
     pub use alloc::task::*;
 }
 
-// Platform-abstraction modules
+// The runtime entry point and a few unstable public functions used by the
+// compiler
 #[macro_use]
-mod sys_common;
+pub mod rt;
+
+// Platform-abstraction modules
 mod sys;
+mod sys_common;
 
 pub mod alloc;
 
 // Private support modules
 mod panicking;
-
-// The runtime entry point and a few unstable public functions used by the
-// compiler
-pub mod rt;
 
 #[path = "../../backtrace/src/lib.rs"]
 #[allow(dead_code, unused_attributes)]

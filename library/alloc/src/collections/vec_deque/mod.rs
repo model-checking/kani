@@ -88,7 +88,7 @@ const MAXIMUM_ZST_CAPACITY: usize = 1 << (usize::BITS - 1); // Largest possible 
 /// [`extend`]: VecDeque::extend
 /// [`append`]: VecDeque::append
 /// [`make_contiguous`]: VecDeque::make_contiguous
-#[cfg_attr(not(test), rustc_diagnostic_item = "vecdeque_type")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "VecDeque")]
 #[stable(feature = "rust1", since = "1.0.0")]
 #[rustc_insignificant_dtor]
 pub struct VecDeque<
@@ -711,7 +711,6 @@ impl<T, A: Allocator> VecDeque<T, A> {
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::TryReserveError;
     /// use std::collections::VecDeque;
     ///
@@ -730,7 +729,7 @@ impl<T, A: Allocator> VecDeque<T, A> {
     /// }
     /// # process_data(&[1, 2, 3]).expect("why is the test harness OOMing on 12 bytes?");
     /// ```
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.try_reserve(additional)
     }
@@ -749,7 +748,6 @@ impl<T, A: Allocator> VecDeque<T, A> {
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::TryReserveError;
     /// use std::collections::VecDeque;
     ///
@@ -768,7 +766,7 @@ impl<T, A: Allocator> VecDeque<T, A> {
     /// }
     /// # process_data(&[1, 2, 3]).expect("why is the test harness OOMing on 12 bytes?");
     /// ```
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         let old_cap = self.cap();
         let used_cap = self.len() + 1;
@@ -3004,6 +3002,16 @@ impl<T, const N: usize> From<[T; N]> for VecDeque<T> {
     /// assert_eq!(deq1, deq2);
     /// ```
     fn from(arr: [T; N]) -> Self {
-        core::array::IntoIter::new(arr).collect()
+        let mut deq = VecDeque::with_capacity(N);
+        let arr = ManuallyDrop::new(arr);
+        if mem::size_of::<T>() != 0 {
+            // SAFETY: VecDeque::with_capacity ensures that there is enough capacity.
+            unsafe {
+                ptr::copy_nonoverlapping(arr.as_ptr(), deq.ptr(), N);
+            }
+        }
+        deq.tail = 0;
+        deq.head = N;
+        deq
     }
 }

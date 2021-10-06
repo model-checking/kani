@@ -7,8 +7,8 @@ use crate::{PathResult, PathSource, Segment};
 
 use rustc_ast::visit::FnKind;
 use rustc_ast::{
-    self as ast, Expr, ExprKind, GenericParam, GenericParamKind, Item, ItemKind, NodeId, Path, Ty,
-    TyKind,
+    self as ast, AssocItemKind, Expr, ExprKind, GenericParam, GenericParamKind, Item, ItemKind,
+    NodeId, Path, Ty, TyKind,
 };
 use rustc_ast_pretty::pprust::path_segment_to_string;
 use rustc_data_structures::fx::FxHashSet;
@@ -1150,6 +1150,40 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
         true
     }
 
+    /// Given the target `ident` and `kind`, search for the similarly named associated item
+    /// in `self.current_trait_ref`.
+    crate fn find_similarly_named_assoc_item(
+        &mut self,
+        ident: Symbol,
+        kind: &AssocItemKind,
+    ) -> Option<Symbol> {
+        let module = if let Some((module, _)) = self.current_trait_ref {
+            module
+        } else {
+            return None;
+        };
+        if ident == kw::Underscore {
+            // We do nothing for `_`.
+            return None;
+        }
+
+        let resolutions = self.r.resolutions(module);
+        let targets = resolutions
+            .borrow()
+            .iter()
+            .filter_map(|(key, res)| res.borrow().binding.map(|binding| (key, binding.res())))
+            .filter(|(_, res)| match (kind, res) {
+                (AssocItemKind::Const(..), Res::Def(DefKind::AssocConst, _)) => true,
+                (AssocItemKind::Fn(_), Res::Def(DefKind::AssocFn, _)) => true,
+                (AssocItemKind::TyAlias(..), Res::Def(DefKind::AssocTy, _)) => true,
+                _ => false,
+            })
+            .map(|(key, _)| key.ident.name)
+            .collect::<Vec<_>>();
+
+        find_best_match_for_name(&targets, ident, None)
+    }
+
     fn lookup_assoc_candidate<FilterFn>(
         &mut self,
         ident: Ident,
@@ -1457,7 +1491,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                     // form the path
                     let mut path_segments = path_segments.clone();
                     path_segments.push(ast::PathSegment::from_ident(ident));
-                    let module_def_id = module.def_id().unwrap();
+                    let module_def_id = module.def_id();
                     if module_def_id == def_id {
                         let path =
                             Path { span: name_binding.span, segments: path_segments, tokens: None };
