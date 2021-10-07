@@ -944,6 +944,8 @@ dependencies = [
  "Inflector",
  "pulldown-cmark 0.8.0",
  "rustdoc",
+ "serde",
+ "serde_json",
  "walkdir",
 ]
 
