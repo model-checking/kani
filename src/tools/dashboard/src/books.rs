@@ -7,7 +7,7 @@ extern crate rustc_span;
 
 use crate::{
     dashboard,
-    litani::Litani,
+    litani::{Litani, LitaniPipeline, LitaniRun},
     util::{self, FailStep, TestProps},
 };
 use inflector::cases::{snakecase::to_snake_case, titlecase::to_title_case};
@@ -17,16 +17,15 @@ use rustdoc::{
     doctest::Tester,
     html::markdown::{ErrorCodes, Ignore, LangString},
 };
+use serde_json;
 use std::{
     collections::{HashMap, HashSet},
-    env,
     ffi::OsStr,
     fmt::Write,
     fs,
-    io::{BufRead, BufReader},
+    io::BufReader,
     iter::FromIterator,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 use walkdir::WalkDir;
 
@@ -356,35 +355,6 @@ fn paths_to_string(paths: HashSet<PathBuf>) -> String {
     f
 }
 
-/// Runs `compiletest` on the `suite` and logs the results to `log_path`.
-fn run_examples(suite: &str, log_path: &Path) {
-    // Before executing this program, `cargo` populates the environment with
-    // build configs. `x.py` respects those configs, causing a recompilation
-    // of `rustc`. This is not a desired behavior, so we remove those configs.
-    let filtered_env: HashMap<String, String> = env::vars()
-        .filter(|&(ref k, _)| {
-            !(k.contains("CARGO") || k.contains("LD_LIBRARY_PATH") || k.contains("RUST"))
-        })
-        .collect();
-    // Create the log's parent directory (if it does not exist).
-    fs::create_dir_all(log_path.parent().unwrap()).unwrap();
-    let mut cmd = Command::new([".", "x.py"].iter().collect::<PathBuf>());
-    cmd.args([
-        "test",
-        suite,
-        "-i",
-        "--stage",
-        "1",
-        "--test-args",
-        "--logfile",
-        "--test-args",
-        log_path.to_str().unwrap(),
-    ]);
-    cmd.env_clear().envs(filtered_env);
-    cmd.stdout(Stdio::null());
-    cmd.spawn().unwrap().wait().unwrap();
-}
-
 /// Creates a new [`Tree`] from `path`, and a test `result`.
 fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
     assert!(path.len() > 0, "Error: `path` must contain at least 1 element.");
@@ -405,42 +375,45 @@ fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
     tree
 }
 
-/// Parses and generates a dashboard from the log output of `compiletest` in
-/// `path`.
-fn parse_log(path: &Path) -> dashboard::Tree {
+/// Parses a `litani` run and generates a dashboard tree from it
+fn parse_litani_output(path: &Path) -> dashboard::Tree {
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
+    let run: LitaniRun = serde_json::from_reader(reader).unwrap();
     let mut tests =
         dashboard::Tree::new(dashboard::Node::new(String::from("dashboard"), 0, 0), vec![]);
-    for line in reader.lines() {
-        let (ns, l) = parse_log_line(&line.unwrap());
+    let pipelines = run.get_pipelines();
+    for pipeline in pipelines {
+        let (ns, l) = parse_log_line(&pipeline);
         tests = dashboard::Tree::merge(tests, tree_from_path(ns, l)).unwrap();
     }
     tests
 }
 
-/// Parses a line in the log output of `compiletest` and returns a pair containing
+/// Parses a `litani` pipeline and returns a pair containing
 /// the path to a test and its result.
-fn parse_log_line(line: &str) -> (Vec<String>, bool) {
-    // Each line has the format `<result> [rmc] <path>`. Extract <result> and
-    // <path>.
-    let splits: Vec<_> = line.split(" [rmc] ").map(String::from).collect();
-    let l = if splits[0].as_str() == "ok" { true } else { false };
-    let mut ns: Vec<_> = splits[1].split(&['/', '.'][..]).map(String::from).collect();
-    // Remove unnecessary `.rs` suffix.
+fn parse_log_line(pipeline: &LitaniPipeline) -> (Vec<String>, bool) {
+    let l = pipeline.get_status();
+    let name = pipeline.get_name();
+    let mut ns: Vec<String> = name.split(&['/', '.'][..]).map(String::from).collect();
+    // Remove unnecessary items from the path until "dashboard"
+    let dash_index = ns.iter().position(|item| item == "dashboard").unwrap();
+    ns.drain(..dash_index);
+    // Remove unnecessary "rs" suffix.
     ns.pop();
     (ns, l)
 }
 
-/// Display the dashboard in the terminal.
-fn display_terminal_dashboard(dashboard: dashboard::Tree) {
-    println!(
-        "# of tests: {}\t✔️ {}\t❌ {}",
+/// Format and write a text version of the dashboard
+fn generate_text_dashboard(dashboard: dashboard::Tree, path: &Path) {
+    let dashboard_str = format!(
+        "# of tests: {}\t✔️ {}\t❌ {}\n{}",
         dashboard.data.num_pass + dashboard.data.num_fail,
         dashboard.data.num_pass,
-        dashboard.data.num_fail
+        dashboard.data.num_fail,
+        dashboard
     );
-    println!("{}", dashboard);
+    fs::write(&path, dashboard_str).expect("Error: Unable to write dashboard results");
 }
 
 /// Runs examples using Litani build.
@@ -468,9 +441,9 @@ fn litani_run_tests() {
 /// Extracts examples from the Rust books, run them through RMC, and displays
 /// their results in a terminal dashboard.
 pub fn generate_dashboard() {
-    let build_dir = &env::var("BUILD_DIR").unwrap();
-    let triple = &env::var("TRIPLE").unwrap();
-    let log_path: PathBuf = [build_dir, triple, "dashboard", "log"].iter().collect();
+    let litani_log: PathBuf = ["build", "output", "latest", "run.json"].iter().collect();
+    let text_dash: PathBuf =
+        ["build", "output", "latest", "html", "dashboard.txt"].iter().collect();
     // Parse the chapter/section hierarchy for the books.
     let mut map = HashMap::new();
     map.extend(parse_reference_hierarchy());
@@ -480,13 +453,10 @@ pub fn generate_dashboard() {
     // Extract examples from the books, pre-process them, and save them
     // following the partial hierarchy in map.
     extract_examples(map);
-    // Pre-process the examples before running them through `compiletest`.
-    // Run `compiletest` on the examples.
-    run_examples("dashboard", &log_path);
-    // Parse `compiletest` log file.
-    let dashboard = parse_log(&log_path);
-    // Display the terminal dashboard.
-    display_terminal_dashboard(dashboard);
-    // Generate Litani's HTML dashboard.
+    // Generate Litani's HTML dashboard
     litani_run_tests();
+    // Parse Litani's output
+    let dashboard = parse_litani_output(&litani_log);
+    // Generate text dashboard
+    generate_text_dashboard(dashboard, &text_dash);
 }
