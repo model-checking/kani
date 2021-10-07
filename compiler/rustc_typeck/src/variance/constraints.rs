@@ -62,7 +62,7 @@ pub fn add_constraints_from_crate<'a, 'tcx>(
         constraints: Vec::new(),
     };
 
-    tcx.hir().krate().visit_all_item_likes(&mut constraint_cx);
+    tcx.hir().visit_all_item_likes(&mut constraint_cx);
 
     constraint_cx
 }
@@ -293,7 +293,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
                 self.add_constraints_from_invariant_substs(current, substs, variance);
             }
 
-            ty::Dynamic(ref data, r) => {
+            ty::Dynamic(data, r) => {
                 // The type `Foo<T+'a>` is contravariant w/r/t `'a`:
                 let contra = self.contravariant(variance);
                 self.add_constraints_from_region(current, r, contra);

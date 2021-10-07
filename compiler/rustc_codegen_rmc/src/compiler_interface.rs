@@ -11,13 +11,14 @@ use cbmc::goto_program::SymbolTable;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;
+use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
-use rustc_middle::middle::cstore::{EncodedMetadata, MetadataLoaderDyn};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
+use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
 use tracing::{debug, warn};
 

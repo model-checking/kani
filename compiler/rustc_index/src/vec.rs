@@ -3,9 +3,9 @@ use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::iter::{self, FromIterator};
+use std::iter::FromIterator;
 use std::marker::PhantomData;
-use std::ops::{Index, IndexMut, Range, RangeBounds};
+use std::ops::{Index, IndexMut, RangeBounds};
 use std::slice;
 use std::vec;
 
@@ -124,7 +124,9 @@ macro_rules! newtype_index {
 
             #[inline]
             $v const fn from_usize(value: usize) -> Self {
-                // FIXME: replace with `assert!(value <= ($max as usize));` once `const_panic` is stable
+                #[cfg(not(bootstrap))]
+                assert!(value <= ($max as usize));
+                #[cfg(bootstrap)]
                 [()][(value > ($max as usize)) as usize];
                 unsafe {
                     Self::from_u32_unchecked(value as u32)
@@ -133,7 +135,9 @@ macro_rules! newtype_index {
 
             #[inline]
             $v const fn from_u32(value: u32) -> Self {
-                // FIXME: replace with `assert!(value <= $max);` once `const_panic` is stable
+                #[cfg(not(bootstrap))]
+                assert!(value <= $max);
+                #[cfg(bootstrap)]
                 [()][(value > $max) as usize];
                 unsafe {
                     Self::from_u32_unchecked(value)
@@ -518,8 +522,6 @@ impl<I: Idx, T: fmt::Debug> fmt::Debug for IndexVec<I, T> {
     }
 }
 
-pub type Enumerated<I, J> = iter::Map<iter::Enumerate<J>, IntoIdx<I>>;
-
 impl<I: Idx, T> IndexVec<I, T> {
     #[inline]
     pub fn new() -> Self {
@@ -596,8 +598,10 @@ impl<I: Idx, T> IndexVec<I, T> {
     }
 
     #[inline]
-    pub fn into_iter_enumerated(self) -> Enumerated<I, vec::IntoIter<T>> {
-        self.raw.into_iter().enumerate().map(IntoIdx { _marker: PhantomData })
+    pub fn into_iter_enumerated(
+        self,
+    ) -> impl DoubleEndedIterator<Item = (I, T)> + ExactSizeIterator {
+        self.raw.into_iter().enumerate().map(|(n, t)| (I::new(n), t))
     }
 
     #[inline]
@@ -606,13 +610,15 @@ impl<I: Idx, T> IndexVec<I, T> {
     }
 
     #[inline]
-    pub fn iter_enumerated(&self) -> Enumerated<I, slice::Iter<'_, T>> {
-        self.raw.iter().enumerate().map(IntoIdx { _marker: PhantomData })
+    pub fn iter_enumerated(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (I, &T)> + ExactSizeIterator + '_ {
+        self.raw.iter().enumerate().map(|(n, t)| (I::new(n), t))
     }
 
     #[inline]
-    pub fn indices(&self) -> iter::Map<Range<usize>, IntoIdx<I>> {
-        (0..self.len()).map(IntoIdx { _marker: PhantomData })
+    pub fn indices(&self) -> impl DoubleEndedIterator<Item = I> + ExactSizeIterator + 'static {
+        (0..self.len()).map(|n| I::new(n))
     }
 
     #[inline]
@@ -621,8 +627,10 @@ impl<I: Idx, T> IndexVec<I, T> {
     }
 
     #[inline]
-    pub fn iter_enumerated_mut(&mut self) -> Enumerated<I, slice::IterMut<'_, T>> {
-        self.raw.iter_mut().enumerate().map(IntoIdx { _marker: PhantomData })
+    pub fn iter_enumerated_mut(
+        &mut self,
+    ) -> impl DoubleEndedIterator<Item = (I, &mut T)> + ExactSizeIterator + '_ {
+        self.raw.iter_mut().enumerate().map(|(n, t)| (I::new(n), t))
     }
 
     #[inline]
@@ -638,7 +646,7 @@ impl<I: Idx, T> IndexVec<I, T> {
         &'a mut self,
         range: R,
     ) -> impl Iterator<Item = (I, T)> + 'a {
-        self.raw.drain(range).enumerate().map(IntoIdx { _marker: PhantomData })
+        self.raw.drain(range).enumerate().map(|(n, t)| (I::new(n), t))
     }
 
     #[inline]
@@ -829,37 +837,6 @@ impl<'a, I: Idx, T> IntoIterator for &'a mut IndexVec<I, T> {
     #[inline]
     fn into_iter(self) -> slice::IterMut<'a, T> {
         self.raw.iter_mut()
-    }
-}
-
-pub struct IntoIdx<I: Idx> {
-    _marker: PhantomData<fn(&I)>,
-}
-impl<I: Idx, T> FnOnce<((usize, T),)> for IntoIdx<I> {
-    type Output = (I, T);
-
-    extern "rust-call" fn call_once(self, ((n, t),): ((usize, T),)) -> Self::Output {
-        (I::new(n), t)
-    }
-}
-
-impl<I: Idx, T> FnMut<((usize, T),)> for IntoIdx<I> {
-    extern "rust-call" fn call_mut(&mut self, ((n, t),): ((usize, T),)) -> Self::Output {
-        (I::new(n), t)
-    }
-}
-
-impl<I: Idx> FnOnce<(usize,)> for IntoIdx<I> {
-    type Output = I;
-
-    extern "rust-call" fn call_once(self, (n,): (usize,)) -> Self::Output {
-        I::new(n)
-    }
-}
-
-impl<I: Idx> FnMut<(usize,)> for IntoIdx<I> {
-    extern "rust-call" fn call_mut(&mut self, (n,): (usize,)) -> Self::Output {
-        I::new(n)
     }
 }
 

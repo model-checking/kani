@@ -230,8 +230,7 @@ impl ExternalCrate {
         };
         if root.is_local() {
             tcx.hir()
-                .krate()
-                .module()
+                .root_module()
                 .item_ids
                 .iter()
                 .filter_map(|&id| {
@@ -297,8 +296,7 @@ impl ExternalCrate {
 
         if root.is_local() {
             tcx.hir()
-                .krate()
-                .module()
+                .root_module()
                 .item_ids
                 .iter()
                 .filter_map(|&id| {
@@ -1396,7 +1394,6 @@ crate enum Type {
     Slice(Box<Type>),
     /// The `String` field is about the size or the constant representing the array's length.
     Array(Box<Type>, String),
-    Never,
     RawPointer(Mutability, Box<Type>),
     BorrowedRef {
         lifetime: Option<Lifetime>,
@@ -1462,7 +1459,6 @@ impl Type {
             }
             RawPointer(..) => Some(PrimitiveType::RawPointer),
             BareFunction(..) => Some(PrimitiveType::Fn),
-            Never => Some(PrimitiveType::Never),
             _ => None,
         }
     }
@@ -1550,7 +1546,6 @@ impl Type {
                 }
             }
             BareFunction(..) => PrimitiveType::Fn,
-            Never => PrimitiveType::Never,
             Slice(..) => PrimitiveType::Slice,
             Array(..) => PrimitiveType::Array,
             RawPointer(..) => PrimitiveType::RawPointer,

@@ -11,7 +11,7 @@ crate mod utils;
 
 use rustc_ast as ast;
 use rustc_attr as attr;
-use rustc_const_eval::const_eval::{is_const_fn, is_unstable_const_fn};
+use rustc_const_eval::const_eval::is_unstable_const_fn;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, DefKind, Res};
@@ -787,7 +787,7 @@ fn clean_fn_or_proc_macro(
             let mut func = (sig, generics, body_id).clean(cx);
             let def_id = item.def_id.to_def_id();
             func.header.constness =
-                if is_const_fn(cx.tcx, def_id) && is_unstable_const_fn(cx.tcx, def_id).is_none() {
+                if cx.tcx.is_const_fn(def_id) && is_unstable_const_fn(cx.tcx, def_id).is_none() {
                     hir::Constness::Const
                 } else {
                     hir::Constness::NotConst
@@ -1313,7 +1313,7 @@ impl Clean<Type> for hir::Ty<'_> {
         use rustc_hir::*;
 
         match self.kind {
-            TyKind::Never => Never,
+            TyKind::Never => Primitive(PrimitiveType::Never),
             TyKind::Ptr(ref m) => RawPointer(m.mutbl, box m.ty.clean(cx)),
             TyKind::Rptr(ref l, ref m) => {
                 // There are two times a `Fresh` lifetime can be created:
@@ -1402,7 +1402,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
         trace!("cleaning type: {:?}", self);
         let ty = normalize(cx, self).unwrap_or(self);
         match *ty.kind() {
-            ty::Never => Never,
+            ty::Never => Primitive(PrimitiveType::Never),
             ty::Bool => Primitive(PrimitiveType::Bool),
             ty::Char => Primitive(PrimitiveType::Char),
             ty::Int(int_ty) => Primitive(int_ty.into()),

@@ -289,7 +289,7 @@ use crate::vec::Vec;
 /// [`Deref`]: core::ops::Deref "ops::Deref"
 /// [`as_str()`]: String::as_str
 #[derive(PartialOrd, Eq, Ord)]
-#[cfg_attr(not(test), rustc_diagnostic_item = "string_type")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "String")]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct String {
     vec: Vec<u8>,
@@ -1009,7 +1009,6 @@ impl String {
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::TryReserveError;
     ///
     /// fn process_data(data: &str) -> Result<String, TryReserveError> {
@@ -1025,7 +1024,7 @@ impl String {
     /// }
     /// # process_data("rust").expect("why is the test harness OOMing on 4 bytes?");
     /// ```
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.vec.try_reserve(additional)
     }
@@ -1049,7 +1048,6 @@ impl String {
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::TryReserveError;
     ///
     /// fn process_data(data: &str) -> Result<String, TryReserveError> {
@@ -1065,7 +1063,7 @@ impl String {
     /// }
     /// # process_data("rust").expect("why is the test harness OOMing on 4 bytes?");
     /// ```
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.vec.try_reserve_exact(additional)
     }

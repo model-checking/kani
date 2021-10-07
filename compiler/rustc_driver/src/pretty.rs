@@ -88,7 +88,7 @@ trait PrinterSupport: pprust::PpAnn {
     /// Produces the pretty-print annotation object.
     ///
     /// (Rust does not yet support upcasting from a trait object to
-    /// an object for one of its super-traits.)
+    /// an object for one of its supertraits.)
     fn pp_ann(&self) -> &dyn pprust::PpAnn;
 }
 
@@ -104,7 +104,7 @@ trait HirPrinterSupport<'hir>: pprust_hir::PpAnn {
     /// Produces the pretty-print annotation object.
     ///
     /// (Rust does not yet support upcasting from a trait object to
-    /// an object for one of its super-traits.)
+    /// an object for one of its supertraits.)
     fn pp_ann(&self) -> &dyn pprust_hir::PpAnn;
 }
 
@@ -296,7 +296,7 @@ struct TypedAnnotation<'tcx> {
 
 impl<'tcx> HirPrinterSupport<'tcx> for TypedAnnotation<'tcx> {
     fn sess(&self) -> &Session {
-        &self.tcx.sess
+        self.tcx.sess
     }
 
     fn hir_map(&self) -> Option<hir_map::Map<'tcx>> {
@@ -347,8 +347,7 @@ impl<'tcx> pprust_hir::PpAnn for TypedAnnotation<'tcx> {
 fn get_source(input: &Input, sess: &Session) -> (String, FileName) {
     let src_name = input.source_name();
     let src = String::clone(
-        &sess
-            .source_map()
+        sess.source_map()
             .get_source_file(&src_name)
             .expect("get_source_file")
             .src
@@ -489,7 +488,7 @@ fn print_with_analysis(
             let mut out = String::new();
             abort_on_err(rustc_typeck::check_crate(tcx), tcx.sess);
             debug!("pretty printing THIR tree");
-            for did in tcx.body_owners() {
+            for did in tcx.hir().body_owners() {
                 let _ = writeln!(
                     out,
                     "{:?}:\n{}\n",

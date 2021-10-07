@@ -112,6 +112,21 @@ where
         self.iter.fold(init, enumerate(self.count, fold))
     }
 
+    #[inline]
+    #[rustc_inherit_overflow_checks]
+    fn advance_by(&mut self, n: usize) -> Result<(), usize> {
+        match self.iter.advance_by(n) {
+            ret @ Ok(_) => {
+                self.count += n;
+                ret
+            }
+            ret @ Err(advanced) => {
+                self.count += advanced;
+                ret
+            }
+        }
+    }
+
     #[rustc_inherit_overflow_checks]
     #[doc(hidden)]
     unsafe fn __iterator_get_unchecked(&mut self, idx: usize) -> <Self as Iterator>::Item
@@ -191,6 +206,13 @@ where
         let count = self.count + self.iter.len();
         self.iter.rfold(init, enumerate(count, fold))
     }
+
+    #[inline]
+    fn advance_back_by(&mut self, n: usize) -> Result<(), usize> {
+        // we do not need to update the count since that only tallies the number of items
+        // consumed from the front. consuming items from the back can never reduce that.
+        self.iter.advance_back_by(n)
+    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -227,14 +249,14 @@ impl<I> FusedIterator for Enumerate<I> where I: FusedIterator {}
 unsafe impl<I> TrustedLen for Enumerate<I> where I: TrustedLen {}
 
 #[unstable(issue = "none", feature = "inplace_iteration")]
-unsafe impl<S: Iterator, I: Iterator> SourceIter for Enumerate<I>
+unsafe impl<I> SourceIter for Enumerate<I>
 where
-    I: SourceIter<Source = S>,
+    I: SourceIter,
 {
-    type Source = S;
+    type Source = I::Source;
 
     #[inline]
-    unsafe fn as_inner(&mut self) -> &mut S {
+    unsafe fn as_inner(&mut self) -> &mut I::Source {
         // SAFETY: unsafe function forwarding to unsafe function with the same requirements
         unsafe { SourceIter::as_inner(&mut self.iter) }
     }

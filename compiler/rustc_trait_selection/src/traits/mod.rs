@@ -64,7 +64,9 @@ pub use self::specialize::specialization_graph::FutureCompatOverlapErrorKind;
 pub use self::specialize::{specialization_graph, translate_substs, OverlapError};
 pub use self::structural_match::search_for_structural_match_violation;
 pub use self::structural_match::NonStructuralMatchTy;
-pub use self::util::{elaborate_predicates, elaborate_trait_ref, elaborate_trait_refs};
+pub use self::util::{
+    elaborate_obligations, elaborate_predicates, elaborate_trait_ref, elaborate_trait_refs,
+};
 pub use self::util::{expand_trait_aliases, TraitAliasExpander};
 pub use self::util::{
     get_vtable_index_of_object_method, impl_item_is_final, predicate_for_trait_def, upcast_choices,
@@ -623,7 +625,7 @@ fn dump_vtable_entries<'tcx>(
     trait_ref: ty::PolyTraitRef<'tcx>,
     entries: &[VtblEntry<'tcx>],
 ) {
-    let msg = format!("Vtable entries for `{}`: {:#?}", trait_ref, entries);
+    let msg = format!("vtable entries for `{}`: {:#?}", trait_ref, entries);
     tcx.sess.struct_span_err(sp, &msg).emit();
 }
 

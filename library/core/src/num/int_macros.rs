@@ -543,7 +543,8 @@ macro_rules! int_impl {
                       without modifying the original"]
         #[inline]
         pub const fn checked_div(self, rhs: Self) -> Option<Self> {
-            if unlikely!(rhs == 0 || (self == Self::MIN && rhs == -1)) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!(rhs == 0 || ((self == Self::MIN) & (rhs == -1))) {
                 None
             } else {
                 // SAFETY: div by zero and by INT_MIN have been checked above
@@ -569,7 +570,8 @@ macro_rules! int_impl {
                       without modifying the original"]
         #[inline]
         pub const fn checked_div_euclid(self, rhs: Self) -> Option<Self> {
-            if unlikely!(rhs == 0 || (self == Self::MIN && rhs == -1)) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!(rhs == 0 || ((self == Self::MIN) & (rhs == -1))) {
                 None
             } else {
                 Some(self.div_euclid(rhs))
@@ -595,7 +597,8 @@ macro_rules! int_impl {
                       without modifying the original"]
         #[inline]
         pub const fn checked_rem(self, rhs: Self) -> Option<Self> {
-            if unlikely!(rhs == 0 || (self == Self::MIN && rhs == -1)) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!(rhs == 0 || ((self == Self::MIN) & (rhs == -1))) {
                 None
             } else {
                 // SAFETY: div by zero and by INT_MIN have been checked above
@@ -621,7 +624,8 @@ macro_rules! int_impl {
                       without modifying the original"]
         #[inline]
         pub const fn checked_rem_euclid(self, rhs: Self) -> Option<Self> {
-            if unlikely!(rhs == 0 || (self == Self::MIN && rhs == -1)) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!(rhs == 0 || ((self == Self::MIN) & (rhs == -1))) {
                 None
             } else {
                 Some(self.rem_euclid(rhs))
@@ -1466,7 +1470,8 @@ macro_rules! int_impl {
         #[must_use = "this returns the result of the operation, \
                       without modifying the original"]
         pub const fn overflowing_div(self, rhs: Self) -> (Self, bool) {
-            if unlikely!(self == Self::MIN && rhs == -1) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!((self == Self::MIN) & (rhs == -1)) {
                 (self, true)
             } else {
                 (self / rhs, false)
@@ -1496,7 +1501,8 @@ macro_rules! int_impl {
         #[must_use = "this returns the result of the operation, \
                       without modifying the original"]
         pub const fn overflowing_div_euclid(self, rhs: Self) -> (Self, bool) {
-            if unlikely!(self == Self::MIN && rhs == -1) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!((self == Self::MIN) & (rhs == -1)) {
                 (self, true)
             } else {
                 (self.div_euclid(rhs), false)
@@ -1527,7 +1533,8 @@ macro_rules! int_impl {
         #[must_use = "this returns the result of the operation, \
                       without modifying the original"]
         pub const fn overflowing_rem(self, rhs: Self) -> (Self, bool) {
-            if unlikely!(self == Self::MIN && rhs == -1) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!((self == Self::MIN) & (rhs == -1)) {
                 (0, true)
             } else {
                 (self % rhs, false)
@@ -1558,7 +1565,8 @@ macro_rules! int_impl {
                       without modifying the original"]
         #[inline]
         pub const fn overflowing_rem_euclid(self, rhs: Self) -> (Self, bool) {
-            if unlikely!(self == Self::MIN && rhs == -1) {
+            // Using `&` helps LLVM see that it is the same check made in division.
+            if unlikely!((self == Self::MIN) & (rhs == -1)) {
                 (0, true)
             } else {
                 (self.rem_euclid(rhs), false)
@@ -2224,6 +2232,46 @@ macro_rules! int_impl {
                 -self
             } else {
                 self
+            }
+        }
+
+        /// Computes the absolute difference between `self` and `other`.
+        ///
+        /// This function always returns the correct answer without overflow or
+        /// panics by returning an unsigned integer.
+        ///
+        /// # Examples
+        ///
+        /// Basic usage:
+        ///
+        /// ```
+        /// #![feature(int_abs_diff)]
+        #[doc = concat!("assert_eq!(100", stringify!($SelfT), ".abs_diff(80), 20", stringify!($UnsignedT), ");")]
+        #[doc = concat!("assert_eq!(100", stringify!($SelfT), ".abs_diff(110), 10", stringify!($UnsignedT), ");")]
+        #[doc = concat!("assert_eq!((-100", stringify!($SelfT), ").abs_diff(80), 180", stringify!($UnsignedT), ");")]
+        #[doc = concat!("assert_eq!((-100", stringify!($SelfT), ").abs_diff(-120), 20", stringify!($UnsignedT), ");")]
+        #[doc = concat!("assert_eq!(", stringify!($SelfT), "::MIN.abs_diff(", stringify!($SelfT), "::MAX), ", stringify!($UnsignedT), "::MAX);")]
+        /// ```
+        #[unstable(feature = "int_abs_diff", issue = "89492")]
+        #[inline]
+        pub const fn abs_diff(self, other: Self) -> $UnsignedT {
+            if self < other {
+                // Converting a non-negative x from signed to unsigned by using
+                // `x as U` is left unchanged, but a negative x is converted
+                // to value x + 2^N. Thus if `s` and `o` are binary variables
+                // respectively indicating whether `self` and `other` are
+                // negative, we are computing the mathematical value:
+                //
+                //    (other + o*2^N) - (self + s*2^N)    mod  2^N
+                //    other - self + (o-s)*2^N            mod  2^N
+                //    other - self                        mod  2^N
+                //
+                // Finally, taking the mod 2^N of the mathematical value of
+                // `other - self` does not change it as it already is
+                // in the range [0, 2^N).
+                (other as $UnsignedT).wrapping_sub(self as $UnsignedT)
+            } else {
+                (self as $UnsignedT).wrapping_sub(other as $UnsignedT)
             }
         }
 

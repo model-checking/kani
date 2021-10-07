@@ -270,9 +270,10 @@ pub struct ArgumentV1<'a> {
 /// of `format_args!(..)` and reduce the scope of the `unsafe` block.
 #[allow(missing_debug_implementations)]
 #[doc(hidden)]
-#[non_exhaustive]
 #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
-pub struct UnsafeArg;
+pub struct UnsafeArg {
+    _private: (),
+}
 
 impl UnsafeArg {
     /// See documentation where `UnsafeArg` is required to know when it is safe to
@@ -281,7 +282,7 @@ impl UnsafeArg {
     #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
     #[inline(always)]
     pub unsafe fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 }
 
@@ -616,7 +617,7 @@ impl Display for Arguments<'_> {
     label = "`{Self}` cannot be formatted using `{{:?}}` because it doesn't implement `{Debug}`"
 )]
 #[doc(alias = "{:?}")]
-#[rustc_diagnostic_item = "debug_trait"]
+#[rustc_diagnostic_item = "Debug"]
 #[cfg_attr(not(bootstrap), rustc_trivial_field_reads)]
 pub trait Debug {
     /// Formats the value using the given formatter.
@@ -709,7 +710,7 @@ pub use macros::Debug;
     note = "in format strings you may be able to use `{{:?}}` (or {{:#?}} for pretty-print) instead"
 )]
 #[doc(alias = "{}")]
-#[rustc_diagnostic_item = "display_trait"]
+#[rustc_diagnostic_item = "Display"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub trait Display {
     /// Formats the value using the given formatter.
@@ -1002,7 +1003,7 @@ pub trait UpperHex {
 /// assert_eq!(&l_ptr[..2], "0x");
 /// ```
 #[stable(feature = "rust1", since = "1.0.0")]
-#[rustc_diagnostic_item = "pointer_trait"]
+#[rustc_diagnostic_item = "Pointer"]
 pub trait Pointer {
     /// Formats the value using the given formatter.
     #[stable(feature = "rust1", since = "1.0.0")]

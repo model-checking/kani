@@ -3,10 +3,10 @@ use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorReported, Handler};
 use rustc_fs_util::fix_windows_verbatim_for_gcc;
 use rustc_hir::def_id::CrateNum;
-use rustc_middle::middle::cstore::DllImport;
 use rustc_middle::middle::dependency_format::Linkage;
 use rustc_session::config::{self, CFGuard, CrateType, DebugInfo, LdImpl, Strip};
 use rustc_session::config::{OutputFilenames, OutputType, PrintRequest};
+use rustc_session::cstore::DllImport;
 use rustc_session::output::{check_file_is_writeable, invalid_output_for_target, out_filename};
 use rustc_session::search_paths::PathKind;
 use rustc_session::utils::NativeLibKind;
@@ -327,7 +327,7 @@ fn link_rlib<'a, B: ArchiveBuilder<'a>>(
             // metadata in rlib files is wrapped in a "dummy" object file for
             // the target platform so the rlib can be processed entirely by
             // normal linkers for the platform.
-            let metadata = create_metadata_file(sess, &codegen_results.metadata.raw_data);
+            let metadata = create_metadata_file(sess, codegen_results.metadata.raw_data());
             ab.add_file(&emit_metadata(sess, &metadata, tmpdir));
 
             // After adding all files to the archive, we need to update the
@@ -1490,9 +1490,13 @@ fn exec_linker(
 fn link_output_kind(sess: &Session, crate_type: CrateType) -> LinkOutputKind {
     let kind = match (crate_type, sess.crt_static(Some(crate_type)), sess.relocation_model()) {
         (CrateType::Executable, _, _) if sess.is_wasi_reactor() => LinkOutputKind::WasiReactorExe,
-        (CrateType::Executable, false, RelocModel::Pic) => LinkOutputKind::DynamicPicExe,
+        (CrateType::Executable, false, RelocModel::Pic | RelocModel::Pie) => {
+            LinkOutputKind::DynamicPicExe
+        }
         (CrateType::Executable, false, _) => LinkOutputKind::DynamicNoPicExe,
-        (CrateType::Executable, true, RelocModel::Pic) => LinkOutputKind::StaticPicExe,
+        (CrateType::Executable, true, RelocModel::Pic | RelocModel::Pie) => {
+            LinkOutputKind::StaticPicExe
+        }
         (CrateType::Executable, true, _) => LinkOutputKind::StaticNoPicExe,
         (_, true, _) => LinkOutputKind::StaticDylib,
         (_, false, _) => LinkOutputKind::DynamicDylib,
