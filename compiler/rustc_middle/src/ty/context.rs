@@ -8,7 +8,7 @@ use crate::lint::{struct_lint_level, LintDiagnosticBuilder, LintLevelSource};
 use crate::middle;
 use crate::middle::resolve_lifetime::{self, LifetimeScopeForPath, ObjectLifetimeDefault};
 use crate::middle::stability;
-use crate::mir::interpret::{self, AllocId, Allocation, ConstValue, Scalar};
+use crate::mir::interpret::{self, Allocation, ConstValue, Scalar};
 use crate::mir::{Body, Field, Local, Place, PlaceElem, ProjectionKind, Promoted};
 use crate::thir::Thir;
 use crate::traits;
@@ -1047,10 +1047,6 @@ pub struct GlobalCtxt<'tcx> {
     pub(crate) alloc_map: Lock<interpret::AllocMap<'tcx>>,
 
     output_filenames: Arc<OutputFilenames>,
-
-    // FIXME(eddyb) this doesn't belong here and should be using a query.
-    pub(super) vtables_cache:
-        Lock<FxHashMap<(Ty<'tcx>, Option<ty::PolyExistentialTraitRef<'tcx>>), AllocId>>,
 }
 
 impl<'tcx> TyCtxt<'tcx> {
@@ -1189,7 +1185,6 @@ impl<'tcx> TyCtxt<'tcx> {
             const_stability_interner: Default::default(),
             alloc_map: Lock::new(interpret::AllocMap::new()),
             output_filenames: Arc::new(output_filenames),
-            vtables_cache: Default::default(),
         }
     }
 
@@ -1232,12 +1227,17 @@ impl<'tcx> TyCtxt<'tcx> {
     /// Obtain the given diagnostic item's `DefId`. Use `is_diagnostic_item` if you just want to
     /// compare against another `DefId`, since `is_diagnostic_item` is cheaper.
     pub fn get_diagnostic_item(self, name: Symbol) -> Option<DefId> {
-        self.all_diagnostic_items(()).get(&name).copied()
+        self.all_diagnostic_items(()).name_to_id.get(&name).copied()
+    }
+
+    /// Obtain the diagnostic item's name
+    pub fn get_diagnostic_name(self, id: DefId) -> Option<Symbol> {
+        self.diagnostic_items(id.krate).id_to_name.get(&id).copied()
     }
 
     /// Check whether the diagnostic item with the given `name` has the given `DefId`.
     pub fn is_diagnostic_item(self, name: Symbol, did: DefId) -> bool {
-        self.diagnostic_items(did.krate).get(&name) == Some(&did)
+        self.diagnostic_items(did.krate).name_to_id.get(&name) == Some(&did)
     }
 
     pub fn stability(self) -> &'tcx stability::Index<'tcx> {

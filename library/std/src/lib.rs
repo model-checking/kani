@@ -195,6 +195,7 @@
     test(no_crate_inject, attr(deny(warnings))),
     test(attr(allow(dead_code, deprecated, unused_variables, unused_mut)))
 )]
+#![cfg_attr(not(bootstrap), doc(cfg_hide(not(test), not(any(test, bootstrap)))))]
 // Don't link to std. We are std.
 #![no_std]
 #![warn(deprecated_in_future)]
@@ -263,6 +264,7 @@
 #![feature(custom_test_frameworks)]
 #![feature(decl_macro)]
 #![feature(doc_cfg)]
+#![cfg_attr(not(bootstrap), feature(doc_cfg_hide))]
 #![feature(doc_keyword)]
 #![feature(doc_masked)]
 #![feature(doc_notable_trait)]
@@ -297,6 +299,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(min_specialization)]
+#![feature(mixed_integer_ops)]
 #![cfg_attr(not(bootstrap), feature(must_not_suspend))]
 #![feature(needs_panic_runtime)]
 #![feature(negative_impls)]

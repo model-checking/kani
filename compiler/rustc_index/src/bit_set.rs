@@ -841,7 +841,7 @@ impl<T: Idx> GrowableBitSet<T> {
     #[inline]
     pub fn contains(&self, elem: T) -> bool {
         let (word_index, mask) = word_index_and_mask(elem);
-        if let Some(word) = self.bit_set.words.get(word_index) { (word & mask) != 0 } else { false }
+        self.bit_set.words.get(word_index).map_or(false, |word| (word & mask) != 0)
     }
 }
 
@@ -990,9 +990,8 @@ impl<R: Idx, C: Idx> BitMatrix<R, C> {
     pub fn insert_all_into_row(&mut self, row: R) {
         assert!(row.index() < self.num_rows);
         let (start, end) = self.range(row);
-        let words = &mut self.words[..];
-        for index in start..end {
-            words[index] = !0;
+        for word in self.words[start..end].iter_mut() {
+            *word = !0;
         }
         self.clear_excess_bits(row);
     }
@@ -1144,7 +1143,7 @@ impl<R: Idx, C: Idx> SparseBitMatrix<R, C> {
 
     /// Iterates through all the columns set to true in a given row of
     /// the matrix.
-    pub fn iter<'a>(&'a self, row: R) -> impl Iterator<Item = C> + 'a {
+    pub fn iter(&self, row: R) -> impl Iterator<Item = C> + '_ {
         self.row(row).into_iter().flat_map(|r| r.iter())
     }
 

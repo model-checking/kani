@@ -18,6 +18,7 @@ use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, CtorOf, DefKind, Res};
 use rustc_hir::def_id::{CrateNum, DefId, DefIndex, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::definitions::{DefKey, DefPath, DefPathData, DefPathHash};
+use rustc_hir::diagnostic_items::DiagnosticItems;
 use rustc_hir::lang_items;
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_middle::hir::exports::Export;
@@ -1052,16 +1053,23 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
     }
 
     /// Iterates over the diagnostic items in the given crate.
-    fn get_diagnostic_items(&self) -> FxHashMap<Symbol, DefId> {
+    fn get_diagnostic_items(&self) -> DiagnosticItems {
         if self.root.is_proc_macro_crate() {
             // Proc macro crates do not export any diagnostic-items to the target.
             Default::default()
         } else {
-            self.root
+            let mut id_to_name = FxHashMap::default();
+            let name_to_id = self
+                .root
                 .diagnostic_items
                 .decode(self)
-                .map(|(name, def_index)| (name, self.local_def_id(def_index)))
-                .collect()
+                .map(|(name, def_index)| {
+                    let id = self.local_def_id(def_index);
+                    id_to_name.insert(id, name);
+                    (name, id)
+                })
+                .collect();
+            DiagnosticItems { id_to_name, name_to_id }
         }
     }
 
@@ -1624,7 +1632,7 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
         self.def_path_hash_map.def_path_hash_to_def_index(&hash)
     }
 
-    fn expn_hash_to_expn_id(&self, index_guess: u32, hash: ExpnHash) -> ExpnId {
+    fn expn_hash_to_expn_id(&self, sess: &Session, index_guess: u32, hash: ExpnHash) -> ExpnId {
         debug_assert_eq!(ExpnId::from_hash(hash), None);
         let index_guess = ExpnIndex::from_u32(index_guess);
         let old_hash = self.root.expn_hashes.get(self, index_guess).map(|lazy| lazy.decode(self));
@@ -1646,8 +1654,6 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
                     let i = ExpnIndex::from_u32(i);
                     if let Some(hash) = self.root.expn_hashes.get(self, i) {
                         map.insert(hash.decode(self), i);
-                    } else {
-                        panic!("Missing expn_hash entry for {:?}", i);
                     }
                 }
                 map
@@ -1655,7 +1661,7 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
             map[&hash]
         };
 
-        let data = self.root.expn_data.get(self, index).unwrap().decode(self);
+        let data = self.root.expn_data.get(self, index).unwrap().decode((self, sess));
         rustc_span::hygiene::register_expn_id(self.cnum, index, data, hash)
     }
 

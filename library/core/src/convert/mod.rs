@@ -273,6 +273,7 @@ pub trait AsMut<T: ?Sized> {
 #[stable(feature = "rust1", since = "1.0.0")]
 pub trait Into<T>: Sized {
     /// Performs the conversion.
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn into(self) -> T;
 }
@@ -367,6 +368,7 @@ pub trait Into<T>: Sized {
 pub trait From<T>: Sized {
     /// Performs the conversion.
     #[lang = "from"]
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn from(_: T) -> Self;
 }
@@ -662,7 +664,7 @@ impl AsMut<str> for str {
 ///
 /// However there is one case where `!` syntax can be used
 /// before `!` is stabilized as a full-fledged type: in the position of a function’s return type.
-/// Specifically, it is possible implementations for two different function pointer types:
+/// Specifically, it is possible to have implementations for two different function pointer types:
 ///
 /// ```
 /// trait MyTrait {}

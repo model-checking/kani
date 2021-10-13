@@ -363,7 +363,7 @@ impl Collector<'tcx> {
                 .collect::<Vec<_>>();
             if existing.is_empty() {
                 // Add if not found
-                let new_name = passed_lib.new_name.as_ref().map(|s| &**s); // &Option<String> -> Option<&str>
+                let new_name: Option<&str> = passed_lib.new_name.as_deref();
                 let lib = NativeLib {
                     name: Some(Symbol::intern(new_name.unwrap_or(&passed_lib.name))),
                     kind: passed_lib.kind,
@@ -433,6 +433,12 @@ impl Collector<'tcx> {
                 }
             }
         };
-        DllImport { name: item.ident.name, ordinal: None, calling_convention, span: item.span }
+
+        DllImport {
+            name: item.ident.name,
+            ordinal: self.tcx.codegen_fn_attrs(item.id.def_id).link_ordinal,
+            calling_convention,
+            span: item.span,
+        }
     }
 }

@@ -843,19 +843,18 @@ fn link_natively<'a, B: ArchiveBuilder<'a>>(
         let msg_bus = "clang: error: unable to execute command: Bus error: 10";
         if out.contains(msg_segv) || out.contains(msg_bus) {
             warn!(
+                ?cmd, %out,
                 "looks like the linker segfaulted when we tried to call it, \
-                 automatically retrying again. cmd = {:?}, out = {}.",
-                cmd, out,
+                 automatically retrying again",
             );
             continue;
         }
 
         if is_illegal_instruction(&output.status) {
             warn!(
+                ?cmd, %out, status = %output.status,
                 "looks like the linker hit an illegal instruction when we \
-                 tried to call it, automatically retrying again. cmd = {:?}, ]\
-                 out = {}, status = {}.",
-                cmd, out, output.status,
+                 tried to call it, automatically retrying again.",
             );
             continue;
         }
@@ -1024,14 +1023,20 @@ fn link_natively<'a, B: ArchiveBuilder<'a>>(
     }
 
     if sess.target.is_like_osx {
-        if let Some(option) = osx_strip_opt(sess.opts.debugging_opts.strip) {
-            strip_symbols_in_osx(sess, &out_filename, option);
+        match sess.opts.debugging_opts.strip {
+            Strip::Debuginfo => strip_symbols_in_osx(sess, &out_filename, Some("-S")),
+            Strip::Symbols => strip_symbols_in_osx(sess, &out_filename, None),
+            Strip::None => {}
         }
     }
 }
 
-fn strip_symbols_in_osx<'a>(sess: &'a Session, out_filename: &Path, option: &str) {
-    let prog = Command::new("strip").arg(option).arg(out_filename).output();
+fn strip_symbols_in_osx<'a>(sess: &'a Session, out_filename: &Path, option: Option<&str>) {
+    let mut cmd = Command::new("strip");
+    if let Some(option) = option {
+        cmd.arg(option);
+    }
+    let prog = cmd.arg(out_filename).output();
     match prog {
         Ok(prog) => {
             if !prog.status.success() {
@@ -1046,14 +1051,6 @@ fn strip_symbols_in_osx<'a>(sess: &'a Session, out_filename: &Path, option: &str
             }
         }
         Err(e) => sess.fatal(&format!("unable to run `strip`: {}", e)),
-    }
-}
-
-fn osx_strip_opt<'a>(strip: Strip) -> Option<&'a str> {
-    match strip {
-        Strip::Debuginfo => Some("-S"),
-        Strip::Symbols => Some("-x"),
-        Strip::None => None,
     }
 }
 
