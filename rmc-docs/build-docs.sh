@@ -23,7 +23,7 @@ HTML_DIR=$RMC_DIR/build/output/latest/html/
 
 if [ -d $HTML_DIR ]; then
     # Litani run is copied into `src` to avoid deletion by `mdbook`
-    cp -r $HTML_DIR/* src/dashboard/
+    cp -r $HTML_DIR src/dashboard/
     # Replace artifacts by examples under test
     BOOKS_DIR=$RMC_DIR/src/test/dashboard/books
     rm -r src/dashboard/artifacts
