@@ -15,9 +15,9 @@ use rustc_middle::ty::print::with_crate_prefix;
 use rustc_middle::ty::{self, ToPredicate, Ty, TyCtxt, TypeFoldable, WithConstness};
 use rustc_span::lev_distance;
 use rustc_span::symbol::{kw, sym, Ident};
-use rustc_span::{source_map, FileName, Span};
+use rustc_span::{source_map, FileName, MultiSpan, Span};
 use rustc_trait_selection::traits::query::evaluate_obligation::InferCtxtExt;
-use rustc_trait_selection::traits::Obligation;
+use rustc_trait_selection::traits::{FulfillmentError, Obligation};
 
 use std::cmp::Ordering;
 use std::iter;
@@ -969,56 +969,119 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         None
     }
 
+    crate fn note_unmet_impls_on_type(
+        &self,
+        err: &mut rustc_errors::DiagnosticBuilder<'_>,
+        errors: Vec<FulfillmentError<'tcx>>,
+    ) {
+        let all_local_types_needing_impls =
+            errors.iter().all(|e| match e.obligation.predicate.kind().skip_binder() {
+                ty::PredicateKind::Trait(pred) => match pred.self_ty().kind() {
+                    ty::Adt(def, _) => def.did.is_local(),
+                    _ => false,
+                },
+                _ => false,
+            });
+        let mut preds: Vec<_> = errors
+            .iter()
+            .filter_map(|e| match e.obligation.predicate.kind().skip_binder() {
+                ty::PredicateKind::Trait(pred) => Some(pred),
+                _ => None,
+            })
+            .collect();
+        preds.sort_by_key(|pred| (pred.def_id(), pred.self_ty()));
+        let def_ids = preds
+            .iter()
+            .filter_map(|pred| match pred.self_ty().kind() {
+                ty::Adt(def, _) => Some(def.did),
+                _ => None,
+            })
+            .collect::<FxHashSet<_>>();
+        let sm = self.tcx.sess.source_map();
+        let mut spans: MultiSpan = def_ids
+            .iter()
+            .filter_map(|def_id| {
+                let span = self.tcx.def_span(*def_id);
+                if span.is_dummy() { None } else { Some(sm.guess_head_span(span)) }
+            })
+            .collect::<Vec<_>>()
+            .into();
+
+        for pred in &preds {
+            match pred.self_ty().kind() {
+                ty::Adt(def, _) => {
+                    spans.push_span_label(
+                        sm.guess_head_span(self.tcx.def_span(def.did)),
+                        format!("must implement `{}`", pred.trait_ref.print_only_trait_path()),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        if all_local_types_needing_impls && spans.primary_span().is_some() {
+            let msg = if preds.len() == 1 {
+                format!(
+                    "an implementation of `{}` might be missing for `{}`",
+                    preds[0].trait_ref.print_only_trait_path(),
+                    preds[0].self_ty()
+                )
+            } else {
+                format!(
+                    "the following type{} would have to `impl` {} required trait{} for this \
+                     operation to be valid",
+                    pluralize!(def_ids.len()),
+                    if def_ids.len() == 1 { "its" } else { "their" },
+                    pluralize!(preds.len()),
+                )
+            };
+            err.span_note(spans, &msg);
+        }
+
+        let preds: Vec<_> = errors.iter().map(|e| (e.obligation.predicate, None)).collect();
+        self.suggest_derive(err, &preds);
+    }
+
     fn suggest_derive(
         &self,
         err: &mut DiagnosticBuilder<'_>,
         unsatisfied_predicates: &Vec<(ty::Predicate<'tcx>, Option<ty::Predicate<'tcx>>)>,
     ) {
-        let derivables = [
-            sym::Eq,
-            sym::PartialEq,
-            sym::Ord,
-            sym::PartialOrd,
-            sym::Clone,
-            sym::Copy,
-            sym::Hash,
-            sym::Default,
-            sym::Debug,
-        ];
-        let mut derives = unsatisfied_predicates
-            .iter()
-            .filter_map(|(pred, _)| {
-                let trait_pred =
-                    if let ty::PredicateKind::Trait(trait_pred) = pred.kind().skip_binder() {
-                        trait_pred
-                    } else {
-                        return None;
-                    };
-                let trait_ref = trait_pred.trait_ref;
-                let adt_def = if let ty::Adt(adt_def, _) = trait_ref.self_ty().kind() {
-                    adt_def
-                } else {
-                    return None;
-                };
-                if adt_def.did.is_local() {
-                    let diagnostic_items = self.tcx.diagnostic_items(trait_ref.def_id.krate);
-                    return derivables.iter().find_map(|trait_derivable| {
-                        let item_def_id = diagnostic_items.get(trait_derivable)?;
-                        if item_def_id == &trait_pred.trait_ref.def_id
-                            && !(adt_def.is_enum() && *trait_derivable == sym::Default)
-                        {
-                            return Some((
-                                format!("{}", trait_ref.self_ty()),
-                                self.tcx.def_span(adt_def.did),
-                                format!("{}", trait_ref.print_only_trait_path()),
-                            ));
-                        }
-                        None
-                    });
-                }
-                None
-            })
-            .collect::<Vec<(String, Span, String)>>();
+        let mut derives = Vec::<(String, Span, String)>::new();
+        let mut traits = Vec::<Span>::new();
+        for (pred, _) in unsatisfied_predicates {
+            let trait_pred = match pred.kind().skip_binder() {
+                ty::PredicateKind::Trait(trait_pred) => trait_pred,
+                _ => continue,
+            };
+            let adt = match trait_pred.self_ty().ty_adt_def() {
+                Some(adt) if adt.did.is_local() => adt,
+                _ => continue,
+            };
+            let can_derive = match self.tcx.get_diagnostic_name(trait_pred.def_id()) {
+                Some(sym::Default) => !adt.is_enum(),
+                Some(
+                    sym::Eq
+                    | sym::PartialEq
+                    | sym::Ord
+                    | sym::PartialOrd
+                    | sym::Clone
+                    | sym::Copy
+                    | sym::Hash
+                    | sym::Debug,
+                ) => true,
+                _ => false,
+            };
+            if can_derive {
+                derives.push((
+                    format!("{}", trait_pred.self_ty()),
+                    self.tcx.def_span(adt.did),
+                    format!("{}", trait_pred.trait_ref.print_only_trait_name()),
+                ));
+            } else {
+                traits.push(self.tcx.def_span(trait_pred.def_id()));
+            }
+        }
         derives.sort();
         let derives_grouped = derives.into_iter().fold(
             Vec::<(String, Span, String)>::new(),
@@ -1033,6 +1096,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 acc
             },
         );
+        traits.sort();
+        traits.dedup();
+
+        let len = traits.len();
+        if len > 0 {
+            let span: MultiSpan = traits.into();
+            err.span_note(
+                span,
+                &format!("the following trait{} must be implemented", pluralize!(len),),
+            );
+        }
+
         for (self_name, self_span, traits) in &derives_grouped {
             err.span_suggestion_verbose(
                 self_span.shrink_to_lo(),

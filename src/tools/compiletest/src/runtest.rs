@@ -13,9 +13,11 @@ use crate::common::{CompareMode, FailMode, PassMode};
 use crate::common::{Config, TestPaths};
 use crate::common::{Pretty, RunPassValgrind};
 use crate::common::{UI_RUN_STDERR, UI_RUN_STDOUT};
+use crate::compute_diff::{write_diff, write_filtered_diff};
 use crate::errors::{self, Error, ErrorKind};
 use crate::header::TestProps;
 use crate::json;
+use crate::read2::read2_abbreviated;
 use crate::util::get_pointer_width;
 use crate::util::{logv, PathBufExt};
 use crate::ColorConfig;
@@ -23,7 +25,7 @@ use regex::{Captures, Regex};
 use rustfix::{apply_suggestions, get_suggestions_from_json, Filter};
 
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, create_dir_all, File, OpenOptions};
@@ -31,7 +33,7 @@ use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use std::io::{self, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
 use glob::glob;
@@ -40,6 +42,9 @@ use tracing::*;
 
 use crate::extract_gdb_version;
 use crate::is_android_gdb_target;
+
+mod debugger;
+use debugger::{check_debugger_output, DebuggerCommands};
 
 #[cfg(test)]
 mod tests;
@@ -103,111 +108,6 @@ pub fn get_lib_name(lib: &str, dylib: bool) -> String {
     } else {
         format!("lib{}.so", lib)
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DiffLine {
-    Context(String),
-    Expected(String),
-    Resulting(String),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Mismatch {
-    pub line_number: u32,
-    pub lines: Vec<DiffLine>,
-}
-
-impl Mismatch {
-    fn new(line_number: u32) -> Mismatch {
-        Mismatch { line_number, lines: Vec::new() }
-    }
-}
-
-// Produces a diff between the expected output and actual output.
-pub fn make_diff(expected: &str, actual: &str, context_size: usize) -> Vec<Mismatch> {
-    let mut line_number = 1;
-    let mut context_queue: VecDeque<&str> = VecDeque::with_capacity(context_size);
-    let mut lines_since_mismatch = context_size + 1;
-    let mut results = Vec::new();
-    let mut mismatch = Mismatch::new(0);
-
-    for result in diff::lines(expected, actual) {
-        match result {
-            diff::Result::Left(str) => {
-                if lines_since_mismatch >= context_size && lines_since_mismatch > 0 {
-                    results.push(mismatch);
-                    mismatch = Mismatch::new(line_number - context_queue.len() as u32);
-                }
-
-                while let Some(line) = context_queue.pop_front() {
-                    mismatch.lines.push(DiffLine::Context(line.to_owned()));
-                }
-
-                mismatch.lines.push(DiffLine::Expected(str.to_owned()));
-                line_number += 1;
-                lines_since_mismatch = 0;
-            }
-            diff::Result::Right(str) => {
-                if lines_since_mismatch >= context_size && lines_since_mismatch > 0 {
-                    results.push(mismatch);
-                    mismatch = Mismatch::new(line_number - context_queue.len() as u32);
-                }
-
-                while let Some(line) = context_queue.pop_front() {
-                    mismatch.lines.push(DiffLine::Context(line.to_owned()));
-                }
-
-                mismatch.lines.push(DiffLine::Resulting(str.to_owned()));
-                lines_since_mismatch = 0;
-            }
-            diff::Result::Both(str, _) => {
-                if context_queue.len() >= context_size {
-                    let _ = context_queue.pop_front();
-                }
-
-                if lines_since_mismatch < context_size {
-                    mismatch.lines.push(DiffLine::Context(str.to_owned()));
-                } else if context_size > 0 {
-                    context_queue.push_back(str);
-                }
-
-                line_number += 1;
-                lines_since_mismatch += 1;
-            }
-        }
-    }
-
-    results.push(mismatch);
-    results.remove(0);
-
-    results
-}
-
-fn write_diff(expected: &str, actual: &str, context_size: usize) -> String {
-    use std::fmt::Write;
-    let mut output = String::new();
-    let diff_results = make_diff(expected, actual, context_size);
-    for result in diff_results {
-        let mut line_number = result.line_number;
-        for line in result.lines {
-            match line {
-                DiffLine::Expected(e) => {
-                    writeln!(output, "-\t{}", e).unwrap();
-                    line_number += 1;
-                }
-                DiffLine::Context(c) => {
-                    writeln!(output, "{}\t{}", line_number, c).unwrap();
-                    line_number += 1;
-                }
-                DiffLine::Resulting(r) => {
-                    writeln!(output, "+\t{}", r).unwrap();
-                }
-            }
-        }
-        writeln!(output).unwrap();
-    }
-    output
 }
 
 pub fn run(config: Config, testpaths: &TestPaths, revision: Option<&str>) {
@@ -308,12 +208,6 @@ struct TestCx<'test> {
     revision: Option<&'test str>,
 }
 
-struct DebuggerCommands {
-    commands: Vec<String>,
-    check_lines: Vec<String>,
-    breakpoint_lines: Vec<usize>,
-}
-
 enum ReadFrom {
     Path,
     Stdin(String),
@@ -343,10 +237,8 @@ impl<'test> TestCx<'test> {
     /// Code executed for each revision in turn (or, if there are no
     /// revisions, exactly once, with revision == None).
     fn run_revision(&self) {
-        if self.props.should_ice {
-            if self.config.mode != Incremental {
-                self.fatal("cannot use should-ice in a test that is not cfail");
-            }
+        if self.props.should_ice && self.config.mode != Incremental {
+            self.fatal("cannot use should-ice in a test that is not cfail");
         }
         match self.config.mode {
             RunPassValgrind => self.run_valgrind_test(),
@@ -786,7 +678,10 @@ impl<'test> TestCx<'test> {
 
         // Parse debugger commands etc from test files
         let DebuggerCommands { commands, check_lines, breakpoint_lines, .. } =
-            self.parse_debugger_commands(prefixes);
+            match DebuggerCommands::parse_from(&self.testpaths.file, self.config, prefixes) {
+                Ok(cmds) => cmds,
+                Err(e) => self.fatal(&e),
+            };
 
         // https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/debugger-commands
         let mut script_str = String::with_capacity(2048);
@@ -838,7 +733,9 @@ impl<'test> TestCx<'test> {
             self.fatal_proc_rec("Error while running CDB", &debugger_run_result);
         }
 
-        self.check_debugger_output(&debugger_run_result, &check_lines);
+        if let Err(e) = check_debugger_output(&debugger_run_result, &check_lines) {
+            self.fatal_proc_rec(&e, &debugger_run_result);
+        }
     }
 
     fn run_debuginfo_gdb_test(&self) {
@@ -869,7 +766,10 @@ impl<'test> TestCx<'test> {
         };
 
         let DebuggerCommands { commands, check_lines, breakpoint_lines } =
-            self.parse_debugger_commands(prefixes);
+            match DebuggerCommands::parse_from(&self.testpaths.file, self.config, prefixes) {
+                Ok(cmds) => cmds,
+                Err(e) => self.fatal(&e),
+            };
         let mut cmds = commands.join("\n");
 
         // compile test file (it should have 'compile-flags:-g' in the header)
@@ -1072,7 +972,9 @@ impl<'test> TestCx<'test> {
             self.fatal_proc_rec("gdb failed to execute", &debugger_run_result);
         }
 
-        self.check_debugger_output(&debugger_run_result, &check_lines);
+        if let Err(e) = check_debugger_output(&debugger_run_result, &check_lines) {
+            self.fatal_proc_rec(&e, &debugger_run_result);
+        }
     }
 
     fn run_debuginfo_lldb_test(&self) {
@@ -1130,7 +1032,10 @@ impl<'test> TestCx<'test> {
 
         // Parse debugger commands etc from test files
         let DebuggerCommands { commands, check_lines, breakpoint_lines, .. } =
-            self.parse_debugger_commands(prefixes);
+            match DebuggerCommands::parse_from(&self.testpaths.file, self.config, prefixes) {
+                Ok(cmds) => cmds,
+                Err(e) => self.fatal(&e),
+            };
 
         // Write debugger script:
         // We don't want to hang when calling `quit` while the process is still running
@@ -1206,7 +1111,9 @@ impl<'test> TestCx<'test> {
             self.fatal_proc_rec("Error while running LLDB", &debugger_run_result);
         }
 
-        self.check_debugger_output(&debugger_run_result, &check_lines);
+        if let Err(e) = check_debugger_output(&debugger_run_result, &check_lines) {
+            self.fatal_proc_rec(&e, &debugger_run_result);
+        }
     }
 
     fn run_lldb(
@@ -1241,45 +1148,6 @@ impl<'test> TestCx<'test> {
 
         self.dump_output(&out, &err);
         ProcRes { status, stdout: out, stderr: err, cmdline: format!("{:?}", cmd) }
-    }
-
-    fn parse_debugger_commands(&self, debugger_prefixes: &[&str]) -> DebuggerCommands {
-        let directives = debugger_prefixes
-            .iter()
-            .map(|prefix| (format!("{}-command", prefix), format!("{}-check", prefix)))
-            .collect::<Vec<_>>();
-
-        let mut breakpoint_lines = vec![];
-        let mut commands = vec![];
-        let mut check_lines = vec![];
-        let mut counter = 1;
-        let reader = BufReader::new(File::open(&self.testpaths.file).unwrap());
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    let line =
-                        if line.starts_with("//") { line[2..].trim_start() } else { line.as_str() };
-
-                    if line.contains("#break") {
-                        breakpoint_lines.push(counter);
-                    }
-
-                    for &(ref command_directive, ref check_directive) in &directives {
-                        self.config
-                            .parse_name_value_directive(&line, command_directive)
-                            .map(|cmd| commands.push(cmd));
-
-                        self.config
-                            .parse_name_value_directive(&line, check_directive)
-                            .map(|cmd| check_lines.push(cmd));
-                    }
-                }
-                Err(e) => self.fatal(&format!("Error while parsing debugger commands: {}", e)),
-            }
-            counter += 1;
-        }
-
-        DebuggerCommands { commands, check_lines, breakpoint_lines }
     }
 
     fn cleanup_debug_info_options(&self, options: &Option<String>) -> Option<String> {
@@ -1325,66 +1193,6 @@ impl<'test> TestCx<'test> {
                 continue;
             }
             cmd.arg(arg);
-        }
-    }
-
-    fn check_debugger_output(&self, debugger_run_result: &ProcRes, check_lines: &[String]) {
-        let num_check_lines = check_lines.len();
-
-        let mut check_line_index = 0;
-        for line in debugger_run_result.stdout.lines() {
-            if check_line_index >= num_check_lines {
-                break;
-            }
-
-            if check_single_line(line, &(check_lines[check_line_index])[..]) {
-                check_line_index += 1;
-            }
-        }
-        if check_line_index != num_check_lines && num_check_lines > 0 {
-            self.fatal_proc_rec(
-                &format!("line not found in debugger output: {}", check_lines[check_line_index]),
-                debugger_run_result,
-            );
-        }
-
-        fn check_single_line(line: &str, check_line: &str) -> bool {
-            // Allow check lines to leave parts unspecified (e.g., uninitialized
-            // bits in the  wrong case of an enum) with the notation "[...]".
-            let line = line.trim();
-            let check_line = check_line.trim();
-            let can_start_anywhere = check_line.starts_with("[...]");
-            let can_end_anywhere = check_line.ends_with("[...]");
-
-            let check_fragments: Vec<&str> =
-                check_line.split("[...]").filter(|frag| !frag.is_empty()).collect();
-            if check_fragments.is_empty() {
-                return true;
-            }
-
-            let (mut rest, first_fragment) = if can_start_anywhere {
-                match line.find(check_fragments[0]) {
-                    Some(pos) => (&line[pos + check_fragments[0].len()..], 1),
-                    None => return false,
-                }
-            } else {
-                (line, 0)
-            };
-
-            for current_fragment in &check_fragments[first_fragment..] {
-                match rest.find(current_fragment) {
-                    Some(pos) => {
-                        rest = &rest[pos + current_fragment.len()..];
-                    }
-                    None => return false,
-                }
-            }
-
-            if !can_end_anywhere && !rest.is_empty() {
-                return false;
-            }
-
-            true
         }
     }
 
@@ -2266,9 +2074,9 @@ impl<'test> TestCx<'test> {
 
     fn maybe_dump_to_stdout(&self, out: &str, err: &str) {
         if self.config.verbose {
-            println!("------{}------------------------------", "stdout");
+            println!("------stdout------------------------------");
             println!("{}", out);
-            println!("------{}------------------------------", "stderr");
+            println!("------stderr------------------------------");
             println!("{}", err);
             println!("------------------------------------------");
         }
@@ -2776,43 +2584,17 @@ impl<'test> TestCx<'test> {
 
         let diff_filename = format!("build/tmp/rustdoc-compare-{}.diff", std::process::id());
 
-        {
-            let mut diff_output = File::create(&diff_filename).unwrap();
-            let mut wrote_data = false;
-            for entry in walkdir::WalkDir::new(out_dir) {
-                let entry = entry.expect("failed to read file");
-                let extension = entry.path().extension().and_then(|p| p.to_str());
-                if entry.file_type().is_file()
+        if !write_filtered_diff(
+            &diff_filename,
+            out_dir,
+            &compare_dir,
+            self.config.verbose,
+            |file_type, extension| {
+                file_type.is_file()
                     && (extension == Some("html".into()) || extension == Some("js".into()))
-                {
-                    let expected_path =
-                        compare_dir.join(entry.path().strip_prefix(&out_dir).unwrap());
-                    let expected =
-                        if let Ok(s) = std::fs::read(&expected_path) { s } else { continue };
-                    let actual_path = entry.path();
-                    let actual = std::fs::read(&actual_path).unwrap();
-                    let diff = unified_diff::diff(
-                        &expected,
-                        &expected_path.to_string_lossy(),
-                        &actual,
-                        &actual_path.to_string_lossy(),
-                        3,
-                    );
-                    wrote_data |= !diff.is_empty();
-                    diff_output.write_all(&diff).unwrap();
-                }
-            }
-
-            if !wrote_data {
-                println!("note: diff is identical to nightly rustdoc");
-                assert!(diff_output.metadata().unwrap().len() == 0);
-                return;
-            } else if self.config.verbose {
-                eprintln!("printing diff:");
-                let mut buf = Vec::new();
-                diff_output.read_to_end(&mut buf).unwrap();
-                std::io::stderr().lock().write_all(&mut buf).unwrap();
-            }
+            },
+        ) {
+            return;
         }
 
         match self.config.color {
@@ -3647,11 +3429,10 @@ impl<'test> TestCx<'test> {
                 if !proc_res.status.success() {
                     self.fatal_proc_rec("test run failed!", &proc_res);
                 }
-            } else {
-                if proc_res.status.success() {
-                    self.fatal_proc_rec("test run succeeded!", &proc_res);
-                }
+            } else if proc_res.status.success() {
+                self.fatal_proc_rec("test run succeeded!", &proc_res);
             }
+
             if !self.props.error_patterns.is_empty() {
                 // "// error-pattern" comments
                 self.check_error_patterns(&proc_res.stderr, &proc_res, pm);
@@ -3698,10 +3479,11 @@ impl<'test> TestCx<'test> {
             if !res.status.success() {
                 self.fatal_proc_rec("failed to compile fixed code", &res);
             }
-            if !res.stderr.is_empty() && !self.props.rustfix_only_machine_applicable {
-                if !json::rustfix_diagnostics_only(&res.stderr).is_empty() {
-                    self.fatal_proc_rec("fixed code is still producing diagnostics", &res);
-                }
+            if !res.stderr.is_empty()
+                && !self.props.rustfix_only_machine_applicable
+                && !json::rustfix_diagnostics_only(&res.stderr).is_empty()
+            {
+                self.fatal_proc_rec("fixed code is still producing diagnostics", &res);
             }
         }
     }
@@ -4218,73 +4000,4 @@ enum TargetLocation {
 enum AllowUnused {
     Yes,
     No,
-}
-
-fn read2_abbreviated(mut child: Child) -> io::Result<Output> {
-    use crate::read2::read2;
-    use std::mem::replace;
-
-    const HEAD_LEN: usize = 160 * 1024;
-    const TAIL_LEN: usize = 256 * 1024;
-
-    enum ProcOutput {
-        Full(Vec<u8>),
-        Abbreviated { head: Vec<u8>, skipped: usize, tail: Box<[u8]> },
-    }
-
-    impl ProcOutput {
-        fn extend(&mut self, data: &[u8]) {
-            let new_self = match *self {
-                ProcOutput::Full(ref mut bytes) => {
-                    bytes.extend_from_slice(data);
-                    let new_len = bytes.len();
-                    if new_len <= HEAD_LEN + TAIL_LEN {
-                        return;
-                    }
-                    let tail = bytes.split_off(new_len - TAIL_LEN).into_boxed_slice();
-                    let head = replace(bytes, Vec::new());
-                    let skipped = new_len - HEAD_LEN - TAIL_LEN;
-                    ProcOutput::Abbreviated { head, skipped, tail }
-                }
-                ProcOutput::Abbreviated { ref mut skipped, ref mut tail, .. } => {
-                    *skipped += data.len();
-                    if data.len() <= TAIL_LEN {
-                        tail[..data.len()].copy_from_slice(data);
-                        tail.rotate_left(data.len());
-                    } else {
-                        tail.copy_from_slice(&data[(data.len() - TAIL_LEN)..]);
-                    }
-                    return;
-                }
-            };
-            *self = new_self;
-        }
-
-        fn into_bytes(self) -> Vec<u8> {
-            match self {
-                ProcOutput::Full(bytes) => bytes,
-                ProcOutput::Abbreviated { mut head, skipped, tail } => {
-                    write!(&mut head, "\n\n<<<<<< SKIPPED {} BYTES >>>>>>\n\n", skipped).unwrap();
-                    head.extend_from_slice(&tail);
-                    head
-                }
-            }
-        }
-    }
-
-    let mut stdout = ProcOutput::Full(Vec::new());
-    let mut stderr = ProcOutput::Full(Vec::new());
-
-    drop(child.stdin.take());
-    read2(
-        child.stdout.take().unwrap(),
-        child.stderr.take().unwrap(),
-        &mut |is_stdout, data, _| {
-            if is_stdout { &mut stdout } else { &mut stderr }.extend(data);
-            data.clear();
-        },
-    )?;
-    let status = child.wait()?;
-
-    Ok(Output { status, stdout: stdout.into_bytes(), stderr: stderr.into_bytes() })
 }

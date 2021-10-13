@@ -54,9 +54,10 @@ impl<'tcx> LateLintPass<'tcx> for NonPanicFmt {
                     || Some(def_id) == cx.tcx.lang_items().panic_str()
                 {
                     if let Some(id) = f.span.ctxt().outer_expn_data().macro_def_id {
-                        if cx.tcx.is_diagnostic_item(sym::std_panic_2015_macro, id)
-                            || cx.tcx.is_diagnostic_item(sym::core_panic_2015_macro, id)
-                        {
+                        if matches!(
+                            cx.tcx.get_diagnostic_name(id),
+                            Some(sym::core_panic_2015_macro | sym::std_panic_2015_macro)
+                        ) {
                             check_panic(cx, f, arg);
                         }
                     }
@@ -229,8 +230,7 @@ fn check_panic_str<'tcx>(
         Err(_) => (None, None),
     };
 
-    let mut fmt_parser =
-        Parser::new(fmt.as_ref(), style, snippet.clone(), false, ParseMode::Format);
+    let mut fmt_parser = Parser::new(fmt, style, snippet.clone(), false, ParseMode::Format);
     let n_arguments = (&mut fmt_parser).filter(|a| matches!(a, Piece::NextArgument(_))).count();
 
     if n_arguments > 0 && fmt_parser.errors.is_empty() {

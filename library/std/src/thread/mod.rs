@@ -412,9 +412,9 @@ impl Builder {
     ///
     /// # Safety
     ///
-    /// The caller has to ensure that no references in the supplied thread closure
-    /// or its return type can outlive the spawned thread's lifetime. This can be
-    /// guaranteed in two ways:
+    /// The caller has to ensure that the spawned thread does not outlive any
+    /// references in the supplied thread closure and its return type.
+    /// This can be guaranteed in two ways:
     ///
     /// - ensure that [`join`][`JoinHandle::join`] is called before any referenced
     /// data is dropped
@@ -1031,6 +1031,7 @@ impl ThreadId {
     /// value is entirely opaque -- only equality testing is stable. Note that
     /// it is not guaranteed which values new threads will return, and this may
     /// change across Rust versions.
+    #[must_use]
     #[unstable(feature = "thread_id_value", issue = "67939")]
     pub fn as_u64(&self) -> NonZeroU64 {
         self.0
@@ -1453,12 +1454,14 @@ fn _assert_sync_and_send() {
 ///
 /// ```
 /// # #![allow(dead_code)]
-/// #![feature(available_concurrency)]
+/// #![feature(available_parallelism)]
 /// use std::thread;
 ///
-/// let count = thread::available_concurrency().map(|n| n.get()).unwrap_or(1);
+/// let count = thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
 /// ```
-#[unstable(feature = "available_concurrency", issue = "74479")]
-pub fn available_concurrency() -> io::Result<NonZeroUsize> {
-    imp::available_concurrency()
+#[doc(alias = "hardware_concurrency")] // Alias for C++ `std::thread::hardware_concurrency`.
+#[doc(alias = "available_concurrency")] // Alias for a name we gave this API on unstable.
+#[unstable(feature = "available_parallelism", issue = "74479")]
+pub fn available_parallelism() -> io::Result<NonZeroUsize> {
+    imp::available_parallelism()
 }

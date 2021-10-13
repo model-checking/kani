@@ -1012,6 +1012,13 @@ rustc_queries! {
             key.1, key.0 }
     }
 
+    query vtable_allocation(key: (Ty<'tcx>, Option<ty::PolyExistentialTraitRef<'tcx>>)) -> mir::interpret::AllocId {
+        desc { |tcx| "vtable const allocation for <{} as {}>",
+            key.0,
+            key.1.map(|trait_ref| format!("{}", trait_ref)).unwrap_or("_".to_owned())
+        }
+    }
+
     query codegen_fulfill_obligation(
         key: (ty::ParamEnv<'tcx>, ty::PolyTraitRef<'tcx>)
     ) -> Result<ImplSource<'tcx, ()>, ErrorReported> {
@@ -1442,7 +1449,7 @@ rustc_queries! {
     }
 
     /// Returns all diagnostic items defined in all crates.
-    query all_diagnostic_items(_: ()) -> FxHashMap<Symbol, DefId> {
+    query all_diagnostic_items(_: ()) -> rustc_hir::diagnostic_items::DiagnosticItems {
         storage(ArenaCacheSelector<'tcx>)
         eval_always
         desc { "calculating the diagnostic items map" }
@@ -1454,7 +1461,7 @@ rustc_queries! {
     }
 
     /// Returns the diagnostic items defined in a crate.
-    query diagnostic_items(_: CrateNum) -> FxHashMap<Symbol, DefId> {
+    query diagnostic_items(_: CrateNum) -> rustc_hir::diagnostic_items::DiagnosticItems {
         storage(ArenaCacheSelector<'tcx>)
         desc { "calculating the diagnostic items map in a crate" }
     }

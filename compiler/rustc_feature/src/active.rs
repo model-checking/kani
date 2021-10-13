@@ -675,6 +675,12 @@ declare_features! (
     /// Allows `#[track_caller]` on closures and generators.
     (active, closure_track_caller, "1.57.0", Some(87417), None),
 
+    /// Allows `#[doc(cfg_hide(...))]`.
+    (active, doc_cfg_hide, "1.57.0", Some(43781), None),
+
+    /// Allows using the `non_exhaustive_omitted_patterns` lint.
+    (active, non_exhaustive_omitted_patterns_lint, "1.57.0", Some(89554), None),
+
     // -------------------------------------------------------------------------
     // feature-group-end: actual feature gates
     // -------------------------------------------------------------------------

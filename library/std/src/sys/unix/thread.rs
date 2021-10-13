@@ -263,7 +263,7 @@ impl Drop for Thread {
     }
 }
 
-pub fn available_concurrency() -> io::Result<NonZeroUsize> {
+pub fn available_parallelism() -> io::Result<NonZeroUsize> {
     cfg_if::cfg_if! {
         if #[cfg(any(
             target_os = "android",
@@ -594,7 +594,8 @@ pub mod guard {
                 Some(stackaddr - guardsize..stackaddr)
             } else if cfg!(all(target_os = "linux", target_env = "musl")) {
                 Some(stackaddr - guardsize..stackaddr)
-            } else if cfg!(all(target_os = "linux", target_env = "gnu")) {
+            } else if cfg!(all(target_os = "linux", any(target_env = "gnu", target_env = "uclibc")))
+            {
                 // glibc used to include the guard area within the stack, as noted in the BUGS
                 // section of `man pthread_attr_getguardsize`.  This has been corrected starting
                 // with glibc 2.27, and in some distro backports, so the guard is now placed at the

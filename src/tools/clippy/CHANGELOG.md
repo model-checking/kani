@@ -1873,10 +1873,10 @@ Released 2019-01-17
 
 [2e26fdc2...b2601be](https://github.com/rust-lang/rust-clippy/compare/2e26fdc2...b2601be)
 
-* New lints: [`slow_vector_initialization`], [`mem_discriminant_non_enum`],
+* New lints: [`slow_vector_initialization`], `mem_discriminant_non_enum`,
   [`redundant_clone`], [`wildcard_dependencies`],
   [`into_iter_on_ref`], `into_iter_on_array`, [`deprecated_cfg_attr`],
-  [`mem_discriminant_non_enum`], [`cargo_common_metadata`]
+  [`cargo_common_metadata`]
 * Add support for `u128` and `i128` to integer related lints
 * Add float support to `mistyped_literal_suffixes`
 * Fix false positives in `use_self`
@@ -2695,6 +2695,7 @@ Released 2018-09-13
 [`enum_glob_use`]: https://rust-lang.github.io/rust-clippy/master/index.html#enum_glob_use
 [`enum_variant_names`]: https://rust-lang.github.io/rust-clippy/master/index.html#enum_variant_names
 [`eq_op`]: https://rust-lang.github.io/rust-clippy/master/index.html#eq_op
+[`equatable_if_let`]: https://rust-lang.github.io/rust-clippy/master/index.html#equatable_if_let
 [`erasing_op`]: https://rust-lang.github.io/rust-clippy/master/index.html#erasing_op
 [`eval_order_dependence`]: https://rust-lang.github.io/rust-clippy/master/index.html#eval_order_dependence
 [`excessive_precision`]: https://rust-lang.github.io/rust-clippy/master/index.html#excessive_precision
@@ -2838,7 +2839,6 @@ Released 2018-09-13
 [`match_wild_err_arm`]: https://rust-lang.github.io/rust-clippy/master/index.html#match_wild_err_arm
 [`match_wildcard_for_single_variants`]: https://rust-lang.github.io/rust-clippy/master/index.html#match_wildcard_for_single_variants
 [`maybe_infinite_iter`]: https://rust-lang.github.io/rust-clippy/master/index.html#maybe_infinite_iter
-[`mem_discriminant_non_enum`]: https://rust-lang.github.io/rust-clippy/master/index.html#mem_discriminant_non_enum
 [`mem_forget`]: https://rust-lang.github.io/rust-clippy/master/index.html#mem_forget
 [`mem_replace_option_with_none`]: https://rust-lang.github.io/rust-clippy/master/index.html#mem_replace_option_with_none
 [`mem_replace_with_default`]: https://rust-lang.github.io/rust-clippy/master/index.html#mem_replace_with_default
@@ -2898,6 +2898,7 @@ Released 2018-09-13
 [`no_effect`]: https://rust-lang.github.io/rust-clippy/master/index.html#no_effect
 [`non_ascii_literal`]: https://rust-lang.github.io/rust-clippy/master/index.html#non_ascii_literal
 [`non_octal_unix_permissions`]: https://rust-lang.github.io/rust-clippy/master/index.html#non_octal_unix_permissions
+[`non_send_fields_in_send_ty`]: https://rust-lang.github.io/rust-clippy/master/index.html#non_send_fields_in_send_ty
 [`nonminimal_bool`]: https://rust-lang.github.io/rust-clippy/master/index.html#nonminimal_bool
 [`nonsensical_open_options`]: https://rust-lang.github.io/rust-clippy/master/index.html#nonsensical_open_options
 [`nonstandard_macro_braces`]: https://rust-lang.github.io/rust-clippy/master/index.html#nonstandard_macro_braces
