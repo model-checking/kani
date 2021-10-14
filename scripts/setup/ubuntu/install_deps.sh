@@ -39,10 +39,11 @@ OTHER_DEPS="${VERSION_DEPS[${UBUNTU_VERSION}]:-""}"
 
 set -x
 
-# Github promises weekly build image updates, so we can skip the update step and
-# worst case we should only be 1-2 weeks behind upstream repos.
-# https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#supported-software
-#sudo apt-get --yes update
+# Github promises weekly build image updates, but recommends running
+# `sudo apt-get update` before installing packages in case the `apt`
+# index is stale. This prevents package installation failures.
+# https://docs.github.com/en/actions/using-github-hosted-runners/customizing-github-hosted-runners#installing-software-on-ubuntu-runners
+sudo apt-get --yes update
 
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}" "${OTHER_DEPS[@]}"
 
