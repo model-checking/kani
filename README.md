@@ -159,7 +159,7 @@ For example, we will describe using RMC as a backend to build the [`rand-core` c
 2. Clone `rand` and navigate to the `rand-core` directory:
    ```
    git clone git@github.com:rust-random/rand.git
-   cd rand/rand-core
+   cd rand/rand_core
    ```
 3. Next, we need to add an entry-point for CBMC to the crate's source. For now, we will just pick an existing unit test. Open `src/le.rs` and find the `test_read` function at the bottom of the file. Add the following attribute to keep the function name unmangled, so we can later pass it to CBMC. 
 
