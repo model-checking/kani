@@ -1,10 +1,10 @@
-# RMC on a crate
+# RMC on a package
 
 > RMC currently ships with a `cargo-rmc` script, but this support is deeply limited (e.g. to a single crate).
 > This will be corrected soon, and this documentation updated.
 > In the meantime, we document the current build process for a larger project with dependencies here.
 
-To build a larger project with RMC, you currently need to:
+To build a larger project (one with dependencies or multiple crates) with RMC, you currently need to:
 
 1. Build the project with an appropriate set of flags to output CBMC "symbol table" `.json` files.
 2. Link these together into a single "goto binary", with appropriate preprocessing flags.
@@ -30,6 +30,8 @@ A sample build script might start like this:
 ```
 
 This allows us to re-use the `cargo` build system, but with flags that override `rustc` with RMC instead.
+More specifically, by setting the `RUSTC` environment variable to `rmc-rustc`, each Rust source file targeted by `cargo build` is "compiled" with RMC instead of `rustc`.
+The result of running `rmc-rustc` on a source file is a symbol table json file written in the CBMC Goto-C language.
 The use of an alternate target directory ensures RMC and rustc don't confuse each other with different intermediate output.
 
 Next we can convert the symbol tables into goto binaries, in parallel, and then link them together:
@@ -46,5 +48,5 @@ To do that, we specialize it, preprocess it, and then run CBMC on the result:
 {{#include sample-rmc-build.sh:cbmc}}
 ```
 
-At this point we have a complete script and should now be able to run `./rmc-build my_harness` to run a particular proof harness.
+At this point we have a complete script and should now be able to run `./sample-rmc-build my_harness` to run a particular proof harness.
 Even in very large projects the removal of unreachable code should mean only the parts relevant to that proof harness are preserved in the RMC run.

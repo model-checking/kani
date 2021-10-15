@@ -43,7 +43,6 @@ goto-cc --function ${ENTRY_POINT} linked-binary.out empty.c -o "${HARNESS_BIN}"
 # Perform some preprocessing
 INSTRUMENT_ARGS=(
   --drop-unused-functions
-  #--reachability-slice
 )
 goto-instrument "${INSTRUMENT_ARGS[@]}" "${HARNESS_BIN}" "${HARNESS_BIN}"
 
