@@ -1,10 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! This tests whether we properly replace missing functions with `assert(false)`
-//! To run this test, do
-//! rmc missing_fn_fail.rs -- lib.c
+// rmc-verify-fail
 
-// rmc-flags: --c-lib src/test/rmc/ForeignItems/lib.c
+//! This tests whether we properly replace missing functions with `assert(false)`
 
 // https://doc.rust-lang.org/reference/items/external-blocks.html
 // https://doc.rust-lang.org/nomicon/ffi.html
