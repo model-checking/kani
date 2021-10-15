@@ -132,6 +132,8 @@ def add_check_flags(make_group, add_flag, config):
              help="Turn on default memory safety checks")
     add_flag(group, "--overflow-checks", default=True, action=BooleanOptionalAction,
              help="Turn on default overflow checks")
+    add_flag(group, "--undefined-function-checks", default=True, action=BooleanOptionalAction,
+             help="Turn on undefined function checks")
     add_flag(group, "--unwinding-checks", default=True, action=BooleanOptionalAction,
              help="Turn on default unwinding checks")
 
