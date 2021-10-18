@@ -3,7 +3,7 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use crate::GotocCtx;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, ExprValue, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -466,11 +466,13 @@ impl<'tcx> GotocCtx<'tcx> {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         // TODO: give a better message here.
-        let arg = match fargs[0].struct_expr_values() {
-            Some(values) => values[0].clone(),
-            _ => Expr::string_constant(
+
+        let arg = if let Some(s) = extract_panic_string(&fargs[0]) {
+            Expr::string_constant(&s)
+        } else {
+            Expr::string_constant(
                 "This is a placeholder assertion message; the rust message requires dynamic string formatting, which is not supported by CBMC",
-            ),
+            )
         };
 
         let loc = self.codegen_span_option(span);
@@ -640,4 +642,32 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
     }
+}
+
+///
+/// 1. what is the problem and why it exists -> rust stdl creates assertion failed
+/// 2.
+///
+fn extract_panic_string(e: &Expr) -> Option<String> {
+    // The MIR represents the StringConstant as `&"constant"[0]`. We are representing a rust str type as a struct.
+    let arg: &str = match e.struct_expr_values().unwrap()[0].value() {
+        ExprValue::AddressOf(expr) => match expr.value() {
+            ExprValue::Index { array, .. } => match array.value() {
+                ExprValue::StringConstant { s } => s,
+                _ => return None,
+            },
+            _ => return None,
+        },
+        ExprValue::StringConstant { s } => s,
+        _ => return None,
+    };
+
+    // "assertion failed: 1 == 1: SUCCESS" was confusing, so we removed the "failed"
+    let rewritten_string = if let Some(stripped) = arg.strip_prefix("assertion failed") {
+        format!("assertion{}", stripped)
+    } else {
+        arg.to_string()
+    };
+
+    Some(rewritten_string)
 }
