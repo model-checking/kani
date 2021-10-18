@@ -4,7 +4,7 @@
   - [Installation](./install-guide.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [RMC on a single file](./rmc-single-file.md)
-  - [RMC on a crate]()
+  - [RMC on a package](./cargo-rmc.md)
   - [Debugging failures]()
   - [Debugging non-termination]()
   - [Debugging coverage]()
