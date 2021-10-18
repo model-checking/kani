@@ -644,10 +644,9 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-///
-/// 1. what is the problem and why it exists -> rust stdl creates assertion failed
-/// 2.
-///
+/// This function extracts the "assertion failed" string which is created by the rust stdl. It
+/// causes confusing outputs like "assertion failed: 1 == 1" SUCCESS to be printed out. This function
+/// can extract the "assertion failed" component out and change the string to "assertion"
 fn extract_panic_string(e: &Expr) -> Option<String> {
     // The MIR represents the StringConstant as `&"constant"[0]`. We are representing a rust str type as a struct.
     let arg: &str = match e.struct_expr_values().unwrap()[0].value() {
