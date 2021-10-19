@@ -7,9 +7,13 @@
 
 # Test for platform
 PLATFORM=$(uname -sp)
-if [[ $PLATFORM != "Linux x86_64" ]]; then
+if [[ $PLATFORM == "Linux x86_64" ]]; then
+  TARGET="x86_64-unknown-linux-gnu"
+elif [[ $PLATFORM == "Darwin i386" ]]; then
+  TARGET="x86_64-apple-darwin"
+else
   echo
-  echo "Std-Lib codegen regression only works on Linux x86 platform, skipping..."
+  echo "Std-Lib codegen regression only works on Linux or OSX x86 platforms, skipping..."
   echo
   exit 0
 fi
@@ -36,7 +40,9 @@ fi
 STD_LIB_LOG="/tmp/StdLibTest/log.txt"
 
 echo "Starting cargo build with RMC"
-RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo +nightly build -Z build-std --target x86_64-unknown-linux-gnu 2>&1 | tee $STD_LIB_LOG
+RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" \
+  RUSTC=rmc-rustc cargo +nightly build -Z build-std --target $TARGET 2>&1 \
+  | tee $STD_LIB_LOG
 
 # For now, we expect a linker error, but no modules should fail with a compiler
 # panic. 
