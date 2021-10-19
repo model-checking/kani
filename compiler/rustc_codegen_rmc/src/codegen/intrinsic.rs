@@ -456,7 +456,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // Unimplemented
             _ => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md"
+                "https://github.com/model-checking/rmc/issues/new/choose"
             ),
         }
     }
