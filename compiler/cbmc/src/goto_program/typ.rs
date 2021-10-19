@@ -576,10 +576,9 @@ impl Type {
     /// base_name: the local name of the parameter within the function `x`
     /// typ: The type of the parameter
     pub fn as_parameter(self, identifier: Option<String>, base_name: Option<String>) -> Parameter {
-        // TODO:
+        // FIXME: https://github.com/model-checking/rmc/issues/570
         assert!(
-            //self.is_empty() ||
-            self.is_lvalue(),
+            self.is_empty() || self.is_lvalue(),
             "Expected lvalue from {:?} {:?} {:?}",
             self,
             identifier,
