@@ -74,6 +74,7 @@
         not(any(test, bootstrap)),
         any(not(feature = "miri-test-libstd"), test, doctest),
         no_global_oom_handling,
+        not(no_global_oom_handling),
         target_has_atomic = "ptr"
     ))
 )]
@@ -188,7 +189,6 @@ mod boxed {
 pub mod borrow;
 pub mod collections;
 pub mod fmt;
-pub mod prelude;
 pub mod raw_vec;
 pub mod rc;
 pub mod slice;

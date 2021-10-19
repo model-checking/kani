@@ -765,10 +765,12 @@ impl Config {
             config.llvm_from_ci = match llvm.download_ci_llvm {
                 Some(StringOrBool::String(s)) => {
                     assert!(s == "if-available", "unknown option `{}` for download-ci-llvm", s);
-                    // This is currently all tier 1 targets (since others may not have CI artifacts)
+                    // This is currently all tier 1 targets and tier 2 targets with host tools
+                    // (since others may not have CI artifacts)
                     // https://doc.rust-lang.org/rustc/platform-support.html#tier-1
                     // FIXME: this is duplicated in bootstrap.py
                     let supported_platforms = [
+                        // tier 1
                         "aarch64-unknown-linux-gnu",
                         "i686-pc-windows-gnu",
                         "i686-pc-windows-msvc",
@@ -777,6 +779,26 @@ impl Config {
                         "x86_64-apple-darwin",
                         "x86_64-pc-windows-gnu",
                         "x86_64-pc-windows-msvc",
+                        // tier 2 with host tools
+                        "aarch64-apple-darwin",
+                        "aarch64-pc-windows-msvc",
+                        "aarch64-unknown-linux-musl",
+                        "arm-unknown-linux-gnueabi",
+                        "arm-unknown-linux-gnueabihf",
+                        "armv7-unknown-linux-gnueabihf",
+                        "mips-unknown-linux-gnu",
+                        "mips64-unknown-linux-gnuabi64",
+                        "mips64el-unknown-linux-gnuabi64",
+                        "mipsel-unknown-linux-gnu",
+                        "powerpc-unknown-linux-gnu",
+                        "powerpc64-unknown-linux-gnu",
+                        "powerpc64le-unknown-linux-gnu",
+                        "riscv64gc-unknown-linux-gnu",
+                        "s390x-unknown-linux-gnu",
+                        "x86_64-unknown-freebsd",
+                        "x86_64-unknown-illumos",
+                        "x86_64-unknown-linux-musl",
+                        "x86_64-unknown-netbsd",
                     ];
                     supported_platforms.contains(&&*config.build.triple)
                 }
@@ -825,15 +847,10 @@ impl Config {
                 };
             }
 
-            if config.llvm_thin_lto {
-                // If we're building with ThinLTO on, we want to link to LLVM
-                // shared, to avoid re-doing ThinLTO (which happens in the link
-                // step) with each stage.
-                assert_ne!(
-                    llvm.link_shared,
-                    Some(false),
-                    "setting link-shared=false is incompatible with thin-lto=true"
-                );
+            if config.llvm_thin_lto && llvm.link_shared.is_none() {
+                // If we're building with ThinLTO on, by default we want to link
+                // to LLVM shared, to avoid re-doing ThinLTO (which happens in
+                // the link step) with each stage.
                 config.llvm_link_shared = true;
             }
         }

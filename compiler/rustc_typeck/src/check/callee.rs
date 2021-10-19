@@ -17,7 +17,7 @@ use rustc_infer::{
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AllowTwoPhase, AutoBorrow, AutoBorrowMutability,
 };
-use rustc_middle::ty::subst::SubstsRef;
+use rustc_middle::ty::subst::{Subst, SubstsRef};
 use rustc_middle::ty::{self, Ty, TyCtxt, TypeFoldable};
 use rustc_span::symbol::{sym, Ident};
 use rustc_span::Span;
@@ -300,7 +300,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             let end = callee_span.shrink_to_hi();
             err.multipart_suggestion(
                 "if you meant to create this closure and immediately call it, surround the \
-                closure with parenthesis",
+                closure with parentheses",
                 vec![(start, "(".to_string()), (end, ")".to_string())],
                 Applicability::MaybeIncorrect,
             );
@@ -317,6 +317,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     ) -> Ty<'tcx> {
         let (fn_sig, def_id) = match *callee_ty.kind() {
             ty::FnDef(def_id, subst) => {
+                let fn_sig = self.tcx.fn_sig(def_id).subst(self.tcx, subst);
+
                 // Unit testing: function items annotated with
                 // `#[rustc_evaluate_where_clauses]` trigger special output
                 // to let us test the trait evaluation system.
@@ -342,7 +344,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             .emit();
                     }
                 }
-                (callee_ty.fn_sig(self.tcx), Some(def_id))
+                (fn_sig, Some(def_id))
             }
             ty::FnPtr(sig) => (sig, None),
             ref t => {
@@ -381,7 +383,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         call_expr.span,
                         &format!(
                             "`{}` is a unit variant, you need to write it \
-                                 without the parenthesis",
+                                 without the parentheses",
                             path
                         ),
                         path.to_string(),

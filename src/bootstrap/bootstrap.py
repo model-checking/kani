@@ -492,10 +492,11 @@ class RustBuild(object):
 
     def downloading_llvm(self):
         opt = self.get_toml('download-ci-llvm', 'llvm')
-        # This is currently all tier 1 targets (since others may not have CI
-        # artifacts)
+        # This is currently all tier 1 targets and tier 2 targets with host tools
+        # (since others may not have CI artifacts)
         # https://doc.rust-lang.org/rustc/platform-support.html#tier-1
         supported_platforms = [
+            # tier 1
             "aarch64-unknown-linux-gnu",
             "i686-pc-windows-gnu",
             "i686-pc-windows-msvc",
@@ -504,6 +505,26 @@ class RustBuild(object):
             "x86_64-apple-darwin",
             "x86_64-pc-windows-gnu",
             "x86_64-pc-windows-msvc",
+            # tier 2 with host tools
+            "aarch64-apple-darwin",
+            "aarch64-pc-windows-msvc",
+            "aarch64-unknown-linux-musl",
+            "arm-unknown-linux-gnueabi",
+            "arm-unknown-linux-gnueabihf",
+            "armv7-unknown-linux-gnueabihf",
+            "mips-unknown-linux-gnu",
+            "mips64-unknown-linux-gnuabi64",
+            "mips64el-unknown-linux-gnuabi64",
+            "mipsel-unknown-linux-gnu",
+            "powerpc-unknown-linux-gnu",
+            "powerpc64-unknown-linux-gnu",
+            "powerpc64le-unknown-linux-gnu",
+            "riscv64gc-unknown-linux-gnu",
+            "s390x-unknown-linux-gnu",
+            "x86_64-unknown-freebsd",
+            "x86_64-unknown-illumos",
+            "x86_64-unknown-linux-musl",
+            "x86_64-unknown-netbsd",
         ]
         return opt == "true" \
             or (opt == "if-available" and self.build in supported_platforms)
@@ -959,7 +980,7 @@ class RustBuild(object):
                 self.cargo()))
         args = [self.cargo(), "build", "--manifest-path",
                 os.path.join(self.rust_root, "src/bootstrap/Cargo.toml")]
-        for _ in range(1, self.verbose):
+        for _ in range(0, self.verbose):
             args.append("--verbose")
         if self.use_locked_deps:
             args.append("--locked")
@@ -1001,7 +1022,7 @@ class RustBuild(object):
         run(["git", "submodule", "-q", "sync", module],
             cwd=self.rust_root, verbose=self.verbose)
 
-        update_args = ["git", "submodule", "update", "--init", "--recursive"]
+        update_args = ["git", "submodule", "update", "--init", "--recursive", "--depth=1"]
         if self.git_version >= distutils.version.LooseVersion("2.11.0"):
             update_args.append("--progress")
         update_args.append(module)
