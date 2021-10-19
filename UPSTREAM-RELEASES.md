@@ -1,4 +1,4 @@
-Rust 1.56.0 (2021-10-21)
+Version 1.56.0 (2021-10-21)
 ========================
 
 Language
@@ -6,7 +6,6 @@ Language
 
 - [The 2021 Edition is now stable.][rust#88100]
   See [the edition guide][rust-2021-edition-guide] for more details.
-- [You can now specify explicit discriminant values on any Rust enum.][rust#86860]
 - [The pattern in `binding @ pattern` can now also introduce new bindings.][rust#85305]
 - [Union field access is permitted in `const fn`.][rust#85769]
 
@@ -22,6 +21,7 @@ Compiler
   This feature is primarily intended for usage by `cargo fix`, rather than end users.
 - [Promote `aarch64-apple-ios-sim` to Tier 2\*.][rust#87760]
 - [Add `powerpc-unknown-freebsd` at Tier 3\*.][rust#87370]
+- [Add `riscv32imc-esp-espidf` at Tier 3\*.][rust#87666]
 
 \* Refer to Rust's [platform support page][platform-support-doc] for more
 information on Rust's tiered platform support.
@@ -50,8 +50,6 @@ Stabilised APIs
 ---------------
 
 - [`std::os::unix::fs::chroot`]
-- [`Iterator::intersperse`]
-- [`Iterator::intersperse_with`]
 - [`UnsafeCell::raw_get`]
 - [`BufWriter::into_parts`]
 - [`core::panic::{UnwindSafe, RefUnwindSafe, AssertUnwindSafe}`]
@@ -180,6 +178,7 @@ and related tools.
 [rust#87619]: https://github.com/rust-lang/rust/pull/87619
 [rust#81825]: https://github.com/rust-lang/rust/pull/81825#issuecomment-808406918
 [rust#88019]: https://github.com/rust-lang/rust/pull/88019
+[rust#87666]: https://github.com/rust-lang/rust/pull/87666
 
 Version 1.55.0 (2021-09-09)
 ============================

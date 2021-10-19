@@ -3678,6 +3678,7 @@ dependencies = [
  "rustc_errors",
  "rustc_hir",
  "rustc_index",
+ "rustc_query_system",
  "rustc_session",
  "rustc_span",
  "rustc_target",
@@ -3878,8 +3879,6 @@ dependencies = [
 name = "rustc_const_eval"
 version = "0.0.0"
 dependencies = [
- "either",
- "gsgdt",
  "rustc_apfloat",
  "rustc_ast",
  "rustc_attr",
@@ -4247,6 +4246,7 @@ dependencies = [
  "polonius-engine",
  "rand 0.8.4",
  "rand_xoshiro 0.6.0",
+ "rustc-rayon",
  "rustc-rayon-core",
  "rustc_apfloat",
  "rustc_arena",
@@ -4491,6 +4491,7 @@ dependencies = [
  "rustc_index",
  "rustc_metadata",
  "rustc_middle",
+ "rustc_query_system",
  "rustc_session",
  "rustc_span",
  "smallvec",
