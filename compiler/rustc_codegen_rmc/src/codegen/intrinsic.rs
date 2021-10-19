@@ -455,28 +455,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
 
             // Unimplemented
-            "bitreverse" => unimplemented!(),
-            "fadd_fast" => unimplemented!(),
-            "fdiv_fast" => unimplemented!(),
-            "float_to_int_unchecked" => unimplemented!(),
-            "fmul_fast" => unimplemented!(),
-            "frem_fast" => unimplemented!(),
-            "fsub_fast" => unimplemented!(),
-            "prefetch_read_data" => unimplemented!(),
-            "prefetch_read_instruction" => unimplemented!(),
-            "prefetch_write_data" => unimplemented!(),
-            "prefetch_write_instruction" => unimplemented!(),
-            "unaligned_volatile_store" => unimplemented!(),
-            "va_arg" => unimplemented!(),
-            "va_copy" => unimplemented!(),
-            "va_end" => unimplemented!(),
-            "va_start" => unimplemented!(),
-            "volatile_set_memory" => unimplemented!(),
-            "volatile_store" => unimplemented!(),
-            _ => unimplemented!(
-                "unsupported intrinsic: {}\n\tin function {}",
-                intrinsic,
-                self.current_fn().readable_name()
+            _ => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md"
             ),
         }
     }
