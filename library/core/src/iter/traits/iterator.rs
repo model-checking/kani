@@ -246,8 +246,14 @@ pub trait Iterator {
     /// of elements the iterator is advanced by before running out of elements (i.e. the
     /// length of the iterator). Note that `k` is always less than `n`.
     ///
-    /// Calling `advance_by(0)` does not consume any elements and always returns [`Ok(())`][Ok].
+    /// Calling `advance_by(0)` can do meaningful work, for example [`Flatten`]
+    /// can advance its outer iterator until it finds an inner iterator that is not empty, which
+    /// then often allows it to return a more accurate `size_hint()` than in its initial state.
+    /// `advance_by(0)` may either return `Ok()` or `Err(0)`. The former conveys no information
+    /// whether the iterator is or is not exhausted, the latter can be treated as if [`next`]
+    /// had returned `None`. Replacing a `Err(0)` with `Ok` is only correct for `n = 0`.
     ///
+    /// [`Flatten`]: crate::iter::Flatten
     /// [`next`]: Iterator::next
     ///
     /// # Examples
@@ -533,6 +539,8 @@ pub trait Iterator {
     /// Basic usage:
     ///
     /// ```
+    /// #![feature(iter_intersperse)]
+    ///
     /// let mut a = [0, 1, 2].iter().intersperse(&100);
     /// assert_eq!(a.next(), Some(&0));   // The first element from `a`.
     /// assert_eq!(a.next(), Some(&100)); // The separator.
@@ -543,8 +551,9 @@ pub trait Iterator {
     /// ```
     ///
     /// `intersperse` can be very useful to join an iterator's items using a common element:
-    ///
     /// ```
+    /// #![feature(iter_intersperse)]
+    ///
     /// let hello = ["Hello", "World", "!"].iter().copied().intersperse(" ").collect::<String>();
     /// assert_eq!(hello, "Hello World !");
     /// ```
@@ -552,7 +561,7 @@ pub trait Iterator {
     /// [`Clone`]: crate::clone::Clone
     /// [`intersperse_with`]: Iterator::intersperse_with
     #[inline]
-    #[stable(feature = "iter_intersperse", since = "1.56.0")]
+    #[unstable(feature = "iter_intersperse", reason = "recently added", issue = "79524")]
     fn intersperse(self, separator: Self::Item) -> Intersperse<Self>
     where
         Self: Sized,
@@ -577,6 +586,8 @@ pub trait Iterator {
     /// Basic usage:
     ///
     /// ```
+    /// #![feature(iter_intersperse)]
+    ///
     /// #[derive(PartialEq, Debug)]
     /// struct NotClone(usize);
     ///
@@ -593,8 +604,9 @@ pub trait Iterator {
     ///
     /// `intersperse_with` can be used in situations where the separator needs
     /// to be computed:
-    ///
     /// ```
+    /// #![feature(iter_intersperse)]
+    ///
     /// let src = ["Hello", "to", "all", "people", "!!"].iter().copied();
     ///
     /// // The closure mutably borrows its context to generate an item.
@@ -607,7 +619,7 @@ pub trait Iterator {
     /// [`Clone`]: crate::clone::Clone
     /// [`intersperse`]: Iterator::intersperse
     #[inline]
-    #[stable(feature = "iter_intersperse", since = "1.56.0")]
+    #[unstable(feature = "iter_intersperse", reason = "recently added", issue = "79524")]
     fn intersperse_with<G>(self, separator: G) -> IntersperseWith<Self, G>
     where
         Self: Sized,
@@ -2825,12 +2837,12 @@ pub trait Iterator {
     /// Basic usage:
     ///
     /// ```
-    /// let a = [(1, 2), (3, 4)];
+    /// let a = [(1, 2), (3, 4), (5, 6)];
     ///
     /// let (left, right): (Vec<_>, Vec<_>) = a.iter().cloned().unzip();
     ///
-    /// assert_eq!(left, [1, 3]);
-    /// assert_eq!(right, [2, 4]);
+    /// assert_eq!(left, [1, 3, 5]);
+    /// assert_eq!(right, [2, 4, 6]);
     ///
     /// // you can also unzip multiple nested tuples at once
     /// let a = [(1, (2, 3)), (4, (5, 6))];
@@ -3448,6 +3460,7 @@ pub trait Iterator {
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<I: Iterator + ?Sized> Iterator for &mut I {
     type Item = I::Item;
+    #[inline]
     fn next(&mut self) -> Option<I::Item> {
         (**self).next()
     }

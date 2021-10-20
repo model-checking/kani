@@ -425,9 +425,6 @@ declare_features! (
     /// Allows using the `amdgpu-kernel` ABI.
     (active, abi_amdgpu_kernel, "1.29.0", Some(51575), None),
 
-    /// Allows panicking during const eval (producing compile-time errors).
-    (active, const_panic, "1.30.0", Some(51999), None),
-
     /// Allows `#[marker]` on certain traits allowing overlapping implementations.
     (active, marker_trait_attr, "1.30.0", Some(29864), None),
 
@@ -466,6 +463,9 @@ declare_features! (
 
     /// Allows #[repr(transparent)] on unions (RFC 2645).
     (active, transparent_unions, "1.37.0", Some(60405), None),
+
+    /// Allows explicit discriminants on non-unit enum variants.
+    (active, arbitrary_enum_discriminant, "1.37.0", Some(60553), None),
 
     /// Allows `async || body` closures.
     (active, async_closure, "1.37.0", Some(62290), None),
@@ -677,6 +677,12 @@ declare_features! (
 
     /// Allows `#[track_caller]` on closures and generators.
     (active, closure_track_caller, "1.57.0", Some(87417), None),
+
+    /// Allows `#[doc(cfg_hide(...))]`.
+    (active, doc_cfg_hide, "1.57.0", Some(43781), None),
+
+    /// Allows using the `non_exhaustive_omitted_patterns` lint.
+    (active, non_exhaustive_omitted_patterns_lint, "1.57.0", Some(89554), None),
 
     // -------------------------------------------------------------------------
     // feature-group-end: actual feature gates

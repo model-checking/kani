@@ -28,6 +28,7 @@ use self::header::{make_test_description, EarlyProps};
 mod tests;
 
 pub mod common;
+pub mod compute_diff;
 pub mod errors;
 pub mod header;
 mod json;
@@ -507,6 +508,8 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
             Err(_) => false,
         },
         color: config.color,
+        shuffle: false,
+        shuffle_seed: None,
         test_threads: None,
         skip: vec![],
         list: false,

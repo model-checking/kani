@@ -65,12 +65,12 @@ impl<'tcx> LateLintPass<'tcx> for UselessFormat {
             if_chain! {
                 if format_args.format_string_symbols == [kw::Empty];
                 if match cx.typeck_results().expr_ty(value).peel_refs().kind() {
-                    ty::Adt(adt, _) => cx.tcx.is_diagnostic_item(sym::string_type, adt.did),
+                    ty::Adt(adt, _) => cx.tcx.is_diagnostic_item(sym::String, adt.did),
                     ty::Str => true,
                     _ => false,
                 };
-                if format_args.args.iter().all(|e| is_display_arg(e));
-                if format_args.fmt_expr.map_or(true, |e| check_unformatted(e));
+                if format_args.args.iter().all(is_display_arg);
+                if format_args.fmt_expr.map_or(true, check_unformatted);
                 then {
                     let is_new_string = match value.kind {
                         ExprKind::Binary(..) => true,
@@ -90,12 +90,7 @@ impl<'tcx> LateLintPass<'tcx> for UselessFormat {
     }
 }
 
-fn span_useless_format(cx: &LateContext<'_>, span: Span, mut sugg: String, mut applicability: Applicability) {
-    // The callsite span contains the statement semicolon for some reason.
-    if snippet_with_applicability(cx, span, "..", &mut applicability).ends_with(';') {
-        sugg.push(';');
-    }
-
+fn span_useless_format(cx: &LateContext<'_>, span: Span, sugg: String, applicability: Applicability) {
     span_lint_and_sugg(
         cx,
         USELESS_FORMAT,
@@ -112,7 +107,7 @@ fn is_display_arg(expr: &Expr<'_>) -> bool {
         if let ExprKind::Call(_, [_, fmt]) = expr.kind;
         if let ExprKind::Path(QPath::Resolved(_, path)) = fmt.kind;
         if let [.., t, _] = path.segments;
-        if t.ident.name.as_str() == "Display";
+        if t.ident.name == sym::Display;
         then { true } else { false }
     }
 }

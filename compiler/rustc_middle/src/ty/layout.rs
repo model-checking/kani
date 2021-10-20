@@ -2,7 +2,6 @@ use crate::middle::codegen_fn_attrs::CodegenFnAttrFlags;
 use crate::mir::{GeneratorLayout, GeneratorSavedLocal};
 use crate::ty::subst::Subst;
 use crate::ty::{self, subst::SubstsRef, ReprOptions, Ty, TyCtxt, TypeFoldable};
-
 use rustc_ast as ast;
 use rustc_attr as attr;
 use rustc_hir as hir;
@@ -23,6 +22,9 @@ use std::fmt;
 use std::iter;
 use std::num::NonZeroUsize;
 use std::ops::Bound;
+
+use rand::{seq::SliceRandom, SeedableRng};
+use rand_xoshiro::Xoshiro128StarStar;
 
 pub fn provide(providers: &mut ty::query::Providers) {
     *providers =
@@ -324,6 +326,10 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
 
         let mut inverse_memory_index: Vec<u32> = (0..fields.len() as u32).collect();
 
+        // `ReprOptions.layout_seed` is a deterministic seed that we can use to
+        // randomize field ordering with
+        let mut rng = Xoshiro128StarStar::seed_from_u64(repr.field_shuffle_seed);
+
         let optimize = !repr.inhibit_struct_field_reordering_opt();
         if optimize {
             let end =
@@ -332,20 +338,35 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             let field_align = |f: &TyAndLayout<'_>| {
                 if let Some(pack) = pack { f.align.abi.min(pack) } else { f.align.abi }
             };
-            match kind {
-                StructKind::AlwaysSized | StructKind::MaybeUnsized => {
-                    optimizing.sort_by_key(|&x| {
-                        // Place ZSTs first to avoid "interesting offsets",
-                        // especially with only one or two non-ZST fields.
-                        let f = &fields[x as usize];
-                        (!f.is_zst(), cmp::Reverse(field_align(f)))
-                    });
+
+            // If `-Z randomize-layout` was enabled for the type definition we can shuffle
+            // the field ordering to try and catch some code making assumptions about layouts
+            // we don't guarantee
+            if repr.can_randomize_type_layout() {
+                // Shuffle the ordering of the fields
+                optimizing.shuffle(&mut rng);
+
+            // Otherwise we just leave things alone and actually optimize the type's fields
+            } else {
+                match kind {
+                    StructKind::AlwaysSized | StructKind::MaybeUnsized => {
+                        optimizing.sort_by_key(|&x| {
+                            // Place ZSTs first to avoid "interesting offsets",
+                            // especially with only one or two non-ZST fields.
+                            let f = &fields[x as usize];
+                            (!f.is_zst(), cmp::Reverse(field_align(f)))
+                        });
+                    }
+
+                    StructKind::Prefixed(..) => {
+                        // Sort in ascending alignment so that the layout stays optimal
+                        // regardless of the prefix
+                        optimizing.sort_by_key(|&x| field_align(&fields[x as usize]));
+                    }
                 }
-                StructKind::Prefixed(..) => {
-                    // Sort in ascending alignment so that the layout stay optimal
-                    // regardless of the prefix
-                    optimizing.sort_by_key(|&x| field_align(&fields[x as usize]));
-                }
+
+                // FIXME(Kixiron): We can always shuffle fields within a given alignment class
+                //                 regardless of the status of `-Z randomize-layout`
             }
         }
 
@@ -965,7 +986,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
                             let niche = if def.repr.hide_niche() {
                                 None
                             } else {
-                                Niche::from_scalar(dl, Size::ZERO, scalar.clone())
+                                Niche::from_scalar(dl, Size::ZERO, *scalar)
                             };
                             if let Some(niche) = niche {
                                 match st.largest_niche {
@@ -1805,8 +1826,11 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
 
         match layout.variants {
             Variants::Single { index } => {
-                debug!("print-type-size `{:#?}` variant {}", layout, adt_def.variants[index].ident);
-                if !adt_def.variants.is_empty() {
+                if !adt_def.variants.is_empty() && layout.fields != FieldsShape::Primitive {
+                    debug!(
+                        "print-type-size `{:#?}` variant {}",
+                        layout, adt_def.variants[index].ident
+                    );
                     let variant_def = &adt_def.variants[index];
                     let fields: Vec<_> = variant_def.fields.iter().map(|f| f.ident.name).collect();
                     record(
@@ -2249,7 +2273,7 @@ where
         ) -> TyMaybeWithLayout<'tcx> {
             let tcx = cx.tcx();
             let tag_layout = |tag: Scalar| -> TyAndLayout<'tcx> {
-                let layout = Layout::scalar(cx, tag.clone());
+                let layout = Layout::scalar(cx, tag);
                 TyAndLayout { layout: tcx.intern_layout(layout), ty: tag.value.to_ty(tcx) }
             };
 
@@ -2988,7 +3012,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
         };
 
         let target = &self.tcx.sess.target;
-        let target_env_gnu_like = matches!(&target.env[..], "gnu" | "musl");
+        let target_env_gnu_like = matches!(&target.env[..], "gnu" | "musl" | "uclibc");
         let win_x64_gnu = target.os == "windows" && target.arch == "x86_64" && target.env == "gnu";
         let linux_s390x_gnu_like =
             target.os == "linux" && target.arch == "s390x" && target_env_gnu_like;
@@ -3086,7 +3110,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             if arg.layout.is_zst() {
                 // For some forsaken reason, x86_64-pc-windows-gnu
                 // doesn't ignore zero-sized struct arguments.
-                // The same is true for {s390x,sparc64,powerpc}-unknown-linux-{gnu,musl}.
+                // The same is true for {s390x,sparc64,powerpc}-unknown-linux-{gnu,musl,uclibc}.
                 if is_return
                     || rust_abi
                     || (!win_x64_gnu

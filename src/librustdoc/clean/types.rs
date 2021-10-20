@@ -120,8 +120,7 @@ crate struct Crate {
     crate module: Item,
     crate externs: Vec<ExternalCrate>,
     crate primitives: ThinVec<(DefId, PrimitiveType)>,
-    // These are later on moved into `CACHEKEY`, leaving the map empty.
-    // Only here so that they can be filtered through the rustdoc passes.
+    /// Only here so that they can be filtered through the rustdoc passes.
     crate external_traits: Rc<RefCell<FxHashMap<DefId, TraitWithExtraInfo>>>,
     crate collapsed: bool,
 }
@@ -230,8 +229,7 @@ impl ExternalCrate {
         };
         if root.is_local() {
             tcx.hir()
-                .krate()
-                .module()
+                .root_module()
                 .item_ids
                 .iter()
                 .filter_map(|&id| {
@@ -297,8 +295,7 @@ impl ExternalCrate {
 
         if root.is_local() {
             tcx.hir()
-                .krate()
-                .module()
+                .root_module()
                 .item_ids
                 .iter()
                 .filter_map(|&id| {
@@ -423,7 +420,7 @@ impl Item {
             kind,
             box ast_attrs.clean(cx),
             cx,
-            ast_attrs.cfg(cx.sess()),
+            ast_attrs.cfg(cx.tcx, &cx.cache.hidden_cfg),
         )
     }
 
@@ -749,7 +746,7 @@ crate trait AttributesExt {
 
     fn other_attrs(&self) -> Vec<ast::Attribute>;
 
-    fn cfg(&self, sess: &Session) -> Option<Arc<Cfg>>;
+    fn cfg(&self, tcx: TyCtxt<'_>, hidden_cfg: &FxHashSet<Cfg>) -> Option<Arc<Cfg>>;
 }
 
 impl AttributesExt for [ast::Attribute] {
@@ -774,8 +771,41 @@ impl AttributesExt for [ast::Attribute] {
         self.iter().filter(|attr| attr.doc_str().is_none()).cloned().collect()
     }
 
-    fn cfg(&self, sess: &Session) -> Option<Arc<Cfg>> {
-        let mut cfg = Cfg::True;
+    fn cfg(&self, tcx: TyCtxt<'_>, hidden_cfg: &FxHashSet<Cfg>) -> Option<Arc<Cfg>> {
+        let sess = tcx.sess;
+        let doc_cfg_active = tcx.features().doc_cfg;
+
+        fn single<T: IntoIterator>(it: T) -> Option<T::Item> {
+            let mut iter = it.into_iter();
+            let item = iter.next()?;
+            if iter.next().is_some() {
+                return None;
+            }
+            Some(item)
+        }
+
+        let mut cfg = if doc_cfg_active {
+            let mut doc_cfg = self
+                .iter()
+                .filter(|attr| attr.has_name(sym::doc))
+                .flat_map(|attr| attr.meta_item_list().unwrap_or_else(Vec::new))
+                .filter(|attr| attr.has_name(sym::cfg))
+                .peekable();
+            if doc_cfg.peek().is_some() {
+                doc_cfg
+                    .filter_map(|attr| Cfg::parse(attr.meta_item()?).ok())
+                    .fold(Cfg::True, |cfg, new_cfg| cfg & new_cfg)
+            } else {
+                self.iter()
+                    .filter(|attr| attr.has_name(sym::cfg))
+                    .filter_map(|attr| single(attr.meta_item_list()?))
+                    .filter_map(|attr| Cfg::parse(attr.meta_item()?).ok())
+                    .filter(|cfg| !hidden_cfg.contains(cfg))
+                    .fold(Cfg::True, |cfg, new_cfg| cfg & new_cfg)
+            }
+        } else {
+            Cfg::True
+        };
 
         for attr in self.iter() {
             // #[doc]
@@ -802,6 +832,8 @@ impl AttributesExt for [ast::Attribute] {
             }
         }
 
+        // treat #[target_feature(enable = "feat")] attributes as if they were
+        // #[doc(cfg(target_feature = "feat"))] attributes as well
         for attr in self.lists(sym::target_feature) {
             if attr.has_name(sym::enable) {
                 if let Some(feat) = attr.value_str() {
@@ -1114,7 +1146,7 @@ impl GenericBound {
         let path = external_path(cx, did, false, vec![], empty);
         inline::record_extern_fqn(cx, did, ItemType::Trait);
         GenericBound::TraitBound(
-            PolyTrait { trait_: ResolvedPath { path, did }, generic_params: Vec::new() },
+            PolyTrait { trait_: path, generic_params: Vec::new() },
             hir::TraitBoundModifier::Maybe,
         )
     }
@@ -1122,7 +1154,7 @@ impl GenericBound {
     crate fn is_sized_bound(&self, cx: &DocContext<'_>) -> bool {
         use rustc_hir::TraitBoundModifier as TBM;
         if let GenericBound::TraitBound(PolyTrait { ref trait_, .. }, TBM::None) = *self {
-            if trait_.def_id() == cx.tcx.lang_items().sized_trait() {
+            if Some(trait_.def_id()) == cx.tcx.lang_items().sized_trait() {
                 return true;
             }
         }
@@ -1136,7 +1168,7 @@ impl GenericBound {
         None
     }
 
-    crate fn get_trait_type(&self) -> Option<Type> {
+    crate fn get_trait_path(&self) -> Option<Path> {
         if let GenericBound::TraitBound(PolyTrait { ref trait_, .. }, _) = *self {
             Some(trait_.clone())
         } else {
@@ -1368,56 +1400,59 @@ crate struct TraitAlias {
 /// A trait reference, which may have higher ranked lifetimes.
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate struct PolyTrait {
-    crate trait_: Type,
+    crate trait_: Path,
     crate generic_params: Vec<GenericParamDef>,
 }
 
-/// A representation of a type suitable for hyperlinking purposes. Ideally, one can get the original
-/// type out of the AST/`TyCtxt` given one of these, if more information is needed. Most
-/// importantly, it does not preserve mutability or boxes.
+/// Rustdoc's representation of types, mostly based on the [`hir::Ty`].
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate enum Type {
-    /// Structs/enums/traits (most that would be an `hir::TyKind::Path`).
-    ResolvedPath {
-        path: Path,
-        did: DefId,
-    },
-    /// `dyn for<'a> Trait<'a> + Send + 'static`
+    /// A named type, which could be a trait.
+    ///
+    /// This is mostly Rustdoc's version of [`hir::Path`]. It has to be different because Rustdoc's [`PathSegment`] can contain cleaned generics.
+    ResolvedPath { path: Path, did: DefId },
+    /// A `dyn Trait` object: `dyn for<'a> Trait<'a> + Send + 'static`
     DynTrait(Vec<PolyTrait>, Option<Lifetime>),
-    /// For parameterized types, so the consumer of the JSON don't go
-    /// looking for types which don't exist anywhere.
+    /// A type parameter.
     Generic(Symbol),
-    /// Primitives are the fixed-size numeric types (plus int/usize/float), char,
-    /// arrays, slices, and tuples.
+    /// A primitive (aka, builtin) type.
     Primitive(PrimitiveType),
-    /// `extern "ABI" fn`
+    /// A function pointer: `extern "ABI" fn(...) -> ...`
     BareFunction(Box<BareFunctionDecl>),
+    /// A tuple type: `(i32, &str)`.
     Tuple(Vec<Type>),
+    /// A slice type (does *not* include the `&`): `[i32]`
     Slice(Box<Type>),
-    /// The `String` field is about the size or the constant representing the array's length.
+    /// An array type.
+    ///
+    /// The `String` field is a stringified version of the array's length parameter.
     Array(Box<Type>, String),
-    Never,
+    /// A raw pointer type: `*const i32`, `*mut i32`
     RawPointer(Mutability, Box<Type>),
-    BorrowedRef {
-        lifetime: Option<Lifetime>,
-        mutability: Mutability,
-        type_: Box<Type>,
-    },
+    /// A reference type: `&i32`, `&'a mut Foo`
+    BorrowedRef { lifetime: Option<Lifetime>, mutability: Mutability, type_: Box<Type> },
 
-    // `<Type as Trait>::Name`
+    /// A qualified path to an associated item: `<Type as Trait>::Name`
     QPath {
         name: Symbol,
         self_type: Box<Type>,
+        /// FIXME: This is a hack that should be removed; see [this discussion][1].
+        ///
+        /// [1]: https://github.com/rust-lang/rust/pull/85479#discussion_r635729093
         self_def_id: Option<DefId>,
-        trait_: Box<Type>,
+        trait_: Path,
     },
 
-    // `_`
+    /// A type that is inferred: `_`
     Infer,
 
-    // `impl TraitA + TraitB + ...`
+    /// An `impl Trait`: `impl TraitA + TraitB + ...`
     ImplTrait(Vec<GenericBound>),
 }
+
+// `Type` is used a lot. Make sure it doesn't unintentionally get bigger.
+#[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
+rustc_data_structures::static_assert_size!(Type, 72);
 
 crate trait GetDefId {
     /// Use this method to get the [`DefId`] of a [`clean`] AST node.
@@ -1462,7 +1497,6 @@ impl Type {
             }
             RawPointer(..) => Some(PrimitiveType::RawPointer),
             BareFunction(..) => Some(PrimitiveType::Fn),
-            Never => Some(PrimitiveType::Never),
             _ => None,
         }
     }
@@ -1483,34 +1517,8 @@ impl Type {
     }
 
     crate fn generics(&self) -> Option<Vec<&Type>> {
-        match *self {
-            ResolvedPath { ref path, .. } => path.segments.last().and_then(|seg| {
-                if let GenericArgs::AngleBracketed { ref args, .. } = seg.args {
-                    Some(
-                        args.iter()
-                            .filter_map(|arg| match arg {
-                                GenericArg::Type(ty) => Some(ty),
-                                _ => None,
-                            })
-                            .collect(),
-                    )
-                } else {
-                    None
-                }
-            }),
-            _ => None,
-        }
-    }
-
-    crate fn bindings(&self) -> Option<&[TypeBinding]> {
-        match *self {
-            ResolvedPath { ref path, .. } => path.segments.last().and_then(|seg| {
-                if let GenericArgs::AngleBracketed { ref bindings, .. } = seg.args {
-                    Some(&**bindings)
-                } else {
-                    None
-                }
-            }),
+        match self {
+            ResolvedPath { path, .. } => path.generics(),
             _ => None,
         }
     }
@@ -1528,17 +1536,13 @@ impl Type {
             QPath { self_type, trait_, name, .. } => (self_type, trait_, name),
             _ => return None,
         };
-        let trait_did = match **trait_ {
-            ResolvedPath { did, .. } => did,
-            _ => return None,
-        };
-        Some((&self_, trait_did, *name))
+        Some((&self_, trait_.def_id(), *name))
     }
 
     fn inner_def_id(&self, cache: Option<&Cache>) -> Option<DefId> {
         let t: PrimitiveType = match *self {
             ResolvedPath { did, .. } => return Some(did),
-            DynTrait(ref bounds, _) => return bounds[0].trait_.inner_def_id(cache),
+            DynTrait(ref bounds, _) => return Some(bounds[0].trait_.def_id()),
             Primitive(p) => return cache.and_then(|c| c.primitive_locations.get(&p).cloned()),
             BorrowedRef { type_: box Generic(..), .. } => PrimitiveType::Reference,
             BorrowedRef { ref type_, .. } => return type_.inner_def_id(cache),
@@ -1550,7 +1554,6 @@ impl Type {
                 }
             }
             BareFunction(..) => PrimitiveType::Fn,
-            Never => PrimitiveType::Never,
             Slice(..) => PrimitiveType::Slice,
             Array(..) => PrimitiveType::Array,
             RawPointer(..) => PrimitiveType::RawPointer,
@@ -1571,8 +1574,12 @@ impl GetDefId for Type {
     }
 }
 
-/// N.B. this has to be different from `hir::PrimTy` because it also includes types that aren't
-/// paths, like `Unit`.
+/// A primitive (aka, builtin) type.
+///
+/// This represents things like `i32`, `str`, etc.
+///
+/// N.B. This has to be different from [`hir::PrimTy`] because it also includes types that aren't
+/// paths, like [`Self::Unit`].
 #[derive(Clone, PartialEq, Eq, Hash, Copy, Debug)]
 crate enum PrimitiveType {
     Isize,
@@ -1970,12 +1977,15 @@ impl Span {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate struct Path {
-    crate global: bool,
     crate res: Res,
     crate segments: Vec<PathSegment>,
 }
 
 impl Path {
+    crate fn def_id(&self) -> DefId {
+        self.res.def_id()
+    }
+
     crate fn last(&self) -> Symbol {
         self.segments.last().expect("segments were empty").name
     }
@@ -1985,8 +1995,11 @@ impl Path {
     }
 
     crate fn whole_name(&self) -> String {
-        String::from(if self.global { "::" } else { "" })
-            + &self.segments.iter().map(|s| s.name.to_string()).collect::<Vec<_>>().join("::")
+        self.segments
+            .iter()
+            .map(|s| if s.name == kw::PathRoot { String::new() } else { s.name.to_string() })
+            .intersperse("::".into())
+            .collect()
     }
 
     /// Checks if this is a `T::Name` path for an associated type.
@@ -1997,6 +2010,33 @@ impl Path {
             Res::Def(DefKind::AssocTy, _) => true,
             _ => false,
         }
+    }
+
+    crate fn generics(&self) -> Option<Vec<&Type>> {
+        self.segments.last().and_then(|seg| {
+            if let GenericArgs::AngleBracketed { ref args, .. } = seg.args {
+                Some(
+                    args.iter()
+                        .filter_map(|arg| match arg {
+                            GenericArg::Type(ty) => Some(ty),
+                            _ => None,
+                        })
+                        .collect(),
+                )
+            } else {
+                None
+            }
+        })
+    }
+
+    crate fn bindings(&self) -> Option<&[TypeBinding]> {
+        self.segments.last().and_then(|seg| {
+            if let GenericArgs::AngleBracketed { ref bindings, .. } = seg.args {
+                Some(&**bindings)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -2141,7 +2181,7 @@ crate struct Impl {
     crate span: Span,
     crate unsafety: hir::Unsafety,
     crate generics: Generics,
-    crate trait_: Option<Type>,
+    crate trait_: Option<Path>,
     crate for_: Type,
     crate items: Vec<Item>,
     crate negative_polarity: bool,
@@ -2152,7 +2192,8 @@ crate struct Impl {
 impl Impl {
     crate fn provided_trait_methods(&self, tcx: TyCtxt<'_>) -> FxHashSet<Symbol> {
         self.trait_
-            .def_id()
+            .as_ref()
+            .map(|t| t.def_id())
             .map(|did| tcx.provided_trait_methods(did).map(|meth| meth.ident.name).collect())
             .unwrap_or_default()
     }

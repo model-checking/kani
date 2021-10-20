@@ -19,16 +19,16 @@ mod entry;
 pub use entry::{Entry, OccupiedEntry, OccupiedError, VacantEntry};
 use Entry::*;
 
-/// Minimum number of elements in nodes that are not a root.
+/// Minimum number of elements in a node that is not a root.
 /// We might temporarily have fewer elements during methods.
 pub(super) const MIN_LEN: usize = node::MIN_LEN_AFTER_SPLIT;
 
 // A tree in a `BTreeMap` is a tree in the `node` module with additional invariants:
 // - Keys must appear in ascending order (according to the key's type).
-// - If the root node is internal, it must contain at least 1 element.
+// - Every non-leaf node contains at least 1 element (has at least 2 children).
 // - Every non-root node contains at least MIN_LEN elements.
 //
-// An empty map may be represented both by the absence of a root node or by a
+// An empty map is represented either by the absence of a root node or by a
 // root node that is an empty leaf.
 
 /// A map based on a [B-Tree].
@@ -502,6 +502,7 @@ impl<K, V> BTreeMap<K, V> {
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_unstable(feature = "const_btree_new", issue = "71835")]
+    #[must_use]
     pub const fn new() -> BTreeMap<K, V> {
         BTreeMap { root: None, length: 0 }
     }
@@ -1264,6 +1265,7 @@ impl<K, V> BTreeMap<K, V> {
     /// assert_eq!(keys, [1, 2]);
     /// ```
     #[inline]
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "map_into_keys_values", since = "1.54.0")]
     pub fn into_keys(self) -> IntoKeys<K, V> {
         IntoKeys { inner: self.into_iter() }
@@ -1286,6 +1288,7 @@ impl<K, V> BTreeMap<K, V> {
     /// assert_eq!(values, ["hello", "goodbye"]);
     /// ```
     #[inline]
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "map_into_keys_values", since = "1.54.0")]
     pub fn into_values(self) -> IntoValues<K, V> {
         IntoValues { inner: self.into_iter() }
@@ -1735,8 +1738,8 @@ impl<'a, K: 'a, V: 'a> DrainFilterInner<'a, K, V> {
     pub(super) fn size_hint(&self) -> (usize, Option<usize>) {
         // In most of the btree iterators, `self.length` is the number of elements
         // yet to be visited. Here, it includes elements that were visited and that
-        // the predicate decided not to drain. Making this upper bound more accurate
-        // requires maintaining an extra field and is not worth while.
+        // the predicate decided not to drain. Making this upper bound more tight
+        // during iteration would require an extra field.
         (0, Some(*self.length))
     }
 }
@@ -1968,6 +1971,7 @@ impl<'a, K: Ord + Copy, V: Copy> Extend<(&'a K, &'a V)> for BTreeMap<K, V> {
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<K: Hash, V: Hash> Hash for BTreeMap<K, V> {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.len().hash(state);
         for elt in self {
             elt.hash(state);
         }

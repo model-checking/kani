@@ -329,8 +329,8 @@
 //!   [`Ok`], or returns the provided default value if the [`Result`] is
 //!   [`Err`]
 //! * [`map_or_else`] applies the provided function to the contained value
-//!   of [`Ok`], or applies the provided fallback function to the contained
-//!   value of [`Err`]
+//!   of [`Ok`], or applies the provided default fallback function to the
+//!   contained value of [`Err`]
 //!
 //! [`map_or`]: Result::map_or
 //! [`map_or_else`]: Result::map_or_else
@@ -498,7 +498,7 @@ use crate::{convert, fmt, hint};
 /// See the [module documentation](self) for details.
 #[derive(Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 #[must_use = "this `Result` may be an `Err` variant, which should be handled"]
-#[rustc_diagnostic_item = "result_type"]
+#[rustc_diagnostic_item = "Result"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub enum Result<T, E> {
     /// Contains the success value
@@ -729,7 +729,8 @@ impl<T, E> Result<T, E> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn as_mut(&mut self) -> Result<&mut T, &mut E> {
+    #[rustc_const_unstable(feature = "const_result", issue = "82814")]
+    pub const fn as_mut(&mut self) -> Result<&mut T, &mut E> {
         match *self {
             Ok(ref mut x) => Ok(x),
             Err(ref mut x) => Err(x),
@@ -795,9 +796,8 @@ impl<T, E> Result<T, E> {
         }
     }
 
-    /// Maps a `Result<T, E>` to `U` by applying a fallback function to a
-    /// contained [`Err`] value, or a default function to a
-    /// contained [`Ok`] value.
+    /// Maps a `Result<T, E>` to `U` by applying fallback function `default` to
+    /// a contained [`Err`] value, or function `f` to a contained [`Ok`] value.
     ///
     /// This function can be used to unpack a successful result
     /// while handling an error.

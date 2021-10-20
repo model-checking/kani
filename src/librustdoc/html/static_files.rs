@@ -70,8 +70,6 @@ crate static RUST_FAVICON_SVG: &[u8] = include_bytes!("static/images/favicon.svg
 crate static RUST_FAVICON_PNG_16: &[u8] = include_bytes!("static/images/favicon-16x16.png");
 crate static RUST_FAVICON_PNG_32: &[u8] = include_bytes!("static/images/favicon-32x32.png");
 
-crate static PAGE: &str = include_str!("templates/page.html");
-
 /// The built-in themes given to every documentation site.
 crate mod themes {
     /// The "light" theme, selected by default when no setting is available. Used as the basis for
@@ -159,15 +157,14 @@ crate mod source_code_pro {
 }
 
 crate mod noto_sans_kr {
-    /// The file `noto-sans-kr-v13-korean-regular.woff`, the Regular variant of the Noto Sans KR
-    /// font.
-    crate static REGULAR: &[u8] =
-        include_bytes!("static/fonts/noto-sans-kr-v13-korean-regular.woff");
+    /// The file `noto-sans-kr.woff`, the Regular variant of the Noto Sans KR font.
+    crate static REGULAR: &[u8] = include_bytes!("static/fonts/noto-sans-kr-regular.woff");
 
-    /// The file `noto-sans-kr-v13-korean-regular-LICENSE.txt`, the license text of the Noto Sans KR
-    /// font.
-    crate static LICENSE: &[u8] =
-        include_bytes!("static/fonts/noto-sans-kr-v13-korean-regular-LICENSE.txt");
+    /// The file `noto-sans-kr.woff2`, the Regular variant of the Noto Sans KR font.
+    crate static REGULAR2: &[u8] = include_bytes!("static/fonts/noto-sans-kr-regular.woff2");
+
+    /// The file `noto-sans-kr-LICENSE.txt`, the license text of the Noto Sans KR font.
+    crate static LICENSE: &[u8] = include_bytes!("static/fonts/noto-sans-kr-LICENSE.txt");
 }
 
 /// Files related to the sidebar in rustdoc sources.

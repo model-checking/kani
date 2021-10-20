@@ -1,7 +1,7 @@
 use rustc_middle::mir::visit::Visitor;
 use rustc_middle::mir::{self, BasicBlock, Location};
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Span;
+use rustc_span::{symbol::sym, Span};
 
 use super::check::Qualifs;
 use super::ops::{self, NonConstOp};
@@ -27,6 +27,10 @@ pub fn check_live_drops(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) {
     let def_id = body.source.def_id().expect_local();
     let const_kind = tcx.hir().body_const_context(def_id);
     if const_kind.is_none() {
+        return;
+    }
+
+    if tcx.has_attr(def_id.to_def_id(), sym::rustc_do_not_const_check) {
         return;
     }
 
@@ -93,7 +97,7 @@ impl Visitor<'tcx> for CheckLiveDrops<'mir, 'tcx> {
                 // `src/test/ui/consts/control-flow/drop-pass.rs`; e.g., when an `Option<Vec<T>>` is
                 // initialized with `None` and never changed, it still emits drop glue.
                 // Hence we additionally check the qualifs here to allow more code to pass.
-                if self.qualifs.needs_drop(self.ccx, dropped_place.local, location) {
+                if self.qualifs.needs_non_const_drop(self.ccx, dropped_place.local, location) {
                     // Use the span where the dropped local was declared for the error.
                     let span = self.body.local_decls[dropped_place.local].source_info.span;
                     self.check_live_drop(span);

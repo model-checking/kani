@@ -41,20 +41,17 @@
 #![feature(once_cell)]
 #![feature(min_specialization)]
 #![feature(trusted_len)]
-#![feature(test)]
 #![feature(in_band_lifetimes)]
 #![feature(crate_visibility_modifier)]
 #![feature(associated_type_bounds)]
 #![feature(rustc_attrs)]
 #![feature(half_open_range_patterns)]
-#![feature(exclusive_range_pattern)]
 #![feature(control_flow_enum)]
 #![feature(associated_type_defaults)]
 #![feature(iter_zip)]
 #![feature(thread_local_const_init)]
 #![feature(trusted_step)]
 #![feature(try_blocks)]
-#![feature(try_reserve)]
 #![feature(try_reserve_kind)]
 #![feature(nonzero_ops)]
 #![recursion_limit = "512"]
@@ -84,7 +81,6 @@ pub mod arena;
 #[macro_use]
 pub mod dep_graph;
 pub mod hir;
-pub mod ich;
 pub mod infer;
 pub mod lint;
 pub mod middle;

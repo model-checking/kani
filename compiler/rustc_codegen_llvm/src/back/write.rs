@@ -41,7 +41,7 @@ use std::sync::Arc;
 pub fn llvm_err(handler: &rustc_errors::Handler, msg: &str) -> FatalError {
     match llvm::last_error() {
         Some(err) => handler.fatal(&format!("{}: {}", msg, err)),
-        None => handler.fatal(&msg),
+        None => handler.fatal(msg),
     }
 }
 
@@ -96,7 +96,7 @@ pub fn create_target_machine(tcx: TyCtxt<'_>, mod_name: &str) -> &'static mut ll
         None
     };
     let config = TargetMachineFactoryConfig { split_dwarf_file };
-    target_machine_factory(&tcx.sess, tcx.backend_optimization_level(()))(config)
+    target_machine_factory(tcx.sess, tcx.backend_optimization_level(()))(config)
         .unwrap_or_else(|err| llvm_err(tcx.sess.diagnostic(), &err).raise())
 }
 
@@ -129,7 +129,8 @@ fn to_pass_builder_opt_level(cfg: config::OptLevel) -> llvm::PassBuilderOptLevel
 fn to_llvm_relocation_model(relocation_model: RelocModel) -> llvm::RelocModel {
     match relocation_model {
         RelocModel::Static => llvm::RelocModel::Static,
-        RelocModel::Pic => llvm::RelocModel::PIC,
+        // LLVM doesn't have a PIE relocation model, it represents PIE as PIC with an extra attribute.
+        RelocModel::Pic | RelocModel::Pie => llvm::RelocModel::PIC,
         RelocModel::DynamicNoPic => llvm::RelocModel::DynamicNoPic,
         RelocModel::Ropi => llvm::RelocModel::ROPI,
         RelocModel::Rwpi => llvm::RelocModel::RWPI,
@@ -369,10 +370,26 @@ fn get_pgo_use_path(config: &ModuleConfig) -> Option<CString> {
         .map(|path_buf| CString::new(path_buf.to_string_lossy().as_bytes()).unwrap())
 }
 
-pub(crate) fn should_use_new_llvm_pass_manager(config: &ModuleConfig) -> bool {
+fn get_pgo_sample_use_path(config: &ModuleConfig) -> Option<CString> {
+    config
+        .pgo_sample_use
+        .as_ref()
+        .map(|path_buf| CString::new(path_buf.to_string_lossy().as_bytes()).unwrap())
+}
+
+pub(crate) fn should_use_new_llvm_pass_manager(
+    cgcx: &CodegenContext<LlvmCodegenBackend>,
+    config: &ModuleConfig,
+) -> bool {
     // The new pass manager is enabled by default for LLVM >= 13.
     // This matches Clang, which also enables it since Clang 13.
-    config.new_llvm_pass_manager.unwrap_or_else(|| llvm_util::get_version() >= (13, 0, 0))
+
+    // FIXME: There are some perf issues with the new pass manager
+    // when targeting s390x, so it is temporarily disabled for that
+    // arch, see https://github.com/rust-lang/rust/issues/89609
+    config
+        .new_llvm_pass_manager
+        .unwrap_or_else(|| cgcx.target_arch != "s390x" && llvm_util::get_version() >= (13, 0, 0))
 }
 
 pub(crate) unsafe fn optimize_with_new_llvm_pass_manager(
@@ -388,6 +405,7 @@ pub(crate) unsafe fn optimize_with_new_llvm_pass_manager(
     let using_thin_buffers = opt_stage == llvm::OptStage::PreLinkThinLTO || config.bitcode_needed();
     let pgo_gen_path = get_pgo_gen_path(config);
     let pgo_use_path = get_pgo_use_path(config);
+    let pgo_sample_use_path = get_pgo_sample_use_path(config);
     let is_lto = opt_stage == llvm::OptStage::ThinLTO || opt_stage == llvm::OptStage::FatLTO;
     // Sanitizer instrumentation is only inserted during the pre-link optimization stage.
     let sanitizer_options = if !is_lto {
@@ -405,12 +423,14 @@ pub(crate) unsafe fn optimize_with_new_llvm_pass_manager(
         None
     };
 
-    let llvm_selfprofiler = if cgcx.prof.llvm_recording_enabled() {
-        let mut llvm_profiler = LlvmSelfProfiler::new(cgcx.prof.get_self_profiler().unwrap());
-        &mut llvm_profiler as *mut _ as *mut c_void
+    let mut llvm_profiler = if cgcx.prof.llvm_recording_enabled() {
+        Some(LlvmSelfProfiler::new(cgcx.prof.get_self_profiler().unwrap()))
     } else {
-        std::ptr::null_mut()
+        None
     };
+
+    let llvm_selfprofiler =
+        llvm_profiler.as_mut().map(|s| s as *mut _ as *mut c_void).unwrap_or(std::ptr::null_mut());
 
     let extra_passes = config.passes.join(",");
 
@@ -436,6 +456,8 @@ pub(crate) unsafe fn optimize_with_new_llvm_pass_manager(
         pgo_use_path.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
         config.instrument_coverage,
         config.instrument_gcov,
+        pgo_sample_use_path.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+        config.debug_info_for_profiling,
         llvm_selfprofiler,
         selfprofile_before_pass_callback,
         selfprofile_after_pass_callback,
@@ -469,7 +491,7 @@ pub(crate) unsafe fn optimize(
     }
 
     if let Some(opt_level) = config.opt_level {
-        if should_use_new_llvm_pass_manager(config) {
+        if should_use_new_llvm_pass_manager(cgcx, config) {
             let opt_stage = match cgcx.lto {
                 Lto::Fat => llvm::OptStage::PreLinkFatLTO,
                 Lto::Thin | Lto::ThinLocal => llvm::OptStage::PreLinkThinLTO,
@@ -541,6 +563,9 @@ pub(crate) unsafe fn optimize(
             if config.instrument_coverage {
                 llvm::LLVMRustAddPass(mpm, find_pass("instrprof").unwrap());
             }
+            if config.debug_info_for_profiling {
+                llvm::LLVMRustAddPass(mpm, find_pass("add-discriminators").unwrap());
+            }
 
             add_sanitizer_passes(config, &mut extra_passes);
 
@@ -555,7 +580,7 @@ pub(crate) unsafe fn optimize(
                 let prepare_for_thin_lto = cgcx.lto == Lto::Thin
                     || cgcx.lto == Lto::ThinLocal
                     || (cgcx.lto != Lto::Fat && cgcx.opts.cg.linker_plugin_lto.enabled());
-                with_llvm_pmb(llmod, &config, opt_level, prepare_for_thin_lto, &mut |b| {
+                with_llvm_pmb(llmod, config, opt_level, prepare_for_thin_lto, &mut |b| {
                     llvm::LLVMRustAddLastExtensionPasses(
                         b,
                         extra_passes.as_ptr(),
@@ -657,9 +682,9 @@ pub(crate) fn link(
         let _timer =
             cgcx.prof.generic_activity_with_arg("LLVM_link_module", format!("{:?}", module.name));
         let buffer = ModuleBuffer::new(module.module_llvm.llmod());
-        linker.add(&buffer.data()).map_err(|()| {
+        linker.add(buffer.data()).map_err(|()| {
             let msg = format!("failed to serialize module {:?}", module.name);
-            llvm_err(&diag_handler, &msg)
+            llvm_err(diag_handler, &msg)
         })?;
     }
     drop(linker);
@@ -998,6 +1023,7 @@ pub unsafe fn with_llvm_pmb(
     let inline_threshold = config.inline_threshold;
     let pgo_gen_path = get_pgo_gen_path(config);
     let pgo_use_path = get_pgo_use_path(config);
+    let pgo_sample_use_path = get_pgo_sample_use_path(config);
 
     llvm::LLVMRustConfigurePassManagerBuilder(
         builder,
@@ -1008,6 +1034,7 @@ pub unsafe fn with_llvm_pmb(
         prepare_for_thin_lto,
         pgo_gen_path.as_ref().map_or(ptr::null(), |s| s.as_ptr()),
         pgo_use_path.as_ref().map_or(ptr::null(), |s| s.as_ptr()),
+        pgo_sample_use_path.as_ref().map_or(ptr::null(), |s| s.as_ptr()),
     );
 
     llvm::LLVMPassManagerBuilderSetSizeLevel(builder, opt_size as u32);

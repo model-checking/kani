@@ -293,7 +293,7 @@ impl<'a, 'tcx> WrongNumberOfGenericArgs<'a, 'tcx> {
         &self,
         num_params_to_take: usize,
     ) -> String {
-        let fn_sig = self.tcx.hir().get_if_local(self.def_id).and_then(|node| fn_sig(node));
+        let fn_sig = self.tcx.hir().get_if_local(self.def_id).and_then(fn_sig);
         let is_used_in_input = |def_id| {
             fn_sig.map_or(false, |fn_sig| {
                 fn_sig.decl.inputs.iter().any(|ty| match ty.kind {
@@ -731,7 +731,11 @@ impl<'a, 'tcx> WrongNumberOfGenericArgs<'a, 'tcx> {
     /// Builds the `type defined here` message.
     fn show_definition(&self, err: &mut DiagnosticBuilder<'_>) {
         let mut spans: MultiSpan = if let Some(def_span) = self.tcx.def_ident_span(self.def_id) {
-            def_span.into()
+            if self.tcx.sess.source_map().span_to_snippet(def_span).is_ok() {
+                def_span.into()
+            } else {
+                return;
+            }
         } else {
             return;
         };

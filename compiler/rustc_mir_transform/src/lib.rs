@@ -1,7 +1,7 @@
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(crate_visibility_modifier)]
-#![feature(const_panic)]
+#![cfg_attr(bootstrap, feature(const_panic))]
 #![feature(in_band_lifetimes)]
 #![feature(iter_zip)]
 #![feature(map_try_insert)]
@@ -58,6 +58,7 @@ mod lower_intrinsics;
 mod lower_slice_len;
 mod match_branches;
 mod multiple_return_terminators;
+mod normalize_array_len;
 mod nrvo;
 mod remove_noop_landing_pads;
 mod remove_storage_markers;
@@ -133,7 +134,7 @@ fn mir_keys(tcx: TyCtxt<'_>, (): ()) -> FxHashSet<LocalDefId> {
     let mut set = FxHashSet::default();
 
     // All body-owners have MIR associated with them.
-    set.extend(tcx.body_owners());
+    set.extend(tcx.hir().body_owners());
 
     // Additionally, tuple struct/variant constructors have MIR, but
     // they don't have a BodyId, so we need to build them separately.
@@ -160,9 +161,7 @@ fn mir_keys(tcx: TyCtxt<'_>, (): ()) -> FxHashSet<LocalDefId> {
             NestedVisitorMap::None
         }
     }
-    tcx.hir()
-        .krate()
-        .visit_all_item_likes(&mut GatherCtors { tcx, set: &mut set }.as_deep_visitor());
+    tcx.hir().visit_all_item_likes(&mut GatherCtors { tcx, set: &mut set }.as_deep_visitor());
 
     set
 }
@@ -490,6 +489,7 @@ fn run_optimization_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
     // machine than on MIR with async primitives.
     let optimizations_with_generators: &[&dyn MirPass<'tcx>] = &[
         &lower_slice_len::LowerSliceLenCalls, // has to be done before inlining, otherwise actual call will be almost always inlined. Also simple, so can just do first
+        &normalize_array_len::NormalizeArrayLen, // has to run after `slice::len` lowering
         &unreachable_prop::UnreachablePropagation,
         &uninhabited_enum_branching::UninhabitedEnumBranching,
         &simplify::SimplifyCfg::new("after-uninhabited-enum-branching"),

@@ -202,15 +202,15 @@ changelog-seen = 2
 # You can use "$ROOT" to indicate the root of the git repository.
 #build-dir = "build"
 
-# Instead of downloading the src/stage0.txt version of Cargo specified, use
+# Instead of downloading the src/stage0.json version of Cargo specified, use
 # this Cargo binary instead to build all Rust code
 #cargo = "/path/to/cargo"
 
-# Instead of downloading the src/stage0.txt version of the compiler
+# Instead of downloading the src/stage0.json version of the compiler
 # specified, use this rustc binary instead as the stage0 snapshot compiler.
 #rustc = "/path/to/rustc"
 
-# Instead of download the src/stage0.txt version of rustfmt specified,
+# Instead of download the src/stage0.json version of rustfmt specified,
 # use this rustfmt binary instead as the stage0 snapshot rustfmt.
 #rustfmt = "/path/to/rustfmt"
 
@@ -312,6 +312,12 @@ changelog-seen = 2
 # captures, what platforms it supports, the format of its associated output, and
 # this setting's very existence, are all subject to change.)
 #print-step-rusage = false
+
+# Always patch binaries for usage with Nix toolchains. If `true` then binaries
+# will be patched unconditionally. If `false` or unset, binaries will be patched
+# only if the current distribution is NixOS. This option is useful when using
+# a Nix toolchain on non-NixOS distributions.
+#patch-binaries-for-nix = false
 
 # =============================================================================
 # General install configuration options
@@ -416,6 +422,18 @@ changelog-seen = 2
 # `max_level_info` is enabled and means logging won't be shown,
 # set this value to `true`.
 #debug-logging = rust.debug-assertions (boolean)
+
+# Whether or not overflow checks are enabled for the compiler and standard
+# library.
+#
+# Defaults to rust.debug value
+#overflow-checks = rust.debug (boolean)
+
+# Whether or not overflow checks are enabled for the standard library.
+# Overrides the `overflow-checks` option, if defined.
+#
+# Defaults to rust.overflow-checks value
+#overflow-checks-std = rust.overflow-checks (boolean)
 
 # Debuginfo level for most of Rust code, corresponds to the `-C debuginfo=N` option of `rustc`.
 # `0` - no debug info

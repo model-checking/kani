@@ -59,23 +59,23 @@ where
 }
 fn call_with_pp_support_hir<A, F>(ppmode: &PpHirMode, tcx: TyCtxt<'_>, f: F) -> A
 where
-    F: FnOnce(&dyn HirPrinterSupport<'_>, &hir::Crate<'_>) -> A,
+    F: FnOnce(&dyn HirPrinterSupport<'_>, hir_map::Map<'_>) -> A,
 {
     match *ppmode {
         PpHirMode::Normal => {
             let annotation = NoAnn { sess: tcx.sess, tcx: Some(tcx) };
-            f(&annotation, tcx.hir().krate())
+            f(&annotation, tcx.hir())
         }
 
         PpHirMode::Identified => {
             let annotation = IdentifiedAnnotation { sess: tcx.sess, tcx: Some(tcx) };
-            f(&annotation, tcx.hir().krate())
+            f(&annotation, tcx.hir())
         }
         PpHirMode::Typed => {
             abort_on_err(tcx.analysis(()), tcx.sess);
 
             let annotation = TypedAnnotation { tcx, maybe_typeck_results: Cell::new(None) };
-            tcx.dep_graph.with_ignore(|| f(&annotation, tcx.hir().krate()))
+            tcx.dep_graph.with_ignore(|| f(&annotation, tcx.hir()))
         }
     }
 }
@@ -88,7 +88,7 @@ trait PrinterSupport: pprust::PpAnn {
     /// Produces the pretty-print annotation object.
     ///
     /// (Rust does not yet support upcasting from a trait object to
-    /// an object for one of its super-traits.)
+    /// an object for one of its supertraits.)
     fn pp_ann(&self) -> &dyn pprust::PpAnn;
 }
 
@@ -104,7 +104,7 @@ trait HirPrinterSupport<'hir>: pprust_hir::PpAnn {
     /// Produces the pretty-print annotation object.
     ///
     /// (Rust does not yet support upcasting from a trait object to
-    /// an object for one of its super-traits.)
+    /// an object for one of its supertraits.)
     fn pp_ann(&self) -> &dyn pprust_hir::PpAnn;
 }
 
@@ -296,7 +296,7 @@ struct TypedAnnotation<'tcx> {
 
 impl<'tcx> HirPrinterSupport<'tcx> for TypedAnnotation<'tcx> {
     fn sess(&self) -> &Session {
-        &self.tcx.sess
+        self.tcx.sess
     }
 
     fn hir_map(&self) -> Option<hir_map::Map<'tcx>> {
@@ -347,8 +347,7 @@ impl<'tcx> pprust_hir::PpAnn for TypedAnnotation<'tcx> {
 fn get_source(input: &Input, sess: &Session) -> (String, FileName) {
     let src_name = input.source_name();
     let src = String::clone(
-        &sess
-            .source_map()
+        sess.source_map()
             .get_source_file(&src_name)
             .expect("get_source_file")
             .src
@@ -444,17 +443,27 @@ pub fn print_after_hir_lowering<'tcx>(
             format!("{:#?}", krate)
         }
 
-        Hir(s) => call_with_pp_support_hir(&s, tcx, move |annotation, krate| {
+        Hir(s) => call_with_pp_support_hir(&s, tcx, move |annotation, hir_map| {
             debug!("pretty printing HIR {:?}", s);
             let sess = annotation.sess();
             let sm = sess.source_map();
-            pprust_hir::print_crate(sm, krate, src_name, src, annotation.pp_ann())
+            let attrs = |id| hir_map.attrs(id);
+            pprust_hir::print_crate(
+                sm,
+                hir_map.root_module(),
+                src_name,
+                src,
+                &attrs,
+                annotation.pp_ann(),
+            )
         }),
 
-        HirTree => call_with_pp_support_hir(&PpHirMode::Normal, tcx, move |_annotation, krate| {
-            debug!("pretty printing HIR tree");
-            format!("{:#?}", krate)
-        }),
+        HirTree => {
+            call_with_pp_support_hir(&PpHirMode::Normal, tcx, move |_annotation, hir_map| {
+                debug!("pretty printing HIR tree");
+                format!("{:#?}", hir_map.krate())
+            })
+        }
 
         _ => unreachable!(),
     };
@@ -489,7 +498,7 @@ fn print_with_analysis(
             let mut out = String::new();
             abort_on_err(rustc_typeck::check_crate(tcx), tcx.sess);
             debug!("pretty printing THIR tree");
-            for did in tcx.body_owners() {
+            for did in tcx.hir().body_owners() {
                 let _ = writeln!(
                     out,
                     "{:?}:\n{}\n",

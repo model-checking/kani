@@ -63,29 +63,24 @@ impl MacroUseImports {
     fn push_unique_macro(&mut self, cx: &LateContext<'_>, span: Span) {
         let call_site = span.source_callsite();
         let name = snippet(cx, cx.sess().source_map().span_until_char(call_site, '!'), "_");
-        if let Some(_callee) = span.source_callee() {
-            if !self.collected.contains(&call_site) {
-                let name = if name.contains("::") {
-                    name.split("::").last().unwrap().to_string()
-                } else {
-                    name.to_string()
-                };
+        if span.source_callee().is_some() && !self.collected.contains(&call_site) {
+            let name = if name.contains("::") {
+                name.split("::").last().unwrap().to_string()
+            } else {
+                name.to_string()
+            };
 
-                self.mac_refs.push(MacroRefData::new(name));
-                self.collected.insert(call_site);
-            }
+            self.mac_refs.push(MacroRefData::new(name));
+            self.collected.insert(call_site);
         }
     }
 
     fn push_unique_macro_pat_ty(&mut self, cx: &LateContext<'_>, span: Span) {
         let call_site = span.source_callsite();
         let name = snippet(cx, cx.sess().source_map().span_until_char(call_site, '!'), "_");
-        if let Some(_callee) = span.source_callee() {
-            if !self.collected.contains(&call_site) {
-                self.mac_refs
-                    .push(MacroRefData::new(name.to_string()));
-                self.collected.insert(call_site);
-            }
+        if span.source_callee().is_some() && !self.collected.contains(&call_site) {
+            self.mac_refs.push(MacroRefData::new(name.to_string()));
+            self.collected.insert(call_site);
         }
     }
 }
@@ -140,7 +135,7 @@ impl<'tcx> LateLintPass<'tcx> for MacroUseImports {
         }
     }
     #[allow(clippy::too_many_lines)]
-    fn check_crate_post(&mut self, cx: &LateContext<'_>, _krate: &hir::Crate<'_>) {
+    fn check_crate_post(&mut self, cx: &LateContext<'_>) {
         let mut used = FxHashMap::default();
         let mut check_dup = vec![];
         for (import, span) in &self.imports {

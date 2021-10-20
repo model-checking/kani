@@ -116,3 +116,10 @@ pub mod keyword {}
 
 /// Just some type alias.
 pub type SomeType = u32;
+
+pub mod huge_amount_of_consts {
+    include!(concat!(env!("OUT_DIR"), "/huge_amount_of_consts.rs"));
+}
+
+/// Very long code text `hereIgoWithLongTextBecauseWhyNotAndWhyWouldntI`.
+pub mod long_code_block {}

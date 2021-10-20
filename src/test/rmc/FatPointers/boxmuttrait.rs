@@ -1,5 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// https://github.com/model-checking/rmc/issues/555
+// rmc-flags: --no-undefined-function-checks
+
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 

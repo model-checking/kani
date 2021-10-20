@@ -528,7 +528,7 @@ impl Step for Rustc {
     const DEFAULT: bool = false;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("compiler/rustc")
+        run.never()
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -1023,9 +1023,16 @@ pub struct Assemble {
 
 impl Step for Assemble {
     type Output = Compiler;
+    const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.never()
+        run.path("compiler/rustc")
+    }
+
+    fn make_run(run: RunConfig<'_>) {
+        run.builder.ensure(Assemble {
+            target_compiler: run.builder.compiler(run.builder.top_stage + 1, run.target),
+        });
     }
 
     /// Prepare a new compiler from the artifacts in `stage`
@@ -1136,14 +1143,14 @@ impl Step for Assemble {
             // for `-Z gcc-ld=lld`
             let gcc_ld_dir = libdir_bin.join("gcc-ld");
             t!(fs::create_dir(&gcc_ld_dir));
-            builder.copy(
-                &lld_install.join("bin").join(&src_exe),
-                &gcc_ld_dir.join(exe("ld", target_compiler.host)),
-            );
-            builder.copy(
-                &lld_install.join("bin").join(&src_exe),
-                &gcc_ld_dir.join(exe("ld64", target_compiler.host)),
-            );
+            for flavor in ["ld", "ld64"] {
+                let lld_wrapper_exe = builder.ensure(crate::tool::LldWrapper {
+                    compiler: build_compiler,
+                    target: target_compiler.host,
+                    flavor_feature: flavor,
+                });
+                builder.copy(&lld_wrapper_exe, &gcc_ld_dir.join(exe(flavor, target_compiler.host)));
+            }
         }
 
         // Similarly, copy `llvm-dwp` into libdir for Split DWARF. Only copy it when the LLVM

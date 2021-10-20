@@ -88,7 +88,7 @@ struct ProbeContext<'a, 'tcx> {
 impl<'a, 'tcx> Deref for ProbeContext<'a, 'tcx> {
     type Target = FnCtxt<'a, 'tcx>;
     fn deref(&self) -> &Self::Target {
-        &self.fcx
+        self.fcx
     }
 }
 
@@ -614,7 +614,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
         let lang_items = self.tcx.lang_items();
 
         match *self_ty.value.value.kind() {
-            ty::Dynamic(ref data, ..) if let Some(p) = data.principal() => {
+            ty::Dynamic(data, ..) if let Some(p) = data.principal() => {
                 // Subtle: we can't use `instantiate_query_response` here: using it will
                 // commit to all of the type equalities assumed by inference going through
                 // autoderef (see the `method-probe-no-guessing` test).
@@ -634,7 +634,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
                 // type variables in any form, so just do that!
                 let (QueryResponse { value: generalized_self_ty, .. }, _ignored_var_values) =
                     self.fcx
-                        .instantiate_canonical_with_fresh_inference_vars(self.span, &self_ty);
+                        .instantiate_canonical_with_fresh_inference_vars(self.span, self_ty);
 
                 self.assemble_inherent_candidates_from_object(generalized_self_ty);
                 self.assemble_inherent_impl_candidates_for_type(p.def_id());
@@ -753,17 +753,27 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             let (impl_ty, impl_substs) = self.impl_ty_and_substs(impl_def_id);
             let impl_ty = impl_ty.subst(self.tcx, impl_substs);
 
+            debug!("impl_ty: {:?}", impl_ty);
+
             // Determine the receiver type that the method itself expects.
-            let xform_tys = self.xform_self_ty(&item, impl_ty, impl_substs);
+            let (xform_self_ty, xform_ret_ty) = self.xform_self_ty(&item, impl_ty, impl_substs);
+            debug!("xform_self_ty: {:?}, xform_ret_ty: {:?}", xform_self_ty, xform_ret_ty);
 
             // We can't use normalize_associated_types_in as it will pollute the
             // fcx's fulfillment context after this probe is over.
+            // Note: we only normalize `xform_self_ty` here since the normalization
+            // of the return type can lead to inference results that prohibit
+            // valid canidates from being found, see issue #85671
+            // FIXME Postponing the normalization of the return type likely only hides a deeper bug,
+            // which might be caused by the `param_env` itself. The clauses of the `param_env`
+            // maybe shouldn't include `Param`s, but rather fresh variables or be canonicalized,
+            // see isssue #89650
             let cause = traits::ObligationCause::misc(self.span, self.body_id);
             let selcx = &mut traits::SelectionContext::new(self.fcx);
-            let traits::Normalized { value: (xform_self_ty, xform_ret_ty), obligations } =
-                traits::normalize(selcx, self.param_env, cause, xform_tys);
+            let traits::Normalized { value: xform_self_ty, obligations } =
+                traits::normalize(selcx, self.param_env, cause, xform_self_ty);
             debug!(
-                "assemble_inherent_impl_probe: xform_self_ty = {:?}/{:?}",
+                "assemble_inherent_impl_probe after normalization: xform_self_ty = {:?}/{:?}",
                 xform_self_ty, xform_ret_ty
             );
 
@@ -964,7 +974,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
         let trait_ref = ty::TraitRef::new(trait_def_id, trait_substs);
 
         if self.tcx.is_trait_alias(trait_def_id) {
-            // For trait aliases, assume all super-traits are relevant.
+            // For trait aliases, assume all supertraits are relevant.
             let bounds = iter::once(ty::Binder::dummy(trait_ref));
             self.elaborate_bounds(bounds, |this, new_trait_ref, item| {
                 let new_trait_ref = this.erase_late_bound_regions(new_trait_ref);
@@ -1420,6 +1430,9 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             };
 
             let mut result = ProbeResult::Match;
+            let mut xform_ret_ty = probe.xform_ret_ty;
+            debug!(?xform_ret_ty);
+
             let selcx = &mut traits::SelectionContext::new(self);
             let cause = traits::ObligationCause::misc(self.span, self.body_id);
 
@@ -1429,6 +1442,16 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             // don't have enough information to fully evaluate).
             match probe.kind {
                 InherentImplCandidate(ref substs, ref ref_obligations) => {
+                    // `xform_ret_ty` hasn't been normalized yet, only `xform_self_ty`,
+                    // see the reasons mentioned in the comments in `assemble_inherent_impl_probe`
+                    // for why this is necessary
+                    let traits::Normalized {
+                        value: normalized_xform_ret_ty,
+                        obligations: normalization_obligations,
+                    } = traits::normalize(selcx, self.param_env, cause.clone(), probe.xform_ret_ty);
+                    xform_ret_ty = normalized_xform_ret_ty;
+                    debug!("xform_ret_ty after normalization: {:?}", xform_ret_ty);
+
                     // Check whether the impl imposes obligations we have to worry about.
                     let impl_def_id = probe.item.container.id();
                     let impl_bounds = self.tcx.predicates_of(impl_def_id);
@@ -1442,7 +1465,9 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
 
                     let candidate_obligations = impl_obligations
                         .chain(norm_obligations.into_iter())
-                        .chain(ref_obligations.iter().cloned());
+                        .chain(ref_obligations.iter().cloned())
+                        .chain(normalization_obligations.into_iter());
+
                     // Evaluate those obligations to see if they might possibly hold.
                     for o in candidate_obligations {
                         let o = self.resolve_vars_if_possible(o);
@@ -1527,9 +1552,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             }
 
             if let ProbeResult::Match = result {
-                if let (Some(return_ty), Some(xform_ret_ty)) =
-                    (self.return_type, probe.xform_ret_ty)
-                {
+                if let (Some(return_ty), Some(xform_ret_ty)) = (self.return_type, xform_ret_ty) {
                     let xform_ret_ty = self.resolve_vars_if_possible(xform_ret_ty);
                     debug!(
                         "comparing return_ty {:?} with xform ret ty {:?}",
@@ -1669,6 +1692,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
         self.static_candidates.push(source);
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn xform_self_ty(
         &self,
         item: &ty::AssocItem,
@@ -1683,9 +1707,10 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn xform_method_sig(&self, method: DefId, substs: SubstsRef<'tcx>) -> ty::FnSig<'tcx> {
         let fn_sig = self.tcx.fn_sig(method);
-        debug!("xform_self_ty(fn_sig={:?}, substs={:?})", fn_sig, substs);
+        debug!(?fn_sig);
 
         assert!(!substs.has_escaping_bound_vars());
 

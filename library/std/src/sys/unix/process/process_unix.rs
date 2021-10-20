@@ -333,9 +333,19 @@ impl Command {
             let mut set = MaybeUninit::<libc::sigset_t>::uninit();
             cvt(sigemptyset(set.as_mut_ptr()))?;
             cvt(libc::pthread_sigmask(libc::SIG_SETMASK, set.as_ptr(), ptr::null_mut()))?;
-            let ret = sys::signal(libc::SIGPIPE, libc::SIG_DFL);
-            if ret == libc::SIG_ERR {
-                return Err(io::Error::last_os_error());
+
+            #[cfg(target_os = "android")] // see issue #88585
+            {
+                let mut action: libc::sigaction = mem::zeroed();
+                action.sa_sigaction = libc::SIG_DFL;
+                cvt(libc::sigaction(libc::SIGPIPE, &action, ptr::null_mut()))?;
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                let ret = sys::signal(libc::SIGPIPE, libc::SIG_DFL);
+                if ret == libc::SIG_ERR {
+                    return Err(io::Error::last_os_error());
+                }
             }
         }
 
@@ -552,8 +562,7 @@ impl Process {
         use crate::os::unix::io::FromRawFd;
         use crate::sys_common::FromInner;
         // Safety: If `pidfd` is nonnegative, we assume it's valid and otherwise unowned.
-        let pidfd = (pidfd >= 0)
-            .then(|| PidFd::from_inner(unsafe { sys::fd::FileDesc::from_raw_fd(pidfd) }));
+        let pidfd = (pidfd >= 0).then(|| PidFd::from_inner(sys::fd::FileDesc::from_raw_fd(pidfd)));
         Process { pid, status: None, pidfd }
     }
 
@@ -607,8 +616,14 @@ impl Process {
 }
 
 /// Unix exit statuses
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct ExitStatus(c_int);
+
+impl fmt::Debug for ExitStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("unix_wait_status").field(&self.0).finish()
+    }
+}
 
 impl ExitStatus {
     pub fn new(status: c_int) -> ExitStatus {
@@ -683,12 +698,18 @@ impl fmt::Display for ExitStatus {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct ExitStatusError(NonZero_c_int);
 
 impl Into<ExitStatus> for ExitStatusError {
     fn into(self) -> ExitStatus {
         ExitStatus(self.0.into())
+    }
+}
+
+impl fmt::Debug for ExitStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("unix_wait_status").field(&self.0).finish()
     }
 }
 

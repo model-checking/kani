@@ -15,6 +15,14 @@ pub struct Rename {
     pub rename: String,
 }
 
+/// A single disallowed method, used by the `DISALLOWED_METHOD` lint.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum DisallowedMethod {
+    Simple(String),
+    WithReason { path: String, reason: Option<String> },
+}
+
 /// Conf with parse errors
 #[derive(Default)]
 pub struct TryConf {
@@ -128,7 +136,7 @@ macro_rules! define_Conf {
 }
 
 define_Conf! {
-    /// Lint: ENUM_VARIANT_NAMES, LARGE_TYPES_PASSED_BY_VALUE, TRIVIALLY_COPY_PASS_BY_REF, UNNECESSARY_WRAPS, UPPER_CASE_ACRONYMS, WRONG_SELF_CONVENTION, BOX_VEC, REDUNDANT_ALLOCATION, RC_BUFFER, VEC_BOX, OPTION_OPTION, LINKEDLIST, RC_MUTEX.
+    /// Lint: ENUM_VARIANT_NAMES, LARGE_TYPES_PASSED_BY_VALUE, TRIVIALLY_COPY_PASS_BY_REF, UNNECESSARY_WRAPS, UPPER_CASE_ACRONYMS, WRONG_SELF_CONVENTION, BOX_COLLECTION, REDUNDANT_ALLOCATION, RC_BUFFER, VEC_BOX, OPTION_OPTION, LINKEDLIST, RC_MUTEX.
     ///
     /// Suppress lints whenever the suggested change would cause breakage for other crates.
     (avoid_breaking_exported_api: bool = true),
@@ -243,7 +251,7 @@ define_Conf! {
     /// Lint: DISALLOWED_METHOD.
     ///
     /// The list of disallowed methods, written as fully qualified paths.
-    (disallowed_methods: Vec<String> = Vec::new()),
+    (disallowed_methods: Vec<crate::utils::conf::DisallowedMethod> = Vec::new()),
     /// Lint: DISALLOWED_TYPE.
     ///
     /// The list of disallowed types, written as fully qualified paths.
@@ -276,6 +284,10 @@ define_Conf! {
     ///
     /// The list of unicode scripts allowed to be used in the scope.
     (allowed_scripts: Vec<String> = vec!["Latin".to_string()]),
+    /// Lint: NON_SEND_FIELDS_IN_SEND_TY.
+    ///
+    /// Whether to apply the raw pointer heuristic to determine if a type is `Send`.
+    (enable_raw_pointer_heuristic_for_send: bool = true),
 }
 
 /// Search for the configuration file.

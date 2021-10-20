@@ -269,10 +269,11 @@ pub trait AsMut<T: ?Sized> {
 ///
 /// [`String`]: ../../std/string/struct.String.html
 /// [`Vec`]: ../../std/vec/struct.Vec.html
-#[rustc_diagnostic_item = "into_trait"]
+#[rustc_diagnostic_item = "Into"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub trait Into<T>: Sized {
     /// Performs the conversion.
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn into(self) -> T;
 }
@@ -358,7 +359,7 @@ pub trait Into<T>: Sized {
 /// [`String`]: ../../std/string/struct.String.html
 /// [`from`]: From::from
 /// [book]: ../../book/ch09-00-error-handling.html
-#[rustc_diagnostic_item = "from_trait"]
+#[rustc_diagnostic_item = "From"]
 #[stable(feature = "rust1", since = "1.0.0")]
 #[rustc_on_unimplemented(on(
     all(_Self = "&str", T = "std::string::String"),
@@ -367,6 +368,7 @@ pub trait Into<T>: Sized {
 pub trait From<T>: Sized {
     /// Performs the conversion.
     #[lang = "from"]
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn from(_: T) -> Self;
 }
@@ -385,7 +387,7 @@ pub trait From<T>: Sized {
 ///
 /// This suffers the same restrictions and reasoning as implementing
 /// [`Into`], see there for details.
-#[rustc_diagnostic_item = "try_into_trait"]
+#[rustc_diagnostic_item = "TryInto"]
 #[stable(feature = "try_from", since = "1.34.0")]
 pub trait TryInto<T>: Sized {
     /// The type returned in the event of a conversion error.
@@ -465,7 +467,7 @@ pub trait TryInto<T>: Sized {
 /// ```
 ///
 /// [`try_from`]: TryFrom::try_from
-#[rustc_diagnostic_item = "try_from_trait"]
+#[rustc_diagnostic_item = "TryFrom"]
 #[stable(feature = "try_from", since = "1.34.0")]
 pub trait TryFrom<T>: Sized {
     /// The type returned in the event of a conversion error.
@@ -662,7 +664,7 @@ impl AsMut<str> for str {
 ///
 /// However there is one case where `!` syntax can be used
 /// before `!` is stabilized as a full-fledged type: in the position of a function’s return type.
-/// Specifically, it is possible implementations for two different function pointer types:
+/// Specifically, it is possible to have implementations for two different function pointer types:
 ///
 /// ```
 /// trait MyTrait {}

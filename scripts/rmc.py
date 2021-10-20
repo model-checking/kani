@@ -89,7 +89,7 @@ def add_selected_default_cbmc_flags(args):
 
 # Updates environment to use gotoc backend debugging
 def add_rmc_rustc_debug_to_env(env):
-    env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_llvm::gotoc")
+    env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_rmc")
 
 # Prints info about the RMC process
 def print_rmc_step_status(step_name, completed_process, verbose=False):

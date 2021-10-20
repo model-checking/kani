@@ -15,11 +15,10 @@
 #![feature(never_type)]
 #![feature(once_cell)]
 #![feature(type_ascription)]
+#![feature(iter_intersperse)]
 #![recursion_limit = "256"]
 #![warn(rustc::internal)]
 
-#[macro_use]
-extern crate lazy_static;
 #[macro_use]
 extern crate tracing;
 

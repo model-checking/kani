@@ -120,7 +120,9 @@ pub enum SelectionCandidate<'tcx> {
 
     /// Implementation of a `Fn`-family trait by one of the anonymous
     /// types generated for a fn pointer type (e.g., `fn(int) -> int`)
-    FnPointerCandidate,
+    FnPointerCandidate {
+        is_const: bool,
+    },
 
     /// Builtin implementation of `DiscriminantKind`.
     DiscriminantKindCandidate,
@@ -259,12 +261,18 @@ impl EvaluationResult {
     }
 }
 
-/// Indicates that trait evaluation caused overflow.
+/// Indicates that trait evaluation caused overflow and in which pass.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, HashStable)]
-pub struct OverflowError;
+pub enum OverflowError {
+    Canonical,
+    ErrorReporting,
+}
 
 impl<'tcx> From<OverflowError> for SelectionError<'tcx> {
-    fn from(OverflowError: OverflowError) -> SelectionError<'tcx> {
-        SelectionError::Overflow
+    fn from(overflow_error: OverflowError) -> SelectionError<'tcx> {
+        match overflow_error {
+            OverflowError::Canonical => SelectionError::Overflow,
+            OverflowError::ErrorReporting => SelectionError::ErrorReporting,
+        }
     }
 }

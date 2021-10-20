@@ -6,14 +6,19 @@
 //!
 //! [rustc dev guide]:https://rustc-dev-guide.rust-lang.org/traits/resolution.html#candidate-assembly
 use rustc_hir as hir;
+use rustc_hir::def_id::DefId;
+use rustc_infer::traits::TraitEngine;
 use rustc_infer::traits::{Obligation, SelectionError, TraitObligation};
+use rustc_lint_defs::builtin::DEREF_INTO_DYN_SUPERTRAIT;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Ty, TypeFoldable};
+use rustc_middle::ty::{self, ToPredicate, Ty, TypeFoldable, WithConstness};
 use rustc_target::spec::abi::Abi;
 
+use crate::traits;
 use crate::traits::coherence::Conflict;
+use crate::traits::query::evaluate_obligation::InferCtxtExt;
 use crate::traits::{util, SelectionResult};
-use crate::traits::{Overflow, Unimplemented};
+use crate::traits::{ErrorReporting, Overflow, Unimplemented};
 
 use super::BuiltinImplConditions;
 use super::IntercrateAmbiguityCause;
@@ -156,7 +161,8 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     Ok(Some(EvaluatedCandidate { candidate: c, evaluation: eval }))
                 }
                 Ok(_) => Ok(None),
-                Err(OverflowError) => Err(Overflow),
+                Err(OverflowError::Canonical) => Err(Overflow),
+                Err(OverflowError::ErrorReporting) => Err(ErrorReporting),
             })
             .flat_map(Result::transpose)
             .collect::<Result<Vec<_>, _>>()?;
@@ -476,7 +482,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     ..
                 } = self_ty.fn_sig(self.tcx()).skip_binder()
                 {
-                    candidates.vec.push(FnPointerCandidate);
+                    candidates.vec.push(FnPointerCandidate { is_const: false });
                 }
             }
             // Provide an impl for suitable functions, rejecting `#[target_feature]` functions (RFC 2396).
@@ -489,7 +495,9 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 } = self_ty.fn_sig(self.tcx()).skip_binder()
                 {
                     if self.tcx().codegen_fn_attrs(def_id).target_features.is_empty() {
-                        candidates.vec.push(FnPointerCandidate);
+                        candidates
+                            .vec
+                            .push(FnPointerCandidate { is_const: self.tcx().is_const_fn(def_id) });
                     }
                 }
             }
@@ -670,6 +678,55 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         })
     }
 
+    /// Temporary migration for #89190
+    fn need_migrate_deref_output_trait_object(
+        &mut self,
+        ty: Ty<'tcx>,
+        cause: &traits::ObligationCause<'tcx>,
+        param_env: ty::ParamEnv<'tcx>,
+    ) -> Option<(Ty<'tcx>, DefId)> {
+        let tcx = self.tcx();
+        if tcx.features().trait_upcasting {
+            return None;
+        }
+
+        // <ty as Deref>
+        let trait_ref = ty::TraitRef {
+            def_id: tcx.lang_items().deref_trait()?,
+            substs: tcx.mk_substs_trait(ty, &[]),
+        };
+
+        let obligation = traits::Obligation::new(
+            cause.clone(),
+            param_env,
+            ty::Binder::dummy(trait_ref).without_const().to_predicate(tcx),
+        );
+        if !self.infcx.predicate_may_hold(&obligation) {
+            return None;
+        }
+
+        let mut fulfillcx = traits::FulfillmentContext::new_in_snapshot();
+        let normalized_ty = fulfillcx.normalize_projection_type(
+            &self.infcx,
+            param_env,
+            ty::ProjectionTy {
+                item_def_id: tcx.lang_items().deref_target()?,
+                substs: trait_ref.substs,
+            },
+            cause.clone(),
+        );
+
+        let data = if let ty::Dynamic(ref data, ..) = normalized_ty.kind() {
+            data
+        } else {
+            return None;
+        };
+
+        let def_id = data.principal_def_id()?;
+
+        return Some((normalized_ty, def_id));
+    }
+
     /// Searches for unsizing that might apply to `obligation`.
     fn assemble_candidates_for_unsizing(
         &mut self,
@@ -730,6 +787,30 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                         let principal_a = data_a.principal().unwrap();
                         let target_trait_did = principal_def_id_b.unwrap();
                         let source_trait_ref = principal_a.with_self_ty(self.tcx(), source);
+                        if let Some((deref_output_ty, deref_output_trait_did)) = self
+                            .need_migrate_deref_output_trait_object(
+                                source,
+                                &obligation.cause,
+                                obligation.param_env,
+                            )
+                        {
+                            if deref_output_trait_did == target_trait_did {
+                                self.tcx().struct_span_lint_hir(
+                                    DEREF_INTO_DYN_SUPERTRAIT,
+                                    obligation.cause.body_id,
+                                    obligation.cause.span,
+                                    |lint| {
+                                        lint.build(&format!(
+                                            "`{}` implements `Deref` with supertrait `{}` as output",
+                                            source,
+                                            deref_output_ty
+                                        )).emit();
+                                    },
+                                );
+                                return;
+                            }
+                        }
+
                         for (idx, upcast_trait_ref) in
                             util::supertraits(self.tcx(), source_trait_ref).enumerate()
                         {
@@ -892,12 +973,16 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 ty::Tuple(_) => stack.extend(ty.tuple_fields().map(|t| (t, depth + 1))),
 
                 ty::Closure(_, substs) => {
-                    stack.extend(substs.as_closure().upvar_tys().map(|t| (t, depth + 1)))
+                    let substs = substs.as_closure();
+                    let ty = self.infcx.shallow_resolve(substs.tupled_upvars_ty());
+                    stack.push((ty, depth + 1));
                 }
 
                 ty::Generator(_, substs, _) => {
                     let substs = substs.as_generator();
-                    stack.extend(substs.upvar_tys().map(|t| (t, depth + 1)));
+                    let ty = self.infcx.shallow_resolve(substs.tupled_upvars_ty());
+
+                    stack.push((ty, depth + 1));
                     stack.push((substs.witness(), depth + 1));
                 }
 

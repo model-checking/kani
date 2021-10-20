@@ -221,8 +221,8 @@ use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::svh::Svh;
 use rustc_data_structures::sync::MetadataRef;
 use rustc_errors::struct_span_err;
-use rustc_middle::middle::cstore::{CrateSource, MetadataLoader};
 use rustc_session::config::{self, CrateType};
+use rustc_session::cstore::{CrateSource, MetadataLoader};
 use rustc_session::filesearch::{FileDoesntMatch, FileMatches, FileSearch};
 use rustc_session::search_paths::PathKind;
 use rustc_session::utils::CanonicalizedPath;
@@ -232,6 +232,7 @@ use rustc_span::Span;
 use rustc_target::spec::{Target, TargetTriple};
 
 use snap::read::FrameDecoder;
+use std::fmt::Write as _;
 use std::io::{Read, Result as IoResult, Write};
 use std::path::{Path, PathBuf};
 use std::{cmp, fmt, fs};
@@ -740,7 +741,9 @@ fn get_metadata_section(
             // Header is okay -> inflate the actual metadata
             let compressed_bytes = &buf[header_len..];
             debug!("inflating {} bytes of compressed metadata", compressed_bytes.len());
-            let mut inflated = Vec::new();
+            // Assume the decompressed data will be at least the size of the compressed data, so we
+            // don't have to grow the buffer as much.
+            let mut inflated = Vec::with_capacity(compressed_bytes.len());
             match FrameDecoder::new(compressed_bytes).read_to_end(&mut inflated) {
                 Ok(_) => rustc_erase_owner!(OwningRef::new(inflated).map_owner_box()),
                 Err(_) => {
@@ -908,23 +911,30 @@ impl CrateError {
                     "multiple matching crates for `{}`",
                     crate_name
                 );
+                let mut libraries: Vec<_> = libraries.into_values().collect();
+                // Make ordering of candidates deterministic.
+                // This has to `clone()` to work around lifetime restrictions with `sort_by_key()`.
+                // `sort_by()` could be used instead, but this is in the error path,
+                // so the performance shouldn't matter.
+                libraries.sort_by_cached_key(|lib| lib.source.paths().next().unwrap().clone());
                 let candidates = libraries
                     .iter()
-                    .filter_map(|(_, lib)| {
+                    .map(|lib| {
                         let crate_name = &lib.metadata.get_root().name().as_str();
-                        match (&lib.source.dylib, &lib.source.rlib) {
-                            (Some((pd, _)), Some((pr, _))) => Some(format!(
-                                "\ncrate `{}`: {}\n{:>padding$}",
-                                crate_name,
-                                pd.display(),
-                                pr.display(),
-                                padding = 8 + crate_name.len()
-                            )),
-                            (Some((p, _)), None) | (None, Some((p, _))) => {
-                                Some(format!("\ncrate `{}`: {}", crate_name, p.display()))
-                            }
-                            (None, None) => None,
+                        let mut paths = lib.source.paths();
+
+                        // This `unwrap()` should be okay because there has to be at least one
+                        // source file. `CrateSource`'s docs confirm that too.
+                        let mut s = format!(
+                            "\ncrate `{}`: {}",
+                            crate_name,
+                            paths.next().unwrap().display()
+                        );
+                        let padding = 8 + crate_name.len();
+                        for path in paths {
+                            write!(s, "\n{:>padding$}", path.display(), padding = padding).unwrap();
                         }
+                        s
                     })
                     .collect::<String>();
                 err.note(&format!("candidates:{}", candidates));
@@ -1030,7 +1040,8 @@ impl CrateError {
                         add,
                     );
                     err.help(&format!(
-                        "please recompile that crate using this compiler ({})",
+                        "please recompile that crate using this compiler ({}) \
+                         (consider running `cargo clean` first)",
                         rustc_version(),
                     ));
                     let mismatches = locator.crate_rejections.via_version.iter();

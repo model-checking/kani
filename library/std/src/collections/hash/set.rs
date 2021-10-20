@@ -107,7 +107,7 @@ use super::map::{map_try_reserve_error, RandomState};
 /// [`HashMap`]: crate::collections::HashMap
 /// [`RefCell`]: crate::cell::RefCell
 /// [`Cell`]: crate::cell::Cell
-#[cfg_attr(not(test), rustc_diagnostic_item = "hashset_type")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "HashSet")]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct HashSet<T, S = RandomState> {
     base: base::HashSet<T, S>,
@@ -126,6 +126,7 @@ impl<T> HashSet<T, RandomState> {
     /// let set: HashSet<i32> = HashSet::new();
     /// ```
     #[inline]
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn new() -> HashSet<T, RandomState> {
         Default::default()
@@ -144,6 +145,7 @@ impl<T> HashSet<T, RandomState> {
     /// assert!(set.capacity() >= 10);
     /// ```
     #[inline]
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn with_capacity(capacity: usize) -> HashSet<T, RandomState> {
         HashSet { base: base::HashSet::with_capacity_and_hasher(capacity, Default::default()) }
@@ -423,13 +425,12 @@ where
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::HashSet;
     /// let mut set: HashSet<i32> = HashSet::new();
     /// set.try_reserve(10).expect("why is the test harness OOMing on 10 bytes?");
     /// ```
     #[inline]
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.base.try_reserve(additional).map_err(map_try_reserve_error)
     }

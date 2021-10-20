@@ -198,20 +198,10 @@ pub struct DirBuilder {
     recursive: bool,
 }
 
-/// Indicates how large a buffer to pre-allocate before reading the entire file.
-fn initial_buffer_size(file: &File) -> usize {
-    // Allocate one extra byte so the buffer doesn't need to grow before the
-    // final `read` call at the end of the file.  Don't worry about `usize`
-    // overflow because reading will fail regardless in that case.
-    file.metadata().map(|m| m.len() as usize + 1).unwrap_or(0)
-}
-
 /// Read the entire contents of a file into a bytes vector.
 ///
 /// This is a convenience function for using [`File::open`] and [`read_to_end`]
-/// with fewer imports and without an intermediate variable. It pre-allocates a
-/// buffer based on the file size when available, so it is generally faster than
-/// reading into a vector created with [`Vec::new()`].
+/// with fewer imports and without an intermediate variable.
 ///
 /// [`read_to_end`]: Read::read_to_end
 ///
@@ -238,7 +228,7 @@ fn initial_buffer_size(file: &File) -> usize {
 pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     fn inner(path: &Path) -> io::Result<Vec<u8>> {
         let mut file = File::open(path)?;
-        let mut bytes = Vec::with_capacity(initial_buffer_size(&file));
+        let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
         Ok(bytes)
     }
@@ -248,9 +238,7 @@ pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
 /// Read the entire contents of a file into a string.
 ///
 /// This is a convenience function for using [`File::open`] and [`read_to_string`]
-/// with fewer imports and without an intermediate variable. It pre-allocates a
-/// buffer based on the file size when available, so it is generally faster than
-/// reading into a string created with [`String::new()`].
+/// with fewer imports and without an intermediate variable.
 ///
 /// [`read_to_string`]: Read::read_to_string
 ///
@@ -279,7 +267,7 @@ pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
 pub fn read_to_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     fn inner(path: &Path) -> io::Result<String> {
         let mut file = File::open(path)?;
-        let mut string = String::with_capacity(initial_buffer_size(&file));
+        let mut string = String::new();
         file.read_to_string(&mut string)?;
         Ok(string)
     }
@@ -616,6 +604,15 @@ impl fmt::Debug for File {
     }
 }
 
+/// Indicates how much extra capacity is needed to read the rest of the file.
+fn buffer_capacity_required(mut file: &File) -> usize {
+    let size = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let pos = file.stream_position().unwrap_or(0);
+    // Don't worry about `usize` overflow because reading will fail regardless
+    // in that case.
+    size.saturating_sub(pos) as usize
+}
+
 #[stable(feature = "rust1", since = "1.0.0")]
 impl Read for File {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -635,6 +632,18 @@ impl Read for File {
     unsafe fn initializer(&self) -> Initializer {
         // SAFETY: Read is guaranteed to work on uninitialized memory
         unsafe { Initializer::nop() }
+    }
+
+    // Reserves space in the buffer based on the file size when available.
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        buf.reserve(buffer_capacity_required(self));
+        io::default_read_to_end(self, buf)
+    }
+
+    // Reserves space in the buffer based on the file size when available.
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        buf.reserve(buffer_capacity_required(self));
+        io::default_read_to_string(self, buf)
     }
 }
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -682,6 +691,18 @@ impl Read for &File {
         // SAFETY: Read is guaranteed to work on uninitialized memory
         unsafe { Initializer::nop() }
     }
+
+    // Reserves space in the buffer based on the file size when available.
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        buf.reserve(buffer_capacity_required(self));
+        io::default_read_to_end(self, buf)
+    }
+
+    // Reserves space in the buffer based on the file size when available.
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        buf.reserve(buffer_capacity_required(self));
+        io::default_read_to_string(self, buf)
+    }
 }
 #[stable(feature = "rust1", since = "1.0.0")]
 impl Write for &File {
@@ -723,6 +744,7 @@ impl OpenOptions {
     /// let file = options.read(true).open("foo.txt");
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn new() -> Self {
         OpenOptions(fs_imp::OpenOptions::new())
     }
@@ -983,6 +1005,7 @@ impl Metadata {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn is_dir(&self) -> bool {
         self.file_type().is_dir()
@@ -1011,6 +1034,7 @@ impl Metadata {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn is_file(&self) -> bool {
         self.file_type().is_file()
@@ -1037,6 +1061,7 @@ impl Metadata {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use]
     #[unstable(feature = "is_symlink", issue = "85748")]
     pub fn is_symlink(&self) -> bool {
         self.file_type().is_symlink()
@@ -1284,6 +1309,7 @@ impl FileType {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "file_type", since = "1.1.0")]
     pub fn is_dir(&self) -> bool {
         self.0.is_dir()
@@ -1316,6 +1342,7 @@ impl FileType {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "file_type", since = "1.1.0")]
     pub fn is_file(&self) -> bool {
         self.0.is_file()
@@ -1351,6 +1378,7 @@ impl FileType {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "file_type", since = "1.1.0")]
     pub fn is_symlink(&self) -> bool {
         self.0.is_symlink()
@@ -2163,6 +2191,7 @@ impl DirBuilder {
     /// let builder = DirBuilder::new();
     /// ```
     #[stable(feature = "dir_builder", since = "1.6.0")]
+    #[must_use]
     pub fn new() -> DirBuilder {
         DirBuilder { inner: fs_imp::DirBuilder::new(), recursive: false }
     }

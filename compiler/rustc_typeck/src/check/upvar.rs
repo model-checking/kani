@@ -65,6 +65,7 @@ use std::iter;
 enum PlaceAncestryRelation {
     Ancestor,
     Descendant,
+    SamePlace,
     Divergent,
 }
 
@@ -564,7 +565,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 for possible_ancestor in min_cap_list.iter_mut() {
                     match determine_place_ancestry_relation(&place, &possible_ancestor.place) {
                         // current place is descendant of possible_ancestor
-                        PlaceAncestryRelation::Descendant => {
+                        PlaceAncestryRelation::Descendant | PlaceAncestryRelation::SamePlace => {
                             ancestor_found = true;
                             let backup_path_expr_id = possible_ancestor.info.path_expr_id;
 
@@ -790,7 +791,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             // This is a multi-line closure with just a `{` on the first line,
                             // so we put the `let` on its own line.
                             // We take the indentation from the next non-empty line.
-                            let line2 = lines.filter(|line| !line.is_empty()).next().unwrap_or_default();
+                            let line2 = lines.find(|line| !line.is_empty()).unwrap_or_default();
                             let indent = line2.split_once(|c: char| !c.is_whitespace()).unwrap_or_default().0;
                             diagnostics_builder.span_suggestion(
                                 closure_body_span.with_lo(closure_body_span.lo() + BytePos::from_usize(line1.len())).shrink_to_lo(),
@@ -844,14 +845,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     ) -> String {
         let mut reasons = String::new();
 
-        if auto_trait_reasons.len() > 0 {
+        if !auto_trait_reasons.is_empty() {
             reasons = format!(
                 "{} trait implementation for closure",
                 auto_trait_reasons.clone().into_iter().collect::<Vec<&str>>().join(", ")
             );
         }
 
-        if auto_trait_reasons.len() > 0 && drop_reason {
+        if !auto_trait_reasons.is_empty() && drop_reason {
             reasons = format!("{} and ", reasons);
         }
 
@@ -877,7 +878,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let auto_traits_def_id = vec![
             self.tcx.lang_items().clone_trait(),
             self.tcx.lang_items().sync_trait(),
-            self.tcx.get_diagnostic_item(sym::send_trait),
+            self.tcx.get_diagnostic_item(sym::Send),
             self.tcx.lang_items().unpin_trait(),
             self.tcx.get_diagnostic_item(sym::unwind_safe_trait),
             self.tcx.get_diagnostic_item(sym::ref_unwind_safe_trait),
@@ -885,13 +886,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let auto_traits =
             vec!["`Clone`", "`Sync`", "`Send`", "`Unpin`", "`UnwindSafe`", "`RefUnwindSafe`"];
 
-        let root_var_min_capture_list = if let Some(root_var_min_capture_list) =
-            min_captures.and_then(|m| m.get(&var_hir_id))
-        {
-            root_var_min_capture_list
-        } else {
-            return None;
-        };
+        let root_var_min_capture_list = min_captures.and_then(|m| m.get(&var_hir_id))?;
 
         let ty = self.infcx.resolve_vars_if_possible(self.node_ty(var_hir_id));
 
@@ -966,14 +961,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 }
             }
 
-            if capture_problems.len() > 0 {
+            if !capture_problems.is_empty() {
                 problematic_captures.insert(
                     (capture.info.path_expr_id, capture.to_string(self.tcx)),
                     capture_problems,
                 );
             }
         }
-        if problematic_captures.len() > 0 {
+        if !problematic_captures.is_empty() {
             return Some(problematic_captures);
         }
         None
@@ -1042,7 +1037,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let is_moved = !projections_list.is_empty();
 
         let is_not_completely_captured =
-            root_var_min_capture_list.iter().any(|capture| capture.place.projections.len() > 0);
+            root_var_min_capture_list.iter().any(|capture| !capture.place.projections.is_empty());
 
         if is_moved
             && is_not_completely_captured
@@ -1056,7 +1051,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             return Some(diagnostics_info);
         }
 
-        return None;
+        None
     }
 
     /// Figures out the list of root variables (and their types) that aren't completely
@@ -1152,7 +1147,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 ));
             }
 
-            if capture_diagnostic.len() > 0 {
+            if !capture_diagnostic.is_empty() {
                 need_migrations.push((var_hir_id, responsible_captured_hir_ids));
             }
         }
@@ -1857,10 +1852,10 @@ impl<'a, 'tcx> euv::Delegate<'tcx> for InferBorrowKind<'a, 'tcx> {
     #[instrument(skip(self), level = "debug")]
     fn consume(&mut self, place_with_id: &PlaceWithHirId<'tcx>, diag_expr_id: hir::HirId) {
         if !self.capture_information.contains_key(&place_with_id.place) {
-            self.init_capture_info_for_place(&place_with_id, diag_expr_id);
+            self.init_capture_info_for_place(place_with_id, diag_expr_id);
         }
 
-        self.adjust_upvar_borrow_kind_for_consume(&place_with_id, diag_expr_id);
+        self.adjust_upvar_borrow_kind_for_consume(place_with_id, diag_expr_id);
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -1997,7 +1992,7 @@ fn restrict_capture_precision<'tcx>(
         }
     }
 
-    return (place, curr_mode);
+    (place, curr_mode)
 }
 
 /// Truncate deref of any reference.
@@ -2066,7 +2061,7 @@ fn construct_capture_kind_reason_string(
     place: &Place<'tcx>,
     capture_info: &ty::CaptureInfo<'tcx>,
 ) -> String {
-    let place_str = construct_place_string(tcx, &place);
+    let place_str = construct_place_string(tcx, place);
 
     let capture_kind_str = match capture_info.capture_kind {
         ty::UpvarCapture::ByValue(_) => "ByValue".into(),
@@ -2077,7 +2072,7 @@ fn construct_capture_kind_reason_string(
 }
 
 fn construct_path_string(tcx: TyCtxt<'_>, place: &Place<'tcx>) -> String {
-    let place_str = construct_place_string(tcx, &place);
+    let place_str = construct_place_string(tcx, place);
 
     format!("{} used here", place_str)
 }
@@ -2087,7 +2082,7 @@ fn construct_capture_info_string(
     place: &Place<'tcx>,
     capture_info: &ty::CaptureInfo<'tcx>,
 ) -> String {
-    let place_str = construct_place_string(tcx, &place);
+    let place_str = construct_place_string(tcx, place);
 
     let capture_kind_str = match capture_info.capture_kind {
         ty::UpvarCapture::ByValue(_) => "ByValue".into(),
@@ -2284,15 +2279,17 @@ fn determine_place_ancestry_relation(
     let projections_b = &place_b.projections;
 
     let same_initial_projections =
-        iter::zip(projections_a, projections_b).all(|(proj_a, proj_b)| proj_a == proj_b);
+        iter::zip(projections_a, projections_b).all(|(proj_a, proj_b)| proj_a.kind == proj_b.kind);
 
     if same_initial_projections {
+        use std::cmp::Ordering;
+
         // First min(n, m) projections are the same
         // Select Ancestor/Descendant
-        if projections_b.len() >= projections_a.len() {
-            PlaceAncestryRelation::Ancestor
-        } else {
-            PlaceAncestryRelation::Descendant
+        match projections_b.len().cmp(&projections_a.len()) {
+            Ordering::Greater => PlaceAncestryRelation::Ancestor,
+            Ordering::Equal => PlaceAncestryRelation::SamePlace,
+            Ordering::Less => PlaceAncestryRelation::Descendant,
         }
     } else {
         PlaceAncestryRelation::Divergent

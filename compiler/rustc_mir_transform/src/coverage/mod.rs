@@ -14,14 +14,12 @@ use spans::{CoverageSpan, CoverageSpans};
 
 use crate::MirPass;
 
-use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::graph::WithNumNodes;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_data_structures::sync::Lrc;
 use rustc_index::vec::IndexVec;
 use rustc_middle::hir;
 use rustc_middle::hir::map::blocks::FnLikeNode;
-use rustc_middle::ich::StableHashingContext;
 use rustc_middle::middle::codegen_fn_attrs::CodegenFnAttrFlags;
 use rustc_middle::mir::coverage::*;
 use rustc_middle::mir::dump_enabled;
@@ -574,15 +572,13 @@ fn get_body_span<'tcx>(
 }
 
 fn hash_mir_source<'tcx>(tcx: TyCtxt<'tcx>, hir_body: &'tcx rustc_hir::Body<'tcx>) -> u64 {
+    // FIXME(cjgillot) Stop hashing HIR manually here.
     let mut hcx = tcx.create_no_span_stable_hashing_context();
-    hash(&mut hcx, &hir_body.value).to_smaller_hash()
-}
-
-fn hash(
-    hcx: &mut StableHashingContext<'tcx>,
-    node: &impl HashStable<StableHashingContext<'tcx>>,
-) -> Fingerprint {
     let mut stable_hasher = StableHasher::new();
-    node.hash_stable(hcx, &mut stable_hasher);
+    let owner = hir_body.id().hir_id.owner;
+    let bodies = &tcx.hir_owner_nodes(owner).as_ref().unwrap().bodies;
+    hcx.with_hir_bodies(false, owner, bodies, |hcx| {
+        hir_body.value.hash_stable(hcx, &mut stable_hasher)
+    });
     stable_hasher.finish()
 }

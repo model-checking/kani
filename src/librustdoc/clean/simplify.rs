@@ -11,8 +11,7 @@
 //! This module attempts to reconstruct the original where and/or parameter
 //! bounds by special casing scenarios such as these. Fun!
 
-use std::collections::BTreeMap;
-
+use rustc_data_structures::fx::FxIndexMap;
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty;
 use rustc_span::Symbol;
@@ -23,8 +22,11 @@ use crate::clean::WherePredicate as WP;
 use crate::core::DocContext;
 
 crate fn where_clauses(cx: &DocContext<'_>, clauses: Vec<WP>) -> Vec<WP> {
-    // First, partition the where clause into its separate components
-    let mut params: BTreeMap<_, (Vec<_>, Vec<_>)> = BTreeMap::new();
+    // First, partition the where clause into its separate components.
+    //
+    // We use `FxIndexMap` so that the insertion order is preserved to prevent messing up to
+    // the order of the generated bounds.
+    let mut params: FxIndexMap<Symbol, (Vec<_>, Vec<_>)> = FxIndexMap::default();
     let mut lifetimes = Vec::new();
     let mut equalities = Vec::new();
     let mut tybounds = Vec::new();
@@ -97,17 +99,13 @@ crate fn merge_bounds(
             clean::GenericBound::TraitBound(ref mut tr, _) => tr,
             clean::GenericBound::Outlives(..) => return false,
         };
-        let (did, path) = match trait_ref.trait_ {
-            clean::ResolvedPath { did, ref mut path, .. } => (did, path),
-            _ => return false,
-        };
         // If this QPath's trait `trait_did` is the same as, or a supertrait
         // of, the bound's trait `did` then we can keep going, otherwise
         // this is just a plain old equality bound.
-        if !trait_is_same_or_supertrait(cx, did, trait_did) {
+        if !trait_is_same_or_supertrait(cx, trait_ref.trait_.def_id(), trait_did) {
             return false;
         }
-        let last = path.segments.last_mut().expect("segments were empty");
+        let last = trait_ref.trait_.segments.last_mut().expect("segments were empty");
         match last.args {
             PP::AngleBracketed { ref mut bindings, .. } => {
                 bindings.push(clean::TypeBinding {

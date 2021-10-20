@@ -7,12 +7,11 @@
 //! This API is completely unstable and subject to change.
 
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/nightly-rustc/")]
-#![feature(allow_internal_unstable)]
 #![feature(array_windows)]
 #![feature(associated_type_bounds)]
 #![feature(auto_traits)]
 #![feature(bool_to_option)]
-#![feature(const_panic)]
+#![cfg_attr(bootstrap, feature(const_panic))]
 #![feature(control_flow_enum)]
 #![feature(core_intrinsics)]
 #![feature(extend_one)]

@@ -21,10 +21,16 @@
 #include "llvm/Support/CBindingWrapping.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
+#if LLVM_VERSION_LT(14, 0)
+#include "llvm/Support/TargetRegistry.h"
+#else
+#include "llvm/MC/TargetRegistry.h"
+#endif
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/FunctionImport.h"
+#include "llvm/Transforms/Utils/AddDiscriminators.h"
 #include "llvm/Transforms/Utils/FunctionImportUtils.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm-c/Transforms/PassManagerBuilder.h"
@@ -39,6 +45,7 @@
 #include "llvm/Transforms/Instrumentation/HWAddressSanitizer.h"
 #include "llvm/Transforms/Utils/CanonicalizeAliases.h"
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
+#include "llvm/Transforms/Utils.h"
 
 using namespace llvm;
 
@@ -523,7 +530,7 @@ extern "C" void LLVMRustDisposeTargetMachine(LLVMTargetMachineRef TM) {
 extern "C" void LLVMRustConfigurePassManagerBuilder(
     LLVMPassManagerBuilderRef PMBR, LLVMRustCodeGenOptLevel OptLevel,
     bool MergeFunctions, bool SLPVectorize, bool LoopVectorize, bool PrepareForThinLTO,
-    const char* PGOGenPath, const char* PGOUsePath) {
+    const char* PGOGenPath, const char* PGOUsePath, const char* PGOSampleUsePath) {
   unwrap(PMBR)->MergeFunctions = MergeFunctions;
   unwrap(PMBR)->SLPVectorize = SLPVectorize;
   unwrap(PMBR)->OptLevel = fromRust(OptLevel);
@@ -531,13 +538,14 @@ extern "C" void LLVMRustConfigurePassManagerBuilder(
   unwrap(PMBR)->PrepareForThinLTO = PrepareForThinLTO;
 
   if (PGOGenPath) {
-    assert(!PGOUsePath);
+    assert(!PGOUsePath && !PGOSampleUsePath);
     unwrap(PMBR)->EnablePGOInstrGen = true;
     unwrap(PMBR)->PGOInstrGen = PGOGenPath;
-  }
-  if (PGOUsePath) {
-    assert(!PGOGenPath);
+  } else if (PGOUsePath) {
+    assert(!PGOSampleUsePath);
     unwrap(PMBR)->PGOInstrUse = PGOUsePath;
+  } else if (PGOSampleUsePath) {
+    unwrap(PMBR)->PGOSampleUse = PGOSampleUsePath;
   }
 }
 
@@ -759,6 +767,7 @@ LLVMRustOptimizeWithNewPassManager(
     LLVMRustSanitizerOptions *SanitizerOptions,
     const char *PGOGenPath, const char *PGOUsePath,
     bool InstrumentCoverage, bool InstrumentGCOV,
+    const char *PGOSampleUsePath, bool DebugInfoForProfiling,
     void* LlvmSelfProfiler,
     LLVMRustSelfProfileBeforePassCallback BeforePassCallback,
     LLVMRustSelfProfileAfterPassCallback AfterPassCallback,
@@ -797,11 +806,19 @@ LLVMRustOptimizeWithNewPassManager(
 
   Optional<PGOOptions> PGOOpt;
   if (PGOGenPath) {
-    assert(!PGOUsePath);
-    PGOOpt = PGOOptions(PGOGenPath, "", "", PGOOptions::IRInstr);
+    assert(!PGOUsePath && !PGOSampleUsePath);
+    PGOOpt = PGOOptions(PGOGenPath, "", "", PGOOptions::IRInstr,
+                        PGOOptions::NoCSAction, DebugInfoForProfiling);
   } else if (PGOUsePath) {
-    assert(!PGOGenPath);
-    PGOOpt = PGOOptions(PGOUsePath, "", "", PGOOptions::IRUse);
+    assert(!PGOSampleUsePath);
+    PGOOpt = PGOOptions(PGOUsePath, "", "", PGOOptions::IRUse,
+                        PGOOptions::NoCSAction, DebugInfoForProfiling);
+  } else if (PGOSampleUsePath) {
+    PGOOpt = PGOOptions(PGOSampleUsePath, "", "", PGOOptions::SampleUse,
+                        PGOOptions::NoCSAction, DebugInfoForProfiling);
+  } else if (DebugInfoForProfiling) {
+    PGOOpt = PGOOptions("", "", "", PGOOptions::NoAction,
+                        PGOOptions::NoCSAction, DebugInfoForProfiling);
   }
 
 #if LLVM_VERSION_GE(12, 0) && !LLVM_VERSION_GE(13,0)
@@ -1572,7 +1589,11 @@ extern "C" bool
 LLVMRustPrepareThinLTOResolveWeak(const LLVMRustThinLTOData *Data, LLVMModuleRef M) {
   Module &Mod = *unwrap(M);
   const auto &DefinedGlobals = Data->ModuleToDefinedGVSummaries.lookup(Mod.getModuleIdentifier());
+#if LLVM_VERSION_GE(14, 0)
+  thinLTOFinalizeInModule(Mod, DefinedGlobals, /*PropagateAttrs=*/true);
+#else
   thinLTOResolvePrevailingInModule(Mod, DefinedGlobals);
+#endif
   return true;
 }
 

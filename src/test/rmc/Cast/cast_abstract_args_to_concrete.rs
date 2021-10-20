@@ -1,6 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// https://github.com/model-checking/rmc/issues/555
+// rmc-flags: --no-undefined-function-checks
+
 // This regression test is in response to issue #135.
 // The type of the second parameter to powi is a `CInteger`, but
 // the type of `2` here is a `u32`. This test ensures that

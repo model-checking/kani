@@ -86,7 +86,7 @@ impl ty::layout::HasParamEnv<'tcx> for Builder<'_, '_, 'tcx> {
 impl HasTargetSpec for Builder<'_, '_, 'tcx> {
     #[inline]
     fn target_spec(&self) -> &Target {
-        &self.cx.target_spec()
+        self.cx.target_spec()
     }
 }
 
@@ -828,6 +828,7 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     fn fcmp(&mut self, op: RealPredicate, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
+        let op = llvm::RealPredicate::from_generic(op);
         unsafe { llvm::LLVMBuildFCmp(self.llbuilder, op as c_uint, lhs, rhs, UNNAMED) }
     }
 

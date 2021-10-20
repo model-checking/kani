@@ -10,6 +10,7 @@ use rustc_errors::struct_span_err;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::LocalDefId;
+use rustc_index::vec::Idx;
 use rustc_span::source_map::{respan, DesugaringKind};
 use rustc_span::symbol::{kw, sym, Ident};
 use rustc_span::Span;
@@ -99,11 +100,12 @@ impl<'hir> LoweringContext<'_, 'hir> {
     ) -> T {
         let old_len = self.in_scope_lifetimes.len();
 
-        let parent_generics = match self.owners[parent_hir_id].unwrap().expect_item().kind {
-            hir::ItemKind::Impl(hir::Impl { ref generics, .. })
-            | hir::ItemKind::Trait(_, _, ref generics, ..) => generics.params,
-            _ => &[],
-        };
+        let parent_generics =
+            match self.owners[parent_hir_id].as_ref().unwrap().node().expect_item().kind {
+                hir::ItemKind::Impl(hir::Impl { ref generics, .. })
+                | hir::ItemKind::Trait(_, _, ref generics, ..) => generics.params,
+                _ => &[],
+            };
         let lt_def_names = parent_generics.iter().filter_map(|param| match param.kind {
             hir::GenericParamKind::Lifetime { .. } => Some(param.name.normalize_to_macros_2_0()),
             _ => None,
@@ -493,7 +495,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                         let kind = hir::ItemKind::Use(path, hir::UseKind::Single);
                         let vis = this.rebuild_vis(&vis);
                         if let Some(attrs) = attrs {
-                            this.attrs.insert(hir::HirId::make_owner(new_id), attrs);
+                            this.attrs.insert(hir::ItemLocalId::new(0), attrs);
                         }
 
                         let item = hir::Item {
@@ -568,7 +570,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                         let kind =
                             this.lower_use_tree(use_tree, &prefix, id, &mut vis, &mut ident, attrs);
                         if let Some(attrs) = attrs {
-                            this.attrs.insert(hir::HirId::make_owner(new_hir_id), attrs);
+                            this.attrs.insert(hir::ItemLocalId::new(0), attrs);
                         }
 
                         let item = hir::Item {
@@ -971,7 +973,9 @@ impl<'hir> LoweringContext<'_, 'hir> {
     ) -> hir::BodyId {
         let body = hir::Body { generator_kind: self.generator_kind, params, value };
         let id = body.id();
-        self.bodies.insert(id, body);
+        debug_assert_eq!(id.hir_id.owner, self.current_hir_id_owner);
+        self.bodies.ensure_contains_elem(id.hir_id.local_id, || None);
+        self.bodies[id.hir_id.local_id] = Some(self.arena.alloc(body));
         id
     }
 
@@ -1124,7 +1128,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 //
                 // If this is the simple case, this parameter will end up being the same as the
                 // original parameter, but with a different pattern id.
-                let stmt_attrs = this.attrs.get(&parameter.hir_id).copied();
+                let stmt_attrs = this.attrs.get(&parameter.hir_id.local_id).copied();
                 let (new_parameter_pat, new_parameter_id) = this.pat_ident(desugared_span, ident);
                 let new_parameter = hir::Param {
                     hir_id: parameter.hir_id,
@@ -1328,32 +1332,44 @@ impl<'hir> LoweringContext<'_, 'hir> {
         // keep track of the Span info. Now, `add_implicitly_sized` in `AstConv` checks both param bounds and
         // where clauses for `?Sized`.
         for pred in &generics.where_clause.predicates {
-            if let WherePredicate::BoundPredicate(ref bound_pred) = *pred {
-                'next_bound: for bound in &bound_pred.bounds {
-                    if let GenericBound::Trait(_, TraitBoundModifier::Maybe) = *bound {
-                        // Check if the where clause type is a plain type parameter.
-                        match self
-                            .resolver
-                            .get_partial_res(bound_pred.bounded_ty.id)
-                            .map(|d| (d.base_res(), d.unresolved_segments()))
-                        {
-                            Some((Res::Def(DefKind::TyParam, def_id), 0))
-                                if bound_pred.bound_generic_params.is_empty() =>
-                            {
-                                for param in &generics.params {
-                                    if def_id == self.resolver.local_def_id(param.id).to_def_id() {
-                                        continue 'next_bound;
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                        self.diagnostic().span_err(
-                            bound_pred.bounded_ty.span,
-                            "`?Trait` bounds are only permitted at the \
-                                 point where a type parameter is declared",
-                        );
+            let bound_pred = match *pred {
+                WherePredicate::BoundPredicate(ref bound_pred) => bound_pred,
+                _ => continue,
+            };
+            let compute_is_param = || {
+                // Check if the where clause type is a plain type parameter.
+                match self
+                    .resolver
+                    .get_partial_res(bound_pred.bounded_ty.id)
+                    .map(|d| (d.base_res(), d.unresolved_segments()))
+                {
+                    Some((Res::Def(DefKind::TyParam, def_id), 0))
+                        if bound_pred.bound_generic_params.is_empty() =>
+                    {
+                        generics
+                            .params
+                            .iter()
+                            .any(|p| def_id == self.resolver.local_def_id(p.id).to_def_id())
                     }
+                    // Either the `bounded_ty` is not a plain type parameter, or
+                    // it's not found in the generic type parameters list.
+                    _ => false,
+                }
+            };
+            // We only need to compute this once per `WherePredicate`, but don't
+            // need to compute this at all unless there is a Maybe bound.
+            let mut is_param: Option<bool> = None;
+            for bound in &bound_pred.bounds {
+                if !matches!(*bound, GenericBound::Trait(_, TraitBoundModifier::Maybe)) {
+                    continue;
+                }
+                let is_param = *is_param.get_or_insert_with(compute_is_param);
+                if !is_param {
+                    self.diagnostic().span_err(
+                        bound.span(),
+                        "`?Trait` bounds are only permitted at the \
+                        point where a type parameter is declared",
+                    );
                 }
             }
         }

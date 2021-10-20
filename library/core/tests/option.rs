@@ -367,6 +367,27 @@ fn option_const() {
 
     const IS_NONE: bool = OPTION.is_none();
     assert!(!IS_NONE);
+
+    const COPIED: Option<usize> = OPTION.as_ref().copied();
+    assert_eq!(COPIED, OPTION);
+}
+
+#[test]
+const fn option_const_mut() {
+    // test that the methods of `Option` that take mutable references are usable in a const context
+
+    let mut option: Option<usize> = Some(32);
+
+    let _take = option.take();
+    let _replace = option.replace(42);
+
+    {
+        let as_mut = option.as_mut();
+        match as_mut {
+            Some(v) => *v = 32,
+            None => unreachable!(),
+        }
+    }
 }
 
 #[test]

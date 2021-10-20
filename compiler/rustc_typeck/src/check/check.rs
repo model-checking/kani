@@ -31,7 +31,7 @@ use std::ops::ControlFlow;
 
 pub fn check_wf_new(tcx: TyCtxt<'_>) {
     let visit = wfcheck::CheckTypeWellFormedVisitor::new(tcx);
-    tcx.hir().krate().par_visit_all_item_likes(&visit);
+    tcx.hir().par_visit_all_item_likes(&visit);
 }
 
 pub(super) fn check_abi(tcx: TyCtxt<'_>, hir_id: hir::HirId, span: Span, abi: Abi) {
@@ -58,7 +58,7 @@ pub(super) fn check_abi(tcx: TyCtxt<'_>, hir_id: hir::HirId, span: Span, abi: Ab
             tcx.sess,
             span,
             E0781,
-            "the `\"C-cmse-nonsecure-call\"` ABI is only allowed on function pointers."
+            "the `\"C-cmse-nonsecure-call\"` ABI is only allowed on function pointers"
         )
         .emit()
     }
@@ -1374,7 +1374,7 @@ fn check_enum<'tcx>(
         }
     }
 
-    if tcx.adt_def(def_id).repr.int.is_none() {
+    if tcx.adt_def(def_id).repr.int.is_none() && tcx.features().arbitrary_enum_discriminant {
         let is_unit = |var: &hir::Variant<'_>| matches!(var.data, hir::VariantData::Unit(..));
 
         let has_disr = |var: &hir::Variant<'_>| var.disr_expr.is_some();

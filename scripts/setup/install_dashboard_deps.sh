@@ -15,6 +15,7 @@ DEPS=(
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}"
 
 PYTHON_DEPS=(
+  bs4 # Used for dashboard updates
   jinja2
 )
 

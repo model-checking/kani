@@ -1,5 +1,4 @@
 use crate::dep_graph::{DepNode, WorkProduct, WorkProductId};
-use crate::ich::{NodeIdHashingMode, StableHashingContext};
 use crate::ty::{subst::InternalSubsts, Instance, InstanceDef, SymbolName, TyCtxt};
 use rustc_attr::InlineAttr;
 use rustc_data_structures::base_n;
@@ -8,6 +7,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_hir::def_id::{CrateNum, DefId, LOCAL_CRATE};
 use rustc_hir::{HirId, ItemId};
+use rustc_query_system::ich::{NodeIdHashingMode, StableHashingContext};
 use rustc_session::config::OptLevel;
 use rustc_span::source_map::Span;
 use rustc_span::symbol::Symbol;
@@ -47,6 +47,14 @@ pub enum MonoItem<'tcx> {
 }
 
 impl<'tcx> MonoItem<'tcx> {
+    /// Returns `true` if the mono item is user-defined (i.e. not compiler-generated, like shims).
+    pub fn is_user_defined(&self) -> bool {
+        match *self {
+            MonoItem::Fn(instance) => matches!(instance.def, InstanceDef::Item(..)),
+            MonoItem::Static(..) | MonoItem::GlobalAsm(..) => true,
+        }
+    }
+
     pub fn size_estimate(&self, tcx: TyCtxt<'tcx>) -> usize {
         match *self {
             MonoItem::Fn(instance) => {

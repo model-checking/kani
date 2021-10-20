@@ -18,7 +18,6 @@
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
 extern crate rustc_attr;
-extern crate rustc_const_eval;
 extern crate rustc_data_structures;
 extern crate rustc_errors;
 extern crate rustc_hir;
@@ -510,7 +509,6 @@ pub fn path_to_local_id(expr: &Expr<'_>, id: HirId) -> bool {
 }
 
 /// Gets the definition associated to a path.
-#[allow(clippy::shadow_unrelated)] // false positive #6563
 pub fn path_to_res(cx: &LateContext<'_>, path: &[&str]) -> Res {
     macro_rules! try_res {
         ($e:expr) => {
@@ -648,13 +646,13 @@ pub fn can_mut_borrow_both(cx: &LateContext<'_>, e1: &Expr<'_>, e2: &Expr<'_>) -
 /// constructor from the std library
 fn is_default_equivalent_ctor(cx: &LateContext<'_>, def_id: DefId, path: &QPath<'_>) -> bool {
     let std_types_symbols = &[
-        sym::string_type,
-        sym::vec_type,
-        sym::vecdeque_type,
+        sym::String,
+        sym::Vec,
+        sym::VecDeque,
         sym::LinkedList,
-        sym::hashmap_type,
+        sym::HashMap,
         sym::BTreeMap,
-        sym::hashset_type,
+        sym::HashSet,
         sym::BTreeSet,
         sym::BinaryHeap,
     ];
@@ -684,7 +682,17 @@ pub fn is_default_equivalent(cx: &LateContext<'_>, e: &Expr<'_>) -> bool {
             _ => false,
         },
         ExprKind::Tup(items) | ExprKind::Array(items) => items.iter().all(|x| is_default_equivalent(cx, x)),
-        ExprKind::Repeat(x, _) => is_default_equivalent(cx, x),
+        ExprKind::Repeat(x, y) => if_chain! {
+            if let ExprKind::Lit(ref const_lit) = cx.tcx.hir().body(y.body).value.kind;
+            if let LitKind::Int(v, _) = const_lit.node;
+            if v <= 32 && is_default_equivalent(cx, x);
+            then {
+                true
+            }
+            else {
+                false
+            }
+        },
         ExprKind::Call(repl_func, _) => if_chain! {
             if let ExprKind::Path(ref repl_func_qpath) = repl_func.kind;
             if let Some(repl_def_id) = cx.qpath_res(repl_func_qpath, repl_func.hir_id).opt_def_id();
@@ -1499,7 +1507,7 @@ pub fn is_try<'tcx>(cx: &LateContext<'_>, expr: &'tcx Expr<'tcx>) -> Option<&'tc
 
     if let ExprKind::Match(_, arms, ref source) = expr.kind {
         // desugared from a `?` operator
-        if let MatchSource::TryDesugar = *source {
+        if *source == MatchSource::TryDesugar {
             return Some(expr);
         }
 

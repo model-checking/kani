@@ -46,7 +46,9 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
                 }
             }
         }
-        if let RegionResolutionError::ConcreteFailure(origin, _, _) = error.clone() {
+        if let RegionResolutionError::ConcreteFailure(origin, _, _)
+        | RegionResolutionError::GenericBoundFailure(origin, _, _) = error.clone()
+        {
             if let SubregionOrigin::CompareImplTypeObligation {
                 span,
                 item_name,
@@ -130,8 +132,8 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
             .tcx()
             .sess
             .struct_span_err(span, &format!("`impl` associated type signature for `{}` doesn't match `trait` associated type signature", item_name));
-        err.span_label(impl_sp, &format!("found"));
-        err.span_label(trait_sp, &format!("expected"));
+        err.span_label(impl_sp, "found");
+        err.span_label(trait_sp, "expected");
 
         err.emit();
     }

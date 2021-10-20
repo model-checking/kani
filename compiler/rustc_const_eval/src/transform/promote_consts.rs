@@ -26,8 +26,7 @@ use rustc_index::vec::{Idx, IndexVec};
 use std::cell::Cell;
 use std::{cmp, iter, mem};
 
-use crate::const_eval::{is_const_fn, is_unstable_const_fn};
-use crate::transform::check_consts::{is_lang_panic_fn, qualifs, ConstCx};
+use crate::transform::check_consts::{is_lang_special_const_fn, qualifs, ConstCx};
 use crate::transform::MirPass;
 
 /// A `MirPass` for promotion.
@@ -231,7 +230,7 @@ impl<'tcx> Validator<'_, 'tcx> {
 
                         // We cannot promote things that need dropping, since the promoted value
                         // would not get dropped.
-                        if self.qualif_local::<qualifs::NeedsNonConstDrop>(place.local) {
+                        if self.qualif_local::<qualifs::NeedsDrop>(place.local) {
                             return Err(Unpromotable);
                         }
 
@@ -658,9 +657,7 @@ impl<'tcx> Validator<'_, 'tcx> {
 
         let is_const_fn = match *fn_ty.kind() {
             ty::FnDef(def_id, _) => {
-                is_const_fn(self.tcx, def_id)
-                    || is_unstable_const_fn(self.tcx, def_id).is_some()
-                    || is_lang_panic_fn(self.tcx, def_id)
+                self.tcx.is_const_fn_raw(def_id) || is_lang_special_const_fn(self.tcx, def_id)
             }
             _ => false,
         };
@@ -1081,7 +1078,7 @@ pub fn is_const_fn_in_array_repeat_expression<'tcx>(
                 if let ty::FnDef(def_id, _) = *literal.ty().kind() {
                     if let Some((destination_place, _)) = destination {
                         if destination_place == place {
-                            if is_const_fn(ccx.tcx, def_id) {
+                            if ccx.tcx.is_const_fn(def_id) {
                                 return true;
                             }
                         }

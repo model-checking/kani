@@ -36,16 +36,7 @@ rustc_queries! {
     /// prefer wrappers like `tcx.visit_all_items_in_krate()`.
     query hir_crate(key: ()) -> &'tcx Crate<'tcx> {
         eval_always
-        no_hash
         desc { "get the crate HIR" }
-    }
-
-    /// The indexed HIR. This can be conveniently accessed by `tcx.hir()`.
-    /// Avoid calling this query directly.
-    query index_hir(_: ()) -> &'tcx crate::hir::IndexedHir<'tcx> {
-        eval_always
-        no_hash
-        desc { "index HIR" }
     }
 
     /// The items in a module.
@@ -62,7 +53,6 @@ rustc_queries! {
     /// This can be conveniently accessed by methods on `tcx.hir()`.
     /// Avoid calling this query directly.
     query hir_owner(key: LocalDefId) -> Option<crate::hir::Owner<'tcx>> {
-        eval_always
         desc { |tcx| "HIR owner of `{}`", tcx.def_path_str(key.to_def_id()) }
     }
 
@@ -71,7 +61,6 @@ rustc_queries! {
     /// This can be conveniently accessed by methods on `tcx.hir()`.
     /// Avoid calling this query directly.
     query hir_owner_parent(key: LocalDefId) -> hir::HirId {
-        eval_always
         desc { |tcx| "HIR parent of `{}`", tcx.def_path_str(key.to_def_id()) }
     }
 
@@ -79,8 +68,7 @@ rustc_queries! {
     ///
     /// This can be conveniently accessed by methods on `tcx.hir()`.
     /// Avoid calling this query directly.
-    query hir_owner_nodes(key: LocalDefId) -> Option<&'tcx crate::hir::OwnerNodes<'tcx>> {
-        eval_always
+    query hir_owner_nodes(key: LocalDefId) -> Option<&'tcx hir::OwnerNodes<'tcx>> {
         desc { |tcx| "HIR owner items in `{}`", tcx.def_path_str(key.to_def_id()) }
     }
 
@@ -88,8 +76,7 @@ rustc_queries! {
     ///
     /// This can be conveniently accessed by methods on `tcx.hir()`.
     /// Avoid calling this query directly.
-    query hir_attrs(key: LocalDefId) -> rustc_middle::hir::AttributeMap<'tcx> {
-        eval_always
+    query hir_attrs(key: LocalDefId) -> &'tcx hir::AttributeMap<'tcx> {
         desc { |tcx| "HIR owner attributes in `{}`", tcx.def_path_str(key.to_def_id()) }
     }
 
@@ -933,12 +920,6 @@ rustc_queries! {
 
     query def_span(def_id: DefId) -> Span {
         desc { |tcx| "looking up span for `{}`", tcx.def_path_str(def_id) }
-        // FIXME(mw): DefSpans are not really inputs since they are derived from
-        // HIR. But at the moment HIR hashing still contains some hacks that allow
-        // to make type debuginfo to be source location independent. Declaring
-        // DefSpan an input makes sure that changes to these are always detected
-        // regardless of HIR hashing.
-        eval_always
     }
 
     query def_ident_span(def_id: DefId) -> Option<Span> {
@@ -1010,6 +991,13 @@ rustc_queries! {
     query vtable_trait_upcasting_coercion_new_vptr_slot(key: (ty::Ty<'tcx>, ty::Ty<'tcx>)) -> Option<usize> {
         desc { |tcx| "finding the slot within vtable for trait object {} vtable ptr during trait upcasting coercion from {} vtable",
             key.1, key.0 }
+    }
+
+    query vtable_allocation(key: (Ty<'tcx>, Option<ty::PolyExistentialTraitRef<'tcx>>)) -> mir::interpret::AllocId {
+        desc { |tcx| "vtable const allocation for <{} as {}>",
+            key.0,
+            key.1.map(|trait_ref| format!("{}", trait_ref)).unwrap_or("_".to_owned())
+        }
     }
 
     query codegen_fulfill_obligation(
@@ -1442,7 +1430,7 @@ rustc_queries! {
     }
 
     /// Returns all diagnostic items defined in all crates.
-    query all_diagnostic_items(_: ()) -> FxHashMap<Symbol, DefId> {
+    query all_diagnostic_items(_: ()) -> rustc_hir::diagnostic_items::DiagnosticItems {
         storage(ArenaCacheSelector<'tcx>)
         eval_always
         desc { "calculating the diagnostic items map" }
@@ -1454,7 +1442,7 @@ rustc_queries! {
     }
 
     /// Returns the diagnostic items defined in a crate.
-    query diagnostic_items(_: CrateNum) -> FxHashMap<Symbol, DefId> {
+    query diagnostic_items(_: CrateNum) -> rustc_hir::diagnostic_items::DiagnosticItems {
         storage(ArenaCacheSelector<'tcx>)
         desc { "calculating the diagnostic items map in a crate" }
     }
@@ -1551,11 +1539,11 @@ rustc_queries! {
     query codegen_unit(_: Symbol) -> &'tcx CodegenUnit<'tcx> {
         desc { "codegen_unit" }
     }
-    query unused_generic_params(key: DefId) -> FiniteBitSet<u32> {
-        cache_on_disk_if { key.is_local() }
+    query unused_generic_params(key: ty::InstanceDef<'tcx>) -> FiniteBitSet<u32> {
+        cache_on_disk_if { key.def_id().is_local() }
         desc {
             |tcx| "determining which generic parameters are unused by `{}`",
-                tcx.def_path_str(key)
+                tcx.def_path_str(key.def_id())
         }
     }
     query backend_optimization_level(_: ()) -> OptLevel {

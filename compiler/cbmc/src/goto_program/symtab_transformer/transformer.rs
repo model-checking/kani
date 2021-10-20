@@ -97,11 +97,8 @@ pub trait Transformer: Sized {
 
     /// Transforms a parameter for a function
     fn transform_type_parameter(&mut self, parameter: &Parameter) -> Parameter {
-        Type::parameter(
-            parameter.identifier().cloned(),
-            parameter.base_name().cloned(),
-            self.transform_type(parameter.typ()),
-        )
+        self.transform_type(parameter.typ())
+            .as_parameter(parameter.identifier().cloned(), parameter.base_name().cloned())
     }
 
     /// Transforms a function type (`return_type x(parameters)`)

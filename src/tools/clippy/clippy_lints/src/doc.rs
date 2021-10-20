@@ -212,7 +212,7 @@ impl_lint_pass!(DocMarkdown =>
 );
 
 impl<'tcx> LateLintPass<'tcx> for DocMarkdown {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>, _: &'tcx hir::Crate<'_>) {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         let attrs = cx.tcx.hir().attrs(hir::CRATE_HIR_ID);
         check_attrs(cx, &self.valid_idents, attrs);
     }
@@ -236,7 +236,17 @@ impl<'tcx> LateLintPass<'tcx> for DocMarkdown {
             hir::ItemKind::Impl(ref impl_) => {
                 self.in_trait_impl = impl_.of_trait.is_some();
             },
-            _ => {},
+            hir::ItemKind::Trait(_, unsafety, ..) => {
+                if !headers.safety && unsafety == hir::Unsafety::Unsafe {
+                    span_lint(
+                        cx,
+                        MISSING_SAFETY_DOC,
+                        item.span,
+                        "docs for unsafe trait missing `# Safety` section",
+                    );
+                }
+            },
+            _ => (),
         }
     }
 
@@ -307,7 +317,7 @@ fn lint_for_missing_headers<'tcx>(
     }
     if !headers.errors {
         let hir_id = cx.tcx.hir().local_def_id_to_hir_id(def_id);
-        if is_type_diagnostic_item(cx, return_ty(cx, hir_id), sym::result_type) {
+        if is_type_diagnostic_item(cx, return_ty(cx, hir_id), sym::Result) {
             span_lint(
                 cx,
                 MISSING_ERRORS_DOC,
@@ -325,7 +335,7 @@ fn lint_for_missing_headers<'tcx>(
                 if let ty::Opaque(_, subs) = ret_ty.kind();
                 if let Some(gen) = subs.types().next();
                 if let ty::Generator(_, subs, _) = gen.kind();
-                if is_type_diagnostic_item(cx, subs.as_generator().return_ty(), sym::result_type);
+                if is_type_diagnostic_item(cx, subs.as_generator().return_ty(), sym::Result);
                 then {
                     span_lint(
                         cx,
@@ -396,6 +406,15 @@ struct DocHeaders {
 }
 
 fn check_attrs<'a>(cx: &LateContext<'_>, valid_idents: &FxHashSet<String>, attrs: &'a [Attribute]) -> DocHeaders {
+    use pulldown_cmark::{BrokenLink, CowStr, Options};
+    /// We don't want the parser to choke on intra doc links. Since we don't
+    /// actually care about rendering them, just pretend that all broken links are
+    /// point to a fake address.
+    #[allow(clippy::unnecessary_wraps)] // we're following a type signature
+    fn fake_broken_link_callback<'a>(_: BrokenLink<'_>) -> Option<(CowStr<'a>, CowStr<'a>)> {
+        Some(("fake".into(), "fake".into()))
+    }
+
     let mut doc = String::new();
     let mut spans = vec![];
 
@@ -430,7 +449,10 @@ fn check_attrs<'a>(cx: &LateContext<'_>, valid_idents: &FxHashSet<String>, attrs
         };
     }
 
-    let parser = pulldown_cmark::Parser::new(&doc).into_offset_iter();
+    let mut cb = fake_broken_link_callback;
+
+    let parser =
+        pulldown_cmark::Parser::new_with_broken_link_callback(&doc, Options::empty(), Some(&mut cb)).into_offset_iter();
     // Iterate over all `Events` and combine consecutive events into one
     let events = parser.coalesce(|previous, current| {
         use pulldown_cmark::Event::Text;
@@ -760,8 +782,8 @@ impl<'a, 'tcx> Visitor<'tcx> for FindPanicUnwrap<'a, 'tcx> {
         // check for `unwrap`
         if let Some(arglists) = method_chain_args(expr, &["unwrap"]) {
             let reciever_ty = self.typeck_results.expr_ty(&arglists[0][0]).peel_refs();
-            if is_type_diagnostic_item(self.cx, reciever_ty, sym::option_type)
-                || is_type_diagnostic_item(self.cx, reciever_ty, sym::result_type)
+            if is_type_diagnostic_item(self.cx, reciever_ty, sym::Option)
+                || is_type_diagnostic_item(self.cx, reciever_ty, sym::Result)
             {
                 self.panic_span = Some(expr.span);
             }

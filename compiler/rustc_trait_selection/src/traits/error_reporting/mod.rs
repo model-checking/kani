@@ -516,12 +516,12 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                             });
                             let unit_obligation = obligation.with(predicate.to_predicate(tcx));
                             if self.predicate_may_hold(&unit_obligation) {
-                                err.note("this trait is implemented for `()`.");
+                                err.note("this trait is implemented for `()`");
                                 err.note(
                                     "this error might have been caused by changes to \
                                     Rust's type-inference algorithm (see issue #48950 \
                                     <https://github.com/rust-lang/rust/issues/48950> \
-                                    for more information).",
+                                    for more information)",
                                 );
                                 err.help("did you intend to use the type `()` here instead?");
                             }
@@ -533,9 +533,9 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                         // example).
 
                         let trait_is_debug =
-                            self.tcx.is_diagnostic_item(sym::debug_trait, trait_ref.def_id());
+                            self.tcx.is_diagnostic_item(sym::Debug, trait_ref.def_id());
                         let trait_is_display =
-                            self.tcx.is_diagnostic_item(sym::display_trait, trait_ref.def_id());
+                            self.tcx.is_diagnostic_item(sym::Display, trait_ref.def_id());
 
                         let in_std_macro =
                             match obligation.cause.span.ctxt().outer_expn_data().macro_def_id {
@@ -841,6 +841,9 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
 
             Overflow => {
                 bug!("overflow should be handled before the `report_selection_error` path");
+            }
+            SelectionError::ErrorReporting => {
+                bug!("ErrorReporting Overflow should not reach `report_selection_err` call")
             }
         };
 
