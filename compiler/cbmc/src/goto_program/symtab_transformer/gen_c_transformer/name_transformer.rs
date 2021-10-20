@@ -144,10 +144,9 @@ impl Transformer for NameTransformer {
 
     /// Normalize parameter identifier.
     fn transform_type_parameter(&mut self, parameter: &Parameter) -> Parameter {
-        Type::parameter(
+        self.transform_type(parameter.typ()).as_parameter(
             parameter.identifier().map(|name| self.normalize_identifier(name)),
             parameter.base_name().map(|name| self.normalize_identifier(name)),
-            self.transform_type(parameter.typ()),
         )
     }
 
