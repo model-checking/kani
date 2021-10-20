@@ -644,12 +644,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-/// This function extracts the "assertion failed" string which is created by the rust stdl. It
-/// causes confusing outputs like "assertion failed: 1 == 1" SUCCESS to be printed out. This function
-/// can extract the "assertion failed" component out and change the string to "assertion"
+/// Assertions, regardless of failing or being proven true are printed as "assertion failed". For example, "assertion 1==2: SUCCESS".
+/// This is due to the rustc builtin macros formatting with the "assertion failed" prefix inside expressions. This function extracts
+/// the prefix and changes it to "assert".
 fn extract_panic_string(e: &Expr) -> Option<String> {
     // The MIR represents the StringConstant as `&"constant"[0]`. We are representing a rust str type as a struct.
-    let arg: &str = match e.struct_expr_values().unwrap()[0].value() {
+    let extracted_string: &str = match e.struct_expr_values().unwrap()[0].value() {
         ExprValue::AddressOf(expr) => match expr.value() {
             ExprValue::Index { array, .. } => match array.value() {
                 ExprValue::StringConstant { s } => s,
@@ -661,11 +661,14 @@ fn extract_panic_string(e: &Expr) -> Option<String> {
         _ => return None,
     };
 
+    debug!("Printing out the panic String constant {:?}", extracted_string);
+
     // "assertion failed: 1 == 1: SUCCESS" was confusing, so we removed the "failed"
-    let rewritten_string = if let Some(stripped) = arg.strip_prefix("assertion failed") {
+    let rewritten_string = if let Some(stripped) = extracted_string.strip_prefix("assertion failed")
+    {
         format!("assertion{}", stripped)
     } else {
-        arg.to_string()
+        extracted_string.to_string()
     };
 
     Some(rewritten_string)
