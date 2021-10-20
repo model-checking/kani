@@ -1202,7 +1202,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             ident = name;
                         }
                     }
-                    Some(Type::parameter(Some(ident.to_string()), Some(ident), self.codegen_ty(*t)))
+                    Some(self.codegen_ty(*t).as_parameter(Some(ident.to_string()), Some(ident)))
                 }
             })
             .collect();
@@ -1214,7 +1214,7 @@ impl<'tcx> GotocCtx<'tcx> {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier().map(|i| i.to_string());
                 let ty = self_param.typ().clone();
-                params[0] = Type::parameter(ident.clone(), ident, ty.to_pointer());
+                params[0] = ty.to_pointer().as_parameter(ident.clone(), ident);
             }
         }
 
