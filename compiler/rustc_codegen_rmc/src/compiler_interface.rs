@@ -20,10 +20,13 @@ use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
+use std::collections::BTreeMap;
+use std::iter::FromIterator;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
+    pub type_map: BTreeMap<String, String>,
     pub symtab: SymbolTable,
     pub crate_name: rustc_span::Symbol,
 }
@@ -124,7 +127,10 @@ impl CodegenBackend for GotocCodegenBackend {
             &tcx.sess.opts.debugging_opts.symbol_table_passes,
         );
 
+        let type_map = BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string())));
+
         Box::new(GotocCodegenResult {
+            type_map,
             symtab: symbol_table,
             crate_name: tcx.crate_name(LOCAL_CRATE) as rustc_span::Symbol,
         })
@@ -158,6 +164,12 @@ impl CodegenBackend for GotocCodegenBackend {
         debug!("output to {:?}", output_name);
         let mut out_file = ::std::fs::File::create(output_name).unwrap();
         write!(out_file, "{}", pretty_json.to_string()).unwrap();
+
+        let type_map_name = outputs.path(OutputType::Object).with_extension("type_map");
+        debug!("type_map to {:?}", type_map_name);
+        let mut out_file = ::std::fs::File::create(type_map_name).unwrap();
+        let json = result.type_map.to_json().pretty().to_string();
+        write!(out_file, "{}", json).unwrap();
 
         Ok(())
     }

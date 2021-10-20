@@ -475,6 +475,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
     ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
+        let goto_typ = self.codegen_ty_inner(ty);
+        if let Some(tag) = goto_typ.tag() {
+            if !self.type_map.contains_key(tag) {
+                self.type_map.insert(tag.to_string(), ty);
+            }
+        }
+        goto_typ
+    }
+
+    fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {
         if let Some(handler) = self.type_hooks.hook_applies(self.tcx, ty) {
             return handler.handle(self, ty);
         }
