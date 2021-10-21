@@ -18,7 +18,7 @@ RUSTC_LOG=error CARGO_TARGET_DIR=/tmp/type_mismatch_test_build RUST_BACKTRACE=1 
 
 # Convert from JSON to Gotoc 
 cd /tmp/type_mismatch_test_build/debug/deps/
-ls *.json | xargs symtab2gb
+ls *.symtab.json | xargs symtab2gb
 
 # Add the entry point and remove unused functions
 goto-cc --function main *.out -o a.out 

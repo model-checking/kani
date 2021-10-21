@@ -25,14 +25,14 @@ def main():
         rmc.cargo_build(args.crate, args.target_dir,
                         args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
 
-        pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
-        jsons = glob.glob(pattern)
-        rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+        pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
+        symbol_table_jsons = glob.glob(pattern)
+        rmc.ensure(len(symbol_table_jsons) == 1, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
 
         cbmc_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.out")
         c_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.c")
 
-        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_runnable_filename, args.verbose, args.keep_temps, args.dry_run):
+        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(symbol_table_jsons[0], cbmc_runnable_filename, args.verbose, args.keep_temps, args.dry_run):
             return 1
 
         if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_runnable_filename, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
@@ -46,19 +46,19 @@ def main():
     rmc.cargo_build(args.crate, args.target_dir,
                     args.verbose, args.debug, args.mangler, args.dry_run, [])
 
-    pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
-    jsons = glob.glob(pattern)
+    pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
+    symbol_table_jsons = glob.glob(pattern)
 
     if not args.dry_run:
-        rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+        rmc.ensure(len(symbol_table_jsons) == 1, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
     else:
         # Add a dummy value so dry-run works.
-        jsons = ["dry-run.json"]
+        symbol_table_jsons = ["dry-run.symtab.json"]
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
-    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
+    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(symbol_table_jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
         return 1
 
     args.c_lib.append(str(RMC_C_LIB))

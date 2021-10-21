@@ -50,6 +50,7 @@ pub struct GotocCtx<'tcx> {
     /// map a global allocation to a name in the symbol table
     pub alloc_map: FxHashMap<&'tcx Allocation, String>,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
+    pub type_map: FxHashMap<String, Ty<'tcx>>,
 }
 
 /// Constructor
@@ -67,6 +68,7 @@ impl<'tcx> GotocCtx<'tcx> {
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
             current_fn: None,
+            type_map: FxHashMap::default(),
         }
     }
 }
