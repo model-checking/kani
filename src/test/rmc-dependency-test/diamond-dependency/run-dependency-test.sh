@@ -9,18 +9,23 @@ echo
 echo "Starting Diamond Dependency Test..."
 echo
 
+TEMP_FOLD="/tmp/DependencyTest"
+mkdir -p $TEMP_FOLD
+
+DEP_LOG=$TEMP_FOLD/"log.txt"
+
 # Compile crates with RMC backend
 cd $(dirname $0)
 rm -rf build
-CARGO_TARGET_DIR=build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build
+CARGO_TARGET_DIR=build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build > $DEP_LOG 2>&1
 
 # Convert from JSON to Gotoc 
 cd build/debug/deps/
-ls *.json | xargs symtab2gb
+ls *.json | xargs symtab2gb >> $DEP_LOG 2>&1
 
 # Add the entry point and remove unused functions
-goto-cc --function harness *.out -o a.out 
-goto-instrument --drop-unused-functions a.out b.out 
+goto-cc --function harness *.out -o a.out >> $DEP_LOG 2>&1
+goto-instrument --drop-unused-functions a.out b.out >> $DEP_LOG 2>&1
 
 # Run the solver
 RESULT="/tmp/dependency_test_result.txt"

@@ -37,12 +37,14 @@ if ! rustup toolchain list | grep -q nightly; then
   rustup toolchain install nightly
 fi
 
-STD_LIB_LOG="/tmp/StdLibTest/log.txt"
+TEMP_FOLD="/tmp/StdLibTest"
+mkdir -p $TEMP_FOLD
+
+STD_LIB_LOG=$TEMP_FOLD/"log.txt"
 
 echo "Starting cargo build with RMC"
 RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" \
-  RUSTC=rmc-rustc cargo +nightly build -Z build-std --target $TARGET 2>&1 \
-  | tee $STD_LIB_LOG
+  RUSTC=rmc-rustc cargo +nightly build -Z build-std --target $TARGET > $STD_LIB_LOG 2>&1
 
 # For now, we expect a linker error, but no modules should fail with a compiler
 # panic. 

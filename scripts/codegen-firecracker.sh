@@ -21,9 +21,14 @@ echo
 echo "Starting Firecracker codegen regression..."
 echo
 
+TEMP_FOLD="/tmp/FcCodegenTest"
+mkdir -p $TEMP_FOLD
+
+FC_CODEGEN_LOG=$TEMP_FOLD/"log.txt"
+
 # At the moment, we only test codegen for the virtio module
 cd $RMC_DIR/firecracker/src/devices/src/virtio/
-RUST_BACKTRACE=1 RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build --target x86_64-unknown-linux-gnu
+RUST_BACKTRACE=1 RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build --target x86_64-unknown-linux-gnu > $FC_CODEGEN_LOG 2>&1
 
 echo
 echo "Finished Firecracker codegen regression successfully..."
