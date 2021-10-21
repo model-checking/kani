@@ -28,6 +28,14 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Check codegen for the standard library
 time "$SCRIPT_DIR"/std-lib-regression.sh
 
+# We rarely benefit from re-using build artifacts in the firecracker test,
+# and we often end up with incompatible leftover artifacts:
+# "error[E0514]: found crate `serde_derive` compiled by an incompatible version of rustc"
+# So if we're calling the full regression suite, wipe out old artifacts.
+if [ -d "$RMC_DIR/firecracker/build" ]; then
+  rm -rf "$RMC_DIR/firecracker/build"
+fi
+
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
 
