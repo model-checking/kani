@@ -12,7 +12,7 @@ echo
 # Compile crates with RMC backend
 cd $(dirname $0)
 rm -rf build
-CARGO_TARGET_DIR=build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build
+CARGO_TARGET_DIR=build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc -Z trim-diagnostic-paths=no --cfg=rmc" RUSTC=rmc-rustc cargo build
 
 # Convert from JSON to Gotoc 
 cd build/debug/deps/
