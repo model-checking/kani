@@ -16,7 +16,7 @@ CARGO_TARGET_DIR=build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc --cf
 
 # Convert from JSON to Gotoc 
 cd build/debug/deps/
-ls *.json | xargs symtab2gb
+ls *.symtab.json | xargs symtab2gb
 
 # Add the entry point and remove unused functions
 goto-cc --function harness *.out -o a.out 

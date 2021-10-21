@@ -22,6 +22,7 @@ use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
+use std::path::PathBuf;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
@@ -155,21 +156,19 @@ impl CodegenBackend for GotocCodegenBackend {
         let result = codegen_results
             .downcast::<GotocCodegenResult>()
             .expect("in link: codegen_results is not a GotocCodegenResult");
-        let symtab = result.symtab;
-        let irep_symtab = symtab.to_irep();
-        let json = irep_symtab.to_json();
-        let pretty_json = json.pretty();
 
-        let output_name = outputs.path(OutputType::Object).with_extension("json");
-        debug!("output to {:?}", output_name);
-        let mut out_file = ::std::fs::File::create(output_name).unwrap();
-        write!(out_file, "{}", pretty_json.to_string()).unwrap();
+        // "path.o"
+        let base_filename = outputs.path(OutputType::Object);
 
-        let type_map_name = outputs.path(OutputType::Object).with_extension("type_map");
-        debug!("type_map to {:?}", type_map_name);
-        let mut out_file = ::std::fs::File::create(type_map_name).unwrap();
-        let json = result.type_map.to_json().pretty().to_string();
-        write!(out_file, "{}", json).unwrap();
+        let symtab_filename = base_filename.with_extension("symtab.json");
+        debug!("output to {:?}", symtab_filename);
+        let mut out_file = ::std::fs::File::create(&symtab_filename).unwrap();
+        write!(out_file, "{}", result.symtab.to_irep().to_json().pretty().to_string()).unwrap();
+
+        let type_map_filename = base_filename.with_extension("type_map.json");
+        debug!("type_map to {:?}", type_map_filename);
+        let mut out_file = ::std::fs::File::create(&type_map_filename).unwrap();
+        write!(out_file, "{}", result.type_map.to_json().pretty().to_string()).unwrap();
 
         Ok(())
     }

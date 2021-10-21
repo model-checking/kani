@@ -141,7 +141,7 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
 def compile_single_rust_file(input_filename, base, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, use_abs=False, abs_type="std", symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
-        atexit.register(delete_file, base + ".type_map")
+        atexit.register(delete_file, base + ".type_map.json")
 
     build_cmd = [RMC_RUSTC_EXE,
             "-Z", "codegen-backend=gotoc",
@@ -157,7 +157,7 @@ def compile_single_rust_file(input_filename, base, output_filename, verbose=Fals
                 "--cfg=use_abs",
                 "--cfg", f'abs_type="{abs_type}"']
 
-    build_cmd += ["-o", output_filename, input_filename]
+    build_cmd += ["-o", base + ".o", input_filename]
 
     if "RUSTFLAGS" in os.environ:
         build_cmd += os.environ["RUSTFLAGS"].split(" ")
