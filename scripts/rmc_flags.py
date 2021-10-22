@@ -14,6 +14,7 @@ class BooleanOptionalAction(argparse.Action):
         boolean option. For example, --default-checks and --no-default-checks
         options to control the same boolean property.
     """
+
     def __init__(self,
                  option_strings,
                  dest,
@@ -60,13 +61,14 @@ class ExtendAction(argparse.Action):
         same option. For example, --c-lib <libA> --c-lib <libB> <libC> will
         generate a list [<libA>, <libB>, <libC>].
     """
+
     def __init__(self,
                  option_strings,
                  dest,
                  default=[],
                  **kwargs):
 
-        if type(default) is not list:
+        if not isinstance(default, list):
             raise ValueError('default value for ExtendAction must be a list')
 
         super().__init__(
@@ -140,7 +142,8 @@ def add_check_flags(make_group, add_flag, config):
 # Add flags needed only for visualizer.
 def add_visualizer_flags(make_group, add_flag, config):
     group = make_group(
-        "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
+        "Visualizer flags",
+        "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
     add_flag(group, "--srcdir", type=pl.Path, default=".",
              help="The source directory: the root of the source tree")
     add_flag(group, "--visualize", default=False, action=BooleanOptionalAction,
@@ -189,9 +192,9 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
 
         return parser.add_argument_group(title, description)
 
-    # Add the flag to the group, 
+    # Add the flag to the group
     def add_flag(group, flag, *args, **kwargs):
-        if group == None:
+        if group is None:
             return
 
         if flag in exclude_flags:
