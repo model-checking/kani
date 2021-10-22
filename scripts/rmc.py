@@ -137,20 +137,25 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
 
     return process.returncode
 
+def rustc_flags(mangler, symbol_table_passes):
+    flags = [
+        "-Z", "codegen-backend=gotoc",
+        "-Z", "trim-diagnostic-paths=no",
+        "-Z", f"symbol-mangling-version={mangler}",
+        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
+        "-Z", "human_readable_cgu_names",
+        f"--cfg={RMC_CFG}"]
+    if "RUSTFLAGS" in os.environ:
+        flags += os.environ["RUSTFLAGS"].split(" ")
+    return flags
+
 # Generates a symbol table from a rust file
 def compile_single_rust_file(input_filename, base, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, use_abs=False, abs_type="std", symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
 
-    build_cmd = [RMC_RUSTC_EXE,
-            "-Z", "codegen-backend=gotoc",
-            "-Z", "trim-diagnostic-paths=no",
-            "-Z", f"symbol-mangling-version={mangler}",
-            "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-            "--crate-type=lib",
-            "-Z", "human_readable_cgu_names",
-            f"--cfg={RMC_CFG}"]
+    build_cmd = [RMC_RUSTC_EXE, "--crate-type=lib"] + rustc_flags(mangler, symbol_table_passes)
 
     if use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
@@ -159,8 +164,6 @@ def compile_single_rust_file(input_filename, base, output_filename, verbose=Fals
 
     build_cmd += ["-o", base + ".o", input_filename]
 
-    if "RUSTFLAGS" in os.environ:
-        build_cmd += os.environ["RUSTFLAGS"].split(" ")
     build_env = os.environ
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
@@ -171,19 +174,9 @@ def compile_single_rust_file(input_filename, base, output_filename, verbose=Fals
 def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
-    rustflags = [
-        "-Z", "codegen-backend=gotoc",
-        "-Z", "trim-diagnostic-paths=no",
-        "-Z", f"symbol-mangling-version={mangler}",
-        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-        "-Z", "human_readable_cgu_names",
-        f"--cfg={RMC_CFG}"]
-    rustflags = " ".join(rustflags)
-    if "RUSTFLAGS" in os.environ:
-        rustflags = os.environ["RUSTFLAGS"] + " " + rustflags
-
+    rustflags = rustc_flags(mangler, symbol_table_passes)
     build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
-    build_env = {"RUSTFLAGS": rustflags,
+    build_env = {"RUSTFLAGS": " ".join(rustflags),
                  "RUSTC": RMC_RUSTC_EXE,
                  "PATH": os.environ["PATH"],
                  }
@@ -198,16 +191,25 @@ def append_unwind_tip(text):
     return text + unwind_tip
 
 # Generates a goto program from a symbol table
-def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temps=False, dry_run=False):
-    if not keep_temps:
-        atexit.register(delete_file, cbmc_filename)
-    cmd = ["symtab2gb", json_filename, "--out", cbmc_filename]
-    return run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run)
+def symbol_table_to_gotoc(json_files, verbose=False, keep_temps=False, dry_run=False):
+    out_files = []
+    for json in json_files:
+        out_file = json + ".out"
+        out_files.append(out_file)
+        if not keep_temps:
+            atexit.register(delete_file, out_file)
+
+        cmd = ["symtab2gb", json, "--out", out_file]
+        if run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS:
+            raise Exception("Failed to run command: {}".format(" ".join(cmd)))
+
+    return out_files
 
 # Links in external C programs into a goto program
-def link_c_lib(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
-    cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
-    return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
+def link_c_lib(srcs, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
+    cmd = ["goto-cc"] + ["--function", function] + srcs + c_lib + ["-o", dst]
+    if run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run) != EXIT_CODE_SUCCESS:
+        raise Exception("Failed to run command: {}".format(" ".join(cmd)))
 
 # Runs CBMC on a goto program
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):

@@ -13,20 +13,15 @@ echo
 cd $(dirname $0)
 rm -rf /tmp/type_mismatch_test_build
 cd mismatch
+RESULT="/tmp/dependency_test_result.txt"
+
 # Disable warnings until https://github.com/model-checking/rmc/issues/573 is fixed
-RUSTC_LOG=error CARGO_TARGET_DIR=/tmp/type_mismatch_test_build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build
-
-# Convert from JSON to Gotoc 
-cd /tmp/type_mismatch_test_build/debug/deps/
-ls *.symtab.json | xargs symtab2gb
-
-# Add the entry point and remove unused functions
-goto-cc --function main *.out -o a.out 
-goto-instrument --drop-unused-functions a.out b.out 
+export RUSTC_LOG=error
+export CARGO_TARGET_DIR=/tmp/type_mismatch_test_build
+export RUST_BACKTRACE=1
+cargo rmc &> $RESULT
 
 # Run the solver
-RESULT="/tmp/dependency_test_result.txt"
-cbmc b.out &> $RESULT
 if ! grep -q "VERIFICATION SUCCESSFUL" $RESULT; then
   cat $RESULT
   echo
