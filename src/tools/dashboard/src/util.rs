@@ -163,8 +163,7 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Check) { 1 } else { 0 };
     let mut rmc_rustc = Command::new("rmc-rustc");
     rmc_rustc.args(&test_props.rustc_args).args(["-Z", "no-codegen"]).arg(&test_props.path);
-    // TODO: replace `build` with `check` when Litani adds support for custom
-    // stages (see https://github.com/model-checking/rmc/issues/391).
+
     let mut phony_out = test_props.path.clone();
     phony_out.set_extension("check");
     litani.add_job(
@@ -173,7 +172,7 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
         &[&phony_out],
         "Is this valid Rust code?",
         test_props.path.to_str().unwrap(),
-        "build",
+        "check",
         exit_status,
         5,
     );
@@ -188,6 +187,8 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         .args([
             "-Z",
             "codegen-backend=gotoc",
+            "-Z",
+            "trim-diagnostic-paths=no",
             "--cfg=rmc",
             "--out-dir",
             "build/tmp",
@@ -196,8 +197,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
             "--crate-type=lib",
         ])
         .arg(&test_props.path);
-    // TODO: replace `test` with `codegen` when Litani adds support for custom
-    // stages (see https://github.com/model-checking/rmc/issues/391).
+
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("check");
     let mut phony_out = test_props.path.clone();
@@ -208,7 +208,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         &[&phony_out],
         "Does RMC support all the Rust features used in it?",
         test_props.path.to_str().unwrap(),
-        "test",
+        "codegen",
         exit_status,
         5,
     );
@@ -222,8 +222,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
     if !test_props.rustc_args.is_empty() {
         rmc.env("RUSTFLAGS", test_props.rustc_args.join(" "));
     }
-    // TODO: replace `report` with `verification` when Litani adds support for
-    // custom stages (see https://github.com/model-checking/rmc/issues/391).
+
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("codegen");
     litani.add_job(
@@ -232,7 +231,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
         &[],
         "Can RMC reason about it?",
         test_props.path.to_str().unwrap(),
-        "report",
+        "verification",
         exit_status,
         10,
     );
