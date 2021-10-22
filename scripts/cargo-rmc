@@ -16,7 +16,6 @@ RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
-
 def main():
     args = parse_args()
 
@@ -100,7 +99,6 @@ def main():
         retcode = EXIT_CODE_SUCCESS
 
     return retcode
-
 
 def parse_args():
     # Create parser
@@ -215,8 +213,6 @@ def parse_args():
         return cl_args
 
 # Extract a list of args based on given config toml
-
-
 def extract_flags_from_toml(path):
     # Load the flag data from toml
     data = toml.load(path)

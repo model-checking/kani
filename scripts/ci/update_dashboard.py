@@ -5,7 +5,6 @@
 import argparse
 from bs4 import BeautifulSoup
 
-
 def update_path(run, path):
     '''
     Shortens a path referring to an example and adds a link to the file.
@@ -32,7 +31,6 @@ def update_path(run, path):
     # Add link to the example
     new_tag['href'] = "artifacts/" + new_string
     path.p.replace_with(new_tag)
-
 
 def main():
     parser = argparse.ArgumentParser(

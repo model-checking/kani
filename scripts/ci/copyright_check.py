@@ -5,7 +5,6 @@ import re
 import sys
 import os.path as path
 
-
 def copyright_check(filename):
     # Only check regular files (skip symbolic link to directories)
     if not path.isfile(filename):

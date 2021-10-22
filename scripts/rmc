@@ -15,7 +15,6 @@ RMC_C_STUB = MY_PATH / "library" / "rmc" / "stubs" / "C"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
-
 def main():
     args = parse_args()
 
@@ -121,7 +120,6 @@ def main():
         retcode = EXIT_CODE_SUCCESS
 
     return retcode
-
 
 def parse_args():
     # Create parser

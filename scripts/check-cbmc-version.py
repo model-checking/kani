@@ -31,11 +31,9 @@ def cbmc_version():
 
     return match.groups()
 
-
 def complete_version(*version):
     numbers = [int(num) if num else 0 for num in version]
     return (numbers + [0, 0, 0])[:3]
-
 
 def main():
     parser = argparse.ArgumentParser(

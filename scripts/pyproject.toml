@@ -5,3 +5,4 @@
 max_line_length = 120
 recursive = true
 aggressive = 3
+ignore = "E302"  # Ignore 2 spaces before functions until we fix fn docstrings
