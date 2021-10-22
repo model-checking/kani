@@ -18,7 +18,7 @@ def cbmc_version():
     cmd = ["cbmc", "--version"]
     try:
         version = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, check=True,
-                universal_newlines=True)
+                                 universal_newlines=True)
     except (OSError, subprocess.SubprocessError) as error:
         print(error)
         print(f"Can't run command '{' '.join(cmd)}'")
@@ -31,9 +31,11 @@ def cbmc_version():
 
     return match.groups()
 
+
 def complete_version(*version):
     numbers = [int(num) if num else 0 for num in version]
     return (numbers + [0, 0, 0])[:3]
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -51,6 +53,7 @@ def main():
         desired_version_string = '.'.join([str(num) for num in desired_version])
         print(f'WARNING: CBMC version is {version_string}, expected at least {desired_version_string}')
         sys.exit(EXIT_CODE_MISMATCH)
+
 
 if __name__ == "__main__":
     main()

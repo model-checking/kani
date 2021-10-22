@@ -5,6 +5,7 @@
 import argparse
 from bs4 import BeautifulSoup
 
+
 def update_path(run, path):
     '''
     Shortens a path referring to an example and adds a link to the file.
@@ -32,6 +33,7 @@ def update_path(run, path):
     new_tag['href'] = "artifacts/" + new_string
     path.p.replace_with(new_tag)
 
+
 def main():
     parser = argparse.ArgumentParser(
         description='Produces an updated HTML dashboard file from the '
@@ -45,7 +47,7 @@ def main():
 
     # Update pipeline names to link to the example under test
     for row in run.find_all(lambda tag: tag.name == 'div' and
-                                   tag.get('class') == ['pipeline-row']):
+                            tag.get('class') == ['pipeline-row']):
         path = row.find('div', attrs={'class': 'pipeline-name'})
         # Some paths here may be `None` - skip them
         if path.p:
@@ -59,6 +61,7 @@ def main():
 
     with open(args.output, "w") as file:
         file.write(str(run))
+
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,7 @@ import re
 import sys
 import os.path as path
 
+
 def copyright_check(filename):
     # Only check regular files (skip symbolic link to directories)
     if not path.isfile(filename):
@@ -21,10 +22,10 @@ def copyright_check(filename):
     # '#!' (also know as shebang) to indicate an interpreter for execution.
     # The values for the minimum number of lines and the indices of copyright
     # lines depend on whether the file has a shebang or not.
-    shb_re = re.compile('#!\S+')
+    shb_re = re.compile('#!\\S+')
     has_shebang = shb_re.search(lines[0])
     min_lines = 3 if has_shebang else 2
-    
+
     # The check is failed if the file does not contain enough lines
     if len(lines) < min_lines:
         return False
@@ -42,10 +43,11 @@ def copyright_check(filename):
     else:
         return False
 
+
 if __name__ == "__main__":
     filenames = sys.argv[1:]
     checks = [copyright_check(fname) for fname in filenames]
-    
+
     for i in range(len(filenames)):
         print(f'Copyright check - {filenames[i]}: ', end='')
         print('PASS') if checks[i] else print('FAIL')

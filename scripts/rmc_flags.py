@@ -7,6 +7,8 @@ import pathlib as pl
 
 # Taken from https://github.com/python/cpython/blob/3.9/Lib/argparse.py#L858
 # Cannot use `BooleanOptionalAction` with Python 3.8
+
+
 class BooleanOptionalAction(argparse.Action):
     """ Implements argparse.BooleanOptionalAction introduced on Python 3.9
 
@@ -14,6 +16,7 @@ class BooleanOptionalAction(argparse.Action):
         boolean option. For example, --default-checks and --no-default-checks
         options to control the same boolean property.
     """
+
     def __init__(self,
                  option_strings,
                  dest,
@@ -53,6 +56,7 @@ class BooleanOptionalAction(argparse.Action):
     def format_usage(self):
         return ' | '.join(self.option_strings)
 
+
 class ExtendAction(argparse.Action):
     """ Implements the "extend" option added on Python 3.8.
 
@@ -60,13 +64,14 @@ class ExtendAction(argparse.Action):
         same option. For example, --c-lib <libA> --c-lib <libB> <libC> will
         generate a list [<libA>, <libB>, <libC>].
     """
+
     def __init__(self,
                  option_strings,
                  dest,
                  default=[],
                  **kwargs):
 
-        if type(default) is not list:
+        if not isinstance(default, list):
             raise ValueError('default value for ExtendAction must be a list')
 
         super().__init__(
@@ -81,6 +86,8 @@ class ExtendAction(argparse.Action):
         setattr(namespace, self.dest, items)
 
 # Add flags related to debugging output.
+
+
 def add_loudness_flags(make_group, add_flag, config):
     group = make_group(
         "Loudness flags", "Determine how much textual output to produce.")
@@ -92,6 +99,8 @@ def add_loudness_flags(make_group, add_flag, config):
              help="Output processing stages and commands, along with minor debug information")
 
 # Add flags which specify configurations for the proof.
+
+
 def add_linking_flags(make_group, add_flag, config):
     group = make_group("Linking flags",
                        "Provide information about how to link the prover for RMC.")
@@ -102,6 +111,8 @@ def add_linking_flags(make_group, add_flag, config):
              help="Entry point for verification")
 
 # Add flags that produce extra artifacts.
+
+
 def add_artifact_flags(make_group, add_flag, config):
     default_target = config["default-target"]
     assert default_target is not None, \
@@ -124,6 +135,8 @@ def add_artifact_flags(make_group, add_flag, config):
              help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
 # Add flags to turn off default checks.
+
+
 def add_check_flags(make_group, add_flag, config):
     group = make_group("Check flags", "Disable some or all default checks.")
     add_flag(group, "--default-checks", default=True, action=BooleanOptionalAction,
@@ -138,9 +151,12 @@ def add_check_flags(make_group, add_flag, config):
              help="Turn on default unwinding checks")
 
 # Add flags needed only for visualizer.
+
+
 def add_visualizer_flags(make_group, add_flag, config):
     group = make_group(
-        "Visualizer flags", "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
+        "Visualizer flags",
+        "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
     add_flag(group, "--srcdir", type=pl.Path, default=".",
              help="The source directory: the root of the source tree")
     add_flag(group, "--visualize", default=False, action=BooleanOptionalAction,
@@ -152,6 +168,8 @@ def add_visualizer_flags(make_group, add_flag, config):
                   """)
 
 # Add flags for ad-hoc features.
+
+
 def add_other_flags(make_group, add_flag, config):
     group = make_group("Other flags")
     add_flag(group, "--allow-cbmc-verification-failure", default=False, action=BooleanOptionalAction,
@@ -160,6 +178,8 @@ def add_other_flags(make_group, add_flag, config):
              help="Print commands instead of running them")
 
 # Add flags we don't expect end-users to use.
+
+
 def add_developer_flags(make_group, add_flag, config):
     group = make_group(
         "Developer flags", "These are generally meant for use by RMC developers, and are not stable.")
@@ -175,6 +195,8 @@ def add_developer_flags(make_group, add_flag, config):
 # Adds the flags common to both rmc and cargo-rmc.
 # Allows you to specify flags/groups of flags to not add.
 # This does not return the parser, but mutates the one provided.
+
+
 def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
     # Keep track of what excluded flags and groups we've seen
     # so we can warn for possibly incorrect names passed in.
@@ -189,9 +211,9 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
 
         return parser.add_argument_group(title, description)
 
-    # Add the flag to the group, 
+    # Add the flag to the group,
     def add_flag(group, flag, *args, **kwargs):
-        if group == None:
+        if group is None:
             return
 
         if flag in exclude_flags:
