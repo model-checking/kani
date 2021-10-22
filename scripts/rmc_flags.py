@@ -192,7 +192,7 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
 
         return parser.add_argument_group(title, description)
 
-    # Add the flag to the group,
+    # Add the flag to the group
     def add_flag(group, flag, *args, **kwargs):
         if group is None:
             return

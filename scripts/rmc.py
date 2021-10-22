@@ -273,8 +273,9 @@ def run_visualize(
     # 1) cbmc --xml-ui --trace ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > results.xml
     # 2) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > coverage.xml
     # 3) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > property.xml
-    # 4) cbmc-viewer --result results.xml --coverage coverage.xml --property
-    # property.xml --srcdir . --goto <cbmc_filename> --reportdir report
+    # 4) cbmc-viewer --result results.xml --coverage coverage.xml
+    #                --property property.xml --srcdir . 
+    #                --goto <cbmc_filename> --reportdir report
 
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
         cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
