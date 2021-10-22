@@ -227,8 +227,10 @@ def symbol_table_to_gotoc(json_files, verbose=False, keep_temps=False, dry_run=F
     return out_files
 
 # Links in external C programs into a goto program
-def link_c_lib(srcs, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
+def link_c_lib(srcs, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False, keep_temps=False):
     cmd = ["goto-cc"] + ["--function", function] + srcs + c_lib + ["-o", dst]
+    if not keep_temps:
+        atexit.register(delete_file, dst)
     if run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run) != EXIT_CODE_SUCCESS:
         raise Exception("Failed to run command: {}".format(" ".join(cmd)))
 
