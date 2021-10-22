@@ -31,5 +31,7 @@ then
     exit 1
 fi
 
+echo "Running autopep8 in ${mode} mode"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 autopep8 $mode -r $SCRIPT_DIR --exit-code
+echo "Success"
