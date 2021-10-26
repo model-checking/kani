@@ -40,7 +40,8 @@ fi
 STD_LIB_LOG="/tmp/StdLibTest/log.txt"
 
 echo "Starting cargo build with RMC"
-RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" \
+RUSTC_LOG=error \
+  RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" \
   RUSTC=rmc-rustc cargo +nightly build -Z build-std --target $TARGET 2>&1 \
   | tee $STD_LIB_LOG
 

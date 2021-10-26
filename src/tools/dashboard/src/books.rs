@@ -421,8 +421,11 @@ fn litani_run_tests() {
     let output_prefix: PathBuf = ["build", "output"].iter().collect();
     let output_symlink: PathBuf = output_prefix.join("latest");
     let dashboard_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
+    let stage_names = ["check", "codegen", "verification"];
+
     util::add_rmc_and_litani_to_path();
-    let mut litani = Litani::init("RMC", &output_prefix, &output_symlink);
+    let mut litani = Litani::init("RMC", &stage_names, &output_prefix, &output_symlink);
+
     // Run all tests under the `src/test/dashboard` directory.
     for entry in WalkDir::new(dashboard_dir) {
         let entry = entry.unwrap().into_path();

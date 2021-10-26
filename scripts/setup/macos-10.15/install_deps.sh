@@ -14,6 +14,7 @@ brew install ctags
 
 # Add Python package dependencies
 PYTHON_DEPS=(
+  autopep8
   toml # Used for parsing `cargo-rmc` config toml
 )
 
