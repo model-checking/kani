@@ -473,7 +473,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         // TODO: give a better message here.
 
-        let arg = if let Some(s) = extract_panic_string(&fargs[0]) {
+        // Rewrite panic string depending on "assertion failed" prefix being present or not
+        let arg = if let Some(s) = rewrite_panic_string(fargs) {
             Expr::string_constant(&s)
         } else {
             Expr::string_constant(
@@ -650,11 +651,28 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-/// Assertions, regardless of failing or being proven true are printed as "assertion failed". For example, "assertion 1==2: SUCCESS".
-/// This is due to the rustc builtin macros formatting with the "assertion failed" prefix inside expressions. This function extracts
-/// the prefix and changes it to "assert".
-fn extract_panic_string(e: &Expr) -> Option<String> {
-    // The MIR represents the StringConstant as `&"constant"[0]`. We are representing a rust str type as a struct.
+/// Assertions, regardless of failing or being proven true are printed as "assertion failed". For example, "assertion failed 1==2: SUCCESS".
+/// This is due to the rustc builtin macros formatting the panic string with "assertion failed" prefix inside expressions. This function rewrites the panic string.
+fn rewrite_panic_string(fargs: Vec<Expr>) -> Option<String> {
+    // Extract the StringConstant from the Expr Struct
+    let extracted_string =
+        if let Some(s) = extract_panic_string(&fargs[0]) { s } else { return None };
+
+    // Rewrite the String only in the case of the prefix being "assertion failed"
+    // If there are changes to be made in the future, different helper functions can be called based on the prefix
+    let rewritten_string = if let Some(stripped) = extracted_string.strip_prefix("assertion failed")
+    {
+        rewrite_assertion_failed(stripped)
+    } else {
+        extracted_string.to_string()
+    };
+
+    Some(rewritten_string)
+}
+
+/// Helper function to extract the panic string from the Expr and return only the StringConstant that is wrapped inside
+fn extract_panic_string(e: &Expr) -> Option<&str> {
+    // The goto needs the translation to be represented as `&"constant"[0]`. The Rust Str type needs to be represented as a struct for CBMC
     let extracted_string: &str = match e.struct_expr_values().unwrap()[0].value() {
         ExprValue::AddressOf(expr) => match expr.value() {
             ExprValue::Index { array, .. } => match array.value() {
@@ -667,15 +685,12 @@ fn extract_panic_string(e: &Expr) -> Option<String> {
         _ => return None,
     };
 
-    debug!("Printing out the panic String constant {:?}", extracted_string);
+    Some(extracted_string)
+}
 
-    // "assertion failed: 1 == 1: SUCCESS" was confusing, so we removed the "failed"
-    let rewritten_string = if let Some(stripped) = extracted_string.strip_prefix("assertion failed")
-    {
-        format!("assertion{}", stripped)
-    } else {
-        extracted_string.to_string()
-    };
-
-    Some(rewritten_string)
+/// Micro helper function that specifically handles the case of "assertion failed" StringConstants
+/// If the prefix is changed or the handling needs to be changed, only this function needs to be rewritten
+fn rewrite_assertion_failed(stripped_string: &str) -> String {
+    let rewritten_string = format!("assertion{}", stripped_string);
+    rewritten_string
 }
