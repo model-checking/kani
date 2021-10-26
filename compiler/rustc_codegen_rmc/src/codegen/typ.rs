@@ -36,6 +36,10 @@ use ty::layout::HasParamEnv;
 const UNIT_TYPE_EMPTY_STRUCT_NAME: &str = "Unit";
 pub const FN_RETURN_VOID_VAR_NAME: &str = "VoidUnit";
 
+/// Map the never i.e. `!` type to an empty struct.
+/// The never type can appear as a function argument, e.g. in library/core/src/num/error.rs
+const NEVER_TYPE_EMPTY_STRUCT_NAME: &str = "Never";
+
 pub trait TypeExt {
     fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool;
@@ -544,11 +548,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
-            ty::Never =>
-            // unfortunately, there is no bottom in C. We must pick a type
-            {
-                Type::empty()
-            }
+            ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, None, |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
                     self.codegen_ty_unit()
