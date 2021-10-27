@@ -42,7 +42,7 @@ def main():
         out_files = rmc.symbol_table_to_gotoc([json_runnable_filename], args.verbose, args.keep_temps, args.dry_run)
 
         rmc.link_c_lib(out_files, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
-                       args.dry_run)
+                       args.dry_run, args.keep_temps)
 
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
             return 1
@@ -81,7 +81,8 @@ def main():
         RMC_C_HASHSET = RMC_C_STUB / "hashset" / "hashset.c"
         args.c_lib.append(str(RMC_C_HASHSET))
 
-    rmc.link_c_lib(out_files, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run)
+    rmc.link_c_lib(out_files, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run,
+                   args.keep_temps)
 
     if args.gen_c:
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose, args.dry_run):
