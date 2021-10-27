@@ -1,9 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let a: u32 = __nondet();
+    let a: u32 = rmc::nondet();
     let b = a / 2;
     assert!(b <= a);
     let c = b * 2;

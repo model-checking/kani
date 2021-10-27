@@ -5,8 +5,6 @@ use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::hash::Hash;
-include!("../../rmc-prelude.rs");
-
 use std::marker::PhantomData;
 struct CbmcHashMap<K, V, S = RandomState> {
     len: usize,
@@ -27,24 +25,24 @@ impl<K, V: Copy> CbmcHashMap<K, V> {
 impl<K, V, S> CbmcHashMap<K, V, S> {
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         self.last = Some(v);
-        if __nondet() {
+        if rmc::nondet() {
             self.len += 1;
         }
-        __nondet()
+        rmc::nondet()
     }
     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
     {
-        if false { __nondet() } else { self.last.as_ref() }
+        if false { rmc::nondet() } else { self.last.as_ref() }
     }
 }
 
 fn make_map_visible<K, V: Copy>() {
     let mut v: CbmcHashMap<K, V> = CbmcHashMap::new();
     v.len;
-    v.insert(__nondet(), __nondet());
-    let k: K = __nondet();
+    v.insert(rmc::nondet(), rmc::nondet());
+    let k: K = rmc::nondet();
     v.get(&k);
 }
 

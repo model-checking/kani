@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
     let mut x = 0;
     x |= 1;
@@ -14,10 +12,10 @@ pub fn main() {
     x &= 15;
     assert!(x == 2);
 
-    let mut a: u32 = __nondet();
+    let mut a: u32 = rmc::nondet();
     a %= 8;
 
-    let mut b: u32 = __nondet();
+    let mut b: u32 = rmc::nondet();
     b %= 8;
 
     let mut c = a;

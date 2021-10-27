@@ -6,10 +6,8 @@ fn double(a: u32) -> u32 {
     a * 2
 }
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let a = __nondet();
+    let a = rmc::nondet();
     if a <= std::u32::MAX / 2 {
         let b = double(a);
         assert!(b == 2 * a);

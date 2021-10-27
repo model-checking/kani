@@ -5,10 +5,8 @@
 #![feature(core_intrinsics)]
 use std::intrinsics;
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let v: u128 = __nondet();
-    let w: u128 = __nondet();
+    let v: u128 = rmc::nondet();
+    let w: u128 = rmc::nondet();
     intrinsics::saturating_add(v, w);
 }
