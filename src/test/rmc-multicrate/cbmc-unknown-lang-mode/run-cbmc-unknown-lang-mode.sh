@@ -16,7 +16,7 @@ CARGO_TARGET_DIR=/tmp/cbmc_lang_mode_test_build RUST_BACKTRACE=1 RUSTFLAGS="-Z t
 
 # Convert from JSON to Gotoc 
 cd /tmp/cbmc_lang_mode_test_build/x86_64-unknown-linux-gnu/debug/deps
-symtab2gb *.json --out a.out &> /dev/null
+symtab2gb *.symtab.json --out a.out &> /dev/null
 
 # Add the entry point and remove unused functions
 goto-cc --function test *.out -o a.out &> /dev/null

@@ -36,6 +36,10 @@ use ty::layout::HasParamEnv;
 const UNIT_TYPE_EMPTY_STRUCT_NAME: &str = "Unit";
 pub const FN_RETURN_VOID_VAR_NAME: &str = "VoidUnit";
 
+/// Map the never i.e. `!` type to an empty struct.
+/// The never type can appear as a function argument, e.g. in library/core/src/num/error.rs
+const NEVER_TYPE_EMPTY_STRUCT_NAME: &str = "Never";
+
 pub trait TypeExt {
     fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool;
@@ -475,6 +479,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
     ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
+        let goto_typ = self.codegen_ty_inner(ty);
+        if let Some(tag) = goto_typ.tag() {
+            if !self.type_map.contains_key(tag) {
+                self.type_map.insert(tag.to_string(), ty);
+            }
+        }
+        goto_typ
+    }
+
+    fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {
         if let Some(handler) = self.type_hooks.hook_applies(self.tcx, ty) {
             return handler.handle(self, ty);
         }
@@ -534,11 +548,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
-            ty::Never =>
-            // unfortunately, there is no bottom in C. We must pick a type
-            {
-                Type::empty()
-            }
+            ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, None, |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
                     self.codegen_ty_unit()

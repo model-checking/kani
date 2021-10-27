@@ -152,7 +152,12 @@ pub struct Litani {
 
 impl Litani {
     /// Sets up a new [`Litani`] run.
-    pub fn init(project_name: &str, output_prefix: &Path, output_symlink: &Path) -> Self {
+    pub fn init(
+        project_name: &str,
+        stage_names: &[&str],
+        output_prefix: &Path,
+        output_symlink: &Path,
+    ) -> Self {
         Command::new("litani")
             .args([
                 "init",
@@ -162,7 +167,9 @@ impl Litani {
                 output_prefix.to_str().unwrap(),
                 "--output-symlink",
                 output_symlink.to_str().unwrap(),
+                "--stages",
             ])
+            .args(stage_names)
             .spawn()
             .unwrap()
             .wait()
@@ -231,6 +238,11 @@ impl Litani {
         }
         self.spawned_commands.clear();
         // Run `run-build` command and wait for it to finish.
-        Command::new("litani").arg("run-build").spawn().unwrap().wait().unwrap();
+        Command::new("litani")
+            .args(["run-build", "--no-pipeline-dep-graph"])
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
     }
 }
