@@ -7,6 +7,11 @@
 ./x.py build -i --stage 1 library/std
 ```
 ```bash
+# Once built successfully once, do a faster rebuild
+./x.py build -i --stage 1 library/std --keep-stage 1
+```
+([`--keep-stage` comes with caveats](https://rustc-dev-guide.rust-lang.org/building/suggested.html#incremental-builds-with---keep-stage). Know that it may cause spurious build failures.)
+```bash
 # Full regression suite
 ./scripts/rmc-regression.sh
 ```
@@ -32,10 +37,6 @@ cd rmc-docs
 # or similar error? Clean build RMC:
 rm -rf target build
 ./x.py build -i --stage 1 library/std
-```
-```bash
-# firecracker build problem with rmc-regression? Probably a similar issue:
-rm -rf firecracker/build
 ```
 
 ## Git command cheat sheet
@@ -72,6 +73,8 @@ git submodule update --init
 # Need to update local branch (e.g. for an open pull request?)
 git fetch origin
 git merge origin/main
+# Or rebase, but that requires a force push,
+# and because we squash and merge, an extra merge commit in a PR doesn't hurt.
 ```
 ```bash
 # Search only git-tracked files
@@ -99,7 +102,7 @@ rmc --debug file.rs
 rmc --keep-temps file.rs
 ```
 ```bash
-# Generate "C code" from CBMC IR:
+# Generate "C code" from CBMC IR (.c)
 rmc --gen-c file.rs
 ```
 
@@ -111,6 +114,8 @@ goto-cc file.c -o file.out
 goto-instrument --print-internal-representation file.out
 # or (for json symbol table)
 cbmc --show-symbol-table --json-ui file.out
+# or (an alternative concise format)
+cbmc --show-goto-functions file.out
 ```
 ```bash
 # Recover C from goto-c binary
