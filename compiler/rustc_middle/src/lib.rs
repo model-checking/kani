@@ -39,6 +39,7 @@
 #![feature(new_uninit)]
 #![feature(nll)]
 #![feature(once_cell)]
+#![feature(let_else)]
 #![feature(min_specialization)]
 #![feature(trusted_len)]
 #![feature(in_band_lifetimes)]
@@ -55,6 +56,7 @@
 #![feature(try_reserve_kind)]
 #![feature(nonzero_ops)]
 #![recursion_limit = "512"]
+#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate bitflags;

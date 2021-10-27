@@ -829,6 +829,15 @@ impl<'a> Resolver<'a> {
                     return;
                 }
 
+                // #90113: Do not count an inaccessible reexported item as a candidate.
+                if let NameBindingKind::Import { binding, .. } = name_binding.kind {
+                    if this.is_accessible_from(binding.vis, parent_scope.module)
+                        && !this.is_accessible_from(name_binding.vis, parent_scope.module)
+                    {
+                        return;
+                    }
+                }
+
                 // collect results based on the filter function
                 // avoid suggesting anything from the same module in which we are resolving
                 if ident.name == lookup_ident.name
@@ -1156,14 +1165,9 @@ impl<'a> Resolver<'a> {
             (b1, b2, misc1, misc2, false)
         };
 
-        let mut err = struct_span_err!(
-            self.session,
-            ident.span,
-            E0659,
-            "`{ident}` is ambiguous ({why})",
-            why = kind.descr()
-        );
+        let mut err = struct_span_err!(self.session, ident.span, E0659, "`{ident}` is ambiguous");
         err.span_label(ident.span, "ambiguous name");
+        err.note(&format!("ambiguous because of {}", kind.descr()));
 
         let mut could_refer_to = |b: &NameBinding<'_>, misc: AmbiguityErrorMisc, also: &str| {
             let what = self.binding_description(b, ident, misc == AmbiguityErrorMisc::FromPrelude);
@@ -1471,9 +1475,7 @@ impl<'a, 'b> ImportResolver<'a, 'b> {
         module: ModuleOrUniformRoot<'b>,
         ident: Ident,
     ) -> Option<(Option<Suggestion>, Vec<String>)> {
-        let mut crate_module = if let ModuleOrUniformRoot::Module(module) = module {
-            module
-        } else {
+        let ModuleOrUniformRoot::Module(mut crate_module) = module else {
             return None;
         };
 

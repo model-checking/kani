@@ -15,10 +15,12 @@
 #![feature(crate_visibility_modifier)]
 #![feature(format_args_capture)]
 #![feature(iter_zip)]
+#![feature(let_else)]
 #![feature(never_type)]
 #![feature(nll)]
 #![recursion_limit = "256"]
 #![allow(rustdoc::private_intra_doc_links)]
+#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate tracing;
@@ -726,23 +728,21 @@ enum AmbiguityKind {
 impl AmbiguityKind {
     fn descr(self) -> &'static str {
         match self {
-            AmbiguityKind::Import => "name vs any other name during import resolution",
-            AmbiguityKind::BuiltinAttr => "built-in attribute vs any other name",
-            AmbiguityKind::DeriveHelper => "derive helper attribute vs any other name",
+            AmbiguityKind::Import => "multiple potential import sources",
+            AmbiguityKind::BuiltinAttr => "a name conflict with a builtin attribute",
+            AmbiguityKind::DeriveHelper => "a name conflict with a derive helper attribute",
             AmbiguityKind::MacroRulesVsModularized => {
-                "`macro_rules` vs non-`macro_rules` from other module"
+                "a conflict between a `macro_rules` name and a non-`macro_rules` name from another module"
             }
             AmbiguityKind::GlobVsOuter => {
-                "glob import vs any other name from outer scope during import/macro resolution"
+                "a conflict between a name from a glob import and an outer scope during import or macro resolution"
             }
-            AmbiguityKind::GlobVsGlob => "glob import vs glob import in the same module",
+            AmbiguityKind::GlobVsGlob => "multiple glob imports of a name in the same module",
             AmbiguityKind::GlobVsExpanded => {
-                "glob import vs macro-expanded name in the same \
-                 module during import/macro resolution"
+                "a conflict between a name from a glob import and a macro-expanded name in the same module during import or macro resolution"
             }
             AmbiguityKind::MoreExpandedVsOuter => {
-                "macro-expanded name vs less macro-expanded name \
-                 from outer scope during import/macro resolution"
+                "a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution"
             }
         }
     }
