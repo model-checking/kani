@@ -50,7 +50,7 @@ impl CodegenBackend for GotocCodegenBackend {
         providers.skip_monomorphize = skip_monomorphize;
     }
 
-    fn provide_extern(&self, _providers: &mut ty::query::Providers) {}
+    fn provide_extern(&self, _providers: &mut ty::query::ExternProviders) {}
 
     fn codegen_crate<'tcx>(
         &self,
