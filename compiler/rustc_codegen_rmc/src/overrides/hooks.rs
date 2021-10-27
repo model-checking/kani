@@ -12,14 +12,13 @@ use super::stubs::{HashMapStub, VecStub};
 use crate::utils::{instance_name_is, instance_name_starts_with};
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
 use rustc_span::Span;
 use std::rc::Rc;
-use tracing::debug;
+use tracing::{debug, warn};
 
 pub trait GotocTypeHook<'tcx> {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool;
@@ -66,19 +65,27 @@ fn output_of_instance_is_never<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>
     }
 }
 
+fn matches_function(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, attr_name: &str) -> bool {
+    let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
+    if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
+        if instance.def.def_id() == *attr_id {
+            debug!("matched: {:?} {:?}", attr_id, attr_sym);
+            return true;
+        }
+    }
+    false
+}
+
 struct ExpectFail;
 impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let def_path = tcx.def_path(instance.def.def_id());
-        if let Some(data) = def_path.data.last() {
-            match data.data.name() {
-                DefPathDataName::Named(name) => {
-                    return name.to_string().starts_with("__VERIFIER_expect_fail");
-                }
-                DefPathDataName::Anon { .. } => (),
-            }
+        if instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
+            warn!(
+                "The function __VERIFIER_expect_fail is deprecated. Use rmc::expect_fail instead"
+            );
+            return true;
         }
-        false
+        matches_function(tcx, instance, "RmcExpectFail")
     }
 
     fn handle(
@@ -109,16 +116,12 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
 struct Assume;
 impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let def_path = tcx.def_path(instance.def.def_id());
-        if let Some(data) = def_path.data.last() {
-            match data.data.name() {
-                DefPathDataName::Named(name) => {
-                    return name.to_string().starts_with("__VERIFIER_assume");
-                }
-                DefPathDataName::Anon { .. } => (),
-            }
+        // Keep backward compatibility with old assume.
+        if instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
+            warn!("The function __VERIFIER_assume is deprecated. Use rmc::assume instead");
+            return true;
         }
-        false
+        matches_function(tcx, instance, "RmcAssume")
     }
 
     fn handle(
@@ -149,7 +152,11 @@ struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        instance_name_starts_with(tcx, instance, "__nondet")
+        if instance_name_starts_with(tcx, instance, "__nondet") {
+            warn!("The function __nondet is deprecated. Use rmc::nondet instead");
+            return true;
+        }
+        matches_function(tcx, instance, "RmcNonDet")
     }
 
     fn handle(

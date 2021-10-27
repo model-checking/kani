@@ -149,12 +149,9 @@ def run_cmd(
 
 def rustc_flags(mangler, symbol_table_passes):
     flags = [
-        "-Z", "codegen-backend=gotoc",
-        "-Z", "trim-diagnostic-paths=no",
         "-Z", f"symbol-mangling-version={mangler}",
         "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-        "-Z", "human_readable_cgu_names",
-        f"--cfg={RMC_CFG}"]
+        ]
     if "RUSTFLAGS" in os.environ:
         flags += os.environ["RUSTFLAGS"].split(" ")
     return flags
@@ -176,7 +173,7 @@ def compile_single_rust_file(
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
 
-    build_cmd = [RMC_RUSTC_EXE, "--crate-type=lib"] + rustc_flags(mangler, symbol_table_passes)
+    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes)
 
     if use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
@@ -199,10 +196,14 @@ def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry
     build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
     build_env = {"RUSTFLAGS": " ".join(rustflags),
                  "RUSTC": RMC_RUSTC_EXE,
-                 "PATH": os.environ["PATH"],
+                 "PATH": os.environ["PATH"]
                  }
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
+    if verbose:
+        build_cmd.append("-v")
+    if dry_run:
+        print("{}".format(build_env))
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Adds information about unwinding to the RMC output
