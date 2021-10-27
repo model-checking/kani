@@ -11,7 +11,6 @@
 #![feature(associated_type_bounds)]
 #![feature(auto_traits)]
 #![feature(bool_to_option)]
-#![cfg_attr(bootstrap, feature(const_panic))]
 #![feature(control_flow_enum)]
 #![feature(core_intrinsics)]
 #![feature(extend_one)]
@@ -28,6 +27,7 @@
 #![feature(thread_id_value)]
 #![allow(rustc::default_hash_types)]
 #![deny(unaligned_references)]
+#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate tracing;

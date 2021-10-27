@@ -63,6 +63,7 @@ This API is completely unstable and subject to change.
 #![feature(in_band_lifetimes)]
 #![feature(is_sorted)]
 #![feature(iter_zip)]
+#![feature(let_else)]
 #![feature(min_specialization)]
 #![feature(nll)]
 #![feature(try_blocks)]
@@ -70,6 +71,7 @@ This API is completely unstable and subject to change.
 #![feature(slice_partition_dedup)]
 #![feature(control_flow_enum)]
 #![recursion_limit = "256"]
+#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate tracing;

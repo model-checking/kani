@@ -1770,7 +1770,7 @@ extern "C" {
 
     pub fn LLVMDisposeMessage(message: *mut c_char);
 
-    pub fn LLVMStartMultithreaded() -> Bool;
+    pub fn LLVMIsMultithreaded() -> Bool;
 
     /// Returns a string describing the last error caused by an LLVMRust* call.
     pub fn LLVMRustGetLastError() -> *const c_char;
@@ -2187,6 +2187,7 @@ extern "C" {
         UseSoftFP: bool,
         FunctionSections: bool,
         DataSections: bool,
+        UniqueSectionNames: bool,
         TrapUnreachable: bool,
         Singlethread: bool,
         AsmComments: bool,

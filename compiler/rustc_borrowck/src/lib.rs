@@ -2,16 +2,17 @@
 
 #![feature(bool_to_option)]
 #![feature(box_patterns)]
-#![cfg_attr(bootstrap, feature(const_panic))]
 #![feature(crate_visibility_modifier)]
 #![feature(format_args_capture)]
 #![feature(in_band_lifetimes)]
 #![feature(iter_zip)]
+#![feature(let_else)]
 #![feature(min_specialization)]
 #![feature(stmt_expr_attributes)]
 #![feature(trusted_step)]
 #![feature(try_blocks)]
 #![recursion_limit = "256"]
+#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate rustc_middle;
