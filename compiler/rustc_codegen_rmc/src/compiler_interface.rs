@@ -147,7 +147,7 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn link(
         &self,
-        _sess: &Session,
+        sess: &Session,
         codegen_results: Box<dyn Any>,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
@@ -157,18 +157,21 @@ impl CodegenBackend for GotocCodegenBackend {
             .downcast::<GotocCodegenResult>()
             .expect("in link: codegen_results is not a GotocCodegenResult");
 
-        // "path.o"
-        let base_filename = outputs.path(OutputType::Object);
+        // No output should be generated if user selected no_codegen.
+        if !sess.opts.debugging_opts.no_codegen && sess.opts.output_types.should_codegen() {
+            // "path.o"
+            let base_filename = outputs.path(OutputType::Object);
 
-        let symtab_filename = base_filename.with_extension("symtab.json");
-        debug!("output to {:?}", symtab_filename);
-        let mut out_file = ::std::fs::File::create(&symtab_filename).unwrap();
-        write!(out_file, "{}", result.symtab.to_irep().to_json().pretty().to_string()).unwrap();
+            let symtab_filename = base_filename.with_extension("symtab.json");
+            debug!("output to {:?}", symtab_filename);
+            let mut out_file = ::std::fs::File::create(&symtab_filename).unwrap();
+            write!(out_file, "{}", result.symtab.to_irep().to_json().pretty().to_string()).unwrap();
 
-        let type_map_filename = base_filename.with_extension("type_map.json");
-        debug!("type_map to {:?}", type_map_filename);
-        let mut out_file = ::std::fs::File::create(&type_map_filename).unwrap();
-        write!(out_file, "{}", result.type_map.to_json().pretty().to_string()).unwrap();
+            let type_map_filename = base_filename.with_extension("type_map.json");
+            debug!("type_map to {:?}", type_map_filename);
+            let mut out_file = ::std::fs::File::create(&type_map_filename).unwrap();
+            write!(out_file, "{}", result.type_map.to_json().pretty().to_string()).unwrap();
+        }
 
         Ok(())
     }
