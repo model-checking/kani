@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # Usage:
-# rmc-rustc [--rmc-flags | --rmc-path]
+# rmc-rustc (--rmc-flags | --rmc-path)
 #   - This will print the configurations used to run rmc version of rustc.
 # rmc-rustc RUSTC_OPTIONS
 #   - This will run RUSTC with RMC flags + the given RUSTC_OPTIONS
@@ -42,9 +42,14 @@ get_rmc_lib_path() {
 }
 
 RMC_PATH=$(get_rmc_path)
-RMC_FLAGS="--crate-type=lib -Z unstable-options -L $(get_rmc_lib_path) --extern rmc \
-        -Z codegen-backend=gotoc -Z trim-diagnostic-paths=no -Z human_readable_cgu_names \
-        --cfg=rmc"
+
+RMC_FLAGS="--crate-type=lib \
+        -Z codegen-backend=gotoc \
+        -Z trim-diagnostic-paths=no \
+        -Z human_readable_cgu_names \
+        --cfg=rmc \
+        -L $(get_rmc_lib_path) \
+        --extern rmc"
 
 if [ "${1:-''}" == "--rmc-flags" ]
 then
