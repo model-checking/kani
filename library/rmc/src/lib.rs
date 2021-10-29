@@ -8,7 +8,7 @@
 ///
 /// # Example:
 ///
-/// The code snipped below should never panic.
+/// The code snippet below should never panic.
 ///
 /// ```rust
 /// let i : i32 = rmc::nondet();
@@ -29,12 +29,12 @@
 #[rustc_diagnostic_item = "RmcAssume"]
 pub fn assume(_cond: bool) {}
 
-/// This creates an unconstrainted value of type `T`. You can assign the return value of this
+/// This creates an unconstrained value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
 ///
 /// # Example:
 ///
-/// In the snipped below, we are verifying the behavior of the function `fn_under_verification`
+/// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
 /// under all possible i32 input values.
 ///
 /// ```rust
