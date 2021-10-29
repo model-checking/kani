@@ -24,7 +24,11 @@ echo
 # At the moment, we only test codegen for the virtio module
 cd $RMC_DIR/firecracker/src/devices/src/virtio/
 # Disable warnings until https://github.com/model-checking/rmc/issues/573 is fixed
-RUSTC_LOG=error RUST_BACKTRACE=1 RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" RUSTC=rmc-rustc cargo build --target x86_64-unknown-linux-gnu
+export RUSTC_LOG=error
+export RUST_BACKTRACE=1
+export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
+export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
+cargo build --target x86_64-unknown-linux-gnu
 
 echo
 echo "Finished Firecracker codegen regression successfully..."

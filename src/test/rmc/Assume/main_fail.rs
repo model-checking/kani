@@ -1,10 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let i: i32 = __nondet();
-    __VERIFIER_assume(i < 10);
-    __VERIFIER_expect_fail(i > 20, "Blocked by assumption above.");
+    let i: i32 = rmc::nondet();
+    rmc::assume(i < 10);
+    rmc::expect_fail(i > 20, "Blocked by assumption above.");
 }

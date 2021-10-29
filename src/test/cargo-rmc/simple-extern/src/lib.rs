@@ -17,13 +17,10 @@ mod tests {
 mod rmc_tests {
     use super::*;
 
-    fn __nondet<T>() -> T {
-        unimplemented!()
-    }
     #[allow(dead_code)]
     #[no_mangle]
     fn test_sum() {
-        let a: u32 = __nondet();
+        let a: u32 = rmc::nondet();
 
         if a < 100 {
             unsafe {

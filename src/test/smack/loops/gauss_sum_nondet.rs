@@ -4,11 +4,9 @@
 // @expect verified
 // cbmc-flags: --unwind 5
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
     let mut sum = 0;
-    let b: u64 = __nondet();
+    let b: u64 = rmc::nondet();
     if b < 5 && b > 1 {
         for i in 0..b {
             sum += i;

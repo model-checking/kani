@@ -4,8 +4,6 @@
 
 use std::slice;
 
-include!("../../rmc-prelude.rs");
-
 // From Listing 19-7: Creating a slice from an arbitrary memory location. https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html
 pub fn main() {
     let address = 0x01234usize;

@@ -40,16 +40,17 @@ fi
 STD_LIB_LOG="/tmp/StdLibTest/log.txt"
 
 echo "Starting cargo build with RMC"
-RUSTC_LOG=error \
-  RUSTFLAGS="-Z trim-diagnostic-paths=no -Z codegen-backend=gotoc --cfg=rmc" \
-  RUSTC=rmc-rustc cargo +nightly build -Z build-std --target $TARGET 2>&1 \
+export RUSTC_LOG=error
+export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
+export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
+cargo +nightly build -Z build-std --target $TARGET 2>&1 \
   | tee $STD_LIB_LOG
 
 # For now, we expect a linker error, but no modules should fail with a compiler
-# panic. 
+# panic.
 #
 # With https://github.com/model-checking/rmc/issues/109, this check can be
-# removed to just allow the success of the previous line to determine the 
+# removed to just allow the success of the previous line to determine the
 # success of this script (with no $STD_LIB_LOG needed)
 
 # TODO: this check is insufficient if the failure is before codegen

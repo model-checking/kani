@@ -13,8 +13,6 @@ use std::intrinsics::size_of;
 use std::ptr::drop_in_place;
 
 include!("../Helpers/vtable_utils_ignore.rs");
-include!("../../rmc-prelude.rs");
-
 // Different sized data fields on each struct
 struct Sheep {
     pub sheep_num: i32,

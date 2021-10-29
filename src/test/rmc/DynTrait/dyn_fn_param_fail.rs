@@ -8,14 +8,12 @@
 #![feature(ptr_metadata)]
 
 include!("../Helpers/vtable_utils_ignore.rs");
-include!("../../rmc-prelude.rs");
-
 fn takes_dyn_fun(fun: &dyn Fn() -> u32) {
     let x = fun();
-    __VERIFIER_expect_fail(x != 5, "Wrong return");
+    rmc::expect_fail(x != 5, "Wrong return");
 
     /* The function dynamic object has no associated data */
-    __VERIFIER_expect_fail(size_from_vtable(vtable!(fun)) != 0, "Wrong size");
+    rmc::expect_fail(size_from_vtable(vtable!(fun)) != 0, "Wrong size");
 }
 
 pub fn unit_to_u32() -> u32 {

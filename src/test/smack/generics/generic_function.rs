@@ -33,14 +33,12 @@ fn swapem<T, U: S<T>>(s: U) -> U {
     s.swap_items()
 }
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let x2 = __nondet();
-    let y2 = __nondet();
-    let x3 = __nondet();
-    let y3 = __nondet();
-    let z3 = __nondet();
+    let x2 = rmc::nondet();
+    let y2 = rmc::nondet();
+    let x3 = rmc::nondet();
+    let y3 = rmc::nondet();
+    let z3 = rmc::nondet();
     let p2 = Point::<i64> { x: x2, y: y2 };
     let p3 = Point3::<i64> { x: x3, y: y3, z: z3 };
 

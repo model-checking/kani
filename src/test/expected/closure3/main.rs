@@ -7,10 +7,8 @@ where
     f(10)
 }
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let num: i64 = __nondet();
+    let num: i64 = rmc::nondet();
     if num <= std::i64::MAX - 100 {
         // avoid overflow
         let y = call_with_one(|x| x + num);

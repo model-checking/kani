@@ -182,21 +182,7 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
 pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Codegen) { 1 } else { 0 };
     let mut rmc_rustc = Command::new("rmc-rustc");
-    rmc_rustc
-        .args(&test_props.rustc_args)
-        .args([
-            "-Z",
-            "codegen-backend=gotoc",
-            "-Z",
-            "trim-diagnostic-paths=no",
-            "--cfg=rmc",
-            "--out-dir",
-            "build/tmp",
-            "-Z",
-            "human_readable_cgu_names",
-            "--crate-type=lib",
-        ])
-        .arg(&test_props.path);
+    rmc_rustc.args(&test_props.rustc_args).args(["--out-dir", "build/tmp"]).arg(&test_props.path);
 
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("check");

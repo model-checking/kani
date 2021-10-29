@@ -8,10 +8,8 @@
 // a verification failure (the loop being unwound depends on
 // a nondet. variable)
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let x: u32 = __nondet();
+    let x: u32 = rmc::nondet();
     let pi = 3.14159265359;
 
     let x_iters = leibniz_pi(x);

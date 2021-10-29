@@ -3,11 +3,9 @@
 // @expect error
 // rmc-verify-fail
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let a = __nondet();
-    let b = __nondet();
+    let a = rmc::nondet();
+    let b = rmc::nondet();
     if 4 < a && a < 8 {
         // a in [5,7]
         if 5 < b && b < 9 {
