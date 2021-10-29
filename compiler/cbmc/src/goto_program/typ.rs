@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::DatatypeComponent::*;
 use self::Type::*;
-use super::super::utils::aggr_name;
+use super::super::utils::{aggr_name, max_int, min_int};
 use super::super::MachineModel;
 use super::{Expr, SymbolTable};
 use std::collections::BTreeMap;
@@ -790,33 +790,18 @@ impl Type {
 
 /// Constants from Types, for use in Expr contexts
 impl Type {
-    //TODO second mathematical check
-    pub fn max_int(&self, mm: &MachineModel) -> i128 {
-        assert!(self.is_integer());
-        let w = self.native_width(mm).unwrap();
-        assert!(w < 128);
-        let shift = if self.is_signed(mm) { 129 - w } else { 128 - w };
-        let max: u128 = u128::MAX >> shift;
-        max.try_into().unwrap()
-    }
-
     pub fn max_int_expr(&self, mm: &MachineModel) -> Expr {
-        Expr::int_constant(self.max_int(mm), self.clone())
-    }
-
-    pub fn min_int(&self, mm: &MachineModel) -> i128 {
         assert!(self.is_integer());
-        if self.is_unsigned(mm) {
-            0
-        } else {
-            let max = self.max_int(mm);
-            let min = -max - 1;
-            min
-        }
+        let width = self.native_width(mm).unwrap();
+        let signed = self.is_signed(mm);
+        Expr::int_constant(max_int(width, signed), self.clone())
     }
 
     pub fn min_int_expr(&self, mm: &MachineModel) -> Expr {
-        Expr::int_constant(self.min_int(mm), self.clone())
+        assert!(self.is_integer());
+        let width = self.native_width(mm).unwrap();
+        let signed = self.is_signed(mm);
+        Expr::int_constant(min_int(width, signed), self.clone())
     }
 
     /// an expression of nondeterministic value of type self
