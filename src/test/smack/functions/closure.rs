@@ -10,10 +10,8 @@ where
     some_closure(1);
 }
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let mut num: i32 = __nondet();
+    let mut num: i32 = rmc::nondet();
     if num <= std::i32::MAX - 10 {
         let original_num = num;
         {

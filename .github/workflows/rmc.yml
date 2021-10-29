@@ -51,9 +51,11 @@ jobs:
           export RUST_BACKTRACE=1
           ./x.py build -i --stage 1 library/std
 
+      - name: Build RMC Library
+        run: bash -x ./scripts/setup/build_rmc_lib.sh
+
       - name: Execute RMC regression
         run: ./scripts/rmc-regression.sh
-
 
       - name: Install dashboard dependencies
         if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}

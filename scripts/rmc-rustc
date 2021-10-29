@@ -2,19 +2,62 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# Usage:
+# rmc-rustc (--rmc-flags | --rmc-path)
+#   - This will print the configurations used to run rmc version of rustc.
+# rmc-rustc RUSTC_OPTIONS
+#   - This will run RUSTC with RMC flags + the given RUSTC_OPTIONS
 set -eu
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 REPO_DIR="$(dirname $SCRIPT_DIR)"
 
-shopt -s nullglob
-RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
+get_rmc_path() {
+    shopt -s nullglob
+    RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
 
-if [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]; then
-    echo "ERROR: Could not find RMC binary."
-    echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
-    echo "Was RMC successfully built first?"
-    exit 1
+    if [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]; then
+        echo "ERROR: Could not find RMC binary."
+        echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
+        echo "Was RMC successfully built first?"
+        exit 1
+    fi
+    echo ${RMC_CANDIDATES[0]}
+}
+
+get_rmc_lib_path() {
+    if [ -z "${RMC_LIB_PATH:-""}" ]
+    then
+        RMC_LIB_CANDIDATES=("$REPO_DIR"/target/*/librmc.rlib)
+        if [[ ${#RMC_LIB_CANDIDATES[@]} -ne 1 ]]; then
+            echo "ERROR: Could not find RMC library."
+            echo "Looked for: \"$REPO_DIR/target/*/librmc.rlib\""
+            echo "Was RMC library successfully built first?"
+            exit 1
+        fi
+        echo $(dirname ${RMC_LIB_CANDIDATES[0]})
+    else
+        echo ${RMC_LIB_PATH}
+    fi
+}
+
+RMC_PATH=$(get_rmc_path)
+
+RMC_FLAGS="--crate-type=lib \
+        -Z codegen-backend=gotoc \
+        -Z trim-diagnostic-paths=no \
+        -Z human_readable_cgu_names \
+        --cfg=rmc \
+        -L $(get_rmc_lib_path) \
+        --extern rmc"
+
+if [ "${1:-''}" == "--rmc-flags" ]
+then
+    echo ${RMC_FLAGS}
+elif [ "${1:-''}" == "--rmc-path" ]
+then
+    echo ${RMC_PATH}
+else
+    # Execute rmc
+   "${RMC_PATH}" ${RMC_FLAGS} "$@"
 fi
-
-"${RMC_CANDIDATES[0]}" "$@"

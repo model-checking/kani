@@ -4,6 +4,7 @@ members = [
   "compiler/rustc",
   "library/std",
   "library/test",
+  "library/rmc",
   "src/rustdoc-json-types",
   "src/tools/cargotest",
   "src/tools/clippy",
@@ -55,7 +56,9 @@ exclude = [
   # stdarch has its own Cargo workspace
   "library/stdarch",
   # dependency tests have their own workspace
-  "src/test/rmc-dependency-test/dependency3"
+  "src/test/rmc-dependency-test/dependency3",
+  # cargo rmc tests should also have their own workspace
+  "src/test/cargo-rmc"
 ]
 
 [profile.release.package.compiler_builtins]

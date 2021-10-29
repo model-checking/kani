@@ -43,15 +43,13 @@ fn binary_search<T: Ord>(arr: &[T], elem: &T) -> Option<usize> {
     None
 }
 
-include!("../rmc-prelude.rs");
-
 fn get() -> [i32; 11] {
     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 }
 
 pub fn main() {
     let x = get();
-    let y = __nondet();
+    let y = rmc::nondet();
     if 1 <= y && y <= 11 {
         assert!(binary_search_wrong(&x, &y) == Some(y as usize - 1)); // this fails
 

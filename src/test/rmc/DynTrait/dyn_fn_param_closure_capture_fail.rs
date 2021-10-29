@@ -6,13 +6,11 @@
 #![feature(ptr_metadata)]
 
 include!("../Helpers/vtable_utils_ignore.rs");
-include!("../../rmc-prelude.rs");
-
 fn takes_dyn_fun(fun: &dyn Fn() -> i32) {
     let x = fun();
-    __VERIFIER_expect_fail(x != 5, "Wrong return");
+    rmc::expect_fail(x != 5, "Wrong return");
     /* The closure captures `a` and thus is sized */
-    __VERIFIER_expect_fail(size_from_vtable(vtable!(fun)) != 8, "Wrong size");
+    rmc::expect_fail(size_from_vtable(vtable!(fun)) != 8, "Wrong size");
 }
 
 pub fn main() {

@@ -9,9 +9,9 @@ include!{"../benchmark-prelude.rs"}
 fn operate_on_vec(times: usize) {
     let mut v: Vec<u32> = Vec::with_capacity(times);
     for i in 0..times {
-        v.push(__nondet());
+        v.push(rmc::nondet());
     }
-    let sentinel = __nondet();
+    let sentinel = rmc::nondet();
     v.push(sentinel);
     // We remove elements to perform more memmoves. These are done to fill up
     // "holes" created due to elements removed from the middle of the Vec.
