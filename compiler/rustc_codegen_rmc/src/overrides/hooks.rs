@@ -79,6 +79,8 @@ fn matches_function(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, attr_name: &str
 struct ExpectFail;
 impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
+        // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
             warn!(
                 "The function __VERIFIER_expect_fail is deprecated. Use rmc::expect_fail instead"
@@ -116,7 +118,8 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
 struct Assume;
 impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Keep backward compatibility with old assume.
+        // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
+        // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
             warn!("The function __VERIFIER_assume is deprecated. Use rmc::assume instead");
             return true;
@@ -152,6 +155,8 @@ struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        // Deprecate old __nondet since it doesn't match rust naming conventions.
+        // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__nondet") {
             warn!("The function __nondet is deprecated. Use rmc::nondet instead");
             return true;

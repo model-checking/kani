@@ -11,7 +11,7 @@
 /// The code snipped below should never panic.
 ///
 /// ```rust
-/// let i : i32 = rmc::non_det();
+/// let i : i32 = rmc::nondet();
 /// rmc::assume(i > 10);
 /// if i < 0 {
 ///   panic!("This will never panic");
@@ -21,7 +21,7 @@
 /// The following code may panic though:
 ///
 /// ```rust
-/// let i : i32 = rmc::non_det();
+/// let i : i32 = rmc::nondet();
 /// assert!(i < 0, "This may panic and verification should fail.");
 /// rmc::assume(i > 10);
 /// ```
@@ -38,7 +38,7 @@ pub fn assume(_cond: bool) {}
 /// under all possible i32 input values.
 ///
 /// ```rust
-/// let inputA = rmc::non_det::<i32>();
+/// let inputA = rmc::nondet::<i32>();
 /// fn_under_verification(inputA);
 /// ```
 #[inline(never)]

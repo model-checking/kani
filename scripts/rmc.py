@@ -151,7 +151,7 @@ def rustc_flags(mangler, symbol_table_passes):
     flags = [
         "-Z", f"symbol-mangling-version={mangler}",
         "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-        ]
+    ]
     if "RUSTFLAGS" in os.environ:
         flags += os.environ["RUSTFLAGS"].split(" ")
     return flags
