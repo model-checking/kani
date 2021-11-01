@@ -46,10 +46,6 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-fn rmc::nondet() -> u32 {
-    unimplemented!()
-}
-
 // ANCHOR: rmc
 #[cfg(rmc)]
 #[no_mangle]
