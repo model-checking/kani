@@ -45,23 +45,6 @@ macro_rules! btree_string_map {
     }}
 }
 
-#[test]
-fn test_max_int() {
-    // Unsigned
-    assert_eq!(max_int(8, false), BigInt::from(u8::MAX));
-    assert_eq!(max_int(16, false), BigInt::from(u16::MAX));
-    assert_eq!(max_int(32, false), BigInt::from(u32::MAX));
-    assert_eq!(max_int(64, false), BigInt::from(u64::MAX));
-    assert_eq!(max_int(128, false), BigInt::from(u128::MAX));
-
-    //Signed
-    assert_eq!(max_int(8, true), BigInt::from(i8::MAX));
-    assert_eq!(max_int(16, true), BigInt::from(i16::MAX));
-    assert_eq!(max_int(32, true), BigInt::from(i32::MAX));
-    assert_eq!(max_int(64, true), BigInt::from(i64::MAX));
-    assert_eq!(max_int(128, true), BigInt::from(i128::MAX));
-}
-
 pub fn max_int(width: u64, signed: bool) -> BigInt {
     let mut bi = BigInt::from(0);
     if signed {
@@ -72,22 +55,6 @@ pub fn max_int(width: u64, signed: bool) -> BigInt {
     bi - 1
 }
 
-#[test]
-fn test_min_int() {
-    // Unsigned
-    assert_eq!(min_int(8, false), BigInt::from(u8::MIN));
-    assert_eq!(min_int(16, false), BigInt::from(u16::MIN));
-    assert_eq!(min_int(32, false), BigInt::from(u32::MIN));
-    assert_eq!(min_int(64, false), BigInt::from(u64::MIN));
-    assert_eq!(min_int(128, false), BigInt::from(u128::MIN));
-
-    //Signed
-    assert_eq!(min_int(8, true), BigInt::from(i8::MIN));
-    assert_eq!(min_int(16, true), BigInt::from(i16::MIN));
-    assert_eq!(min_int(32, true), BigInt::from(i32::MIN));
-    assert_eq!(min_int(64, true), BigInt::from(i64::MIN));
-    assert_eq!(min_int(128, true), BigInt::from(i128::MIN));
-}
 pub fn min_int(width: u64, signed: bool) -> BigInt {
     if signed {
         let max = max_int(width, true);
@@ -95,5 +62,44 @@ pub fn min_int(width: u64, signed: bool) -> BigInt {
         min
     } else {
         BigInt::from(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::utils::{max_int, min_int};
+    use num::BigInt;
+    #[test]
+    fn test_max_int() {
+        // Unsigned
+        assert_eq!(max_int(8, false), BigInt::from(u8::MAX));
+        assert_eq!(max_int(16, false), BigInt::from(u16::MAX));
+        assert_eq!(max_int(32, false), BigInt::from(u32::MAX));
+        assert_eq!(max_int(64, false), BigInt::from(u64::MAX));
+        assert_eq!(max_int(128, false), BigInt::from(u128::MAX));
+
+        //Signed
+        assert_eq!(max_int(8, true), BigInt::from(i8::MAX));
+        assert_eq!(max_int(16, true), BigInt::from(i16::MAX));
+        assert_eq!(max_int(32, true), BigInt::from(i32::MAX));
+        assert_eq!(max_int(64, true), BigInt::from(i64::MAX));
+        assert_eq!(max_int(128, true), BigInt::from(i128::MAX));
+    }
+
+    #[test]
+    fn test_min_int() {
+        // Unsigned
+        assert_eq!(min_int(8, false), BigInt::from(u8::MIN));
+        assert_eq!(min_int(16, false), BigInt::from(u16::MIN));
+        assert_eq!(min_int(32, false), BigInt::from(u32::MIN));
+        assert_eq!(min_int(64, false), BigInt::from(u64::MIN));
+        assert_eq!(min_int(128, false), BigInt::from(u128::MIN));
+
+        //Signed
+        assert_eq!(min_int(8, true), BigInt::from(i8::MIN));
+        assert_eq!(min_int(16, true), BigInt::from(i16::MIN));
+        assert_eq!(min_int(32, true), BigInt::from(i32::MIN));
+        assert_eq!(min_int(64, true), BigInt::from(i64::MIN));
+        assert_eq!(min_int(128, true), BigInt::from(i128::MIN));
     }
 }
