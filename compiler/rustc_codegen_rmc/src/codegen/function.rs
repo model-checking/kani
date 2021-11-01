@@ -19,8 +19,6 @@ impl<'tcx> GotocCtx<'tcx> {
             name if name.ends_with("__getit") => true,
             // https://github.com/model-checking/rmc/issues/205
             "panic::Location::<'a>::caller" => true,
-            // https://github.com/model-checking/rmc/issues/207
-            "core::slice::<impl [T]>::split_first" => true,
             // https://github.com/model-checking/rmc/issues/281
             name if name.starts_with("bridge::client") => true,
             // https://github.com/model-checking/rmc/issues/282
