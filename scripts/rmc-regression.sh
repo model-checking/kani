@@ -20,8 +20,11 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Formatting check
 ./x.py fmt --check
 
-# Standalone rmc tests, expected tests, and cargo tests
+# Build RMC and RMC library
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
+./scripts/setup/build_rmc_lib.sh
+
+# Standalone rmc tests, expected tests, and cargo tests
 ./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc
 ./x.py test -i --stage 0 compiler/cbmc
 
