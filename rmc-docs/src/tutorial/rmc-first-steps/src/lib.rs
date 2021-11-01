@@ -46,7 +46,7 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-fn __nondet() -> u32 {
+fn rmc::nondet() -> u32 {
     unimplemented!()
 }
 
@@ -54,7 +54,7 @@ fn __nondet() -> u32 {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let x: u32 = __nondet();
+    let x: u32 = rmc::nondet();
     estimate_size(x);
 }
 // ANCHOR_END: rmc
