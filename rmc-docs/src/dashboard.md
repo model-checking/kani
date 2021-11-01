@@ -68,7 +68,7 @@ which follows these steps:
 
  * Then all examples are run using
    [Litani](https://github.com/awslabs/aws-build-accumulator).
- * Finally, the litani log is used to generate the [text version of the
+ * Finally, the Litani log is used to generate the [text version of the
    dashboard](./dashboard/dashboard.txt).
 
 > **Warning:** Note that any changes done to the examples in

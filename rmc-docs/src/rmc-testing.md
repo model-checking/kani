@@ -1,6 +1,6 @@
 # Testing
 
-Testing in RMC is carried out in multiple ways. There is at least
+Testing in RMC is carried out in multiple ways. There are at least
 two very good reasons to do it:
  1. **Software regression**: A regression is a type of bug
     that appears after a change is introduced where a feature that
@@ -19,7 +19,7 @@ on the [RMC dashboard](./dashboard.md).
 
 # Regression testing
 
-RMC counts with a quite extensive range of tests to perform regression testing.
+RMC relies on a quite extensive range of tests to perform regression testing.
 Regression testing can be executed by running the command:
 
 ```
@@ -97,12 +97,15 @@ indicate an expected failure. The first one is to add a comment
 // rmc-<stage>-fail
 ```
 at the top of the test file, where `<stage>` is the stage where the test is
-expected to fail. The other option is to use the predicate
-`__VERIFIER_expect_fail(cond, message)` included in the RMC prelude. The testing
-framework expects one `EXPECTED FAIL` message in the verification output for
-each use of the predicate.
+expected to fail.
 
-> **Warning:** Note that `__VERIFIER_expect_fail` is only useful to indicate
+The other option is to use the predicate `rmc::expect_fail(cond, message)`
+included in the RMC library. The `cond` in `rmc::expect_fail` is a condition
+that you expect not to hold during verification. The testing framework expects
+one `EXPECTED FAIL` message in the verification output for each use of the
+predicate.
+
+> **Warning:** Note that `rmc::expect_fail` is only useful to indicate
 > failure in the `verify` stage, errors in other stages will be considered
 > testing failures.
 
@@ -119,6 +122,15 @@ For example, to increase the unwinding value to 4 in a test, we can write:
 ```
 // rmc-flags: --cbmc-args --unwind 4
 ```
+
+Alternatively, CBMC flags can also be passed using `cbmc-flags`:
+
+```
+// cbmc-flags: --unwind 4
+```
+
+> **Warning:** `cbmc-flags` is likely to be deprecated in the near future. We
+> recommend using `rmc-flags` with `--cbmc-args` for now.
 
 For `cargo-rmc` tests, the preferred way to pass command-line options is adding
 them to `Cargo.toml` below the `[rmc.flags]` marker.
