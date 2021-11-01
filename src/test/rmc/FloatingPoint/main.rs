@@ -1,10 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-include!("../../rmc-prelude.rs");
-
 macro_rules! test_floats {
     ($ty:ty) => {
-        let a: $ty = __nondet();
+        let a: $ty = rmc::nondet();
         let b = a / 2.0;
 
         if a < 0.0 {

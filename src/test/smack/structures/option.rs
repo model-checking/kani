@@ -6,10 +6,8 @@ fn safe_div(x: u32, y: u32) -> Option<u32> {
     if y != 0 { Some(x / y) } else { None }
 }
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
-    let x = __nondet();
+    let x = rmc::nondet();
     if x > 0 && x <= 200 {
         // avoid overflow
         let a = safe_div(2 * x, x);
@@ -17,7 +15,7 @@ pub fn main() {
             Some(c) => assert!(c == 2),
             None => assert!(false),
         };
-        let y = __nondet();
+        let y = rmc::nondet();
         if y > 0 {
             let b = safe_div(x, y);
             match b {

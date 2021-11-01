@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // rmc-flags: --use-abs --abs-type rmc
-include!{"../../rmc-prelude.rs"}
-
 fn main() {
     fn shrink_to_fit_test() {
         let mut vec = Vec::with_capacity(10);

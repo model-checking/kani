@@ -15,14 +15,11 @@ mod tests {
 mod rmc_tests {
     use super::*;
 
-    fn __nondet<T>() -> T {
-        unimplemented!()
-    }
     #[allow(dead_code)]
     #[no_mangle]
     fn test_sum() {
-        let a: u64 = __nondet();
-        let b: u64 = __nondet();
+        let a: u64 = rmc::nondet();
+        let b: u64 = rmc::nondet();
         let p = Pair::new(a, b);
         assert!(p.sum() == a.wrapping_add(b));
     }

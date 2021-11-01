@@ -4,8 +4,6 @@
 // rmc-flags: --no-default-checks
 // cbmc-flags: --unwind 10
 
-include!("../../rmc-prelude.rs");
-
 // This example tests the RMC flag `--no-default-checks`
 //
 // It is the same as `main.rs` except for the flags passed to RMC and CBMC
@@ -25,7 +23,7 @@ include!("../../rmc-prelude.rs");
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
 pub fn main() {
-    let mut a: u32 = __nondet();
+    let mut a: u32 = rmc::nondet();
 
     if a < 1024 {
         while a > 0 {

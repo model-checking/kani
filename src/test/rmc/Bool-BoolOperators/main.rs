@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
     assert!(true);
     assert!(true || false);
@@ -14,6 +12,6 @@ pub fn main() {
     assert!(d && true);
     assert!(!b && d);
 
-    let e: bool = __nondet();
+    let e: bool = rmc::nondet();
     assert!(e || !e);
 }

@@ -3311,6 +3311,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmc"
+version = "0.1.0"
+
+[[package]]
 name = "rust-demangler"
 version = "0.0.1"
 dependencies = [

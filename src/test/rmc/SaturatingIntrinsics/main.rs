@@ -3,12 +3,10 @@
 #![feature(core_intrinsics)]
 use std::intrinsics;
 
-include!("../../rmc-prelude.rs");
-
 macro_rules! test_saturating_intrinsics {
     ($ty:ty) => {
-        let v: $ty = __nondet();
-        let w: $ty = __nondet();
+        let v: $ty = rmc::nondet();
+        let w: $ty = rmc::nondet();
         let result = intrinsics::saturating_add(v, w);
         match (0 <= v, 0 <= w) {
             (true, true) => {

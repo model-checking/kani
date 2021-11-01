@@ -13,11 +13,9 @@ fn fac(n: u64) -> u64 {
     }
 }
 
-include!("../../rmc-prelude.rs");
-
 pub fn main() {
     let mut a = 1;
-    let n = __nondet();
+    let n = rmc::nondet();
     if n < 5 {
         for i in 1..n + 1 as u64 {
             a *= i;

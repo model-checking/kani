@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(allocator_api)]
 
-include!("../../rmc-prelude.rs");
-
 use std::alloc::Allocator;
 use std::alloc::Global;
 use std::marker::PhantomData;
@@ -34,13 +32,13 @@ impl<T: Copy, A: Allocator> CbmcVec<T, A> {
         } else {
             self.len -= 1;
             self.last
-            //Some(__nondet())
+            //Some(rmc::nondet())
         }
     }
 }
 fn make_vec_visible<T: Copy>() {
     let mut v: CbmcVec<T> = CbmcVec::new();
-    v.push(__nondet());
+    v.push(rmc::nondet());
     v.len();
     v.pop();
 }
