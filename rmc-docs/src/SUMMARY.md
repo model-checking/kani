@@ -16,5 +16,6 @@
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [RMC developer documentation](./dev-documentation.md)
+  - [Testing](./rmc-testing.md)
 
 - [RMC dashboard](./dashboard.md)
