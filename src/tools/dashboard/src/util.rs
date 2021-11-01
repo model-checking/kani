@@ -196,7 +196,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "codegen",
         exit_status,
-        5,
+        10,
     );
 }
 
@@ -219,7 +219,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
         test_props.path.to_str().unwrap(),
         "verification",
         exit_status,
-        10,
+        60,
     );
 }
 
