@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::{Irep, IrepId, Symbol, SymbolTable};
+use std::collections::BTreeMap;
 use crate::btree_map;
 use rustc_serialize::json::*;
 
@@ -11,7 +12,11 @@ impl ToJson for Irep {
             output.insert("sub".to_string(), self.sub.to_json());
         }
         if !self.named_sub.is_empty() {
-            output.insert("namedSub".to_string(), self.named_sub.to_json());
+            let mut d = BTreeMap::new();
+            for (key, value) in &self.named_sub {
+                d.insert(key.to_string(), value.to_json());
+            }
+            output.insert("namedSub".to_string(), Json::Object(d));
         }
         Json::Object(output)
     }

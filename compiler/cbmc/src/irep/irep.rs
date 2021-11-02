@@ -6,7 +6,6 @@ use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
 use num::BigInt;
-use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 /// The CBMC serialization format for goto-programs.
@@ -16,13 +15,15 @@ use std::fmt::Debug;
 pub struct Irep {
     pub id: IrepId,
     pub sub: Vec<Irep>,
-    pub named_sub: BTreeMap<IrepId, Irep>,
+    // A BTreeMap uses far too much memory, so stick with a vector, since we don't lookup often
+    pub named_sub: Vec<(IrepId, Irep)>,
 }
 
 /// Getters
 impl Irep {
     pub fn lookup(&self, key: IrepId) -> Option<&Irep> {
-        self.named_sub.get(&key)
+        let elem = self.named_sub.iter().find(|x| x.0 == key);
+        elem.map(|x| &x.1)
     }
 
     pub fn lookup_as_int(&self, id: IrepId) -> Option<&BigInt> {
@@ -52,7 +53,7 @@ impl Irep {
 
     pub fn with_named_sub(mut self, key: IrepId, value: Irep) -> Self {
         if !value.is_nil() {
-            self.named_sub.insert(key, value);
+            self.named_sub.push((key, value));
         }
         self
     }
@@ -108,7 +109,7 @@ impl Irep {
     }
 
     pub fn just_id(id: IrepId) -> Irep {
-        Irep { id: id, sub: Vec::new(), named_sub: BTreeMap::new() }
+        Irep { id: id, sub: Vec::new(), named_sub: Vec::new() }
     }
 
     pub fn just_int_id<T>(i: T) -> Irep
@@ -117,7 +118,7 @@ impl Irep {
     {
         Irep::just_id(IrepId::from_int(i))
     }
-    pub fn just_named_sub(named_sub: BTreeMap<IrepId, Irep>) -> Irep {
+    pub fn just_named_sub(named_sub: Vec<(IrepId, Irep)>) -> Irep {
         Irep { id: IrepId::EmptyString, sub: vec![], named_sub: named_sub }
     }
 
@@ -126,7 +127,7 @@ impl Irep {
     }
 
     pub fn just_sub(sub: Vec<Irep>) -> Irep {
-        Irep { id: IrepId::EmptyString, sub: sub, named_sub: BTreeMap::new() }
+        Irep { id: IrepId::EmptyString, sub: sub, named_sub: Vec::new() }
     }
 
     pub fn nil() -> Irep {
