@@ -11,6 +11,7 @@
 use crate::utils::{instance_name_is, instance_name_starts_with};
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
+use cbmc::NO_PRETTY_NAME;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -370,7 +371,7 @@ impl<'tcx> GotocHook<'tcx> for MemSwap {
                     Type::empty(),
                 ),
                 Some(Stmt::block(block, loc.clone())),
-                None,
+                NO_PRETTY_NAME,
                 Location::none(),
             )
         });

@@ -5,6 +5,7 @@ use self::ExprValue::*;
 use self::UnaryOperand::*;
 use super::super::MachineModel;
 use super::{DatatypeComponent, Location, Parameter, Stmt, SwitchCase, SymbolTable, Type};
+use crate::InternedString;
 use num::bigint::BigInt;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -102,7 +103,7 @@ pub enum ExprValue {
     /// `lhs.field`
     Member {
         lhs: Expr,
-        field: String,
+        field: InternedString,
     },
     /// `__nondet()`
     Nondet,
@@ -122,7 +123,7 @@ pub enum ExprValue {
     /// A raw string constant. Note that you normally actually want a pointer to the first element.
     /// `"s"`
     StringConstant {
-        s: String,
+        s: InternedString,
     },
     /// Struct initializer  
     /// `struct foo the_foo = >>> {field1, field2, ... } <<<`
@@ -131,7 +132,7 @@ pub enum ExprValue {
     },
     /// `self`
     Symbol {
-        identifier: String,
+        identifier: InternedString,
     },
     /// `(typ) self`. Target type is in the outer `Expr` struct.
     Typecast(Expr),
@@ -139,7 +140,7 @@ pub enum ExprValue {
     /// `union foo the_foo = >>> {.field = value } <<<`
     Union {
         value: Expr,
-        field: String,
+        field: InternedString,
     },
     // `op self` eg `! self` if `op == UnaryOperand::Not`
     UnOp {
@@ -238,6 +239,7 @@ pub struct ArithmeticOverflowResult {
 
 /// Getters
 impl Expr {
+    //TODO: Consider making this return the `Location` itself, since `Location` is now `Copy`.
     pub fn location(&self) -> &Location {
         &self.location
     }
@@ -559,17 +561,21 @@ impl Expr {
     }
 
     /// `self.field`
-    pub fn member(self, field: &str, symbol_table: &SymbolTable) -> Self {
+    pub fn member<T>(self, field: T, symbol_table: &SymbolTable) -> Self
+    where
+        T: Into<InternedString>,
+    {
+        let field: InternedString = field.into();
         assert!(
             self.typ.is_struct_tag() || self.typ.is_union_tag(),
-            "Can't apply .member operation to\n\t{:?}\n\t{:?}",
+            "Can't apply .member operation to\n\t{:?}\n\t{}",
             self,
             field,
         );
         if let Some(ty) = symbol_table.lookup_field_type_in_type(self.typ(), field) {
-            expr!(Member { lhs: self, field: field.to_string() }, ty.clone())
+            expr!(Member { lhs: self, field }, ty.clone())
         } else {
-            unreachable!("unable to find field {:?} for type {:?}", field, self.typ())
+            unreachable!("unable to find field {} for type {:?}", field, self.typ())
         }
     }
 
@@ -619,7 +625,7 @@ impl Expr {
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
     pub fn struct_expr(
         typ: Type,
-        mut components: BTreeMap<String, Expr>,
+        mut components: BTreeMap<InternedString, Expr>,
         symbol_table: &SymbolTable,
     ) -> Self {
         assert!(
@@ -641,7 +647,7 @@ impl Expr {
         // Check that each formal field has an value
         for field in non_padding_fields {
             let field_typ = field.field_typ().unwrap();
-            let value = components.get(field.name()).unwrap();
+            let value = components.get(&field.name()).unwrap();
             assert_eq!(value.typ(), field_typ);
         }
 
@@ -651,7 +657,7 @@ impl Expr {
                 if field.is_padding() {
                     field.typ().nondet()
                 } else {
-                    components.remove(field.name()).unwrap()
+                    components.remove(&field.name()).unwrap()
                 }
             })
             .collect();
@@ -663,7 +669,7 @@ impl Expr {
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
     pub fn struct_expr_with_nondet_fields(
         typ: Type,
-        mut components: BTreeMap<String, Expr>,
+        mut components: BTreeMap<InternedString, Expr>,
         symbol_table: &SymbolTable,
     ) -> Self {
         assert!(typ.is_struct_tag());
@@ -673,8 +679,8 @@ impl Expr {
             .iter()
             .map(|field| {
                 let field_name = field.name();
-                if components.contains_key(field_name) {
-                    components.remove(field_name).unwrap()
+                if components.contains_key(&field_name) {
+                    components.remove(&field_name).unwrap()
                 } else {
                     field.typ().nondet()
                 }
@@ -762,7 +768,8 @@ impl Expr {
     }
 
     /// `identifier`
-    pub fn symbol_expression(identifier: String, typ: Type) -> Self {
+    pub fn symbol_expression<T: Into<InternedString>>(identifier: T, typ: Type) -> Self {
+        let identifier = identifier.into();
         expr!(Symbol { identifier }, typ)
     }
 
@@ -785,10 +792,16 @@ impl Expr {
 
     /// Union initializer  
     /// `union foo the_foo = >>> {.field = value } <<<`
-    pub fn union_expr(typ: Type, field: &str, value: Expr, symbol_table: &SymbolTable) -> Self {
+    pub fn union_expr<T: Into<InternedString>>(
+        typ: Type,
+        field: T,
+        value: Expr,
+        symbol_table: &SymbolTable,
+    ) -> Self {
+        let field = field.into();
         assert!(typ.is_union_tag());
         assert_eq!(symbol_table.lookup_field_type_in_type(&typ, field), Some(value.typ()));
-        expr!(Union { value, field: field.to_string() }, typ)
+        expr!(Union { value, field }, typ)
     }
 }
 
@@ -1270,17 +1283,17 @@ impl Expr {
 
     /// `"s"`
     /// only to be used when manually wrapped in `.array_to_ptr()`
-    pub fn raw_string_constant(s: &str) -> Self {
-        expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
+    pub fn raw_string_constant(s: InternedString) -> Self {
+        expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1))
     }
 
     /// `"s"`
-    pub fn string_constant(s: &str) -> Self {
+    pub fn string_constant<T: Into<InternedString>>(s: T) -> Self {
         // Internally, CBMC distinguishes between the string constant, and the pointer to it.
         // The thing we actually manipulate is the pointer, so what is what we return from the constructor.
         // TODO: do we need the `.index(0)` here?
-        expr!(StringConstant { s: s.to_string() }, Type::c_char().array_of(s.len() + 1))
-            .array_to_ptr()
+        let s = s.into();
+        expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
     }
 }
 /// Conversions to statements
@@ -1328,11 +1341,11 @@ impl Expr {
     /// field names (ignoring the padding fields) to field values.  The result
     /// is suitable for use in the struct_expr constructor.  This makes it
     /// easier to look up or modify field values of a struct.
-    pub fn struct_field_exprs(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Expr> {
+    pub fn struct_field_exprs(&self, symbol_table: &SymbolTable) -> BTreeMap<InternedString, Expr> {
         let struct_type = self.typ();
         assert!(struct_type.is_struct_tag());
 
-        let mut exprs: BTreeMap<String, Expr> = BTreeMap::new();
+        let mut exprs: BTreeMap<InternedString, Expr> = BTreeMap::new();
         let fields = symbol_table.lookup_fields_in_type(struct_type).unwrap();
         match self.struct_expr_values() {
             Some(values) => {
@@ -1341,7 +1354,7 @@ impl Expr {
                     if fields[i].is_padding() {
                         continue;
                     }
-                    exprs.insert(fields[i].name().to_string(), values[i].clone());
+                    exprs.insert(fields[i].name(), values[i].clone());
                 }
             }
             None => {
@@ -1350,7 +1363,7 @@ impl Expr {
                         continue;
                     }
                     let name = fields[i].name();
-                    exprs.insert(name.to_string(), self.clone().member(name, &symbol_table));
+                    exprs.insert(name, self.clone().member(&name.to_string(), &symbol_table));
                 }
             }
         }

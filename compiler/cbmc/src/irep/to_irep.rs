@@ -317,7 +317,7 @@ impl ToIrep for Location {
                 (IrepId::Line, Irep::just_int_id(*line)),
             ])
             .with_named_sub_option(IrepId::Column, col.map(Irep::just_int_id))
-            .with_named_sub_option(IrepId::Function, function.clone().map(Irep::just_string_id)),
+            .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id)),
         }
     }
 }
@@ -329,14 +329,8 @@ impl ToIrep for Parameter {
             sub: vec![],
             named_sub: vector_map![(IrepId::Type, self.typ().to_irep(mm))],
         }
-        .with_named_sub_option(
-            IrepId::CIdentifier,
-            self.identifier().cloned().map(Irep::just_string_id),
-        )
-        .with_named_sub_option(
-            IrepId::CBaseName,
-            self.base_name().cloned().map(Irep::just_string_id),
-        )
+        .with_named_sub_option(IrepId::CIdentifier, self.identifier().map(Irep::just_string_id))
+        .with_named_sub_option(IrepId::CBaseName, self.base_name().map(Irep::just_string_id))
     }
 }
 
@@ -439,16 +433,16 @@ impl goto_program::Symbol {
             },
             location: self.location.to_irep(mm),
             /// Unique identifier, same as key in symbol table `foo::x`
-            name: self.name.to_string(),
+            name: self.name,
             /// Only used by verilog
-            module: self.module.clone().unwrap_or_default(),
+            module: self.module.unwrap_or("".into()),
             /// Local identifier `x`
-            base_name: self.base_name.clone().unwrap_or_default(),
+            base_name: self.base_name.unwrap_or("".into()),
             /// Almost always the same as base_name, but with name mangling can be relevant
-            pretty_name: self.pretty_name.clone().unwrap_or_default(),
+            pretty_name: self.pretty_name.unwrap_or("".into()),
             /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
             /// https://github.com/model-checking/rmc/issues/1
-            mode: self.mode.to_string(),
+            mode: self.mode.to_string().into(),
 
             // global properties
             is_type: self.is_type,

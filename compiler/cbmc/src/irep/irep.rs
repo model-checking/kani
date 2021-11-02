@@ -5,6 +5,7 @@
 use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
+use crate::cbmc_string::InternedString;
 use num::BigInt;
 use std::fmt::Debug;
 use vector_map::VecMap;
@@ -121,7 +122,7 @@ impl Irep {
         Irep { id: IrepId::EmptyString, sub: vec![], named_sub: named_sub }
     }
 
-    pub fn just_string_id(s: String) -> Irep {
+    pub fn just_string_id<T: Into<InternedString>>(s: T) -> Irep {
         Irep::just_id(IrepId::from_string(s))
     }
 

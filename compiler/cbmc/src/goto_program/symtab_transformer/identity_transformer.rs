@@ -3,7 +3,6 @@
 
 use super::Transformer;
 use crate::goto_program::SymbolTable;
-
 /// Struct for performing the identity transformation on a symbol table.
 /// Mainly used as a demo/for testing.
 pub struct IdentityTransformer {
@@ -151,12 +150,12 @@ mod tests {
             let struct_type = Type::struct_type(
                 "s",
                 vec![
-                    DatatypeComponent::Field { name: "a".to_string(), typ: Type::float() },
-                    DatatypeComponent::Padding { name: "b".to_string(), bits: 4 },
-                    DatatypeComponent::Field { name: "c".to_string(), typ: Type::double() },
-                    DatatypeComponent::Padding { name: "d".to_string(), bits: 5 },
-                    DatatypeComponent::Field { name: "e".to_string(), typ: Type::c_int() },
-                    DatatypeComponent::Padding { name: "f".to_string(), bits: 6 },
+                    DatatypeComponent::field("a", Type::float()),
+                    DatatypeComponent::padding("b", 4),
+                    DatatypeComponent::field("c", Type::double()),
+                    DatatypeComponent::padding("d", 5),
+                    DatatypeComponent::field("e", Type::c_int()),
+                    DatatypeComponent::padding("f", 6),
                 ],
             );
             add_sym(struct_type);
@@ -185,9 +184,9 @@ mod tests {
             let union_type = Type::union_type(
                 "u",
                 vec![
-                    DatatypeComponent::Field { name: "a".to_string(), typ: Type::float() },
-                    DatatypeComponent::Field { name: "c".to_string(), typ: Type::double() },
-                    DatatypeComponent::Field { name: "e".to_string(), typ: Type::c_int() },
+                    DatatypeComponent::field("a", Type::float()),
+                    DatatypeComponent::field("c", Type::double()),
+                    DatatypeComponent::field("e", Type::c_int()),
                 ],
             );
             add_sym(union_type);
@@ -275,12 +274,12 @@ mod tests {
             "s",
             None,
             vec![
-                DatatypeComponent::Field { name: "a".to_string(), typ: Type::float() },
-                DatatypeComponent::Padding { name: "b".to_string(), bits: 4 },
-                DatatypeComponent::Field { name: "c".to_string(), typ: Type::double() },
-                DatatypeComponent::Padding { name: "d".to_string(), bits: 5 },
-                DatatypeComponent::Field { name: "e".to_string(), typ: Type::c_int() },
-                DatatypeComponent::Padding { name: "f".to_string(), bits: 6 },
+                DatatypeComponent::field("a", Type::float()),
+                DatatypeComponent::padding("b", 4),
+                DatatypeComponent::field("c", Type::double()),
+                DatatypeComponent::padding("d", 5),
+                DatatypeComponent::field("e", Type::c_int()),
+                DatatypeComponent::padding("f", 6),
             ],
         );
         original.insert(struct_type);
@@ -309,11 +308,11 @@ mod tests {
 
         let union_type = Symbol::union_type(
             "u",
-            None,
+            crate::NO_PRETTY_NAME,
             vec![
-                DatatypeComponent::Field { name: "a".to_string(), typ: Type::float() },
-                DatatypeComponent::Field { name: "c".to_string(), typ: Type::double() },
-                DatatypeComponent::Field { name: "e".to_string(), typ: Type::c_int() },
+                DatatypeComponent::field("a", Type::float()),
+                DatatypeComponent::field("c", Type::double()),
+                DatatypeComponent::field("e", Type::c_int()),
             ],
         );
         original.insert(union_type);
@@ -356,7 +355,7 @@ mod tests {
                     &name,
                     Type::code_with_unnamed_parameters(vec![], Type::empty()),
                     Some(body),
-                    None,
+                    crate::NO_PRETTY_NAME,
                     Location::none(),
                 ));
                 curr_var += 1;
