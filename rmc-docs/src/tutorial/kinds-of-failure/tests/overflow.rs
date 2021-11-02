@@ -22,19 +22,12 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
-fn __VERIFIER_assume(cond: bool) {
-    unimplemented!()
-}
-
 // ANCHOR: rmc
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let a: u32 = __nondet();
-    let b: u32 = __nondet();
+    let a: u32 = rmc::nondet();
+    let b: u32 = rmc::nondet();
     simple_addition(a, b);
 }
 // ANCHOR_END: rmc

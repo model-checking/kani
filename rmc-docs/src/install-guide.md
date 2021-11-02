@@ -54,10 +54,11 @@ Perform one-time build configuration:
 
 **NOTE: If you skip the above (`llvm.download-ci-llvm=true` specifically), builds may take a long time as all of LLVM would need to be built from scratch.**
 
-Then build RMC:
+Then build RMC and its library:
 
 ```
 ./x.py build -i --stage 1 library/std
+./scripts/setup/build_rmc_lib.sh
 ```
 
 Then, optionally, run the regression tests:
