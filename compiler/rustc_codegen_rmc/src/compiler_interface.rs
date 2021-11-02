@@ -16,7 +16,6 @@ use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, TyCtxt};
-use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
@@ -150,8 +149,6 @@ impl CodegenBackend for GotocCodegenBackend {
         codegen_results: Box<dyn Any>,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
-        use std::io::Write;
-
         let result = codegen_results
             .downcast::<GotocCodegenResult>()
             .expect("in link: codegen_results is not a GotocCodegenResult");
@@ -163,13 +160,13 @@ impl CodegenBackend for GotocCodegenBackend {
 
             let symtab_filename = base_filename.with_extension("symtab.json");
             debug!("output to {:?}", symtab_filename);
-            let mut out_file = ::std::fs::File::create(&symtab_filename).unwrap();
-            write!(out_file, "{}", result.symtab.to_irep().to_json().pretty().to_string()).unwrap();
+            let out_file = ::std::fs::File::create(&symtab_filename).unwrap();
+            serde_json::to_writer(out_file, &result.symtab.to_irep()).unwrap();
 
             let type_map_filename = base_filename.with_extension("type_map.json");
             debug!("type_map to {:?}", type_map_filename);
-            let mut out_file = ::std::fs::File::create(&type_map_filename).unwrap();
-            write!(out_file, "{}", result.type_map.to_json().pretty().to_string()).unwrap();
+            let out_file = ::std::fs::File::create(&type_map_filename).unwrap();
+            serde_json::to_writer(out_file, &result.type_map).unwrap();
         }
 
         Ok(())
