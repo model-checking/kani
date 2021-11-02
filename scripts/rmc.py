@@ -192,10 +192,24 @@ def compile_single_rust_file(
 def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
-    rustflags = rustc_flags(mangler, symbol_table_passes)
+    def get_config(option):
+        process = subprocess.run(
+            [RMC_RUSTC_EXE, option],
+            universal_newlines=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=os.environ,
+            cwd=crate)
+        if process.returncode != EXIT_CODE_SUCCESS:
+            raise Exception("[Error] Fail to extract rmc configuration.\n{}".format(
+                process.stdout))
+        return process.stdout
+
+    rustflags = rustc_flags(mangler, symbol_table_passes) + get_config("--rmc-flags").split()
+    rustc_path = get_config("--rmc-path").strip()
     build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
     build_env = {"RUSTFLAGS": " ".join(rustflags),
-                 "RUSTC": RMC_RUSTC_EXE,
+                 "RUSTC": rustc_path,
                  "PATH": os.environ["PATH"]
                  }
     if debug:
@@ -204,6 +218,7 @@ def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry
         build_cmd.append("-v")
     if dry_run:
         print("{}".format(build_env))
+
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Adds information about unwinding to the RMC output
