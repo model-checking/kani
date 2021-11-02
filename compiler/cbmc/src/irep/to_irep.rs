@@ -22,11 +22,7 @@ fn arguments_irep(arguments: &[Expr], mm: &MachineModel) -> Irep {
     }
 }
 fn code_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
-    Irep {
-        id: IrepId::Code,
-        sub: ops,
-        named_sub: vec![(IrepId::Statement, Irep::just_id(kind))],
-    }
+    Irep { id: IrepId::Code, sub: ops, named_sub: vec![(IrepId::Statement, Irep::just_id(kind))] }
 }
 fn side_effect_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
     Irep {
@@ -176,7 +172,7 @@ impl ToIrep for ExprValue {
             ExprValue::CBoolConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vec![(IrepId::Value, Irep::just_hex_id(if *i { 1 } else { 0 }),)],
+                named_sub: vec![(IrepId::Value, Irep::just_hex_id(if *i { 1 } else { 0 }))],
             },
             ExprValue::Dereference(e) => {
                 Irep { id: IrepId::Dereference, sub: vec![e.to_irep(mm)], named_sub: vec![] }
@@ -239,7 +235,7 @@ impl ToIrep for ExprValue {
             ExprValue::StringConstant { s } => Irep {
                 id: IrepId::StringConstant,
                 sub: vec![],
-                named_sub: vec![(IrepId::Value, Irep::just_string_id(s.to_string()),)],
+                named_sub: vec![(IrepId::Value, Irep::just_string_id(s.to_string()))],
             },
             ExprValue::Struct { values } => Irep {
                 id: IrepId::Struct,
@@ -249,10 +245,7 @@ impl ToIrep for ExprValue {
             ExprValue::Symbol { identifier } => Irep {
                 id: IrepId::Symbol,
                 sub: vec![],
-                named_sub: vec![(
-                    IrepId::Identifier,
-                    Irep::just_string_id(identifier.to_string()),
-                )],
+                named_sub: vec![(IrepId::Identifier, Irep::just_string_id(identifier.to_string()))],
             },
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: vec![] }
@@ -260,10 +253,7 @@ impl ToIrep for ExprValue {
             ExprValue::Union { value, field } => Irep {
                 id: IrepId::Union,
                 sub: vec![value.to_irep(mm)],
-                named_sub: vec![(
-                    IrepId::ComponentName,
-                    Irep::just_string_id(field.to_string()),
-                )],
+                named_sub: vec![(IrepId::ComponentName, Irep::just_string_id(field.to_string()))],
             },
             ExprValue::UnOp { op: UnaryOperand::Bswap, e } => Irep {
                 id: IrepId::Bswap,
@@ -275,7 +265,7 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm)],
                 named_sub: vec![(
                     IrepId::CBoundsCheck,
-                    if *allow_zero { Irep::zero() } else { Irep::one() }
+                    if *allow_zero { Irep::zero() } else { Irep::one() },
                 )],
             },
             ExprValue::UnOp { op: UnaryOperand::CountTrailingZeros { allow_zero }, e } => Irep {
@@ -283,7 +273,7 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm)],
                 named_sub: vec![(
                     IrepId::CBoundsCheck,
-                    if *allow_zero { Irep::zero() } else { Irep::one() }
+                    if *allow_zero { Irep::zero() } else { Irep::one() },
                 )],
             },
             ExprValue::UnOp { op, e } => {
@@ -509,22 +499,22 @@ impl ToIrep for Type {
             Type::CInteger(CIntType::Char) => Irep {
                 id: if mm.char_is_unsigned() { IrepId::Unsignedbv } else { IrepId::Signedbv },
                 sub: vec![],
-                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.char_width()),)],
+                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.char_width()))],
             },
             Type::CInteger(CIntType::Int) => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.int_width()),)],
+                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.int_width()))],
             },
             Type::CInteger(CIntType::SizeT) => Irep {
                 id: IrepId::Unsignedbv,
                 sub: vec![],
-                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.pointer_width()))],
             },
             Type::CInteger(CIntType::SSizeT) => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.pointer_width()))],
             },
             Type::Code { parameters, return_type } => Irep {
                 id: IrepId::Code,
@@ -594,7 +584,7 @@ impl ToIrep for Type {
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,
                 sub: vec![typ.to_irep(mm)],
-                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: vec![(IrepId::Width, Irep::just_int_id(mm.pointer_width()))],
             },
             Type::Signedbv { width } => Irep {
                 id: IrepId::Signedbv,
@@ -615,9 +605,7 @@ impl ToIrep for Type {
             Type::StructTag(name) => Irep {
                 id: IrepId::StructTag,
                 sub: vec![],
-                named_sub: vec![
-                    (IrepId::Identifier, Irep::just_string_id(name.to_string()),)
-                ],
+                named_sub: vec![(IrepId::Identifier, Irep::just_string_id(name.to_string()))],
             },
             Type::Union { tag, components } => Irep {
                 id: IrepId::Union,
@@ -633,9 +621,7 @@ impl ToIrep for Type {
             Type::UnionTag(name) => Irep {
                 id: IrepId::UnionTag,
                 sub: vec![],
-                named_sub: vec![
-                    (IrepId::Identifier, Irep::just_string_id(name.to_string()),)
-                ],
+                named_sub: vec![(IrepId::Identifier, Irep::just_string_id(name.to_string()))],
             },
             Type::Unsignedbv { width } => Irep {
                 id: IrepId::Unsignedbv,
