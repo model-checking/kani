@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// cbmc-flags: --unwind 20
+// cbmc-flags: --unwind 3
 
 pub fn main() {
     let arr = [(1, 2), (2, 2)];
