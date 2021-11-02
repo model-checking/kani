@@ -7,6 +7,5 @@
 //! Instead, we use a "hook" to generate the correct CBMC intrinsic.
 
 mod hooks;
-mod stubs;
 
-pub use hooks::{skip_monomorphize, type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+pub use hooks::{fn_hooks, skip_monomorphize, GotocHooks};
