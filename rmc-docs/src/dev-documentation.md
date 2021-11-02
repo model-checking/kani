@@ -12,6 +12,10 @@
 ```
 ([`--keep-stage` comes with caveats](https://rustc-dev-guide.rust-lang.org/building/suggested.html#incremental-builds-with---keep-stage). Know that it may cause spurious build failures.)
 ```bash
+# Build rmc crate
+./scripts/setup/rmc_build_lib.sh
+```
+```bash
 # Full regression suite
 ./scripts/rmc-regression.sh
 ```
