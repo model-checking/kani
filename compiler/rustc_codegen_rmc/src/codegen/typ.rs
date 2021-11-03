@@ -489,10 +489,6 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {
-        if let Some(handler) = self.type_hooks.hook_applies(self.tcx, ty) {
-            return handler.handle(self, ty);
-        }
-
         match ty.kind() {
             ty::Int(k) => self.codegen_iint(*k),
             ty::Bool => Type::c_bool(),

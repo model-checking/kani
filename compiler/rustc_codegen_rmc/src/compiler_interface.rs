@@ -22,7 +22,6 @@ use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
-use std::path::PathBuf;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]

@@ -15,7 +15,7 @@
 //! this structure as input.
 
 use super::current_fn::CurrentFnCtx;
-use crate::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+use crate::overrides::{fn_hooks, GotocHooks};
 use crate::utils::full_crate_name;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_name;
@@ -42,7 +42,6 @@ pub struct GotocCtx<'tcx> {
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
     pub hooks: GotocHooks<'tcx>,
-    pub type_hooks: GotocTypeHooks<'tcx>,
     /// the full crate name, including versioning info
     pub full_crate_name: String,
     /// a global counter for generating unique names for global variables
@@ -56,14 +55,13 @@ pub struct GotocCtx<'tcx> {
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> GotocCtx<'tcx> {
-        let (thks, fhks) = type_and_fn_hooks();
+        let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
         GotocCtx {
             tcx,
             symbol_table,
             hooks: fhks,
-            type_hooks: thks,
             full_crate_name: full_crate_name(tcx),
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
