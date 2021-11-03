@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver};
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_session::Session;
 use rustc_span::edition::Edition;
@@ -22,8 +22,7 @@ use super::{
     BASIC_KEYWORDS,
 };
 
-use crate::clean;
-use crate::clean::ExternalCrate;
+use crate::clean::{self, ExternalCrate};
 use crate::config::RenderOptions;
 use crate::docfs::{DocFS, PathError};
 use crate::error::Error;
@@ -35,6 +34,7 @@ use crate::html::format::Buffer;
 use crate::html::markdown::{self, plain_text_summary, ErrorCodes, IdMap};
 use crate::html::{layout, sources};
 use crate::scrape_examples::AllCallLocations;
+use crate::try_err;
 
 /// Major driving force in all rustdoc rendering. This contains information
 /// about where in the tree-like hierarchy rendering is occurring and controls
@@ -54,6 +54,9 @@ crate struct Context<'tcx> {
     /// real location of an item. This is used to allow external links to
     /// publicly reused items to redirect to the right location.
     pub(super) render_redirect_pages: bool,
+    /// Tracks section IDs for `Deref` targets so they match in both the main
+    /// body and the sidebar.
+    pub(super) deref_id_map: RefCell<FxHashMap<DefId, String>>,
     /// The map used to ensure all generated 'id=' attributes are unique.
     pub(super) id_map: RefCell<IdMap>,
     /// Shared mutable state.
@@ -70,7 +73,7 @@ crate struct Context<'tcx> {
 
 // `Context` is cloned a lot, so we don't want the size to grow unexpectedly.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Context<'_>, 104);
+rustc_data_structures::static_assert_size!(Context<'_>, 144);
 
 /// Shared mutable state used in [`Context`] and elsewhere.
 crate struct SharedContext<'tcx> {
@@ -405,7 +408,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             ..
         } = options;
 
-        let src_root = match krate.src {
+        let src_root = match krate.src(tcx) {
             FileName::Real(ref p) => match p.local_path_if_available().parent() {
                 Some(p) => p.to_path_buf(),
                 None => PathBuf::new(),
@@ -416,14 +419,14 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
         let mut playground = None;
         if let Some(url) = playground_url {
             playground =
-                Some(markdown::Playground { crate_name: Some(krate.name.to_string()), url });
+                Some(markdown::Playground { crate_name: Some(krate.name(tcx).to_string()), url });
         }
         let mut layout = layout::Layout {
             logo: String::new(),
             favicon: String::new(),
             external_html,
             default_settings,
-            krate: krate.name.to_string(),
+            krate: krate.name(tcx).to_string(),
             css_file_extension: extension_css,
             generate_search_filter,
             scrape_examples_extension: !call_locations.is_empty(),
@@ -444,7 +447,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 }
                 (sym::html_playground_url, Some(s)) => {
                     playground = Some(markdown::Playground {
-                        crate_name: Some(krate.name.to_string()),
+                        crate_name: Some(krate.name(tcx).to_string()),
                         url: s.to_string(),
                     });
                 }
@@ -513,6 +516,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             dst,
             render_redirect_pages: false,
             id_map: RefCell::new(id_map),
+            deref_id_map: RefCell::new(FxHashMap::default()),
             shared: Rc::new(scx),
             include_sources,
         };
@@ -536,6 +540,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             current: self.current.clone(),
             dst: self.dst.clone(),
             render_redirect_pages: self.render_redirect_pages,
+            deref_id_map: RefCell::new(FxHashMap::default()),
             id_map: RefCell::new(IdMap::new()),
             shared: Rc::clone(&self.shared),
             include_sources: self.include_sources,
