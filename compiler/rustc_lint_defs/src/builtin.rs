@@ -323,6 +323,7 @@ declare_lint! {
     ///
     /// ```rust
     /// #![feature(must_not_suspend)]
+    /// #![warn(must_not_suspend)]
     ///
     /// #[must_not_suspend]
     /// struct SyncThing {}
@@ -349,8 +350,9 @@ declare_lint! {
     /// `MutexGuard`'s)
     ///
     pub MUST_NOT_SUSPEND,
-    Warn,
+    Allow,
     "use of a `#[must_not_suspend]` value across a yield point",
+    @feature_gate = rustc_span::symbol::sym::must_not_suspend;
 }
 
 declare_lint! {
@@ -3516,6 +3518,34 @@ declare_lint! {
     Allow,
     "detect when patterns of types marked `non_exhaustive` are missed",
     @feature_gate = sym::non_exhaustive_omitted_patterns_lint;
+}
+
+declare_lint! {
+    /// The `text_direction_codepoint_in_comment` lint detects Unicode codepoints in comments that
+    /// change the visual representation of text on screen in a way that does not correspond to
+    /// their on memory representation.
+    ///
+    /// ### Example
+    ///
+    /// ```rust,compile_fail
+    /// #![deny(text_direction_codepoint_in_comment)]
+    /// fn main() {
+    ///     println!("{:?}"); // '‮');
+    /// }
+    /// ```
+    ///
+    /// {{produces}}
+    ///
+    /// ### Explanation
+    ///
+    /// Unicode allows changing the visual flow of text on screen in order to support scripts that
+    /// are written right-to-left, but a specially crafted comment can make code that will be
+    /// compiled appear to be part of a comment, depending on the software used to read the code.
+    /// To avoid potential problems or confusion, such as in CVE-2021-42574, by default we deny
+    /// their use.
+    pub TEXT_DIRECTION_CODEPOINT_IN_COMMENT,
+    Deny,
+    "invisible directionality-changing codepoints in comment"
 }
 
 declare_lint! {

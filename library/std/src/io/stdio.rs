@@ -301,6 +301,7 @@ pub struct StdinLock<'a> {
 ///     Ok(())
 /// }
 /// ```
+#[must_use]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub fn stdin() -> Stdin {
     static INSTANCE: SyncOnceCell<Mutex<BufReader<StdinRaw>>> = SyncOnceCell::new();
@@ -487,6 +488,7 @@ impl Stdin {
     ///     println!("got a chunk: {}", String::from_utf8_lossy(&split.unwrap()));
     /// }
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[unstable(feature = "stdin_forwarders", issue = "87096")]
     pub fn split(self, byte: u8) -> Split<StdinLock<'static>> {
         self.into_locked().split(byte)
@@ -673,6 +675,7 @@ static STDOUT: SyncOnceCell<ReentrantMutex<RefCell<LineWriter<StdoutRaw>>>> = Sy
 ///     Ok(())
 /// }
 /// ```
+#[must_use]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub fn stdout() -> Stdout {
     Stdout {
@@ -953,6 +956,7 @@ pub struct StderrLock<'a> {
 ///     Ok(())
 /// }
 /// ```
+#[must_use]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub fn stderr() -> Stderr {
     // Note that unlike `stdout()` we don't use `at_exit` here to register a

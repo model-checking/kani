@@ -92,6 +92,7 @@ impl<T: Clone> Clone for BTreeSet<T> {
 /// See its documentation for more.
 ///
 /// [`iter`]: BTreeSet::iter
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Iter<'a, T: 'a> {
     iter: Keys<'a, T, ()>,
@@ -123,6 +124,7 @@ pub struct IntoIter<T> {
 /// See its documentation for more.
 ///
 /// [`range`]: BTreeSet::range
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
 #[stable(feature = "btree_range", since = "1.17.0")]
 pub struct Range<'a, T: 'a> {
@@ -135,6 +137,8 @@ pub struct Range<'a, T: 'a> {
 /// See its documentation for more.
 ///
 /// [`difference`]: BTreeSet::difference
+#[must_use = "this returns the difference as an iterator, \
+              without modifying either input set"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Difference<'a, T: 'a> {
     inner: DifferenceInner<'a, T>,
@@ -167,6 +171,8 @@ impl<T: fmt::Debug> fmt::Debug for Difference<'_, T> {
 /// [`BTreeSet`]. See its documentation for more.
 ///
 /// [`symmetric_difference`]: BTreeSet::symmetric_difference
+#[must_use = "this returns the difference as an iterator, \
+              without modifying either input set"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct SymmetricDifference<'a, T: 'a>(MergeIterInner<Iter<'a, T>>);
 
@@ -183,6 +189,8 @@ impl<T: fmt::Debug> fmt::Debug for SymmetricDifference<'_, T> {
 /// See its documentation for more.
 ///
 /// [`intersection`]: BTreeSet::intersection
+#[must_use = "this returns the intersection as an iterator, \
+              without modifying either input set"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Intersection<'a, T: 'a> {
     inner: IntersectionInner<'a, T>,
@@ -215,6 +223,8 @@ impl<T: fmt::Debug> fmt::Debug for Intersection<'_, T> {
 /// See its documentation for more.
 ///
 /// [`union`]: BTreeSet::union
+#[must_use = "this returns the union as an iterator, \
+              without modifying either input set"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Union<'a, T: 'a>(MergeIterInner<Iter<'a, T>>);
 
@@ -668,6 +678,7 @@ impl<T> BTreeSet<T> {
     /// set.insert(2);
     /// assert_eq!(set.first(), Some(&1));
     /// ```
+    #[must_use]
     #[unstable(feature = "map_first_last", issue = "62924")]
     pub fn first(&self) -> Option<&T>
     where
@@ -694,6 +705,7 @@ impl<T> BTreeSet<T> {
     /// set.insert(2);
     /// assert_eq!(set.last(), Some(&2));
     /// ```
+    #[must_use]
     #[unstable(feature = "map_first_last", issue = "62924")]
     pub fn last(&self) -> Option<&T>
     where
@@ -1034,6 +1046,7 @@ impl<T> BTreeSet<T> {
     /// v.insert(1);
     /// assert_eq!(v.len(), 1);
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_unstable(feature = "const_btree_new", issue = "71835")]
     pub const fn len(&self) -> usize {
@@ -1052,6 +1065,7 @@ impl<T> BTreeSet<T> {
     /// v.insert(1);
     /// assert!(!v.is_empty());
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_unstable(feature = "const_btree_new", issue = "71835")]
     pub const fn is_empty(&self) -> bool {
