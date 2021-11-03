@@ -26,7 +26,7 @@ use rustc_index::vec::{Idx, IndexVec};
 use std::cell::Cell;
 use std::{cmp, iter, mem};
 
-use crate::transform::check_consts::{is_lang_special_const_fn, qualifs, ConstCx};
+use crate::transform::check_consts::{qualifs, ConstCx};
 use crate::transform::MirPass;
 
 /// A `MirPass` for promotion.
@@ -656,9 +656,7 @@ impl<'tcx> Validator<'_, 'tcx> {
         }
 
         let is_const_fn = match *fn_ty.kind() {
-            ty::FnDef(def_id, _) => {
-                self.tcx.is_const_fn_raw(def_id) || is_lang_special_const_fn(self.tcx, def_id)
-            }
+            ty::FnDef(def_id, _) => self.tcx.is_const_fn_raw(def_id),
             _ => false,
         };
         if !is_const_fn {
@@ -837,11 +835,7 @@ impl<'a, 'tcx> Promoter<'a, 'tcx> {
         new_temp
     }
 
-    fn promote_candidate(
-        mut self,
-        candidate: Candidate,
-        next_promoted_id: usize,
-    ) -> Option<Body<'tcx>> {
+    fn promote_candidate(mut self, candidate: Candidate, next_promoted_id: usize) -> Body<'tcx> {
         let def = self.source.source.with_opt_param();
         let mut rvalue = {
             let promoted = &mut self.promoted;
@@ -940,7 +934,7 @@ impl<'a, 'tcx> Promoter<'a, 'tcx> {
 
         let span = self.promoted.span;
         self.assign(RETURN_PLACE, rvalue, span);
-        Some(self.promoted)
+        self.promoted
     }
 }
 
@@ -1013,11 +1007,9 @@ pub fn promote_candidates<'tcx>(
             keep_original: false,
         };
 
-        //FIXME(oli-obk): having a `maybe_push()` method on `IndexVec` might be nice
-        if let Some(mut promoted) = promoter.promote_candidate(candidate, promotions.len()) {
-            promoted.source.promoted = Some(promotions.next_index());
-            promotions.push(promoted);
-        }
+        let mut promoted = promoter.promote_candidate(candidate, promotions.len());
+        promoted.source.promoted = Some(promotions.next_index());
+        promotions.push(promoted);
     }
 
     // Insert each of `extra_statements` before its indicated location, which
