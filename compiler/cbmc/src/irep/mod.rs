@@ -14,7 +14,6 @@
 //! TODO: Parser for json symbol tables into the internal irep format
 //! TODO: Investigate memory usage, and consider using sharing to reduce memory usage
 
-mod from_irep;
 mod irep;
 mod irep_id;
 mod symbol;
