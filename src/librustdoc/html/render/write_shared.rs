@@ -17,6 +17,7 @@ use crate::config::{EmitType, RenderOptions};
 use crate::docfs::PathError;
 use crate::error::Error;
 use crate::html::{layout, static_files};
+use crate::{try_err, try_none};
 
 static FILES_UNVERSIONED: Lazy<FxHashMap<&str, &[u8]>> = Lazy::new(|| {
     map! {
@@ -39,9 +40,9 @@ static FILES_UNVERSIONED: Lazy<FxHashMap<&str, &[u8]>> = Lazy::new(|| {
         "SourceCodePro-Semibold.ttf.woff" => static_files::source_code_pro::SEMIBOLD,
         "SourceCodePro-It.ttf.woff" => static_files::source_code_pro::ITALIC,
         "SourceCodePro-LICENSE.txt" => static_files::source_code_pro::LICENSE,
-        "noto-sans-kr-regular.woff2" => static_files::noto_sans_kr::REGULAR2,
-        "noto-sans-kr-regular.woff" => static_files::noto_sans_kr::REGULAR,
-        "noto-sans-kr-LICENSE.txt" => static_files::noto_sans_kr::LICENSE,
+        "NanumBarunGothic.ttf.woff2" => static_files::nanum_barun_gothic::REGULAR2,
+        "NanumBarunGothic.ttf.woff" => static_files::nanum_barun_gothic::REGULAR,
+        "NanumBarunGothic-LICENSE.txt" => static_files::nanum_barun_gothic::LICENSE,
         "LICENSE-MIT.txt" => static_files::LICENSE_MIT,
         "LICENSE-APACHE.txt" => static_files::LICENSE_APACHE,
         "COPYRIGHT.txt" => static_files::COPYRIGHT,
@@ -455,10 +456,10 @@ pub(super) fn write_shared(
         let dst = cx.dst.join(&format!("source-files{}.js", cx.shared.resource_suffix));
         let make_sources = || {
             let (mut all_sources, _krates) =
-                try_err!(collect(&dst, &krate.name.as_str(), "sourcesIndex"), &dst);
+                try_err!(collect(&dst, &krate.name(cx.tcx()).as_str(), "sourcesIndex"), &dst);
             all_sources.push(format!(
                 "sourcesIndex[\"{}\"] = {};",
-                &krate.name,
+                &krate.name(cx.tcx()),
                 hierarchy.to_json_string()
             ));
             all_sources.sort();
@@ -473,9 +474,10 @@ pub(super) fn write_shared(
 
     // Update the search index and crate list.
     let dst = cx.dst.join(&format!("search-index{}.js", cx.shared.resource_suffix));
-    let (mut all_indexes, mut krates) = try_err!(collect_json(&dst, &krate.name.as_str()), &dst);
+    let (mut all_indexes, mut krates) =
+        try_err!(collect_json(&dst, &krate.name(cx.tcx()).as_str()), &dst);
     all_indexes.push(search_index);
-    krates.push(krate.name.to_string());
+    krates.push(krate.name(cx.tcx()).to_string());
     krates.sort();
 
     // Sort the indexes by crate so the file will be generated identically even
@@ -599,7 +601,7 @@ pub(super) fn write_shared(
 
         let implementors = format!(
             r#"implementors["{}"] = {};"#,
-            krate.name,
+            krate.name(cx.tcx()),
             serde_json::to_string(&implementors).unwrap()
         );
 
@@ -611,7 +613,7 @@ pub(super) fn write_shared(
         mydst.push(&format!("{}.{}.js", remote_item_type, remote_path[remote_path.len() - 1]));
 
         let (mut all_implementors, _) =
-            try_err!(collect(&mydst, &krate.name.as_str(), "implementors"), &mydst);
+            try_err!(collect(&mydst, &krate.name(cx.tcx()).as_str(), "implementors"), &mydst);
         all_implementors.push(implementors);
         // Sort the implementors by crate so the file will be generated
         // identically even with rustdoc running in parallel.
