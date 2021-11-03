@@ -285,7 +285,7 @@ impl<'tcx> GotocCtx<'tcx> {
             };
 
             // Unwrap as needed
-            for (i, t) in tupled_args.iter().enumerate() {
+            for (i, _) in tupled_args.iter().enumerate() {
                 // Access the tupled parameters through the `member` operation
                 let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
                 fargs.push(index_param);
