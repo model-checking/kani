@@ -3,6 +3,8 @@
 use super::{Irep, IrepId, Symbol, SymbolTable};
 use crate::btree_map;
 use rustc_serialize::json::*;
+use std::collections::BTreeMap;
+use std::iter::FromIterator;
 
 impl ToJson for Irep {
     fn to_json(&self) -> Json {
@@ -11,7 +13,10 @@ impl ToJson for Irep {
             output.insert("sub".to_string(), self.sub.to_json());
         }
         if !self.named_sub.is_empty() {
-            output.insert("namedSub".to_string(), self.named_sub.to_json());
+            let map = BTreeMap::from_iter(
+                self.named_sub.iter().map(|(k, v)| (k.to_string(), v.to_json())),
+            );
+            output.insert("namedSub".to_string(), map.to_json());
         }
         Json::Object(output)
     }

@@ -19,6 +19,7 @@ num = "0.4.0"
 serde = {version = "1", features = ["derive"]}
 snap = "1"
 tracing = "0.1"
+vector-map = "1.0.1"
 rustc_middle = { path = "../rustc_middle" }
 rustc-demangle = "0.1.21"
 rustc_arena = { path = "../rustc_arena" }
