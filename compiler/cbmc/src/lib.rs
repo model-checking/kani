@@ -30,4 +30,5 @@ pub mod goto_program;
 pub mod irep;
 mod machine_model;
 pub mod utils;
+pub use irep::serialize;
 pub use machine_model::{MachineModel, RoundingMode};

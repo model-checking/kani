@@ -16,6 +16,7 @@
 
 mod irep;
 mod irep_id;
+pub mod serialize;
 mod symbol;
 mod symbol_table;
 mod to_irep;

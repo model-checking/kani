@@ -501,6 +501,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "rustc_target",
+ "serde",
+ "serde_test",
  "smallvec",
  "snap",
  "tracing",
@@ -3873,6 +3875,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "rustc_target",
+ "serde",
+ "serde_json",
  "smallvec",
  "snap",
  "tracing",
@@ -5004,6 +5008,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_test"
+version = "1.0.130"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d82178225dbdeae2d5d190e8649287db6a3a32c6d24da22ae3146325aa353e4c"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
