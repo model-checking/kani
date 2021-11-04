@@ -271,30 +271,24 @@ impl<'tcx> GotocCtx<'tcx> {
         // Therefore, we have to project out the corresponding fields when we detect
         // an invocation of a closure.
         //
-        // Note: In some cases, the enviroment struct has type FnDef, so we skip it in
+        // Note: In some cases, the environment struct has type FnDef, so we skip it in
         // ignore_var_ty. So the tuple is always the last arg, but it might be in the
         // first or the second position.
+        // Note 2: For empty closures, the only argument needed is the environment struct.
         if fargs.len() > 0 {
             let tupe = fargs.remove(fargs.len() - 1);
             let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
                 ty::Tuple(tupled_args) => {
-                    // The tuple needs to be added back for type checking even if empty
-                    if tupled_args.is_empty() {
-                        fargs.push(tupe);
-                        return;
-                    }
                     tupled_args.iter().map(|s| self.codegen_ty(s.expect_ty())).collect()
                 }
                 _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
             };
 
             // Unwrap as needed
-            for (i, t) in tupled_args.iter().enumerate() {
-                if !t.is_unit() {
-                    // Access the tupled parameters through the `member` operation
-                    let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
-                    fargs.push(index_param);
-                }
+            for (i, _) in tupled_args.iter().enumerate() {
+                // Access the tupled parameters through the `member` operation
+                let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
+                fargs.push(index_param);
             }
         }
     }

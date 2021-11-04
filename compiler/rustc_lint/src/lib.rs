@@ -31,14 +31,12 @@
 #![feature(box_patterns)]
 #![feature(crate_visibility_modifier)]
 #![feature(format_args_capture)]
-#![feature(if_let_guard)]
 #![feature(iter_order_by)]
 #![feature(iter_zip)]
 #![feature(never_type)]
 #![feature(nll)]
 #![feature(control_flow_enum)]
 #![recursion_limit = "256"]
-#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate rustc_middle;
@@ -50,6 +48,7 @@ pub mod builtin;
 mod context;
 mod early;
 mod enum_intrinsics_non_enums;
+pub mod hidden_unicode_codepoints;
 mod internal;
 mod late;
 mod levels;
@@ -80,6 +79,7 @@ use rustc_span::Span;
 use array_into_iter::ArrayIntoIter;
 use builtin::*;
 use enum_intrinsics_non_enums::EnumIntrinsicsNonEnums;
+use hidden_unicode_codepoints::*;
 use internal::*;
 use methods::*;
 use non_ascii_idents::*;
@@ -131,6 +131,7 @@ macro_rules! early_lint_passes {
                 DeprecatedAttr: DeprecatedAttr::new(),
                 WhileTrue: WhileTrue,
                 NonAsciiIdents: NonAsciiIdents,
+                HiddenUnicodeCodepoints: HiddenUnicodeCodepoints,
                 IncompleteFeatures: IncompleteFeatures,
                 RedundantSemicolons: RedundantSemicolons,
                 UnusedDocComment: UnusedDocComment,
@@ -302,7 +303,6 @@ fn register_builtins(store: &mut LintStore, no_interleave_lints: bool) {
         UNUSED_LABELS,
         UNUSED_PARENS,
         UNUSED_BRACES,
-        MUST_NOT_SUSPEND,
         REDUNDANT_SEMICOLONS
     );
 
@@ -486,8 +486,6 @@ fn register_internals(store: &mut LintStore) {
     store.register_early_pass(|| Box::new(LintPassImpl));
     store.register_lints(&DefaultHashTypes::get_lints());
     store.register_late_pass(|| Box::new(DefaultHashTypes));
-    store.register_lints(&QueryStability::get_lints());
-    store.register_late_pass(|| Box::new(QueryStability));
     store.register_lints(&ExistingDocKeyword::get_lints());
     store.register_late_pass(|| Box::new(ExistingDocKeyword));
     store.register_lints(&TyTyKind::get_lints());
@@ -498,7 +496,6 @@ fn register_internals(store: &mut LintStore) {
         None,
         vec![
             LintId::of(DEFAULT_HASH_TYPES),
-            LintId::of(POTENTIAL_QUERY_INSTABILITY),
             LintId::of(USAGE_OF_TY_TYKIND),
             LintId::of(LINT_PASS_IMPL_WITHOUT_MACRO),
             LintId::of(TY_PASS_BY_REFERENCE),

@@ -501,9 +501,12 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "rustc_target",
+ "serde",
+ "serde_test",
  "smallvec",
  "snap",
  "tracing",
+ "vector-map",
 ]
 
 [[package]]
@@ -770,6 +773,17 @@ dependencies = [
  "tempfile",
  "tester",
  "winapi",
+]
+
+[[package]]
+name = "contracts"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9424f2ca1e42776615720e5746eed6efa19866fdbaac2923ab51c294ac4d1f2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2459,9 +2473,9 @@ dependencies = [
 
 [[package]]
 name = "odht"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2504d29fda40b3f2f9ef525392435ab660e407c188196cb664b116ebcca0142"
+checksum = "5a518809ac14b25b569624d0268eba1e88498f71615893dca57982bed7621abb"
 dependencies = [
  "cfg-if 1.0.0",
 ]
@@ -3873,6 +3887,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "rustc_target",
+ "serde",
+ "serde_json",
  "smallvec",
  "snap",
  "tracing",
@@ -4406,6 +4422,7 @@ dependencies = [
  "rustc_span",
  "tracing",
  "unicode-normalization",
+ "unicode-width",
 ]
 
 [[package]]
@@ -4762,8 +4779,8 @@ dependencies = [
  "itertools 0.9.0",
  "minifier",
  "pulldown-cmark 0.8.0",
+ "rayon",
  "regex",
- "rustc-rayon",
  "rustdoc-json-types",
  "serde",
  "serde_json",
@@ -5003,6 +5020,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_test"
+version = "1.0.130"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d82178225dbdeae2d5d190e8649287db6a3a32c6d24da22ae3146325aa353e4c"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -5816,6 +5842,16 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+
+[[package]]
+name = "vector-map"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "550f72ae94a45c0e2139188709e6c4179f0b5ff9bdaa435239ad19048b0cd68c"
+dependencies = [
+ "contracts",
+ "rand 0.7.3",
+]
 
 [[package]]
 name = "vergen"

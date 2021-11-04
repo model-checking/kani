@@ -414,7 +414,6 @@ impl<K, V, S> HashMap<K, V, S> {
     ///     println!("key: {} val: {}", key, val);
     /// }
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn iter(&self) -> Iter<'_, K, V> {
         Iter { base: self.base.iter() }
@@ -443,7 +442,6 @@ impl<K, V, S> HashMap<K, V, S> {
     ///     println!("key: {} val: {}", key, val);
     /// }
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
         IterMut { base: self.base.iter_mut() }
@@ -504,7 +502,6 @@ impl<K, V, S> HashMap<K, V, S> {
     /// assert!(a.is_empty());
     /// ```
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[stable(feature = "drain", since = "1.6.0")]
     pub fn drain(&mut self) -> Drain<'_, K, V> {
         Drain { base: self.base.drain() }
@@ -546,7 +543,6 @@ impl<K, V, S> HashMap<K, V, S> {
     /// assert_eq!(odds, vec![1, 3, 5, 7]);
     /// ```
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[unstable(feature = "hash_drain_filter", issue = "59618")]
     pub fn drain_filter<F>(&mut self, pred: F) -> DrainFilter<'_, K, V, F>
     where
@@ -953,7 +949,6 @@ where
     /// assert_eq!(map.len(), 4);
     /// ```
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[stable(feature = "retain_hash_collection", since = "1.18.0")]
     pub fn retain<F>(&mut self, f: F)
     where
@@ -983,7 +978,6 @@ where
     /// assert_eq!(vec, ["a", "b", "c"]);
     /// ```
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[stable(feature = "map_into_keys_values", since = "1.54.0")]
     pub fn into_keys(self) -> IntoKeys<K, V> {
         IntoKeys { inner: self.into_iter() }
@@ -1010,7 +1004,6 @@ where
     /// assert_eq!(vec, [1, 2, 3]);
     /// ```
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     #[stable(feature = "map_into_keys_values", since = "1.54.0")]
     pub fn into_values(self) -> IntoValues<K, V> {
         IntoValues { inner: self.into_iter() }
@@ -1714,6 +1707,7 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
 impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
     /// Gets a reference to the key in the entry.
     #[inline]
+    #[must_use]
     #[unstable(feature = "hash_raw_entry", issue = "56167")]
     pub fn key(&self) -> &K {
         self.base.key()
@@ -1721,6 +1715,7 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
 
     /// Gets a mutable reference to the key in the entry.
     #[inline]
+    #[must_use]
     #[unstable(feature = "hash_raw_entry", issue = "56167")]
     pub fn key_mut(&mut self) -> &mut K {
         self.base.key_mut()
@@ -1737,6 +1732,7 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
 
     /// Gets a reference to the value in the entry.
     #[inline]
+    #[must_use]
     #[unstable(feature = "hash_raw_entry", issue = "56167")]
     pub fn get(&self) -> &V {
         self.base.get()
@@ -1753,6 +1749,7 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
 
     /// Gets a mutable reference to the value in the entry.
     #[inline]
+    #[must_use]
     #[unstable(feature = "hash_raw_entry", issue = "56167")]
     pub fn get_mut(&mut self) -> &mut V {
         self.base.get_mut()
@@ -1760,6 +1757,7 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
 
     /// Gets a reference to the key and value in the entry.
     #[inline]
+    #[must_use]
     #[unstable(feature = "hash_raw_entry", issue = "56167")]
     pub fn get_key_value(&mut self) -> (&K, &V) {
         self.base.get_key_value()
@@ -1976,7 +1974,6 @@ impl<'a, K, V, S> IntoIterator for &'a HashMap<K, V, S> {
     type IntoIter = Iter<'a, K, V>;
 
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     fn into_iter(self) -> Iter<'a, K, V> {
         self.iter()
     }
@@ -1988,7 +1985,6 @@ impl<'a, K, V, S> IntoIterator for &'a mut HashMap<K, V, S> {
     type IntoIter = IterMut<'a, K, V>;
 
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     fn into_iter(self) -> IterMut<'a, K, V> {
         self.iter_mut()
     }
@@ -2017,7 +2013,6 @@ impl<K, V, S> IntoIterator for HashMap<K, V, S> {
     /// let vec: Vec<(&str, i32)> = map.into_iter().collect();
     /// ```
     #[inline]
-    #[cfg_attr(not(bootstrap), rustc_lint_query_instability)]
     fn into_iter(self) -> IntoIter<K, V> {
         IntoIter { base: self.base.into_iter() }
     }

@@ -21,7 +21,7 @@ use super::{
     render_impl, render_stability_since_raw, write_srclink, AssocItemLink, Context,
     ImplRenderingParameters,
 };
-use crate::clean::{self, GetDefId};
+use crate::clean;
 use crate::formats::item_type::ItemType;
 use crate::formats::{AssocItemRender, Impl, RenderMode};
 use crate::html::escape::Escape;
@@ -742,7 +742,7 @@ fn item_trait(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, t: &clean::Tra
         }
 
         let (local, foreign) = implementors.iter().partition::<Vec<_>, _>(|i| {
-            i.inner_impl().for_.def_id_full(cache).map_or(true, |d| cache.paths.contains_key(&d))
+            i.inner_impl().for_.def_id(cache).map_or(true, |d| cache.paths.contains_key(&d))
         });
 
         let (mut synthetic, mut concrete): (Vec<&&Impl>, Vec<&&Impl>) =
@@ -983,7 +983,7 @@ fn item_union(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, s: &clean::Uni
             if let Some(stability_class) = field.stability_class(cx.tcx()) {
                 write!(w, "<span class=\"stab {stab}\"></span>", stab = stability_class);
             }
-            document(w, cx, field, Some(it), HeadingOffset::H2);
+            document(w, cx, field, Some(it), HeadingOffset::H3);
         }
     }
     let def_id = it.def_id.expect_def_id();
@@ -1094,7 +1094,7 @@ fn item_enum(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, e: &clean::Enum
             w.write_str("</code>");
             render_stability_since(w, variant, it, cx.tcx());
             w.write_str("</div>");
-            document(w, cx, variant, Some(it), HeadingOffset::H2);
+            document(w, cx, variant, Some(it), HeadingOffset::H3);
             document_non_exhaustive(w, variant);
 
             use crate::clean::Variant;
@@ -1134,7 +1134,7 @@ fn item_enum(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, e: &clean::Enum
                                 f = field.name.as_ref().unwrap(),
                                 t = ty.print(cx)
                             );
-                            document(w, cx, field, Some(variant), HeadingOffset::H2);
+                            document(w, cx, field, Some(variant), HeadingOffset::H4);
                         }
                         _ => unreachable!(),
                     }
@@ -1286,7 +1286,7 @@ fn item_struct(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, s: &clean::St
                     name = field_name,
                     ty = ty.print(cx)
                 );
-                document(w, cx, field, Some(it), HeadingOffset::H2);
+                document(w, cx, field, Some(it), HeadingOffset::H3);
             }
         }
     }

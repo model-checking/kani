@@ -2,14 +2,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# Deliberately not enabling this, since we expect a failure currently and are failing based on 'grep' later
-#set -eu
+set -eu
 
 # Test for platform
 PLATFORM=$(uname -sp)
-if [[ $PLATFORM == "Linux x86_64" ]]; then
+if [[ $PLATFORM == "Linux x86_64" ]]
+then
   TARGET="x86_64-unknown-linux-gnu"
-elif [[ $PLATFORM == "Darwin i386" ]]; then
+elif [[ $PLATFORM == "Darwin i386" ]]
+then
   TARGET="x86_64-apple-darwin"
 else
   echo
@@ -27,9 +28,12 @@ echo "Starting RMC codegen for the Rust standard library..."
 echo
 
 cd /tmp
-if [ -d StdLibTest ]; then rm -rf StdLibTest; fi
-cargo new StdLibTest
-cd StdLibTest
+if [ -d std_lib_test ]
+then
+    rm -rf std_lib_test
+fi
+cargo new std_lib_test --lib
+cd std_lib_test
 
 # Check that we have the nighly toolchain, which is required for -Z build-std
 if ! rustup toolchain list | grep -q nightly; then
@@ -37,30 +41,11 @@ if ! rustup toolchain list | grep -q nightly; then
   rustup toolchain install nightly
 fi
 
-STD_LIB_LOG="/tmp/StdLibTest/log.txt"
-
 echo "Starting cargo build with RMC"
 export RUSTC_LOG=error
 export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
 export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
-cargo +nightly build -Z build-std --target $TARGET 2>&1 \
-  | tee $STD_LIB_LOG
-
-# For now, we expect a linker error, but no modules should fail with a compiler
-# panic.
-#
-# With https://github.com/model-checking/rmc/issues/109, this check can be
-# removed to just allow the success of the previous line to determine the
-# success of this script (with no $STD_LIB_LOG needed)
-
-# TODO: this check is insufficient if the failure is before codegen
-# https://github.com/model-checking/rmc/issues/375
-if grep -q "error: internal compiler error: unexpected panic" $STD_LIB_LOG; then
-  echo
-  echo "Panic on building standard library"
-  echo
-  exit 1
-fi
+cargo +nightly build -Z build-std --lib --target $TARGET
 
 echo
 echo "Finished RMC codegen for the Rust standard library successfully..."

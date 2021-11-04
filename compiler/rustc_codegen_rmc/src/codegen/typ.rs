@@ -489,10 +489,6 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {
-        if let Some(handler) = self.type_hooks.hook_applies(self.tcx, ty) {
-            return handler.handle(self, ty);
-        }
-
         match ty.kind() {
             ty::Int(k) => self.codegen_iint(*k),
             ty::Bool => Type::c_bool(),
@@ -1238,7 +1234,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Whether a variable of type ty should be ignored as a parameter to a function
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
-            ty::Tuple(substs) if substs.is_empty() => true,
             ty::FnDef(_, _) => true,
             _ => false,
         }

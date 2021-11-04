@@ -3,8 +3,8 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::overrides::skip_monomorphize;
 use crate::GotocCtx;
+
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
@@ -16,11 +16,11 @@ use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, TyCtxt};
-use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
 use std::collections::BTreeMap;
+use std::io::BufWriter;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use tracing::{debug, warn};
@@ -46,9 +46,7 @@ impl CodegenBackend for GotocCodegenBackend {
         Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
     }
 
-    fn provide(&self, providers: &mut Providers) {
-        providers.skip_monomorphize = skip_monomorphize;
-    }
+    fn provide(&self, _providers: &mut Providers) {}
 
     fn provide_extern(&self, _providers: &mut ty::query::ExternProviders) {}
 
@@ -151,8 +149,6 @@ impl CodegenBackend for GotocCodegenBackend {
         codegen_results: Box<dyn Any>,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
-        use std::io::Write;
-
         let result = codegen_results
             .downcast::<GotocCodegenResult>()
             .expect("in link: codegen_results is not a GotocCodegenResult");
@@ -161,18 +157,21 @@ impl CodegenBackend for GotocCodegenBackend {
         if !sess.opts.debugging_opts.no_codegen && sess.opts.output_types.should_codegen() {
             // "path.o"
             let base_filename = outputs.path(OutputType::Object);
-
-            let symtab_filename = base_filename.with_extension("symtab.json");
-            debug!("output to {:?}", symtab_filename);
-            let mut out_file = ::std::fs::File::create(&symtab_filename).unwrap();
-            write!(out_file, "{}", result.symtab.to_irep().to_json().pretty().to_string()).unwrap();
-
-            let type_map_filename = base_filename.with_extension("type_map.json");
-            debug!("type_map to {:?}", type_map_filename);
-            let mut out_file = ::std::fs::File::create(&type_map_filename).unwrap();
-            write!(out_file, "{}", result.type_map.to_json().pretty().to_string()).unwrap();
+            write_file(&base_filename, "symtab.json", &result.symtab);
+            write_file(&base_filename, "type_map.json", &result.type_map);
         }
 
         Ok(())
     }
+}
+
+fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T)
+where
+    T: serde::Serialize,
+{
+    let filename = base_filename.with_extension(extension);
+    debug!("output to {:?}", filename);
+    let out_file = ::std::fs::File::create(&filename).unwrap();
+    let writer = BufWriter::new(out_file);
+    serde_json::to_writer(writer, &source).unwrap();
 }

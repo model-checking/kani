@@ -12,7 +12,6 @@
 #![feature(trusted_step)]
 #![feature(try_blocks)]
 #![recursion_limit = "256"]
-#![cfg_attr(not(bootstrap), allow(rustc::potential_query_instability))]
 
 #[macro_use]
 extern crate rustc_middle;
@@ -64,7 +63,7 @@ use facts::AllFacts;
 
 use self::path_utils::*;
 
-mod borrow_set;
+pub mod borrow_set;
 mod borrowck_errors;
 mod constraint_generation;
 mod constraints;

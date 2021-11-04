@@ -317,7 +317,6 @@ pub fn collect_crate_mono_items(
     (visited.into_inner(), inlining_map.into_inner())
 }
 
-// Temporary function that allow us to skip monomorphizing lang_start.
 // Find all non-generic items by walking the HIR. These items serve as roots to
 // start monomorphizing from.
 fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<'_>> {
@@ -807,13 +806,22 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirNeighborCollector<'a, 'tcx> {
                     }
                 }
             }
+            mir::TerminatorKind::Assert { ref msg, .. } => {
+                let lang_item = match msg {
+                    mir::AssertKind::BoundsCheck { .. } => LangItem::PanicBoundsCheck,
+                    _ => LangItem::Panic,
+                };
+                let instance = Instance::mono(tcx, tcx.require_lang_item(lang_item, Some(source)));
+                if should_codegen_locally(tcx, &instance) {
+                    self.output.push(create_fn_mono_item(tcx, instance, source));
+                }
+            }
             mir::TerminatorKind::Goto { .. }
             | mir::TerminatorKind::SwitchInt { .. }
             | mir::TerminatorKind::Resume
             | mir::TerminatorKind::Abort
             | mir::TerminatorKind::Return
-            | mir::TerminatorKind::Unreachable
-            | mir::TerminatorKind::Assert { .. } => {}
+            | mir::TerminatorKind::Unreachable => {}
             mir::TerminatorKind::GeneratorDrop
             | mir::TerminatorKind::Yield { .. }
             | mir::TerminatorKind::FalseEdge { .. }
@@ -910,10 +918,6 @@ fn visit_instance_use<'tcx>(
 ) {
     debug!("visit_item_use({:?}, is_direct_call={:?})", instance, is_direct_call);
     if !should_codegen_locally(tcx, &instance) {
-        return;
-    }
-
-    if tcx.skip_monomorphize(instance) {
         return;
     }
 
