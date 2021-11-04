@@ -317,7 +317,6 @@ pub fn collect_crate_mono_items(
     (visited.into_inner(), inlining_map.into_inner())
 }
 
-// Temporary function that allow us to skip monomorphizing lang_start.
 // Find all non-generic items by walking the HIR. These items serve as roots to
 // start monomorphizing from.
 fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<'_>> {
@@ -919,10 +918,6 @@ fn visit_instance_use<'tcx>(
 ) {
     debug!("visit_item_use({:?}, is_direct_call={:?})", instance, is_direct_call);
     if !should_codegen_locally(tcx, &instance) {
-        return;
-    }
-
-    if tcx.skip_monomorphize(instance) {
         return;
     }
 

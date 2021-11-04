@@ -8,4 +8,4 @@
 
 mod hooks;
 
-pub use hooks::{fn_hooks, skip_monomorphize, GotocHooks};
+pub use hooks::{fn_hooks, GotocHooks};

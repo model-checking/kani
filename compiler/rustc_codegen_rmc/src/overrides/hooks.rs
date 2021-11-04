@@ -326,6 +326,7 @@ struct MemSwap;
 
 impl<'tcx> GotocHook<'tcx> for MemSwap {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        // We need to keep the old std / core functions here because we don't compile std yet.
         let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
         name == "core::mem::swap"
             || name == "std::mem::swap"
@@ -687,8 +688,4 @@ impl<'tcx> GotocHooks<'tcx> {
         }
         None
     }
-}
-
-pub fn skip_monomorphize<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-    fn_hooks().hooks.iter().any(|hook| hook.hook_applies(tcx, instance))
 }

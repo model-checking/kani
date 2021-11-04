@@ -1862,11 +1862,4 @@ rustc_queries! {
         no_hash
         desc { "performing HIR wf-checking for predicate {:?} at item {:?}", key.0, key.1 }
     }
-
-    query skip_monomorphize(key: ty::Instance<'tcx>)
-        -> bool {
-        eval_always
-        no_hash
-        desc { "Check if we should skip monomorphization for `{}`", key}
-    }
 }
