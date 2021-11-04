@@ -28,6 +28,21 @@ macro_rules! btree_map {
     }}
 }
 
+/// Provides a useful shortcut for making BTreeMaps.
+#[macro_export]
+macro_rules! vector_map {
+    ($($x:expr),*) => {{
+        use vector_map::VecMap;
+        use std::iter::FromIterator;
+        (VecMap::from_iter(vec![$($x),*]))
+    }};
+    ($($x:expr,)*) => {{
+        use vector_map::VecMap;
+        use std::iter::FromIterator;
+        (VecMap::from_iter(vec![$($x),*]))
+    }}
+}
+
 /// Provides a useful shortcut for making BTreeMaps with String keys.
 /// Arg: a list of (?, V) tuples, where ? is any type that implements `.to_string()`.
 /// Result: BtreeMap<String, V> initilized with the values from the arg list.
