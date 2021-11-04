@@ -3,8 +3,8 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::overrides::skip_monomorphize;
 use crate::GotocCtx;
+
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
@@ -46,9 +46,7 @@ impl CodegenBackend for GotocCodegenBackend {
         Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
     }
 
-    fn provide(&self, providers: &mut Providers) {
-        providers.skip_monomorphize = skip_monomorphize;
-    }
+    fn provide(&self, _providers: &mut Providers) {}
 
     fn provide_extern(&self, _providers: &mut ty::query::ExternProviders) {}
 

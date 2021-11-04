@@ -20,7 +20,6 @@ pub mod serialize;
 mod symbol;
 mod symbol_table;
 mod to_irep;
-mod to_json;
 
 pub use irep::Irep;
 pub use irep_id::IrepId;
