@@ -22,6 +22,7 @@ use rustc_session::Session;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
 use std::iter::FromIterator;
+use std::path::PathBuf;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
@@ -158,20 +159,21 @@ impl CodegenBackend for GotocCodegenBackend {
         if !sess.opts.debugging_opts.no_codegen && sess.opts.output_types.should_codegen() {
             // "path.o"
             let base_filename = outputs.path(OutputType::Object);
-
-            let symtab_filename = base_filename.with_extension("symtab.json");
-            debug!("output to {:?}", symtab_filename);
-            let out_file = ::std::fs::File::create(&symtab_filename).unwrap();
-            let writer = BufWriter::new(out_file);
-            serde_json::to_writer(writer, &result.symtab.to_irep()).unwrap();
-
-            let type_map_filename = base_filename.with_extension("type_map.json");
-            debug!("type_map to {:?}", type_map_filename);
-            let out_file = ::std::fs::File::create(&type_map_filename).unwrap();
-            let writer = BufWriter::new(out_file);
-            serde_json::to_writer(writer, &result.type_map).unwrap();
+            write_file(&base_filename, "symtab.json", &result.symtab.to_irep());
+            write_file(&base_filename, "type_map.json", &result.type_map);
         }
 
         Ok(())
     }
+}
+
+fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T)
+where
+    T: serde::Serialize,
+{
+    let filename = base_filename.with_extension(extension);
+    debug!("output to {:?}", filename);
+    let out_file = ::std::fs::File::create(&filename).unwrap();
+    let writer = BufWriter::new(out_file);
+    serde_json::to_writer(writer, &source).unwrap();
 }

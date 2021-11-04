@@ -80,11 +80,14 @@ impl Serialize for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
+    use serde_test::{assert_ser_tokens, Token};
     #[test]
     fn serialize_irep() {
         let irep = Irep::empty();
-        let json_str = serde_json::to_string(&irep);
-        assert!(json_str.unwrap().contains(&IrepId::Empty.to_string()));
+        assert_ser_tokens(
+            &irep,
+            &[Token::Map { len: None }, Token::String("id"), Token::String("empty"), Token::MapEnd],
+        );
     }
 
     #[test]
@@ -94,7 +97,7 @@ mod test {
             typ: Irep::empty(),
             value: Irep::empty(),
             location: Irep::empty(),
-            name: String::from("name"),
+            name: String::from("my_name"),
             module: String::new(),
             base_name: String::new(),
             pretty_name: String::new(),
@@ -119,7 +122,123 @@ mod test {
             is_weak: false,
         };
         sym_table.insert(symbol.clone());
-        let json_str = serde_json::to_string(&sym_table);
-        assert!(json_str.unwrap().contains(&symbol.name));
+        assert_ser_tokens(
+            &sym_table,
+            &[
+                Token::Map { len: None },
+                Token::String("symbolTable"),
+                Token::Map { len: Some(1) },
+                Token::String("my_name"),
+                // symbol start
+                Token::Map { len: None },
+                // type irep
+                Token::String("type"),
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String("empty"),
+                Token::MapEnd,
+                // value irep
+                Token::String("value"),
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String("empty"),
+                Token::MapEnd,
+                // value locaton
+                Token::String("location"),
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String("empty"),
+                Token::MapEnd,
+                Token::String("name"),
+                Token::String("my_name"),
+                Token::String("module"),
+                Token::String(""),
+                Token::String("baseName"),
+                Token::String(""),
+                Token::String("prettyName"),
+                Token::String(""),
+                Token::String("mode"),
+                Token::String(""),
+                Token::String("isType"),
+                Token::Bool(false),
+                Token::String("isMacro"),
+                Token::Bool(false),
+                Token::String("isExported"),
+                Token::Bool(false),
+                Token::String("isInput"),
+                Token::Bool(false),
+                Token::String("isOutput"),
+                Token::Bool(false),
+                Token::String("isStateVar"),
+                Token::Bool(false),
+                Token::String("isProperty"),
+                Token::Bool(false),
+                Token::String("isStaticLifetime"),
+                Token::Bool(false),
+                Token::String("isThreadLocal"),
+                Token::Bool(false),
+                Token::String("isLvalue"),
+                Token::Bool(false),
+                Token::String("isFileLocal"),
+                Token::Bool(false),
+                Token::String("isExtern"),
+                Token::Bool(false),
+                Token::String("isVolatile"),
+                Token::Bool(false),
+                Token::String("isParameter"),
+                Token::Bool(false),
+                Token::String("isAuxiliary"),
+                Token::Bool(false),
+                Token::String("isWeak"),
+                Token::Bool(false),
+                Token::MapEnd,
+                Token::MapEnd,
+                Token::MapEnd,
+            ],
+        );
+    }
+
+    #[test]
+    fn serialize_irep_sub() {
+        let empty_irep = Irep::empty();
+        let one_irep = Irep::one();
+        let sub_irep = Irep::just_sub(vec![empty_irep.clone(), one_irep]);
+        let top_irep = Irep::just_sub(vec![sub_irep, empty_irep]);
+        assert_ser_tokens(
+            &top_irep,
+            &[
+                // top_irep
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String(""),
+                Token::String("sub"),
+                Token::Seq { len: Some(2) },
+                // sub_irep
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String(""),
+                Token::String("sub"),
+                Token::Seq { len: Some(2) },
+                // empty_irep
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String("empty"),
+                Token::MapEnd,
+                // one_irep
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String("1"),
+                Token::MapEnd,
+                Token::SeqEnd,
+                Token::MapEnd,
+                // empty_irep
+                Token::Map { len: None },
+                Token::String("id"),
+                Token::String("empty"),
+                Token::MapEnd,
+                Token::SeqEnd,
+                Token::MapEnd,
+            ],
+        );
     }
 }
