@@ -6,17 +6,17 @@ use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
 use num::BigInt;
-use std::collections::BTreeMap;
 use std::fmt::Debug;
+use vector_map::VecMap;
 
 /// The CBMC serialization format for goto-programs.
 /// CBMC implementation code is at:
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/irep.h
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Irep {
     pub id: IrepId,
     pub sub: Vec<Irep>,
-    pub named_sub: BTreeMap<IrepId, Irep>,
+    pub named_sub: VecMap<IrepId, Irep>,
 }
 
 /// Getters
@@ -108,7 +108,7 @@ impl Irep {
     }
 
     pub fn just_id(id: IrepId) -> Irep {
-        Irep { id: id, sub: Vec::new(), named_sub: BTreeMap::new() }
+        Irep { id: id, sub: Vec::new(), named_sub: VecMap::new() }
     }
 
     pub fn just_int_id<T>(i: T) -> Irep
@@ -117,7 +117,7 @@ impl Irep {
     {
         Irep::just_id(IrepId::from_int(i))
     }
-    pub fn just_named_sub(named_sub: BTreeMap<IrepId, Irep>) -> Irep {
+    pub fn just_named_sub(named_sub: VecMap<IrepId, Irep>) -> Irep {
         Irep { id: IrepId::EmptyString, sub: vec![], named_sub: named_sub }
     }
 
@@ -126,7 +126,7 @@ impl Irep {
     }
 
     pub fn just_sub(sub: Vec<Irep>) -> Irep {
-        Irep { id: IrepId::EmptyString, sub: sub, named_sub: BTreeMap::new() }
+        Irep { id: IrepId::EmptyString, sub: sub, named_sub: VecMap::new() }
     }
 
     pub fn nil() -> Irep {
