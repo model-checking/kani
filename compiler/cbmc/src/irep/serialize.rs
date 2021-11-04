@@ -59,6 +59,35 @@ impl Serialize for SymbolTable {
     }
 }
 
+// A direct serialization for the goto SymbolTable (contrasting to the irep SymbolTable just above).
+// This permits a "streaming optimization" where we reduce memory usage considerably by
+// only holding the irep conversion of one symbol in memory at a time.
+impl Serialize for crate::goto_program::SymbolTable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut obj = serializer.serialize_map(None)?;
+        obj.serialize_entry("symbolTable", &StreamingSymbols(&self))?;
+        obj.end()
+    }
+}
+struct StreamingSymbols<'a>(&'a crate::goto_program::SymbolTable);
+impl<'a> Serialize for StreamingSymbols<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mm = self.0.machine_model();
+        let mut obj = serializer.serialize_map(None)?;
+        for (k, v) in self.0.iter() {
+            // We're only storing the to_irep in RAM for one symbol at a time
+            obj.serialize_entry(k, &v.to_irep(mm))?;
+        }
+        obj.end()
+    }
+}
+
 impl Serialize for Symbol {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

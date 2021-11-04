@@ -157,7 +157,7 @@ impl CodegenBackend for GotocCodegenBackend {
         if !sess.opts.debugging_opts.no_codegen && sess.opts.output_types.should_codegen() {
             // "path.o"
             let base_filename = outputs.path(OutputType::Object);
-            write_file(&base_filename, "symtab.json", &result.symtab.to_irep());
+            write_file(&base_filename, "symtab.json", &result.symtab);
             write_file(&base_filename, "type_map.json", &result.type_map);
         }
 
