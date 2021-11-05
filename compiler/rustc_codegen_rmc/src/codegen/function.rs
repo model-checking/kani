@@ -193,7 +193,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 fname,
                 ctx.fn_typ(),
                 None,
-                Some(ctx.current_fn().readable_name().to_string()),
+                Some(ctx.current_fn().readable_name()),
                 ctx.codegen_span(&mir.span),
             )
         });

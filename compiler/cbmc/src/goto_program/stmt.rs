@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
+use crate::InternedString;
 use std::fmt::Debug;
 use tracing::debug;
 
@@ -72,7 +73,7 @@ pub enum StmtBody {
         arguments: Vec<Expr>,
     },
     /// `goto dest;`
-    Goto(String),
+    Goto(InternedString),
     /// `if (i) { t } else { e }`
     Ifthenelse {
         i: Expr,
@@ -81,7 +82,7 @@ pub enum StmtBody {
     },
     /// `label: body;`
     Label {
-        label: String,
+        label: InternedString,
         body: Stmt,
     },
     /// `return e;` or `return;`
@@ -270,7 +271,8 @@ impl Stmt {
     }
 
     /// `goto dest;`
-    pub fn goto(dest: String, loc: Location) -> Self {
+    pub fn goto<T: Into<InternedString>>(dest: T, loc: Location) -> Self {
+        let dest = dest.into();
         assert!(!dest.is_empty());
         stmt!(Goto(dest), loc)
     }
@@ -309,7 +311,8 @@ impl Stmt {
     }
 
     /// `label: self;`
-    pub fn with_label(self, label: String) -> Self {
+    pub fn with_label<T: Into<InternedString>>(self, label: T) -> Self {
+        let label = label.into();
         assert!(!label.is_empty());
         stmt!(Label { label, body: self }, self.location().clone())
     }

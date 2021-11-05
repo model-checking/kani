@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::{env, MachineModel};
 use super::{BuiltinFn, DatatypeComponent, Stmt, Symbol, Type};
+use crate::InternedString;
 use std::collections::BTreeMap;
 /// This is a typesafe implementation of the CBMC symbol table, based on the CBMC code at:
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol_table.h
 /// Since the field is kept private, with only immutable references handed out, elements can only
 #[derive(Clone, Debug)]
 pub struct SymbolTable {
-    symbol_table: BTreeMap<String, Symbol>,
+    symbol_table: BTreeMap<InternedString, Symbol>,
     machine_model: MachineModel,
 }
 
@@ -29,7 +30,12 @@ impl SymbolTable {
 impl SymbolTable {
     /// Ensures that the `name` appears in the Symbol table.
     /// If it doesn't, inserts it using `f`.
-    pub fn ensure<F: FnOnce(&Self, &str) -> Symbol>(&mut self, name: &str, f: F) -> &Symbol {
+    pub fn ensure<F: FnOnce(&Self, InternedString) -> Symbol, T: Into<InternedString>>(
+        &mut self,
+        name: T,
+        f: F,
+    ) -> &Symbol {
+        let name = name.into();
         if !self.contains(name) {
             let sym = f(self, name);
             assert_eq!(sym.name, name);
@@ -41,11 +47,11 @@ impl SymbolTable {
     /// Insert the element into the table. Errors if element already exists.
     pub fn insert(&mut self, symbol: Symbol) {
         assert!(
-            self.lookup(&symbol.name).is_none(),
+            self.lookup(symbol.name).is_none(),
             "Tried to insert symbol which already existed\n\t: {:?}\n\t",
             &symbol
         );
-        self.symbol_table.insert(symbol.name.to_string(), symbol);
+        self.symbol_table.insert(symbol.name, symbol);
     }
 
     /// Validates the previous value of the symbol using the validator function, then replaces it.
@@ -55,9 +61,9 @@ impl SymbolTable {
         checker_fn: F,
         new_value: Symbol,
     ) {
-        let old_value = self.lookup(&new_value.name);
+        let old_value = self.lookup(new_value.name);
         assert!(checker_fn(old_value), "{:?}||{:?}", old_value, new_value);
-        self.symbol_table.insert(new_value.name.to_string(), new_value);
+        self.symbol_table.insert(new_value.name, new_value);
     }
 
     /// Replace an incomplete struct or union with a complete struct or union
@@ -65,36 +71,46 @@ impl SymbolTable {
         self.replace(|old_symbol| new_symbol.completes(old_symbol), new_symbol.clone())
     }
 
-    pub fn update_fn_declaration_with_definition(&mut self, name: &str, body: Stmt) {
-        self.symbol_table.get_mut(name).unwrap().update_fn_declaration_with_definition(body);
+    pub fn update_fn_declaration_with_definition<T: Into<InternedString>>(
+        &mut self,
+        name: T,
+        body: Stmt,
+    ) {
+        let name = name.into();
+        self.symbol_table.get_mut(&name).unwrap().update_fn_declaration_with_definition(body);
     }
 }
 
 /// Getters
 impl SymbolTable {
-    pub fn contains(&self, name: &str) -> bool {
-        self.symbol_table.contains_key(name)
+    pub fn contains(&self, name: InternedString) -> bool {
+        self.symbol_table.contains_key(&name)
     }
 
-    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Symbol> {
+    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, InternedString, Symbol> {
         self.symbol_table.iter()
     }
 
-    pub fn lookup(&self, name: &str) -> Option<&Symbol> {
-        self.symbol_table.get(name)
+    pub fn lookup<T: Into<InternedString>>(&self, name: T) -> Option<&Symbol> {
+        let name = name.into();
+        self.symbol_table.get(&name)
     }
 
-    pub fn lookup_components(&self, aggr_name: &str) -> Option<&Vec<DatatypeComponent>> {
+    pub fn lookup_components(&self, aggr_name: InternedString) -> Option<&Vec<DatatypeComponent>> {
         self.lookup(aggr_name).and_then(|x| x.typ.components())
     }
 
     pub fn lookup_components_in_type(&self, base_type: &Type) -> Option<&Vec<DatatypeComponent>> {
-        base_type.type_name().and_then(|aggr_name| self.lookup_components(&aggr_name))
+        base_type.type_name().and_then(|aggr_name| self.lookup_components(aggr_name))
     }
 
     /// If aggr_name.field_name exists in the symbol table, return Some(field_type),
     /// otherwise, return none.
-    pub fn lookup_field_type(&self, aggr_name: &str, field_name: &str) -> Option<&Type> {
+    pub fn lookup_field_type(
+        &self,
+        aggr_name: InternedString,
+        field_name: InternedString,
+    ) -> Option<&Type> {
         self.lookup_components(aggr_name)
             .and_then(|fields| fields.iter().find(|&field| field.name() == field_name))
             .and_then(|field| field.field_typ())
@@ -102,14 +118,19 @@ impl SymbolTable {
 
     /// If aggr_name.field_name exists in the symbol table, return Some(field_type),
     /// otherwise, return none.
-    pub fn lookup_field_type_in_type(&self, base_type: &Type, field_name: &str) -> Option<&Type> {
-        base_type.type_name().and_then(|aggr_name| self.lookup_field_type(&aggr_name, field_name))
+    pub fn lookup_field_type_in_type<T: Into<InternedString>>(
+        &self,
+        base_type: &Type,
+        field_name: T,
+    ) -> Option<&Type> {
+        let field_name = field_name.into();
+        base_type.type_name().and_then(|aggr_name| self.lookup_field_type(aggr_name, field_name))
     }
 
     pub fn lookup_fields_in_type(&self, base_type: &Type) -> Option<&Vec<DatatypeComponent>> {
         base_type
             .type_name()
-            .and_then(|aggr_name| self.lookup(&aggr_name))
+            .and_then(|aggr_name| self.lookup(aggr_name))
             .and_then(|x| x.typ.components())
     }
 

@@ -4,6 +4,7 @@
 //! Functions that make names for things
 
 use crate::GotocCtx;
+use cbmc::InternedString;
 use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathDataName;
@@ -103,10 +104,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
     /// the vtable struct, but we add the method name for debugging readability.
     ///     Example: 3_vol
-    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> String {
+    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> InternedString {
         // format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.item_name(def_id)))
         // TODO: use def_id https://github.com/model-checking/rmc/issues/364
-        idx.to_string()
+        idx.to_string().into()
     }
 }
 

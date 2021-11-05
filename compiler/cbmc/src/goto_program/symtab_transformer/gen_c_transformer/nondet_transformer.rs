@@ -109,7 +109,7 @@ impl Transformer for NondetTransformer {
             let ret_type = typ.return_type().unwrap();
             assert!(!ret_type.is_empty(), "Cannot generate nondet of type `void`.");
             let ret_name = format!("{}_ret", &identifier);
-            let ret_expr = Expr::symbol_expression(ret_name.clone(), ret_type.clone());
+            let ret_expr = Expr::symbol_expression(&ret_name, ret_type.clone());
             let body = Stmt::block(
                 vec![
                     // <ret_type> var_ret;
@@ -126,13 +126,8 @@ impl Transformer for NondetTransformer {
             self.mut_symbol_table().insert(ret_sym);
 
             // Add function to symbol table
-            let func_sym = Symbol::function(
-                &identifier,
-                typ,
-                Some(body),
-                Some(identifier.clone()),
-                Location::none(),
-            );
+            let func_sym =
+                Symbol::function(&identifier, typ, Some(body), Some(&identifier), Location::none());
             self.mut_symbol_table().insert(func_sym);
         }
     }

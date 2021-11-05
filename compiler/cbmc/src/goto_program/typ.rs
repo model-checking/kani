@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::DatatypeComponent::*;
 use self::Type::*;
-use super::super::utils::{aggr_name, max_int, min_int};
+use super::super::utils::{aggr_tag, max_int, min_int};
 use super::super::MachineModel;
 use super::{Expr, SymbolTable};
+use crate::cbmc_string::InternedString;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -42,9 +43,9 @@ pub enum Type {
     /// `float`
     Float,
     /// `struct x {}`
-    IncompleteStruct { tag: String },
+    IncompleteStruct { tag: InternedString },
     /// `union x {}`
-    IncompleteUnion { tag: String },
+    IncompleteUnion { tag: InternedString },
     /// CBMC specific. `typ x[__CPROVER_infinity()]`
     InfiniteArray { typ: Box<Type> },
     /// `typ*`
@@ -52,13 +53,13 @@ pub enum Type {
     /// `int<width>_t`. e.g. `int32_t`
     Signedbv { width: u64 },
     /// `struct tag {component1.typ component1.name; component2.typ component2.name ... }`
-    Struct { tag: String, components: Vec<DatatypeComponent> },
+    Struct { tag: InternedString, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
-    StructTag(String),
+    StructTag(InternedString),
     /// `union tag {component1.typ component1.name; component2.typ component2.name ... }`
-    Union { tag: String, components: Vec<DatatypeComponent> },
+    Union { tag: InternedString, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
-    UnionTag(String),
+    UnionTag(InternedString),
     /// `uint<width>_t`. e.g. `uint32_t`
     Unsignedbv { width: u64 },
     /// `return_type x(parameters, ...)`
@@ -87,8 +88,8 @@ pub enum CIntType {
 /// The fields types of a struct or union
 #[derive(PartialEq, Debug, Clone)]
 pub enum DatatypeComponent {
-    Field { name: String, typ: Type },
-    Padding { name: String, bits: u64 },
+    Field { name: InternedString, typ: Type },
+    Padding { name: InternedString, bits: u64 },
 }
 
 /// The formal parameters of a function.
@@ -96,9 +97,9 @@ pub enum DatatypeComponent {
 pub struct Parameter {
     typ: Type,
     /// The unique identifier that refers to this symbol (qualified by function name, module, etc)
-    identifier: Option<String>,
+    identifier: Option<InternedString>,
     /// The local name the symbol has within the function
-    base_name: Option<String>,
+    base_name: Option<InternedString>,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -121,9 +122,9 @@ impl DatatypeComponent {
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> InternedString {
         match self {
-            Field { name, .. } | Padding { name, .. } => &name,
+            Field { name, .. } | Padding { name, .. } => *name,
         }
     }
 
@@ -132,6 +133,19 @@ impl DatatypeComponent {
             Field { typ, .. } => typ.clone(),
             Padding { bits, .. } => Type::unsigned_int(*bits),
         }
+    }
+}
+
+//Constructors
+impl DatatypeComponent {
+    pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
+        let name = name.into();
+        Field { name, typ }
+    }
+
+    pub fn padding<T: Into<InternedString>>(name: T, bits: u64) -> Self {
+        let name = name.into();
+        Padding { name, bits }
     }
 }
 
@@ -146,12 +160,12 @@ impl PartialEq for Parameter {
 
 /// Getters
 impl Parameter {
-    pub fn base_name(&self) -> Option<&String> {
-        self.base_name.as_ref()
+    pub fn base_name(&self) -> Option<InternedString> {
+        self.base_name
     }
 
-    pub fn identifier(&self) -> Option<&String> {
-        self.identifier.as_ref()
+    pub fn identifier(&self) -> Option<InternedString> {
+        self.identifier
     }
 
     pub fn typ(&self) -> &Type {
@@ -176,8 +190,8 @@ impl Type {
     /// Return the StructTag or UnionTag naming the struct or union type.
     pub fn aggr_tag(&self) -> Option<Type> {
         match self {
-            IncompleteStruct { tag } | Struct { tag, .. } => Some(Type::struct_tag(tag)),
-            IncompleteUnion { tag } | Union { tag, .. } => Some(Type::union_tag(tag)),
+            IncompleteStruct { tag } | Struct { tag, .. } => Some(Type::struct_tag(*tag)),
+            IncompleteUnion { tag } | Union { tag, .. } => Some(Type::union_tag(*tag)),
             StructTag(_) | UnionTag(_) => Some(self.clone()),
             _ => None,
         }
@@ -277,11 +291,11 @@ impl Type {
             Struct { components, .. } => {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).sum()
             }
-            StructTag(tag) => st.lookup(tag).unwrap().typ.sizeof_in_bits(st),
+            StructTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
             Union { components, .. } => {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).max().unwrap_or(0)
             }
-            UnionTag(tag) => st.lookup(tag).unwrap().typ.sizeof_in_bits(st),
+            UnionTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
             Unsignedbv { width } => *width,
             // It's possible this should also have size 0, like Code, but we have not been
             // able to generate a unit test, so leaving it unreachable for now.
@@ -291,27 +305,27 @@ impl Type {
     }
 
     /// Get the tag of a struct or union.
-    pub fn tag(&self) -> Option<&str> {
+    pub fn tag(&self) -> Option<InternedString> {
         match self {
             IncompleteStruct { tag }
             | IncompleteUnion { tag }
             | Struct { tag, .. }
             | StructTag(tag)
             | Union { tag, .. }
-            | UnionTag(tag) => Some(tag),
+            | UnionTag(tag) => Some(*tag),
             _ => None,
         }
     }
 
     /// Given a `struct foo` or `union foo`, returns `Some("tag-foo")`.
     /// Otherwise, returns `None`.
-    pub fn type_name(&self) -> Option<String> {
+    pub fn type_name(&self) -> Option<InternedString> {
         match self {
             IncompleteStruct { tag }
             | Struct { tag, .. }
             | IncompleteUnion { tag }
-            | Union { tag, .. } => Some(aggr_name(tag)),
-            StructTag(tag) | UnionTag(tag) => Some(tag.to_string()),
+            | Union { tag, .. } => Some(aggr_tag(*tag)),
+            StructTag(tag) | UnionTag(tag) => Some(*tag),
             _ => None,
         }
     }
@@ -575,7 +589,11 @@ impl Type {
     /// identifier: The unique identifier that refers to this parameter `foo12_bar17_x@1`
     /// base_name: the local name of the parameter within the function `x`
     /// typ: The type of the parameter
-    pub fn as_parameter(self, identifier: Option<String>, base_name: Option<String>) -> Parameter {
+    pub fn as_parameter(
+        self,
+        identifier: Option<InternedString>,
+        base_name: Option<InternedString>,
+    ) -> Parameter {
         assert!(
             self.is_lvalue(),
             "Expected lvalue from {:?} {:?} {:?}",
@@ -620,13 +638,16 @@ impl Type {
     }
 
     /// A component of a datatype (e.g. a field of a struct or union)
-    pub fn datatype_component(name: &str, typ: Type) -> DatatypeComponent {
-        Field { name: name.to_string(), typ }
+    pub fn datatype_component<T: Into<InternedString>>(name: T, typ: Type) -> DatatypeComponent {
+        let name = name.into();
+        Field { name, typ }
     }
 
     // `__CPROVER_bitvector[bits] $pad<n>`
-    pub fn datatype_padding(name: &str, bits: u64) -> DatatypeComponent {
-        Padding { name: name.to_string(), bits }
+    pub fn datatype_padding<T: Into<InternedString>>(name: T, bits: u64) -> DatatypeComponent {
+        let name = name.into();
+
+        Padding { name, bits }
     }
 
     pub fn double() -> Self {
@@ -640,14 +661,14 @@ impl Type {
 
     /// Empty struct.
     /// struct name {};
-    pub fn empty_struct(name: &str) -> Self {
-        Struct { tag: name.to_string(), components: vec![] }
+    pub fn empty_struct<T: Into<InternedString>>(tag: T) -> Self {
+        Struct { tag: tag.into(), components: vec![] }
     }
 
     /// Empty union.
     /// union name {};
-    pub fn empty_union(name: &str) -> Self {
-        Union { tag: name.to_string(), components: vec![] }
+    pub fn empty_union<T: Into<InternedString>>(tag: T) -> Self {
+        Union { tag: tag.into(), components: vec![] }
     }
 
     pub fn flexible_array_of(self) -> Self {
@@ -660,14 +681,16 @@ impl Type {
 
     /// A forward declared struct.
     /// struct foo;
-    pub fn incomplete_struct(name: &str) -> Self {
-        IncompleteStruct { tag: name.to_string() }
+    pub fn incomplete_struct<T: Into<InternedString>>(tag: T) -> Self {
+        let tag = tag.into();
+        IncompleteStruct { tag }
     }
 
     /// A forward declared union.
     /// union foo;
-    pub fn incomplete_union(name: &str) -> Self {
-        IncompleteUnion { tag: name.to_string() }
+    pub fn incomplete_union<T: Into<InternedString>>(tag: T) -> Self {
+        let tag = tag.into();
+        IncompleteUnion { tag }
     }
 
     pub fn infinite_array_of(self) -> Self {
@@ -697,13 +720,13 @@ impl Type {
         CInteger(CIntType::SSizeT)
     }
     /// struct name
-    pub fn struct_tag(name: &str) -> Self {
-        StructTag(aggr_name(name))
+    pub fn struct_tag<T: Into<InternedString>>(name: T) -> Self {
+        StructTag(aggr_tag(name.into()))
     }
 
     /// struct name, but don't add a tag- prefix
-    pub fn struct_tag_raw(name: &str) -> Self {
-        StructTag(name.to_string())
+    pub fn struct_tag_raw(name: InternedString) -> Self {
+        StructTag(name)
     }
 
     pub fn components_are_unique(components: &[DatatypeComponent]) -> bool {
@@ -716,35 +739,40 @@ impl Type {
     /// struct name {
     ///     f1.typ f1.data; ...
     /// }
-    pub fn struct_type(name: &str, components: Vec<DatatypeComponent>) -> Self {
+    pub fn struct_type<T: Into<InternedString>>(
+        tag: T,
+        components: Vec<DatatypeComponent>,
+    ) -> Self {
         assert!(
             Type::components_are_unique(&components),
             "Components contain duplicates: {:?}",
             components
         );
-        Struct { tag: name.to_string(), components }
+        let tag = tag.into();
+        Struct { tag, components }
     }
 
     /// union name
-    pub fn union_tag(name: &str) -> Self {
-        UnionTag(aggr_name(name))
+    pub fn union_tag<T: Into<InternedString>>(name: T) -> Self {
+        UnionTag(aggr_tag(name.into()))
     }
 
     /// union name, but don't add a tag- prefix
-    pub fn union_tag_raw(name: &str) -> Self {
-        UnionTag(name.to_string())
+    pub fn union_tag_raw(name: InternedString) -> Self {
+        UnionTag(name)
     }
 
     /// union name {
     ///     f1.typ f1.data; ...
     /// }
-    pub fn union_type(name: &str, components: Vec<DatatypeComponent>) -> Self {
+    pub fn union_type<T: Into<InternedString>>(tag: T, components: Vec<DatatypeComponent>) -> Self {
+        let tag = tag.into();
         assert!(
             Type::components_are_unique(&components),
             "Components contain duplicates: {:?}",
             components
         );
-        Union { tag: name.to_string(), components }
+        Union { tag, components }
     }
 
     pub fn unsigned_int<T>(w: T) -> Self
@@ -858,17 +886,17 @@ impl Type {
     /// field names (ignoring the padding fields) to field types.  This makes it
     /// easier to look up field types (and modestly easier to interate over
     /// field types).
-    pub fn struct_field_types(&self, symbol_table: &SymbolTable) -> BTreeMap<String, Type> {
+    pub fn struct_field_types(&self, symbol_table: &SymbolTable) -> BTreeMap<InternedString, Type> {
         // TODO: Accept a Struct type, too, and not just a StructTag assumed below.
         assert!(self.is_struct_tag());
 
-        let mut types: BTreeMap<String, Type> = BTreeMap::new();
+        let mut types: BTreeMap<InternedString, Type> = BTreeMap::new();
         let fields = symbol_table.lookup_fields_in_type(self).unwrap();
         for field in fields {
             if field.is_padding() {
                 continue;
             }
-            types.insert(field.name().to_string(), field.typ());
+            types.insert(field.name(), field.typ());
         }
         types
     }
@@ -876,6 +904,7 @@ impl Type {
     /// Generate a string which uniquely identifies the given type
     /// while also being a valid variable/funcion name
     pub fn to_identifier(&self) -> String {
+        // Use String instead of InternedString, since we don't want to intern temporaries.
         match self {
             Type::Array { typ, size } => {
                 format!("array_of_{}_{}", size, typ.to_identifier())
@@ -901,8 +930,8 @@ impl Type {
             Type::Empty => format!("empty"),
             Type::FlexibleArray { typ } => format!("flexarray_of_{}", typ.to_identifier()),
             Type::Float => format!("float"),
-            Type::IncompleteStruct { tag } => tag.clone(),
-            Type::IncompleteUnion { tag } => tag.clone(),
+            Type::IncompleteStruct { tag } => tag.to_string(),
+            Type::IncompleteUnion { tag } => tag.to_string(),
             Type::InfiniteArray { typ } => {
                 format!("infinite_array_of_{}", typ.to_identifier())
             }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Useful utilities for CBMC
 
+use crate::InternedString;
 use num::bigint::BigInt;
 
 /// RMC bug report URL, for asserts/errors
@@ -9,8 +10,9 @@ pub const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/rmc/issues/new?template=bug_report.md";
 
 /// The aggregate name used in CBMC for aggregates of type `n`.
-pub fn aggr_name(n: &str) -> String {
-    format!("tag-{}", n)
+pub fn aggr_tag<T: Into<InternedString>>(n: T) -> InternedString {
+    let n = n.into();
+    format!("tag-{}", n.to_string()).into()
 }
 
 /// Provides a useful shortcut for making BTreeMaps.
@@ -51,13 +53,14 @@ macro_rules! btree_string_map {
     ($($x:expr),*) => {{
         use std::collections::BTreeMap;
         use std::iter::FromIterator;
-        (BTreeMap::from_iter(vec![$($x),*].into_iter().map(|(k,v)|(k.to_string(),v))))
+        (BTreeMap::from_iter(vec![$($x),*].into_iter().map(|(k,v)|(k.into(),v))))
     }};
     ($($x:expr,)*) => {{
         use std::collections::BTreeMap;
         use std::iter::FromIterator;
-        (BTreeMap::from_iter(vec![$($x),*].into_iter().map(|(k,v)|(k.to_string(),v))))
+        (BTreeMap::from_iter(vec![$($x),*].into_iter().map(|(k,v)|(k.into(),v))))
     }}
+
 }
 
 pub fn max_int(width: u64, signed: bool) -> BigInt {

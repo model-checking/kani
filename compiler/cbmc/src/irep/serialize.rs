@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This crate implements irep serialization using serde Serializer.
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
+use crate::InternedString;
 use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
 use vector_map::VecMap;
@@ -88,6 +89,15 @@ impl<'a> Serialize for StreamingSymbols<'a> {
     }
 }
 
+impl Serialize for InternedString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
 impl Serialize for Symbol {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -143,11 +153,11 @@ mod test {
             typ: Irep::empty(),
             value: Irep::empty(),
             location: Irep::empty(),
-            name: String::from("my_name"),
-            module: String::new(),
-            base_name: String::new(),
-            pretty_name: String::new(),
-            mode: String::new(),
+            name: "my_name".into(),
+            module: "".into(),
+            base_name: "".into(),
+            pretty_name: "".into(),
+            mode: "".into(),
             is_type: false,
             is_macro: false,
             is_exported: false,

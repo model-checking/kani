@@ -146,7 +146,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let components = self.symbol_table.lookup_components_in_type(t).unwrap();
         assert_eq!(components.len(), 2);
         for c in components {
-            match c.name() {
+            match c.name().to_string().as_str() {
                 "0" => self.assert_is_rust_unique_pointer_like(&c.typ()),
                 "1" => self.assert_is_rust_global_alloc_like(&c.typ()),
                 _ => panic!("Unexpected component {} in {:?}", c.name(), t),
@@ -167,7 +167,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let components = self.symbol_table.lookup_components_in_type(t).unwrap();
         assert_eq!(components.len(), 2);
         for c in components {
-            match c.name() {
+            match c.name().to_string().as_str() {
                 "_marker" => self.assert_is_rust_phantom_data_like(&c.typ()),
                 "pointer" => {
                     assert!(c.typ().is_pointer() || c.typ().is_rust_fat_ptr(&self.symbol_table))

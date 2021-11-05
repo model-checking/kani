@@ -5,6 +5,7 @@ use crate::goto_program::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
     Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
 };
+use crate::InternedString;
 use num::bigint::BigInt;
 use rustc_data_structures::fx::FxHashSet;
 
@@ -50,15 +51,15 @@ pub trait Transformer: Sized {
             Type::Empty => self.transform_type_empty(),
             Type::FlexibleArray { typ } => self.transform_type_flexible_array(typ),
             Type::Float => self.transform_type_float(),
-            Type::IncompleteStruct { tag } => self.transform_type_incomplete_struct(tag),
-            Type::IncompleteUnion { tag } => self.transform_type_incomplete_union(tag),
+            Type::IncompleteStruct { tag } => self.transform_type_incomplete_struct(*tag),
+            Type::IncompleteUnion { tag } => self.transform_type_incomplete_union(*tag),
             Type::InfiniteArray { typ } => self.transform_type_infinite_array(typ),
             Type::Pointer { typ } => self.transform_type_pointer(typ),
             Type::Signedbv { width } => self.transform_type_signedbv(width),
-            Type::Struct { tag, components } => self.transform_type_struct(tag, components),
-            Type::StructTag(tag) => self.transform_type_struct_tag(tag),
-            Type::Union { tag, components } => self.transform_type_union(tag, components),
-            Type::UnionTag(tag) => self.transform_type_union_tag(tag),
+            Type::Struct { tag, components } => self.transform_type_struct(*tag, components),
+            Type::StructTag(tag) => self.transform_type_struct_tag(*tag),
+            Type::Union { tag, components } => self.transform_type_union(*tag, components),
+            Type::UnionTag(tag) => self.transform_type_union_tag(*tag),
             Type::Unsignedbv { width } => self.transform_type_unsignedbv(width),
             Type::VariadicCode { parameters, return_type } => {
                 self.transform_type_variadic_code(parameters, return_type)
@@ -98,7 +99,7 @@ pub trait Transformer: Sized {
     /// Transforms a parameter for a function
     fn transform_type_parameter(&mut self, parameter: &Parameter) -> Parameter {
         self.transform_type(parameter.typ())
-            .as_parameter(parameter.identifier().cloned(), parameter.base_name().cloned())
+            .as_parameter(parameter.identifier(), parameter.base_name())
     }
 
     /// Transforms a function type (`return_type x(parameters)`)
@@ -136,12 +137,12 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms an incomplete struct type (`struct x {}`)
-    fn transform_type_incomplete_struct(&mut self, tag: &str) -> Type {
+    fn transform_type_incomplete_struct(&mut self, tag: InternedString) -> Type {
         Type::incomplete_struct(tag)
     }
 
     /// Transforms an incomplete union type (`union x {}`)
-    fn transform_type_incomplete_union(&mut self, tag: &str) -> Type {
+    fn transform_type_incomplete_union(&mut self, tag: InternedString) -> Type {
         Type::incomplete_union(tag)
     }
 
@@ -166,16 +167,18 @@ pub trait Transformer: Sized {
     fn transform_datatype_component(&mut self, component: &DatatypeComponent) -> DatatypeComponent {
         match component {
             DatatypeComponent::Field { name, typ } => {
-                DatatypeComponent::Field { name: name.to_string(), typ: self.transform_type(typ) }
+                DatatypeComponent::field(*name, self.transform_type(typ))
             }
-            DatatypeComponent::Padding { name, bits } => {
-                DatatypeComponent::Padding { name: name.to_string(), bits: *bits }
-            }
+            DatatypeComponent::Padding { name, bits } => DatatypeComponent::padding(*name, *bits),
         }
     }
 
     /// Transforms a struct type (`struct tag {component1.typ component1.name; component2.typ component2.name ... }`)
-    fn transform_type_struct(&mut self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_struct(
+        &mut self,
+        tag: InternedString,
+        components: &[DatatypeComponent],
+    ) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
@@ -184,12 +187,16 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a struct tag type (`tag-<tag>`)
-    fn transform_type_struct_tag(&mut self, tag: &str) -> Type {
+    fn transform_type_struct_tag(&mut self, tag: InternedString) -> Type {
         Type::struct_tag_raw(tag)
     }
 
     /// Transforms a union type (`union tag {component1.typ component1.name; component2.typ component2.name ... }`)
-    fn transform_type_union(&mut self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_union(
+        &mut self,
+        tag: InternedString,
+        components: &[DatatypeComponent],
+    ) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
@@ -198,7 +205,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a union tag type (`tag-<tag>`)
-    fn transform_type_union_tag(&mut self, tag: &str) -> Type {
+    fn transform_type_union_tag(&mut self, tag: InternedString) -> Type {
         Type::union_tag_raw(tag)
     }
 
@@ -250,18 +257,18 @@ pub trait Transformer: Sized {
             ExprValue::If { c, t, e } => self.transform_expr_if(typ, c, t, e),
             ExprValue::Index { array, index } => self.transform_expr_index(typ, array, index),
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
-            ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, field),
+            ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
             ExprValue::Nondet => self.transform_expr_nondet(typ),
             ExprValue::PointerConstant(value) => self.transform_expr_pointer_constant(typ, value),
             ExprValue::SelfOp { op, e } => self.transform_expr_self_op(typ, op, e),
             ExprValue::StatementExpression { statements } => {
                 self.transform_expr_statement_expression(typ, statements)
             }
-            ExprValue::StringConstant { s } => self.transform_expr_string_constant(typ, s),
+            ExprValue::StringConstant { s } => self.transform_expr_string_constant(typ, *s),
             ExprValue::Struct { values } => self.transform_expr_struct(typ, values),
-            ExprValue::Symbol { identifier } => self.transform_expr_symbol(typ, identifier),
+            ExprValue::Symbol { identifier } => self.transform_expr_symbol(typ, *identifier),
             ExprValue::Typecast(child) => self.transform_expr_typecast(typ, child),
-            ExprValue::Union { value, field } => self.transform_expr_union(typ, value, field),
+            ExprValue::Union { value, field } => self.transform_expr_union(typ, value, *field),
             ExprValue::UnOp { op, e } => self.transform_expr_un_op(typ, op, e),
             ExprValue::Vector { elems } => self.transform_expr_vector(typ, elems),
         }
@@ -386,7 +393,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a member access expr (`lhs.field`)
-    fn transform_expr_member(&mut self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
+    fn transform_expr_member(&mut self, _typ: &Type, lhs: &Expr, field: InternedString) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
         transformed_lhs.member(field, self.symbol_table())
     }
@@ -423,7 +430,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a string constant expr (`"s"`)
-    fn transform_expr_string_constant(&mut self, _typ: &Type, value: &str) -> Expr {
+    fn transform_expr_string_constant(&mut self, _typ: &Type, value: InternedString) -> Expr {
         Expr::raw_string_constant(value)
     }
 
@@ -445,9 +452,9 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a symbol expr (`self`)
-    fn transform_expr_symbol(&mut self, typ: &Type, identifier: &str) -> Expr {
+    fn transform_expr_symbol(&mut self, typ: &Type, identifier: InternedString) -> Expr {
         let transformed_typ = self.transform_type(typ);
-        Expr::symbol_expression(identifier.to_string(), transformed_typ)
+        Expr::symbol_expression(identifier, transformed_typ)
     }
 
     /// Transforms a typecast expr (`(typ) self`)
@@ -458,7 +465,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a union initializer expr (`union foo the_foo = >>> {.field = value } <<<`)
-    fn transform_expr_union(&mut self, typ: &Type, value: &Expr, field: &str) -> Expr {
+    fn transform_expr_union(&mut self, typ: &Type, value: &Expr, field: InternedString) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_value = self.transform_expr(value);
         Expr::union_expr(transformed_typ, field, transformed_value, self.symbol_table())
@@ -501,9 +508,9 @@ pub trait Transformer: Sized {
             StmtBody::FunctionCall { lhs, function, arguments } => {
                 self.transform_stmt_function_call(lhs, function, arguments)
             }
-            StmtBody::Goto(label) => self.transform_stmt_goto(label),
+            StmtBody::Goto(label) => self.transform_stmt_goto(*label),
             StmtBody::Ifthenelse { i, t, e } => self.transform_stmt_ifthenelse(i, t, e),
-            StmtBody::Label { label, body } => self.transform_stmt_label(label, body),
+            StmtBody::Label { label, body } => self.transform_stmt_label(*label, body),
             StmtBody::Return(value) => self.transform_stmt_return(value),
             StmtBody::Skip => self.transform_stmt_skip(),
             StmtBody::Switch { control, cases, default } => {
@@ -598,8 +605,8 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a goto stmt (`goto dest;`)
-    fn transform_stmt_goto(&mut self, label: &str) -> Stmt {
-        Stmt::goto(label.to_string(), Location::none())
+    fn transform_stmt_goto(&mut self, label: InternedString) -> Stmt {
+        Stmt::goto(label, Location::none())
     }
 
     /// Transforms an if-then-else stmt (`if (i) { t } else { e }`)
@@ -612,9 +619,9 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a label stmt (`label: body`)
-    fn transform_stmt_label(&mut self, label: &str, body: &Stmt) -> Stmt {
+    fn transform_stmt_label(&mut self, label: InternedString, body: &Stmt) -> Stmt {
         let transformed_body = self.transform_stmt(body);
-        transformed_body.with_label(label.to_string())
+        transformed_body.with_label(label)
     }
 
     /// Transforms a return stmt (`return e;` or `return;`)
@@ -684,20 +691,20 @@ pub trait Transformer: Sized {
     fn transform_symbol_table(mut self, orig_symtab: &SymbolTable) -> SymbolTable {
         self.preprocess();
 
-        let mut added: FxHashSet<String> = FxHashSet::default();
+        let mut added: FxHashSet<InternedString> = FxHashSet::default();
 
         // New symbol tables come with some items in them by default. Skip over those.
         for (name, _symbol) in self.symbol_table().iter() {
-            added.insert(name.clone());
+            added.insert(*name);
         }
 
         // Expr and Stmt symbols might depend on symbols representing types (e.g. struct type).
         // Fill in the type symbols first so that these dependencies are in place.
         for (name, symbol) in orig_symtab.iter() {
-            if !self.symbol_table().contains(name) && symbol.value.is_none() {
+            if !self.symbol_table().contains(*name) && symbol.value.is_none() {
                 let new_symbol = self.transform_symbol(symbol);
                 self.mut_symbol_table().insert(new_symbol);
-                added.insert(name.clone());
+                added.insert(*name);
             }
         }
 

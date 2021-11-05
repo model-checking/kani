@@ -4,12 +4,14 @@
 //!
 //! This file contains [IrepId] which is the id's used in CBMC.
 //! c.f. CBMC source code [src/util/irep_ids.def]
+use crate::cbmc_string::InternedString;
 use num::bigint::BigInt;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum IrepId {
     /// In addition to the standard enums defined below, CBMC also allows ids to be strings.
     /// For e.g, to store the id of a variable. This enum variant captures those strings.
-    FreeformString(String),
+    FreeformString(InternedString),
     /// An integer, encoded as a decimal string
     FreeformInteger(BigInt),
     /// An integer, encoded as a hex string
@@ -833,9 +835,9 @@ impl IrepId {
         IrepId::FreeformHexInteger(i.into())
     }
 
-    pub fn from_string(s: String) -> IrepId {
-        //TODO assert that s is not the string produced by any other IrepId
-        IrepId::FreeformString(s)
+    //TODO assert that s is not the string produced by any other IrepId
+    pub fn from_string<T: Into<InternedString>>(s: T) -> IrepId {
+        IrepId::FreeformString(s.into())
     }
 }
 
