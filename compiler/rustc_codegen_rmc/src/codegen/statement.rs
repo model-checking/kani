@@ -20,10 +20,15 @@ use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self) -> Stmt {
-        let name = &FN_RETURN_VOID_VAR_NAME.to_string();
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var = self.ensure_global_var(name, is_file_local, ty, Location::none(), |_, _| None);
+        let var = self.ensure_global_var(
+            FN_RETURN_VOID_VAR_NAME,
+            is_file_local,
+            ty,
+            Location::none(),
+            |_, _| None,
+        );
         Stmt::ret(Some(var), Location::none())
     }
 
@@ -430,7 +435,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // arg0.vtable->f(arg0.data,arg1);
         let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
         let vtable = vtable_ref.dereference();
-        let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
+        let fn_ptr = vtable.member(vtable_field_name, &self.symbol_table);
 
         // Update the argument from arg0 to arg0.data
         fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);

@@ -8,6 +8,7 @@ use crate::goto_program::{
     BinaryOperand, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
     Type,
 };
+use crate::InternedString;
 use num::bigint::BigInt;
 use rustc_data_structures::fx::FxHashMap;
 
@@ -67,7 +68,7 @@ pub struct ExprTransformer {
     /// when such a symbol is encountered, we add it to this map;
     /// in postprocessing, we initialize each of these variables
     /// with a default value to emphasize that these are externally defined.
-    empty_statics: FxHashMap<String, Expr>,
+    empty_statics: FxHashMap<InternedString, Expr>,
 }
 
 impl ExprTransformer {
@@ -79,7 +80,7 @@ impl ExprTransformer {
     }
 
     /// Extract `empty_statics` map for final processing.
-    fn empty_statics_owned(&mut self) -> FxHashMap<String, Expr> {
+    fn empty_statics_owned(&mut self) -> FxHashMap<InternedString, Expr> {
         std::mem::replace(&mut self.empty_statics, FxHashMap::default())
     }
 
@@ -92,12 +93,7 @@ impl ExprTransformer {
         } else {
             let name = format!("__{}", parameter.typ().to_identifier());
             let parameter_sym = self.mut_symbol_table().ensure(&name, |_symtab, name| {
-                Symbol::variable(
-                    name.to_string(),
-                    name.to_string(),
-                    parameter.typ().clone(),
-                    Location::none(),
-                )
+                Symbol::variable(name, name, parameter.typ().clone(), Location::none())
             });
             parameter_sym.to_function_parameter()
         }
@@ -198,7 +194,7 @@ impl Transformer for ExprTransformer {
                     "Extern objects that aren't functions should be static variables."
                 );
                 let new_typ = self.transform_type(&symbol.typ);
-                self.empty_statics.insert(symbol.name.clone(), Expr::nondet(new_typ.clone()));
+                self.empty_statics.insert(symbol.name, Expr::nondet(new_typ.clone()));
 
                 // Symbol is no longer extern
                 new_symbol.is_extern = false;
@@ -209,11 +205,11 @@ impl Transformer for ExprTransformer {
                 new_symbol.typ = new_typ;
                 new_symbol.value = SymbolValues::None;
             }
-        } else if &symbol.name == "main" {
+        } else if symbol.name == "main" {
             // Replace `main` with `main_` since it has the wrong return type
-            new_symbol.name = "main_".to_string();
-            new_symbol.base_name = Some("main_".to_string());
-            new_symbol.pretty_name = Some("main_".to_string());
+            new_symbol.name = "main_".into();
+            new_symbol.base_name = Some("main_".into());
+            new_symbol.pretty_name = Some("main_".into());
 
             let new_typ = self.transform_type(&symbol.typ);
             let new_value = self.transform_value(&symbol.value);
@@ -259,7 +255,7 @@ impl Transformer for ExprTransformer {
             "main",
             Type::code(Vec::new(), Type::CInteger(CIntType::Int)),
             Some(Stmt::block(main_body, Location::none())),
-            Some("main".to_string()),
+            Some("main"),
             Location::none(),
         );
 

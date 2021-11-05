@@ -70,8 +70,8 @@ pub fn additional_env_symbols() -> Vec<Symbol> {
         int_constant("__CPROVER_malloc_failure_mode_return_null", 1),
         Symbol::typedef("__CPROVER_size_t", "__CPROVER_size_t", Type::size_t(), Location::none()),
         Symbol::static_variable(
-            "__CPROVER_memory".to_string(),
-            "__CPROVER_memory".to_string(),
+            "__CPROVER_memory",
+            "__CPROVER_memory",
             Type::unsigned_int(8).infinite_array_of(),
             Location::none(),
         )
