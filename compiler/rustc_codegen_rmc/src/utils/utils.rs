@@ -4,6 +4,7 @@ use super::super::codegen::TypeExt;
 use crate::GotocCtx;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
+use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -33,6 +34,9 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         url: &str,
     ) -> Expr {
+        // We should possibly upgrade this to a warning in the future, but for now emit at least something
+        debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
+
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
             Stmt::assert_false(

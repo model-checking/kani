@@ -3,8 +3,8 @@
 use crate::cbmc_string::{InternStringOption, InternedString};
 use std::convert::TryInto;
 use std::fmt::Debug;
-/// A `Location` represents a source location.
 
+/// A `Location` represents a source location.
 #[derive(Copy, Clone, Debug)]
 pub enum Location {
     /// Unknown source location
@@ -29,6 +29,21 @@ impl Location {
         match self {
             Location::BuiltinFunction { .. } => true,
             _ => false,
+        }
+    }
+
+    /// Convert a location to a short string suitable for (e.g.) logging.
+    /// Goal is to return just "file:line" as clearly as possible.
+    pub fn short_string(&self) -> String {
+        match self {
+            Location::None => "<none>".to_string(),
+            Location::BuiltinFunction { function_name, line: Some(line) } => {
+                format!("<{}>:{}", function_name.to_string(), line)
+            }
+            Location::BuiltinFunction { function_name, line: None } => {
+                format!("<{}>", function_name.to_string())
+            }
+            Location::Loc { file, line, .. } => format!("{}:{}", file.to_string(), line),
         }
     }
 }
