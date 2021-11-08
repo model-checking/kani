@@ -38,12 +38,12 @@ impl Location {
         match self {
             Location::None => "<none>".to_string(),
             Location::BuiltinFunction { function_name, line: Some(line) } => {
-                format!("<{}>:{}", function_name.to_string(), line)
+                format!("<{}>:{}", function_name, line)
             }
             Location::BuiltinFunction { function_name, line: None } => {
-                format!("<{}>", function_name.to_string())
+                format!("<{}>", function_name)
             }
-            Location::Loc { file, line, .. } => format!("{}:{}", file.to_string(), line),
+            Location::Loc { file, line, .. } => format!("{}:{}", file, line),
         }
     }
 }
