@@ -9,9 +9,13 @@ PLATFORM=$(uname -sp)
 if [[ $PLATFORM == "Linux x86_64" ]]
 then
   TARGET="x86_64-unknown-linux-gnu"
+  # 'env' necessary to avoid bash built-in 'time'
+  WRAPPER="env time -v"
 elif [[ $PLATFORM == "Darwin i386" ]]
 then
   TARGET="x86_64-apple-darwin"
+  # mac 'time' doesn't have -v
+  WRAPPER=""
 else
   echo
   echo "Std-Lib codegen regression only works on Linux or OSX x86 platforms, skipping..."
@@ -45,7 +49,7 @@ echo "Starting cargo build with RMC"
 export RUSTC_LOG=error
 export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
 export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
-cargo +nightly build -Z build-std --lib --target $TARGET
+$WRAPPER cargo +nightly build -Z build-std --lib --target $TARGET
 
 echo
 echo "Finished RMC codegen for the Rust standard library successfully..."

@@ -81,6 +81,11 @@ git merge origin/main
 # and because we squash and merge, an extra merge commit in a PR doesn't hurt.
 ```
 ```bash
+# Checkout a pull request locally without the github cli
+git fetch origin pull/$ID/head:pr/$ID
+git switch pr/$ID
+```
+```bash
 # Search only git-tracked files
 git grep codegen_panic
 ```
