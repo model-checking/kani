@@ -19,7 +19,7 @@ use string_interner::StringInterner;
 /// To create an interned string, either do
 /// `let i : InternedString = s.into();` or
 /// `let i = s.intern();`
-#[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Hash, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InternedString(SymbolU32);
 
 // Use a `Mutex` to make this thread safe.
@@ -51,6 +51,12 @@ impl InternedString {
 impl std::fmt::Display for InternedString {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "{}", INTERNER.lock().unwrap().resolve(self.0).unwrap())
+    }
+}
+/// Custom-implement Debug, so our debug logging contains meaningful strings, not numbers
+impl std::fmt::Debug for InternedString {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{:?}", INTERNER.lock().unwrap().resolve(self.0).unwrap())
     }
 }
 
