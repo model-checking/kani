@@ -1838,7 +1838,7 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
                 post.iter().map(|p| format!("- {}", p)).take(4).collect::<Vec<_>>().join("\n"),
                 post.len() - 4,
             )
-        } else if post.len() > 1 || (post.len() == 1 && post[0].contains("\n")) {
+        } else if post.len() > 1 || (post.len() == 1 && post[0].contains('\n')) {
             format!(":\n{}", post.iter().map(|p| format!("- {}", p)).collect::<Vec<_>>().join("\n"),)
         } else if post.len() == 1 {
             format!(": `{}`", post[0])
@@ -2000,19 +2000,14 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         let sized_trait = self.tcx.lang_items().sized_trait();
         debug!("maybe_suggest_unsized_generics: generics.params={:?}", generics.params);
         debug!("maybe_suggest_unsized_generics: generics.where_clause={:?}", generics.where_clause);
-        let param = generics
-            .params
-            .iter()
-            .filter(|param| param.span == span)
-            .filter(|param| {
-                // Check that none of the explicit trait bounds is `Sized`. Assume that an explicit
-                // `Sized` bound is there intentionally and we don't need to suggest relaxing it.
-                param
-                    .bounds
-                    .iter()
-                    .all(|bound| bound.trait_ref().and_then(|tr| tr.trait_def_id()) != sized_trait)
-            })
-            .next();
+        let param = generics.params.iter().filter(|param| param.span == span).find(|param| {
+            // Check that none of the explicit trait bounds is `Sized`. Assume that an explicit
+            // `Sized` bound is there intentionally and we don't need to suggest relaxing it.
+            param
+                .bounds
+                .iter()
+                .all(|bound| bound.trait_ref().and_then(|tr| tr.trait_def_id()) != sized_trait)
+        });
         let param = match param {
             Some(param) => param,
             _ => return,

@@ -620,23 +620,37 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             _ => bug!("closure candidate for non-closure {:?}", obligation),
         };
 
+        let obligation_predicate = obligation.predicate.to_poly_trait_ref();
+        let Normalized { value: obligation_predicate, mut obligations } =
+            ensure_sufficient_stack(|| {
+                normalize_with_depth(
+                    self,
+                    obligation.param_env,
+                    obligation.cause.clone(),
+                    obligation.recursion_depth + 1,
+                    obligation_predicate,
+                )
+            });
+
         let trait_ref = self.closure_trait_ref_unnormalized(obligation, substs);
-        let Normalized { value: trait_ref, mut obligations } = ensure_sufficient_stack(|| {
-            normalize_with_depth(
-                self,
-                obligation.param_env,
-                obligation.cause.clone(),
-                obligation.recursion_depth + 1,
-                trait_ref,
-            )
-        });
+        let Normalized { value: trait_ref, obligations: trait_ref_obligations } =
+            ensure_sufficient_stack(|| {
+                normalize_with_depth(
+                    self,
+                    obligation.param_env,
+                    obligation.cause.clone(),
+                    obligation.recursion_depth + 1,
+                    trait_ref,
+                )
+            });
 
         debug!(?closure_def_id, ?trait_ref, ?obligations, "confirm closure candidate obligations");
 
+        obligations.extend(trait_ref_obligations);
         obligations.extend(self.confirm_poly_trait_refs(
             obligation.cause.clone(),
             obligation.param_env,
-            obligation.predicate.to_poly_trait_ref(),
+            obligation_predicate,
             trait_ref,
         )?);
 
@@ -948,52 +962,24 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 let tail_field_ty = tcx.type_of(tail_field.did);
 
                 let mut unsizing_params = GrowableBitSet::new_empty();
-                if tcx.features().relaxed_struct_unsize {
-                    for arg in tail_field_ty.walk(tcx) {
+                for arg in tail_field_ty.walk(tcx) {
+                    if let Some(i) = maybe_unsizing_param_idx(arg) {
+                        unsizing_params.insert(i);
+                    }
+                }
+
+                // Ensure none of the other fields mention the parameters used
+                // in unsizing.
+                for field in prefix_fields {
+                    for arg in tcx.type_of(field.did).walk(tcx) {
                         if let Some(i) = maybe_unsizing_param_idx(arg) {
-                            unsizing_params.insert(i);
+                            unsizing_params.remove(i);
                         }
                     }
+                }
 
-                    // Ensure none of the other fields mention the parameters used
-                    // in unsizing.
-                    for field in prefix_fields {
-                        for arg in tcx.type_of(field.did).walk(tcx) {
-                            if let Some(i) = maybe_unsizing_param_idx(arg) {
-                                unsizing_params.remove(i);
-                            }
-                        }
-                    }
-
-                    if unsizing_params.is_empty() {
-                        return Err(Unimplemented);
-                    }
-                } else {
-                    let mut found = false;
-                    for arg in tail_field_ty.walk(tcx) {
-                        if let Some(i) = maybe_unsizing_param_idx(arg) {
-                            unsizing_params.insert(i);
-                            found = true;
-                        }
-                    }
-                    if !found {
-                        return Err(Unimplemented);
-                    }
-
-                    // Ensure none of the other fields mention the parameters used
-                    // in unsizing.
-                    // FIXME(eddyb) cache this (including computing `unsizing_params`)
-                    // by putting it in a query; it would only need the `DefId` as it
-                    // looks at declared field types, not anything substituted.
-                    for field in prefix_fields {
-                        for arg in tcx.type_of(field.did).walk(tcx) {
-                            if let Some(i) = maybe_unsizing_param_idx(arg) {
-                                if unsizing_params.contains(i) {
-                                    return Err(Unimplemented);
-                                }
-                            }
-                        }
-                    }
+                if unsizing_params.is_empty() {
+                    return Err(Unimplemented);
                 }
 
                 // Extract `TailField<T>` and `TailField<U>` from `Struct<T>` and `Struct<U>`.

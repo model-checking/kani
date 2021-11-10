@@ -369,12 +369,12 @@ impl EarlyLintPass for UnsafeCode {
 
     fn check_item(&mut self, cx: &EarlyContext<'_>, it: &ast::Item) {
         match it.kind {
-            ast::ItemKind::Trait(box ast::TraitKind(_, ast::Unsafe::Yes(_), ..)) => self
+            ast::ItemKind::Trait(box ast::Trait { unsafety: ast::Unsafe::Yes(_), .. }) => self
                 .report_unsafe(cx, it.span, |lint| {
                     lint.build("declaration of an `unsafe` trait").emit()
                 }),
 
-            ast::ItemKind::Impl(box ast::ImplKind { unsafety: ast::Unsafe::Yes(_), .. }) => self
+            ast::ItemKind::Impl(box ast::Impl { unsafety: ast::Unsafe::Yes(_), .. }) => self
                 .report_unsafe(cx, it.span, |lint| {
                     lint.build("implementation of an `unsafe` trait").emit()
                 }),
@@ -921,7 +921,7 @@ impl EarlyLintPass for AnonymousParameters {
             // This is a hard error in future editions; avoid linting and erroring
             return;
         }
-        if let ast::AssocItemKind::Fn(box FnKind(_, ref sig, _, _)) = it.kind {
+        if let ast::AssocItemKind::Fn(box Fn { ref sig, .. }) = it.kind {
             for arg in sig.decl.inputs.iter() {
                 if let ast::PatKind::Ident(_, ident, None) = arg.pat.kind {
                     if ident.name == kw::Empty {
@@ -3130,18 +3130,13 @@ impl<'tcx> LateLintPass<'tcx> for DerefNullPtr {
             false
         }
 
-        if let rustc_hir::ExprKind::Unary(ref un_op, ref expr_deref) = expr.kind {
-            if let rustc_hir::UnOp::Deref = un_op {
-                if is_null_ptr(cx, expr_deref) {
-                    cx.struct_span_lint(DEREF_NULLPTR, expr.span, |lint| {
-                        let mut err = lint.build("dereferencing a null pointer");
-                        err.span_label(
-                            expr.span,
-                            "this code causes undefined behavior when executed",
-                        );
-                        err.emit();
-                    });
-                }
+        if let rustc_hir::ExprKind::Unary(rustc_hir::UnOp::Deref, expr_deref) = expr.kind {
+            if is_null_ptr(cx, expr_deref) {
+                cx.struct_span_lint(DEREF_NULLPTR, expr.span, |lint| {
+                    let mut err = lint.build("dereferencing a null pointer");
+                    err.span_label(expr.span, "this code causes undefined behavior when executed");
+                    err.emit();
+                });
             }
         }
     }
@@ -3196,7 +3191,7 @@ impl<'tcx> LateLintPass<'tcx> for NamedAsmLabels {
                         let snippet = template_snippet.as_str();
                         if let Some(pos) = snippet.find(needle) {
                             let end = pos
-                                + &snippet[pos..]
+                                + snippet[pos..]
                                     .find(|c| c == ':')
                                     .unwrap_or(snippet[pos..].len() - 1);
                             let inner = InnerSpan::new(pos, end);

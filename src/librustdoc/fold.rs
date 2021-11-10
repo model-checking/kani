@@ -20,22 +20,28 @@ crate trait DocFolder: Sized {
             StructItem(mut i) => {
                 let num_fields = i.fields.len();
                 i.fields = i.fields.into_iter().filter_map(|x| self.fold_item(x)).collect();
-                i.fields_stripped |=
-                    num_fields != i.fields.len() || i.fields.iter().any(|f| f.is_stripped());
+                if !i.fields_stripped {
+                    i.fields_stripped =
+                        num_fields != i.fields.len() || i.fields.iter().any(|f| f.is_stripped());
+                }
                 StructItem(i)
             }
             UnionItem(mut i) => {
                 let num_fields = i.fields.len();
                 i.fields = i.fields.into_iter().filter_map(|x| self.fold_item(x)).collect();
-                i.fields_stripped |=
-                    num_fields != i.fields.len() || i.fields.iter().any(|f| f.is_stripped());
+                if !i.fields_stripped {
+                    i.fields_stripped =
+                        num_fields != i.fields.len() || i.fields.iter().any(|f| f.is_stripped());
+                }
                 UnionItem(i)
             }
             EnumItem(mut i) => {
                 let num_variants = i.variants.len();
                 i.variants = i.variants.into_iter().filter_map(|x| self.fold_item(x)).collect();
-                i.variants_stripped |=
-                    num_variants != i.variants.len() || i.variants.iter().any(|f| f.is_stripped());
+                if !i.variants_stripped {
+                    i.variants_stripped = num_variants != i.variants.len()
+                        || i.variants.iter().any(|f| f.is_stripped());
+                }
                 EnumItem(i)
             }
             TraitItem(mut i) => {
@@ -46,24 +52,42 @@ crate trait DocFolder: Sized {
                 i.items = i.items.into_iter().filter_map(|x| self.fold_item(x)).collect();
                 ImplItem(i)
             }
-            VariantItem(i) => {
-                let i2 = i.clone(); // this clone is small
-                match i {
-                    Variant::Struct(mut j) => {
-                        let num_fields = j.fields.len();
-                        j.fields = j.fields.into_iter().filter_map(|x| self.fold_item(x)).collect();
-                        j.fields_stripped |= num_fields != j.fields.len()
+            VariantItem(i) => match i {
+                Variant::Struct(mut j) => {
+                    let num_fields = j.fields.len();
+                    j.fields = j.fields.into_iter().filter_map(|x| self.fold_item(x)).collect();
+                    if !j.fields_stripped {
+                        j.fields_stripped = num_fields != j.fields.len()
                             || j.fields.iter().any(|f| f.is_stripped());
-                        VariantItem(Variant::Struct(j))
                     }
-                    Variant::Tuple(fields) => {
-                        let fields = fields.into_iter().filter_map(|x| self.fold_item(x)).collect();
-                        VariantItem(Variant::Tuple(fields))
-                    }
-                    _ => VariantItem(i2),
+                    VariantItem(Variant::Struct(j))
                 }
-            }
-            x => x,
+                Variant::Tuple(fields) => {
+                    let fields = fields.into_iter().filter_map(|x| self.fold_item(x)).collect();
+                    VariantItem(Variant::Tuple(fields))
+                }
+                Variant::CLike => VariantItem(Variant::CLike),
+            },
+            ExternCrateItem { src: _ }
+            | ImportItem(_)
+            | FunctionItem(_)
+            | TypedefItem(_, _)
+            | OpaqueTyItem(_)
+            | StaticItem(_)
+            | ConstantItem(_)
+            | TraitAliasItem(_)
+            | TyMethodItem(_)
+            | MethodItem(_, _)
+            | StructFieldItem(_)
+            | ForeignFunctionItem(_)
+            | ForeignStaticItem(_)
+            | ForeignTypeItem
+            | MacroItem(_)
+            | ProcMacroItem(_)
+            | PrimitiveItem(_)
+            | AssocConstItem(_, _)
+            | AssocTypeItem(_, _)
+            | KeywordItem(_) => kind,
         }
     }
 
@@ -86,14 +110,12 @@ crate trait DocFolder: Sized {
     fn fold_crate(&mut self, mut c: Crate) -> Crate {
         c.module = self.fold_item(c.module).unwrap();
 
-        {
-            let external_traits = { std::mem::take(&mut *c.external_traits.borrow_mut()) };
-            for (k, mut v) in external_traits {
-                v.trait_.items =
-                    v.trait_.items.into_iter().filter_map(|i| self.fold_item(i)).collect();
-                c.external_traits.borrow_mut().insert(k, v);
-            }
+        let external_traits = { std::mem::take(&mut *c.external_traits.borrow_mut()) };
+        for (k, mut v) in external_traits {
+            v.trait_.items = v.trait_.items.into_iter().filter_map(|i| self.fold_item(i)).collect();
+            c.external_traits.borrow_mut().insert(k, v);
         }
+
         c
     }
 }
