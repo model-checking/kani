@@ -391,8 +391,9 @@ fn compare_predicate_entailment<'tcx>(
 
         // Check that all obligations are satisfied by the implementation's
         // version.
-        if let Err(ref errors) = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx) {
-            infcx.report_fulfillment_errors(errors, None, false);
+        let errors = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx);
+        if !errors.is_empty() {
+            infcx.report_fulfillment_errors(&errors, None, false);
             return Err(ErrorReported);
         }
 
@@ -453,6 +454,7 @@ fn check_region_bounds_on_impl_item<'tcx>(
     Ok(())
 }
 
+#[instrument(level = "debug", skip(infcx))]
 fn extract_spans_for_error_reporting<'a, 'tcx>(
     infcx: &infer::InferCtxt<'a, 'tcx>,
     terr: &TypeError<'_>,
@@ -1093,8 +1095,9 @@ crate fn compare_const_impl<'tcx>(
 
         // Check that all obligations are satisfied by the implementation's
         // version.
-        if let Err(ref errors) = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx) {
-            infcx.report_fulfillment_errors(errors, None, false);
+        let errors = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx);
+        if !errors.is_empty() {
+            infcx.report_fulfillment_errors(&errors, None, false);
             return;
         }
 
@@ -1209,8 +1212,9 @@ fn compare_type_predicate_entailment<'tcx>(
 
         // Check that all obligations are satisfied by the implementation's
         // version.
-        if let Err(ref errors) = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx) {
-            infcx.report_fulfillment_errors(errors, None, false);
+        let errors = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx);
+        if !errors.is_empty() {
+            infcx.report_fulfillment_errors(&errors, None, false);
             return Err(ErrorReported);
         }
 
@@ -1426,10 +1430,10 @@ pub fn check_type_bounds<'tcx>(
 
         // Check that all obligations are satisfied by the implementation's
         // version.
-        if let Err(ref errors) =
-            inh.fulfillment_cx.borrow_mut().select_all_with_constness_or_error(&infcx, constness)
-        {
-            infcx.report_fulfillment_errors(errors, None, false);
+        let errors =
+            inh.fulfillment_cx.borrow_mut().select_all_with_constness_or_error(&infcx, constness);
+        if !errors.is_empty() {
+            infcx.report_fulfillment_errors(&errors, None, false);
             return Err(ErrorReported);
         }
 

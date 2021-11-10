@@ -34,8 +34,8 @@ mod span_map;
 mod templates;
 mod write_shared;
 
-crate use context::*;
-crate use span_map::{collect_spans_and_sources, LinkFromSrc};
+crate use self::context::*;
+crate use self::span_map::{collect_spans_and_sources, LinkFromSrc};
 
 use std::collections::VecDeque;
 use std::default::Default;
@@ -54,6 +54,7 @@ use rustc_hir::def::CtorKind;
 use rustc_hir::def_id::DefId;
 use rustc_hir::Mutability;
 use rustc_middle::middle::stability;
+use rustc_middle::ty;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::{
     symbol::{kw, sym, Symbol},
@@ -76,7 +77,7 @@ use crate::html::format::{
 use crate::html::highlight;
 use crate::html::markdown::{HeadingOffset, Markdown, MarkdownHtml, MarkdownSummaryLine};
 use crate::html::sources;
-use crate::scrape_examples::CallData;
+use crate::scrape_examples::{CallData, CallLocation};
 use crate::try_none;
 
 /// A pair of name and its optional document.
@@ -1147,9 +1148,9 @@ fn render_assoc_items_inner(
         }
 
         let (synthetic, concrete): (Vec<&&Impl>, Vec<&&Impl>) =
-            traits.iter().partition(|t| t.inner_impl().synthetic);
+            traits.iter().partition(|t| t.inner_impl().kind.is_auto());
         let (blanket_impl, concrete): (Vec<&&Impl>, _) =
-            concrete.into_iter().partition(|t| t.inner_impl().blanket_impl.is_some());
+            concrete.into_iter().partition(|t| t.inner_impl().kind.is_blanket());
 
         let mut impls = Buffer::empty_from(w);
         render_impls(cx, &mut impls, &concrete, containing_item);
@@ -2033,12 +2034,12 @@ fn sidebar_assoc_items(cx: &Context<'_>, out: &mut Buffer, it: &clean::Item) {
                             let i_display = format!("{:#}", i.print(cx));
                             let out = Escape(&i_display);
                             let encoded = small_url_encode(format!("{:#}", i.print(cx)));
-                            let generated = format!(
-                                "<a href=\"#impl-{}\">{}{}</a>",
-                                encoded,
-                                if it.inner_impl().negative_polarity { "!" } else { "" },
-                                out
-                            );
+                            let prefix = match it.inner_impl().polarity {
+                                ty::ImplPolarity::Positive | ty::ImplPolarity::Reservation => "",
+                                ty::ImplPolarity::Negative => "!",
+                            };
+                            let generated =
+                                format!("<a href=\"#impl-{}\">{}{}</a>", encoded, prefix, out);
                             if links.insert(generated.clone()) { Some(generated) } else { None }
                         } else {
                             None
@@ -2058,10 +2059,9 @@ fn sidebar_assoc_items(cx: &Context<'_>, out: &mut Buffer, it: &clean::Item) {
             };
 
             let (synthetic, concrete): (Vec<&Impl>, Vec<&Impl>) =
-                v.iter().partition::<Vec<_>, _>(|i| i.inner_impl().synthetic);
-            let (blanket_impl, concrete): (Vec<&Impl>, Vec<&Impl>) = concrete
-                .into_iter()
-                .partition::<Vec<_>, _>(|i| i.inner_impl().blanket_impl.is_some());
+                v.iter().partition::<Vec<_>, _>(|i| i.inner_impl().kind.is_auto());
+            let (blanket_impl, concrete): (Vec<&Impl>, Vec<&Impl>) =
+                concrete.into_iter().partition::<Vec<_>, _>(|i| i.inner_impl().kind.is_blanket());
 
             let concrete_format = format_impls(concrete);
             let synthetic_format = format_impls(synthetic);
@@ -2594,6 +2594,21 @@ fn render_call_locations(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item) {
         id = id
     );
 
+    // Create a URL to a particular location in a reverse-dependency's source file
+    let link_to_loc = |call_data: &CallData, loc: &CallLocation| -> (String, String) {
+        let (line_lo, line_hi) = loc.call_expr.line_span;
+        let (anchor, title) = if line_lo == line_hi {
+            ((line_lo + 1).to_string(), format!("line {}", line_lo + 1))
+        } else {
+            (
+                format!("{}-{}", line_lo + 1, line_hi + 1),
+                format!("lines {}-{}", line_lo + 1, line_hi + 1),
+            )
+        };
+        let url = format!("{}{}#{}", cx.root_path(), call_data.url, anchor);
+        (url, title)
+    };
+
     // Generate the HTML for a single example, being the title and code block
     let write_example = |w: &mut Buffer, (path, call_data): (&PathBuf, &CallData)| -> bool {
         let contents = match fs::read_to_string(&path) {
@@ -2631,15 +2646,7 @@ fn render_call_locations(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item) {
                 let (line_lo, line_hi) = loc.call_expr.line_span;
                 let byte_range = (byte_lo - byte_min, byte_hi - byte_min);
                 let line_range = (line_lo - line_min, line_hi - line_min);
-                let (anchor, line_title) = if line_lo == line_hi {
-                    (format!("{}", line_lo + 1), format!("line {}", line_lo + 1))
-                } else {
-                    (
-                        format!("{}-{}", line_lo + 1, line_hi + 1),
-                        format!("lines {}-{}", line_lo + 1, line_hi + 1),
-                    )
-                };
-                let line_url = format!("{}{}#{}", cx.root_path(), call_data.url, anchor);
+                let (line_url, line_title) = link_to_loc(call_data, loc);
 
                 (byte_range, (line_range, line_url, line_title))
             })
@@ -2768,11 +2775,11 @@ fn render_call_locations(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item) {
         if it.peek().is_some() {
             write!(w, r#"<div class="example-links">Additional examples can be found in:<br><ul>"#);
             it.for_each(|(_, call_data)| {
+                let (url, _) = link_to_loc(&call_data, &call_data.locations[0]);
                 write!(
                     w,
-                    r#"<li><a href="{root}{url}">{name}</a></li>"#,
-                    root = cx.root_path(),
-                    url = call_data.url,
+                    r#"<li><a href="{url}">{name}</a></li>"#,
+                    url = url,
                     name = call_data.display_name
                 );
             });

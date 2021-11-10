@@ -320,10 +320,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
 
     /// Returns `true` if the trait predicate is considerd `const` to this selection context.
     pub fn is_trait_predicate_const(&self, pred: ty::TraitPredicate<'_>) -> bool {
-        match pred.constness {
-            ty::BoundConstness::ConstIfConst if self.is_in_const_context => true,
-            _ => false,
-        }
+        matches!(pred.constness, ty::BoundConstness::ConstIfConst) && self.is_in_const_context
     }
 
     /// Returns `true` if the predicate is considered `const` to
@@ -1862,7 +1859,8 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             | ty::Char
             | ty::RawPtr(..)
             | ty::Never
-            | ty::Ref(_, _, hir::Mutability::Not) => {
+            | ty::Ref(_, _, hir::Mutability::Not)
+            | ty::Array(..) => {
                 // Implementations provided in libcore
                 None
             }
@@ -1874,11 +1872,6 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             | ty::GeneratorWitness(..)
             | ty::Foreign(..)
             | ty::Ref(_, _, hir::Mutability::Mut) => None,
-
-            ty::Array(element_ty, _) => {
-                // (*) binder moved here
-                Where(obligation.predicate.rebind(vec![element_ty]))
-            }
 
             ty::Tuple(tys) => {
                 // (*) binder moved here

@@ -180,14 +180,14 @@ fn visit_implementation_of_dispatch_from_dyn(tcx: TyCtxt<'_>, impl_did: LocalDef
 
                 let coerced_fields = fields
                     .iter()
-                    .filter_map(|field| {
+                    .filter(|field| {
                         let ty_a = field.ty(tcx, substs_a);
                         let ty_b = field.ty(tcx, substs_b);
 
                         if let Ok(layout) = tcx.layout_of(param_env.and(ty_a)) {
                             if layout.is_zst() && layout.align.abi.bytes() == 1 {
                                 // ignore ZST fields with alignment of 1 byte
-                                return None;
+                                return false;
                             }
                         }
 
@@ -204,11 +204,11 @@ fn visit_implementation_of_dispatch_from_dyn(tcx: TyCtxt<'_>, impl_did: LocalDef
                                 ))
                                 .emit();
 
-                                return None;
+                                return false;
                             }
                         }
 
-                        Some(field)
+                        return true;
                     })
                     .collect::<Vec<_>>();
 
@@ -263,7 +263,8 @@ fn visit_implementation_of_dispatch_from_dyn(tcx: TyCtxt<'_>, impl_did: LocalDef
                     }
 
                     // Check that all transitive obligations are satisfied.
-                    if let Err(errors) = fulfill_cx.select_all_or_error(&infcx) {
+                    let errors = fulfill_cx.select_all_or_error(&infcx);
+                    if !errors.is_empty() {
                         infcx.report_fulfillment_errors(&errors, None, false);
                     }
 
@@ -522,7 +523,8 @@ pub fn coerce_unsized_info(tcx: TyCtxt<'tcx>, impl_did: DefId) -> CoerceUnsizedI
         fulfill_cx.register_predicate_obligation(&infcx, predicate);
 
         // Check that all transitive obligations are satisfied.
-        if let Err(errors) = fulfill_cx.select_all_or_error(&infcx) {
+        let errors = fulfill_cx.select_all_or_error(&infcx);
+        if !errors.is_empty() {
             infcx.report_fulfillment_errors(&errors, None, false);
         }
 
