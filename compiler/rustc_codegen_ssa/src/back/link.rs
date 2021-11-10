@@ -121,6 +121,19 @@ pub fn link_binary<'a, B: ArchiveBuilder<'a>>(
             if sess.opts.json_artifact_notifications {
                 sess.parse_sess.span_diagnostic.emit_artifact_notification(&out_filename, "link");
             }
+
+            if sess.prof.enabled() {
+                if let Some(artifact_name) = out_filename.file_name() {
+                    // Record size for self-profiling
+                    let file_size = std::fs::metadata(&out_filename).map(|m| m.len()).unwrap_or(0);
+
+                    sess.prof.artifact_size(
+                        "linked_artifact",
+                        artifact_name.to_string_lossy(),
+                        file_size,
+                    );
+                }
+            }
         }
     }
 
@@ -1095,10 +1108,10 @@ fn add_sanitizer_libraries(sess: &Session, crate_type: CrateType, linker: &mut d
 }
 
 fn link_sanitizer_runtime(sess: &Session, linker: &mut dyn Linker, name: &str) {
-    fn find_sanitizer_runtime(sess: &Session, filename: &String) -> PathBuf {
+    fn find_sanitizer_runtime(sess: &Session, filename: &str) -> PathBuf {
         let session_tlib =
             filesearch::make_target_lib_path(&sess.sysroot, sess.opts.target_triple.triple());
-        let path = session_tlib.join(&filename);
+        let path = session_tlib.join(filename);
         if path.exists() {
             return session_tlib;
         } else {

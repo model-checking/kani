@@ -9,6 +9,7 @@
 #![feature(control_flow_enum)]
 #![feature(box_syntax)]
 #![feature(in_band_lifetimes)]
+#![feature(let_else)]
 #![feature(nll)]
 #![feature(test)]
 #![feature(crate_visibility_modifier)]
@@ -121,6 +122,7 @@ mod markdown;
 mod passes;
 mod scrape_examples;
 mod theme;
+mod visit;
 mod visit_ast;
 mod visit_lib;
 
@@ -774,7 +776,7 @@ fn main_options(options: config::Options) -> MainResult {
             // current architecture.
             let resolver = core::create_resolver(queries, sess);
 
-            if sess.has_errors() {
+            if sess.diagnostic().has_errors_or_lint_errors() {
                 sess.fatal("Compilation failed, aborting rustdoc");
             }
 

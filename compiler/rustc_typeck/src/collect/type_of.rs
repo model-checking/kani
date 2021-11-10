@@ -494,7 +494,8 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                 Node::Expr(&Expr { kind: ExprKind::ConstBlock(ref anon_const), .. })
                     if anon_const.hir_id == hir_id =>
                 {
-                    tcx.typeck(def_id).node_type(anon_const.hir_id)
+                    let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
+                    substs.as_inline_const().ty()
                 }
 
                 Node::Expr(&Expr { kind: ExprKind::InlineAsm(asm), .. })
@@ -772,7 +773,7 @@ fn infer_placeholder_type<'a>(
                 } else {
                     err.span_note(
                         tcx.hir().body(body_id).value.span,
-                        &format!("however, the inferred type `{}` cannot be named", ty.to_string()),
+                        &format!("however, the inferred type `{}` cannot be named", ty),
                     );
                 }
             }
@@ -796,7 +797,7 @@ fn infer_placeholder_type<'a>(
                 } else {
                     diag.span_note(
                         tcx.hir().body(body_id).value.span,
-                        &format!("however, the inferred type `{}` cannot be named", ty.to_string()),
+                        &format!("however, the inferred type `{}` cannot be named", ty),
                     );
                 }
             }

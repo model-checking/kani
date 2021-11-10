@@ -391,12 +391,19 @@ impl Item {
             ItemKind::StrippedItem(k) => k,
             _ => &*self.kind,
         };
-        if let ItemKind::ModuleItem(Module { span, .. }) | ItemKind::ImplItem(Impl { span, .. }) =
-            kind
-        {
-            *span
-        } else {
-            self.def_id.as_def_id().map(|did| rustc_span(did, tcx)).unwrap_or_else(Span::dummy)
+        match kind {
+            ItemKind::ModuleItem(Module { span, .. }) => *span,
+            ItemKind::ImplItem(Impl { kind: ImplKind::Auto, .. }) => Span::dummy(),
+            ItemKind::ImplItem(Impl { kind: ImplKind::Blanket(_), .. }) => {
+                if let ItemId::Blanket { impl_id, .. } = self.def_id {
+                    rustc_span(impl_id, tcx)
+                } else {
+                    panic!("blanket impl item has non-blanket ID")
+                }
+            }
+            _ => {
+                self.def_id.as_def_id().map(|did| rustc_span(did, tcx)).unwrap_or_else(Span::dummy)
+            }
         }
     }
 
@@ -789,6 +796,7 @@ impl AttributesExt for [ast::Attribute] {
     fn cfg(&self, tcx: TyCtxt<'_>, hidden_cfg: &FxHashSet<Cfg>) -> Option<Arc<Cfg>> {
         let sess = tcx.sess;
         let doc_cfg_active = tcx.features().doc_cfg;
+        let doc_auto_cfg_active = tcx.features().doc_auto_cfg;
 
         fn single<T: IntoIterator>(it: T) -> Option<T::Item> {
             let mut iter = it.into_iter();
@@ -799,24 +807,26 @@ impl AttributesExt for [ast::Attribute] {
             Some(item)
         }
 
-        let mut cfg = if doc_cfg_active {
+        let mut cfg = if doc_cfg_active || doc_auto_cfg_active {
             let mut doc_cfg = self
                 .iter()
                 .filter(|attr| attr.has_name(sym::doc))
                 .flat_map(|attr| attr.meta_item_list().unwrap_or_else(Vec::new))
                 .filter(|attr| attr.has_name(sym::cfg))
                 .peekable();
-            if doc_cfg.peek().is_some() {
+            if doc_cfg.peek().is_some() && doc_cfg_active {
                 doc_cfg
                     .filter_map(|attr| Cfg::parse(attr.meta_item()?).ok())
                     .fold(Cfg::True, |cfg, new_cfg| cfg & new_cfg)
-            } else {
+            } else if doc_auto_cfg_active {
                 self.iter()
                     .filter(|attr| attr.has_name(sym::cfg))
                     .filter_map(|attr| single(attr.meta_item_list()?))
                     .filter_map(|attr| Cfg::parse(attr.meta_item()?).ok())
                     .filter(|cfg| !hidden_cfg.contains(cfg))
                     .fold(Cfg::True, |cfg, new_cfg| cfg & new_cfg)
+            } else {
+                Cfg::True
             }
         } else {
             Cfg::True
@@ -2162,15 +2172,13 @@ impl Constant {
 
 #[derive(Clone, Debug)]
 crate struct Impl {
-    crate span: Span,
     crate unsafety: hir::Unsafety,
     crate generics: Generics,
     crate trait_: Option<Path>,
     crate for_: Type,
     crate items: Vec<Item>,
-    crate negative_polarity: bool,
-    crate synthetic: bool,
-    crate blanket_impl: Option<Box<Type>>,
+    crate polarity: ty::ImplPolarity,
+    crate kind: ImplKind,
 }
 
 impl Impl {
@@ -2180,6 +2188,30 @@ impl Impl {
             .map(|t| t.def_id())
             .map(|did| tcx.provided_trait_methods(did).map(|meth| meth.ident.name).collect())
             .unwrap_or_default()
+    }
+}
+
+#[derive(Clone, Debug)]
+crate enum ImplKind {
+    Normal,
+    Auto,
+    Blanket(Box<Type>),
+}
+
+impl ImplKind {
+    crate fn is_auto(&self) -> bool {
+        matches!(self, ImplKind::Auto)
+    }
+
+    crate fn is_blanket(&self) -> bool {
+        matches!(self, ImplKind::Blanket(_))
+    }
+
+    crate fn as_blanket_ty(&self) -> Option<&Type> {
+        match self {
+            ImplKind::Blanket(ty) => Some(ty),
+            _ => None,
+        }
     }
 }
 
@@ -2245,5 +2277,34 @@ impl TypeBinding {
             TypeBindingKind::Equality { ref ty } => ty,
             _ => panic!("expected equality type binding for parenthesized generic args"),
         }
+    }
+}
+
+/// The type, lifetime, or constant that a private type alias's parameter should be
+/// replaced with when expanding a use of that type alias.
+///
+/// For example:
+///
+/// ```
+/// type PrivAlias<T> = Vec<T>;
+///
+/// pub fn public_fn() -> PrivAlias<i32> { vec![] }
+/// ```
+///
+/// `public_fn`'s docs will show it as returning `Vec<i32>`, since `PrivAlias` is private.
+/// [`SubstParam`] is used to record that `T` should be mapped to `i32`.
+crate enum SubstParam {
+    Type(Type),
+    Lifetime(Lifetime),
+    Constant(Constant),
+}
+
+impl SubstParam {
+    crate fn as_ty(&self) -> Option<&Type> {
+        if let Self::Type(ty) = self { Some(ty) } else { None }
+    }
+
+    crate fn as_lt(&self) -> Option<&Lifetime> {
+        if let Self::Lifetime(lt) = self { Some(lt) } else { None }
     }
 }

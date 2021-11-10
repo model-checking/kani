@@ -1,4 +1,4 @@
-//! This module contains functions that retrieves specifiec elements.
+//! This module contains functions that retrieve specific elements.
 
 #![deny(clippy::missing_docs_in_private_items)]
 
@@ -587,9 +587,13 @@ impl FormatArgsExpn<'tcx> {
                             if let Some(position_field) = fields.iter().find(|f| f.ident.name == sym::position);
                             if let ExprKind::Lit(lit) = &position_field.expr.kind;
                             if let LitKind::Int(position, _) = lit.node;
+                            if let Ok(i) = usize::try_from(position);
+                            let arg = &self.args[i];
+                            if let ExprKind::Call(_, [arg_name, _]) = arg.kind;
+                            if let ExprKind::Field(_, j) = arg_name.kind;
+                            if let Ok(j) = j.name.as_str().parse::<usize>();
                             then {
-                                let i = usize::try_from(position).unwrap();
-                                Some(FormatArgsArg { value: self.value_args[i], arg: &self.args[i], fmt: Some(fmt) })
+                                Some(FormatArgsArg { value: self.value_args[j], arg, fmt: Some(fmt) })
                             } else {
                                 None
                             }
@@ -718,9 +722,7 @@ impl PanicExpn<'tcx> {
     /// Parses an expanded `panic!` invocation
     pub fn parse(expr: &'tcx Expr<'tcx>) -> Option<Self> {
         if_chain! {
-            if let ExprKind::Block(block, _) = expr.kind;
-            if let Some(init) = block.expr;
-            if let ExprKind::Call(_, [format_args]) = init.kind;
+            if let ExprKind::Call(_, [format_args]) = expr.kind;
             let expn_data = expr.span.ctxt().outer_expn_data();
             if let Some(format_args) = FormatArgsExpn::parse(format_args);
             then {
@@ -770,13 +772,13 @@ pub fn get_vec_init_kind<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) -
                     }
                     return Some(VecInitKind::WithExprCapacity(arg.hir_id));
                 }
-            }
+            },
             ExprKind::Path(QPath::Resolved(_, path))
                 if match_def_path(cx, path.res.opt_def_id()?, &paths::DEFAULT_TRAIT_METHOD)
                     && is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(expr), sym::Vec) =>
             {
                 return Some(VecInitKind::Default);
-            }
+            },
             _ => (),
         }
     }
