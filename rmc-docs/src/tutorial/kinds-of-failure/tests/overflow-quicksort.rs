@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // ANCHOR: code
 fn find_midpoint(low: u32, high: u32) -> u32 {

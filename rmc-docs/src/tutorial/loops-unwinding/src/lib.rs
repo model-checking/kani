@@ -1,5 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-flags: --cbmc-args --unwind 11
+// rmc-verify-fail
 
 // ANCHOR: code
 fn initialize_prefix(length: usize, buffer: &mut [u8]) {

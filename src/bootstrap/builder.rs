@@ -473,6 +473,7 @@ impl<'a> Builder<'a> {
                 test::Expected,
                 test::Dashboard,
                 test::Stub,
+                test::RmcDocs,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),
