@@ -42,6 +42,9 @@ mkdir -p book
 ./mdbook build
 touch book/.nojekyll
 
-# TODO: Test all the code examples from our documentation
+# Testing of the code in the documentation is done via the usual
+# ./scripts/rmc-regression.sh script. A note on running just the
+# doc tests is in README.md. We don't run them here because
+# that would cause CI to run these tests twice.
 
 echo "Finished documentation build successfully."

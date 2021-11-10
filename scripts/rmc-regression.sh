@@ -25,7 +25,7 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 ./scripts/setup/build_rmc_lib.sh
 
 # Standalone rmc tests, expected tests, and cargo tests
-./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc
+./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs
 ./x.py test -i --stage 0 compiler/cbmc
 
 # Check codegen for the standard library

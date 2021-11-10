@@ -21,7 +21,7 @@
 ```
 ```bash
 # Test suite run (to run a specific suite from src/test/, just remove the others)
-./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc
+./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs
 ```
 ```bash
 # Dashboard run
