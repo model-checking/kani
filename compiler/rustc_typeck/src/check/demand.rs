@@ -29,6 +29,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         expected_ty_expr: Option<&'tcx hir::Expr<'tcx>>,
     ) {
         self.annotate_expected_due_to_let_ty(err, expr);
+        self.suggest_box_deref(err, expr, expected, expr_ty);
         self.suggest_compatible_variants(err, expr, expected, expr_ty);
         self.suggest_deref_ref_or_into(err, expr, expected, expr_ty, expected_ty_expr);
         if self.suggest_calling_boxed_future_when_appropriate(err, expr, expected, expr_ty) {
@@ -164,6 +165,23 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 // Point at `let` assignment type.
                 err.span_label(ty.span, "expected due to this");
             }
+        }
+    }
+
+    fn suggest_box_deref(
+        &self,
+        err: &mut DiagnosticBuilder<'_>,
+        expr: &hir::Expr<'_>,
+        expected: Ty<'tcx>,
+        expr_ty: Ty<'tcx>,
+    ) {
+        if expr_ty.is_box() && expr_ty.boxed_ty() == expected {
+            err.span_suggestion_verbose(
+                expr.span.shrink_to_lo(),
+                "try dereferencing the `Box`",
+                "*".to_string(),
+                Applicability::MachineApplicable,
+            );
         }
     }
 
@@ -428,7 +446,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 (&ty::Str, &ty::Array(arr, _) | &ty::Slice(arr)) if arr == self.tcx.types.u8 => {
                     if let hir::ExprKind::Lit(_) = expr.kind {
                         if let Ok(src) = sm.span_to_snippet(sp) {
-                            if let Some(_) = replace_prefix(&src, "b\"", "\"") {
+                            if replace_prefix(&src, "b\"", "\"").is_some() {
                                 let pos = sp.lo() + BytePos(1);
                                 return Some((
                                     sp.with_hi(pos),
@@ -444,7 +462,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 (&ty::Array(arr, _) | &ty::Slice(arr), &ty::Str) if arr == self.tcx.types.u8 => {
                     if let hir::ExprKind::Lit(_) = expr.kind {
                         if let Ok(src) = sm.span_to_snippet(sp) {
-                            if let Some(_) = replace_prefix(&src, "\"", "b\"") {
+                            if replace_prefix(&src, "\"", "b\"").is_some() {
                                 return Some((
                                     sp.shrink_to_lo(),
                                     "consider adding a leading `b`",

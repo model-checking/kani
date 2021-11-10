@@ -633,7 +633,7 @@ dependencies = [
 name = "clippy"
 version = "0.1.58"
 dependencies = [
- "cargo_metadata 0.12.0",
+ "cargo_metadata 0.14.0",
  "clippy_lints",
  "clippy_utils",
  "compiletest_rs",
@@ -645,7 +645,7 @@ dependencies = [
  "regex",
  "rustc-workspace-hack",
  "rustc_tools_util 0.2.0",
- "semver 0.11.0",
+ "semver 1.0.3",
  "serde",
  "syn",
  "tempfile",
@@ -670,7 +670,7 @@ dependencies = [
 name = "clippy_lints"
 version = "0.1.58"
 dependencies = [
- "cargo_metadata 0.12.0",
+ "cargo_metadata 0.14.0",
  "clippy_utils",
  "if_chain",
  "itertools 0.10.1",
@@ -678,7 +678,7 @@ dependencies = [
  "quine-mc_cluskey",
  "regex-syntax",
  "rustc-semver",
- "semver 0.11.0",
+ "semver 1.0.3",
  "serde",
  "serde_json",
  "toml",
@@ -767,9 +767,9 @@ dependencies = [
 
 [[package]]
 name = "compiletest_rs"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64698e5e2435db061a85e6320af12c30c5fd88eb84b35d2c1e03ce4f143255ca"
+checksum = "29843cb8d351febf86557681d049d1e1652b81a086a190fa1173c07fd17fbf83"
 dependencies = [
  "diff",
  "filetime",
@@ -956,9 +956,9 @@ dependencies = [
 
 [[package]]
 name = "curl"
-version = "0.4.39"
+version = "0.4.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aaa3b8db7f3341ddef15786d250106334d4a6c4b0ae4a46cd77082777d9849b9"
+checksum = "877cc2f9b8367e32b6dabb9d581557e651cb3aa693a37f8679091bbf42687d5d"
 dependencies = [
  "curl-sys",
  "libc",
@@ -971,9 +971,9 @@ dependencies = [
 
 [[package]]
 name = "curl-sys"
-version = "0.4.49+curl-7.79.1"
+version = "0.4.50+curl-7.79.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0f44960aea24a786a46907b8824ebc0e66ca06bf4e4978408c7499620343483"
+checksum = "4856b76919dd599f31236bb18db5f5bd36e2ce131e64f857ca5c259665b76171"
 dependencies = [
  "cc",
  "libc",
@@ -1981,9 +1981,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.103"
+version = "0.2.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd8f7255a17a627354f321ef0055d63b898c6fb27eff628af4d1b66b7331edf6"
+checksum = "a60553f9a9e039a333b4e9b20573b9e9b9c0bb3a11e201ccc48ef4283456d673"
 dependencies = [
  "rustc-std-workspace-core",
 ]
