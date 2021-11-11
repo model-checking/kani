@@ -138,6 +138,16 @@ def add_check_flags(make_group, add_flag, config):
              help="Turn on undefined function checks")
     add_flag(group, "--unwinding-checks", default=True, action=BooleanOptionalAction,
              help="Turn on default unwinding checks")
+    add_flag(group, "--default-values", default=True, action=BooleanOptionalAction,
+             help="Turn on default values for common CBMC flags")
+
+# Add flags for common CBMC flags
+def add_common_flags(make_group, add_flag, config):
+    group = make_group("Common flags", "Common CBMC flags handled by RMC.")
+    add_flag(group, "--object-bits", type=str,
+             help="Specify the value used for object bits")
+    add_flag(group, "--unwind", type=str,
+             help="Specify the value used for loop unwinding")
 
 # Add flags needed only for visualizer.
 def add_visualizer_flags(make_group, add_flag, config):
@@ -207,6 +217,7 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
         add_linking_flags,
         add_artifact_flags,
         add_check_flags,
+        add_common_flags,
         add_visualizer_flags,
         add_other_flags,
         add_developer_flags

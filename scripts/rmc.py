@@ -30,6 +30,11 @@ OVERFLOW_CHECKS = ["--conversion-check",
                    "--unsigned-overflow-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
+# The default object bits value in CBMC is 8, which is not enough to handle most
+# medium-sized Rust programs. Increasing it to 16 should have no impact in
+# 32-bit architectures or longer.
+DEFAULT_OBJECT_BITS_VALUE = "16"
+
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
 class Scanner:
@@ -78,14 +83,34 @@ def add_set_cbmc_flags(args, flags):
         else:
             args.cbmc_args.append(arg)
 
-# Add sets of selected default CBMC flags
-def add_selected_default_cbmc_flags(args):
+# Add value-based CBMC flags to the CBMC arguments
+def add_value_based_cbmc_flags(args, flags):
+    # We print a warning if the user has passed the flag via `cbmc_args`
+    # Otherwise we append both the flag and value to the CBMC arguments
+    if flags[0] not in args.cbmc_args:
+        args.cbmc_args.extend(flags)
+    else:
+        print("WARNING: Default CBMC argument `{}` not added (already specified)".format(flags[0]))
+
+# Add sets of selected default CBMC checks
+def add_selected_default_cbmc_checks(args):
     if args.memory_safety_checks:
         add_set_cbmc_flags(args, MEMORY_SAFETY_CHECKS)
     if args.overflow_checks:
         add_set_cbmc_flags(args, OVERFLOW_CHECKS)
     if args.unwinding_checks:
         add_set_cbmc_flags(args, UNWINDING_CHECKS)
+
+def add_common_cbmc_flags(args):
+    if args.object_bits is not None:
+        add_value_based_cbmc_flags(args, ["--object-bits", args.object_bits])
+    if args.unwind is not None:
+        add_value_based_cbmc_flags(args, ["--unwind", args.unwind])
+
+# Add selected default value-based CBMC flags
+def add_selected_default_cbmc_values(args):
+    if args.object_bits is None:
+        args.object_bits = DEFAULT_OBJECT_BITS_VALUE
 
 # Updates environment to use gotoc backend debugging
 def add_rmc_rustc_debug_to_env(env):
