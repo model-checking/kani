@@ -1,1 +1,1 @@
-cbmc --unwind 2 --object-bits 10
+Exception: Conflicting flags: `--object-bits` was specified twice.
