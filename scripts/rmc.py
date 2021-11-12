@@ -8,8 +8,8 @@ import os.path
 import sys
 import re
 import pathlib
-
 import rmc_flags
+import cbmc_json_parser
 
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
@@ -160,7 +160,9 @@ def run_cmd(
         verbose=False,
         debug=False,
         scanners=[],
-        dry_run=False):
+        dry_run=False,
+        output_style='0'
+        ):
     # If this a dry run, we emulate running a successful process whose output is the command itself
     # We set `output_to` to `stdout` so that the output is not omitted below
     if dry_run:
@@ -187,7 +189,14 @@ def run_cmd(
 
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
-        print(stdout)
+        # '2' represents the old default output and '0' and '1' are for the transformed output styles
+        if (output_style != '2'):
+            try:
+                cbmc_json_parser.transform_cbmc_output(stdout, output_style)
+            except:
+                raise Exception("JSON Parsing Error")
+        else:
+            print(stdout)
 
     # Write to file if given
     if output_to is not None and output_to != "stdout":
@@ -310,14 +319,14 @@ def link_c_lib(srcs, dst, c_lib, verbose=False, quiet=False, function="main", dr
         raise Exception("Failed to run command: {}".format(" ".join(cmd)))
 
 # Runs CBMC on a goto program
-def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):
+def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False,output_style='0'):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
     scanners = []
     if "--unwinding-assertions" in cbmc_args:
         # Pass a scanner that shows a tip if the CBMC output contains unwinding failures
         unwind_asserts_pattern = ".*unwinding assertion.*: FAILURE"
         unwind_asserts_scanner = Scanner(unwind_asserts_pattern, append_unwind_tip)
-        scanners.append(unwind_asserts_scanner)
+        scanners.append(unwind_asserts_scanner)      
     return run_cmd(
         cbmc_cmd,
         label="cbmc",
@@ -325,7 +334,9 @@ def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False
         verbose=verbose,
         quiet=quiet,
         scanners=scanners,
-        dry_run=dry_run)
+        dry_run=dry_run,
+        output_style=output_style)
+ 
 
 # Generates a viewer report from a goto program
 def run_visualize(

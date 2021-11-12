@@ -112,8 +112,24 @@ def main():
                 args.verbose, dry_run=args.dry_run):
             return 1
 
+    # Control final output style using output_style variable which takes '0', '1', '2' as values
+    if "newOutput" in args:
+        # if oldOutput flag is passed, then prevent output from going into the json parser
+        # else then by default and for terse output, display the result through the json parser       
+        if not args.oldOutput:
+            # This gives us the json output from CBMC which is passed into the parser
+            if "--json-ui" not in args.cbmc_args:
+                args.cbmc_args.extend(["--json-ui"])
+            if args.terse == True:
+                output_style = '1'
+            else:
+                output_style = '0'
+        else:
+            output_style = '2'
+
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
+
 
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
@@ -122,7 +138,7 @@ def main():
                                     args.verbose, args.quiet, args.keep_temps,
                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
-        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
+        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run, output_style)
 
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
         retcode = EXIT_CODE_SUCCESS

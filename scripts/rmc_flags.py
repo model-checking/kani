@@ -179,6 +179,16 @@ def add_visualizer_flags(make_group, add_flag, config):
                   this is generally the location from which rmc is currently being invoked
                   """)
 
+# Add flags needed for toggling and switching between outputs.
+def add_output_flags(make_group, add_flag, config):
+    group = make_group("Output flags", "Toggle between different styles of output")
+    add_flag(group, "--newOutput", default=True, action=BooleanOptionalAction,
+             help="Turn on new output")    
+    add_flag(group, "--oldOutput", default=False, action=BooleanOptionalAction,
+             help="Turn on old output")
+    add_flag(group, "--terse", default=False, action=BooleanOptionalAction,
+             help="Gives a Summary of the original output")
+
 # Add flags for ad-hoc features.
 def add_other_flags(make_group, add_flag, config):
     group = make_group("Other flags")
@@ -235,7 +245,8 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
         add_common_flags,
         add_visualizer_flags,
         add_other_flags,
-        add_developer_flags
+        add_developer_flags,
+        add_output_flags
     ]
 
     for add_group in add_groups:
