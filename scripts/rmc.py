@@ -37,7 +37,7 @@ DEFAULT_OBJECT_BITS_VALUE = "16"
 # CBMC performs automatic loop unwinding if no unwinding value is specified.
 # Even though this procedure is not guaranteed to terminate, passing a default
 # value for unwinding would prevent users from running automatic loop unwinding.
-DEFAULT_UNWIND_VALUE      = None
+DEFAULT_UNWIND_VALUE = None
 
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
