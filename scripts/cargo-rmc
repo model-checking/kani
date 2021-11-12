@@ -9,6 +9,7 @@ import rmc
 import rmc_flags
 import os
 import pathlib
+import platform
 import toml
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
@@ -22,7 +23,7 @@ def main():
     rmc.ensure_dependencies_in_path()
 
     if args.gen_c_runnable:
-        rmc.cargo_build(args.crate, args.target_dir,
+        rmc.cargo_build(args.crate, args.target_dir, args.build_target,
                         args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
 
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
@@ -42,10 +43,13 @@ def main():
 
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    rmc.cargo_build(args.crate, args.target_dir,
+    rmc.cargo_build(args.crate, args.target_dir, args.build_target,
                     args.verbose, args.debug, args.mangler, args.dry_run, [])
 
-    pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
+    if args.build_target:
+        pattern = os.path.join(args.target_dir, args.build_target, "debug", "deps", "*.symtab.json")
+    else:
+        pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
     symbol_table_jsons = glob.glob(pattern)
 
     if not args.dry_run:
@@ -108,6 +112,24 @@ def main():
 
     return retcode
 
+
+def default_build_target():
+    """
+    Returns the default build target based on the current OS.
+
+    This function will return None for windows and print a warning.
+    """
+    machine = platform.uname()
+    if machine.system == "Linux":
+        return"x86_64-unknown-linux-gnu"
+
+    if machine.system == "Darwin":
+        return "x86_64-apple-darwin"
+
+    print("WARNING: No default build target exists for this platform. Please use --build-target to set the correct target")
+    return None
+
+
 def parse_args():
     # Create parser
     def create_parser():
@@ -124,6 +146,8 @@ def parse_args():
         config_group.add_argument("--config-toml",
                                   help="Where to read configuration from; defaults to crate's Cargo.toml")
         config_group.add_argument("--no-config-toml", action="store_true", help="Do not use any configuration toml")
+        config_group.add_argument("--build-target", help="Build for the target triple.",
+                                  default=default_build_target())
 
         exclude_flags = []
         rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)

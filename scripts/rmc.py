@@ -189,7 +189,15 @@ def compile_single_rust_file(
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def cargo_build(
+        crate,
+        target_dir,
+        build_target=None,
+        verbose=False,
+        debug=False,
+        mangler="v0",
+        dry_run=False,
+        symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     def get_config(option):
@@ -208,6 +216,8 @@ def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry
     rustflags = rustc_flags(mangler, symbol_table_passes) + get_config("--rmc-flags").split()
     rustc_path = get_config("--rmc-path").strip()
     build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
+    if build_target:
+        build_cmd += ["--target", str(build_target)]
     build_env = {"RUSTFLAGS": " ".join(rustflags),
                  "RUSTC": rustc_path,
                  "PATH": os.environ["PATH"]
