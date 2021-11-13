@@ -470,6 +470,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let relative_discr = if *niche_start == 0 {
                         niche_val
                     } else {
+                        // This should be a wrapping sub.
                         niche_val.sub(Expr::int_constant(*niche_start, discr_ty.clone()))
                     };
                     let relative_max =

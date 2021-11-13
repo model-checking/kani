@@ -815,7 +815,7 @@ impl Expr {
                     && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector())
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
-            Plus => {
+            Plus | OverflowMinus | OverflowMult | OverflowPlus => {
                 (lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
@@ -848,10 +848,6 @@ impl Expr {
             }
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
-            // Overflow flags
-            OverflowMinus | OverflowMult | OverflowPlus => {
-                lhs.typ == rhs.typ && lhs.typ.is_integer()
-            }
         }
     }
 
