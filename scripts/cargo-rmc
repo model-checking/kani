@@ -95,6 +95,12 @@ def main():
             args.verbose, dry_run=args.dry_run):
         return 1
 
+    if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+            cbmc_filename, cbmc_filename,
+            ['--drop-unused-functions'],
+            args.verbose, dry_run=args.dry_run):
+        return 1
+
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
 
