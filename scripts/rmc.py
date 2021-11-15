@@ -96,42 +96,52 @@ def add_selected_default_cbmc_checks(args):
     if args.unwinding_checks:
         add_set_cbmc_flags(args, UNWINDING_CHECKS)
 
-# Add a common CBMC flag to `cbmc_args`.
-def add_common_cbmc_flag(args, flag):
-    (cbmc_arg, rmc_arg, _) = flag
+# Add a common CBMC flag to `cbmc_args`
+def add_common_cbmc_flag(args, flag_info):
+    (cbmc_arg, rmc_arg, _) = flag_info
     rmc_value = getattr(args, rmc_arg)
     if rmc_value is not None:
         args.cbmc_args.extend([cbmc_arg, rmc_value])
 
 # Set a common CBMC flag by examining both RMC & CBMC flags
-def set_common_cbmc_flag(args, flag):
-    (cbmc_arg, rmc_arg, default_value) = flag
+def set_common_cbmc_flag(args, flag_info):
+    (cbmc_arg, rmc_arg, default_value) = flag_info
     if getattr(args, rmc_arg) is not None:
         if cbmc_arg in args.cbmc_args:
             # Case #1: The flag is specified twice - Result: Raise an exception
             raise Exception(f"Conflicting flags: `{cbmc_arg}` was specified twice.")
-        # Case #2: Flag specified via `rmc_arg` only - Result: Use `args.rmc_arg`
+        # Case #2: Flag specified via `args.rmc_arg` only - Result: Use `args.rmc_arg`
         return
     if cbmc_arg in args.cbmc_args:
         # Case #3: Flag specified via `cbmc_arg` only - Result: Use `cbmc_arg`
         # Note: `args.rmc_arg` is `None` so nothing will be added later
         return
-    # Case #4: The flag has not been specified - Result: Assign default value to
-    # `args.rmc_arg` if `args.default_values` is on
-    if args.default_values:
-        setattr(args, rmc_arg, default_value)
+    # Case #4: The flag has not been specified - Result: Assign default value
+    setattr(args, rmc_arg, default_value)
+
+def process_object_bits_flag(args):
+    flag_info = ("--object-bits", "object_bits", DEFAULT_OBJECT_BITS_VALUE)
+    set_common_cbmc_flag(args, flag_info)
+    add_common_cbmc_flag(args, flag_info)
+
+def process_unwind_flag(args):
+    # We raise an exception if `--auto-unwind` is being used in
+    # addition to other `--unwind` flags in RMC or CBMC
+    if args.auto_unwind:
+        if args.unwind is not None or "--unwind" in args.cbmc_args:
+            raise Exception("Conflicting flags: `--auto-unwind` is not"
+                            " compatible with other `--unwind` flags.")
+        return
+    flag_info = ("--unwind", "unwind", DEFAULT_UNWIND_VALUE)
+    set_common_cbmc_flag(args, flag_info)
+    add_common_cbmc_flag(args, flag_info)
 
 # Process common CBMC flags
 def process_common_cbmc_flags(args):
-    common_cbmc_flags = [("--object-bits", "object_bits", DEFAULT_OBJECT_BITS_VALUE),
-                         ("--unwind", "unwind", DEFAULT_UNWIND_VALUE)]
-
-    # For each CBMC flag we:
-    #  1. Set the associated RMC flag if needed.
-    #  2. Add the CBMC if RMC has been set.
-    for flag in common_cbmc_flags:
-        set_common_cbmc_flag(args, flag)
-        add_common_cbmc_flag(args, flag)
+    # For each CBMC flag we set the RMC flag if needed, then
+    # we add the associated CBMC flag if RMC flag has been set
+    process_object_bits_flag(args)
+    process_unwind_flag(args)
 
 # Updates environment to use gotoc backend debugging
 def add_rmc_rustc_debug_to_env(env):
