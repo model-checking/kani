@@ -9,6 +9,7 @@ import sys
 import re
 import pathlib
 
+import rmc_flags
 
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
@@ -30,14 +31,6 @@ OVERFLOW_CHECKS = ["--conversion-check",
                    "--unsigned-overflow-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
-# The default object bits value in CBMC is 8, which is not enough to handle most
-# medium-sized Rust programs. Increasing it to 16 should have no impact in
-# 64-bit architectures.
-DEFAULT_OBJECT_BITS_VALUE = "16"
-# CBMC performs automatic loop unwinding if no unwinding value is specified.
-# Even though this procedure is not guaranteed to terminate, passing a default
-# value for unwinding would prevent users from running automatic loop unwinding.
-DEFAULT_UNWIND_VALUE = None
 
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
@@ -120,7 +113,7 @@ def set_common_cbmc_flag(args, flag_info):
     setattr(args, rmc_arg, default_value)
 
 def process_object_bits_flag(args):
-    flag_info = ("--object-bits", "object_bits", DEFAULT_OBJECT_BITS_VALUE)
+    flag_info = ("--object-bits", "object_bits", rmc_flags.DEFAULT_OBJECT_BITS_VALUE)
     set_common_cbmc_flag(args, flag_info)
     add_common_cbmc_flag(args, flag_info)
 
@@ -132,7 +125,7 @@ def process_unwind_flag(args):
             raise Exception("Conflicting flags: `--auto-unwind` is not"
                             " compatible with other `--unwind` flags.")
         return
-    flag_info = ("--unwind", "unwind", DEFAULT_UNWIND_VALUE)
+    flag_info = ("--unwind", "unwind", rmc_flags.DEFAULT_UNWIND_VALUE)
     set_common_cbmc_flag(args, flag_info)
     add_common_cbmc_flag(args, flag_info)
 

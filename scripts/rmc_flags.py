@@ -5,6 +5,15 @@
 import argparse
 import pathlib as pl
 
+# The default object bits value in CBMC is 8, which is not enough to handle most
+# medium-sized Rust programs. Increasing it to 16 should have no impact in
+# 64-bit architectures.
+DEFAULT_OBJECT_BITS_VALUE = "16"
+# CBMC performs automatic loop unwinding if no unwinding value is specified.
+# Even though this procedure is not guaranteed to terminate, passing a default
+# value for unwinding would prevent users from running automatic loop unwinding.
+DEFAULT_UNWIND_VALUE = None
+
 # Taken from https://github.com/python/cpython/blob/3.9/Lib/argparse.py#L858
 # Cannot use `BooleanOptionalAction` with Python 3.8
 class BooleanOptionalAction(argparse.Action):
@@ -141,11 +150,17 @@ def add_check_flags(make_group, add_flag, config):
 
 # Add flags for common CBMC flags
 def add_common_flags(make_group, add_flag, config):
+    # Note: The code for handling common CBMC flags is more complex than usual,
+    # since the flag may have been set via `--cbmc-args`. Here, we print the
+    # default values here but we set them later using `process_common_cbmc_flags`
+    default_unwind_value = DEFAULT_UNWIND_VALUE if DEFAULT_UNWIND_VALUE else "None"
     group = make_group("Common flags", "Common CBMC flags handled by RMC.")
     add_flag(group, "--object-bits", type=str,
-             help="Specify the number of bits used for representing object IDs in CBMC")
+             help="Specify the number of bits used for representing object IDs in CBMC"
+                  " (default: " + DEFAULT_OBJECT_BITS_VALUE + ")")
     add_flag(group, "--unwind", type=str,
-             help="Specify the value used for loop unwinding in CBMC")
+             help="Specify the value used for loop unwinding in CBMC"
+                  " (default: " + default_unwind_value + ")")
     add_flag(group, "--auto-unwind", default=False, action=BooleanOptionalAction,
              help="Turn on automatic loop unwinding")
 
