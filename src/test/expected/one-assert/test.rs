@@ -6,4 +6,3 @@ pub fn main() {
     let y = x;
     assert!(x == y);
 }
-
