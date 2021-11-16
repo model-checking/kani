@@ -153,7 +153,10 @@ def parse_args():
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:
-            rmc.add_selected_default_cbmc_flags(args)
+            rmc.add_selected_default_cbmc_checks(args)
+
+        # Conditionally add common CBMC flags
+        rmc.process_common_cbmc_flags(args)
 
     parser = create_parser()
     args = parser.parse_args()
