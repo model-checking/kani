@@ -83,7 +83,7 @@ def main():
         if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(cbmc_filename, symbols_filename, args.verbose, args.dry_run):
             return 1
 
-    if args.undefined_function_checks
+    if args.undefined_function_checks:
         # https://github.com/diffblue/cbmc/issues/6393
         if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
                 cbmc_filename, cbmc_filename,
