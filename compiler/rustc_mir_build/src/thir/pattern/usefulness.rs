@@ -443,9 +443,7 @@ impl<'p, 'tcx> Matrix<'p, 'tcx> {
     /// expands it.
     fn push(&mut self, row: PatStack<'p, 'tcx>) {
         if !row.is_empty() && row.head().is_or_pat() {
-            for row in row.expand_or_pat() {
-                self.patterns.push(row);
-            }
+            self.patterns.extend(row.expand_or_pat());
         } else {
             self.patterns.push(row);
         }
@@ -797,7 +795,7 @@ fn is_useful<'p, 'tcx>(
         return ret;
     }
 
-    assert!(rows.iter().all(|r| r.len() == v.len()));
+    debug_assert!(rows.iter().all(|r| r.len() == v.len()));
 
     let ty = v.head().ty();
     let is_non_exhaustive = cx.is_foreign_non_exhaustive_enum(ty);
