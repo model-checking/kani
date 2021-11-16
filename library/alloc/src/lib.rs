@@ -105,6 +105,7 @@
 #![feature(fmt_internals)]
 #![feature(fn_traits)]
 #![feature(inherent_ascii_escape)]
+#![cfg_attr(bootstrap, feature(format_args_capture))]
 #![feature(inplace_iteration)]
 #![feature(iter_advance_by)]
 #![feature(iter_zip)]
@@ -174,6 +175,8 @@ extern crate test;
 #[macro_use]
 mod macros;
 
+mod raw_vec;
+
 // Heaps provided for low-level allocation strategies
 
 pub mod alloc;
@@ -192,7 +195,6 @@ mod boxed {
 pub mod borrow;
 pub mod collections;
 pub mod fmt;
-pub mod raw_vec;
 pub mod rc;
 pub mod slice;
 pub mod str;
