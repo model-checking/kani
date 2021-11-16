@@ -2435,8 +2435,9 @@ impl<'test> TestCx<'test> {
     /// Print an error if the verification output does not contain the expected
     /// lines.
     fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
-        if let Some(line) = TestCx::contains_lines(&proc_res.stdout, expected.split('\n').collect())
-        {
+        // Include the output from stderr here for cases where there are exceptions
+        let output = proc_res.stdout.to_string() + &proc_res.stderr;
+        if let Some(line) = TestCx::contains_lines(&output, expected.split('\n').collect()) {
             self.fatal_proc_rec(
                 &format!("test failed: expected output to contain the line: {}", line),
                 &proc_res,
