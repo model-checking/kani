@@ -478,6 +478,26 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 let mut label_span_not_found = || {
                     if unsatisfied_predicates.is_empty() {
                         err.span_label(span, format!("{item_kind} not found in `{ty_str}`"));
+                        let is_string_or_ref_str = match actual.kind() {
+                            ty::Ref(_, ty, _) => {
+                                ty.is_str()
+                                    || matches!(
+                                        ty.kind(),
+                                        ty::Adt(adt, _) if self.tcx.is_diagnostic_item(sym::String, adt.did)
+                                    )
+                            }
+                            ty::Adt(adt, _) => self.tcx.is_diagnostic_item(sym::String, adt.did),
+                            _ => false,
+                        };
+                        if is_string_or_ref_str && item_name.name == sym::iter {
+                            err.span_suggestion_verbose(
+                                item_name.span,
+                                "because of the in-memory representation of `&str`, to obtain \
+                                 an `Iterator` over each of its codepoint use method `chars`",
+                                String::from("chars"),
+                                Applicability::MachineApplicable,
+                            );
+                        }
                         if let ty::Adt(adt, _) = rcvr_ty.kind() {
                             let mut inherent_impls_candidate = self
                                 .tcx
@@ -1410,7 +1430,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 }
                             }
                             // We only want to suggest public or local traits (#45781).
-                            item.vis == ty::Visibility::Public || info.def_id.is_local()
+                            item.vis.is_public() || info.def_id.is_local()
                         })
                         .is_some()
             })

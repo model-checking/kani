@@ -120,10 +120,17 @@ def main():
             return 1
         if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
                 goto_filename, goto_filename,
-                ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*'],
-                args.verbose,
-                dry_run=args.dry_run,
+                ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
+                args.verbose, 
+                dry_run=args.dry_run
                 restrictions_filename=restrictions_filename):
+            return 1
+    else:
+        # Apply --drop-unused-functions if undefined-function-checks was turned off
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                goto_filename, goto_filename,
+                ['--drop-unused-functions'],
+                args.verbose, dry_run=args.dry_run):
             return 1
 
     if "--function" not in args.cbmc_args:
@@ -175,7 +182,10 @@ def parse_args():
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:
-            rmc.add_selected_default_cbmc_flags(args)
+            rmc.add_selected_default_cbmc_checks(args)
+
+        # Conditionally add common CBMC flags
+        rmc.process_common_cbmc_flags(args)
 
     parser = create_parser()
     args = parser.parse_args()

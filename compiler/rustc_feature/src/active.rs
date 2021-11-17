@@ -408,9 +408,6 @@ declare_features! (
     /// Allows inferring `'static` outlives requirements (RFC 2093).
     (active, infer_static_outlives_requirements, "1.26.0", Some(54185), None),
 
-    /// Allows dereferencing raw pointers during const eval.
-    (active, const_raw_ptr_deref, "1.27.0", Some(51911), None),
-
     /// Allows inconsistent bounds in where clauses.
     (active, trivial_bounds, "1.28.0", Some(48214), None),
 
@@ -541,9 +538,6 @@ declare_features! (
 
     /// Be more precise when looking for live drops in a const context.
     (active, const_precise_live_drops, "1.46.0", Some(73255), None),
-
-    /// Allows capturing variables in scope using format_args!
-    (active, format_args_capture, "1.46.0", Some(67984), None),
 
     /// Allows `if let` guard in match arms.
     (active, if_let_guard, "1.47.0", Some(51114), None),
