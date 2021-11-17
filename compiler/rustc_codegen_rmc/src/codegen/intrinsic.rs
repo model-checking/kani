@@ -146,10 +146,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics which encode a SIMD arithmetic operation with overflow check
-        // RMC overflow operations accept SIMD vectors but the results are unsound.
-        // TODO: Create a CBMC issue.
-        // For now, we expand the overflow check.
+        // Intrinsics which encode a SIMD arithmetic operation with overflow check.
+        // We expand the overflow check because CBMC overflow operations don't accept array as
+        // argument.
         macro_rules! codegen_simd_with_overflow_check {
             ($op:ident, $overflow:ident) => {{
                 let a = fargs.remove(0);
@@ -182,7 +181,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Intrinsics which encode a simple wrapping arithmetic operation
         macro_rules! codegen_wrapping_op {
-            ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b)) }};
+            ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
         }
 
         // Intrinsics which encode a simple binary operation
