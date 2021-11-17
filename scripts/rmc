@@ -15,6 +15,7 @@ RMC_C_STUB = MY_PATH / "library" / "rmc" / "stubs" / "C"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
+
 def main():
     args = parse_args()
 
@@ -36,7 +37,8 @@ def main():
                 args.keep_temps,
                 args.mangler,
                 args.dry_run,
-                ["gen-c"]):
+                ["gen-c"],
+                args.restrict_vtable):
             return 1
 
         out_files = rmc.symbol_table_to_gotoc([json_runnable_filename], args.verbose, args.keep_temps, args.dry_run)
@@ -44,15 +46,23 @@ def main():
         rmc.link_c_lib(out_files, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
                        args.dry_run, args.keep_temps)
 
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(
+                goto_runnable_filename,
+                c_runnable_filename,
+                restrictions_runnable_filename,
+                args.verbose,
+                args.dry_run):
             return 1
 
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     symbol_table_json_filename = base + ".symtab.json"
+    restrictions_filename = base + ".restrictions.json"
     goto_filename = base + ".goto"
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
+
+    restrictions_filename = restrictions_filename if args.restrict_vtable else None
 
     if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(
             args.input,
@@ -65,7 +75,8 @@ def main():
             args.dry_run,
             args.use_abs,
             args.abs_type,
-            []):
+            [],
+            args.restrict_vtable):
         return 1
 
     out_files = rmc.symbol_table_to_gotoc([symbol_table_json_filename], args.verbose, args.keep_temps, args.dry_run)
@@ -85,7 +96,13 @@ def main():
                    args.keep_temps)
 
     if args.gen_c:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose, args.dry_run):
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(
+                goto_filename,
+                c_filename,
+                restrictions_filename,
+                args.verbose,
+                args.dry_run,
+                args.restrict_vtable):
             return 1
 
     if args.gen_symbols:
@@ -97,12 +114,16 @@ def main():
         if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
                 goto_filename, goto_filename,
                 ['--add-library'],
-                args.verbose, dry_run=args.dry_run):
+                args.verbose,
+                dry_run=args.dry_run,
+                restrictions_filename=restrictions_filename):
             return 1
         if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
                 goto_filename, goto_filename,
                 ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*'],
-                args.verbose, dry_run=args.dry_run):
+                args.verbose,
+                dry_run=args.dry_run,
+                restrictions_filename=restrictions_filename):
             return 1
 
     if "--function" not in args.cbmc_args:
@@ -121,6 +142,7 @@ def main():
         retcode = EXIT_CODE_SUCCESS
 
     return retcode
+
 
 def parse_args():
     # Create parser

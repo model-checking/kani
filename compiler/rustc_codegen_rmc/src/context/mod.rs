@@ -8,5 +8,7 @@
 
 mod current_fn;
 mod goto_ctx;
+mod vtable_ctx;
 
 pub use goto_ctx::GotocCtx;
+pub use vtable_ctx::VtableCtx;

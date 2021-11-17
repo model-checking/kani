@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
-use crate::GotocCtx;
+use crate::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
@@ -142,8 +142,17 @@ impl<'tcx> GotocCtx<'tcx> {
                             let self_ref =
                                 self_ref.cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
-                            let func_exp: Expr = fn_ptr.dereference();
-                            func_exp.call(vec![self_ref]).as_stmt(Location::none())
+                            let call = if self.vtable_ctx.emit_vtable_restrictions {
+                                self.virtual_call_with_restricted_fn_ptr(
+                                    trait_fat_ptr.typ().clone(),
+                                    VtableCtx::drop_index(),
+                                    fn_ptr,
+                                    vec![self_ref],
+                                )
+                            } else {
+                                fn_ptr.dereference().call(vec![self_ref])
+                            };
+                            call.as_stmt(Location::none())
                         }
                         _ => {
                             // Non-virtual, direct drop call
@@ -448,12 +457,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let assert_nonnull = Stmt::assert(call_is_nonnull, &assert_msg, loc.clone());
 
         // Virtual function call and corresponding nonnull assertion.
-        let func_exp: Expr = fn_ptr.dereference();
-        vec![
-            assert_nonnull,
-            self.codegen_expr_to_place(place, func_exp.call(fargs.to_vec()))
-                .with_location(loc.clone()),
-        ]
+        let call = if self.vtable_ctx.emit_vtable_restrictions {
+            self.virtual_call_with_restricted_fn_ptr(
+                trait_fat_ptr.typ().clone(),
+                idx,
+                fn_ptr,
+                fargs.to_vec(),
+            )
+        } else {
+            fn_ptr.dereference().call(fargs.to_vec())
+        };
+        vec![assert_nonnull, self.codegen_expr_to_place(place, call).with_location(loc.clone())]
     }
 
     /// A place is similar to the C idea of a LHS. For example, the returned value of a function call is stored to a place.

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::utils::{dynamic_fat_ptr, slice_fat_ptr};
-use crate::GotocCtx;
+use crate::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::{aggr_tag, BUG_REPORT_URL};
 use cbmc::MachineModel;
@@ -721,7 +721,17 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Lookup in the symbol table using the full symbol table name/key
         let fn_name = self.symbol_name(instance);
+
         if let Some(fn_symbol) = self.symbol_table.lookup(&fn_name) {
+            if self.vtable_ctx.emit_vtable_restrictions {
+                // Add to the possible method names for this trait type
+                self.vtable_ctx.add_possible_method(
+                    self.normalized_trait_name(t).into(),
+                    idx,
+                    fn_name.into(),
+                );
+            }
+
             // Create a pointer to the method
             // Note that the method takes a self* as the first argument, but the vtable field type has a void* as the first arg.
             // So we need to cast it at the end.
@@ -745,13 +755,22 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_ty: &'tcx ty::TyS<'tcx>,
     ) -> Expr {
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty).polymorphize(self.tcx);
-        let drop_sym_name = self.symbol_name(drop_instance);
+        let drop_sym_name: InternedString = self.symbol_name(drop_instance).into();
 
         // The drop instance has the concrete object type, for consistency with
         // type codegen we need the trait type for the function parameter.
         let trait_fn_ty = self.trait_vtable_drop_type(trait_ty);
 
-        if let Some(drop_sym) = self.symbol_table.lookup(&drop_sym_name) {
+        if let Some(drop_sym) = self.symbol_table.lookup(drop_sym_name) {
+            if self.vtable_ctx.emit_vtable_restrictions {
+                // Add to the possible method names for this trait type
+                self.vtable_ctx.add_possible_method(
+                    self.normalized_trait_name(trait_ty).into(),
+                    VtableCtx::drop_index(),
+                    drop_sym_name,
+                );
+            }
+
             Expr::symbol_expression(drop_sym_name, drop_sym.clone().typ)
                 .address_of()
                 .cast_to(trait_fn_ty)
@@ -760,6 +779,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // for it. Build and insert a function that just calls an unimplemented block
             // to maintain soundness.
             let drop_sym_name = format!("{}_unimplemented", self.symbol_name(drop_instance));
+            if let Some(fn_symbol) = self.symbol_table.lookup(&drop_sym_name) {
+                return fn_symbol.to_expr();
+            }
 
             // Function body
             let unimplemented = self

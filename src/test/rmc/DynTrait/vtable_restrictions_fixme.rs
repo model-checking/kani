@@ -1,6 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// Test vtable function pointer restrictions for dynamic trait objects.
+
+// FIXME until the corresponding CBMC path lands:
+
+// rmc-flags: --restrict-vtable
+
 struct Sheep {}
 struct Cow {}
 
@@ -28,6 +34,12 @@ impl Animal for Cow {
     }
 }
 
+impl Other for i32 {
+    fn noise(&self) -> i32 {
+        3
+    }
+}
+
 // Returns some struct that implements Animal, but we don't know which one at compile time.
 fn random_animal(random_number: i64) -> Box<dyn Animal> {
     if random_number < 5 { Box::new(Sheep {}) } else { Box::new(Cow {}) }
@@ -42,4 +54,7 @@ pub fn main() {
     } else {
         assert!(s == 2);
     }
+
+    let other = &5 as &dyn Other;
+    assert!(other.noise() == 3);
 }

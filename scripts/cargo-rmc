@@ -17,6 +17,7 @@ RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
+
 def main():
     args = parse_args()
 
@@ -24,7 +25,7 @@ def main():
 
     if args.gen_c_runnable:
         rmc.cargo_build(args.crate, args.target_dir, args.build_target,
-                        args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
+                        args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"], args.restrict_vtable)
 
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
         symbol_table_jsons = glob.glob(pattern)
@@ -32,19 +33,26 @@ def main():
 
         cbmc_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.out")
         c_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.c")
+        restrictions_runnable_filename = os.path.join(
+            args.target_dir, "debug", "deps") if args.restrict_vtable else None
 
         out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
         rmc.link_c_lib(out_files, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
                        args.dry_run, args.keep_temps)
 
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(
+                cbmc_runnable_filename,
+                c_runnable_filename,
+                restrictions_runnable_filename,
+                args.verbose,
+                args.dry_run):
             return 1
 
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     rmc.cargo_build(args.crate, args.target_dir, args.build_target,
-                    args.verbose, args.debug, args.mangler, args.dry_run, [])
+                    args.verbose, args.debug, args.mangler, args.dry_run, [], args.restrict_vtable)
 
     if args.build_target:
         pattern = os.path.join(args.target_dir, args.build_target, "debug", "deps", "*.symtab.json")
@@ -63,6 +71,8 @@ def main():
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
     out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
+    restrictions_filename = os.path.join(args.target_dir, "debug", "deps") if args.restrict_vtable else None
+
     args.c_lib.append(str(RMC_C_LIB))
 
     rmc.link_c_lib(
@@ -76,7 +86,12 @@ def main():
         args.keep_temps)
 
     if args.gen_c:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_filename, c_filename, args.verbose, args.dry_run):
+        if EXIT_CODE_SUCCESS != rmc.goto_to_c(
+                cbmc_filename,
+                c_filename,
+                restrictions_filename,
+                args.verbose,
+                args.dry_run):
             return 1
 
     if args.gen_symbols:
@@ -87,12 +102,16 @@ def main():
     if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
             cbmc_filename, cbmc_filename,
             ['--add-library'],
-            args.verbose, dry_run=args.dry_run):
+            args.verbose,
+            dry_run=args.dry_run,
+            restrictions_filename=restrictions_filename):
         return 1
     if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
             cbmc_filename, cbmc_filename,
             ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*'],
-            args.verbose, dry_run=args.dry_run):
+            args.verbose,
+            dry_run=args.dry_run,
+            restrictions_filename=restrictions_filename):
         return 1
 
     if "--function" not in args.cbmc_args:

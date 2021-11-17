@@ -4,7 +4,7 @@
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::InternedString;
 use serde::ser::{SerializeMap, Serializer};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use vector_map::VecMap;
 
 // Wrapper type to allow impl of trait (otherwise impossible when both trait and type are external).
@@ -95,6 +95,32 @@ impl Serialize for InternedString {
         S: Serializer,
     {
         self.to_string().serialize(serializer)
+    }
+}
+
+struct InternedStringVisitor;
+
+impl<'de> serde::Deserialize<'de> for InternedString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(InternedStringVisitor)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for InternedStringVisitor {
+    type Value = InternedString;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a String like thing")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(v.into())
     }
 }
 
