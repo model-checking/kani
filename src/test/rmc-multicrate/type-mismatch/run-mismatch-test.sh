@@ -21,7 +21,6 @@ export CARGO_TARGET_DIR=/tmp/type_mismatch_test_build
 export RUST_BACKTRACE=1
 cargo rmc &> $RESULT
 
-# Run the solver
 if ! grep -q "VERIFICATION SUCCESSFUL" $RESULT; then
   cat $RESULT
   echo
