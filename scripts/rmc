@@ -121,7 +121,7 @@ def main():
         if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
                 goto_filename, goto_filename,
                 ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
-                args.verbose, 
+                args.verbose,
                 dry_run=args.dry_run
                 restrictions_filename=restrictions_filename):
             return 1
