@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "unknown-lang-mode"
+name = "cbmc-unknown-lang-mode"
 version = "0.1.0"
 edition = "2018"
 
