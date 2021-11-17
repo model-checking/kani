@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use rmc_restrictions::*;
+use rmc_restrictions::{TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::fx::FxHashMap;
 use std::env;
 use std::fs::File;

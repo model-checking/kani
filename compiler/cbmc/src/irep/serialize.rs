@@ -4,7 +4,7 @@
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::InternedString;
 use serde::ser::{SerializeMap, Serializer};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use vector_map::VecMap;
 
 // Wrapper type to allow impl of trait (otherwise impossible when both trait and type are external).

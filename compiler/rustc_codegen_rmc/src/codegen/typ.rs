@@ -486,8 +486,8 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
         let goto_typ = self.codegen_ty_inner(ty);
         if let Some(tag) = goto_typ.tag() {
-            if !self.type_map.contains_key(&tag.to_string()) {
-                self.type_map.insert(tag.to_string(), ty);
+            if !self.type_map.contains_key(&tag) {
+                self.type_map.insert(tag, ty);
             }
         }
         goto_typ

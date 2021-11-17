@@ -19,7 +19,7 @@ use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::InternedString;
 use cbmc::NO_PRETTY_NAME;
-use rmc_restrictions::*;
+use rmc_restrictions::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::stable_map::FxHashMap;
 use tracing::debug;
 
@@ -115,6 +115,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the naming unambiguous.
     ///
     /// This can be simplified if CBMC implemented label-based restrictions.
+    /// RMC tracking: https://github.com/model-checking/rmc/issues/651
+    /// CBMC tracking: https://github.com/diffblue/cbmc/issues/6464
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,
         trait_ty: Type,
@@ -130,13 +132,13 @@ impl<'tcx> GotocCtx<'tcx> {
             "restricted_call_{}_{}",
             full_crate_name,
             self.vtable_ctx.get_call_site_global_idx()
-        ).into;
+        )
+        .into();
 
         // We only have the Gotoc type, we need to normalize to match the MIR type.
         assert!(trait_ty.is_struct_tag());
-        let mir_name = self.normalized_trait_name(
-            self.type_map.get(&trait_ty.tag().unwrap().to_string()).unwrap(),
-        );
+        let mir_name =
+            self.normalized_trait_name(self.type_map.get(&trait_ty.tag().unwrap()).unwrap());
         self.vtable_ctx.add_call_site(mir_name.into(), vtable_idx, wrapper_name);
 
         // Declare the wrapper's parameters
@@ -161,8 +163,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let param_typs = parameters.clone().iter().map(|p| p.to_function_parameter()).collect();
         let new_typ = if fn_type.is_code() {
             Type::code(param_typs, ret_typ.clone())
-        } else {
+        } else if fn_type.is_variadic_code() {
             Type::variadic_code(param_typs, ret_typ.clone())
+        } else {
+            unreachable!("Function type must be Code or VariadicCode")
         };
 
         // Build the body: call the original function pointer

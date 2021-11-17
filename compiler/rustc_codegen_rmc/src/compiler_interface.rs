@@ -8,6 +8,7 @@ use crate::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
+use cbmc::InternedString;
 use rmc_restrictions::VtableCtxResults;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
@@ -28,7 +29,7 @@ use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
-    pub type_map: BTreeMap<String, String>,
+    pub type_map: BTreeMap<InternedString, InternedString>,
     pub symtab: SymbolTable,
     pub crate_name: rustc_span::Symbol,
     pub vtable_restrictions: Option<VtableCtxResults>,
@@ -129,7 +130,8 @@ impl CodegenBackend for GotocCodegenBackend {
         );
 
         // Map MIR types to GotoC types
-        let type_map = BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string())));
+        let type_map =
+            BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
 
         // Get the vtable function pointer restrictions if requested
         let vtable_restrictions = if c.vtable_ctx.emit_vtable_restrictions {

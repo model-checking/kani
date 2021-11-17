@@ -52,7 +52,7 @@ pub struct GotocCtx<'tcx> {
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
-    pub type_map: FxHashMap<String, Ty<'tcx>>,
+    pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
 }
 
 /// Constructor
