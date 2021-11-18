@@ -269,9 +269,9 @@ def cargo_build(
         build_cmd += ["--target", str(build_target)]
     build_env = os.environ
     build_env.update({"RUSTFLAGS": " ".join(rustflags),
-                 "RUSTC": rustc_path,
-                 "PATH": os.environ["PATH"]
-                 })
+                      "RUSTC": rustc_path,
+                      "PATH": os.environ["PATH"]
+                      })
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
     if verbose:
