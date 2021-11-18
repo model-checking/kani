@@ -11,5 +11,6 @@ pub fn main() {
     let sum1 = a.wrapping_add(b);
     let sum2 = a.checked_add(b);
     assert!(sum0 == sum1);
+    assert!(sum1 >= b || sum2.is_none());
     assert!(sum1 >= a || sum2.is_none());
 }
