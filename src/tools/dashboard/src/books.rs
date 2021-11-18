@@ -262,10 +262,11 @@ fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<
     } else {
         TestProps::new(path.to_path_buf(), None, Vec::new(), Vec::new())
     };
-    if example.config.edition != Some(Edition::Edition2015) {
-        props.rustc_args.push(String::from("--edition"));
-        props.rustc_args.push(String::from("2018"));
-    }
+    // Add edition flag to the example
+    let edition_year = format!("{}", example.config.edition.unwrap());
+    props.rustc_args.push(String::from("--edition"));
+    props.rustc_args.push(edition_year);
+
     if props.fail_step.is_none() {
         if example.config.compile_fail {
             // Most examples with `compile_fail` annotation fail because of
@@ -294,13 +295,14 @@ fn extract(par_from: &Path, par_to: &Path, config_paths: &mut HashSet<PathBuf>) 
     rustdoc::html::markdown::find_testable_code(&code, &mut examples, ErrorCodes::No, false, None);
     for mut example in examples.0 {
         apply_diff(par_to, &mut example, config_paths);
+        example.config.edition = Some(example.config.edition.unwrap_or(Edition::Edition2021));
         example.code = pub_main(
             rustdoc::doctest::make_test(
                 &example.code,
                 None,
                 false,
                 &Default::default(),
-                example.config.edition.unwrap_or(Edition::Edition2018),
+                example.config.edition.unwrap(),
                 None,
             )
             .0,
