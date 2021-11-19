@@ -296,7 +296,7 @@ fn extract(par_from: &Path, par_to: &Path, config_paths: &mut HashSet<PathBuf>) 
             None,
             false,
             &Default::default(),
-            example.config.edition.unwrap_or(Edition::Edition2018),
+            example.config.edition.unwrap(),
             None,
         )
         .0;
