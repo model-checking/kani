@@ -24,7 +24,7 @@ fn fix(n: u32) {
 }
 
 fn main() {
-    let n: u32 = rmc::nondet();
+    let n: u32 = unsafe { rmc::nondet() };
     bug(n);
     fix(n);
 }

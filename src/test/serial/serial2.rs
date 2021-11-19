@@ -327,9 +327,9 @@ fn main() {
         // test_serial_data_len()
         const LEN: usize = 1;
         let mut serial = Serial::new_out(EventFd {}, OutWrapper::new());
-        let a: u8 = rmc::nondet();
-        let b: u8 = rmc::nondet();
-        let c: u8 = rmc::nondet();
+        let a: u8 = unsafe { rmc::nondet() };
+        let b: u8 = unsafe { rmc::nondet() };
+        let c: u8 = unsafe { rmc::nondet() };
 
         // let missed_writes_before = METRICS.uart.missed_write_count.count();
         // Trying to write data of length different than the one that we initialized the device with

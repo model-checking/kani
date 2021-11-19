@@ -9,11 +9,11 @@ fn operate_on_vec(times: usize) {
     // Create vector with known capacity
     let mut v: Vec<u32> = Vec::with_capacity(times);
     for i in 0..times {
-        v.push(rmc::nondet());
+        v.push(unsafe { rmc::nondet() });
     }
     assert!(v.len() == times);
     // Here, Vecs with grow() internally
-    let i: usize = rmc::nondet();
+    let i: usize = unsafe { rmc::nondet() };
     rmc::assume(i >= 0 && i < v.len());
     let saved = v[i];
     // Completely shrink the array to remove additional allocations
@@ -21,16 +21,16 @@ fn operate_on_vec(times: usize) {
     assert!(v[i] == saved);
     // Push some new elements to grow() again
     for i in 0..times {
-        v.push(rmc::nondet());
+        v.push(unsafe { rmc::nondet() });
     }
     // Drop all elements in the Vec
     v.clear();
     // Add some more new elements
     for i in 0..times {
-        v.push(rmc::nondet());
+        v.push(unsafe { rmc::nondet() });
     }
     // Assert!
-    let sentinel = rmc::nondet();
+    let sentinel = unsafe { rmc::nondet() };
     v.push(sentinel);
     assert!(v.pop() == Some(sentinel));
 }

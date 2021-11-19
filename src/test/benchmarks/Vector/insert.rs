@@ -9,11 +9,11 @@ include!{"../benchmark-prelude.rs"}
 fn operate_on_vec(times: usize) {
     let mut v: Vec<u32> = Vec::with_capacity(times);
     for i in 0..times {
-        v.push(rmc::nondet());
+        v.push(unsafe { rmc::nondet() });
     }
-    let sentinel = rmc::nondet();
+    let sentinel = unsafe { rmc::nondet() };
     v.push(sentinel);
-    v.insert(v.len()/2, rmc::nondet());
+    v.insert(v.len()/2, unsafe { rmc::nondet() });
     assert!(v.pop() == Some(sentinel));
 }
 

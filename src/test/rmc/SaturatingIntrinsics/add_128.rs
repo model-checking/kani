@@ -6,7 +6,7 @@
 use std::intrinsics;
 
 fn main() {
-    let v: u128 = rmc::nondet();
-    let w: u128 = rmc::nondet();
+    let v: u128 = unsafe { rmc::nondet() };
+    let w: u128 = unsafe { rmc::nondet() };
     intrinsics::saturating_add(v, w);
 }

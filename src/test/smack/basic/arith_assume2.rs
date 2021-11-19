@@ -3,8 +3,8 @@
 // @expect verified
 
 pub fn main() {
-    let a = rmc::nondet();
-    let b = rmc::nondet();
+    let a = unsafe { rmc::nondet() };
+    let b = unsafe { rmc::nondet() };
     if 4 < a && a < 8 {
         // a in [5,7]
         if 5 < b && b < 9 {

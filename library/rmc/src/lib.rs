@@ -13,7 +13,7 @@ pub mod slice;
 /// The code snippet below should never panic.
 ///
 /// ```rust
-/// let i : i32 = rmc::nondet();
+/// let i : i32 = unsafe { rmc::nondet() };
 /// rmc::assume(i > 10);
 /// if i < 0 {
 ///   panic!("This will never panic");
@@ -23,7 +23,7 @@ pub mod slice;
 /// The following code may panic though:
 ///
 /// ```rust
-/// let i : i32 = rmc::nondet();
+/// let i : i32 = unsafe { rmc::nondet() };
 /// assert!(i < 0, "This may panic and verification should fail.");
 /// rmc::assume(i > 10);
 /// ```
@@ -40,12 +40,12 @@ pub fn assume(_cond: bool) {}
 /// under all possible i32 input values.
 ///
 /// ```rust
-/// let inputA = rmc::nondet::<i32>();
+/// let inputA = unsafe { rmc::nondet::<i32>() };
 /// fn_under_verification(inputA);
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "RmcNonDet"]
-pub fn nondet<T>() -> T {
+pub unsafe fn nondet<T>() -> T {
     unimplemented!("RMC nondet")
 }
 

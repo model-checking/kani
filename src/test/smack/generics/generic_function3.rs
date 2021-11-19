@@ -35,11 +35,11 @@ fn swapem<T, U: S<T>>(s: U) -> U {
 }
 
 pub fn main() {
-    let x2 = rmc::nondet();
-    let y2 = rmc::nondet();
-    let x3 = rmc::nondet();
-    let y3 = rmc::nondet();
-    let z3 = rmc::nondet();
+    let x2 = unsafe { rmc::nondet() };
+    let y2 = unsafe { rmc::nondet() };
+    let x3 = unsafe { rmc::nondet() };
+    let y3 = unsafe { rmc::nondet() };
+    let z3 = unsafe { rmc::nondet() };
     let p2 = Point::<i64> { x: x2, y: y2 };
     let p3 = Point3::<i64> { x: x3, y: y3, z: z3 };
 

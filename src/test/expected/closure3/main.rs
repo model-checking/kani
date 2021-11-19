@@ -8,7 +8,7 @@ where
 }
 
 fn main() {
-    let num: i64 = rmc::nondet();
+    let num: i64 = unsafe { rmc::nondet() };
     if num <= std::i64::MAX - 100 {
         // avoid overflow
         let y = call_with_one(|x| x + num);

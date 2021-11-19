@@ -34,9 +34,9 @@ mod tests {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let size: usize = rmc::nondet();
+    let size: usize = unsafe { rmc::nondet() };
     rmc::assume(size < 4096);
-    let index: usize = rmc::nondet();
+    let index: usize = unsafe { rmc::nondet() };
     let array: Vec<u32> = vec![0; size];
     get_wrapped(index, &array);
 }

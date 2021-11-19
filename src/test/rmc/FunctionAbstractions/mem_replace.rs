@@ -4,8 +4,8 @@
 use std::mem;
 
 fn main() {
-    let mut var1 = rmc::nondet::<i32>();
-    let mut var2 = rmc::nondet::<i32>();
+    let mut var1 = unsafe { rmc::nondet::<i32>() };
+    let mut var2 = unsafe { rmc::nondet::<i32>() };
     let old_var1 = var1;
     unsafe {
         assert_eq!(mem::replace(&mut var1, var2), old_var1);

@@ -9,11 +9,11 @@ include!{"../benchmark-prelude.rs"}
 fn operate_on_vec(times: usize) {
     let mut v: Vec<u32> = Vec::with_capacity(times);
     for i in 0..times {
-        v.push(rmc::nondet());
+        v.push(unsafe { rmc::nondet() });
     }
     let mut v2: Vec<u32> = Vec::with_capacity(times);
     for i in 0..times {
-        v2.push(rmc::nondet());
+        v2.push(unsafe { rmc::nondet() });
     }
     v.append(&mut v2);
     assert!(v.len() == times * 2);

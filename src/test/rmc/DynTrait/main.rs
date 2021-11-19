@@ -34,7 +34,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 }
 
 fn main() {
-    let random_number = rmc::nondet();
+    let random_number = unsafe { rmc::nondet() };
     let animal = random_animal(random_number);
     let s = animal.noise();
     if random_number < 5 {

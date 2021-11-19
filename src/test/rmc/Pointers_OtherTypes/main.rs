@@ -21,7 +21,7 @@ fn main() {
     make_true(&mut z);
     assert!(z);
 
-    let mut a: f32 = rmc::nondet();
+    let mut a: f32 = unsafe { rmc::nondet() };
     let b = a;
     div_by_two(&mut a);
     //       NaN

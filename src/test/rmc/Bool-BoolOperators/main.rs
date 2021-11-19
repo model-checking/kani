@@ -12,6 +12,6 @@ fn main() {
     assert!(d && true);
     assert!(!b && d);
 
-    let e: bool = rmc::nondet();
+    let e: bool = unsafe { rmc::nondet() };
     assert!(e || !e);
 }

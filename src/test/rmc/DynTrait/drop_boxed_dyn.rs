@@ -36,7 +36,7 @@ impl Drop for Concrete2 {
 fn main() {
     {
         let x: Box<dyn T>;
-        if rmc::nondet() {
+        if unsafe { rmc::nondet() } {
             x = Box::new(Concrete1 {});
         } else {
             x = Box::new(Concrete2 {});

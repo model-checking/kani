@@ -3,8 +3,8 @@
 use std::collections::VecDeque;
 
 fn main() {
-    let x = rmc::nondet();
-    let y = rmc::nondet();
+    let x = unsafe { rmc::nondet() };
+    let y = unsafe { rmc::nondet() };
     let mut q: VecDeque<i32> = VecDeque::new();
     q.push_back(x);
     q.push_back(y);

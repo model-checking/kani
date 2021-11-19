@@ -5,8 +5,8 @@ use std::intrinsics;
 
 macro_rules! test_saturating_intrinsics {
     ($ty:ty) => {
-        let v: $ty = rmc::nondet();
-        let w: $ty = rmc::nondet();
+        let v: $ty = unsafe { rmc::nondet() };
+        let w: $ty = unsafe { rmc::nondet() };
         let result = intrinsics::saturating_add(v, w);
         match (0 <= v, 0 <= w) {
             (true, true) => {

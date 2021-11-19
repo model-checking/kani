@@ -3,7 +3,7 @@
 
 #[no_mangle]
 pub fn check_dummy() {
-    let x = rmc::nondet::<u8>();
+    let x = unsafe { rmc::nondet::<u8>() };
     rmc::assume(x > 10);
     assert!(x > 2);
 }

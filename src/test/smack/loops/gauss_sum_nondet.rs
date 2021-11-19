@@ -6,7 +6,7 @@
 
 pub fn main() {
     let mut sum = 0;
-    let b: u64 = rmc::nondet();
+    let b: u64 = unsafe { rmc::nondet() };
     if b < 5 && b > 1 {
         for i in 0..b {
             sum += i;

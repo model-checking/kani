@@ -9,7 +9,7 @@ where
 }
 
 fn main() {
-    let mut num: i32 = rmc::nondet();
+    let mut num: i32 = unsafe { rmc::nondet() };
     let y = 2;
     if num <= std::i32::MAX - 100 {
         // avoid overflow

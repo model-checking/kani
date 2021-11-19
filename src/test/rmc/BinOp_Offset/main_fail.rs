@@ -4,8 +4,8 @@
 
 pub fn test_offset_in_double_array() {
     //let table: Vec<Vec<u64>> = Vec::with_capacity(1);
-    let table: [[u64; 1]; 1] = [[rmc::nondet::<u64>()]];
-    table[0][rmc::nondet::<usize>()]; // EXPECTED FAIL
+    let table: [[u64; 1]; 1] = [[unsafe { rmc::nondet::<u64>() }]];
+    table[0][unsafe { rmc::nondet::<usize>() }]; // EXPCECTED FAIL
 }
 
 fn main() {

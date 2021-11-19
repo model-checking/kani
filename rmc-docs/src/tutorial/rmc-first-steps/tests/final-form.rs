@@ -52,7 +52,7 @@ mod tests {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let x: u32 = rmc::nondet();
+    let x: u32 = unsafe { rmc::nondet() };
     rmc::assume(x < 4096);
     let y = estimate_size(x);
     assert!(y < 10);
@@ -62,6 +62,6 @@ fn main() {
 #[cfg(rmc)]
 #[no_mangle]
 fn failing_main() {
-    let x: u32 = rmc::nondet();
+    let x: u32 = unsafe { rmc::nondet() };
     let y = estimate_size(x);
 }

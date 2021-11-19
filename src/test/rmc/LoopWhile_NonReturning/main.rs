@@ -4,7 +4,7 @@
 // cbmc-flags: --unwind 11
 
 fn main() {
-    let mut a: u32 = rmc::nondet();
+    let mut a: u32 = unsafe { rmc::nondet() };
 
     if a < 1024 {
         while a > 0 {

@@ -27,8 +27,8 @@ mod tests {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let a: u32 = rmc::nondet();
-    let b: u32 = rmc::nondet();
+    let a: u32 = unsafe { rmc::nondet() };
+    let b: u32 = unsafe { rmc::nondet() };
     simple_addition(a, b);
 }
 // ANCHOR_END: rmc
