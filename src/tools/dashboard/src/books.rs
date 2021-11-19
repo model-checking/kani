@@ -281,11 +281,6 @@ fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<
     example.code = format!("{}{}", props, example.code);
 }
 
-/// Make the main function of a test public so it can be verified by rmc.
-fn pub_main(code: String) -> String {
-    code.replace("fn main", "pub fn main")
-}
-
 /// Extracts examples from the markdown file specified by `par_from`,
 /// pre-processes those examples, and saves them in the directory specified by
 /// `par_to`.
@@ -296,17 +291,15 @@ fn extract(par_from: &Path, par_to: &Path, config_paths: &mut HashSet<PathBuf>) 
     for mut example in examples.0 {
         apply_diff(par_to, &mut example, config_paths);
         example.config.edition = Some(example.config.edition.unwrap_or(Edition::Edition2021));
-        example.code = pub_main(
-            rustdoc::doctest::make_test(
-                &example.code,
-                None,
-                false,
-                &Default::default(),
-                example.config.edition.unwrap(),
-                None,
-            )
-            .0,
-        );
+        example.code = rustdoc::doctest::make_test(
+            &example.code,
+            None,
+            false,
+            &Default::default(),
+            example.config.edition.unwrap_or(Edition::Edition2018),
+            None,
+        )
+        .0;
         prepend_props(par_to, &mut example, config_paths);
         let rs_path = par_to.join(format!("{}.rs", example.line));
         fs::create_dir_all(rs_path.parent().unwrap()).unwrap();
