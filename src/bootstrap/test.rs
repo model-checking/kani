@@ -1231,6 +1231,8 @@ default_test!(Dashboard { path: "src/test/dashboard", mode: "rmc", suite: "dashb
 
 default_test!(RmcDocs { path: "src/test/rmc-docs", mode: "rmc", suite: "rmc-docs" });
 
+default_test!(RmcFixme { path: "src/test/rmc-fixme", mode: "rmc-fixme", suite: "rmc-fixme" });
+
 default_test!(Stub { path: "src/test/stub-tests", mode: "stub-tests", suite: "stub-tests" });
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
