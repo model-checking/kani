@@ -42,10 +42,10 @@ pub struct VtableCtx {
 
 /// Constructor
 impl VtableCtx {
-    pub fn new(restrict_ptrs: bool) -> Self {
-        debug!("Restricting vtable function pointers? {:?}", restrict_ptrs);
+    pub fn new(emit_vtable_restrictions: bool) -> Self {
+        debug!("Restricting vtable function pointers? {:?}", emit_vtable_restrictions);
         Self {
-            emit_vtable_restrictions: restrict_ptrs,
+            emit_vtable_restrictions,
             possible_methods: FxHashMap::default(),
             call_sites: Vec::new(),
             call_site_global_idx: 0,
@@ -63,7 +63,7 @@ impl VtableCtx {
         imp: InternedString,
     ) {
         assert!(self.emit_vtable_restrictions);
-        let key = TraitDefinedMethod { trait_name: trait_name.clone(), vtable_idx: method };
+        let key = TraitDefinedMethod { trait_name, vtable_idx: method };
 
         if let Some(possibilities) = self.possible_methods.get_mut(&key) {
             possibilities.push(imp);
@@ -96,7 +96,7 @@ impl VtableCtx {
     ) {
         assert!(self.emit_vtable_restrictions);
         let site = CallSite {
-            trait_method: TraitDefinedMethod { trait_name: trait_name, vtable_idx: method },
+            trait_method: TraitDefinedMethod { trait_name, vtable_idx: method },
             function_name: function_name,
         };
         self.call_sites.push(site);

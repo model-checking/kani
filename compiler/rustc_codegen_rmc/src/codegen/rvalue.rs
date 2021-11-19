@@ -779,40 +779,37 @@ impl<'tcx> GotocCtx<'tcx> {
             // for it. Build and insert a function that just calls an unimplemented block
             // to maintain soundness.
             let drop_sym_name = format!("{}_unimplemented", self.symbol_name(drop_instance));
-            if let Some(fn_symbol) = self.symbol_table.lookup(&drop_sym_name) {
-                return fn_symbol.to_expr();
-            }
+            let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
+                // Function body
+                let unimplemented = ctx
+                    .codegen_unimplemented(
+                        format!("drop_in_place for {}", drop_sym_name).as_str(),
+                        Type::empty(),
+                        Location::none(),
+                        "https://github.com/model-checking/rmc/issues/281",
+                    )
+                    .as_stmt(Location::none());
 
-            // Function body
-            let unimplemented = self
-                .codegen_unimplemented(
-                    format!("drop_in_place for {}", drop_sym_name).as_str(),
-                    Type::empty(),
+                // Declare symbol for the single, self parameter
+                let param_name = format!("{}::1::var{:?}", drop_sym_name, 0);
+                let param_sym = Symbol::variable(
+                    param_name.clone(),
+                    param_name,
+                    ctx.codegen_ty(trait_ty).to_pointer(),
                     Location::none(),
-                    "https://github.com/model-checking/rmc/issues/281",
+                );
+                ctx.symbol_table.insert(param_sym.clone());
+
+                // Build and insert the function itself
+                Symbol::function(
+                    name,
+                    Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
+                    Some(Stmt::block(vec![unimplemented], Location::none())),
+                    NO_PRETTY_NAME,
+                    Location::none(),
                 )
-                .as_stmt(Location::none());
-
-            // Declare symbol for the single, self parameter
-            let param_name = format!("{}::1::var{:?}", drop_sym_name, 0);
-            let param_sym = Symbol::variable(
-                param_name.clone(),
-                param_name,
-                self.codegen_ty(trait_ty).to_pointer(),
-                Location::none(),
-            );
-            self.symbol_table.insert(param_sym.clone());
-
-            // Build and insert the function itself
-            let sym = Symbol::function(
-                &drop_sym_name,
-                Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
-                Some(Stmt::block(vec![unimplemented], Location::none())),
-                NO_PRETTY_NAME,
-                Location::none(),
-            );
-            self.symbol_table.insert(sym.clone());
-            Expr::symbol_expression(drop_sym_name, sym.typ).address_of().cast_to(trait_fn_ty)
+            });
+            drop_sym.to_expr().address_of().cast_to(trait_fn_ty)
         }
     }
 
