@@ -13,7 +13,7 @@ fn mmap() -> *mut MyCVoid {
     0 as *mut MyCVoid
 }
 
-pub fn main() {
+fn main() {
     let v = mmap();
     assert!(v != MAP_FAILED);
     assert!(v.is_null());

@@ -10,7 +10,7 @@ extern "C" {
     fn missing_int_converter(i: u32) -> u32;
 }
 
-pub fn main() {
+fn main() {
     unsafe {
         let x = missing_int_converter(3);
         assert!(x < 2 || x > 1);

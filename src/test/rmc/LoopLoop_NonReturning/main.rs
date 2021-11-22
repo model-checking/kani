@@ -3,7 +3,7 @@
 
 // cbmc-flags: --unwind 10
 
-pub fn main() {
+fn main() {
     let mut a: u32 = rmc::nondet();
 
     if a < 1024 {

@@ -79,7 +79,7 @@ impl<'a> ArgParser<'a> {
     }
 }
 
-pub fn main() {
+fn main() {
     let a: ArgParser = ArgParser { arguments: BTreeMap::new() };
     a.format_arguments();
 }

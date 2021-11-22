@@ -87,7 +87,7 @@ fn test_swap() {
     assert!(y == 12);
 }
 
-pub fn main() {
+fn main() {
     test_copy();
     test_swap();
     test_append();

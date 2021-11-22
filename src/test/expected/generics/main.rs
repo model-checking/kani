@@ -13,7 +13,7 @@ fn wrapped<T>(x: T) -> Foo<T> {
     Foo { data: ident(x), i: 0 }
 }
 
-pub fn main() {
+fn main() {
     let x = 10;
     let y = wrapped(x);
     let z = 20.0;

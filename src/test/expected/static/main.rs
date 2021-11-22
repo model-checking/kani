@@ -6,7 +6,7 @@ fn foo() -> i32 {
     X
 }
 
-pub fn main() {
+fn main() {
     assert!(10 == foo());
     assert!(12 == foo());
 }

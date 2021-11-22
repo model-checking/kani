@@ -3,7 +3,7 @@
 #[derive(Debug, PartialEq)]
 pub enum Empty {}
 
-pub fn main() {
+fn main() {
     let res: Result<Empty, u32> = Err(0);
     if let Err(num) = res {
         num + 1;

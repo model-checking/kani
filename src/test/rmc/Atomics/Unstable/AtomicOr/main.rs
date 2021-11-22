@@ -5,7 +5,7 @@ use std::intrinsics::{
     atomic_or, atomic_or_acq, atomic_or_acqrel, atomic_or_rel, atomic_or_relaxed,
 };
 
-pub fn main() {
+fn main() {
     let mut a1 = 1 as u8;
     let mut a2 = 1 as u8;
     let mut a3 = 1 as u8;

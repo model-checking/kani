@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub fn main() {
+fn main() {
     let a1 = AtomicBool::new(true);
     let a2 = AtomicBool::new(true);
     let a3 = AtomicBool::new(true);

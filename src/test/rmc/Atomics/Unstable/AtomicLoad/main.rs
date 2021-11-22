@@ -3,7 +3,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::{atomic_load, atomic_load_acq, atomic_load_relaxed};
 
-pub fn main() {
+fn main() {
     let a1 = 1 as u8;
     let a2 = 1 as u8;
     let a3 = 1 as u8;

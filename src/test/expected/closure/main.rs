@@ -8,7 +8,7 @@ where
     some_closure(1, 1);
 }
 
-pub fn main() {
+fn main() {
     let mut num: i32 = rmc::nondet();
     let y = 2;
     if num <= std::i32::MAX - 100 {

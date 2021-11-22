@@ -13,6 +13,6 @@ pub fn unit_to_u32() -> u32 {
     5
 }
 
-pub fn main() {
+fn main() {
     rmc::expect_fail(takes_dyn_fun(Box::new(&unit_to_u32)) == 3, "Wrong u32")
 }

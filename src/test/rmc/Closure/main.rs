@@ -38,7 +38,7 @@ fn test_env() {
     assert!(r == 9);
 }
 
-pub fn main() {
+fn main() {
     closure_with_empty_args();
     closure_with_1_arg();
     test_three_args();

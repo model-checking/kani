@@ -9,7 +9,7 @@ struct Abstract<'a> {
     uints: &'a [u32],
 }
 
-pub fn main() {
+fn main() {
     let x = Concrete { array: [1, 2, 3, 4] };
     assert!(x.array[0] == 1);
     let y = Abstract { uints: &[10, 11, 12, 13] };

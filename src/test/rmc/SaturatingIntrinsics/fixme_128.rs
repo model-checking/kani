@@ -5,7 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics;
 
-pub fn main() {
+fn main() {
     let v: u128 = rmc::nondet();
     let w: u128 = rmc::nondet();
     intrinsics::saturating_add(v, w);

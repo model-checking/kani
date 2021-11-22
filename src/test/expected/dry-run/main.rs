@@ -6,4 +6,4 @@
 // `--dry-run` causes RMC to print out commands instead of running them
 // In `expected` you will find substrings of these commands because the
 // concrete paths depend on your working directory.
-pub fn main() {}
+fn main() {}

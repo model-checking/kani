@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(asm)]
 
-pub fn main() {
+fn main() {
     unsafe {
         asm!("nop");
     }
