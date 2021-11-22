@@ -10,9 +10,7 @@ use rustc_middle::mir::interpret::{
 };
 use rustc_middle::mir::{Constant, ConstantKind, Operand};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{
-    self, Const, ConstKind, FloatTy, Instance, IntTy, ScalarInt, Ty, Uint, UintTy,
-};
+use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
@@ -150,29 +148,33 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
         debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind()};
         match (s, &ty.kind()) {
-            (Scalar::Int(ScalarInt { data, .. }), ty::Int(it)) => match it {
-                IntTy::I8 => Expr::int_constant(data, Type::signed_int(8)),
-                IntTy::I16 => Expr::int_constant(data, Type::signed_int(16)),
-                IntTy::I32 => Expr::int_constant(data, Type::signed_int(32)),
-                IntTy::I64 => Expr::int_constant(data, Type::signed_int(64)),
-                IntTy::I128 => Expr::int_constant(data, Type::signed_int(128)),
-                IntTy::Isize => Expr::int_constant(data, Type::ssize_t()),
+            (Scalar::Int(_), ty::Int(it)) => match it {
+                // We treat the data as bit vector. Thus, we extract the value as unsigned and set
+                // the type to signed int.
+                IntTy::I8 => Expr::int_constant(s.to_u8().unwrap(), Type::signed_int(8)),
+                IntTy::I16 => Expr::int_constant(s.to_u16().unwrap(), Type::signed_int(16)),
+                IntTy::I32 => Expr::int_constant(s.to_u32().unwrap(), Type::signed_int(32)),
+                IntTy::I64 => Expr::int_constant(s.to_u64().unwrap(), Type::signed_int(64)),
+                IntTy::I128 => Expr::int_constant(s.to_u128().unwrap(), Type::signed_int(128)),
+                IntTy::Isize => {
+                    Expr::int_constant(s.to_machine_usize(self).unwrap(), Type::ssize_t())
+                }
             },
-            (Scalar::Int(ScalarInt { data, .. }), ty::Uint(it)) => match it {
-                UintTy::U8 => Expr::int_constant(data, Type::unsigned_int(8)),
-                UintTy::U16 => Expr::int_constant(data, Type::unsigned_int(16)),
-                UintTy::U32 => Expr::int_constant(data, Type::unsigned_int(32)),
-                UintTy::U64 => Expr::int_constant(data, Type::unsigned_int(64)),
-                UintTy::U128 => Expr::int_constant(data, Type::unsigned_int(128)),
-                UintTy::Usize => Expr::int_constant(data, Type::size_t()),
+            (Scalar::Int(_), ty::Uint(it)) => match it {
+                UintTy::U8 => Expr::int_constant(s.to_u8().unwrap(), Type::unsigned_int(8)),
+                UintTy::U16 => Expr::int_constant(s.to_u16().unwrap(), Type::unsigned_int(16)),
+                UintTy::U32 => Expr::int_constant(s.to_u32().unwrap(), Type::unsigned_int(32)),
+                UintTy::U64 => Expr::int_constant(s.to_u64().unwrap(), Type::unsigned_int(64)),
+                UintTy::U128 => Expr::int_constant(s.to_u128().unwrap(), Type::unsigned_int(128)),
+                UintTy::Usize => {
+                    Expr::int_constant(s.to_machine_usize(self).unwrap(), Type::size_t())
+                }
             },
-            (Scalar::Int(ScalarInt { .. }), ty::Bool) => {
-                Expr::c_bool_constant(s.to_bool().unwrap())
-            }
-            (Scalar::Int(ScalarInt { .. }), ty::Char) => {
+            (Scalar::Int(_), ty::Bool) => Expr::c_bool_constant(s.to_bool().unwrap()),
+            (Scalar::Int(_), ty::Char) => {
                 Expr::int_constant(s.to_i32().unwrap(), Type::signed_int(32))
             }
-            (Scalar::Int(ScalarInt { .. }), ty::Float(k)) =>
+            (Scalar::Int(_), ty::Float(k)) =>
             // rustc uses a sophisticated format for floating points that is hard to get f32/f64 from.
             // Instead, we use integers with the right width to represent the bit pattern.
             {
@@ -181,18 +183,26 @@ impl<'tcx> GotocCtx<'tcx> {
                     FloatTy::F64 => Expr::double_constant_from_bitpattern(s.to_u64().unwrap()),
                 }
             }
-            (Scalar::Int(ScalarInt { size: 0, .. }), ty::FnDef(d, substs)) => {
-                self.codegen_fndef(*d, substs, span)
+            (Scalar::Int(int), ty::FnDef(d, substs)) => {
+                if int.size() == Size::ZERO {
+                    self.codegen_fndef(*d, substs, span)
+                } else {
+                    unreachable!();
+                }
             }
-            (Scalar::Int(ScalarInt { .. }), ty::RawPtr(tm)) => {
+            (Scalar::Int(_), ty::RawPtr(tm)) => {
                 Expr::pointer_constant(s.to_u64().unwrap(), self.codegen_ty(tm.ty).to_pointer())
             }
             // TODO: Removing this doesn't cause any regressions to fail.
             // We need a regression for this case.
-            (Scalar::Int(ScalarInt { data: 0, .. }), ty::Ref(_, ty, _)) => {
-                self.codegen_ty(ty).to_pointer().null()
+            (Scalar::Int(int), ty::Ref(_, ty, _)) => {
+                if int.is_null() {
+                    self.codegen_ty(ty).to_pointer().null()
+                } else {
+                    unreachable!()
+                }
             }
-            (Scalar::Int(ScalarInt { .. }), ty::Adt(adt, subst)) => {
+            (Scalar::Int(_), ty::Adt(adt, subst)) => {
                 if adt.is_struct() || adt.is_union() {
                     // in this case, we must have a one variant ADT. there are two cases
                     let variant = &adt.variants.raw[0];
