@@ -3,7 +3,7 @@
 
 use std::ptr::read;
 
-pub fn main() {
+fn main() {
     let var = 1;
     unsafe {
         assert_eq!(read(&var), var);

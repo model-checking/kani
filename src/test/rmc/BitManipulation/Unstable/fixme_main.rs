@@ -5,7 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::{ctlz, cttz, cttz_nonzero};
 
-pub fn main() {
+fn main() {
     let v8 = 0b0011_1000_u8;
     let v16 = 0b0011_1000_0000_0000_u16;
     let v32 = 0b0011_1000_0000_0000_0000_0000_0000_0000_u32;

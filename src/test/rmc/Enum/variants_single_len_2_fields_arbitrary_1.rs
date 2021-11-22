@@ -8,7 +8,7 @@ pub enum MyInfallible {}
 fn foo() -> Result<i64, MyInfallible> {
     Ok(1)
 }
-pub fn main() {
+fn main() {
     let v = foo().unwrap();
     assert!(v == 1);
 }

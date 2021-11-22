@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub fn main() {
+fn main() {
     // pub fn compare_exchange(
     //     &self,
     //     current: bool,

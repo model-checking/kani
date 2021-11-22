@@ -7,6 +7,6 @@ pub struct Foo<const N: usize> {
 
 const x: Foo<3> = Foo { bytes: [1, 2, 3] };
 
-pub fn main() {
+fn main() {
     assert!(x.bytes[0] == 1);
 }

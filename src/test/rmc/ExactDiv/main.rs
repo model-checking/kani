@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(core_intrinsics)]
 
-pub fn main() {
+fn main() {
     let a: u8 = 8;
     let b: u8 = 4;
     let i = unsafe { std::intrinsics::exact_div(a, b) };

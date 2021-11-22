@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{fence, Ordering};
 
-pub fn main() {
+fn main() {
     // pub fn fence(order: Ordering)
     // An atomic fence.
     // Depending on the specified order, a fence prevents the compiler

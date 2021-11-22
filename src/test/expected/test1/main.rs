@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-pub fn main() {
+fn main() {
     let mut a: i32 = 0;
     let mut i: i32 = 10;
     while i != 0 {

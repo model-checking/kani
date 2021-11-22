@@ -23,7 +23,7 @@ impl MemoryMapping {
     }
 }
 
-pub fn main() {
+fn main() {
     let mm = MemoryMapping::new(2);
     if mm.is_ok() {
         let mm = mm.expect("foo");

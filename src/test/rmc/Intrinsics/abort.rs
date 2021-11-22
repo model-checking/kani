@@ -4,6 +4,6 @@
 
 #![feature(core_intrinsics)]
 use std::intrinsics;
-pub fn main() {
+fn main() {
     intrinsics::abort();
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{AtomicIsize, Ordering};
 
-pub fn main() {
+fn main() {
     // pub fn fetch_sub(&self, val: isize, order: Ordering) -> isize
     // Subtracts from the current value, returning the previous value.
     let a1 = AtomicIsize::new(1);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // rmc-verify-fail
 
-pub fn main() {
+fn main() {
     // declare pointer to integer
     let p_subscoped: *const u32;
 

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-pub fn main() {
+fn main() {
     let mut x: Vec<i32> = Vec::new();
     x.push(10);
     assert!(x[0] == 10);

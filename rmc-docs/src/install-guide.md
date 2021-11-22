@@ -85,7 +85,7 @@ Create a test file:
 
 ```rust
 // File: test.rs
-pub fn main() {
+fn main() {
     assert!(1 == 2);
 }
 ```

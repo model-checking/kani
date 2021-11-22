@@ -17,7 +17,7 @@ fn get_b() -> Option<Foo> {
     Some(Foo::B([]))
 }
 
-pub fn main() {
+fn main() {
     match get_none() {
         None => {}
         Some(_) => assert!(false),

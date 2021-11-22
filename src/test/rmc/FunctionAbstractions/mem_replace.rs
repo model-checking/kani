@@ -3,7 +3,7 @@
 
 use std::mem;
 
-pub fn main() {
+fn main() {
     let mut var1 = rmc::nondet::<i32>();
     let mut var2 = rmc::nondet::<i32>();
     let old_var1 = var1;

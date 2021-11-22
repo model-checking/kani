@@ -3,7 +3,7 @@
 
 use std::ptr::write;
 
-pub fn main() {
+fn main() {
     let mut var = 1;
     unsafe {
         write(&mut var, 10);

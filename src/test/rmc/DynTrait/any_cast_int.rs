@@ -25,7 +25,7 @@ fn downcast_to_fewer_traits(s: &(dyn Any + Send)) {
     downcast_to_concrete(c);
 }
 
-pub fn main() {
+fn main() {
     let i: i32 = 7;
     downcast_to_fewer_traits(&i);
 }

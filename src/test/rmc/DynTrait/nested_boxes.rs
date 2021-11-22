@@ -20,7 +20,7 @@ struct Foo {
     pub _b: i8,
 }
 
-pub fn main() {
+fn main() {
     let dyn_trait1: Box<dyn Send> = Box::new(Foo { _a: 1, _b: 2 });
     let dyn_trait2: Box<dyn Send> = Box::new(dyn_trait1);
     let dyn_trait3: Box<dyn Send> = Box::new(dyn_trait2);

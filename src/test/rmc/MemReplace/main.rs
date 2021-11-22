@@ -4,7 +4,7 @@ enum Dummy {
     Dumb,
 }
 
-pub fn main() {
+fn main() {
     // invoke replace on a zero-sized type
     let mut value: Dummy = Dummy::Dumb;
     let dst: &mut Dummy = &mut value;

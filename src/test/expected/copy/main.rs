@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::ptr;
 
-pub fn main() {
+fn main() {
     // TODO: make an overlapping set of locations, and check that it does the right thing for the overlapping region too.
     // https://github.com/model-checking/rmc/issues/12
     let expected_val = 42;

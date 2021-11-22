@@ -21,6 +21,6 @@ fn maybe_call(call: bool) {
     }
 }
 
-pub fn main() {
+fn main() {
     maybe_call(false);
 }

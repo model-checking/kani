@@ -4,7 +4,7 @@
 // Check that we can codegen various nesting structures of boxes and
 // pointer to closures.
 
-pub fn main() {
+fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> = Box::new(Box::new(|x| assert!(x == 1)));
     f(1);

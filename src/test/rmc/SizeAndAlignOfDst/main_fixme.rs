@@ -53,6 +53,6 @@ impl Subscriber for DummySubscriber {
     fn interest_list(&self) {}
 }
 
-pub fn main() {
+fn main() {
     let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
 }

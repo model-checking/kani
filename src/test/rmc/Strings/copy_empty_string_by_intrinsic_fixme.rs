@@ -37,7 +37,7 @@ fn copy_string(s: &str, l: usize) {
     }
 }
 
-pub fn main() {
+fn main() {
     // Verification fails for both of these cases.
     copy_string("x", 1);
     copy_string("", 0);

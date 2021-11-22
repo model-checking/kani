@@ -7,7 +7,7 @@
 
 use std::mem;
 use std::ptr;
-pub fn main() {
+fn main() {
     let x: &mut i32 = unsafe { mem::zeroed() }; //< undefined (should fail)
     let p: *mut i32 = x;
     assert!(p == ptr::null_mut()); //< verifies with RMC

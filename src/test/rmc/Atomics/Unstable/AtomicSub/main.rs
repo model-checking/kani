@@ -5,7 +5,7 @@ use std::intrinsics::{
     atomic_xsub, atomic_xsub_acq, atomic_xsub_acqrel, atomic_xsub_rel, atomic_xsub_relaxed,
 };
 
-pub fn main() {
+fn main() {
     let mut a1 = 1 as u8;
     let mut a2 = 1 as u8;
     let mut a3 = 1 as u8;
