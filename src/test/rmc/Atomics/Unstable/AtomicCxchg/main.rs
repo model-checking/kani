@@ -7,7 +7,7 @@ use std::intrinsics::{
     atomic_cxchg_rel, atomic_cxchg_relaxed,
 };
 
-pub fn main() {
+fn main() {
     let mut a1 = 0 as u8;
     let mut a2 = 0 as u8;
     let mut a3 = 0 as u8;

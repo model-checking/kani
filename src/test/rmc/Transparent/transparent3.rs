@@ -10,7 +10,7 @@ pub struct Container<T> {
     container: Pointer<T>,
 }
 
-pub fn main() {
+fn main() {
     let x: u32 = 4;
     let my_pointer = Pointer { pointer: &x };
     let my_container = Container { container: my_pointer };

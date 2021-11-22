@@ -13,7 +13,7 @@ extern "C" {
 
 }
 
-pub fn main() {
+fn main() {
     unsafe {
         assert!(my_add(2 as usize, 3 as usize, 4 as usize) == 7); //works
         assert!(my_add(3, 3 as usize, 4 as usize, 5 as usize) == 12); //works

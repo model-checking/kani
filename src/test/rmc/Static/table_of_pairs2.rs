@@ -12,7 +12,7 @@ fn test_equal(a: u64, b: u64) -> bool {
     a == b
 }
 
-pub fn main() {
+fn main() {
     let x = TABLE1[0];
     assert!(test_equal(x.1, 1));
     let y = TABLE2[0];

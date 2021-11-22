@@ -4,7 +4,7 @@
 
 use std::fs;
 use std::path::PathBuf;
-pub fn main() {
+fn main() {
     let buf = PathBuf::new();
     let _x = fs::remove_dir_all(buf);
 }

@@ -23,7 +23,7 @@ fn test4() {
         //assert!(*ptr.offset(1) as char == '2'); // u8 to char not handled yet
     }
 }
-pub fn main() {
+fn main() {
     //  test2();
     //  test3();
     test4();

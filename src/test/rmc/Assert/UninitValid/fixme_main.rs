@@ -4,7 +4,7 @@
 
 use std::mem::{self, MaybeUninit};
 
-pub fn main() {
+fn main() {
     // The compiler assumes that variables are properly initialized according to
     // the requirements of the variable's type (e.g., a variable of reference
     // type must be aligned and non-NULL). This is an invariant that must always

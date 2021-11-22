@@ -33,7 +33,7 @@ impl Drop for Concrete2 {
     }
 }
 
-pub fn main() {
+fn main() {
     {
         let x: Box<dyn T>;
         if rmc::nondet() {

@@ -29,7 +29,7 @@ impl Subscriber for DummySubscriber {
     }
 }
 
-pub fn main() {
+fn main() {
     let d = DummySubscriber::new();
 
     let d1 = &d as *const DummySubscriber;

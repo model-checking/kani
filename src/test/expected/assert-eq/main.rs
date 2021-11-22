@@ -9,7 +9,7 @@
 ///     "library/std/src/macros.rs line 17 a panicking function core::panicking::panic_fmt is invoked: SUCCESS"
 ///     https://github.com/model-checking/rmc/issues/13
 
-pub fn main() {
+fn main() {
     let x = 1;
     let y = 2;
     assert_eq!(x + 1, y);

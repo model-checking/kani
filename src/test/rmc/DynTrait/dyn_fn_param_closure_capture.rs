@@ -14,7 +14,7 @@ fn takes_dyn_fun(fun: &dyn Fn() -> i32) {
     assert!(size_from_vtable(vtable!(fun)) == 8);
 }
 
-pub fn main() {
+fn main() {
     let a = vec![3];
     let closure = || a[0] + 2;
     takes_dyn_fun(&closure)

@@ -6,7 +6,7 @@
 
 use std::intrinsics::*;
 
-pub fn main() {
+fn main() {
     let mut a: Box<u8> = Box::new(0);
     unsafe {
         let x = volatile_load(&*a);

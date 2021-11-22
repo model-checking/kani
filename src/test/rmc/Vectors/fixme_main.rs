@@ -9,7 +9,7 @@ pub struct GuestRegionMmap {
 }
 
 // TODO: running this with --unwrap 2 causes CBMC to hang in propositional reduction.
-pub fn main() {
+fn main() {
     let r = GuestRegionMmap { guest_base: GuestAddress(0) };
     let mut regions: Vec<GuestRegionMmap> = vec![];
     regions.push(r);

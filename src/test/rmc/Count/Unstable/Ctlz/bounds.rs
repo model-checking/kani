@@ -6,7 +6,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::ctlz_nonzero;
 
-pub fn main() {
+fn main() {
     let uv8: u8 = 0;
     let uv16: u16 = 0;
     let uv32: u32 = 0;

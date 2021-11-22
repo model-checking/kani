@@ -13,7 +13,7 @@ fn b() -> Foo {
     Foo::B { x: 30, y: 60.0 }
 }
 
-pub fn main() {
+fn main() {
     let x = a();
     match x {
         Foo::A(x) => assert!(x == 10),

@@ -12,7 +12,7 @@ pub type SignalHandler = extern "C" fn(num: c_int, _unused: *mut c_void) -> ();
 
 extern "C" fn handle_signal(_: c_int, _: *mut c_void) {}
 
-pub fn main() {
+fn main() {
     let x = handle_signal as *const () as usize;
     assert!(x != 0);
 }

@@ -49,7 +49,7 @@ macro_rules! test_saturating_intrinsics {
     };
 }
 
-pub fn main() {
+fn main() {
     test_saturating_intrinsics!(u8);
     test_saturating_intrinsics!(u16);
     test_saturating_intrinsics!(u32);

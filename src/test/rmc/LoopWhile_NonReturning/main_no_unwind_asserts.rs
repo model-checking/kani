@@ -22,7 +22,7 @@
 //
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
-pub fn main() {
+fn main() {
     let mut a: u32 = rmc::nondet();
 
     if a < 1024 {
