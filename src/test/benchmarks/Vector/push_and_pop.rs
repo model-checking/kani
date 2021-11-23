@@ -9,7 +9,7 @@ include!{"../benchmark-prelude.rs"}
 fn operate_on_vec(times: usize) {
     let mut v: Vec<u32> = Vec::new();
     for i in 0..times {
-        v.push(unsafe { rmc::nondet() });
+        v.push(rmc::any());
     }
     assert!(v.len() == times);
     v.push(1);
@@ -19,7 +19,7 @@ fn operate_on_vec(times: usize) {
 fn operate_on_vec_len(times: usize) {
     let mut v: Vec<u32> = Vec::new();
     for i in 0..times {
-        v.push(unsafe { rmc::nondet() });
+        v.push(rmc::any());
     }
     assert!(v.len() == times);
     v.push(1);

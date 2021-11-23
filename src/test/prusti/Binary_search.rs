@@ -49,7 +49,7 @@ fn get() -> [i32; 11] {
 
 fn main() {
     let x = get();
-    let y = unsafe { rmc::nondet() };
+    let y = rmc::any();
     if 1 <= y && y <= 11 {
         assert!(binary_search_wrong(&x, &y) == Some(y as usize - 1)); // this fails
 

@@ -4,8 +4,8 @@
 use std::mem;
 
 fn main() {
-    let mut var1 = unsafe { rmc::nondet::<i32>() };
-    let mut var2 = unsafe { rmc::nondet::<i32>() };
+    let mut var1 = rmc::any::<i32>();
+    let mut var2 = rmc::any::<i32>();
     let old_var1 = var1;
     let old_var2 = var2;
     unsafe {

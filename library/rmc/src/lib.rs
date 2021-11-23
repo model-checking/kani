@@ -3,6 +3,9 @@
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 
 pub mod slice;
+mod invariants;
+
+use invariants::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
@@ -31,7 +34,7 @@ pub mod slice;
 #[rustc_diagnostic_item = "RmcAssume"]
 pub fn assume(_cond: bool) {}
 
-/// This creates an unconstrained value of type `T`. You can assign the return value of this
+/// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
 ///
 /// # Example:
@@ -40,12 +43,33 @@ pub fn assume(_cond: bool) {}
 /// under all possible i32 input values.
 ///
 /// ```rust
-/// let inputA = unsafe { rmc::nondet::<i32>() };
+/// let inputA = rmc::any::<i32>();
 /// fn_under_verification(inputA);
 /// ```
-#[inline(never)]
+///
+/// Note: This is a safe construct and can only be used with types that implement the `Invariant`
+/// trait. The invariant trait is used to constraint the result to ensure the value is valid.
+#[inline(always)]
+pub fn any<T: Invariant>() -> T {
+    let value = unsafe { any_raw::<T>() };
+    assume(value.is_valid());
+    value
+}
+
+/// This function creates an unconstrained value of type `T`. This may result in an invalid value.
+///
+/// # Example:
+///
+/// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
+/// under all possible values of char, including invalid ones that are greater than char::MAX.
+///
+/// ```rust
+/// let inputA = rmc::any_raw::<char>();
+/// fn_under_verification(inputA);
+/// ```
 #[rustc_diagnostic_item = "RmcNonDet"]
-pub unsafe fn nondet<T>() -> T {
+#[inline(never)]
+pub unsafe fn any_raw<T>() -> T {
     unimplemented!("RMC nondet")
 }
 

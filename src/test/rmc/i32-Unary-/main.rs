@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 fn main() {
-    let a: i32 = unsafe { rmc::nondet() };
+    let a: i32 = rmc::any();
     if -100000 < a && a < 100000 {
         let b = -a;
 

@@ -9,7 +9,7 @@
 // a nondet. variable)
 
 fn main() {
-    let x: u32 = unsafe { rmc::nondet() };
+    let x: u32 = rmc::any();
     let pi = 3.14159265359;
 
     let x_iters = leibniz_pi(x);

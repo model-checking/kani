@@ -4,8 +4,8 @@
 // rmc-verify-fail
 
 pub fn main() {
-    let a = unsafe { rmc::nondet() };
-    let b = unsafe { rmc::nondet() };
+    let a = rmc::any();
+    let b = rmc::any();
     if 4 < a && a < 8 {
         // a in [5,7]
         if 5 < b && b < 9 {

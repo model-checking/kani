@@ -11,7 +11,7 @@
 // In this test, we check that RMC warns the user about unwinding failures
 // and makes a recommendation to fix the issue.
 fn main() {
-    let mut a: u32 = unsafe { rmc::nondet() };
+    let mut a: u32 = rmc::any();
 
     if a < 1024 {
         loop {

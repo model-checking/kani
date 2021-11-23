@@ -7,8 +7,8 @@ fn main() {
     assert!(!8 ^ !0 == 8);
 
     let x = 1;
-    let a: u32 = unsafe { rmc::nondet() };
-    let b: u32 = unsafe { rmc::nondet() };
+    let a: u32 = rmc::any();
+    let b: u32 = rmc::any();
     if a < 100000 && b < 100000 {
         let c = a + b;
         if c & x == x {

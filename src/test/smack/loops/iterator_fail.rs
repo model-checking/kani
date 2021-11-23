@@ -15,7 +15,7 @@ fn fac(n: u64) -> u64 {
 
 pub fn main() {
     let mut a = 1;
-    let n = unsafe { rmc::nondet() };
+    let n = rmc::any();
     if n < 5 {
         for i in 1..n + 1 as u64 {
             a *= i;

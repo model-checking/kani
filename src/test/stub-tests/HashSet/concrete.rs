@@ -8,9 +8,9 @@ fn main() {
     // TODO: This test should ideally work with nondeterminstic values but for
     // for the moment it does not.
     //
-    // let a: u16 = unsafe { rmc::nondet() };
-    // let b: u16 = unsafe { rmc::nondet() };
-    // let c: u16 = unsafe { rmc::nondet() };
+    // let a: u16 = rmc::any();
+    // let b: u16 = rmc::any();
+    // let c: u16 = rmc::any();
     // rmc::assume(a != b);
     // rmc::assume(a != c);
     // rmc::assume(b != c);

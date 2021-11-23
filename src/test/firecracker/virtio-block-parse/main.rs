@@ -23,7 +23,7 @@ pub struct GuestMemoryMmap {}
 impl GuestMemoryMmap {
     fn checked_offset(&self, base: GuestAddress, offset: usize) -> Option<GuestAddress> {
         let mut retval = None;
-        if unsafe { rmc::nondet() } {
+        if rmc::any() {
             if let Some(sum) = base.0.checked_add(offset as u64) {
                 retval = Some(GuestAddress(sum))
             }
@@ -31,7 +31,7 @@ impl GuestMemoryMmap {
         unsafe {
             if retval.is_none() && !TRACK_CHECKED_OFFSET_NONE {
                 TRACK_CHECKED_OFFSET_NONE = true;
-            }
+           }
         }
         return retval;
     }
@@ -42,15 +42,15 @@ impl GuestMemoryMmap {
             if let Some(prev_addr) = TRACK_READ_OBJ {
                 assert!(prev_addr.0 != addr.0);
             }
-            if unsafe { rmc::nondet() && TRACK_READ_OBJ.is_none() } {
+            if rmc::any() && TRACK_READ_OBJ.is_none() {
                 TRACK_READ_OBJ = Some(addr);
             }
         }
-        unsafe { rmc::nondet() }
+        unsafe { rmc::any_raw() }
     }
 
     fn read_obj_request_header(&self, addr: GuestAddress) -> Result<RequestHeader, Error> {
-        unsafe { rmc::nondet() }
+        unsafe { rmc::any_raw() }
     }
 }
 
@@ -317,12 +317,12 @@ fn is_nonzero_pow2(x: u16) -> bool {
 
 fn main() {
     let mem = GuestMemoryMmap {};
-    let queue_size: u16 = unsafe { rmc::nondet() };
+    let queue_size: u16 = rmc::any();
     if !is_nonzero_pow2(queue_size) {
         return;
     }
-    let index: u16 = unsafe { rmc::nondet() };
-    let desc_table = GuestAddress(unsafe { rmc::nondet::<u64>() } & 0xffff_ffff_ffff_fff0);
+    let index: u16 = rmc::any();
+    let desc_table = GuestAddress(rmc::any::<u64>() & 0xffff_ffff_ffff_fff0);
     let desc = DescriptorChain::checked_new(&mem, desc_table, queue_size, index);
     match desc {
         Some(x) => {

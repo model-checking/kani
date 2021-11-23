@@ -56,7 +56,7 @@ fn expand(ranges: Vec<(u32, u32)>) -> Vec<u32> {
 fn main() {
     let mut input = vec![0; 2];
     for i in 0..input.len() {
-        input[i] = unsafe { rmc::nondet() };
+        input[i] = rmc::any();
         if input[i] == u32::MAX {
             return;
         }
@@ -67,7 +67,7 @@ fn main() {
     }
     assert!(output.len() <= input.len());
     let expanded_output = expand(output);
-    let i: usize = unsafe { rmc::nondet() };
+    let i: usize = rmc::any();
     if i < expanded_output.len() {
         assert!(expanded_output[i] == input[i]);
     }

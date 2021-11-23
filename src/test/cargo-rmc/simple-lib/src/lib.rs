@@ -18,8 +18,8 @@ mod rmc_tests {
     #[allow(dead_code)]
     #[no_mangle]
     fn test_sum() {
-        let a: u64 = unsafe { rmc::nondet() };
-        let b: u64 = unsafe { rmc::nondet() };
+        let a: u64 = rmc::any();
+        let b: u64 = rmc::any();
         let p = Pair::new(a, b);
         assert!(p.sum() == a.wrapping_add(b));
     }

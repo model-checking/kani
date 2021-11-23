@@ -5,7 +5,7 @@
 // compile-flags: --crate-type lib
 #[no_mangle]
 pub fn check_assert() {
-    let x: u8 = unsafe { rmc::nondet() };
+    let x: u8 = rmc::any();
     let y = x;
     assert!(x == y);
 }

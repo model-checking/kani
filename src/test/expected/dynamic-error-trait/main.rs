@@ -14,7 +14,7 @@ pub struct MemoryMapping {
 
 impl MemoryMapping {
     pub fn new(size: usize) -> Result<MemoryMapping> {
-        if unsafe { rmc::nondet() } {
+        if rmc::any() {
             let mm = MemoryMapping { addr: std::ptr::null_mut(), size: size };
             Ok(mm)
         } else {

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 fn main() {
-    let a: u32 = unsafe { rmc::nondet() };
+    let a: u32 = rmc::any();
 
     let b = if a % 3 == 0 {
         assert!(a != 5);
@@ -16,7 +16,7 @@ fn main() {
 
     assert!(b < 3);
 
-    let c: u32 = unsafe { rmc::nondet() };
+    let c: u32 = rmc::any();
 
     let d = if c > 100 {
         c
