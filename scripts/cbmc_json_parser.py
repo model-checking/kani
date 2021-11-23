@@ -123,7 +123,6 @@ def is_json(myjson):
     try:
         json.loads(myjson)
     except ValueError:
-        print("Unable to access Values, JSON File incorrect")
         return False
     return True
 
@@ -215,7 +214,6 @@ def construct_solver_information_message(solver_information):
         except KeyError as e:
             print("Key Error, Missing Properties in reading Solver Information from JSON")
         solver_information_message += '\n'
-    solver_information_message += '\n'
     return solver_information_message
 
 # Get property tests and results from the Json file written
@@ -349,7 +347,7 @@ def construct_property_message(properties):
          - Description: "assertion false" """
         output_message += f"Property {index+1}: {name}\n\t - Status: " + message + f"\n\t - Description: \"{description}\"\n"
 
-    output_message += f"SUMMARY: \n ** {number_tests_failed} of {index+1} failed\n"
+    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed\n"
     
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
