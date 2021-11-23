@@ -21,14 +21,15 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 MEMORY_SAFETY_CHECKS = ["--bounds-check",
                         "--pointer-check",
                         "--pointer-primitive-check"]
+
+# We no longer use --(un)signed-overflow-check" by default since rust already add assertions for places where wrapping
+# is an error.
 OVERFLOW_CHECKS = ["--conversion-check",
                    "--div-by-zero-check",
                    "--float-overflow-check",
                    "--nan-check",
                    "--pointer-overflow-check",
-                   "--signed-overflow-check",
-                   "--undefined-shift-check",
-                   "--unsigned-overflow-check"]
+                   "--undefined-shift-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
 
@@ -172,6 +173,8 @@ def run_cmd(
 
         process = subprocess.CompletedProcess(None, EXIT_CODE_SUCCESS, stdout=cmd_line)
     else:
+        if verbose:
+            print(' '.join(cmd))
         process = subprocess.run(
             cmd, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             env=env, cwd=cwd)
