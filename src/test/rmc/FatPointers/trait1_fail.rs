@@ -25,7 +25,7 @@ impl Subscriber for DummySubscriber {
     }
 }
 
-pub fn main() {
+fn main() {
     let _d = DummySubscriber::new();
     let _s = &_d as &dyn Subscriber;
     assert!(_s.process() == 3); // Should be _s.process() == 1

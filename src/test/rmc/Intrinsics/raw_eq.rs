@@ -4,7 +4,7 @@
 #![feature(const_intrinsic_raw_eq)]
 #![deny(const_err)]
 
-pub fn main() {
+fn main() {
     // Check that we get the expected results for the `raw_eq` intrinsic
     use std::intrinsics::raw_eq;
 

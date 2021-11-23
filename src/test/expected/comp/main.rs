@@ -12,7 +12,7 @@ fn eq2(a: i32, b: i32) {
     assert!(a - b < a);
 }
 
-pub fn main() {
+fn main() {
     let a = rmc::nondet();
     let b = rmc::nondet();
     if a > -400 && a < 100 && b < 200 && b > 0 {

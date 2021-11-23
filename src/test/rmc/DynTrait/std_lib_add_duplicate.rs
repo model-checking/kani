@@ -18,7 +18,7 @@ fn weird_add(x: &dyn WeirdAdd, y: i32) -> i32 {
     x.add(y)
 }
 
-pub fn main() {
+fn main() {
     let x = 2;
     let y = 4;
 

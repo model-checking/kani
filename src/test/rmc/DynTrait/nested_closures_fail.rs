@@ -6,7 +6,7 @@
 
 // rmc-verify-fail
 
-pub fn main() {
+fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> =
         Box::new(Box::new(|x| rmc::expect_fail(x != 1, "wrong int")));

@@ -5,7 +5,7 @@
 // Stable way of calling the `try` intrinsic.
 use std::panic;
 
-pub fn main() {
+fn main() {
     let result = panic::catch_unwind(|| {
         println!("hello!");
     });

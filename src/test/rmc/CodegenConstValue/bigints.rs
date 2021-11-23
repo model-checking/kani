@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-pub fn main() {
+fn main() {
     let x: u128 = u128::MAX;
     let x2: u128 = {
         // u128::MAX = 2^128 - 1;

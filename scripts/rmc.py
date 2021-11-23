@@ -276,7 +276,7 @@ def cargo_build(
 
     rustflags = rustc_flags(mangler, symbol_table_passes, restrict_vtable) + get_config("--rmc-flags").split()
     rustc_path = get_config("--rmc-path").strip()
-    build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
+    build_cmd = ["cargo", "build", "--target-dir", str(target_dir)]
     if build_target:
         build_cmd += ["--target", str(build_target)]
     build_env = os.environ

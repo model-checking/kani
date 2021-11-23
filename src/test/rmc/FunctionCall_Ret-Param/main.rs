@@ -8,7 +8,7 @@
 // a verification failure (the loop being unwound depends on
 // a nondet. variable)
 
-pub fn main() {
+fn main() {
     let x: u32 = rmc::nondet();
     let pi = 3.14159265359;
 

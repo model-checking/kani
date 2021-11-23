@@ -42,7 +42,7 @@ fn weird_count(c: &mut dyn Iterator) -> usize {
     c.next().unwrap()
 }
 
-pub fn main() {
+fn main() {
     let counter: &mut Counter = &mut Counter { count: 0 };
     assert!(std_count(counter as &mut dyn std::iter::Iterator<Item = usize>) == 1);
     assert!(weird_count(counter as &mut dyn Iterator) == 42);

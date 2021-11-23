@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub fn main() {
+fn main() {
     // pub fn load(&self, order: Ordering) -> bool
     // Loads a value from the bool.
     // load takes an Ordering argument which describes the memory ordering

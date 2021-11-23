@@ -2273,26 +2273,7 @@ impl<'test> TestCx<'test> {
     /// Runs RMC on the test file specified by `self.testpaths.file`. An error
     /// message is printed to stdout if the verification result is not expected.
     fn verify(&self) {
-        // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
-        // 1. It calls rustc instead of RMC
-        // 2. It may pass some options that do not make sense for RMC
-        // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
-        let mut rmc = Command::new("rmc");
-        // We cannot pass rustc flags directly to RMC. Instead, we add them
-        // to the current environment through the `RUSTFLAGS` environment
-        // variable. RMC recognizes the variable and adds those flags to its
-        // internal call to rustc.
-        if !self.props.compile_flags.is_empty() {
-            rmc.env("RUSTFLAGS", self.props.compile_flags.join(" "));
-        }
-        // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
-        rmc.args(&self.props.rmc_flags)
-            .arg("--input")
-            .arg(&self.testpaths.file)
-            .arg("--cbmc-args")
-            .args(&self.props.cbmc_flags);
-        self.add_rmc_dir_to_path(&mut rmc);
-        let proc_res = self.compose_and_run_compiler(rmc, None);
+        let proc_res = self.run_rmc();
         // If the test file contains expected failures in some locations, ensure
         // that verification does indeed fail in those locations
         if proc_res.stdout.contains("EXPECTED FAIL") {
@@ -2390,12 +2371,20 @@ impl<'test> TestCx<'test> {
         self.verify_output(&proc_res, &expected);
     }
 
-    /// Runs RMC on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification output does not contain
-    /// the expected output in `expected` file.
-    fn run_expected_test(&self) {
-        // We create our own command for the same reasons listed in `run_rmc_test` method.
+    /// Common method used to run RMC on a single file test.
+    fn run_rmc(&self) -> ProcRes {
+        // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
+        // 1. It calls rustc instead of RMC
+        // 2. It may pass some options that do not make sense for RMC
+        // So we create our own command to execute RMC and pass it to self.compose_and_run_compiler(...) directly.
         let mut rmc = Command::new("rmc");
+        // We cannot pass rustc flags directly to RMC. Instead, we add them
+        // to the current environment through the `RUSTFLAGS` environment
+        // variable. RMC recognizes the variable and adds those flags to its
+        // internal call to rustc.
+        if !self.props.compile_flags.is_empty() {
+            rmc.env("RUSTFLAGS", self.props.compile_flags.join(" "));
+        }
         // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
         rmc.args(&self.props.rmc_flags)
             .arg("--input")
@@ -2403,7 +2392,14 @@ impl<'test> TestCx<'test> {
             .arg("--cbmc-args")
             .args(&self.props.cbmc_flags);
         self.add_rmc_dir_to_path(&mut rmc);
-        let proc_res = self.compose_and_run_compiler(rmc, None);
+        self.compose_and_run_compiler(rmc, None)
+    }
+
+    /// Runs RMC on the test file specified by `self.testpaths.file`. An error
+    /// message is printed to stdout if verification output does not contain
+    /// the expected output in `expected` file.
+    fn run_expected_test(&self) {
+        let proc_res = self.run_rmc();
         let expected =
             fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
         self.verify_output(&proc_res, &expected);
@@ -2414,16 +2410,7 @@ impl<'test> TestCx<'test> {
     /// abstraction. At a later stage, it should be possible to add command-line
     /// arguments to test specific abstractions and modules.
     fn run_stub_test(&self) {
-        let mut rmc = Command::new("rmc");
-        // Arguments to choose specific abstraction are currently provided as
-        // as rmc-flags in the test file
-        rmc.args(&self.props.rmc_flags)
-            .arg("--input")
-            .arg(&self.testpaths.file)
-            .arg("--cbmc-args")
-            .args(&self.props.cbmc_flags);
-        self.add_rmc_dir_to_path(&mut rmc);
-        let proc_res = self.compose_and_run_compiler(rmc, None);
+        let proc_res = self.run_rmc();
         if !proc_res.status.success() {
             self.fatal_proc_rec(
                 "test failed: expected verification success, got failure",

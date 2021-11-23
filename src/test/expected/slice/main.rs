@@ -8,7 +8,7 @@ fn bar(x: &[i32; 5]) -> &[i32] {
     &x[1..4]
 }
 
-pub fn main() {
+fn main() {
     let x = [1, 2, 3, 4, 5];
     let y = foo(&x);
     let z = bar(&x);

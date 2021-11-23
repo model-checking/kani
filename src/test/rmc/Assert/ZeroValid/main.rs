@@ -18,7 +18,7 @@ fn do_test<T: std::cmp::Eq>(init: T, expected: T) {
     assert!(expected == x);
 }
 
-pub fn main() {
+fn main() {
     do_test::<bool>(true, false);
     do_test::<i8>(-42, 0);
     do_test::<i16>(-42, 0);

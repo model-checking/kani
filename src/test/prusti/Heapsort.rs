@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-pub fn main() {
+fn main() {
     let mut v = [3, 0, 1, 2];
     create_heap(&mut v, |x, y| x < y);
     assert!(v == [3, 2, 1, 0]);

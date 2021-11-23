@@ -22,7 +22,7 @@ pub fn test_offset_str() {
     }
 }
 
-pub fn main() {
+fn main() {
     test_offset_array();
     test_offset_str()
 }

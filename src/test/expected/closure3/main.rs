@@ -7,7 +7,7 @@ where
     f(10)
 }
 
-pub fn main() {
+fn main() {
     let num: i64 = rmc::nondet();
     if num <= std::i64::MAX - 100 {
         // avoid overflow

@@ -3,7 +3,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::{rotate_left, rotate_right};
 
-pub fn main() {
+fn main() {
     let vl8 = 0b0011_1000_u8;
     let vl16 = 0b0011_1000_0000_0000_u16;
     let vl32 = 0b0011_1000_0000_0000_0000_0000_0000_0000_u32;

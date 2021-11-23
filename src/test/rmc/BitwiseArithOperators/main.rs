@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-pub fn main() {
+fn main() {
     assert!(3 | 5 == 7);
     assert!(7 & 9 == 1);
     assert!(9 ^ 7 == 14);

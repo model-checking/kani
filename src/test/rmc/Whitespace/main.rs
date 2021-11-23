@@ -10,7 +10,7 @@
 // [_RNvXs5_NtNtCs9Odk7Lrvgnw_4core3str7patternINtB5_19MultiCharEqSearcherNtB7_12IsWhitespaceENtB5_8Searcher4nextCs21hi0yVfW1J_4main.overflow.1] line 641 arithmetic overflow on unsigned - in *((unsigned int *)((unsigned char *)&var_5 + 8)) - 1114112: FAILURE
 // Tracking issue: https://github.com/model-checking/rmc/issues/307
 
-pub fn main() {
+fn main() {
     let mut iter = "A few words".split_whitespace();
     match iter.next() {
         None => assert!(false),
