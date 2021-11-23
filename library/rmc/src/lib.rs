@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 
+pub mod invariant;
 pub mod slice;
-mod invariants;
 
-use invariants::Invariant;
+pub use invariant::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
@@ -64,13 +64,20 @@ pub fn any<T: Invariant>() -> T {
 /// under all possible values of char, including invalid ones that are greater than char::MAX.
 ///
 /// ```rust
-/// let inputA = rmc::any_raw::<char>();
+/// let inputA = unsafe { rmc::any_raw::<char>() };
 /// fn_under_verification(inputA);
 /// ```
-#[rustc_diagnostic_item = "RmcNonDet"]
+#[rustc_diagnostic_item = "RmcAnyRaw"]
 #[inline(never)]
 pub unsafe fn any_raw<T>() -> T {
-    unimplemented!("RMC nondet")
+    unimplemented!("RMC any_raw")
+}
+
+/// This function has been split into a safe and unsafe functions: `rmc::any` and `rmc::any_raw`.
+#[deprecated]
+#[inline(never)]
+pub fn nondet<T: Invariant>() -> T {
+    any::<T>()
 }
 
 /// Function used in tests for cases where the condition is not always true.

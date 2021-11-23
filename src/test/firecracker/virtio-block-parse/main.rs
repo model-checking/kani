@@ -12,6 +12,10 @@ macro_rules! error {
 
 struct MyError {}
 
+unsafe impl rmc::Invariant for MyError {
+    fn is_valid(&self) -> bool { true }
+}
+
 #[derive(Default, Clone, Copy)]
 pub struct GuestAddress(pub u64);
 
@@ -46,11 +50,19 @@ impl GuestMemoryMmap {
                 TRACK_READ_OBJ = Some(addr);
             }
         }
-        unsafe { rmc::any_raw() }
+        if rmc::any() {
+            unsafe { Ok(rmc::any_raw::<T>()) }
+        } else {
+            Err(rmc::any::<MyError>())
+        }
     }
 
     fn read_obj_request_header(&self, addr: GuestAddress) -> Result<RequestHeader, Error> {
-        unsafe { rmc::any_raw() }
+        if rmc::any() {
+            unsafe { Ok(rmc::any_raw::<RequestHeader>()) }
+        } else {
+            unsafe { Err(rmc::any_raw::<Error>()) }
+        }
     }
 }
 

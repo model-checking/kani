@@ -153,10 +153,10 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         // Deprecate old __nondet since it doesn't match rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__nondet") {
-            warn!("The function __nondet is deprecated. Use rmc::nondet instead");
+            warn!("The function __nondet is deprecated. Use rmc::any instead");
             return true;
         }
-        matches_function(tcx, instance, "RmcNonDet")
+        matches_function(tcx, instance, "RmcAnyRaw")
     }
 
     fn handle(
@@ -180,11 +180,6 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
             Stmt::block(
                 vec![
                     pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),
-                    // we should potentially generate an assumption
-                    match tcx.codegen_assumption(pt) {
-                        None => Stmt::skip(loc.clone()),
-                        Some(f) => Stmt::assume(f.call(vec![pe.address_of()]), loc.clone()),
-                    },
                     Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
                 ],
                 loc,
