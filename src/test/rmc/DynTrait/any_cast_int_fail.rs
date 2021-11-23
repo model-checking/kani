@@ -3,8 +3,6 @@
 
 use std::any::Any;
 
-include!("../../rmc-prelude.rs");
-
 // Cast one dynamic trait object type to another, which is legal because Send
 // is an auto trait with no associated function (so the underlying vtable is
 // the same before and after the cast).
@@ -15,7 +13,7 @@ include!("../../rmc-prelude.rs");
 fn downcast_to_concrete(a: &dyn Any) {
     match a.downcast_ref::<i32>() {
         Some(i) => {
-            __VERIFIER_expect_fail(*i == 8, "Wrong underlying concrete value");
+            rmc::expect_fail(*i == 8, "Wrong underlying concrete value");
         }
         None => {
             assert!(false);
@@ -28,7 +26,7 @@ fn downcast_to_fewer_traits(s: &(dyn Any + Send)) {
     downcast_to_concrete(c);
 }
 
-pub fn main() {
+fn main() {
     let i: i32 = 7;
     downcast_to_fewer_traits(&i);
 }

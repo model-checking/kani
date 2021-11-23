@@ -1,6 +1,6 @@
 // run-rustfix
 
-#![allow(clippy::print_literal, clippy::redundant_clone)]
+#![allow(clippy::print_literal, clippy::redundant_clone, clippy::to_string_in_format_args)]
 #![warn(clippy::useless_format)]
 
 struct Foo(pub String);
@@ -15,6 +15,8 @@ fn main() {
     "{} abc {}".to_string();
     r##"foo {}
 " bar"##.to_string();
+
+    let _ = String::new();
 
     "foo".to_string();
     format!("{:?}", "foo"); // Don't warn about `Debug`.

@@ -14,13 +14,12 @@ use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
+use rustc_middle::ty;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::def_id::CRATE_DEF_INDEX;
 use rustc_target::spec::abi::Abi;
 
-use crate::clean::{
-    self, utils::find_nearest_parent_module, ExternalCrate, GetDefId, ItemId, PrimitiveType,
-};
+use crate::clean::{self, utils::find_nearest_parent_module, ExternalCrate, ItemId, PrimitiveType};
 use crate::formats::item_type::ItemType;
 use crate::html::escape::Escape;
 use crate::html::render::cache::ExternalLocation;
@@ -270,7 +269,7 @@ crate fn print_where_clause<'a, 'tcx: 'a>(
                         0 => String::new(),
                         _ if f.alternate() => {
                             format!(
-                                "for<{:#}> ",
+                                "for&lt;{:#}&gt; ",
                                 comma_sep(bound_params.iter().map(|lt| lt.print()))
                             )
                         }
@@ -599,7 +598,7 @@ crate fn href_relative_parts<'a>(fqp: &'a [String], relative_to_fqp: &'a [String
 
 /// Used when rendering a `ResolvedPath` structure. This invokes the `path`
 /// rendering function with the necessary arguments for linking to a local path.
-fn resolved_path<'a, 'cx: 'a>(
+fn resolved_path<'cx>(
     w: &mut fmt::Formatter<'_>,
     did: DefId,
     path: &clean::Path,
@@ -698,7 +697,7 @@ fn primitive_link(
 
 /// Helper to render type parameters
 fn tybounds<'a, 'tcx: 'a>(
-    bounds: &'a Vec<clean::PolyTrait>,
+    bounds: &'a [clean::PolyTrait],
     lt: &'a Option<clean::Lifetime>,
     cx: &'a Context<'tcx>,
 ) -> impl fmt::Display + 'a + Captures<'tcx> {
@@ -761,6 +760,9 @@ fn fmt_type<'cx>(
             fmt::Display::fmt(&tybounds(bounds, lt, cx), f)
         }
         clean::Infer => write!(f, "_"),
+        clean::Primitive(clean::PrimitiveType::Never) => {
+            primitive_link(f, PrimitiveType::Never, "!", cx)
+        }
         clean::Primitive(prim) => primitive_link(f, prim, &*prim.as_sym().as_str(), cx),
         clean::BareFunction(ref decl) => {
             if f.alternate() {
@@ -819,7 +821,6 @@ fn fmt_type<'cx>(
                 primitive_link(f, PrimitiveType::Array, &format!("; {}]", Escape(n)), cx)
             }
         }
-        clean::Never => primitive_link(f, PrimitiveType::Never, "!", cx),
         clean::RawPointer(m, ref t) => {
             let m = match m {
                 hir::Mutability::Mut => "mut",
@@ -886,7 +887,7 @@ fn fmt_type<'cx>(
                     if bounds.len() > 1 || trait_lt.is_some() =>
                 {
                     write!(f, "{}{}{}(", amp, lt, m)?;
-                    fmt_type(&ty, f, use_absolute, cx)?;
+                    fmt_type(ty, f, use_absolute, cx)?;
                     write!(f, ")")
                 }
                 clean::Generic(..) => {
@@ -896,11 +897,11 @@ fn fmt_type<'cx>(
                         &format!("{}{}{}", amp, lt, m),
                         cx,
                     )?;
-                    fmt_type(&ty, f, use_absolute, cx)
+                    fmt_type(ty, f, use_absolute, cx)
                 }
                 _ => {
                     write!(f, "{}{}{}", amp, lt, m)?;
-                    fmt_type(&ty, f, use_absolute, cx)
+                    fmt_type(ty, f, use_absolute, cx)
                 }
             }
         }
@@ -912,15 +913,10 @@ fn fmt_type<'cx>(
             }
         }
         clean::QPath { ref name, ref self_type, ref trait_, ref self_def_id } => {
-            let should_show_cast = match *trait_ {
-                box clean::ResolvedPath { ref path, .. } => {
-                    !path.segments.is_empty()
-                        && self_def_id
-                            .zip(trait_.def_id())
-                            .map_or(!self_type.is_self_type(), |(id, trait_)| id != trait_)
-                }
-                _ => true,
-            };
+            let should_show_cast = !trait_.segments.is_empty()
+                && self_def_id
+                    .zip(Some(trait_.def_id()))
+                    .map_or(!self_type.is_self_type(), |(id, trait_)| id != trait_);
             if f.alternate() {
                 if should_show_cast {
                     write!(f, "<{:#} as {:#}>::", self_type.print(cx), trait_.print(cx))?
@@ -934,36 +930,31 @@ fn fmt_type<'cx>(
                     write!(f, "{}::", self_type.print(cx))?
                 }
             };
-            match *trait_ {
-                // It's pretty unsightly to look at `<A as B>::C` in output, and
-                // we've got hyperlinking on our side, so try to avoid longer
-                // notation as much as possible by making `C` a hyperlink to trait
-                // `B` to disambiguate.
-                //
-                // FIXME: this is still a lossy conversion and there should probably
-                //        be a better way of representing this in general? Most of
-                //        the ugliness comes from inlining across crates where
-                //        everything comes in as a fully resolved QPath (hard to
-                //        look at).
-                box clean::ResolvedPath { did, .. } => {
-                    match href(did, cx) {
-                        Ok((ref url, _, ref path)) if !f.alternate() => {
-                            write!(
-                                f,
-                                "<a class=\"type\" href=\"{url}#{shortty}.{name}\" \
+            // It's pretty unsightly to look at `<A as B>::C` in output, and
+            // we've got hyperlinking on our side, so try to avoid longer
+            // notation as much as possible by making `C` a hyperlink to trait
+            // `B` to disambiguate.
+            //
+            // FIXME: this is still a lossy conversion and there should probably
+            //        be a better way of representing this in general? Most of
+            //        the ugliness comes from inlining across crates where
+            //        everything comes in as a fully resolved QPath (hard to
+            //        look at).
+            match href(trait_.def_id(), cx) {
+                Ok((ref url, _, ref path)) if !f.alternate() => {
+                    write!(
+                        f,
+                        "<a class=\"type\" href=\"{url}#{shortty}.{name}\" \
                                     title=\"type {path}::{name}\">{name}</a>",
-                                url = url,
-                                shortty = ItemType::AssocType,
-                                name = name,
-                                path = path.join("::")
-                            )?;
-                        }
-                        _ => write!(f, "{}", name)?,
-                    }
-                    Ok(())
+                        url = url,
+                        shortty = ItemType::AssocType,
+                        name = name,
+                        path = path.join("::")
+                    )?;
                 }
-                _ => write!(f, "{}", name),
+                _ => write!(f, "{}", name)?,
             }
+            Ok(())
         }
     }
 }
@@ -974,6 +965,15 @@ impl clean::Type {
         cx: &'a Context<'tcx>,
     ) -> impl fmt::Display + 'b + Captures<'tcx> {
         display_fn(move |f| fmt_type(self, f, false, cx))
+    }
+}
+
+impl clean::Path {
+    crate fn print<'b, 'a: 'b, 'tcx: 'a>(
+        &'a self,
+        cx: &'a Context<'tcx>,
+    ) -> impl fmt::Display + 'b + Captures<'tcx> {
+        display_fn(move |f| resolved_path(f, self.def_id(), self, false, false, cx))
     }
 }
 
@@ -991,14 +991,15 @@ impl clean::Impl {
             }
 
             if let Some(ref ty) = self.trait_ {
-                if self.negative_polarity {
-                    write!(f, "!")?;
+                match self.polarity {
+                    ty::ImplPolarity::Positive | ty::ImplPolarity::Reservation => {}
+                    ty::ImplPolarity::Negative => write!(f, "!")?,
                 }
                 fmt::Display::fmt(&ty.print(cx), f)?;
                 write!(f, " for ")?;
             }
 
-            if let Some(ref ty) = self.blanket_impl {
+            if let Some(ref ty) = self.kind.as_blanket_ty() {
                 fmt_type(ty, f, use_absolute, cx)?;
             } else {
                 fmt_type(&self.for_, f, use_absolute, cx)?;
@@ -1057,7 +1058,11 @@ impl clean::BareFunctionDecl {
     ) -> impl fmt::Display + 'a + Captures<'tcx> {
         display_fn(move |f| {
             if !self.generic_params.is_empty() {
-                write!(f, "for<{}> ", comma_sep(self.generic_params.iter().map(|g| g.print(cx))))
+                write!(
+                    f,
+                    "for&lt;{}&gt; ",
+                    comma_sep(self.generic_params.iter().map(|g| g.print(cx)))
+                )
             } else {
                 Ok(())
             }

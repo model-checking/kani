@@ -30,7 +30,7 @@
 // Full support for subslice projection to be added in
 // https://github.com/model-checking/rmc/issues/357
 
-pub fn main() {
+fn main() {
     let arr = [1, 2, 3];
     // s is a slice (&[i32])
     let [s @ ..] = &arr[1..];

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-pub fn main() {
+fn main() {
     let mut door_open = [false; 10];
     for pass in 1..11 {
         let mut door = pass;

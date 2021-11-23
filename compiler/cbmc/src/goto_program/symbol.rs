@@ -1,14 +1,15 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::super::utils::aggr_name;
+use super::super::utils::aggr_tag;
 use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
+use crate::{InternStringOption, InternedString};
 
 /// Based off the CBMC symbol implementation here:
 /// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h
 #[derive(Clone, Debug)]
 pub struct Symbol {
     /// Unique identifier. Mangled name from compiler `foo12_bar17_x@1`
-    pub name: String,
+    pub name: InternedString,
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
@@ -16,11 +17,11 @@ pub struct Symbol {
     /// Optional debugging information
 
     /// Local name `x`
-    pub base_name: Option<String>,
+    pub base_name: Option<InternedString>,
     /// Fully qualifier name `foo::bar::x`
-    pub pretty_name: Option<String>,
+    pub pretty_name: Option<InternedString>,
     /// Only used by verilog
-    pub module: Option<String>,
+    pub module: Option<InternedString>,
     pub mode: SymbolModes,
     // global properties
     pub is_exported: bool,
@@ -59,14 +60,17 @@ pub enum SymbolValues {
 }
 /// Constructors
 impl Symbol {
-    fn new(
-        name: String,
+    fn new<T: Into<InternedString>, U: Into<InternedString>, V: Into<InternedString>>(
+        name: T,
         location: Location,
         typ: Type,
         value: SymbolValues,
-        base_name: Option<String>,
-        pretty_name: Option<String>,
+        base_name: Option<U>,
+        pretty_name: Option<V>,
     ) -> Self {
+        let name = name.into();
+        let base_name = base_name.intern();
+        let pretty_name = pretty_name.intern();
         Symbol {
             name,
             location,
@@ -100,20 +104,26 @@ impl Symbol {
 
     /// The symbol that defines the type of the struct or union.
     /// For a struct foo this is the symbol "tag-foo" that maps to the type struct foo.
-    pub fn aggr_ty(t: Type, pretty_name: Option<String>) -> Symbol {
+    pub fn aggr_ty<T: Into<InternedString>>(t: Type, pretty_name: Option<T>) -> Symbol {
         //TODO take location
-        let base_name = t.tag().unwrap().to_string();
-        let name = aggr_name(&base_name);
+        let pretty_name = pretty_name.intern();
+        let base_name = t.tag().unwrap();
+        let name = aggr_tag(base_name);
         Symbol::new(name, Location::none(), t, SymbolValues::None, Some(base_name), pretty_name)
             .with_is_type(true)
     }
 
-    pub fn builtin_function(name: &str, param_types: Vec<Type>, return_type: Type) -> Symbol {
+    pub fn builtin_function<T: Into<InternedString>>(
+        name: T,
+        param_types: Vec<Type>,
+        return_type: Type,
+    ) -> Symbol {
+        let name = name.into();
         Symbol::function(
             name,
             Type::code_with_unnamed_parameters(param_types, return_type),
             None,
-            None,
+            None::<InternedString>,
             Location::builtin_function(name, None),
         )
     }
@@ -136,19 +146,21 @@ impl Symbol {
         .with_is_static_lifetime(true) //TODO with thread local was also true??
     }
 
-    pub fn function(
-        name: &str,
+    pub fn function<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
         typ: Type,
         body: Option<Stmt>,
-        pretty_name: Option<String>,
+        pretty_name: Option<U>,
         loc: Location,
     ) -> Symbol {
+        let name = name.into();
+        let pretty_name = pretty_name.intern();
         Symbol::new(
             name.to_string(),
             loc,
             typ,
             body.map_or(SymbolValues::None, |x| SymbolValues::Stmt(x)),
-            Some(name.to_string()),
+            Some(name),
             pretty_name,
         )
         .with_is_lvalue(true)
@@ -168,48 +180,73 @@ impl Symbol {
         .with_is_static_lifetime(true)
     }
 
-    pub fn variable(name: String, base_name: String, t: Type, l: Location) -> Symbol {
-        Symbol::new(name, l, t, SymbolValues::None, Some(base_name), None)
+    pub fn variable<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
+        base_name: U,
+        t: Type,
+        l: Location,
+    ) -> Symbol {
+        let name = name.into();
+        let base_name: InternedString = base_name.into();
+        Symbol::new(name, l, t, SymbolValues::None, Some(base_name), None::<InternedString>)
             .with_is_thread_local(true)
             .with_is_lvalue(true)
             .with_is_state_var(true)
     }
 
-    pub fn static_variable(name: String, base_name: String, t: Type, l: Location) -> Symbol {
+    pub fn static_variable<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
+        base_name: U,
+        t: Type,
+        l: Location,
+    ) -> Symbol {
+        let name = name.into();
+        let base_name: InternedString = base_name.into();
         Symbol::variable(name, base_name, t, l)
             .with_is_thread_local(false)
             .with_is_static_lifetime(true)
     }
 
-    pub fn struct_type(
-        name: &str,
-        pretty_name: Option<String>,
+    pub fn struct_type<T: Into<InternedString>>(
+        name: T,
+        pretty_name: Option<InternedString>,
         components: Vec<DatatypeComponent>,
     ) -> Symbol {
+        let name = name.into();
         Symbol::aggr_ty(Type::struct_type(name, components), pretty_name)
     }
 
-    pub fn union_type(
-        name: &str,
-        pretty_name: Option<String>,
+    pub fn union_type<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
+        pretty_name: Option<U>,
         components: Vec<DatatypeComponent>,
     ) -> Symbol {
+        let name = name.into();
+        let pretty_name = pretty_name.intern();
         Symbol::aggr_ty(Type::union_type(name, components), pretty_name)
     }
 
-    pub fn empty_struct(name: &str, pretty_name: Option<String>) -> Symbol {
+    pub fn empty_struct(name: InternedString, pretty_name: Option<InternedString>) -> Symbol {
         Symbol::aggr_ty(Type::empty_struct(name), pretty_name)
     }
 
-    pub fn empty_union(name: &str, pretty_name: Option<String>) -> Symbol {
+    pub fn empty_union(name: InternedString, pretty_name: Option<InternedString>) -> Symbol {
         Symbol::aggr_ty(Type::empty_union(name), pretty_name)
     }
 
-    pub fn incomplete_struct(name: &str, pretty_name: Option<String>) -> Symbol {
+    pub fn incomplete_struct<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
+        pretty_name: Option<U>,
+    ) -> Symbol {
         Symbol::aggr_ty(Type::incomplete_struct(name), pretty_name)
     }
 
-    pub fn incomplete_union(name: &str, pretty_name: Option<String>) -> Symbol {
+    pub fn incomplete_union<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
+        pretty_name: Option<U>,
+    ) -> Symbol {
+        let name = name.into();
+        let pretty_name = pretty_name.intern();
         Symbol::aggr_ty(Type::incomplete_union(name), pretty_name)
     }
 }
@@ -256,8 +293,8 @@ impl Symbol {
         self
     }
 
-    pub fn with_pretty_name(mut self, pretty_name: &str) -> Symbol {
-        self.pretty_name = Some(pretty_name.to_string());
+    pub fn with_pretty_name<T: Into<InternedString>>(mut self, pretty_name: T) -> Symbol {
+        self.pretty_name = Some(pretty_name.into());
         self
     }
 }
@@ -289,12 +326,12 @@ impl Symbol {
 impl Symbol {
     /// Makes a formal function parameter from a symbol.
     pub fn to_function_parameter(&self) -> Parameter {
-        Type::parameter(Some(self.name.to_string()), self.base_name.clone(), self.typ.clone())
+        self.typ.clone().as_parameter(Some(self.name), self.base_name)
     }
 
     /// Makes an expression from a symbol.
     pub fn to_expr(&self) -> Expr {
-        Expr::symbol_expression(self.name.clone(), self.typ.clone())
+        Expr::symbol_expression(self.name, self.typ.clone())
     }
 }
 

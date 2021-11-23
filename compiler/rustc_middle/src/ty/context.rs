@@ -1,16 +1,14 @@
 //! Type context book-keeping.
 
 use crate::arena::Arena;
-use crate::dep_graph::DepGraph;
+use crate::dep_graph::{DepGraph, DepKind, DepKindStruct};
 use crate::hir::place::Place as HirPlace;
-use crate::ich::{NodeIdHashingMode, StableHashingContext};
 use crate::infer::canonical::{Canonical, CanonicalVarInfo, CanonicalVarInfos};
 use crate::lint::{struct_lint_level, LintDiagnosticBuilder, LintLevelSource};
 use crate::middle;
-use crate::middle::cstore::EncodedMetadata;
 use crate::middle::resolve_lifetime::{self, LifetimeScopeForPath, ObjectLifetimeDefault};
 use crate::middle::stability;
-use crate::mir::interpret::{self, AllocId, Allocation, ConstValue, Scalar};
+use crate::mir::interpret::{self, Allocation, ConstValue, Scalar};
 use crate::mir::{Body, Field, Local, Place, PlaceElem, ProjectionKind, Promoted};
 use crate::thir::Thir;
 use crate::traits;
@@ -46,6 +44,7 @@ use rustc_hir::{
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_macros::HashStable;
 use rustc_middle::mir::FakeReadCause;
+use rustc_query_system::ich::{NodeIdHashingMode, StableHashingContext};
 use rustc_serialize::opaque::{FileEncodeResult, FileEncoder};
 use rustc_session::config::{BorrowckMode, CrateType, OutputFilenames};
 use rustc_session::lint::{Level, Lint};
@@ -79,11 +78,6 @@ pub trait OnDiskCache<'tcx>: rustc_data_structures::sync::Sync {
     fn new_empty(source_map: &'tcx SourceMap) -> Self
     where
         Self: Sized;
-
-    /// Converts a `DefPathHash` to its corresponding `DefId` in the current compilation
-    /// session, if it still exists. This is used during incremental compilation to
-    /// turn a deserialized `DefPathHash` into its current `DefId`.
-    fn def_path_hash_to_def_id(&self, tcx: TyCtxt<'tcx>, def_path_hash: DefPathHash) -> DefId;
 
     fn drop_serialized_data(&self, tcx: TyCtxt<'tcx>);
 
@@ -1017,6 +1011,7 @@ pub struct GlobalCtxt<'tcx> {
 
     pub queries: &'tcx dyn query::QueryEngine<'tcx>,
     pub query_caches: query::QueryCaches<'tcx>,
+    query_kinds: &'tcx [DepKindStruct],
 
     // Internal caches for metadata decoding. No need to track deps on this.
     pub ty_rcache: Lock<FxHashMap<ty::CReaderCacheKey, Ty<'tcx>>>,
@@ -1048,10 +1043,6 @@ pub struct GlobalCtxt<'tcx> {
     pub(crate) alloc_map: Lock<interpret::AllocMap<'tcx>>,
 
     output_filenames: Arc<OutputFilenames>,
-
-    // FIXME(eddyb) this doesn't belong here and should be using a query.
-    pub(super) vtables_cache:
-        Lock<FxHashMap<(Ty<'tcx>, Option<ty::PolyExistentialTraitRef<'tcx>>), AllocId>>,
 }
 
 impl<'tcx> TyCtxt<'tcx> {
@@ -1154,6 +1145,7 @@ impl<'tcx> TyCtxt<'tcx> {
         dep_graph: DepGraph,
         on_disk_cache: Option<&'tcx dyn OnDiskCache<'tcx>>,
         queries: &'tcx dyn query::QueryEngine<'tcx>,
+        query_kinds: &'tcx [DepKindStruct],
         crate_name: &str,
         output_filenames: OutputFilenames,
     ) -> GlobalCtxt<'tcx> {
@@ -1180,6 +1172,7 @@ impl<'tcx> TyCtxt<'tcx> {
             on_disk_cache,
             queries,
             query_caches: query::QueryCaches::default(),
+            query_kinds,
             ty_rcache: Default::default(),
             pred_rcache: Default::default(),
             selection_cache: Default::default(),
@@ -1190,8 +1183,11 @@ impl<'tcx> TyCtxt<'tcx> {
             const_stability_interner: Default::default(),
             alloc_map: Lock::new(interpret::AllocMap::new()),
             output_filenames: Arc::new(output_filenames),
-            vtables_cache: Default::default(),
         }
+    }
+
+    crate fn query_kind(self, k: DepKind) -> &'tcx DepKindStruct {
+        &self.query_kinds[k as usize]
     }
 
     /// Constructs a `TyKind::Error` type and registers a `delay_span_bug` to ensure it gets used.
@@ -1233,12 +1229,17 @@ impl<'tcx> TyCtxt<'tcx> {
     /// Obtain the given diagnostic item's `DefId`. Use `is_diagnostic_item` if you just want to
     /// compare against another `DefId`, since `is_diagnostic_item` is cheaper.
     pub fn get_diagnostic_item(self, name: Symbol) -> Option<DefId> {
-        self.all_diagnostic_items(()).get(&name).copied()
+        self.all_diagnostic_items(()).name_to_id.get(&name).copied()
+    }
+
+    /// Obtain the diagnostic item's name
+    pub fn get_diagnostic_name(self, id: DefId) -> Option<Symbol> {
+        self.diagnostic_items(id.krate).id_to_name.get(&id).copied()
     }
 
     /// Check whether the diagnostic item with the given `name` has the given `DefId`.
     pub fn is_diagnostic_item(self, name: Symbol, did: DefId) -> bool {
-        self.diagnostic_items(did.krate).get(&name) == Some(&did)
+        self.diagnostic_items(did.krate).name_to_id.get(&name) == Some(&did)
     }
 
     pub fn stability(self) -> &'tcx stability::Index<'tcx> {
@@ -1302,6 +1303,27 @@ impl<'tcx> TyCtxt<'tcx> {
         }
     }
 
+    /// Converts a `DefPathHash` to its corresponding `DefId` in the current compilation
+    /// session, if it still exists. This is used during incremental compilation to
+    /// turn a deserialized `DefPathHash` into its current `DefId`.
+    pub fn def_path_hash_to_def_id(self, hash: DefPathHash) -> DefId {
+        debug!("def_path_hash_to_def_id({:?})", hash);
+
+        let stable_crate_id = hash.stable_crate_id();
+
+        // If this is a DefPathHash from the local crate, we can look up the
+        // DefId in the tcx's `Definitions`.
+        if stable_crate_id == self.sess.local_stable_crate_id() {
+            self.untracked_resolutions.definitions.local_def_path_hash_to_def_id(hash).to_def_id()
+        } else {
+            // If this is a DefPathHash from an upstream crate, let the CrateStore map
+            // it to a DefId.
+            let cstore = &self.untracked_resolutions.cstore;
+            let cnum = cstore.stable_crate_id_to_crate_num(stable_crate_id);
+            cstore.def_path_hash_to_def_id(cnum, hash)
+        }
+    }
+
     pub fn def_path_debug_str(self, def_id: DefId) -> String {
         // We are explicitly not going through queries here in order to get
         // crate name and stable crate id since this code is called from debug!()
@@ -1324,11 +1346,6 @@ impl<'tcx> TyCtxt<'tcx> {
         )
     }
 
-    pub fn encode_metadata(self) -> EncodedMetadata {
-        let _prof_timer = self.prof.verbose_generic_activity("generate_crate_metadata");
-        self.untracked_resolutions.cstore.encode_metadata(self)
-    }
-
     /// Note that this is *untracked* and should only be used within the query
     /// system if the result is otherwise tracked through queries
     pub fn cstore_untracked(self) -> &'tcx ty::CrateStoreDyn {
@@ -1343,20 +1360,15 @@ impl<'tcx> TyCtxt<'tcx> {
 
     #[inline(always)]
     pub fn create_stable_hashing_context(self) -> StableHashingContext<'tcx> {
-        let krate = self.gcx.untracked_crate;
         let resolutions = &self.gcx.untracked_resolutions;
-
-        StableHashingContext::new(self.sess, krate, &resolutions.definitions, &*resolutions.cstore)
+        StableHashingContext::new(self.sess, &resolutions.definitions, &*resolutions.cstore)
     }
 
     #[inline(always)]
     pub fn create_no_span_stable_hashing_context(self) -> StableHashingContext<'tcx> {
-        let krate = self.gcx.untracked_crate;
         let resolutions = &self.gcx.untracked_resolutions;
-
         StableHashingContext::ignore_spans(
             self.sess,
-            krate,
             &resolutions.definitions,
             &*resolutions.cstore,
         )
@@ -2123,7 +2135,7 @@ impl<'tcx> TyCtxt<'tcx> {
         })
     }
 
-    /// Computes the def-ids of the transitive super-traits of `trait_def_id`. This (intentionally)
+    /// Computes the def-ids of the transitive supertraits of `trait_def_id`. This (intentionally)
     /// does not compute the full elaborated super-predicates but just the set of def-ids. It is used
     /// to identify which traits may define a given associated type to help avoid cycle errors.
     /// Returns a `DefId` iterator.
@@ -2707,6 +2719,29 @@ impl<'tcx> TyCtxt<'tcx> {
     pub fn lifetime_scope(self, id: HirId) -> Option<LifetimeScopeForPath> {
         self.lifetime_scope_map(id.owner).and_then(|mut map| map.remove(&id.local_id))
     }
+
+    /// Whether the `def_id` counts as const fn in the current crate, considering all active
+    /// feature gates
+    pub fn is_const_fn(self, def_id: DefId) -> bool {
+        if self.is_const_fn_raw(def_id) {
+            match self.lookup_const_stability(def_id) {
+                Some(stability) if stability.level.is_unstable() => {
+                    // has a `rustc_const_unstable` attribute, check whether the user enabled the
+                    // corresponding feature gate.
+                    self.features()
+                        .declared_lib_features
+                        .iter()
+                        .any(|&(sym, _)| sym == stability.feature)
+                }
+                // functions without const stability are either stable user written
+                // const fn or the user is using feature gates and we thus don't
+                // care what they do
+                _ => true,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 impl TyCtxtAt<'tcx> {
@@ -2806,7 +2841,8 @@ fn ptr_eq<T, U>(t: *const T, u: *const U) -> bool {
 }
 
 pub fn provide(providers: &mut ty::query::Providers) {
-    providers.in_scope_traits_map = |tcx, id| tcx.hir_crate(()).trait_map.get(&id);
+    providers.in_scope_traits_map =
+        |tcx, id| tcx.hir_crate(()).owners[id].as_ref().map(|owner_info| &owner_info.trait_map);
     providers.resolutions = |tcx, ()| &tcx.untracked_resolutions;
     providers.module_exports = |tcx, id| tcx.resolutions(()).export_map.get(&id).map(|v| &v[..]);
     providers.crate_name = |tcx, id| {

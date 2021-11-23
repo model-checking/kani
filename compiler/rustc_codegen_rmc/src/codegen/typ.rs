@@ -1,9 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::GotocCtx;
-use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
-use cbmc::utils::aggr_name;
+use cbmc::utils::aggr_tag;
+use cbmc::{btree_map, NO_PRETTY_NAME};
+use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
@@ -25,9 +26,9 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::iter;
+use std::iter::FromIterator;
 use tracing::debug;
 use ty::layout::HasParamEnv;
-
 /// Map the unit type to an empty struct
 ///
 /// Mapping unit to `void` works for functions with no return type but not for variables with type
@@ -35,6 +36,10 @@ use ty::layout::HasParamEnv;
 /// variable `struct Unit VoidUnit` returned by all void functions.
 const UNIT_TYPE_EMPTY_STRUCT_NAME: &str = "Unit";
 pub const FN_RETURN_VOID_VAR_NAME: &str = "VoidUnit";
+
+/// Map the never i.e. `!` type to an empty struct.
+/// The never type can appear as a function argument, e.g. in library/core/src/num/error.rs
+const NEVER_TYPE_EMPTY_STRUCT_NAME: &str = "Never";
 
 pub trait TypeExt {
     fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
@@ -53,7 +58,7 @@ impl TypeExt for Type {
                     && components.iter().any(|x| x.name() == "data" && x.typ().is_pointer())
                     && components.iter().any(|x| x.name() == "len" && x.typ().is_integer())
             }
-            Type::StructTag(tag) => st.lookup(tag).unwrap().typ.is_rust_slice_fat_ptr(st),
+            Type::StructTag(tag) => st.lookup(*tag).unwrap().typ.is_rust_slice_fat_ptr(st),
             _ => false,
         }
     }
@@ -65,7 +70,9 @@ impl TypeExt for Type {
                     && components.iter().any(|x| x.name() == "data" && x.typ().is_pointer())
                     && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
             }
-            Type::StructTag(tag) => st.lookup(tag).unwrap().typ.is_rust_trait_fat_ptr(st),
+            Type::StructTag(tag) => {
+                st.lookup(&tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
+            }
             _ => false,
         }
     }
@@ -82,7 +89,7 @@ impl TypeExt for Type {
 
     fn is_unit(&self) -> bool {
         match self {
-            Type::StructTag(name) => *name == aggr_name(UNIT_TYPE_EMPTY_STRUCT_NAME),
+            Type::StructTag(name) => *name == aggr_tag(UNIT_TYPE_EMPTY_STRUCT_NAME),
             _ => false,
         }
     }
@@ -295,7 +302,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // vtable field name, i.e., 3_vol (idx_method)
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
 
-        Type::datatype_component(&vtable_field_name, fn_ptr)
+        Type::datatype_component(vtable_field_name, fn_ptr)
     }
 
     /// Generates a vtable that looks like this:
@@ -308,7 +315,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///   }
     /// Ensures that the vtable is added to the symbol table.
     fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
-        self.ensure_struct(&self.vtable_name(t), None, |ctx, _| ctx.trait_vtable_field_types(t))
+        self.ensure_struct(self.vtable_name(t), NO_PRETTY_NAME, |ctx, _| {
+            ctx.trait_vtable_field_types(t)
+        })
     }
 
     /// a trait dyn Trait is translated to
@@ -317,14 +326,14 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     void* vtable;
     /// }
     fn codegen_trait_fat_ptr_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
-        self.ensure_struct(&self.normalized_trait_name(t), None, |ctx, _| {
+        self.ensure_struct(&self.normalized_trait_name(t), NO_PRETTY_NAME, |ctx, _| {
             // At this point in time, the vtable hasn't been codegen yet.
             // However, all we need to know is its name, which we do know.
             // See the comment on codegen_ty_ref.
             let vtable_name = ctx.vtable_name(t);
             vec![
                 Type::datatype_component("data", Type::void_pointer()),
-                Type::datatype_component("vtable", Type::struct_tag(&vtable_name).to_pointer()),
+                Type::datatype_component("vtable", Type::struct_tag(vtable_name).to_pointer()),
             ]
         })
     }
@@ -395,10 +404,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// See compiler/rustc_middle/src/ty/vtable.rs
     /// https://github.com/model-checking/rmc/issues/358
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
-        self.normalized_trait_name(t) + "::vtable"
+        format!("{}::vtable", self.normalized_trait_name(t))
     }
 
-    pub fn ty_pretty_name(&self, t: Ty<'tcx>) -> String {
+    pub fn ty_pretty_name(&self, t: Ty<'tcx>) -> InternedString {
         use rustc_hir::def::Namespace;
         use rustc_middle::ty::print::Printer;
         let mut name = String::new();
@@ -410,10 +419,10 @@ impl<'tcx> GotocCtx<'tcx> {
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
         with_no_trimmed_paths(|| printer.print_type(t).unwrap());
-        name
+        name.intern()
     }
 
-    pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> String {
+    pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
         // Crate resolution: mangled names need to be distinct across different versions
         // of the same crate that could be pulled in by dependencies. However, RMC's
         // treatment of FFI C calls asssumes that we generate the same name for structs
@@ -426,7 +435,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             // This hash is documented to be the same no matter the crate context
             let id_u64 = self.tcx.type_id_hash(t);
-            format!("_{}", id_u64)
+            format!("_{}", id_u64).intern()
         }
     }
 
@@ -455,16 +464,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We handle this by treating it as an incomplete struct.
     fn codegen_foreign(&mut self, ty: Ty<'tcx>, defid: DefId) -> Type {
         debug!("codegen_foreign {:?} {:?}", ty, defid);
-        let name = self.ty_mangled_name(ty);
-        self.ensure(&aggr_name(&name), |ctx, _| {
-            Symbol::incomplete_struct(&name, Some(ctx.ty_pretty_name(ty)))
+        let name = self.ty_mangled_name(ty).intern();
+        self.ensure(aggr_tag(name), |ctx, _| {
+            Symbol::incomplete_struct(name, Some(ctx.ty_pretty_name(ty)))
         });
-        Type::struct_tag(&name)
+        Type::struct_tag(name)
     }
 
     /// The unit type in Rust is an empty struct in gotoc
     pub fn codegen_ty_unit(&mut self) -> Type {
-        self.ensure_struct(UNIT_TYPE_EMPTY_STRUCT_NAME, None, |_, _| vec![])
+        self.ensure_struct(UNIT_TYPE_EMPTY_STRUCT_NAME, NO_PRETTY_NAME, |_, _| vec![])
     }
 
     /// codegen for types. it finds a C type which corresponds to a rust type.
@@ -475,10 +484,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
     ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
-        if let Some(handler) = self.type_hooks.hook_applies(self.tcx, ty) {
-            return handler.handle(self, ty);
+        let goto_typ = self.codegen_ty_inner(ty);
+        if let Some(tag) = goto_typ.tag() {
+            if !self.type_map.contains_key(&tag.to_string()) {
+                self.type_map.insert(tag.to_string(), ty);
+            }
         }
+        goto_typ
+    }
 
+    fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {
         match ty.kind() {
             ty::Int(k) => self.codegen_iint(*k),
             ty::Bool => Type::c_bool(),
@@ -511,7 +526,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // struct [T; n] {
                 //   T _0[n];
                 // }
-                self.ensure_struct(&array_name, None, |ctx, _| {
+                self.ensure_struct(&array_name, NO_PRETTY_NAME, |ctx, _| {
                     if et.is_unit() {
                         // we do not generate a struct with an array of units
                         vec![]
@@ -534,10 +549,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
-            ty::Never =>
-            // unfortunately, there is no bottom in C. We must pick a type
-            {
-                Type::empty()
+            ty::Never => {
+                self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, NO_PRETTY_NAME, |_, _| vec![])
             }
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -546,7 +559,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // we do not have to do two insertions for tuple because it is impossible for
                     // finite tuples to loop.
                     self.ensure_struct(
-                        &self.ty_mangled_name(ty),
+                        self.ty_mangled_name(ty),
                         Some(self.ty_pretty_name(ty)),
                         |tcx, _| tcx.codegen_ty_tuple_fields(ty, ts),
                     )
@@ -718,7 +731,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
     fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::subst::SubstsRef<'tcx>) -> Type {
-        self.ensure_struct(&self.ty_mangled_name(t), Some(self.ty_pretty_name(t)), |ctx, _| {
+        self.ensure_struct(self.ty_mangled_name(t), Some(self.ty_pretty_name(t)), |ctx, _| {
             ctx.codegen_ty_tuple_like(t, substs.as_closure().upvar_tys().collect())
         })
     }
@@ -741,8 +754,8 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.use_slice_fat_pointer(mir_type) {
             let pointer_name = match mir_type.kind() {
                 ty::Slice(..) => self.ty_mangled_name(mir_type),
-                ty::Str => "str".to_string(),
-                ty::Adt(..) => format!("&{}", self.ty_mangled_name(mir_type)),
+                ty::Str => "str".intern(),
+                ty::Adt(..) => format!("&{}", self.ty_mangled_name(mir_type)).intern(),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             let element_type = match mir_type.kind() {
@@ -752,7 +765,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ty::Adt(..) => self.codegen_ty(mir_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
-            self.ensure_struct(&pointer_name, None, |_, _| {
+            self.ensure_struct(pointer_name, NO_PRETTY_NAME, |_, _| {
                 vec![
                     Type::datatype_component("data", element_type.to_pointer()),
                     Type::datatype_component("len", Type::size_t()),
@@ -885,7 +898,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
-        self.ensure_struct(&self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
+        self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
             let variant = &def.variants.raw[0];
             let layout = ctx.layout_of(ty);
             ctx.codegen_variant_struct_fields(variant, subst, layout.layout, 0)
@@ -915,7 +928,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
-        self.ensure_union(&self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
+        self.ensure_union(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
             def.variants.raw[0]
                 .fields
                 .iter()
@@ -967,7 +980,7 @@ impl<'tcx> GotocCtx<'tcx> {
         adtdef: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
-        self.ensure_struct(&self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, name| {
+        self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, name| {
             // variants appearing in source code (in source code order)
             let source_variants = &adtdef.variants;
             // variants appearing in mir code
@@ -1117,14 +1130,14 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_enum_cases_union(
         &mut self,
-        name: &str,
+        name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
         layouts: &IndexVec<VariantIdx, Layout>,
         initial_offset: usize,
     ) -> Type {
         // TODO Should we have a pretty name here?
-        self.ensure_union(&format!("{}-union", name), None, |ctx, name| {
+        self.ensure_union(&format!("{}-union", name.to_string()), NO_PRETTY_NAME, |ctx, name| {
             def.variants
                 .iter_enumerated()
                 .map(|(i, case)| {
@@ -1145,15 +1158,15 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_enum_case_struct(
         &mut self,
-        name: &str,
+        name: InternedString,
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
         variant: &Layout,
         initial_offset: usize,
     ) -> Type {
-        let case_name = format!("{}::{}", name, case.ident.name);
+        let case_name = format!("{}::{}", name.to_string(), case.ident.name);
         debug!("handling variant {}: {:?}", case_name, case);
-        self.ensure_struct(&case_name, None, |tcx, _| {
+        self.ensure_struct(&case_name, NO_PRETTY_NAME, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)
         })
     }
@@ -1202,7 +1215,10 @@ impl<'tcx> GotocCtx<'tcx> {
                             ident = name;
                         }
                     }
-                    Some(Type::parameter(Some(ident.to_string()), Some(ident), self.codegen_ty(*t)))
+                    Some(
+                        self.codegen_ty(*t)
+                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
+                    )
                 }
             })
             .collect();
@@ -1212,9 +1228,9 @@ impl<'tcx> GotocCtx<'tcx> {
         // and similar code in compiler/rustc_mir/src/shim.rs.
         if let ty::InstanceDef::VtableShim(..) = self.current_fn().instance().def {
             if let Some(self_param) = params.first() {
-                let ident = self_param.identifier().map(|i| i.to_string());
+                let ident = self_param.identifier();
                 let ty = self_param.typ().clone();
-                params[0] = Type::parameter(ident.clone(), ident, ty.to_pointer());
+                params[0] = ty.to_pointer().as_parameter(ident, ident);
             }
         }
 
@@ -1228,7 +1244,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Whether a variable of type ty should be ignored as a parameter to a function
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
-            ty::Tuple(substs) if substs.is_empty() => true,
             ty::FnDef(_, _) => true,
             _ => false,
         }
@@ -1238,17 +1253,16 @@ impl<'tcx> GotocCtx<'tcx> {
 /// Use maps instead of lists to manage mir struct components.
 impl<'tcx> GotocCtx<'tcx> {
     /// A mapping from mir field names to mir field types for a mir struct (for a single-variant adt)
-    pub fn mir_struct_field_types(&self, struct_type: Ty<'tcx>) -> BTreeMap<String, Ty<'tcx>> {
+    pub fn mir_struct_field_types(
+        &self,
+        struct_type: Ty<'tcx>,
+    ) -> BTreeMap<InternedString, Ty<'tcx>> {
         match struct_type.kind() {
             ty::Adt(adt_def, adt_substs) if adt_def.variants.len() == 1 => {
                 let fields = &adt_def.variants.get(VariantIdx::from_u32(0)).unwrap().fields;
-                let mut map: BTreeMap<String, Ty<'tcx>> = BTreeMap::new();
-                map.extend(
-                    fields.iter().map(|field| {
-                        (field.ident.name.to_string(), field.ty(self.tcx, adt_substs))
-                    }),
-                );
-                map
+                BTreeMap::from_iter(fields.iter().map(|field| {
+                    (field.ident.name.to_string().into(), field.ty(self.tcx, adt_substs))
+                }))
             }
             _ => unreachable!("Expected a single-variant ADT. Found {:?}", struct_type),
         }

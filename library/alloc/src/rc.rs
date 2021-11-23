@@ -41,7 +41,7 @@
 //! use std::rc::Rc;
 //!
 //! let my_rc = Rc::new(());
-//! Rc::downgrade(&my_rc);
+//! let my_weak = Rc::downgrade(&my_rc);
 //! ```
 //!
 //! `Rc<T>`'s implementations of traits like `Clone` may also be called using
@@ -313,11 +313,19 @@ pub struct Rc<T: ?Sized> {
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized> !marker::Send for Rc<T> {}
+
+// Note that this negative impl isn't strictly necessary for correctness,
+// as `Rc` transitively contains a `Cell`, which is itself `!Sync`.
+// However, given how important `Rc`'s `!Sync`-ness is,
+// having an explicit negative impl is nice for documentation purposes
+// and results in nicer error messages.
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized> !marker::Sync for Rc<T> {}
 
 #[stable(feature = "catch_unwind", since = "1.9.0")]
 impl<T: RefUnwindSafe + ?Sized> UnwindSafe for Rc<T> {}
+#[stable(feature = "rc_ref_unwind_safe", since = "1.58.0")]
+impl<T: RefUnwindSafe + ?Sized> RefUnwindSafe for Rc<T> {}
 
 #[unstable(feature = "coerce_unsized", issue = "27732")]
 impl<T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<Rc<U>> for Rc<T> {}
@@ -452,6 +460,7 @@ impl<T> Rc<T> {
     /// ```
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_uninit() -> Rc<mem::MaybeUninit<T>> {
         unsafe {
             Rc::from_ptr(Rc::allocate_for_layout(
@@ -484,6 +493,7 @@ impl<T> Rc<T> {
     /// [zeroed]: mem::MaybeUninit::zeroed
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_zeroed() -> Rc<mem::MaybeUninit<T>> {
         unsafe {
             Rc::from_ptr(Rc::allocate_for_layout(
@@ -587,6 +597,7 @@ impl<T> Rc<T> {
     /// `value` will be pinned in memory and unable to be moved.
     #[cfg(not(no_global_oom_handling))]
     #[stable(feature = "pin", since = "1.33.0")]
+    #[must_use]
     pub fn pin(value: T) -> Pin<Rc<T>> {
         unsafe { Pin::new_unchecked(Rc::new(value)) }
     }
@@ -658,6 +669,7 @@ impl<T> Rc<[T]> {
     /// ```
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_uninit_slice(len: usize) -> Rc<[mem::MaybeUninit<T>]> {
         unsafe { Rc::from_ptr(Rc::allocate_for_slice(len)) }
     }
@@ -684,6 +696,7 @@ impl<T> Rc<[T]> {
     /// [zeroed]: mem::MaybeUninit::zeroed
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_zeroed_slice(len: usize) -> Rc<[mem::MaybeUninit<T>]> {
         unsafe {
             Rc::from_ptr(Rc::allocate_for_layout(
@@ -884,6 +897,8 @@ impl<T: ?Sized> Rc<T> {
     ///
     /// let weak_five = Rc::downgrade(&five);
     /// ```
+    #[must_use = "this returns a new `Weak` pointer, \
+                  without modifying the original `Rc`"]
     #[stable(feature = "rc_weak", since = "1.4.0")]
     pub fn downgrade(this: &Self) -> Weak<T> {
         this.inner().inc_weak();
@@ -2044,6 +2059,7 @@ impl<T> Weak<T> {
     /// assert!(empty.upgrade().is_none());
     /// ```
     #[stable(feature = "downgraded_weak", since = "1.10.0")]
+    #[must_use]
     pub fn new() -> Weak<T> {
         Weak { ptr: NonNull::new(usize::MAX as *mut RcBox<T>).expect("MAX is not 0") }
     }
@@ -2087,6 +2103,7 @@ impl<T: ?Sized> Weak<T> {
     /// ```
     ///
     /// [`null`]: ptr::null
+    #[must_use]
     #[stable(feature = "rc_as_ptr", since = "1.45.0")]
     pub fn as_ptr(&self) -> *const T {
         let ptr: *mut RcBox<T> = NonNull::as_ptr(self.ptr);
@@ -2130,6 +2147,7 @@ impl<T: ?Sized> Weak<T> {
     ///
     /// [`from_raw`]: Weak::from_raw
     /// [`as_ptr`]: Weak::as_ptr
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "weak_into_raw", since = "1.45.0")]
     pub fn into_raw(self) -> *const T {
         let result = self.as_ptr();
@@ -2222,6 +2240,8 @@ impl<T: ?Sized> Weak<T> {
     ///
     /// assert!(weak_five.upgrade().is_none());
     /// ```
+    #[must_use = "this returns a new `Rc`, \
+                  without modifying the original weak pointer"]
     #[stable(feature = "rc_weak", since = "1.4.0")]
     pub fn upgrade(&self) -> Option<Rc<T>> {
         let inner = self.inner()?;
@@ -2236,6 +2256,7 @@ impl<T: ?Sized> Weak<T> {
     /// Gets the number of strong (`Rc`) pointers pointing to this allocation.
     ///
     /// If `self` was created using [`Weak::new`], this will return 0.
+    #[must_use]
     #[stable(feature = "weak_counts", since = "1.41.0")]
     pub fn strong_count(&self) -> usize {
         if let Some(inner) = self.inner() { inner.strong() } else { 0 }
@@ -2244,6 +2265,7 @@ impl<T: ?Sized> Weak<T> {
     /// Gets the number of `Weak` pointers pointing to this allocation.
     ///
     /// If no strong pointers remain, this will return zero.
+    #[must_use]
     #[stable(feature = "weak_counts", since = "1.41.0")]
     pub fn weak_count(&self) -> usize {
         self.inner()
@@ -2314,6 +2336,7 @@ impl<T: ?Sized> Weak<T> {
     /// assert!(!first.ptr_eq(&third));
     /// ```
     #[inline]
+    #[must_use]
     #[stable(feature = "weak_ptr_eq", since = "1.39.0")]
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.ptr.as_ptr() == other.ptr.as_ptr()

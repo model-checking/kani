@@ -9,6 +9,7 @@ import rmc
 import rmc_flags
 import os
 import pathlib
+import platform
 import toml
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
@@ -22,49 +23,57 @@ def main():
     rmc.ensure_dependencies_in_path()
 
     if args.gen_c_runnable:
-        rmc.cargo_build(args.crate, args.target_dir,
+        rmc.cargo_build(args.crate, args.target_dir, args.build_target,
                         args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"])
 
-        pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
-        jsons = glob.glob(pattern)
-        rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+        pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
+        symbol_table_jsons = glob.glob(pattern)
+        rmc.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
 
         cbmc_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.out")
         c_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.c")
 
-        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_runnable_filename, args.verbose, args.keep_temps, args.dry_run):
-            return 1
+        out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
-        if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_runnable_filename, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
-            return 1
+        rmc.link_c_lib(out_files, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
+                       args.dry_run, args.keep_temps)
 
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
             return 1
 
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    rmc.cargo_build(args.crate, args.target_dir,
+    rmc.cargo_build(args.crate, args.target_dir, args.build_target,
                     args.verbose, args.debug, args.mangler, args.dry_run, [])
 
-    pattern = os.path.join(args.target_dir, "debug", "deps", "*.json")
-    jsons = glob.glob(pattern)
+    if args.build_target:
+        pattern = os.path.join(args.target_dir, args.build_target, "debug", "deps", "*.symtab.json")
+    else:
+        pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
+    symbol_table_jsons = glob.glob(pattern)
 
     if not args.dry_run:
-        rmc.ensure(len(jsons) == 1, f"Unexpected number of json outputs: {len(jsons)}")
+        rmc.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
     else:
         # Add a dummy value so dry-run works.
-        jsons = ["dry-run.json"]
+        symbol_table_jsons = ["dry-run.symtab.json"]
 
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
-    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(jsons[0], cbmc_filename, args.verbose, args.keep_temps, args.dry_run):
-        return 1
+    out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
     args.c_lib.append(str(RMC_C_LIB))
 
-    if EXIT_CODE_SUCCESS != rmc.link_c_lib(cbmc_filename, cbmc_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
-        return 1
+    rmc.link_c_lib(
+        out_files,
+        cbmc_filename,
+        args.c_lib,
+        args.verbose,
+        args.quiet,
+        args.function,
+        args.dry_run,
+        args.keep_temps)
 
     if args.gen_c:
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(cbmc_filename, c_filename, args.verbose, args.dry_run):
@@ -74,15 +83,35 @@ def main():
         if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(cbmc_filename, symbols_filename, args.verbose, args.dry_run):
             return 1
 
+    if args.undefined_function_checks:
+        # https://github.com/diffblue/cbmc/issues/6393
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                cbmc_filename, cbmc_filename,
+                ['--add-library'],
+                args.verbose, dry_run=args.dry_run):
+            return 1
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                cbmc_filename, cbmc_filename,
+                ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
+                args.verbose, dry_run=args.dry_run):
+            return 1
+    else:
+        # Apply --drop-unused-functions if undefined-function-checks was turned off
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                cbmc_filename, cbmc_filename,
+                ['--drop-unused-functions'],
+                args.verbose, dry_run=args.dry_run):
+            return 1
+
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
 
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
-        retcode = rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args, \
-                                 args.verbose, args.quiet, args.keep_temps, \
-                                 args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
+        retcode = rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args,
+                                    args.verbose, args.quiet, args.keep_temps,
+                                    args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
         retcode = rmc.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
 
@@ -91,18 +120,42 @@ def main():
 
     return retcode
 
+
+def default_build_target():
+    """
+    Returns the default build target based on the current OS.
+
+    This function will return None for windows and print a warning.
+    """
+    machine = platform.uname()
+    if machine.system == "Linux":
+        return"x86_64-unknown-linux-gnu"
+
+    if machine.system == "Darwin":
+        return "x86_64-apple-darwin"
+
+    print("WARNING: No default build target exists for this platform. Please use --build-target to set the correct target")
+    return None
+
+
 def parse_args():
     # Create parser
     def create_parser():
-        parser = argparse.ArgumentParser(prog="cargo rmc", description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
+        parser = argparse.ArgumentParser(
+            prog="cargo rmc",
+            description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
 
-        crate_group = parser.add_argument_group("Crate", "You can pass in the rust crate positionally or with the --crate flag.")
+        crate_group = parser.add_argument_group(
+            "Crate", "You can pass in the rust crate positionally or with the --crate flag.")
         crate_group.add_argument("crate", help="crate to verify", nargs="?")
         crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
         config_group = parser.add_argument_group("Config", "You can configure cargo rmc with your Cargo.toml file.")
-        config_group.add_argument("--config-toml", help="Where to read configuration from; defaults to crate's Cargo.toml")
+        config_group.add_argument("--config-toml",
+                                  help="Where to read configuration from; defaults to crate's Cargo.toml")
         config_group.add_argument("--no-config-toml", action="store_true", help="Do not use any configuration toml")
+        config_group.add_argument("--build-target", help="Build for the target triple.",
+                                  default=default_build_target())
 
         exclude_flags = []
         rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
@@ -141,7 +194,7 @@ def parse_args():
 
         # Set relative paths to be rooted at config toml's directory rather than cwd
         def fix_paths(value):
-            if type(value) == list:
+            if isinstance(value, list):
                 return list(map(fix_paths, value))
             elif isinstance(value, pathlib.PurePath):
                 return pathlib.Path(config_toml).parent.joinpath(value)
@@ -160,7 +213,8 @@ def parse_args():
     # Check for conflicting flags
     def validate(args):
         rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")
-        rmc.ensure(not (args.no_config_toml and args.config_toml), "Incompatible flags: --config-toml, --no-config-toml")
+        rmc.ensure(not (args.no_config_toml and args.config_toml),
+                   "Incompatible flags: --config-toml, --no-config-toml")
 
     # Fix up args before returning
     def post_process(args):
@@ -173,7 +227,10 @@ def parse_args():
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:
-            rmc.add_selected_default_cbmc_flags(args)
+            rmc.add_selected_default_cbmc_checks(args)
+
+        # Conditionally add common CBMC flags
+        rmc.process_common_cbmc_flags(args)
 
     # Remove "rmc" from arg if invoked `cargo rmc ...`
     if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
@@ -212,9 +269,10 @@ def extract_flags_from_toml(path):
 
     # Extract nested flags
     flags = dict()
+
     def find_flags(map):
         for key in map:
-            if type(map[key]) == dict:
+            if isinstance(map[key], dict):
                 find_flags(map[key])
             else:
                 flags[key] = map[key]
@@ -223,8 +281,9 @@ def extract_flags_from_toml(path):
     # Add config toml flags to flag list
     success = True
     flag_list = []
+
     def add_flag(flag, value):
-        if type(value) == bool:
+        if isinstance(value, bool):
             if value:
                 flag_list.append(f"--{flag}")
             else:
@@ -232,11 +291,11 @@ def extract_flags_from_toml(path):
                     flag_list.append(f"--{flag[3:]}")
                 else:
                     flag_list.append(f"--no-{flag}")
-        elif type(value) == list:
+        elif isinstance(value, list):
             flag_list.append(f"--{flag}")
-            assert all(map(lambda arg: type(arg) == str, value)), f"ERROR: Invalid config: {flag} = {value}"
+            assert all(map(lambda arg: isinstance(arg, str), value)), f"ERROR: Invalid config: {flag} = {value}"
             flag_list.extend(value)
-        elif type(value) == str:
+        elif isinstance(value, str):
             flag_list.append(f"--{flag}")
             flag_list.append(value)
         else:
@@ -247,6 +306,7 @@ def extract_flags_from_toml(path):
 
     rmc.ensure(success)
     return flag_list
+
 
 if __name__ == "__main__":
     sys.exit(main())

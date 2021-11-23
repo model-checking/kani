@@ -9,7 +9,7 @@
 // [overflow.2] arithmetic overflow on signed - in var_11 - var_12: FAILURE
 // Tracking issue: https://github.com/model-checking/rmc/issues/307
 
-pub fn main() {
+fn main() {
     // pub unsafe fn offset_from(self, origin: *const T) -> isize
     // Calculates the distance between two pointers. The returned value
     // is in units of T: the distance in bytes is divided by mem::size_of::<T>().

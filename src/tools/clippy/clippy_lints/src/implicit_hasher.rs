@@ -167,12 +167,20 @@ impl<'tcx> LateLintPass<'tcx> for ImplicitHasher {
                             continue;
                         }
                         let generics_suggestion_span = generics.span.substitute_dummy({
-                            let pos = snippet_opt(cx, item.span.until(body.params[0].pat.span))
-                                .and_then(|snip| {
-                                    let i = snip.find("fn")?;
-                                    Some(item.span.lo() + BytePos((i + (&snip[i..]).find('(')?) as u32))
-                                })
-                                .expect("failed to create span for type parameters");
+                            let pos = snippet_opt(
+                                cx,
+                                Span::new(
+                                    item.span.lo(),
+                                    body.params[0].pat.span.lo(),
+                                    item.span.ctxt(),
+                                    item.span.parent(),
+                                ),
+                            )
+                            .and_then(|snip| {
+                                let i = snip.find("fn")?;
+                                Some(item.span.lo() + BytePos((i + (&snip[i..]).find('(')?) as u32))
+                            })
+                            .expect("failed to create span for type parameters");
                             Span::new(pos, pos, item.span.ctxt(), item.span.parent())
                         });
 
@@ -225,14 +233,14 @@ impl<'tcx> ImplicitHasherType<'tcx> {
 
             let ty = hir_ty_to_ty(cx.tcx, hir_ty);
 
-            if is_type_diagnostic_item(cx, ty, sym::hashmap_type) && params_len == 2 {
+            if is_type_diagnostic_item(cx, ty, sym::HashMap) && params_len == 2 {
                 Some(ImplicitHasherType::HashMap(
                     hir_ty.span,
                     ty,
                     snippet(cx, params[0].span, "K"),
                     snippet(cx, params[1].span, "V"),
                 ))
-            } else if is_type_diagnostic_item(cx, ty, sym::hashset_type) && params_len == 1 {
+            } else if is_type_diagnostic_item(cx, ty, sym::HashSet) && params_len == 1 {
                 Some(ImplicitHasherType::HashSet(
                     hir_ty.span,
                     ty,
@@ -347,7 +355,7 @@ impl<'a, 'b, 'tcx> Visitor<'tcx> for ImplicitHasherConstructorVisitor<'a, 'b, 't
                     return;
                 }
 
-                if self.cx.tcx.is_diagnostic_item(sym::hashmap_type, ty_did) {
+                if self.cx.tcx.is_diagnostic_item(sym::HashMap, ty_did) {
                     if method.ident.name == sym::new {
                         self.suggestions
                             .insert(e.span, "HashMap::default()".to_string());
@@ -360,7 +368,7 @@ impl<'a, 'b, 'tcx> Visitor<'tcx> for ImplicitHasherConstructorVisitor<'a, 'b, 't
                             ),
                         );
                     }
-                } else if self.cx.tcx.is_diagnostic_item(sym::hashset_type, ty_did) {
+                } else if self.cx.tcx.is_diagnostic_item(sym::HashSet, ty_did) {
                     if method.ident.name == sym::new {
                         self.suggestions
                             .insert(e.span, "HashSet::default()".to_string());

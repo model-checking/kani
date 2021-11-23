@@ -13,22 +13,22 @@
 //!   2. Provides constructors, getters and setters for the context.
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
-
 use super::current_fn::CurrentFnCtx;
-use crate::overrides::{type_and_fn_hooks, GotocHooks, GotocTypeHooks};
+use crate::overrides::{fn_hooks, GotocHooks};
 use crate::utils::full_crate_name;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
-use cbmc::utils::aggr_name;
+use cbmc::utils::aggr_tag;
+use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
 use cbmc::{MachineModel, RoundingMode};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;
 use rustc_data_structures::sync::MetadataRef;
-use rustc_middle::middle::cstore::MetadataLoader;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers, TyAndLayout};
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
+use rustc_session::cstore::MetadataLoader;
 use rustc_session::Session;
 use rustc_span::source_map::Span;
 use rustc_target::abi::Endian;
@@ -42,7 +42,6 @@ pub struct GotocCtx<'tcx> {
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
     pub hooks: GotocHooks<'tcx>,
-    pub type_hooks: GotocTypeHooks<'tcx>,
     /// the full crate name, including versioning info
     pub full_crate_name: String,
     /// a global counter for generating unique names for global variables
@@ -50,23 +49,24 @@ pub struct GotocCtx<'tcx> {
     /// map a global allocation to a name in the symbol table
     pub alloc_map: FxHashMap<&'tcx Allocation, String>,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
+    pub type_map: FxHashMap<String, Ty<'tcx>>,
 }
 
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> GotocCtx<'tcx> {
-        let (thks, fhks) = type_and_fn_hooks();
+        let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
         GotocCtx {
             tcx,
             symbol_table,
             hooks: fhks,
-            type_hooks: thks,
             full_crate_name: full_crate_name(tcx),
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
             current_fn: None,
+            type_map: FxHashMap::default(),
         }
     }
 }
@@ -101,7 +101,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Symbol {
         let base_name = format!("{}_{}", prefix, c);
         let name = format!("{}::1::{}", fname, base_name);
-        let symbol = Symbol::variable(name.to_string(), base_name, t, loc);
+        let symbol = Symbol::variable(name, base_name, t, loc);
         self.symbol_table.insert(symbol.clone());
         symbol
     }
@@ -117,11 +117,15 @@ impl<'tcx> GotocCtx<'tcx> {
 impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that the `name` appears in the Symbol table.
     /// If it doesn't, inserts it using `f`.
-    pub fn ensure<F: FnOnce(&mut GotocCtx<'tcx>, &str) -> Symbol>(
+    pub fn ensure<
+        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Symbol,
+        T: Into<InternedString>,
+    >(
         &mut self,
-        name: &str,
+        name: T,
         f: F,
     ) -> &Symbol {
+        let name = name.into();
         if !self.symbol_table.contains(name) {
             let sym = f(self, name);
             self.symbol_table.insert(sym);
@@ -133,21 +137,25 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If it doesn't, inserts it.
     /// If `init_fn` returns `Some(body)`, creates an initializer for the variable using `body`.
     /// Otherwise, leaves the variable uninitialized .
-    pub fn ensure_global_var<F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Option<Stmt>>(
+    pub fn ensure_global_var<
+        F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Option<Stmt>,
+        T: Into<InternedString>,
+    >(
         &mut self,
-        name: &str,
+        name: T,
         is_file_local: bool,
         t: Type,
         loc: Location,
         init_fn: F,
     ) -> Expr {
+        let name = name.into();
         if !self.symbol_table.contains(name) {
-            let sym = Symbol::static_variable(name.to_string(), name.to_string(), t.clone(), loc)
+            let sym = Symbol::static_variable(name, name, t.clone(), loc)
                 .with_is_file_local(is_file_local);
             let var = sym.to_expr();
             self.symbol_table.insert(sym);
             if let Some(body) = init_fn(self, var) {
-                self.register_initializer(name, body);
+                self.register_initializer(&name.to_string(), body);
             }
         }
         self.symbol_table.lookup(name).unwrap().to_expr()
@@ -156,17 +164,26 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a struct-tag referencing the inserted struct.
-    pub fn ensure_struct<F: FnOnce(&mut GotocCtx<'tcx>, &str) -> Vec<DatatypeComponent>>(
+
+    pub fn ensure_struct<
+        T: Into<InternedString>,
+        U: Into<InternedString>,
+        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Vec<DatatypeComponent>,
+    >(
         &mut self,
-        struct_name: &str,
-        pretty_name: Option<String>,
+        struct_name: T,
+        pretty_name: Option<U>,
         f: F,
     ) -> Type {
+        let struct_name = struct_name.into();
+
         assert!(!struct_name.starts_with("tag-"));
-        if !self.symbol_table.contains(&aggr_name(struct_name)) {
+        if !self.symbol_table.contains(aggr_tag(struct_name)) {
+            let pretty_name = pretty_name.intern();
             // Prevent recursion by inserting an incomplete value.
             self.symbol_table.insert(Symbol::incomplete_struct(struct_name, pretty_name.clone()));
             let components = f(self, struct_name);
+            let struct_name: InternedString = struct_name;
             let sym = Symbol::struct_type(struct_name, pretty_name, components);
             self.symbol_table.replace_with_completion(sym);
         }
@@ -176,16 +193,22 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that a union with name `union_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a union-tag referencing the inserted struct.
-    pub fn ensure_union<F: FnOnce(&mut GotocCtx<'tcx>, &str) -> Vec<DatatypeComponent>>(
+    pub fn ensure_union<
+        T: Into<InternedString>,
+        U: Into<InternedString>,
+        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Vec<DatatypeComponent>,
+    >(
         &mut self,
-        union_name: &str,
-        pretty_name: Option<String>,
+        union_name: T,
+        pretty_name: Option<U>,
         f: F,
     ) -> Type {
+        let union_name = union_name.into();
+        let pretty_name = pretty_name.intern();
         assert!(!union_name.starts_with("tag-"));
-        if !self.symbol_table.contains(&aggr_name(union_name)) {
+        if !self.symbol_table.contains(aggr_tag(union_name)) {
             // Prevent recursion by inserting an incomplete value.
-            self.symbol_table.insert(Symbol::incomplete_union(union_name, pretty_name.clone()));
+            self.symbol_table.insert(Symbol::incomplete_union(union_name, pretty_name));
             let components = f(self, union_name);
             let sym = Symbol::union_type(union_name, pretty_name, components);
             self.symbol_table.replace_with_completion(sym);
@@ -193,8 +216,8 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::union_tag(union_name)
     }
 
-    pub fn find_function(&mut self, fname: &str) -> Option<Expr> {
-        self.symbol_table.lookup(&fname).map(|s| s.to_expr())
+    pub fn find_function<T: Into<InternedString>>(&mut self, fname: T) -> Option<Expr> {
+        self.symbol_table.lookup(fname).map(|s| s.to_expr())
     }
 
     /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
@@ -205,7 +228,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &fn_name,
                 Type::code(vec![], Type::constructor()),
                 Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
-                None,
+                NO_PRETTY_NAME,
                 Location::none(),
             )
             .with_is_file_local(true)

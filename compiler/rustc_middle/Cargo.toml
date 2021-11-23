@@ -12,6 +12,7 @@ bitflags = "1.2.1"
 either = "1.5.0"
 gsgdt = "0.1.2"
 tracing = "0.1"
+rustc-rayon = "0.3.1"
 rustc-rayon-core = "0.3.1"
 polonius-engine = "0.13.0"
 rustc_apfloat = { path = "../rustc_apfloat" }
@@ -32,3 +33,5 @@ chalk-ir = "0.55.0"
 smallvec = { version = "1.6.1", features = ["union", "may_dangle"] }
 rustc_session = { path = "../rustc_session" }
 rustc_type_ir = { path = "../rustc_type_ir" }
+rand = "0.8.4"
+rand_xoshiro = "0.6.0"

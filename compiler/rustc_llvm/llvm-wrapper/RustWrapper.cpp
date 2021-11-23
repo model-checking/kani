@@ -54,7 +54,11 @@ static LLVM_THREAD_LOCAL char *LastError;
 //
 // Notably it exits the process with code 101, unlike LLVM's default of 1.
 static void FatalErrorHandler(void *UserData,
+#if LLVM_VERSION_LT(14, 0)
                               const std::string& Reason,
+#else
+                              const char* Reason,
+#endif
                               bool GenCrashDiag) {
   // Do the same thing that the default error handler does.
   std::cerr << "LLVM ERROR: " << Reason << std::endl;
@@ -259,11 +263,7 @@ extern "C" void LLVMRustAddByValCallSiteAttr(LLVMValueRef Instr, unsigned Index,
 extern "C" void LLVMRustAddStructRetCallSiteAttr(LLVMValueRef Instr, unsigned Index,
                                                  LLVMTypeRef Ty) {
   CallBase *Call = unwrap<CallBase>(Instr);
-#if LLVM_VERSION_GE(12, 0)
   Attribute Attr = Attribute::getWithStructRetType(Call->getContext(), unwrap(Ty));
-#else
-  Attribute Attr = Attribute::get(Call->getContext(), Attribute::StructRet);
-#endif
   AddAttribute(Call, Index, Attr);
 }
 
@@ -307,11 +307,7 @@ extern "C" void LLVMRustAddByValAttr(LLVMValueRef Fn, unsigned Index,
 extern "C" void LLVMRustAddStructRetAttr(LLVMValueRef Fn, unsigned Index,
                                          LLVMTypeRef Ty) {
   Function *F = unwrap<Function>(Fn);
-#if LLVM_VERSION_GE(12, 0)
   Attribute Attr = Attribute::getWithStructRetType(F->getContext(), unwrap(Ty));
-#else
-  Attribute Attr = Attribute::get(F->getContext(), Attribute::StructRet);
-#endif
   AddAttribute(F, Index, Attr);
 }
 
@@ -677,10 +673,8 @@ static Optional<DIFile::ChecksumKind> fromRust(LLVMRustChecksumKind Kind) {
     return DIFile::ChecksumKind::CSK_MD5;
   case LLVMRustChecksumKind::SHA1:
     return DIFile::ChecksumKind::CSK_SHA1;
-#if (LLVM_VERSION_MAJOR >= 11)
   case LLVMRustChecksumKind::SHA256:
     return DIFile::ChecksumKind::CSK_SHA256;
-#endif
   default:
     report_fatal_error("bad ChecksumKind.");
   }
@@ -995,14 +989,9 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateUnionType(
 extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateTemplateTypeParameter(
     LLVMRustDIBuilderRef Builder, LLVMMetadataRef Scope,
     const char *Name, size_t NameLen, LLVMMetadataRef Ty) {
-#if LLVM_VERSION_GE(11, 0)
   bool IsDefault = false; // FIXME: should we ever set this true?
   return wrap(Builder->createTemplateTypeParameter(
       unwrapDI<DIDescriptor>(Scope), StringRef(Name, NameLen), unwrapDI<DIType>(Ty), IsDefault));
-#else
-  return wrap(Builder->createTemplateTypeParameter(
-      unwrapDI<DIDescriptor>(Scope), StringRef(Name, NameLen), unwrapDI<DIType>(Ty)));
-#endif
 }
 
 extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateNameSpace(
@@ -1027,17 +1016,11 @@ extern "C" LLVMMetadataRef
 LLVMRustDIBuilderCreateDebugLocation(unsigned Line, unsigned Column,
                                      LLVMMetadataRef ScopeRef,
                                      LLVMMetadataRef InlinedAt) {
-#if LLVM_VERSION_GE(12, 0)
   MDNode *Scope = unwrapDIPtr<MDNode>(ScopeRef);
   DILocation *Loc = DILocation::get(
       Scope->getContext(), Line, Column, Scope,
       unwrapDIPtr<MDNode>(InlinedAt));
   return wrap(Loc);
-#else
-  DebugLoc debug_loc = DebugLoc::get(Line, Column, unwrapDIPtr<MDNode>(ScopeRef),
-                                     unwrapDIPtr<MDNode>(InlinedAt));
-  return wrap(debug_loc.getAsMDNode());
-#endif
 }
 
 extern "C" int64_t LLVMRustDIBuilderCreateOpDeref() {
@@ -1242,27 +1225,18 @@ extern "C" LLVMTypeKind LLVMRustGetTypeKind(LLVMTypeRef Ty) {
     return LLVMArrayTypeKind;
   case Type::PointerTyID:
     return LLVMPointerTypeKind;
-#if LLVM_VERSION_GE(11, 0)
   case Type::FixedVectorTyID:
     return LLVMVectorTypeKind;
-#else
-  case Type::VectorTyID:
-    return LLVMVectorTypeKind;
-#endif
   case Type::X86_MMXTyID:
     return LLVMX86_MMXTypeKind;
   case Type::TokenTyID:
     return LLVMTokenTypeKind;
-#if LLVM_VERSION_GE(11, 0)
   case Type::ScalableVectorTyID:
     return LLVMScalableVectorTypeKind;
   case Type::BFloatTyID:
     return LLVMBFloatTypeKind;
-#endif
-#if LLVM_VERSION_GE(12, 0)
   case Type::X86_AMXTyID:
     return LLVMX86_AMXTypeKind;
-#endif
   }
   report_fatal_error("Unhandled TypeID.");
 }
@@ -1720,23 +1694,15 @@ LLVMRustBuildVectorReduceMax(LLVMBuilderRef B, LLVMValueRef Src, bool IsSigned) 
 }
 extern "C" LLVMValueRef
 LLVMRustBuildVectorReduceFMin(LLVMBuilderRef B, LLVMValueRef Src, bool NoNaN) {
-#if LLVM_VERSION_GE(12, 0)
   Instruction *I = unwrap(B)->CreateFPMinReduce(unwrap(Src));
   I->setHasNoNaNs(NoNaN);
   return wrap(I);
-#else
-  return wrap(unwrap(B)->CreateFPMinReduce(unwrap(Src), NoNaN));
-#endif
 }
 extern "C" LLVMValueRef
 LLVMRustBuildVectorReduceFMax(LLVMBuilderRef B, LLVMValueRef Src, bool NoNaN) {
-#if LLVM_VERSION_GE(12, 0)
   Instruction *I = unwrap(B)->CreateFPMaxReduce(unwrap(Src));
   I->setHasNoNaNs(NoNaN);
   return wrap(I);
-#else
-  return wrap(unwrap(B)->CreateFPMaxReduce(unwrap(Src), NoNaN));
-#endif
 }
 
 extern "C" LLVMValueRef
@@ -1749,10 +1715,11 @@ LLVMRustBuildMaxNum(LLVMBuilderRef B, LLVMValueRef LHS, LLVMValueRef RHS) {
 }
 
 // This struct contains all necessary info about a symbol exported from a DLL.
-// At the moment, it's just the symbol's name, but we use a separate struct to
-// make it easier to add other information like ordinal later.
 struct LLVMRustCOFFShortExport {
   const char* name;
+  bool ordinal_present;
+  // The value of `ordinal` is only meaningful if `ordinal_present` is true.
+  uint16_t ordinal;
 };
 
 // Machine must be a COFF machine type, as defined in PE specs.
@@ -1768,13 +1735,15 @@ extern "C" LLVMRustResult LLVMRustWriteImportLibrary(
   ConvertedExports.reserve(NumExports);
 
   for (size_t i = 0; i < NumExports; ++i) {
+    bool ordinal_present = Exports[i].ordinal_present;
+    uint16_t ordinal = ordinal_present ? Exports[i].ordinal : 0;
     ConvertedExports.push_back(llvm::object::COFFShortExport{
       Exports[i].name,  // Name
       std::string{},    // ExtName
       std::string{},    // SymbolName
       std::string{},    // AliasTarget
-      0,                // Ordinal
-      false,            // Noname
+      ordinal,          // Ordinal
+      ordinal_present,  // Noname
       false,            // Data
       false,            // Private
       false             // Constant

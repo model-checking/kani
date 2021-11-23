@@ -6,7 +6,7 @@ pub use self::imp::cleanup;
 pub use self::imp::init;
 
 pub struct Handler {
-    _data: *mut libc::c_void,
+    data: *mut libc::c_void,
 }
 
 impl Handler {
@@ -15,14 +15,14 @@ impl Handler {
     }
 
     fn null() -> Handler {
-        Handler { _data: crate::ptr::null_mut() }
+        Handler { data: crate::ptr::null_mut() }
     }
 }
 
 impl Drop for Handler {
     fn drop(&mut self) {
         unsafe {
-            drop_handler(self);
+            drop_handler(self.data);
         }
     }
 }
@@ -134,23 +134,24 @@ mod imp {
         }
 
         let handler = make_handler();
-        MAIN_ALTSTACK.store(handler._data, Ordering::Relaxed);
+        MAIN_ALTSTACK.store(handler.data, Ordering::Relaxed);
         mem::forget(handler);
     }
 
     pub unsafe fn cleanup() {
-        Handler { _data: MAIN_ALTSTACK.load(Ordering::Relaxed) };
+        drop_handler(MAIN_ALTSTACK.load(Ordering::Relaxed));
     }
 
     unsafe fn get_stackp() -> *mut libc::c_void {
-        let stackp = mmap(
-            ptr::null_mut(),
-            SIGSTKSZ + page_size(),
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANON,
-            -1,
-            0,
-        );
+        // OpenBSD requires this flag for stack mapping
+        // otherwise the said mapping will fail as a no-op on most systems
+        // and has a different meaning on FreeBSD
+        #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "linux",))]
+        let flags = MAP_PRIVATE | MAP_ANON | libc::MAP_STACK;
+        #[cfg(not(any(target_os = "openbsd", target_os = "netbsd", target_os = "linux",)))]
+        let flags = MAP_PRIVATE | MAP_ANON;
+        let stackp =
+            mmap(ptr::null_mut(), SIGSTKSZ + page_size(), PROT_READ | PROT_WRITE, flags, -1, 0);
         if stackp == MAP_FAILED {
             panic!("failed to allocate an alternative stack: {}", io::Error::last_os_error());
         }
@@ -175,14 +176,14 @@ mod imp {
         if stack.ss_flags & SS_DISABLE != 0 {
             stack = get_stack();
             sigaltstack(&stack, ptr::null_mut());
-            Handler { _data: stack.ss_sp as *mut libc::c_void }
+            Handler { data: stack.ss_sp as *mut libc::c_void }
         } else {
             Handler::null()
         }
     }
 
-    pub unsafe fn drop_handler(handler: &mut Handler) {
-        if !handler._data.is_null() {
+    pub unsafe fn drop_handler(data: *mut libc::c_void) {
+        if !data.is_null() {
             let stack = libc::stack_t {
                 ss_sp: ptr::null_mut(),
                 ss_flags: SS_DISABLE,
@@ -195,7 +196,7 @@ mod imp {
             sigaltstack(&stack, ptr::null_mut());
             // We know from `get_stackp` that the alternate stack we installed is part of a mapping
             // that started one page earlier, so walk back a page and unmap from there.
-            munmap(handler._data.sub(page_size()), SIGSTKSZ + page_size());
+            munmap(data.sub(page_size()), SIGSTKSZ + page_size());
         }
     }
 }
@@ -219,5 +220,5 @@ mod imp {
         super::Handler::null()
     }
 
-    pub unsafe fn drop_handler(_handler: &mut super::Handler) {}
+    pub unsafe fn drop_handler(_data: *mut libc::c_void) {}
 }

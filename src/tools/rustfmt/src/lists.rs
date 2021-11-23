@@ -367,9 +367,9 @@ where
             result.push_str(&comment);
 
             if !inner_item.is_empty() {
-                if tactic == DefinitiveListTactic::Vertical || tactic == DefinitiveListTactic::Mixed
-                {
-                    // We cannot keep pre-comments on the same line if the comment if normalized.
+                use DefinitiveListTactic::*;
+                if matches!(tactic, Vertical | Mixed | SpecialMacro(_)) {
+                    // We cannot keep pre-comments on the same line if the comment is normalized.
                     let keep_comment = if formatting.config.normalize_comments()
                         || item.pre_comment_style == ListItemCommentStyle::DifferentLine
                     {
@@ -386,10 +386,10 @@ where
                         result.push('\n');
                         result.push_str(indent_str);
                         // This is the width of the item (without comments).
-                        line_len = item.item.as_ref().map_or(0, |s| unicode_str_width(&s));
+                        line_len = item.item.as_ref().map_or(0, |s| unicode_str_width(s));
                     }
                 } else {
-                    result.push(' ');
+                    result.push(' ')
                 }
             }
             item_max_width = None;
@@ -820,7 +820,7 @@ where
 pub(crate) fn total_item_width(item: &ListItem) -> usize {
     comment_len(item.pre_comment.as_ref().map(|x| &(*x)[..]))
         + comment_len(item.post_comment.as_ref().map(|x| &(*x)[..]))
-        + item.item.as_ref().map_or(0, |s| unicode_str_width(&s))
+        + item.item.as_ref().map_or(0, |s| unicode_str_width(s))
 }
 
 fn comment_len(comment: Option<&str>) -> usize {

@@ -292,7 +292,8 @@ pub(super) fn default_anon_const_substs(tcx: TyCtxt<'_>, def_id: DefId) -> Subst
     // Getting this wrong can lead to ICE and unsoundness, so we assert it here.
     for arg in substs.iter() {
         let allowed_flags = ty::TypeFlags::MAY_NEED_DEFAULT_CONST_SUBSTS
-            | ty::TypeFlags::STILL_FURTHER_SPECIALIZABLE;
+            | ty::TypeFlags::STILL_FURTHER_SPECIALIZABLE
+            | ty::TypeFlags::HAS_ERROR;
         assert!(!arg.has_type_flags(!allowed_flags));
     }
     substs
@@ -312,7 +313,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                 let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
                 tcx.mk_fn_def(def_id.to_def_id(), substs)
             }
-            TraitItemKind::Const(ref ty, body_id) => body_id
+            TraitItemKind::Const(ty, body_id) => body_id
                 .and_then(|body_id| {
                     if is_suggestable_infer_ty(ty) {
                         Some(infer_placeholder_type(
@@ -323,7 +324,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                     }
                 })
                 .unwrap_or_else(|| icx.to_ty(ty)),
-            TraitItemKind::Type(_, Some(ref ty)) => icx.to_ty(ty),
+            TraitItemKind::Type(_, Some(ty)) => icx.to_ty(ty),
             TraitItemKind::Type(_, None) => {
                 span_bug!(item.span, "associated type missing default");
             }
@@ -334,14 +335,14 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                 let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
                 tcx.mk_fn_def(def_id.to_def_id(), substs)
             }
-            ImplItemKind::Const(ref ty, body_id) => {
+            ImplItemKind::Const(ty, body_id) => {
                 if is_suggestable_infer_ty(ty) {
                     infer_placeholder_type(tcx, def_id, body_id, ty.span, item.ident, "constant")
                 } else {
                     icx.to_ty(ty)
                 }
             }
-            ImplItemKind::TyAlias(ref ty) => {
+            ImplItemKind::TyAlias(ty) => {
                 if tcx.impl_trait_ref(tcx.hir().get_parent_did(hir_id).to_def_id()).is_none() {
                     check_feature_inherent_assoc_ty(tcx, item.span);
                 }
@@ -352,7 +353,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
 
         Node::Item(item) => {
             match item.kind {
-                ItemKind::Static(ref ty, .., body_id) => {
+                ItemKind::Static(ty, .., body_id) => {
                     if is_suggestable_infer_ty(ty) {
                         infer_placeholder_type(
                             tcx,
@@ -366,7 +367,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                         icx.to_ty(ty)
                     }
                 }
-                ItemKind::Const(ref ty, body_id) => {
+                ItemKind::Const(ty, body_id) => {
                     if is_suggestable_infer_ty(ty) {
                         infer_placeholder_type(
                             tcx, def_id, body_id, ty.span, item.ident, "constant",
@@ -375,8 +376,8 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                         icx.to_ty(ty)
                     }
                 }
-                ItemKind::TyAlias(ref self_ty, _)
-                | ItemKind::Impl(hir::Impl { ref self_ty, .. }) => icx.to_ty(self_ty),
+                ItemKind::TyAlias(self_ty, _)
+                | ItemKind::Impl(hir::Impl { self_ty, .. }) => icx.to_ty(self_ty),
                 ItemKind::Fn(..) => {
                     let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
                     tcx.mk_fn_def(def_id.to_def_id(), substs)
@@ -395,7 +396,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                         .mir_borrowck(owner.expect_local())
                         .concrete_opaque_types
                         .get_value_matching(|(key, _)| key.def_id == def_id.to_def_id())
-                        .map(|concrete_ty| *concrete_ty)
+                        .copied()
                         .unwrap_or_else(|| {
                             tcx.sess.delay_span_bug(
                                 DUMMY_SP,
@@ -446,7 +447,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                 let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
                 tcx.mk_fn_def(def_id.to_def_id(), substs)
             }
-            ForeignItemKind::Static(ref t, _) => icx.to_ty(t),
+            ForeignItemKind::Static(t, _) => icx.to_ty(t),
             ForeignItemKind::Type => tcx.mk_foreign(def_id.to_def_id()),
         },
 
@@ -460,7 +461,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
             }
         },
 
-        Node::Field(field) => icx.to_ty(&field.ty),
+        Node::Field(field) => icx.to_ty(field.ty),
 
         Node::Expr(&Expr { kind: ExprKind::Closure(.., gen), .. }) => {
             let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
@@ -493,7 +494,8 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                 Node::Expr(&Expr { kind: ExprKind::ConstBlock(ref anon_const), .. })
                     if anon_const.hir_id == hir_id =>
                 {
-                    tcx.typeck(def_id).node_type(anon_const.hir_id)
+                    let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
+                    substs.as_inline_const().ty()
                 }
 
                 Node::Expr(&Expr { kind: ExprKind::InlineAsm(asm), .. })
@@ -685,9 +687,9 @@ fn find_opaque_ty_constraints(tcx: TyCtxt<'_>, def_id: LocalDefId) -> Ty<'_> {
             //
             // requires us to explicitly process `foo()` in order
             // to notice the defining usage of `Blah`.
-            Node::Item(ref it) => locator.visit_item(it),
-            Node::ImplItem(ref it) => locator.visit_impl_item(it),
-            Node::TraitItem(ref it) => locator.visit_trait_item(it),
+            Node::Item(it) => locator.visit_item(it),
+            Node::ImplItem(it) => locator.visit_impl_item(it),
+            Node::TraitItem(it) => locator.visit_trait_item(it),
             other => bug!("{:?} is not a valid scope for an opaque type item", other),
         }
     }
@@ -752,29 +754,31 @@ fn infer_placeholder_type<'a>(
     // us to improve in typeck so we do that now.
     match tcx.sess.diagnostic().steal_diagnostic(span, StashKey::ItemNoType) {
         Some(mut err) => {
-            // The parser provided a sub-optimal `HasPlaceholders` suggestion for the type.
-            // We are typeck and have the real type, so remove that and suggest the actual type.
-            err.suggestions.clear();
+            if !ty.references_error() {
+                // The parser provided a sub-optimal `HasPlaceholders` suggestion for the type.
+                // We are typeck and have the real type, so remove that and suggest the actual type.
+                err.suggestions.clear();
 
-            // Suggesting unnameable types won't help.
-            let mut mk_nameable = MakeNameable::new(tcx);
-            let ty = mk_nameable.fold_ty(ty);
-            let sugg_ty = if mk_nameable.success { Some(ty) } else { None };
-            if let Some(sugg_ty) = sugg_ty {
-                err.span_suggestion(
-                    span,
-                    &format!("provide a type for the {item}", item = kind),
-                    format!("{}: {}", item_ident, sugg_ty),
-                    Applicability::MachineApplicable,
-                );
-            } else {
-                err.span_note(
-                    tcx.hir().body(body_id).value.span,
-                    &format!("however, the inferred type `{}` cannot be named", ty.to_string()),
-                );
+                // Suggesting unnameable types won't help.
+                let mut mk_nameable = MakeNameable::new(tcx);
+                let ty = mk_nameable.fold_ty(ty);
+                let sugg_ty = if mk_nameable.success { Some(ty) } else { None };
+                if let Some(sugg_ty) = sugg_ty {
+                    err.span_suggestion(
+                        span,
+                        &format!("provide a type for the {item}", item = kind),
+                        format!("{}: {}", item_ident, sugg_ty),
+                        Applicability::MachineApplicable,
+                    );
+                } else {
+                    err.span_note(
+                        tcx.hir().body(body_id).value.span,
+                        &format!("however, the inferred type `{}` cannot be named", ty),
+                    );
+                }
             }
 
-            err.emit_unless(ty.references_error());
+            err.emit();
         }
         None => {
             let mut diag = bad_placeholder_type(tcx, vec![span], kind);
@@ -793,7 +797,7 @@ fn infer_placeholder_type<'a>(
                 } else {
                     diag.span_note(
                         tcx.hir().body(body_id).value.span,
-                        &format!("however, the inferred type `{}` cannot be named", ty.to_string()),
+                        &format!("however, the inferred type `{}` cannot be named", ty),
                     );
                 }
             }

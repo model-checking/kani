@@ -43,7 +43,7 @@ else
     PYTHON="python2"
 fi
 
-if ! isCI || isCiBranch auto || isCiBranch beta; then
+if ! isCI || isCiBranch auto || isCiBranch beta || isCiBranch try; then
     RUST_CONFIGURE_ARGS="$RUST_CONFIGURE_ARGS --set build.print-step-timings --enable-verbose-tests"
 fi
 
@@ -89,6 +89,11 @@ else
     RUST_CONFIGURE_ARGS="$RUST_CONFIGURE_ARGS --enable-debug-assertions"
   fi
 
+  # Same for overflow checks
+  if [ "$NO_OVERFLOW_CHECKS" = "" ]; then
+    RUST_CONFIGURE_ARGS="$RUST_CONFIGURE_ARGS --enable-overflow-checks"
+  fi
+
   # In general we always want to run tests with LLVM assertions enabled, but not
   # all platforms currently support that, so we have an option to disable.
   if [ "$NO_LLVM_ASSERTIONS" = "" ]; then
@@ -112,7 +117,7 @@ datecheck() {
   echo -n "  local time: "
   date
   echo -n "  network time: "
-  curl -fs --head http://detectportal.firefox.com/success.txt | grep ^Date: \
+  curl -fs --head http://ci-caches.rust-lang.org | grep ^Date: \
       | sed 's/Date: //g' || true
   echo "== end clock drift check =="
 }

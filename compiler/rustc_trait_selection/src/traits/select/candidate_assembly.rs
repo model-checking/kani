@@ -6,14 +6,19 @@
 //!
 //! [rustc dev guide]:https://rustc-dev-guide.rust-lang.org/traits/resolution.html#candidate-assembly
 use rustc_hir as hir;
+use rustc_hir::def_id::DefId;
+use rustc_infer::traits::TraitEngine;
 use rustc_infer::traits::{Obligation, SelectionError, TraitObligation};
+use rustc_lint_defs::builtin::DEREF_INTO_DYN_SUPERTRAIT;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Ty, TypeFoldable};
+use rustc_middle::ty::{self, ToPredicate, Ty, TypeFoldable, WithConstness};
 use rustc_target::spec::abi::Abi;
 
+use crate::traits;
 use crate::traits::coherence::Conflict;
+use crate::traits::query::evaluate_obligation::InferCtxtExt;
 use crate::traits::{util, SelectionResult};
-use crate::traits::{Overflow, Unimplemented};
+use crate::traits::{Ambiguous, ErrorReporting, Overflow, Unimplemented};
 
 use super::BuiltinImplConditions;
 use super::IntercrateAmbiguityCause;
@@ -116,7 +121,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             return Ok(None);
         }
 
-        let mut candidates = candidate_set.vec;
+        let candidates = candidate_set.vec;
 
         debug!(?stack, ?candidates, "assembled {} candidates", candidates.len());
 
@@ -128,6 +133,8 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         // unconstrained type variable. In that case, we'll get a
         // candidate which assumes $0 == int, one that assumes `$0 ==
         // usize`, etc. This spells an ambiguity.
+
+        let mut candidates = self.filter_impls(candidates, stack.obligation);
 
         // If there is more than one candidate, first winnow them down
         // by considering extra conditions (nested obligations and so
@@ -144,7 +151,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         // Instead, we select the right impl now but report "`Bar` does
         // not implement `Clone`".
         if candidates.len() == 1 {
-            return self.filter_impls(candidates.pop().unwrap(), stack.obligation);
+            return self.filter_reservation_impls(candidates.pop().unwrap(), stack.obligation);
         }
 
         // Winnow, but record the exact outcome of evaluation, which
@@ -156,7 +163,8 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     Ok(Some(EvaluatedCandidate { candidate: c, evaluation: eval }))
                 }
                 Ok(_) => Ok(None),
-                Err(OverflowError) => Err(Overflow),
+                Err(OverflowError::Canonical) => Err(Overflow),
+                Err(OverflowError::ErrorReporting) => Err(ErrorReporting),
             })
             .flat_map(Result::transpose)
             .collect::<Result<Vec<_>, _>>()?;
@@ -189,7 +197,15 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     // and report ambiguity.
                     if i > 1 {
                         debug!("multiple matches, ambig");
-                        return Ok(None);
+                        return Err(Ambiguous(
+                            candidates
+                                .into_iter()
+                                .filter_map(|c| match c.candidate {
+                                    SelectionCandidate::ImplCandidate(def_id) => Some(def_id),
+                                    _ => None,
+                                })
+                                .collect(),
+                        ));
                     }
                 }
             }
@@ -217,7 +233,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         }
 
         // Just one candidate left.
-        self.filter_impls(candidates.pop().unwrap().candidate, stack.obligation)
+        self.filter_reservation_impls(candidates.pop().unwrap().candidate, stack.obligation)
     }
 
     #[instrument(skip(self, stack), level = "debug")]
@@ -248,68 +264,75 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
 
         let mut candidates = SelectionCandidateSet { vec: Vec::new(), ambiguous: false };
 
-        self.assemble_candidates_for_trait_alias(obligation, &mut candidates);
-
-        // Other bounds. Consider both in-scope bounds from fn decl
-        // and applicable impls. There is a certain set of precedence rules here.
-        let def_id = obligation.predicate.def_id();
-        let lang_items = self.tcx().lang_items();
-
-        if lang_items.copy_trait() == Some(def_id) {
-            debug!(obligation_self_ty = ?obligation.predicate.skip_binder().self_ty());
-
-            // User-defined copy impls are permitted, but only for
-            // structs and enums.
+        // The only way to prove a NotImplemented(T: Foo) predicate is via a negative impl.
+        // There are no compiler built-in rules for this.
+        if obligation.polarity() == ty::ImplPolarity::Negative {
+            self.assemble_candidates_for_trait_alias(obligation, &mut candidates);
             self.assemble_candidates_from_impls(obligation, &mut candidates);
-
-            // For other types, we'll use the builtin rules.
-            let copy_conditions = self.copy_clone_conditions(obligation);
-            self.assemble_builtin_bound_candidates(copy_conditions, &mut candidates);
-        } else if lang_items.discriminant_kind_trait() == Some(def_id) {
-            // `DiscriminantKind` is automatically implemented for every type.
-            candidates.vec.push(DiscriminantKindCandidate);
-        } else if lang_items.pointee_trait() == Some(def_id) {
-            // `Pointee` is automatically implemented for every type.
-            candidates.vec.push(PointeeCandidate);
-        } else if lang_items.sized_trait() == Some(def_id) {
-            // Sized is never implementable by end-users, it is
-            // always automatically computed.
-            let sized_conditions = self.sized_conditions(obligation);
-            self.assemble_builtin_bound_candidates(sized_conditions, &mut candidates);
-        } else if lang_items.unsize_trait() == Some(def_id) {
-            self.assemble_candidates_for_unsizing(obligation, &mut candidates);
-        } else if lang_items.drop_trait() == Some(def_id)
-            && obligation.predicate.skip_binder().constness == ty::BoundConstness::ConstIfConst
-        {
-            if self.is_in_const_context {
-                self.assemble_const_drop_candidates(obligation, &mut candidates)?;
-            } else {
-                debug!("passing ~const Drop bound; in non-const context");
-                // `~const Drop` when we are not in a const context has no effect.
-                candidates.vec.push(ConstDropCandidate)
-            }
         } else {
-            if lang_items.clone_trait() == Some(def_id) {
-                // Same builtin conditions as `Copy`, i.e., every type which has builtin support
-                // for `Copy` also has builtin support for `Clone`, and tuples/arrays of `Clone`
-                // types have builtin support for `Clone`.
-                let clone_conditions = self.copy_clone_conditions(obligation);
-                self.assemble_builtin_bound_candidates(clone_conditions, &mut candidates);
+            self.assemble_candidates_for_trait_alias(obligation, &mut candidates);
+
+            // Other bounds. Consider both in-scope bounds from fn decl
+            // and applicable impls. There is a certain set of precedence rules here.
+            let def_id = obligation.predicate.def_id();
+            let lang_items = self.tcx().lang_items();
+
+            if lang_items.copy_trait() == Some(def_id) {
+                debug!(obligation_self_ty = ?obligation.predicate.skip_binder().self_ty());
+
+                // User-defined copy impls are permitted, but only for
+                // structs and enums.
+                self.assemble_candidates_from_impls(obligation, &mut candidates);
+
+                // For other types, we'll use the builtin rules.
+                let copy_conditions = self.copy_clone_conditions(obligation);
+                self.assemble_builtin_bound_candidates(copy_conditions, &mut candidates);
+            } else if lang_items.discriminant_kind_trait() == Some(def_id) {
+                // `DiscriminantKind` is automatically implemented for every type.
+                candidates.vec.push(DiscriminantKindCandidate);
+            } else if lang_items.pointee_trait() == Some(def_id) {
+                // `Pointee` is automatically implemented for every type.
+                candidates.vec.push(PointeeCandidate);
+            } else if lang_items.sized_trait() == Some(def_id) {
+                // Sized is never implementable by end-users, it is
+                // always automatically computed.
+                let sized_conditions = self.sized_conditions(obligation);
+                self.assemble_builtin_bound_candidates(sized_conditions, &mut candidates);
+            } else if lang_items.unsize_trait() == Some(def_id) {
+                self.assemble_candidates_for_unsizing(obligation, &mut candidates);
+            } else if lang_items.drop_trait() == Some(def_id)
+                && obligation.predicate.skip_binder().constness == ty::BoundConstness::ConstIfConst
+            {
+                if self.is_in_const_context {
+                    self.assemble_const_drop_candidates(obligation, &mut candidates)?;
+                } else {
+                    debug!("passing ~const Drop bound; in non-const context");
+                    // `~const Drop` when we are not in a const context has no effect.
+                    candidates.vec.push(ConstDropCandidate)
+                }
+            } else {
+                if lang_items.clone_trait() == Some(def_id) {
+                    // Same builtin conditions as `Copy`, i.e., every type which has builtin support
+                    // for `Copy` also has builtin support for `Clone`, and tuples/arrays of `Clone`
+                    // types have builtin support for `Clone`.
+                    let clone_conditions = self.copy_clone_conditions(obligation);
+                    self.assemble_builtin_bound_candidates(clone_conditions, &mut candidates);
+                }
+
+                self.assemble_generator_candidates(obligation, &mut candidates);
+                self.assemble_closure_candidates(obligation, &mut candidates);
+                self.assemble_fn_pointer_candidates(obligation, &mut candidates);
+                self.assemble_candidates_from_impls(obligation, &mut candidates);
+                self.assemble_candidates_from_object_ty(obligation, &mut candidates);
             }
 
-            self.assemble_generator_candidates(obligation, &mut candidates);
-            self.assemble_closure_candidates(obligation, &mut candidates);
-            self.assemble_fn_pointer_candidates(obligation, &mut candidates);
-            self.assemble_candidates_from_impls(obligation, &mut candidates);
-            self.assemble_candidates_from_object_ty(obligation, &mut candidates);
-        }
-
-        self.assemble_candidates_from_projected_tys(obligation, &mut candidates);
-        self.assemble_candidates_from_caller_bounds(stack, &mut candidates)?;
-        // Auto implementations have lower priority, so we only
-        // consider triggering a default if there is no other impl that can apply.
-        if candidates.vec.is_empty() {
-            self.assemble_candidates_from_auto_impls(obligation, &mut candidates);
+            self.assemble_candidates_from_projected_tys(obligation, &mut candidates);
+            self.assemble_candidates_from_caller_bounds(stack, &mut candidates)?;
+            // Auto implementations have lower priority, so we only
+            // consider triggering a default if there is no other impl that can apply.
+            if candidates.vec.is_empty() {
+                self.assemble_candidates_from_auto_impls(obligation, &mut candidates);
+            }
         }
         debug!("candidate list size: {}", candidates.vec.len());
         Ok(candidates)
@@ -370,7 +393,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         for bound in matching_bounds {
             let wc = self.evaluate_where_clause(stack, bound.value)?;
             if wc.may_apply() {
-                candidates.vec.push(ParamCandidate(bound));
+                candidates.vec.push(ParamCandidate((bound, stack.obligation.polarity())));
             }
         }
 
@@ -476,7 +499,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     ..
                 } = self_ty.fn_sig(self.tcx()).skip_binder()
                 {
-                    candidates.vec.push(FnPointerCandidate);
+                    candidates.vec.push(FnPointerCandidate { is_const: false });
                 }
             }
             // Provide an impl for suitable functions, rejecting `#[target_feature]` functions (RFC 2396).
@@ -489,7 +512,9 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 } = self_ty.fn_sig(self.tcx()).skip_binder()
                 {
                     if self.tcx().codegen_fn_attrs(def_id).target_features.is_empty() {
-                        candidates.vec.push(FnPointerCandidate);
+                        candidates
+                            .vec
+                            .push(FnPointerCandidate { is_const: self.tcx().is_const_fn(def_id) });
                     }
                 }
             }
@@ -670,6 +695,53 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         })
     }
 
+    /// Temporary migration for #89190
+    fn need_migrate_deref_output_trait_object(
+        &mut self,
+        ty: Ty<'tcx>,
+        cause: &traits::ObligationCause<'tcx>,
+        param_env: ty::ParamEnv<'tcx>,
+    ) -> Option<(Ty<'tcx>, DefId)> {
+        let tcx = self.tcx();
+        if tcx.features().trait_upcasting {
+            return None;
+        }
+
+        // <ty as Deref>
+        let trait_ref = ty::TraitRef {
+            def_id: tcx.lang_items().deref_trait()?,
+            substs: tcx.mk_substs_trait(ty, &[]),
+        };
+
+        let obligation = traits::Obligation::new(
+            cause.clone(),
+            param_env,
+            ty::Binder::dummy(trait_ref).without_const().to_predicate(tcx),
+        );
+        if !self.infcx.predicate_may_hold(&obligation) {
+            return None;
+        }
+
+        let mut fulfillcx = traits::FulfillmentContext::new_in_snapshot();
+        let normalized_ty = fulfillcx.normalize_projection_type(
+            &self.infcx,
+            param_env,
+            ty::ProjectionTy {
+                item_def_id: tcx.lang_items().deref_target()?,
+                substs: trait_ref.substs,
+            },
+            cause.clone(),
+        );
+
+        let ty::Dynamic(data, ..) = normalized_ty.kind() else {
+            return None;
+        };
+
+        let def_id = data.principal_def_id()?;
+
+        return Some((normalized_ty, def_id));
+    }
+
     /// Searches for unsizing that might apply to `obligation`.
     fn assemble_candidates_for_unsizing(
         &mut self,
@@ -730,6 +802,30 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                         let principal_a = data_a.principal().unwrap();
                         let target_trait_did = principal_def_id_b.unwrap();
                         let source_trait_ref = principal_a.with_self_ty(self.tcx(), source);
+                        if let Some((deref_output_ty, deref_output_trait_did)) = self
+                            .need_migrate_deref_output_trait_object(
+                                source,
+                                &obligation.cause,
+                                obligation.param_env,
+                            )
+                        {
+                            if deref_output_trait_did == target_trait_did {
+                                self.tcx().struct_span_lint_hir(
+                                    DEREF_INTO_DYN_SUPERTRAIT,
+                                    obligation.cause.body_id,
+                                    obligation.cause.span,
+                                    |lint| {
+                                        lint.build(&format!(
+                                            "`{}` implements `Deref` with supertrait `{}` as output",
+                                            source,
+                                            deref_output_ty
+                                        )).emit();
+                                    },
+                                );
+                                return;
+                            }
+                        }
+
                         for (idx, upcast_trait_ref) in
                             util::supertraits(self.tcx(), source_trait_ref).enumerate()
                         {
@@ -834,6 +930,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                         substs: self.tcx().mk_substs_trait(ty, &[]),
                     },
                     constness: ty::BoundConstness::NotConst,
+                    polarity: ty::ImplPolarity::Positive,
                 }));
             copy_obligation.recursion_depth = depth + 1;
             self.assemble_candidates_from_impls(&copy_obligation, &mut copy_candidates);
@@ -892,12 +989,16 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 ty::Tuple(_) => stack.extend(ty.tuple_fields().map(|t| (t, depth + 1))),
 
                 ty::Closure(_, substs) => {
-                    stack.extend(substs.as_closure().upvar_tys().map(|t| (t, depth + 1)))
+                    let substs = substs.as_closure();
+                    let ty = self.infcx.shallow_resolve(substs.tupled_upvars_ty());
+                    stack.push((ty, depth + 1));
                 }
 
                 ty::Generator(_, substs, _) => {
                     let substs = substs.as_generator();
-                    stack.extend(substs.upvar_tys().map(|t| (t, depth + 1)));
+                    let ty = self.infcx.shallow_resolve(substs.tupled_upvars_ty());
+
+                    stack.push((ty, depth + 1));
                     stack.push((substs.witness(), depth + 1));
                 }
 

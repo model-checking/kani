@@ -14,19 +14,30 @@ EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 RMC_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 30
+check-cbmc-version.py --major 5 --minor 43
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
 ./x.py fmt --check
 
-# Standalone rmc tests, expected tests, and cargo tests
+# Build RMC and RMC library
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc
+./scripts/setup/build_rmc_lib.sh
+
+# Standalone rmc tests, expected tests, and cargo tests
+./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs
 ./x.py test -i --stage 0 compiler/cbmc
 
 # Check codegen for the standard library
 time "$SCRIPT_DIR"/std-lib-regression.sh
+
+# We rarely benefit from re-using build artifacts in the firecracker test,
+# and we often end up with incompatible leftover artifacts:
+# "error[E0514]: found crate `serde_derive` compiled by an incompatible version of rustc"
+# So if we're calling the full regression suite, wipe out old artifacts.
+if [ -d "$RMC_DIR/firecracker/build" ]; then
+  rm -rf "$RMC_DIR/firecracker/build"
+fi
 
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
@@ -43,10 +54,6 @@ time "$RMC_DIR"/src/test/rmc-dependency-test/diamond-dependency/run-dependency-t
 
 # Check that we don't have type mismatches across different crates
 time "$RMC_DIR"/src/test/rmc-multicrate/type-mismatch/run-mismatch-test.sh
-
-# Check that CBMC issue #6341 is fixed
-# Disabled till https://github.com/model-checking/rmc/issues/533 is fixed
-#time "$RMC_DIR"/src/test/rmc-multicrate/cbmc-unknown-lang-mode/run-cbmc-unknown-lang-mode.sh
 
 echo
 echo "All RMC regression tests completed successfully."

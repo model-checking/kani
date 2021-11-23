@@ -134,9 +134,27 @@ Book][unstable-masked] and [its tracking issue][issue-masked].
 
 ## Document primitives
 
+This is for Rust compiler internal use only.
+
 Since primitive types are defined in the compiler, there's no place to attach documentation
-attributes. The `#[doc(primitive)]` attribute is used by the standard library to provide a way to generate
-documentation for primitive types, and requires `#![feature(doc_primitive)]` to enable.
+attributes. The `#[doc(primitive)]` attribute is used by the standard library to provide a way
+to generate documentation for primitive types, and requires `#![feature(doc_primitive)]` to enable.
+
+## Document keywords
+
+This is for Rust compiler internal use only.
+
+Rust keywords are documented in the standard library (look for `match` for example).
+
+To do so, the `#[doc(keyword = "...")]` attribute is used. Example:
+
+```rust
+#![feature(doc_keyword)]
+
+/// Some documentation about the keyword.
+#[doc(keyword = "keyword")]
+mod empty_mod {}
+```
 
 ## Unstable command-line arguments
 
@@ -455,3 +473,27 @@ Calculating code examples follows these rules:
   * static
   * typedef
 2. If one of the previously listed items has a code example, then it'll be counted.
+
+### `--with-examples`: include examples of uses of items as documentation
+
+This option, combined with `--scrape-examples-target-crate` and
+`--scrape-examples-output-path`, is used to implement the functionality in [RFC
+#3123](https://github.com/rust-lang/rfcs/pull/3123). Uses of an item (currently
+functions / call-sites) are found in a crate and its reverse-dependencies, and
+then the uses are included as documentation for that item. This feature is
+intended to be used via `cargo doc --scrape-examples`, but the rustdoc-only
+workflow looks like:
+
+```bash
+$ rustdoc examples/ex.rs -Z unstable-options \
+    --extern foobar=target/deps/libfoobar.rmeta \
+    --scrape-examples-target-crate foobar \
+    --scrape-examples-output-path output.calls
+$ rustdoc src/lib.rs -Z unstable-options --with-examples output.calls
+```
+
+First, the library must be checked to generate an `rmeta`. Then a
+reverse-dependency like `examples/ex.rs` is given to rustdoc with the target
+crate being documented (`foobar`) and a path to output the calls
+(`output.calls`). Then, the generated calls file can be passed via
+`--with-examples` to the subsequent documentation of `foobar`.

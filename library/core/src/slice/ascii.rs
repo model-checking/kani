@@ -11,6 +11,7 @@ use crate::ops;
 impl [u8] {
     /// Checks if all bytes in this slice are within the ASCII range.
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
+    #[must_use]
     #[inline]
     pub fn is_ascii(&self) -> bool {
         is_ascii(self)
@@ -21,6 +22,7 @@ impl [u8] {
     /// Same as `to_ascii_lowercase(a) == to_ascii_lowercase(b)`,
     /// but without allocating and copying temporaries.
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
+    #[must_use]
     #[inline]
     pub fn eq_ignore_ascii_case(&self, other: &[u8]) -> bool {
         self.len() == other.len() && iter::zip(self, other).all(|(a, b)| a.eq_ignore_ascii_case(b))
@@ -72,6 +74,8 @@ impl [u8] {
     /// let escaped = s.escape_ascii().to_string();
     /// assert_eq!(escaped, "0\\t\\r\\n\\'\\\"\\\\\\x9d");
     /// ```
+    #[must_use = "this returns the escaped bytes as an iterator, \
+                  without modifying the original"]
     #[unstable(feature = "inherent_ascii_escape", issue = "77174")]
     pub fn escape_ascii(&self) -> EscapeAscii<'_> {
         EscapeAscii { inner: self.iter().flat_map(EscapeByte) }

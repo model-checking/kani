@@ -5,8 +5,6 @@
 // function definition. Expected to fail because we are comparing
 // to an incorrect value.
 
-include!("../../rmc-prelude.rs");
-
 fn takes_dyn_fun(fun: Box<dyn FnOnce() -> u32>) -> u32 {
     fun()
 }
@@ -15,6 +13,6 @@ pub fn unit_to_u32() -> u32 {
     5
 }
 
-pub fn main() {
-    __VERIFIER_expect_fail(takes_dyn_fun(Box::new(&unit_to_u32)) == 3, "Wrong u32")
+fn main() {
+    rmc::expect_fail(takes_dyn_fun(Box::new(&unit_to_u32)) == 3, "Wrong u32")
 }

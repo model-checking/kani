@@ -287,6 +287,8 @@ pub enum UndefinedBehaviorInfo<'tcx> {
         target_size: u64,
         data_size: u64,
     },
+    /// A discriminant of an uninhabited enum variant is written.
+    UninhabitedEnumVariantWritten,
 }
 
 impl fmt::Display for UndefinedBehaviorInfo<'_> {
@@ -391,6 +393,9 @@ impl fmt::Display for UndefinedBehaviorInfo<'_> {
                 "scalar size mismatch: expected {} bytes but got {} bytes instead",
                 target_size, data_size
             ),
+            UninhabitedEnumVariantWritten => {
+                write!(f, "writing discriminant of an uninhabited enum")
+            }
         }
     }
 }
@@ -533,12 +538,12 @@ impl InterpError<'_> {
     /// To avoid performance issues, there are places where we want to be sure to never raise these formatting errors,
     /// so this method lets us detect them and `bug!` on unexpected errors.
     pub fn formatted_string(&self) -> bool {
-        match self {
+        matches!(
+            self,
             InterpError::Unsupported(UnsupportedOpInfo::Unsupported(_))
-            | InterpError::UndefinedBehavior(UndefinedBehaviorInfo::ValidationFailure { .. })
-            | InterpError::UndefinedBehavior(UndefinedBehaviorInfo::Ub(_)) => true,
-            _ => false,
-        }
+                | InterpError::UndefinedBehavior(UndefinedBehaviorInfo::ValidationFailure { .. })
+                | InterpError::UndefinedBehavior(UndefinedBehaviorInfo::Ub(_))
+        )
     }
 
     /// Should this error be reported as a hard error, preventing compilation, or a soft error,

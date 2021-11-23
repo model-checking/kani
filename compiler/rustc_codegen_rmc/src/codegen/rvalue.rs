@@ -3,10 +3,11 @@
 use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::GotocCtx;
-use cbmc::btree_string_map;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use cbmc::utils::{aggr_name, BUG_REPORT_URL};
+use cbmc::utils::{aggr_tag, BUG_REPORT_URL};
 use cbmc::MachineModel;
+use cbmc::NO_PRETTY_NAME;
+use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
@@ -191,7 +192,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func_name,
                 Type::code(vec![inp.to_function_parameter()], res_t),
                 Some(Stmt::block(body, Location::none())),
-                None,
+                NO_PRETTY_NAME,
                 Location::none(),
             )
         });
@@ -430,7 +431,15 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Aggregate(ref k, operands) => {
                 self.codegen_rvalue_aggregate(&*k, operands, res_ty)
             }
-            Rvalue::ThreadLocalRef(_) => unimplemented!(),
+            Rvalue::ThreadLocalRef(_) => {
+                let typ = self.codegen_ty(res_ty);
+                self.codegen_unimplemented(
+                    "Rvalue::ThreadLocalRef",
+                    typ,
+                    Location::none(),
+                    "https://github.com/model-checking/rmc/issues/541",
+                )
+            }
         }
     }
 
@@ -703,10 +712,10 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> Expr {
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
-        let vtable_type_name = aggr_name(&self.vtable_name(t));
+        let vtable_type_name = aggr_tag(self.vtable_name(t));
         let field_type = self
             .symbol_table
-            .lookup_field_type(&vtable_type_name, &vtable_field_name)
+            .lookup_field_type(vtable_type_name, vtable_field_name)
             .cloned()
             .unwrap();
 
@@ -716,7 +725,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Create a pointer to the method
             // Note that the method takes a self* as the first argument, but the vtable field type has a void* as the first arg.
             // So we need to cast it at the end.
-            Expr::symbol_expression(fn_symbol.name.clone(), fn_symbol.typ.clone())
+            Expr::symbol_expression(fn_symbol.name, fn_symbol.typ.clone())
                 .address_of()
                 .cast_to(field_type)
         } else {
@@ -777,7 +786,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &drop_sym_name,
                 Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
                 Some(Stmt::block(vec![unimplemented], Location::none())),
-                None,
+                NO_PRETTY_NAME,
                 Location::none(),
             );
             self.symbol_table.insert(sym.clone());
@@ -855,13 +864,13 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let src_name = self.ty_mangled_name(src_mir_type);
         // The name needs to be the same as inserted in typ.rs
-        let vtable_name = self.vtable_name(trait_type);
+        let vtable_name = self.vtable_name(trait_type).intern();
         let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
 
         self.ensure_global_var(
-            &vtable_impl_name,
+            vtable_impl_name,
             true,
-            Type::struct_tag(&vtable_name),
+            Type::struct_tag(vtable_name),
             Location::none(),
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
@@ -897,7 +906,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     .collect();
 
                 let vtable = Expr::struct_expr_from_values(
-                    Type::struct_tag(&vtable_name),
+                    Type::struct_tag(vtable_name),
                     vtable_fields,
                     &ctx.symbol_table,
                 );
@@ -941,7 +950,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst_goto_type = self.codegen_ty(dst_mir_type);
         let data = src_goto_expr.to_owned().member("data", &self.symbol_table);
         let vtable_name = self.vtable_name(dst_mir_dyn_ty);
-        let vtable_ty = Type::struct_tag(&vtable_name).to_pointer();
+        let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
 
         let vtable = src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_ty);
 
@@ -1115,14 +1124,14 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(src_goto_field_values.keys().eq(dst_mir_field_types.keys()));
 
         // Cast each field and collect the fields for which a cast was required
-        let mut cast_required: Vec<(String, Expr)> = vec![];
+        let mut cast_required: Vec<(InternedString, Expr)> = vec![];
         for field in src_goto_field_values.keys() {
             if let Some(expr) = self.cast_to_unsized_expr(
                 src_goto_field_values.get(field).unwrap().clone(),
                 src_mir_field_types.get(field).unwrap(),
                 dst_mir_field_types.get(field).unwrap(),
             ) {
-                cast_required.push((field.to_string(), expr));
+                cast_required.push((*field, expr));
             }
         }
         // Return None for a struct with fields if none of the fields require a cast.

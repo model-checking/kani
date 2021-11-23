@@ -6,18 +6,16 @@
 
 // rmc-verify-fail
 
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
+fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> =
-        Box::new(Box::new(|x| __VERIFIER_expect_fail(x != 1, "wrong int")));
+        Box::new(Box::new(|x| rmc::expect_fail(x != 1, "wrong int")));
     f(1);
 
     // Create a pointer to a closure
     let g = |x: f32, y: i32| {
-        __VERIFIER_expect_fail(x != 1.0, "wrong float");
-        __VERIFIER_expect_fail(y != 2, "wrong int")
+        rmc::expect_fail(x != 1.0, "wrong float");
+        rmc::expect_fail(y != 2, "wrong int")
     };
     let p: &dyn Fn(f32, i32) = &g;
     p(1.0, 2);
@@ -28,15 +26,14 @@ pub fn main() {
 
     // Create a boxed pointer to a closure
     let r: Box<&dyn Fn(f32, i32, bool)> = Box::new(&|x: f32, y: i32, z: bool| {
-        __VERIFIER_expect_fail(x != 1.0, "wrong float");
-        __VERIFIER_expect_fail(y != 2, "wrong int");
-        __VERIFIER_expect_fail(!z, "wrong bool");
+        rmc::expect_fail(x != 1.0, "wrong float");
+        rmc::expect_fail(y != 2, "wrong int");
+        rmc::expect_fail(!z, "wrong bool");
     });
     r(1.0, 2, true);
 
     // Another boxed box
-    let s: Box<Box<dyn Fn(i32)>> =
-        Box::new(Box::new(|x| __VERIFIER_expect_fail(x != 3, "wrong int")));
+    let s: Box<Box<dyn Fn(i32)>> = Box::new(Box::new(|x| rmc::expect_fail(x != 3, "wrong int")));
     s(3);
 
     // A pointer to the boxed box

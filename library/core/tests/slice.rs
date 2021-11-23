@@ -2147,8 +2147,88 @@ fn test_slice_run_destructors() {
 }
 
 #[test]
+fn test_const_from_ref() {
+    const VALUE: &i32 = &1;
+    const SLICE: &[i32] = core::slice::from_ref(VALUE);
+
+    assert!(core::ptr::eq(VALUE, &SLICE[0]))
+}
+
+#[test]
 fn test_slice_fill_with_uninit() {
     // This should not UB. See #87891
     let mut a = [MaybeUninit::<u8>::uninit(); 10];
     a.fill(MaybeUninit::uninit());
+}
+
+#[test]
+fn test_swap() {
+    let mut x = ["a", "b", "c", "d"];
+    x.swap(1, 3);
+    assert_eq!(x, ["a", "d", "c", "b"]);
+    x.swap(0, 3);
+    assert_eq!(x, ["b", "d", "c", "a"]);
+}
+
+mod swap_panics {
+    #[test]
+    #[should_panic(expected = "index out of bounds: the len is 4 but the index is 4")]
+    fn index_a_equals_len() {
+        let mut x = ["a", "b", "c", "d"];
+        x.swap(4, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds: the len is 4 but the index is 4")]
+    fn index_b_equals_len() {
+        let mut x = ["a", "b", "c", "d"];
+        x.swap(2, 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds: the len is 4 but the index is 5")]
+    fn index_a_greater_than_len() {
+        let mut x = ["a", "b", "c", "d"];
+        x.swap(5, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds: the len is 4 but the index is 5")]
+    fn index_b_greater_than_len() {
+        let mut x = ["a", "b", "c", "d"];
+        x.swap(2, 5);
+    }
+}
+
+#[test]
+fn slice_split_array_mut() {
+    let v = &mut [1, 2, 3, 4, 5, 6][..];
+
+    {
+        let (left, right) = v.split_array_mut::<0>();
+        assert_eq!(left, &mut []);
+        assert_eq!(right, [1, 2, 3, 4, 5, 6]);
+    }
+
+    {
+        let (left, right) = v.split_array_mut::<6>();
+        assert_eq!(left, &mut [1, 2, 3, 4, 5, 6]);
+        assert_eq!(right, []);
+    }
+}
+
+#[should_panic]
+#[test]
+fn slice_split_array_ref_out_of_bounds() {
+    let v = &[1, 2, 3, 4, 5, 6][..];
+
+    v.split_array_ref::<7>();
+}
+
+#[should_panic]
+#[test]
+fn slice_split_array_mut_out_of_bounds() {
+    let v = &mut [1, 2, 3, 4, 5, 6][..];
+
+    v.split_array_mut::<7>();
 }

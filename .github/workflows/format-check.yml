@@ -25,3 +25,8 @@ jobs:
 
       - name: Check C code formatting
         run: ./scripts/run-clang-format.sh -d
+
+      - name: Check Python code formatting
+        run: |
+            pip3 install --upgrade autopep8
+            ./scripts/run-autopep8.sh

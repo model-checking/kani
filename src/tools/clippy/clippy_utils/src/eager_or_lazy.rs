@@ -27,10 +27,9 @@ fn identify_some_pure_patterns(expr: &Expr<'_>) -> bool {
     match expr.kind {
         ExprKind::Lit(..) | ExprKind::ConstBlock(..) | ExprKind::Path(..) | ExprKind::Field(..) => true,
         ExprKind::AddrOf(_, _, addr_of_expr) => identify_some_pure_patterns(addr_of_expr),
-        ExprKind::Tup(tup_exprs) => tup_exprs.iter().all(|expr| identify_some_pure_patterns(expr)),
+        ExprKind::Tup(tup_exprs) => tup_exprs.iter().all(identify_some_pure_patterns),
         ExprKind::Struct(_, fields, expr) => {
-            fields.iter().all(|f| identify_some_pure_patterns(f.expr))
-                && expr.map_or(true, |e| identify_some_pure_patterns(e))
+            fields.iter().all(|f| identify_some_pure_patterns(f.expr)) && expr.map_or(true, identify_some_pure_patterns)
         },
         ExprKind::Call(
             &Expr {
@@ -45,7 +44,7 @@ fn identify_some_pure_patterns(expr: &Expr<'_>) -> bool {
                 ..
             },
             args,
-        ) => args.iter().all(|expr| identify_some_pure_patterns(expr)),
+        ) => args.iter().all(identify_some_pure_patterns),
         ExprKind::Block(
             &Block {
                 stmts,
@@ -102,7 +101,7 @@ fn identify_some_potentially_expensive_patterns<'tcx>(cx: &LateContext<'tcx>, ex
                 ExprKind::Call(..) => !is_ctor_or_promotable_const_function(self.cx, expr),
                 ExprKind::Index(obj, _) => {
                     let ty = self.cx.typeck_results().expr_ty(obj);
-                    is_type_diagnostic_item(self.cx, ty, sym::hashmap_type)
+                    is_type_diagnostic_item(self.cx, ty, sym::HashMap)
                         || is_type_diagnostic_item(self.cx, ty, sym::BTreeMap)
                 },
                 ExprKind::MethodCall(..) => true,

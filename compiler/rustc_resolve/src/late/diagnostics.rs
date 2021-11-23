@@ -7,8 +7,8 @@ use crate::{PathResult, PathSource, Segment};
 
 use rustc_ast::visit::FnKind;
 use rustc_ast::{
-    self as ast, Expr, ExprKind, GenericParam, GenericParamKind, Item, ItemKind, NodeId, Path, Ty,
-    TyKind,
+    self as ast, AssocItemKind, Expr, ExprKind, GenericParam, GenericParamKind, Item, ItemKind,
+    NodeId, Path, Ty, TyKind,
 };
 use rustc_ast_pretty::pprust::path_segment_to_string;
 use rustc_data_structures::fx::FxHashSet;
@@ -333,7 +333,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
         let candidates = self
             .r
             .lookup_import_candidates(ident, ns, &self.parent_scope, is_expected)
-            .drain(..)
+            .into_iter()
             .filter(|ImportSuggestion { did, .. }| {
                 match (did, res.and_then(|res| res.opt_def_id())) {
                     (Some(suggestion_did), Some(actual_did)) => *suggestion_did != actual_did,
@@ -1150,6 +1150,40 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
         true
     }
 
+    /// Given the target `ident` and `kind`, search for the similarly named associated item
+    /// in `self.current_trait_ref`.
+    crate fn find_similarly_named_assoc_item(
+        &mut self,
+        ident: Symbol,
+        kind: &AssocItemKind,
+    ) -> Option<Symbol> {
+        let module = if let Some((module, _)) = self.current_trait_ref {
+            module
+        } else {
+            return None;
+        };
+        if ident == kw::Underscore {
+            // We do nothing for `_`.
+            return None;
+        }
+
+        let resolutions = self.r.resolutions(module);
+        let targets = resolutions
+            .borrow()
+            .iter()
+            .filter_map(|(key, res)| res.borrow().binding.map(|binding| (key, binding.res())))
+            .filter(|(_, res)| match (kind, res) {
+                (AssocItemKind::Const(..), Res::Def(DefKind::AssocConst, _)) => true,
+                (AssocItemKind::Fn(_), Res::Def(DefKind::AssocFn, _)) => true,
+                (AssocItemKind::TyAlias(..), Res::Def(DefKind::AssocTy, _)) => true,
+                _ => false,
+            })
+            .map(|(key, _)| key.ident.name)
+            .collect::<Vec<_>>();
+
+        find_best_match_for_name(&targets, ident, None)
+    }
+
     fn lookup_assoc_candidate<FilterFn>(
         &mut self,
         ident: Ident,
@@ -1201,9 +1235,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                 if assoc_item.ident == ident {
                     return Some(match &assoc_item.kind {
                         ast::AssocItemKind::Const(..) => AssocSuggestion::AssocConst,
-                        ast::AssocItemKind::Fn(box ast::FnKind(_, sig, ..))
-                            if sig.decl.has_self() =>
-                        {
+                        ast::AssocItemKind::Fn(box ast::Fn { sig, .. }) if sig.decl.has_self() => {
                             AssocSuggestion::MethodWithSelf
                         }
                         ast::AssocItemKind::Fn(..) => AssocSuggestion::AssocFn,
@@ -1312,12 +1344,10 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
         } else {
             // Search in module.
             let mod_path = &path[..path.len() - 1];
-            if let PathResult::Module(module) =
+            if let PathResult::Module(ModuleOrUniformRoot::Module(module)) =
                 self.resolve_path(mod_path, Some(TypeNS), false, span, CrateLint::No)
             {
-                if let ModuleOrUniformRoot::Module(module) = module {
-                    self.r.add_module_candidates(module, &mut names, &filter_fn);
-                }
+                self.r.add_module_candidates(module, &mut names, &filter_fn);
             }
         }
 
@@ -1457,7 +1487,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                     // form the path
                     let mut path_segments = path_segments.clone();
                     path_segments.push(ast::PathSegment::from_ident(ident));
-                    let module_def_id = module.def_id().unwrap();
+                    let module_def_id = module.def_id();
                     if module_def_id == def_id {
                         let path =
                             Path { span: name_binding.span, segments: path_segments, tokens: None };
@@ -1468,6 +1498,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                                 descr: "module",
                                 path,
                                 accessible: true,
+                                note: None,
                             },
                         ));
                     } else {
@@ -1518,8 +1549,8 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
             matches!(source, PathSource::TupleStruct(..)) || source.is_call();
         if suggest_only_tuple_variants {
             // Suggest only tuple variants regardless of whether they have fields and do not
-            // suggest path with added parenthesis.
-            let mut suggestable_variants = variants
+            // suggest path with added parentheses.
+            let suggestable_variants = variants
                 .iter()
                 .filter(|(.., kind)| *kind == CtorKind::Fn)
                 .map(|(variant, ..)| path_names_to_string(variant))
@@ -1545,7 +1576,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                 err.span_suggestions(
                     span,
                     &msg,
-                    suggestable_variants.drain(..),
+                    suggestable_variants.into_iter(),
                     Applicability::MaybeIncorrect,
                 );
             }
@@ -1603,7 +1634,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                 );
             }
 
-            let mut suggestable_variants_with_placeholders = variants
+            let suggestable_variants_with_placeholders = variants
                 .iter()
                 .filter(|(_, def_id, kind)| needs_placeholder(*def_id, *kind))
                 .map(|(variant, _, kind)| (path_names_to_string(variant), kind))
@@ -1628,7 +1659,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                 err.span_suggestions(
                     span,
                     msg,
-                    suggestable_variants_with_placeholders.drain(..),
+                    suggestable_variants_with_placeholders.into_iter(),
                     Applicability::HasPlaceholders,
                 );
             }

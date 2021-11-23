@@ -5,11 +5,9 @@
 // normalize-stderr-64bit: "size 8" -> "size $$WORD"
 
 #![feature(
-    const_panic,
     core_intrinsics,
     const_raw_ptr_comparison,
     const_ptr_offset,
-    const_raw_ptr_deref
 )]
 
 const FOO: &usize = &42;

@@ -76,17 +76,17 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
             new_generics
         });
 
-        let negative_polarity;
+        let polarity;
         let new_generics = match result {
             AutoTraitResult::PositiveImpl(new_generics) => {
-                negative_polarity = false;
+                polarity = ty::ImplPolarity::Positive;
                 if discard_positive_impl {
                     return None;
                 }
                 new_generics
             }
             AutoTraitResult::NegativeImpl => {
-                negative_polarity = true;
+                polarity = ty::ImplPolarity::Negative;
 
                 // For negative impls, we use the generic params, but *not* the predicates,
                 // from the original type. Otherwise, the displayed impl appears to be a
@@ -115,15 +115,13 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
             visibility: Inherited,
             def_id: ItemId::Auto { trait_: trait_def_id, for_: item_def_id },
             kind: box ImplItem(Impl {
-                span: Span::dummy(),
                 unsafety: hir::Unsafety::Normal,
                 generics: new_generics,
-                trait_: Some(trait_ref.clean(self.cx).get_trait_type().unwrap()),
+                trait_: Some(trait_ref.clean(self.cx)),
                 for_: ty.clean(self.cx),
                 items: Vec::new(),
-                negative_polarity,
-                synthetic: true,
-                blanket_impl: None,
+                polarity,
+                kind: ImplKind::Auto,
             }),
             cfg: None,
         })
@@ -136,7 +134,7 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
         let f = auto_trait::AutoTraitFinder::new(tcx);
 
         debug!("get_auto_trait_impls({:?})", ty);
-        let auto_traits: Vec<_> = self.cx.auto_traits.iter().cloned().collect();
+        let auto_traits: Vec<_> = self.cx.auto_traits.iter().copied().collect();
         let mut auto_traits: Vec<Item> = auto_traits
             .into_iter()
             .filter_map(|trait_def_id| {
@@ -166,16 +164,16 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
             .clone()
     }
 
-    // This method calculates two things: Lifetime constraints of the form 'a: 'b,
-    // and region constraints of the form ReVar: 'a
-    //
-    // This is essentially a simplified version of lexical_region_resolve. However,
-    // handle_lifetimes determines what *needs be* true in order for an impl to hold.
-    // lexical_region_resolve, along with much of the rest of the compiler, is concerned
-    // with determining if a given set up constraints/predicates *are* met, given some
-    // starting conditions (e.g., user-provided code). For this reason, it's easier
-    // to perform the calculations we need on our own, rather than trying to make
-    // existing inference/solver code do what we want.
+    /// This method calculates two things: Lifetime constraints of the form `'a: 'b`,
+    /// and region constraints of the form `RegionVid: 'a`
+    ///
+    /// This is essentially a simplified version of lexical_region_resolve. However,
+    /// handle_lifetimes determines what *needs be* true in order for an impl to hold.
+    /// lexical_region_resolve, along with much of the rest of the compiler, is concerned
+    /// with determining if a given set up constraints/predicates *are* met, given some
+    /// starting conditions (e.g., user-provided code). For this reason, it's easier
+    /// to perform the calculations we need on our own, rather than trying to make
+    /// existing inference/solver code do what we want.
     fn handle_lifetimes<'cx>(
         regions: &RegionConstraintData<'cx>,
         names_map: &FxHashMap<Symbol, Lifetime>,
@@ -193,8 +191,8 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
         // to its smaller and larger regions. Note that 'larger' regions correspond
         // to sub-regions in Rust code (e.g., in 'a: 'b, 'a is the larger region).
         for constraint in regions.constraints.keys() {
-            match constraint {
-                &Constraint::VarSubVar(r1, r2) => {
+            match *constraint {
+                Constraint::VarSubVar(r1, r2) => {
                     {
                         let deps1 = vid_map.entry(RegionTarget::RegionVid(r1)).or_default();
                         deps1.larger.insert(RegionTarget::RegionVid(r2));
@@ -203,15 +201,15 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                     let deps2 = vid_map.entry(RegionTarget::RegionVid(r2)).or_default();
                     deps2.smaller.insert(RegionTarget::RegionVid(r1));
                 }
-                &Constraint::RegSubVar(region, vid) => {
+                Constraint::RegSubVar(region, vid) => {
                     let deps = vid_map.entry(RegionTarget::RegionVid(vid)).or_default();
                     deps.smaller.insert(RegionTarget::Region(region));
                 }
-                &Constraint::VarSubReg(vid, region) => {
+                Constraint::VarSubReg(vid, region) => {
                     let deps = vid_map.entry(RegionTarget::RegionVid(vid)).or_default();
                     deps.larger.insert(RegionTarget::Region(region));
                 }
-                &Constraint::RegSubReg(r1, r2) => {
+                Constraint::RegSubReg(r1, r2) => {
                     // The constraint is already in the form that we want, so we're done with it
                     // Desired order is 'larger, smaller', so flip then
                     if region_name(r1) != region_name(r2) {
@@ -353,48 +351,35 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                 if let Some(data) = ty_to_fn.get(&ty) {
                     let (poly_trait, output) =
                         (data.0.as_ref().unwrap().clone(), data.1.as_ref().cloned().map(Box::new));
-                    let new_ty = match poly_trait.trait_ {
-                        Type::ResolvedPath { ref path, ref did } => {
-                            let mut new_path = path.clone();
-                            let last_segment =
-                                new_path.segments.pop().expect("segments were empty");
+                    let mut new_path = poly_trait.trait_.clone();
+                    let last_segment = new_path.segments.pop().expect("segments were empty");
 
-                            let (old_input, old_output) = match last_segment.args {
-                                GenericArgs::AngleBracketed { args, .. } => {
-                                    let types = args
-                                        .iter()
-                                        .filter_map(|arg| match arg {
-                                            GenericArg::Type(ty) => Some(ty.clone()),
-                                            _ => None,
-                                        })
-                                        .collect();
-                                    (types, None)
-                                }
-                                GenericArgs::Parenthesized { inputs, output, .. } => {
-                                    (inputs, output)
-                                }
-                            };
-
-                            if old_output.is_some() && old_output != output {
-                                panic!(
-                                    "Output mismatch for {:?} {:?} {:?}",
-                                    ty, old_output, data.1
-                                );
-                            }
-
-                            let new_params =
-                                GenericArgs::Parenthesized { inputs: old_input, output };
-
-                            new_path
-                                .segments
-                                .push(PathSegment { name: last_segment.name, args: new_params });
-
-                            Type::ResolvedPath { path: new_path, did: *did }
+                    let (old_input, old_output) = match last_segment.args {
+                        GenericArgs::AngleBracketed { args, .. } => {
+                            let types = args
+                                .iter()
+                                .filter_map(|arg| match arg {
+                                    GenericArg::Type(ty) => Some(ty.clone()),
+                                    _ => None,
+                                })
+                                .collect();
+                            (types, None)
                         }
-                        _ => panic!("Unexpected data: {:?}, {:?}", ty, data),
+                        GenericArgs::Parenthesized { inputs, output } => (inputs, output),
                     };
+
+                    if old_output.is_some() && old_output != output {
+                        panic!("Output mismatch for {:?} {:?} {:?}", ty, old_output, data.1);
+                    }
+
+                    let new_params = GenericArgs::Parenthesized { inputs: old_input, output };
+
+                    new_path
+                        .segments
+                        .push(PathSegment { name: last_segment.name, args: new_params });
+
                     bounds.insert(GenericBound::TraitBound(
-                        PolyTrait { trait_: new_ty, generic_params: poly_trait.generic_params },
+                        PolyTrait { trait_: new_path, generic_params: poly_trait.generic_params },
                         hir::TraitBoundModifier::None,
                     ));
                 }
@@ -423,15 +408,15 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
             .collect()
     }
 
-    // Converts the calculated ParamEnv and lifetime information to a clean::Generics, suitable for
-    // display on the docs page. Cleaning the Predicates produces sub-optimal `WherePredicate`s,
-    // so we fix them up:
-    //
-    // * Multiple bounds for the same type are coalesced into one: e.g., 'T: Copy', 'T: Debug'
-    // becomes 'T: Copy + Debug'
-    // * Fn bounds are handled specially - instead of leaving it as 'T: Fn(), <T as Fn::Output> =
-    // K', we use the dedicated syntax 'T: Fn() -> K'
-    // * We explicitly add a '?Sized' bound if we didn't find any 'Sized' predicates for a type
+    /// Converts the calculated `ParamEnv` and lifetime information to a [`clean::Generics`](Generics), suitable for
+    /// display on the docs page. Cleaning the `Predicates` produces sub-optimal [`WherePredicate`]s,
+    /// so we fix them up:
+    ///
+    /// * Multiple bounds for the same type are coalesced into one: e.g., `T: Copy`, `T: Debug`
+    /// becomes `T: Copy + Debug`
+    /// * `Fn` bounds are handled specially - instead of leaving it as `T: Fn(), <T as Fn::Output> =
+    /// K`, we use the dedicated syntax `T: Fn() -> K`
+    /// * We explicitly add a `?Sized` bound if we didn't find any `Sized` predicates for a type
     fn param_env_to_generics(
         &mut self,
         item_def_id: DefId,
@@ -476,7 +461,7 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
         let mut has_sized = FxHashSet::default();
         let mut ty_to_bounds: FxHashMap<_, FxHashSet<_>> = Default::default();
         let mut lifetime_to_bounds: FxHashMap<_, FxHashSet<_>> = Default::default();
-        let mut ty_to_traits: FxHashMap<Type, FxHashSet<Type>> = Default::default();
+        let mut ty_to_traits: FxHashMap<Type, FxHashSet<Path>> = Default::default();
 
         let mut ty_to_fn: FxHashMap<Type, (Option<PolyTrait>, Option<Type>)> = Default::default();
 
@@ -511,11 +496,11 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                     if b.is_sized_bound(self.cx) {
                         has_sized.insert(ty.clone());
                     } else if !b
-                        .get_trait_type()
-                        .and_then(|t| {
+                        .get_trait_path()
+                        .and_then(|trait_| {
                             ty_to_traits
                                 .get(&ty)
-                                .map(|bounds| bounds.contains(&strip_type(t.clone())))
+                                .map(|bounds| bounds.contains(&strip_path_generics(trait_.clone())))
                         })
                         .unwrap_or(false)
                     {
@@ -526,13 +511,13 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                         // as we want to combine them with any 'Output' qpaths
                         // later
 
-                        let is_fn = match &mut b {
-                            &mut GenericBound::TraitBound(ref mut p, _) => {
+                        let is_fn = match b {
+                            GenericBound::TraitBound(ref mut p, _) => {
                                 // Insert regions into the for_generics hash map first, to ensure
                                 // that we don't end up with duplicate bounds (e.g., for<'b, 'b>)
                                 for_generics.extend(p.generic_params.clone());
                                 p.generic_params = for_generics.into_iter().collect();
-                                self.is_fn_ty(&p.trait_)
+                                self.is_fn_trait(&p.trait_)
                             }
                             _ => false,
                         };
@@ -558,78 +543,59 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                     match lhs {
                         Type::QPath { name: left_name, ref self_type, ref trait_, .. } => {
                             let ty = &*self_type;
-                            match **trait_ {
-                                Type::ResolvedPath { path: ref trait_path, ref did } => {
-                                    let mut new_trait_path = trait_path.clone();
+                            let mut new_trait = trait_.clone();
 
-                                    if self.is_fn_ty(trait_) && left_name == sym::Output {
-                                        ty_to_fn
-                                            .entry(*ty.clone())
-                                            .and_modify(|e| *e = (e.0.clone(), Some(rhs.clone())))
-                                            .or_insert((None, Some(rhs)));
-                                        continue;
-                                    }
-
-                                    let args = &mut new_trait_path
-                                        .segments
-                                        .last_mut()
-                                        .expect("segments were empty")
-                                        .args;
-
-                                    match args {
-                                        // Convert something like '<T as Iterator::Item> = u8'
-                                        // to 'T: Iterator<Item=u8>'
-                                        GenericArgs::AngleBracketed {
-                                            ref mut bindings, ..
-                                        } => {
-                                            bindings.push(TypeBinding {
-                                                name: left_name,
-                                                kind: TypeBindingKind::Equality { ty: rhs },
-                                            });
-                                        }
-                                        GenericArgs::Parenthesized { .. } => {
-                                            existing_predicates.push(WherePredicate::EqPredicate {
-                                                lhs: lhs.clone(),
-                                                rhs,
-                                            });
-                                            continue; // If something other than a Fn ends up
-                                            // with parenthesis, leave it alone
-                                        }
-                                    }
-
-                                    let bounds = ty_to_bounds.entry(*ty.clone()).or_default();
-
-                                    bounds.insert(GenericBound::TraitBound(
-                                        PolyTrait {
-                                            trait_: Type::ResolvedPath {
-                                                path: new_trait_path,
-                                                did: *did,
-                                            },
-                                            generic_params: Vec::new(),
-                                        },
-                                        hir::TraitBoundModifier::None,
-                                    ));
-
-                                    // Remove any existing 'plain' bound (e.g., 'T: Iterator`) so
-                                    // that we don't see a
-                                    // duplicate bound like `T: Iterator + Iterator<Item=u8>`
-                                    // on the docs page.
-                                    bounds.remove(&GenericBound::TraitBound(
-                                        PolyTrait {
-                                            trait_: *trait_.clone(),
-                                            generic_params: Vec::new(),
-                                        },
-                                        hir::TraitBoundModifier::None,
-                                    ));
-                                    // Avoid creating any new duplicate bounds later in the outer
-                                    // loop
-                                    ty_to_traits
-                                        .entry(*ty.clone())
-                                        .or_default()
-                                        .insert(*trait_.clone());
-                                }
-                                _ => panic!("Unexpected trait {:?} for {:?}", trait_, item_def_id),
+                            if self.is_fn_trait(trait_) && left_name == sym::Output {
+                                ty_to_fn
+                                    .entry(*ty.clone())
+                                    .and_modify(|e| *e = (e.0.clone(), Some(rhs.clone())))
+                                    .or_insert((None, Some(rhs)));
+                                continue;
                             }
+
+                            let args = &mut new_trait
+                                .segments
+                                .last_mut()
+                                .expect("segments were empty")
+                                .args;
+
+                            match args {
+                                // Convert something like '<T as Iterator::Item> = u8'
+                                // to 'T: Iterator<Item=u8>'
+                                GenericArgs::AngleBracketed { ref mut bindings, .. } => {
+                                    bindings.push(TypeBinding {
+                                        name: left_name,
+                                        kind: TypeBindingKind::Equality { ty: rhs },
+                                    });
+                                }
+                                GenericArgs::Parenthesized { .. } => {
+                                    existing_predicates.push(WherePredicate::EqPredicate {
+                                        lhs: lhs.clone(),
+                                        rhs,
+                                    });
+                                    continue; // If something other than a Fn ends up
+                                    // with parentheses, leave it alone
+                                }
+                            }
+
+                            let bounds = ty_to_bounds.entry(*ty.clone()).or_default();
+
+                            bounds.insert(GenericBound::TraitBound(
+                                PolyTrait { trait_: new_trait, generic_params: Vec::new() },
+                                hir::TraitBoundModifier::None,
+                            ));
+
+                            // Remove any existing 'plain' bound (e.g., 'T: Iterator`) so
+                            // that we don't see a
+                            // duplicate bound like `T: Iterator + Iterator<Item=u8>`
+                            // on the docs page.
+                            bounds.remove(&GenericBound::TraitBound(
+                                PolyTrait { trait_: trait_.clone(), generic_params: Vec::new() },
+                                hir::TraitBoundModifier::None,
+                            ));
+                            // Avoid creating any new duplicate bounds later in the outer
+                            // loop
+                            ty_to_traits.entry(*ty.clone()).or_default().insert(trait_.clone());
                         }
                         _ => panic!("Unexpected LHS {:?} for {:?}", lhs, item_def_id),
                     }
@@ -664,11 +630,11 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
         Generics { params: generic_params, where_predicates: existing_predicates }
     }
 
-    // Ensure that the predicates are in a consistent order. The precise
-    // ordering doesn't actually matter, but it's important that
-    // a given set of predicates always appears in the same order -
-    // both for visual consistency between 'rustdoc' runs, and to
-    // make writing tests much easier
+    /// Ensure that the predicates are in a consistent order. The precise
+    /// ordering doesn't actually matter, but it's important that
+    /// a given set of predicates always appears in the same order -
+    /// both for visual consistency between 'rustdoc' runs, and to
+    /// make writing tests much easier
     #[inline]
     fn sort_where_predicates(&self, mut predicates: &mut Vec<WherePredicate>) {
         // We should never have identical bounds - and if we do,
@@ -677,11 +643,11 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
         self.unstable_debug_sort(&mut predicates);
     }
 
-    // Ensure that the bounds are in a consistent order. The precise
-    // ordering doesn't actually matter, but it's important that
-    // a given set of bounds always appears in the same order -
-    // both for visual consistency between 'rustdoc' runs, and to
-    // make writing tests much easier
+    /// Ensure that the bounds are in a consistent order. The precise
+    /// ordering doesn't actually matter, but it's important that
+    /// a given set of bounds always appears in the same order -
+    /// both for visual consistency between 'rustdoc' runs, and to
+    /// make writing tests much easier
     #[inline]
     fn sort_where_bounds(&self, mut bounds: &mut Vec<GenericBound>) {
         // We should never have identical bounds - and if we do,
@@ -690,58 +656,54 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
         self.unstable_debug_sort(&mut bounds);
     }
 
-    // This might look horrendously hacky, but it's actually not that bad.
-    //
-    // For performance reasons, we use several different FxHashMaps
-    // in the process of computing the final set of where predicates.
-    // However, the iteration order of a HashMap is completely unspecified.
-    // In fact, the iteration of an FxHashMap can even vary between platforms,
-    // since FxHasher has different behavior for 32-bit and 64-bit platforms.
-    //
-    // Obviously, it's extremely undesirable for documentation rendering
-    // to be dependent on the platform it's run on. Apart from being confusing
-    // to end users, it makes writing tests much more difficult, as predicates
-    // can appear in any order in the final result.
-    //
-    // To solve this problem, we sort WherePredicates and GenericBounds
-    // by their Debug string. The thing to keep in mind is that we don't really
-    // care what the final order is - we're synthesizing an impl or bound
-    // ourselves, so any order can be considered equally valid. By sorting the
-    // predicates and bounds, however, we ensure that for a given codebase, all
-    // auto-trait impls always render in exactly the same way.
-    //
-    // Using the Debug implementation for sorting prevents us from needing to
-    // write quite a bit of almost entirely useless code (e.g., how should two
-    // Types be sorted relative to each other). It also allows us to solve the
-    // problem for both WherePredicates and GenericBounds at the same time. This
-    // approach is probably somewhat slower, but the small number of items
-    // involved (impls rarely have more than a few bounds) means that it
-    // shouldn't matter in practice.
+    /// This might look horrendously hacky, but it's actually not that bad.
+    ///
+    /// For performance reasons, we use several different FxHashMaps
+    /// in the process of computing the final set of where predicates.
+    /// However, the iteration order of a HashMap is completely unspecified.
+    /// In fact, the iteration of an FxHashMap can even vary between platforms,
+    /// since FxHasher has different behavior for 32-bit and 64-bit platforms.
+    ///
+    /// Obviously, it's extremely undesirable for documentation rendering
+    /// to be dependent on the platform it's run on. Apart from being confusing
+    /// to end users, it makes writing tests much more difficult, as predicates
+    /// can appear in any order in the final result.
+    ///
+    /// To solve this problem, we sort WherePredicates and GenericBounds
+    /// by their Debug string. The thing to keep in mind is that we don't really
+    /// care what the final order is - we're synthesizing an impl or bound
+    /// ourselves, so any order can be considered equally valid. By sorting the
+    /// predicates and bounds, however, we ensure that for a given codebase, all
+    /// auto-trait impls always render in exactly the same way.
+    ///
+    /// Using the Debug implementation for sorting prevents us from needing to
+    /// write quite a bit of almost entirely useless code (e.g., how should two
+    /// Types be sorted relative to each other). It also allows us to solve the
+    /// problem for both WherePredicates and GenericBounds at the same time. This
+    /// approach is probably somewhat slower, but the small number of items
+    /// involved (impls rarely have more than a few bounds) means that it
+    /// shouldn't matter in practice.
     fn unstable_debug_sort<T: Debug>(&self, vec: &mut Vec<T>) {
         vec.sort_by_cached_key(|x| format!("{:?}", x))
     }
 
-    fn is_fn_ty(&self, ty: &Type) -> bool {
+    fn is_fn_trait(&self, path: &Path) -> bool {
         let tcx = self.cx.tcx;
-        match ty {
-            &Type::ResolvedPath { did, .. } => {
-                did == tcx.require_lang_item(LangItem::Fn, None)
-                    || did == tcx.require_lang_item(LangItem::FnMut, None)
-                    || did == tcx.require_lang_item(LangItem::FnOnce, None)
-            }
-            _ => false,
-        }
+        let did = path.def_id();
+        did == tcx.require_lang_item(LangItem::Fn, None)
+            || did == tcx.require_lang_item(LangItem::FnMut, None)
+            || did == tcx.require_lang_item(LangItem::FnOnce, None)
     }
 }
 
 fn region_name(region: Region<'_>) -> Option<Symbol> {
-    match region {
-        &ty::ReEarlyBound(r) => Some(r.name),
+    match *region {
+        ty::ReEarlyBound(r) => Some(r.name),
         _ => None,
     }
 }
 
-// Replaces all ReVars in a type with ty::Region's, using the provided map
+/// Replaces all [`ty::RegionVid`]s in a type with [`ty::Region`]s, using the provided map.
 struct RegionReplacer<'a, 'tcx> {
     vid_to_region: &'a FxHashMap<ty::RegionVid, ty::Region<'tcx>>,
     tcx: TyCtxt<'tcx>,
@@ -753,8 +715,8 @@ impl<'a, 'tcx> TypeFolder<'tcx> for RegionReplacer<'a, 'tcx> {
     }
 
     fn fold_region(&mut self, r: ty::Region<'tcx>) -> ty::Region<'tcx> {
-        (match r {
-            &ty::ReVar(vid) => self.vid_to_region.get(&vid).cloned(),
+        (match *r {
+            ty::ReVar(vid) => self.vid_to_region.get(&vid).cloned(),
             _ => None,
         })
         .unwrap_or_else(|| r.super_fold_with(self))

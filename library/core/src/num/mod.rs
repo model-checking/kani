@@ -94,7 +94,7 @@ depending on the target pointer size.
 }
 
 macro_rules! widening_impl {
-    ($SelfT:ty, $WideT:ty, $BITS:literal) => {
+    ($SelfT:ty, $WideT:ty, $BITS:literal, unsigned) => {
         /// Calculates the complete product `self * rhs` without the possibility to overflow.
         ///
         /// This returns the low-order (wrapping) bits and the high-order (overflow) bits
@@ -148,6 +148,33 @@ macro_rules! widening_impl {
         /// assert_eq!(5u32.carrying_mul(2, 10), (20, 0));
         /// assert_eq!(1_000_000_000u32.carrying_mul(10, 0), (1410065408, 2));
         /// assert_eq!(1_000_000_000u32.carrying_mul(10, 10), (1410065418, 2));
+        #[doc = concat!("assert_eq!(",
+            stringify!($SelfT), "::MAX.carrying_mul(", stringify!($SelfT), "::MAX, ", stringify!($SelfT), "::MAX), ",
+            "(0, ", stringify!($SelfT), "::MAX));"
+        )]
+        /// ```
+        ///
+        /// If `carry` is zero, this is similar to [`overflowing_mul`](Self::overflowing_mul),
+        /// except that it gives the value of the overflow instead of just whether one happened:
+        ///
+        /// ```
+        /// #![feature(bigint_helper_methods)]
+        /// let r = u8::carrying_mul(7, 13, 0);
+        /// assert_eq!((r.0, r.1 != 0), u8::overflowing_mul(7, 13));
+        /// let r = u8::carrying_mul(13, 42, 0);
+        /// assert_eq!((r.0, r.1 != 0), u8::overflowing_mul(13, 42));
+        /// ```
+        ///
+        /// The value of the first field in the returned tuple matches what you'd get
+        /// by combining the [`wrapping_mul`](Self::wrapping_mul) and
+        /// [`wrapping_add`](Self::wrapping_add) methods:
+        ///
+        /// ```
+        /// #![feature(bigint_helper_methods)]
+        /// assert_eq!(
+        ///     789_u16.carrying_mul(456, 123).0,
+        ///     789_u16.wrapping_mul(456).wrapping_add(123),
+        /// );
         /// ```
         #[unstable(feature = "bigint_helper_methods", issue = "85532")]
         #[rustc_const_unstable(feature = "bigint_helper_methods", issue = "85532")]
@@ -168,21 +195,18 @@ macro_rules! widening_impl {
 
 #[lang = "i8"]
 impl i8 {
-    widening_impl! { i8, i16, 8 }
     int_impl! { i8, i8, u8, 8, 7, -128, 127, 2, "-0x7e", "0xa", "0x12", "0x12", "0x48",
     "[0x12]", "[0x12]", "", "" }
 }
 
 #[lang = "i16"]
 impl i16 {
-    widening_impl! { i16, i32, 16 }
     int_impl! { i16, i16, u16, 16, 15, -32768, 32767, 4, "-0x5ffd", "0x3a", "0x1234", "0x3412",
     "0x2c48", "[0x34, 0x12]", "[0x12, 0x34]", "", "" }
 }
 
 #[lang = "i32"]
 impl i32 {
-    widening_impl! { i32, i64, 32 }
     int_impl! { i32, i32, u32, 32, 31, -2147483648, 2147483647, 8, "0x10000b3", "0xb301",
     "0x12345678", "0x78563412", "0x1e6a2c48", "[0x78, 0x56, 0x34, 0x12]",
     "[0x12, 0x34, 0x56, 0x78]", "", "" }
@@ -190,7 +214,6 @@ impl i32 {
 
 #[lang = "i64"]
 impl i64 {
-    widening_impl! { i64, i128, 64 }
     int_impl! { i64, i64, u64, 64, 63, -9223372036854775808, 9223372036854775807, 12,
     "0xaa00000000006e1", "0x6e10aa", "0x1234567890123456", "0x5634129078563412",
     "0x6a2c48091e6a2c48", "[0x56, 0x34, 0x12, 0x90, 0x78, 0x56, 0x34, 0x12]",
@@ -212,7 +235,6 @@ impl i128 {
 #[cfg(target_pointer_width = "16")]
 #[lang = "isize"]
 impl isize {
-    widening_impl! { isize, i32, 16 }
     int_impl! { isize, i16, usize, 16, 15, -32768, 32767, 4, "-0x5ffd", "0x3a", "0x1234",
     "0x3412", "0x2c48", "[0x34, 0x12]", "[0x12, 0x34]",
     usize_isize_to_xe_bytes_doc!(), usize_isize_from_xe_bytes_doc!() }
@@ -221,7 +243,6 @@ impl isize {
 #[cfg(target_pointer_width = "32")]
 #[lang = "isize"]
 impl isize {
-    widening_impl! { isize, i64, 32 }
     int_impl! { isize, i32, usize, 32, 31, -2147483648, 2147483647, 8, "0x10000b3", "0xb301",
     "0x12345678", "0x78563412", "0x1e6a2c48", "[0x78, 0x56, 0x34, 0x12]",
     "[0x12, 0x34, 0x56, 0x78]",
@@ -231,12 +252,11 @@ impl isize {
 #[cfg(target_pointer_width = "64")]
 #[lang = "isize"]
 impl isize {
-    widening_impl! { isize, i128, 64 }
     int_impl! { isize, i64, usize, 64, 63, -9223372036854775808, 9223372036854775807,
     12, "0xaa00000000006e1", "0x6e10aa",  "0x1234567890123456", "0x5634129078563412",
-     "0x6a2c48091e6a2c48", "[0x56, 0x34, 0x12, 0x90, 0x78, 0x56, 0x34, 0x12]",
-     "[0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56]",
-     usize_isize_to_xe_bytes_doc!(), usize_isize_from_xe_bytes_doc!() }
+    "0x6a2c48091e6a2c48", "[0x56, 0x34, 0x12, 0x90, 0x78, 0x56, 0x34, 0x12]",
+    "[0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56]",
+    usize_isize_to_xe_bytes_doc!(), usize_isize_from_xe_bytes_doc!() }
 }
 
 /// If 6th bit set ascii is upper case.
@@ -244,9 +264,9 @@ const ASCII_CASE_MASK: u8 = 0b0010_0000;
 
 #[lang = "u8"]
 impl u8 {
-    widening_impl! { u8, u16, 8 }
-    uint_impl! { u8, u8, 8, 255, 2, "0x82", "0xa", "0x12", "0x12", "0x48", "[0x12]",
+    uint_impl! { u8, u8, i8, 8, 255, 2, "0x82", "0xa", "0x12", "0x12", "0x48", "[0x12]",
     "[0x12]", "", "" }
+    widening_impl! { u8, u16, 8, unsigned }
 
     /// Checks if the value is within the ASCII range.
     ///
@@ -259,6 +279,7 @@ impl u8 {
     /// assert!(ascii.is_ascii());
     /// assert!(!non_ascii.is_ascii());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
     #[rustc_const_stable(feature = "const_ascii_methods_on_intrinsics", since = "1.43.0")]
     #[inline]
@@ -282,6 +303,7 @@ impl u8 {
     /// ```
     ///
     /// [`make_ascii_uppercase`]: Self::make_ascii_uppercase
+    #[must_use = "to uppercase the value in-place, use `make_ascii_uppercase()`"]
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
     #[rustc_const_stable(feature = "const_ascii_methods_on_intrinsics", since = "1.52.0")]
     #[inline]
@@ -306,6 +328,7 @@ impl u8 {
     /// ```
     ///
     /// [`make_ascii_lowercase`]: Self::make_ascii_lowercase
+    #[must_use = "to lowercase the value in-place, use `make_ascii_lowercase()`"]
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
     #[rustc_const_stable(feature = "const_ascii_methods_on_intrinsics", since = "1.52.0")]
     #[inline]
@@ -417,6 +440,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_alphabetic());
     /// assert!(!esc.is_ascii_alphabetic());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -450,6 +474,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_uppercase());
     /// assert!(!esc.is_ascii_uppercase());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -483,6 +508,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_lowercase());
     /// assert!(!esc.is_ascii_lowercase());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -519,6 +545,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_alphanumeric());
     /// assert!(!esc.is_ascii_alphanumeric());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -552,6 +579,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_digit());
     /// assert!(!esc.is_ascii_digit());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -588,6 +616,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_hexdigit());
     /// assert!(!esc.is_ascii_hexdigit());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -625,6 +654,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_punctuation());
     /// assert!(!esc.is_ascii_punctuation());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -658,6 +688,7 @@ impl u8 {
     /// assert!(!lf.is_ascii_graphic());
     /// assert!(!esc.is_ascii_graphic());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -708,6 +739,7 @@ impl u8 {
     /// assert!(lf.is_ascii_whitespace());
     /// assert!(!esc.is_ascii_whitespace());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -743,6 +775,7 @@ impl u8 {
     /// assert!(lf.is_ascii_control());
     /// assert!(esc.is_ascii_control());
     /// ```
+    #[must_use]
     #[stable(feature = "ascii_ctype_on_intrinsics", since = "1.24.0")]
     #[rustc_const_stable(feature = "const_ascii_ctype_on_intrinsics", since = "1.47.0")]
     #[inline]
@@ -769,6 +802,8 @@ impl u8 {
     /// assert_eq!("\\\\", b'\\'.escape_ascii().to_string());
     /// assert_eq!("\\x9d", b'\x9d'.escape_ascii().to_string());
     /// ```
+    #[must_use = "this returns the escaped byte as an iterator, \
+                  without modifying the original"]
     #[unstable(feature = "inherent_ascii_escape", issue = "77174")]
     #[inline]
     pub fn escape_ascii(&self) -> ascii::EscapeDefault {
@@ -778,31 +813,31 @@ impl u8 {
 
 #[lang = "u16"]
 impl u16 {
-    widening_impl! { u16, u32, 16 }
-    uint_impl! { u16, u16, 16, 65535, 4, "0xa003", "0x3a", "0x1234", "0x3412", "0x2c48",
+    uint_impl! { u16, u16, i16, 16, 65535, 4, "0xa003", "0x3a", "0x1234", "0x3412", "0x2c48",
     "[0x34, 0x12]", "[0x12, 0x34]", "", "" }
+    widening_impl! { u16, u32, 16, unsigned }
 }
 
 #[lang = "u32"]
 impl u32 {
-    widening_impl! { u32, u64, 32 }
-    uint_impl! { u32, u32, 32, 4294967295, 8, "0x10000b3", "0xb301", "0x12345678",
+    uint_impl! { u32, u32, i32, 32, 4294967295, 8, "0x10000b3", "0xb301", "0x12345678",
     "0x78563412", "0x1e6a2c48", "[0x78, 0x56, 0x34, 0x12]", "[0x12, 0x34, 0x56, 0x78]", "", "" }
+    widening_impl! { u32, u64, 32, unsigned }
 }
 
 #[lang = "u64"]
 impl u64 {
-    widening_impl! { u64, u128, 64 }
-    uint_impl! { u64, u64, 64, 18446744073709551615, 12, "0xaa00000000006e1", "0x6e10aa",
+    uint_impl! { u64, u64, i64, 64, 18446744073709551615, 12, "0xaa00000000006e1", "0x6e10aa",
     "0x1234567890123456", "0x5634129078563412", "0x6a2c48091e6a2c48",
     "[0x56, 0x34, 0x12, 0x90, 0x78, 0x56, 0x34, 0x12]",
     "[0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56]",
     "", ""}
+    widening_impl! { u64, u128, 64, unsigned }
 }
 
 #[lang = "u128"]
 impl u128 {
-    uint_impl! { u128, u128, 128, 340282366920938463463374607431768211455, 16,
+    uint_impl! { u128, u128, i128, 128, 340282366920938463463374607431768211455, 16,
     "0x13f40000000000000000000000004f76", "0x4f7613f4", "0x12345678901234567890123456789012",
     "0x12907856341290785634129078563412", "0x48091e6a2c48091e6a2c48091e6a2c48",
     "[0x12, 0x90, 0x78, 0x56, 0x34, 0x12, 0x90, 0x78, \
@@ -815,29 +850,29 @@ impl u128 {
 #[cfg(target_pointer_width = "16")]
 #[lang = "usize"]
 impl usize {
-    widening_impl! { usize, u32, 16 }
-    uint_impl! { usize, u16, 16, 65535, 4, "0xa003", "0x3a", "0x1234", "0x3412", "0x2c48",
+    uint_impl! { usize, u16, isize, 16, 65535, 4, "0xa003", "0x3a", "0x1234", "0x3412", "0x2c48",
     "[0x34, 0x12]", "[0x12, 0x34]",
     usize_isize_to_xe_bytes_doc!(), usize_isize_from_xe_bytes_doc!() }
+    widening_impl! { usize, u32, 16, unsigned }
 }
 #[cfg(target_pointer_width = "32")]
 #[lang = "usize"]
 impl usize {
-    widening_impl! { usize, u64, 32 }
-    uint_impl! { usize, u32, 32, 4294967295, 8, "0x10000b3", "0xb301", "0x12345678",
+    uint_impl! { usize, u32, isize, 32, 4294967295, 8, "0x10000b3", "0xb301", "0x12345678",
     "0x78563412", "0x1e6a2c48", "[0x78, 0x56, 0x34, 0x12]", "[0x12, 0x34, 0x56, 0x78]",
     usize_isize_to_xe_bytes_doc!(), usize_isize_from_xe_bytes_doc!() }
+    widening_impl! { usize, u64, 32, unsigned }
 }
 
 #[cfg(target_pointer_width = "64")]
 #[lang = "usize"]
 impl usize {
-    widening_impl! { usize, u128, 64 }
-    uint_impl! { usize, u64, 64, 18446744073709551615, 12, "0xaa00000000006e1", "0x6e10aa",
+    uint_impl! { usize, u64, isize, 64, 18446744073709551615, 12, "0xaa00000000006e1", "0x6e10aa",
     "0x1234567890123456", "0x5634129078563412", "0x6a2c48091e6a2c48",
     "[0x56, 0x34, 0x12, 0x90, 0x78, 0x56, 0x34, 0x12]",
-     "[0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56]",
+    "[0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56]",
     usize_isize_to_xe_bytes_doc!(), usize_isize_from_xe_bytes_doc!() }
+    widening_impl! { usize, u128, 64, unsigned }
 }
 
 /// A classification of floating point numbers.
@@ -865,23 +900,41 @@ impl usize {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub enum FpCategory {
-    /// "Not a Number", often obtained by dividing by zero.
+    /// NaN (not a number): this value results from calculations like `(-1.0).sqrt()`.
+    ///
+    /// See [the documentation for `f32`](f32) for more information on the unusual properties
+    /// of NaN.
     #[stable(feature = "rust1", since = "1.0.0")]
     Nan,
 
-    /// Positive or negative infinity.
+    /// Positive or negative infinity, which often results from dividing a nonzero number
+    /// by zero.
     #[stable(feature = "rust1", since = "1.0.0")]
     Infinite,
 
     /// Positive or negative zero.
+    ///
+    /// See [the documentation for `f32`](f32) for more information on the signedness of zeroes.
     #[stable(feature = "rust1", since = "1.0.0")]
     Zero,
 
-    /// De-normalized floating point representation (less precise than `Normal`).
+    /// “Subnormal” or “denormal” floating point representation (less precise, relative to
+    /// their magnitude, than [`Normal`]).
+    ///
+    /// Subnormal numbers are larger in magnitude than [`Zero`] but smaller in magnitude than all
+    /// [`Normal`] numbers.
+    ///
+    /// [`Normal`]: Self::Normal
+    /// [`Zero`]: Self::Zero
     #[stable(feature = "rust1", since = "1.0.0")]
     Subnormal,
 
-    /// A regular floating point number.
+    /// A regular floating point number, not any of the exceptional categories.
+    ///
+    /// The smallest positive normal numbers are [`f32::MIN_POSITIVE`] and [`f64::MIN_POSITIVE`],
+    /// and the largest positive normal numbers are [`f32::MAX`] and [`f64::MAX`]. (Unlike signed
+    /// integers, floating point numbers are symmetric in their range, so negating any of these
+    /// constants will produce their negative counterpart.)
     #[stable(feature = "rust1", since = "1.0.0")]
     Normal,
 }

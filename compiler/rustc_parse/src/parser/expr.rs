@@ -1096,7 +1096,7 @@ impl<'a> Parser<'a> {
             (Err(ref mut err), Some((mut snapshot, ExprKind::Path(None, path)))) => {
                 let name = pprust::path_to_string(&path);
                 snapshot.bump(); // `(`
-                match snapshot.parse_struct_fields(path.clone(), false, token::Paren) {
+                match snapshot.parse_struct_fields(path, false, token::Paren) {
                     Ok((fields, ..)) if snapshot.eat(&token::CloseDelim(token::Paren)) => {
                         // We have are certain we have `Enum::Foo(a: 3, b: 4)`, suggest
                         // `Enum::Foo { a: 3, b: 4 }` or `Enum::Foo(3, 4)`.
@@ -2322,7 +2322,24 @@ impl<'a> Parser<'a> {
                 None
             };
             let arrow_span = this.token.span;
-            this.expect(&token::FatArrow)?;
+            if let Err(mut err) = this.expect(&token::FatArrow) {
+                // We might have a `=>` -> `=` or `->` typo (issue #89396).
+                if TokenKind::FatArrow
+                    .similar_tokens()
+                    .map_or(false, |similar_tokens| similar_tokens.contains(&this.token.kind))
+                {
+                    err.span_suggestion(
+                        this.token.span,
+                        "try using a fat arrow here",
+                        "=>".to_string(),
+                        Applicability::MaybeIncorrect,
+                    );
+                    err.emit();
+                    this.bump();
+                } else {
+                    return Err(err);
+                }
+            }
             let arm_start_span = this.token.span;
 
             let expr = this.parse_expr_res(Restrictions::STMT_EXPR, None).map_err(|mut err| {

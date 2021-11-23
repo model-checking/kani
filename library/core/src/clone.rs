@@ -93,7 +93,6 @@
 ///
 /// * Function item types (i.e., the distinct types defined for each function)
 /// * Function pointer types (e.g., `fn() -> i32`)
-/// * Array types, for all sizes, if the item type also implements `Clone` (e.g., `[i32; 123456]`)
 /// * Tuple types, if each component also implements `Clone` (e.g., `()`, `(i32, bool)`)
 /// * Closure types, if they capture no value from the environment
 ///   or if all such captured values implement `Clone` themselves.
@@ -105,7 +104,7 @@
 #[stable(feature = "rust1", since = "1.0.0")]
 #[lang = "clone"]
 #[rustc_diagnostic_item = "Clone"]
-#[cfg_attr(not(bootstrap), rustc_trivial_field_reads)]
+#[rustc_trivial_field_reads]
 pub trait Clone: Sized {
     /// Returns a copy of the value.
     ///

@@ -1,12 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-codegen-fail
+// rmc-verify-fail
 
 #![feature(core_intrinsics)]
 
 use std::intrinsics::*;
 
-pub fn main() {
+fn main() {
     let mut a: Box<u8> = Box::new(0);
     unsafe {
         let x = volatile_load(&*a);

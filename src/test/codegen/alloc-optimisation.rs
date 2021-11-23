@@ -1,5 +1,5 @@
 //
-// min-llvm-version: 10.0.1
+// no-system-llvm
 // compile-flags: -O
 #![crate_type="lib"]
 

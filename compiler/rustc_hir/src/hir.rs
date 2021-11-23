@@ -1,7 +1,8 @@
 use crate::def::{CtorKind, DefKind, Res};
-use crate::def_id::{DefId, CRATE_DEF_ID};
+use crate::def_id::DefId;
 crate use crate::hir_id::{HirId, ItemLocalId};
-use crate::{itemlikevisit, LangItem};
+use crate::intravisit::FnKind;
+use crate::LangItem;
 
 use rustc_ast::util::parser::ExprPrecedence;
 use rustc_ast::{self as ast, CrateSugar, LlvmAsmDialect};
@@ -9,8 +10,9 @@ use rustc_ast::{Attribute, FloatTy, IntTy, Label, LitKind, StrStyle, TraitObject
 pub use rustc_ast::{BorrowKind, ImplPolarity, IsAuto};
 pub use rustc_ast::{CaptureBy, Movability, Mutability};
 use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
+use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_data_structures::sync::{par_for_each_in, Send, Sync};
+use rustc_data_structures::sorted_map::SortedMap;
 use rustc_index::vec::IndexVec;
 use rustc_macros::HashStable_Generic;
 use rustc_span::source_map::Spanned;
@@ -21,7 +23,6 @@ use rustc_target::asm::InlineAsmRegOrRegClass;
 use rustc_target::spec::abi::Abi;
 
 use smallvec::SmallVec;
-use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Copy, Clone, Encodable, HashStable_Generic)]
@@ -122,7 +123,7 @@ impl LifetimeName {
         match *self {
             LifetimeName::ImplicitObjectLifetimeDefault
             | LifetimeName::Implicit
-            | LifetimeName::Error => Ident::invalid(),
+            | LifetimeName::Error => Ident::empty(),
             LifetimeName::Underscore => Ident::with_dummy_span(kw::UnderscoreLifetime),
             LifetimeName::Static => Ident::with_dummy_span(kw::StaticLifetime),
             LifetimeName::Param(param_name) => param_name.ident(),
@@ -234,7 +235,7 @@ impl<'hir> PathSegment<'hir> {
     }
 
     pub fn invalid() -> Self {
-        Self::from_ident(Ident::invalid())
+        Self::from_ident(Ident::empty())
     }
 
     pub fn args(&self) -> &GenericArgs<'hir> {
@@ -311,7 +312,7 @@ impl GenericArg<'_> {
     }
 
     pub fn is_synthetic(&self) -> bool {
-        matches!(self, GenericArg::Lifetime(lifetime) if lifetime.name.ident() == Ident::invalid())
+        matches!(self, GenericArg::Lifetime(lifetime) if lifetime.name.ident() == Ident::empty())
     }
 
     pub fn descr(&self) -> &'static str {
@@ -382,6 +383,16 @@ impl GenericArgs<'_> {
     #[inline]
     pub fn has_type_params(&self) -> bool {
         self.args.iter().any(|arg| matches!(arg, GenericArg::Type(_)))
+    }
+
+    pub fn has_err(&self) -> bool {
+        self.args.iter().any(|arg| match arg {
+            GenericArg::Type(ty) => matches!(ty.kind, TyKind::Err),
+            _ => false,
+        }) || self.bindings.iter().any(|arg| match arg.kind {
+            TypeBindingKind::Equality { ty } => matches!(ty.kind, TyKind::Err),
+            _ => false,
+        })
     }
 
     #[inline]
@@ -636,6 +647,22 @@ pub struct WhereBoundPredicate<'hir> {
     pub bounds: GenericBounds<'hir>,
 }
 
+impl WhereBoundPredicate<'hir> {
+    /// Returns `true` if `param_def_id` matches the `bounded_ty` of this predicate.
+    pub fn is_param_bound(&self, param_def_id: DefId) -> bool {
+        let path = match self.bounded_ty.kind {
+            TyKind::Path(QPath::Resolved(None, path)) => path,
+            _ => return false,
+        };
+        match path.res {
+            Res::Def(DefKind::TyParam, def_id) | Res::SelfTy(Some(def_id), None) => {
+                def_id == param_def_id
+            }
+            _ => false,
+        }
+    }
+}
+
 /// A lifetime predicate (e.g., `'a: 'b + 'c`).
 #[derive(Debug, HashStable_Generic)]
 pub struct WhereRegionPredicate<'hir> {
@@ -653,6 +680,74 @@ pub struct WhereEqPredicate<'hir> {
     pub rhs_ty: &'hir Ty<'hir>,
 }
 
+/// HIR node coupled with its parent's id in the same HIR owner.
+///
+/// The parent is trash when the node is a HIR owner.
+#[derive(Clone, Debug)]
+pub struct ParentedNode<'tcx> {
+    pub parent: ItemLocalId,
+    pub node: Node<'tcx>,
+}
+
+/// Attributes owned by a HIR owner.
+#[derive(Debug)]
+pub struct AttributeMap<'tcx> {
+    pub map: SortedMap<ItemLocalId, &'tcx [Attribute]>,
+    pub hash: Fingerprint,
+}
+
+impl<'tcx> AttributeMap<'tcx> {
+    pub const EMPTY: &'static AttributeMap<'static> =
+        &AttributeMap { map: SortedMap::new(), hash: Fingerprint::ZERO };
+
+    #[inline]
+    pub fn get(&self, id: ItemLocalId) -> &'tcx [Attribute] {
+        self.map.get(&id).copied().unwrap_or(&[])
+    }
+}
+
+/// Map of all HIR nodes inside the current owner.
+/// These nodes are mapped by `ItemLocalId` alongside the index of their parent node.
+/// The HIR tree, including bodies, is pre-hashed.
+#[derive(Debug)]
+pub struct OwnerNodes<'tcx> {
+    /// Pre-computed hash of the full HIR.
+    pub hash_including_bodies: Fingerprint,
+    /// Pre-computed hash of the item signature, sithout recursing into the body.
+    pub hash_without_bodies: Fingerprint,
+    /// Full HIR for the current owner.
+    // The zeroth node's parent should never be accessed: the owner's parent is computed by the
+    // hir_owner_parent query.  It is set to `ItemLocalId::INVALID` to force an ICE if accidentally
+    // used.
+    pub nodes: IndexVec<ItemLocalId, Option<ParentedNode<'tcx>>>,
+    /// Content of local bodies.
+    pub bodies: SortedMap<ItemLocalId, &'tcx Body<'tcx>>,
+}
+
+/// Full information resulting from lowering an AST node.
+#[derive(Debug, HashStable_Generic)]
+pub struct OwnerInfo<'hir> {
+    /// Contents of the HIR.
+    pub nodes: OwnerNodes<'hir>,
+    /// Map from each nested owner to its parent's local id.
+    pub parenting: FxHashMap<LocalDefId, ItemLocalId>,
+    /// Collected attributes of the HIR nodes.
+    pub attrs: AttributeMap<'hir>,
+    /// Map indicating what traits are in scope for places where this
+    /// is relevant; generated by resolve.
+    pub trait_map: FxHashMap<ItemLocalId, Box<[TraitCandidate]>>,
+}
+
+impl<'tcx> OwnerInfo<'tcx> {
+    #[inline]
+    pub fn node(&self) -> OwnerNode<'tcx> {
+        use rustc_index::vec::Idx;
+        let node = self.nodes.nodes[ItemLocalId::new(0)].as_ref().unwrap().node;
+        let node = node.as_owner().unwrap(); // Indexing must ensure it is an OwnerNode.
+        node
+    }
+}
+
 /// The top-level data structure that stores the entire contents of
 /// the crate currently being compiled.
 ///
@@ -661,87 +756,8 @@ pub struct WhereEqPredicate<'hir> {
 /// [rustc dev guide]: https://rustc-dev-guide.rust-lang.org/hir.html
 #[derive(Debug)]
 pub struct Crate<'hir> {
-    pub owners: IndexVec<LocalDefId, Option<OwnerNode<'hir>>>,
-    pub bodies: BTreeMap<BodyId, Body<'hir>>,
-
-    /// Map indicating what traits are in scope for places where this
-    /// is relevant; generated by resolve.
-    pub trait_map: FxHashMap<LocalDefId, FxHashMap<ItemLocalId, Box<[TraitCandidate]>>>,
-
-    /// Collected attributes from HIR nodes.
-    pub attrs: BTreeMap<HirId, &'hir [Attribute]>,
-}
-
-impl Crate<'hir> {
-    pub fn module(&self) -> &'hir Mod<'hir> {
-        if let Some(OwnerNode::Crate(m)) = self.owners[CRATE_DEF_ID] { m } else { panic!() }
-    }
-
-    pub fn item(&self, id: ItemId) -> &'hir Item<'hir> {
-        self.owners[id.def_id].as_ref().unwrap().expect_item()
-    }
-
-    pub fn trait_item(&self, id: TraitItemId) -> &'hir TraitItem<'hir> {
-        self.owners[id.def_id].as_ref().unwrap().expect_trait_item()
-    }
-
-    pub fn impl_item(&self, id: ImplItemId) -> &'hir ImplItem<'hir> {
-        self.owners[id.def_id].as_ref().unwrap().expect_impl_item()
-    }
-
-    pub fn foreign_item(&self, id: ForeignItemId) -> &'hir ForeignItem<'hir> {
-        self.owners[id.def_id].as_ref().unwrap().expect_foreign_item()
-    }
-
-    pub fn body(&self, id: BodyId) -> &Body<'hir> {
-        &self.bodies[&id]
-    }
-}
-
-impl Crate<'_> {
-    /// Visits all items in the crate in some deterministic (but
-    /// unspecified) order. If you just need to process every item,
-    /// but don't care about nesting, this method is the best choice.
-    ///
-    /// If you do care about nesting -- usually because your algorithm
-    /// follows lexical scoping rules -- then you want a different
-    /// approach. You should override `visit_nested_item` in your
-    /// visitor and then call `intravisit::walk_crate` instead.
-    pub fn visit_all_item_likes<'hir, V>(&'hir self, visitor: &mut V)
-    where
-        V: itemlikevisit::ItemLikeVisitor<'hir>,
-    {
-        for owner in self.owners.iter().filter_map(Option::as_ref) {
-            match owner {
-                OwnerNode::Item(item) => visitor.visit_item(item),
-                OwnerNode::ForeignItem(item) => visitor.visit_foreign_item(item),
-                OwnerNode::ImplItem(item) => visitor.visit_impl_item(item),
-                OwnerNode::TraitItem(item) => visitor.visit_trait_item(item),
-                OwnerNode::Crate(_) => {}
-            }
-        }
-    }
-
-    /// A parallel version of `visit_all_item_likes`.
-    pub fn par_visit_all_item_likes<'hir, V>(&'hir self, visitor: &V)
-    where
-        V: itemlikevisit::ParItemLikeVisitor<'hir> + Sync + Send,
-    {
-        par_for_each_in(&self.owners.raw, |owner| match owner {
-            Some(OwnerNode::Item(item)) => visitor.visit_item(item),
-            Some(OwnerNode::ForeignItem(item)) => visitor.visit_foreign_item(item),
-            Some(OwnerNode::ImplItem(item)) => visitor.visit_impl_item(item),
-            Some(OwnerNode::TraitItem(item)) => visitor.visit_trait_item(item),
-            Some(OwnerNode::Crate(_)) | None => {}
-        })
-    }
-
-    pub fn items<'hir>(&'hir self) -> impl Iterator<Item = &'hir Item<'hir>> + 'hir {
-        self.owners.iter().filter_map(|owner| match owner {
-            Some(OwnerNode::Item(item)) => Some(*item),
-            _ => None,
-        })
-    }
+    pub owners: IndexVec<LocalDefId, Option<OwnerInfo<'hir>>>,
+    pub hir_hash: Fingerprint,
 }
 
 /// A block of statements `{ .. }`, which may have a label (in this case the
@@ -2272,8 +2288,7 @@ pub enum TyKind<'hir> {
     ///
     /// Type parameters may be stored in each `PathSegment`.
     Path(QPath<'hir>),
-    /// An opaque type definition itself. This is currently only used for the
-    /// `opaque type Foo: Trait` item that `impl Trait` in desugars to.
+    /// An opaque type definition itself. This is only used for `impl Trait`.
     ///
     /// The generic argument list contains the lifetimes (and in the future
     /// possibly parameters) that are actually bound on the `impl Trait`.
@@ -2329,6 +2344,13 @@ impl<'hir> InlineAsmOperand<'hir> {
             | Self::SplitInOut { reg, .. } => Some(reg),
             Self::Const { .. } | Self::Sym { .. } => None,
         }
+    }
+
+    pub fn is_clobber(&self) -> bool {
+        matches!(
+            self,
+            InlineAsmOperand::Out { reg: InlineAsmRegOrRegClass::Reg(_), late: _, expr: None }
+        )
     }
 }
 
@@ -3250,6 +3272,32 @@ impl<'hir> Node<'hir> {
             Node::TraitItem(i) => Some(OwnerNode::TraitItem(i)),
             Node::ImplItem(i) => Some(OwnerNode::ImplItem(i)),
             Node::Crate(i) => Some(OwnerNode::Crate(i)),
+            _ => None,
+        }
+    }
+
+    pub fn fn_kind(self) -> Option<FnKind<'hir>> {
+        match self {
+            Node::Item(i) => match i.kind {
+                ItemKind::Fn(ref sig, ref generics, _) => {
+                    Some(FnKind::ItemFn(i.ident, generics, sig.header, &i.vis))
+                }
+                _ => None,
+            },
+            Node::TraitItem(ti) => match ti.kind {
+                TraitItemKind::Fn(ref sig, TraitFn::Provided(_)) => {
+                    Some(FnKind::Method(ti.ident, sig, None))
+                }
+                _ => None,
+            },
+            Node::ImplItem(ii) => match ii.kind {
+                ImplItemKind::Fn(ref sig, _) => Some(FnKind::Method(ii.ident, sig, Some(&ii.vis))),
+                _ => None,
+            },
+            Node::Expr(e) => match e.kind {
+                ExprKind::Closure(..) => Some(FnKind::Closure),
+                _ => None,
+            },
             _ => None,
         }
     }

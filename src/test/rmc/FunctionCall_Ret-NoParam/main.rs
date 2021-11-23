@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
+fn main() {
     let a = return_u32();
     assert!(a < 10);
     assert!(return_u32() < 10);
@@ -12,7 +10,7 @@ pub fn main() {
     assert!(return_f64() < 11.0 && return_f64() > -11.0);
 }
 fn return_u32() -> u32 {
-    let x: u32 = __nondet();
+    let x: u32 = rmc::nondet();
 
     if x < 10 {
         return x;
@@ -21,7 +19,7 @@ fn return_u32() -> u32 {
     }
 }
 fn return_u64() -> u64 {
-    let x: u64 = __nondet();
+    let x: u64 = rmc::nondet();
 
     if x > 100 {
         return x;
@@ -30,7 +28,7 @@ fn return_u64() -> u64 {
     }
 }
 fn return_bool() -> bool {
-    let x: bool = __nondet();
+    let x: bool = rmc::nondet();
     if x {
         return x;
     } else {
@@ -39,7 +37,7 @@ fn return_bool() -> bool {
 }
 fn return_f32() -> f32 {
     let x = 10.0;
-    let y: bool = __nondet();
+    let y: bool = rmc::nondet();
     if y {
         return x / 2.0;
     } else {
@@ -47,7 +45,7 @@ fn return_f32() -> f32 {
     }
 }
 fn return_f64() -> f64 {
-    let x: f64 = __nondet();
+    let x: f64 = rmc::nondet();
     if x <= 10.0 && x >= -10.0 {
         return x;
     } else {

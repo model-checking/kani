@@ -94,6 +94,7 @@ impl Layout {
     /// [`Layout::from_size_align`].
     #[stable(feature = "alloc_layout", since = "1.28.0")]
     #[rustc_const_stable(feature = "alloc_layout", since = "1.36.0")]
+    #[must_use]
     #[inline]
     pub const unsafe fn from_size_align_unchecked(size: usize, align: usize) -> Self {
         // SAFETY: the caller must ensure that `align` is greater than zero.
@@ -103,6 +104,7 @@ impl Layout {
     /// The minimum size in bytes for a memory block of this layout.
     #[stable(feature = "alloc_layout", since = "1.28.0")]
     #[rustc_const_stable(feature = "const_alloc_layout", since = "1.50.0")]
+    #[must_use]
     #[inline]
     pub const fn size(&self) -> usize {
         self.size_
@@ -111,6 +113,8 @@ impl Layout {
     /// The minimum byte alignment for a memory block of this layout.
     #[stable(feature = "alloc_layout", since = "1.28.0")]
     #[rustc_const_stable(feature = "const_alloc_layout", since = "1.50.0")]
+    #[must_use = "this returns the minimum alignment, \
+                  without modifying the layout"]
     #[inline]
     pub const fn align(&self) -> usize {
         self.align_.get()
@@ -119,6 +123,7 @@ impl Layout {
     /// Constructs a `Layout` suitable for holding a value of type `T`.
     #[stable(feature = "alloc_layout", since = "1.28.0")]
     #[rustc_const_stable(feature = "alloc_layout_const_new", since = "1.42.0")]
+    #[must_use]
     #[inline]
     pub const fn new<T>() -> Self {
         let (size, align) = size_align::<T>();
@@ -133,6 +138,7 @@ impl Layout {
     /// allocate backing structure for `T` (which could be a trait
     /// or other unsized type like a slice).
     #[stable(feature = "alloc_layout", since = "1.28.0")]
+    #[must_use]
     #[inline]
     pub fn for_value<T: ?Sized>(t: &T) -> Self {
         let (size, align) = (mem::size_of_val(t), mem::align_of_val(t));
@@ -167,6 +173,7 @@ impl Layout {
     /// [trait object]: ../../book/ch17-02-trait-objects.html
     /// [extern type]: ../../unstable-book/language-features/extern-types.html
     #[unstable(feature = "layout_for_ptr", issue = "69835")]
+    #[must_use]
     pub unsafe fn for_value_raw<T: ?Sized>(t: *const T) -> Self {
         // SAFETY: we pass along the prerequisites of these functions to the caller
         let (size, align) = unsafe { (mem::size_of_val_raw(t), mem::align_of_val_raw(t)) };
@@ -183,6 +190,7 @@ impl Layout {
     /// some other means.
     #[unstable(feature = "alloc_layout_extra", issue = "55724")]
     #[rustc_const_unstable(feature = "alloc_layout_extra", issue = "55724")]
+    #[must_use]
     #[inline]
     pub const fn dangling(&self) -> NonNull<u8> {
         // SAFETY: align is guaranteed to be non-zero
@@ -227,6 +235,8 @@ impl Layout {
     /// satisfy this constraint is to ensure `align <= self.align()`.
     #[unstable(feature = "alloc_layout_extra", issue = "55724")]
     #[rustc_const_unstable(feature = "const_alloc_layout", issue = "67521")]
+    #[must_use = "this returns the padding needed, \
+                  without modifying the `Layout`"]
     #[inline]
     pub const fn padding_needed_for(&self, align: usize) -> usize {
         let len = self.size();
@@ -260,6 +270,8 @@ impl Layout {
     /// This is equivalent to adding the result of `padding_needed_for`
     /// to the layout's current size.
     #[stable(feature = "alloc_layout_manipulation", since = "1.44.0")]
+    #[must_use = "this returns a new `Layout`, \
+                  without modifying the original"]
     #[inline]
     pub fn pad_to_align(&self) -> Layout {
         let pad = self.padding_needed_for(self.align());

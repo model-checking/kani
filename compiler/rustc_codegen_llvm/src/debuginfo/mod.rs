@@ -322,13 +322,13 @@ impl DebugInfoMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         type_names::push_item_name(self.tcx(), def_id, false, &mut name);
 
         // Find the enclosing function, in case this is a closure.
-        let enclosing_fn_def_id = self.tcx().closure_base_def_id(def_id);
+        let enclosing_fn_def_id = self.tcx().typeck_root_def_id(def_id);
 
         // Get_template_parameters() will append a `<...>` clause to the function
         // name if necessary.
         let generics = self.tcx().generics_of(enclosing_fn_def_id);
         let substs = instance.substs.truncate_to(self.tcx(), generics);
-        let template_parameters = get_template_parameters(self, &generics, substs, &mut name);
+        let template_parameters = get_template_parameters(self, generics, substs, &mut name);
 
         let linkage_name = &mangled_name_of_instance(self, instance).name;
         // Omit the linkage_name if it is the same as subprogram name.
@@ -550,8 +550,13 @@ impl DebugInfoMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         unsafe { llvm::LLVMRustDIBuilderCreateDebugLocation(line, col, scope, inlined_at) }
     }
 
-    fn create_vtable_metadata(&self, ty: Ty<'tcx>, vtable: Self::Value) {
-        metadata::create_vtable_metadata(self, ty, vtable)
+    fn create_vtable_metadata(
+        &self,
+        ty: Ty<'tcx>,
+        trait_ref: Option<ty::PolyExistentialTraitRef<'tcx>>,
+        vtable: Self::Value,
+    ) {
+        metadata::create_vtable_metadata(self, ty, trait_ref, vtable)
     }
 
     fn extend_scope_to_file(
@@ -559,7 +564,7 @@ impl DebugInfoMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         scope_metadata: &'ll DIScope,
         file: &rustc_span::SourceFile,
     ) -> &'ll DILexicalBlock {
-        metadata::extend_scope_to_file(&self, scope_metadata, file)
+        metadata::extend_scope_to_file(self, scope_metadata, file)
     }
 
     fn debuginfo_finalize(&self) {

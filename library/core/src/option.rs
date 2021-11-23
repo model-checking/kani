@@ -509,7 +509,7 @@ use crate::{
 
 /// The `Option` type. See [the module level documentation](self) for more.
 #[derive(Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
-#[rustc_diagnostic_item = "option_type"]
+#[rustc_diagnostic_item = "Option"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub enum Option<T> {
     /// No value
@@ -544,8 +544,8 @@ impl<T> Option<T> {
     /// ```
     #[must_use = "if you intended to assert that this has a value, consider `.unwrap()` instead"]
     #[inline]
-    #[rustc_const_stable(feature = "const_option", since = "1.48.0")]
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[rustc_const_stable(feature = "const_option", since = "1.48.0")]
     pub const fn is_some(&self) -> bool {
         matches!(*self, Some(_))
     }
@@ -564,8 +564,8 @@ impl<T> Option<T> {
     #[must_use = "if you intended to assert that this doesn't have a value, consider \
                   `.and_then(|_| panic!(\"`Option` had a value when expected `None`\"))` instead"]
     #[inline]
-    #[rustc_const_stable(feature = "const_option", since = "1.48.0")]
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[rustc_const_stable(feature = "const_option", since = "1.48.0")]
     pub const fn is_none(&self) -> bool {
         !self.is_some()
     }
@@ -646,7 +646,8 @@ impl<T> Option<T> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn as_mut(&mut self) -> Option<&mut T> {
+    #[rustc_const_unstable(feature = "const_option", issue = "67441")]
+    pub const fn as_mut(&mut self) -> Option<&mut T> {
         match *self {
             Some(ref mut x) => Some(x),
             None => None,
@@ -657,6 +658,7 @@ impl<T> Option<T> {
     ///
     /// [&]: reference "shared reference"
     #[inline]
+    #[must_use]
     #[stable(feature = "pin", since = "1.33.0")]
     pub fn as_pin_ref(self: Pin<&Self>) -> Option<Pin<&T>> {
         // SAFETY: `x` is guaranteed to be pinned because it comes from `self`
@@ -668,6 +670,7 @@ impl<T> Option<T> {
     ///
     /// [&mut]: reference "mutable reference"
     #[inline]
+    #[must_use]
     #[stable(feature = "pin", since = "1.33.0")]
     pub fn as_pin_mut(self: Pin<&mut Self>) -> Option<Pin<&mut T>> {
         // SAFETY: `get_unchecked_mut` is never used to move the `Option` inside `self`.
@@ -797,19 +800,17 @@ impl<T> Option<T> {
     /// # Examples
     ///
     /// ```
-    /// #![feature(option_result_unwrap_unchecked)]
     /// let x = Some("air");
     /// assert_eq!(unsafe { x.unwrap_unchecked() }, "air");
     /// ```
     ///
     /// ```no_run
-    /// #![feature(option_result_unwrap_unchecked)]
     /// let x: Option<&str> = None;
     /// assert_eq!(unsafe { x.unwrap_unchecked() }, "air"); // Undefined behavior!
     /// ```
     #[inline]
     #[track_caller]
-    #[unstable(feature = "option_result_unwrap_unchecked", reason = "newly added", issue = "81383")]
+    #[stable(feature = "option_result_unwrap_unchecked", since = "1.58.0")]
     pub unsafe fn unwrap_unchecked(self) -> T {
         debug_assert!(self.is_some());
         match self {
@@ -1318,8 +1319,10 @@ impl<T> Option<T> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn take(&mut self) -> Option<T> {
-        mem::take(self)
+    #[rustc_const_unstable(feature = "const_option", issue = "67441")]
+    pub const fn take(&mut self) -> Option<T> {
+        // FIXME replace `mem::replace` by `mem::take` when the latter is const ready
+        mem::replace(self, None)
     }
 
     /// Replaces the actual value in the option by the value given in parameter,
@@ -1340,8 +1343,9 @@ impl<T> Option<T> {
     /// assert_eq!(old, None);
     /// ```
     #[inline]
+    #[rustc_const_unstable(feature = "const_option", issue = "67441")]
     #[stable(feature = "option_replace", since = "1.31.0")]
-    pub fn replace(&mut self, value: T) -> Option<T> {
+    pub const fn replace(&mut self, value: T) -> Option<T> {
         mem::replace(self, Some(value))
     }
 
@@ -1445,9 +1449,16 @@ impl<T: Copy> Option<&T> {
     /// let copied = opt_x.copied();
     /// assert_eq!(copied, Some(12));
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "copied", since = "1.35.0")]
-    pub fn copied(self) -> Option<T> {
-        self.map(|&t| t)
+    #[rustc_const_unstable(feature = "const_option", issue = "67441")]
+    pub const fn copied(self) -> Option<T> {
+        // FIXME: this implementation, which sidesteps using `Option::map` since it's not const
+        // ready yet, should be reverted when possible to avoid code repetition
+        match self {
+            Some(&v) => Some(v),
+            None => None,
+        }
     }
 }
 
@@ -1464,6 +1475,7 @@ impl<T: Copy> Option<&mut T> {
     /// let copied = opt_x.copied();
     /// assert_eq!(copied, Some(12));
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "copied", since = "1.35.0")]
     pub fn copied(self) -> Option<T> {
         self.map(|&mut t| t)
@@ -1483,6 +1495,7 @@ impl<T: Clone> Option<&T> {
     /// let cloned = opt_x.cloned();
     /// assert_eq!(cloned, Some(12));
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn cloned(self) -> Option<T> {
         self.map(|t| t.clone())
@@ -1709,7 +1722,8 @@ impl<'a, T> IntoIterator for &'a mut Option<T> {
 }
 
 #[stable(since = "1.12.0", feature = "option_from")]
-impl<T> From<T> for Option<T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<T> const From<T> for Option<T> {
     /// Moves `val` into a new [`Some`].
     ///
     /// # Examples
@@ -1725,7 +1739,8 @@ impl<T> From<T> for Option<T> {
 }
 
 #[stable(feature = "option_ref_from_ref_option", since = "1.30.0")]
-impl<'a, T> From<&'a Option<T>> for Option<&'a T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<'a, T> const From<&'a Option<T>> for Option<&'a T> {
     /// Converts from `&Option<T>` to `Option<&T>`.
     ///
     /// # Examples
@@ -1752,7 +1767,8 @@ impl<'a, T> From<&'a Option<T>> for Option<&'a T> {
 }
 
 #[stable(feature = "option_ref_from_ref_option", since = "1.30.0")]
-impl<'a, T> From<&'a mut Option<T>> for Option<&'a mut T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<'a, T> const From<&'a mut Option<T>> for Option<&'a mut T> {
     /// Converts from `&mut Option<T>` to `Option<&mut T>`
     ///
     /// # Examples
@@ -2038,7 +2054,7 @@ impl<T> ops::Try for Option<T> {
 }
 
 #[unstable(feature = "try_trait_v2", issue = "84277")]
-impl<T> ops::FromResidual for Option<T> {
+impl<T> const ops::FromResidual for Option<T> {
     #[inline]
     fn from_residual(residual: Option<convert::Infallible>) -> Self {
         match residual {

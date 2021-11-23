@@ -1,10 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// https://github.com/model-checking/rmc/issues/555
+// rmc-flags: --no-undefined-function-checks
+
 // Casts boxed array to boxed slice (example taken from rust documentation)
 use std::str;
 
-pub fn main() {
+fn main() {
     // This vector of bytes is used to initialize a Box<[u8; 4]>
     let sparkle_heart_vec = vec![240, 159, 146, 150];
 

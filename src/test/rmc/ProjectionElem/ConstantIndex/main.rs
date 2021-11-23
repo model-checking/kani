@@ -96,7 +96,7 @@ fn test4() {
     assert!(encode_utf8_raw(code, dst) == 0);
 }
 
-pub fn main() {
+fn main() {
     test1();
     test2();
     test3(&[1, 2, 3, 4]);

@@ -21,7 +21,6 @@ use rustc_session::lint::builtin::{UNINHABITED_STATIC, UNSUPPORTED_CALLING_CONVE
 use rustc_span::symbol::sym;
 use rustc_span::{self, MultiSpan, Span};
 use rustc_target::spec::abi::Abi;
-use rustc_trait_selection::opaque_types::InferCtxtExt as _;
 use rustc_trait_selection::traits;
 use rustc_trait_selection::traits::error_reporting::InferCtxtExt as _;
 use rustc_ty_utils::representability::{self, Representability};
@@ -31,7 +30,7 @@ use std::ops::ControlFlow;
 
 pub fn check_wf_new(tcx: TyCtxt<'_>) {
     let visit = wfcheck::CheckTypeWellFormedVisitor::new(tcx);
-    tcx.hir().krate().par_visit_all_item_likes(&visit);
+    tcx.hir().par_visit_all_item_likes(&visit);
 }
 
 pub(super) fn check_abi(tcx: TyCtxt<'_>, hir_id: hir::HirId, span: Span, abi: Abi) {
@@ -58,7 +57,7 @@ pub(super) fn check_abi(tcx: TyCtxt<'_>, hir_id: hir::HirId, span: Span, abi: Ab
             tcx.sess,
             span,
             E0781,
-            "the `\"C-cmse-nonsecure-call\"` ABI is only allowed on function pointers."
+            "the `\"C-cmse-nonsecure-call\"` ABI is only allowed on function pointers"
         )
         .emit()
     }
@@ -664,8 +663,9 @@ fn check_opaque_meets_bounds<'tcx>(
 
         // Check that all obligations are satisfied by the implementation's
         // version.
-        if let Err(ref errors) = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx) {
-            infcx.report_fulfillment_errors(errors, None, false);
+        let errors = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx);
+        if !errors.is_empty() {
+            infcx.report_fulfillment_errors(&errors, None, false);
         }
 
         // Finally, resolve all regions. This catches wily misuses of
@@ -1374,7 +1374,7 @@ fn check_enum<'tcx>(
         }
     }
 
-    if tcx.adt_def(def_id).repr.int.is_none() {
+    if tcx.adt_def(def_id).repr.int.is_none() && tcx.features().arbitrary_enum_discriminant {
         let is_unit = |var: &hir::Variant<'_>| matches!(var.data, hir::VariantData::Unit(..));
 
         let has_disr = |var: &hir::Variant<'_>| var.disr_expr.is_some();

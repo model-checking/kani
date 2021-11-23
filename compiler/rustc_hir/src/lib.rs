@@ -2,10 +2,12 @@
 //!
 //! [rustc dev guide]: https://rustc-dev-guide.rust-lang.org/hir.html
 
+#![feature(const_btree_new)]
 #![feature(crate_visibility_modifier)]
 #![feature(in_band_lifetimes)]
 #![feature(once_cell)]
 #![feature(min_specialization)]
+#![feature(never_type)]
 #![recursion_limit = "256"]
 
 #[macro_use]
@@ -18,6 +20,7 @@ mod arena;
 pub mod def;
 pub mod def_path_hash_map;
 pub mod definitions;
+pub mod diagnostic_items;
 pub use rustc_span::def_id;
 mod hir;
 pub mod hir_id;

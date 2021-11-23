@@ -11,7 +11,7 @@ impl Foo {
     }
 }
 
-pub fn main() {
+fn main() {
     let foo = Foo { a: 2, _b: 3.0 };
     let z = foo.get_a();
     assert!(z == 2);

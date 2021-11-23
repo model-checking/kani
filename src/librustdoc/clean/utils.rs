@@ -2,7 +2,7 @@ use crate::clean::auto_trait::AutoTraitFinder;
 use crate::clean::blanket_impl::BlanketImplFinder;
 use crate::clean::{
     inline, Clean, Crate, ExternalCrate, Generic, GenericArg, GenericArgs, ImportSource, Item,
-    ItemKind, Lifetime, Path, PathSegment, PolyTrait, Primitive, PrimitiveType, ResolvedPath, Type,
+    ItemKind, Lifetime, Path, PathSegment, Primitive, PrimitiveType, ResolvedPath, Type,
     TypeBinding, Visibility,
 };
 use crate::core::DocContext;
@@ -26,16 +26,14 @@ mod tests;
 crate fn krate(cx: &mut DocContext<'_>) -> Crate {
     use crate::visit_lib::LibEmbargoVisitor;
 
-    let krate = cx.tcx.hir().krate();
-    let module = crate::visit_ast::RustdocVisitor::new(cx).visit(krate);
+    let module = crate::visit_ast::RustdocVisitor::new(cx).visit();
 
     let mut externs = Vec::new();
-    for &cnum in cx.tcx.crates(()).iter() {
+    for &cnum in cx.tcx.crates(()) {
         externs.push(ExternalCrate { crate_num: cnum });
         // Analyze doc-reachability for extern items
         LibEmbargoVisitor::new(cx).visit_lib(cnum);
     }
-    externs.sort_unstable_by_key(|e| e.crate_num);
 
     // Clean the crate, translating the entire librustc_ast AST to one that is
     // understood by rustdoc.
@@ -58,8 +56,6 @@ crate fn krate(cx: &mut DocContext<'_>) -> Crate {
     }
 
     let local_crate = ExternalCrate { crate_num: LOCAL_CRATE };
-    let src = local_crate.src(cx.tcx);
-    let name = local_crate.name(cx.tcx);
     let primitives = local_crate.primitives(cx.tcx);
     let keywords = local_crate.keywords(cx.tcx);
     {
@@ -81,8 +77,6 @@ crate fn krate(cx: &mut DocContext<'_>) -> Crate {
     }
 
     Crate {
-        name,
-        src,
         module,
         externs,
         primitives,
@@ -148,7 +142,6 @@ pub(super) fn external_path(
     let def_kind = cx.tcx.def_kind(did);
     let name = cx.tcx.item_name(did);
     Path {
-        global: false,
         res: Res::Def(def_kind, did),
         segments: vec![PathSegment {
             name,
@@ -157,39 +150,8 @@ pub(super) fn external_path(
     }
 }
 
-crate fn strip_type(ty: Type) -> Type {
-    match ty {
-        Type::ResolvedPath { path, did } => Type::ResolvedPath { path: strip_path(&path), did },
-        Type::DynTrait(mut bounds, lt) => {
-            let first = bounds.remove(0);
-            let stripped_trait = strip_type(first.trait_);
-
-            bounds.insert(
-                0,
-                PolyTrait { trait_: stripped_trait, generic_params: first.generic_params },
-            );
-            Type::DynTrait(bounds, lt)
-        }
-        Type::Tuple(inner_tys) => {
-            Type::Tuple(inner_tys.iter().map(|t| strip_type(t.clone())).collect())
-        }
-        Type::Slice(inner_ty) => Type::Slice(Box::new(strip_type(*inner_ty))),
-        Type::Array(inner_ty, s) => Type::Array(Box::new(strip_type(*inner_ty)), s),
-        Type::RawPointer(m, inner_ty) => Type::RawPointer(m, Box::new(strip_type(*inner_ty))),
-        Type::BorrowedRef { lifetime, mutability, type_ } => {
-            Type::BorrowedRef { lifetime, mutability, type_: Box::new(strip_type(*type_)) }
-        }
-        Type::QPath { name, self_type, trait_, self_def_id } => Type::QPath {
-            name,
-            self_def_id,
-            self_type: Box::new(strip_type(*self_type)),
-            trait_: Box::new(strip_type(*trait_)),
-        },
-        _ => ty,
-    }
-}
-
-crate fn strip_path(path: &Path) -> Path {
+/// Remove the generic arguments from a path.
+crate fn strip_path_generics(path: Path) -> Path {
     let segments = path
         .segments
         .iter()
@@ -199,13 +161,13 @@ crate fn strip_path(path: &Path) -> Path {
         })
         .collect();
 
-    Path { global: path.global, res: path.res, segments }
+    Path { res: path.res, segments }
 }
 
 crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
     let segments = match *p {
-        hir::QPath::Resolved(_, ref path) => &path.segments,
-        hir::QPath::TypeRelative(_, ref segment) => return segment.ident.to_string(),
+        hir::QPath::Resolved(_, path) => &path.segments,
+        hir::QPath::TypeRelative(_, segment) => return segment.ident.to_string(),
         hir::QPath::LangItem(lang_item, ..) => return lang_item.name().to_string(),
     };
 
@@ -250,15 +212,15 @@ crate fn name_from_pat(p: &hir::Pat<'_>) -> Symbol {
         PatKind::Wild | PatKind::Struct(..) => return kw::Underscore,
         PatKind::Binding(_, _, ident, _) => return ident.name,
         PatKind::TupleStruct(ref p, ..) | PatKind::Path(ref p) => qpath_to_string(p),
-        PatKind::Or(ref pats) => {
+        PatKind::Or(pats) => {
             pats.iter().map(|p| name_from_pat(p).to_string()).collect::<Vec<String>>().join(" | ")
         }
-        PatKind::Tuple(ref elts, _) => format!(
+        PatKind::Tuple(elts, _) => format!(
             "({})",
             elts.iter().map(|p| name_from_pat(p).to_string()).collect::<Vec<String>>().join(", ")
         ),
-        PatKind::Box(ref p) => return name_from_pat(&**p),
-        PatKind::Ref(ref p, _) => return name_from_pat(&**p),
+        PatKind::Box(p) => return name_from_pat(&*p),
+        PatKind::Ref(p, _) => return name_from_pat(&*p),
         PatKind::Lit(..) => {
             warn!(
                 "tried to get argument name from PatKind::Lit, which is silly in function arguments"
@@ -266,7 +228,7 @@ crate fn name_from_pat(p: &hir::Pat<'_>) -> Symbol {
             return Symbol::intern("()");
         }
         PatKind::Range(..) => return kw::Underscore,
-        PatKind::Slice(ref begin, ref mid, ref end) => {
+        PatKind::Slice(begin, ref mid, end) => {
             let begin = begin.iter().map(|p| name_from_pat(p).to_string());
             let mid = mid.as_ref().map(|p| format!("..{}", name_from_pat(&**p))).into_iter();
             let end = end.iter().map(|p| name_from_pat(p).to_string());
@@ -468,8 +430,9 @@ crate fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
         | Res::NonMacroAttr(_)
         | Res::Err => return res.def_id(),
         Res::Def(
-            TyParam | ConstParam | Ctor(..) | ExternCrate | Use | ForeignMod | AnonConst | OpaqueTy
-            | Field | LifetimeParam | GlobalAsm | Impl | Closure | Generator,
+            TyParam | ConstParam | Ctor(..) | ExternCrate | Use | ForeignMod | AnonConst
+            | InlineConst | OpaqueTy | Field | LifetimeParam | GlobalAsm | Impl | Closure
+            | Generator,
             id,
         ) => return id,
     };
@@ -540,7 +503,7 @@ crate fn has_doc_flag(attrs: ty::Attributes<'_>, flag: Symbol) -> bool {
 /// so that the channel is consistent.
 ///
 /// Set by `bootstrap::Builder::doc_rust_lang_org_channel` in order to keep tests passing on beta/stable.
-crate const DOC_RUST_LANG_ORG_CHANNEL: &'static str = env!("DOC_RUST_LANG_ORG_CHANNEL");
+crate const DOC_RUST_LANG_ORG_CHANNEL: &str = env!("DOC_RUST_LANG_ORG_CHANNEL");
 
 /// Render a sequence of macro arms in a format suitable for displaying to the user
 /// as part of an item declaration.

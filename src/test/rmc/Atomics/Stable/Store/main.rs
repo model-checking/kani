@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub fn main() {
+fn main() {
     // ppub fn store(&self, val: bool, order: Ordering)
     // Stores a value into the bool.
     // store takes an Ordering argument which describes the memory ordering

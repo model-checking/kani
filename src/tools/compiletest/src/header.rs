@@ -233,6 +233,7 @@ impl TestProps {
     /// `//[foo]`), then the property is ignored unless `cfg` is
     /// `Some("foo")`.
     fn load_from(&mut self, testfile: &Path, cfg: Option<&str>, config: &Config) {
+        let mut has_edition = false;
         if !testfile.is_dir() {
             let file = File::open(testfile).unwrap();
 
@@ -259,9 +260,7 @@ impl TestProps {
 
                 if let Some(edition) = config.parse_edition(ln) {
                     self.compile_flags.push(format!("--edition={}", edition));
-                    if edition == "2021" {
-                        self.compile_flags.push("-Zunstable-options".to_string());
-                    }
+                    has_edition = true;
                 }
 
                 config.parse_and_update_revisions(ln, &mut self.revisions);
@@ -410,6 +409,10 @@ impl TestProps {
                     self.exec_env.push(((*key).to_owned(), val))
                 }
             }
+        }
+
+        if let (Some(edition), false) = (&config.edition, has_edition) {
+            self.compile_flags.push(format!("--edition={}", edition));
         }
     }
 

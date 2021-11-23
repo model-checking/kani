@@ -403,7 +403,7 @@ pub fn get_codegen_sysroot(
         .iter()
         .chain(sysroot_candidates.iter())
         .map(|sysroot| {
-            filesearch::make_target_lib_path(&sysroot, &target).with_file_name("codegen-backends")
+            filesearch::make_target_lib_path(sysroot, target).with_file_name("codegen-backends")
         })
         .find(|f| {
             info!("codegen backend candidate: {}", f.display());
@@ -605,6 +605,7 @@ pub fn build_output_filenames(
     input: &Input,
     odir: &Option<PathBuf>,
     ofile: &Option<PathBuf>,
+    temps_dir: &Option<PathBuf>,
     attrs: &[ast::Attribute],
     sess: &Session,
 ) -> OutputFilenames {
@@ -620,13 +621,14 @@ pub fn build_output_filenames(
                 .opts
                 .crate_name
                 .clone()
-                .or_else(|| rustc_attr::find_crate_name(&sess, attrs).map(|n| n.to_string()))
+                .or_else(|| rustc_attr::find_crate_name(sess, attrs).map(|n| n.to_string()))
                 .unwrap_or_else(|| input.filestem().to_owned());
 
             OutputFilenames::new(
                 dirpath,
                 stem,
                 None,
+                temps_dir.clone(),
                 sess.opts.cg.extra_filename.clone(),
                 sess.opts.output_types.clone(),
             )
@@ -655,6 +657,7 @@ pub fn build_output_filenames(
                 out_file.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
                 out_file.file_stem().unwrap_or_default().to_str().unwrap().to_string(),
                 ofile,
+                temps_dir.clone(),
                 sess.opts.cg.extra_filename.clone(),
                 sess.opts.output_types.clone(),
             )
@@ -777,7 +780,7 @@ impl<'a> MutVisitor for ReplaceBodyWithLoop<'a, '_> {
     fn visit_item_kind(&mut self, i: &mut ast::ItemKind) {
         let is_const = match i {
             ast::ItemKind::Static(..) | ast::ItemKind::Const(..) => true,
-            ast::ItemKind::Fn(box ast::FnKind(_, ref sig, _, _)) => Self::is_sig_const(sig),
+            ast::ItemKind::Fn(box ast::Fn { ref sig, .. }) => Self::is_sig_const(sig),
             _ => false,
         };
         self.run(is_const, |s| noop_visit_item_kind(i, s))
@@ -786,7 +789,7 @@ impl<'a> MutVisitor for ReplaceBodyWithLoop<'a, '_> {
     fn flat_map_trait_item(&mut self, i: P<ast::AssocItem>) -> SmallVec<[P<ast::AssocItem>; 1]> {
         let is_const = match i.kind {
             ast::AssocItemKind::Const(..) => true,
-            ast::AssocItemKind::Fn(box ast::FnKind(_, ref sig, _, _)) => Self::is_sig_const(sig),
+            ast::AssocItemKind::Fn(box ast::Fn { ref sig, .. }) => Self::is_sig_const(sig),
             _ => false,
         };
         self.run(is_const, |s| noop_flat_map_assoc_item(i, s))

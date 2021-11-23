@@ -28,6 +28,7 @@ use self::header::{make_test_description, EarlyProps};
 mod tests;
 
 pub mod common;
+pub mod compute_diff;
 pub mod errors;
 pub mod header;
 mod json;
@@ -147,7 +148,8 @@ pub fn parse_config(args: Vec<String>) -> Config {
         )
         .optflag("", "force-rerun", "rerun tests even if the inputs are unchanged")
         .optflag("h", "help", "show this message")
-        .reqopt("", "channel", "current Rust channel", "CHANNEL");
+        .reqopt("", "channel", "current Rust channel", "CHANNEL")
+        .optopt("", "edition", "default Rust edition", "EDITION");
 
     let (argv0, args_) = args.split_first().unwrap();
     if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
@@ -283,6 +285,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         rustfix_coverage: matches.opt_present("rustfix-coverage"),
         has_tidy,
         channel: matches.opt_str("channel").unwrap(),
+        edition: matches.opt_str("edition"),
 
         cc: matches.opt_str("cc").unwrap(),
         cxx: matches.opt_str("cxx").unwrap(),
@@ -507,6 +510,8 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
             Err(_) => false,
         },
         color: config.color,
+        shuffle: false,
+        shuffle_seed: None,
         test_threads: None,
         skip: vec![],
         list: false,

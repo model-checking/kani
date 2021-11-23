@@ -20,7 +20,7 @@ impl Foo for Bar {
 }
 
 // this example works with static dispatch, so should work also while dynamic dispatch is not yet resolved
-pub fn main() {
+fn main() {
     let bar = Bar {};
     assert!(bar.a() == 3);
     assert!(bar.b() == 5);

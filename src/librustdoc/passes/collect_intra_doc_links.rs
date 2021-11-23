@@ -32,10 +32,10 @@ use std::ops::Range;
 
 use crate::clean::{self, utils::find_nearest_parent_module, Crate, Item, ItemLink, PrimitiveType};
 use crate::core::DocContext;
-use crate::fold::DocFolder;
 use crate::html::markdown::{markdown_links, MarkdownLink};
 use crate::lint::{BROKEN_INTRA_DOC_LINKS, PRIVATE_INTRA_DOC_LINKS};
 use crate::passes::Pass;
+use crate::visit::DocVisitor;
 
 mod early;
 crate use early::load_intra_link_crates;
@@ -47,13 +47,14 @@ crate const COLLECT_INTRA_DOC_LINKS: Pass = Pass {
 };
 
 fn collect_intra_doc_links(krate: Crate, cx: &mut DocContext<'_>) -> Crate {
-    LinkCollector {
+    let mut collector = LinkCollector {
         cx,
         mod_ids: Vec::new(),
         kind_side_channel: Cell::new(None),
         visited_links: FxHashMap::default(),
-    }
-    .fold_crate(krate)
+    };
+    collector.visit_crate(&krate);
+    krate
 }
 
 /// Top-level errors emitted by this pass.
@@ -289,7 +290,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
     ) -> Result<(Res, Option<String>), ErrorKind<'path>> {
         let tcx = self.cx.tcx;
         let no_res = || ResolutionFailure::NotResolved {
-            module_id: module_id,
+            module_id,
             partial_res: None,
             unresolved: path_str.into(),
         };
@@ -437,7 +438,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
     fn resolve_path(&self, path_str: &str, ns: Namespace, module_id: DefId) -> Option<Res> {
         let result = self.cx.enter_resolver(|resolver| {
             resolver
-                .resolve_str_path_error(DUMMY_SP, &path_str, ns, module_id)
+                .resolve_str_path_error(DUMMY_SP, path_str, ns, module_id)
                 .and_then(|(_, res)| res.try_into())
         });
         debug!("{} resolved to {:?} in namespace {:?}", path_str, result, ns);
@@ -543,7 +544,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
             ty::Uint(uty) => Res::Primitive(uty.into()),
             ty::Float(fty) => Res::Primitive(fty.into()),
             ty::Str => Res::Primitive(Str),
-            ty::Tuple(ref tys) if tys.is_empty() => Res::Primitive(Unit),
+            ty::Tuple(tys) if tys.is_empty() => Res::Primitive(Unit),
             ty::Tuple(_) => Res::Primitive(Tuple),
             ty::Array(..) => Res::Primitive(Array),
             ty::Slice(_) => Res::Primitive(Slice),
@@ -816,8 +817,8 @@ fn is_derive_trait_collision<T>(ns: &PerNS<Result<(Res, T), ResolutionFailure<'_
     )
 }
 
-impl<'a, 'tcx> DocFolder for LinkCollector<'a, 'tcx> {
-    fn fold_item(&mut self, item: Item) -> Option<Item> {
+impl<'a, 'tcx> DocVisitor for LinkCollector<'a, 'tcx> {
+    fn visit_item(&mut self, item: &Item) {
         use rustc_middle::ty::DefIdTree;
 
         let parent_node =
@@ -911,17 +912,16 @@ impl<'a, 'tcx> DocFolder for LinkCollector<'a, 'tcx> {
             }
         }
 
-        Some(if item.is_mod() {
+        if item.is_mod() {
             if !inner_docs {
                 self.mod_ids.push(item.def_id.expect_def_id());
             }
 
-            let ret = self.fold_item_recur(item);
+            self.visit_item_recur(item);
             self.mod_ids.pop();
-            ret
         } else {
-            self.fold_item_recur(item)
-        })
+            self.visit_item_recur(item)
+        }
     }
 }
 
@@ -978,13 +978,13 @@ fn preprocess_link<'a>(
     }
 
     // Parse and strip the disambiguator from the link, if present.
-    let (disambiguator, path_str, link_text) = match Disambiguator::from_str(&link) {
+    let (disambiguator, path_str, link_text) = match Disambiguator::from_str(link) {
         Ok(Some((d, path, link_text))) => (Some(d), path.trim(), link_text.trim()),
         Ok(None) => (None, link.trim(), link.trim()),
         Err((err_msg, relative_range)) => {
             // Only report error if we would not have ignored this link. See issue #83859.
             if !should_ignore_link_with_disambiguators(link) {
-                let no_backticks_range = range_between_backticks(&ori_link);
+                let no_backticks_range = range_between_backticks(ori_link);
                 let disambiguator_range = (no_backticks_range.start + relative_range.start)
                     ..(no_backticks_range.start + relative_range.end);
                 return Some(Err(PreprocessingError::Disambiguator(disambiguator_range, err_msg)));
@@ -1000,7 +1000,7 @@ fn preprocess_link<'a>(
 
     // Strip generics from the path.
     let path_str = if path_str.contains(['<', '>'].as_slice()) {
-        match strip_generics_from_path(&path_str) {
+        match strip_generics_from_path(path_str) {
             Ok(path) => path,
             Err(err_kind) => {
                 debug!("link has malformed generics: {}", path_str);
@@ -1228,7 +1228,7 @@ impl LinkCollector<'_, '_> {
                 if self.cx.tcx.privacy_access_levels(()).is_exported(src_id)
                     && !self.cx.tcx.privacy_access_levels(()).is_exported(dst_id)
                 {
-                    privacy_error(self.cx, &diag_info, &path_str);
+                    privacy_error(self.cx, &diag_info, path_str);
                 }
             }
 
@@ -1766,8 +1766,8 @@ fn report_diagnostic(
 
         let span =
             super::source_span_for_markdown_range(tcx, dox, link_range, &item.attrs).map(|sp| {
-                if dox.bytes().nth(link_range.start) == Some(b'`')
-                    && dox.bytes().nth(link_range.end - 1) == Some(b'`')
+                if dox.as_bytes().get(link_range.start) == Some(&b'`')
+                    && dox.as_bytes().get(link_range.end - 1) == Some(&b'`')
                 {
                     sp.with_lo(sp.lo() + BytePos(1)).with_hi(sp.hi() - BytePos(1))
                 } else {
@@ -1868,8 +1868,7 @@ fn resolution_failure(
                         };
                         name = start;
                         for ns in [TypeNS, ValueNS, MacroNS] {
-                            if let Some(res) =
-                                collector.check_full_res(ns, &start, module_id, &None)
+                            if let Some(res) = collector.check_full_res(ns, start, module_id, &None)
                             {
                                 debug!("found partial_res={:?}", res);
                                 *partial_res = Some(res);
@@ -1938,7 +1937,8 @@ fn resolution_failure(
                             | Use
                             | LifetimeParam
                             | Ctor(_, _)
-                            | AnonConst => {
+                            | AnonConst
+                            | InlineConst => {
                                 let note = assoc_item_not_allowed(res);
                                 if let Some(span) = sp {
                                     diag.span_label(span, &note);

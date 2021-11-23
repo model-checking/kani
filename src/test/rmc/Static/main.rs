@@ -11,7 +11,7 @@ pub enum MyEnum {
     ChoiceC,
 }
 
-pub fn main() {
+fn main() {
     assert!(!X);
     unsafe {
         Y = true;

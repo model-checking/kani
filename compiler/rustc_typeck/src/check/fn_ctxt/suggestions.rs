@@ -8,12 +8,13 @@ use rustc_errors::{Applicability, DiagnosticBuilder};
 use rustc_hir as hir;
 use rustc_hir::def::{CtorOf, DefKind};
 use rustc_hir::lang_items::LangItem;
-use rustc_hir::{Expr, ExprKind, ItemKind, Node, Stmt, StmtKind};
+use rustc_hir::{Expr, ExprKind, ItemKind, Node, Path, QPath, Stmt, StmtKind, TyKind};
 use rustc_infer::infer;
 use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty::{self, Binder, Ty};
-use rustc_span::symbol::kw;
+use rustc_span::symbol::{kw, sym};
 
+use rustc_middle::ty::subst::GenericArgKind;
 use std::iter;
 
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
@@ -232,48 +233,72 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             let is_struct_pat_shorthand_field =
                 self.is_hir_id_from_struct_pattern_shorthand_field(expr.hir_id, expr.span);
             let methods = self.get_conversion_methods(expr.span, expected, found, expr.hir_id);
-            if let Ok(expr_text) = self.sess().source_map().span_to_snippet(expr.span) {
-                let mut suggestions = iter::zip(iter::repeat(&expr_text), &methods)
-                    .filter_map(|(receiver, method)| {
-                        let method_call = format!(".{}()", method.ident);
-                        if receiver.ends_with(&method_call) {
-                            None // do not suggest code that is already there (#53348)
-                        } else {
-                            let method_call_list = [".to_vec()", ".to_string()"];
-                            let mut sugg = if receiver.ends_with(".clone()")
-                                && method_call_list.contains(&method_call.as_str())
-                            {
-                                let max_len = receiver.rfind('.').unwrap();
-                                vec![(
-                                    expr.span,
-                                    format!("{}{}", &receiver[..max_len], method_call),
-                                )]
+            if !methods.is_empty() {
+                if let Ok(expr_text) = self.sess().source_map().span_to_snippet(expr.span) {
+                    let mut suggestions = iter::zip(iter::repeat(&expr_text), &methods)
+                        .filter_map(|(receiver, method)| {
+                            let method_call = format!(".{}()", method.ident);
+                            if receiver.ends_with(&method_call) {
+                                None // do not suggest code that is already there (#53348)
                             } else {
-                                if expr.precedence().order() < ExprPrecedence::MethodCall.order() {
-                                    vec![
-                                        (expr.span.shrink_to_lo(), "(".to_string()),
-                                        (expr.span.shrink_to_hi(), format!("){}", method_call)),
-                                    ]
+                                let method_call_list = [".to_vec()", ".to_string()"];
+                                let mut sugg = if receiver.ends_with(".clone()")
+                                    && method_call_list.contains(&method_call.as_str())
+                                {
+                                    let max_len = receiver.rfind('.').unwrap();
+                                    vec![(
+                                        expr.span,
+                                        format!("{}{}", &receiver[..max_len], method_call),
+                                    )]
                                 } else {
-                                    vec![(expr.span.shrink_to_hi(), method_call)]
+                                    if expr.precedence().order()
+                                        < ExprPrecedence::MethodCall.order()
+                                    {
+                                        vec![
+                                            (expr.span.shrink_to_lo(), "(".to_string()),
+                                            (expr.span.shrink_to_hi(), format!("){}", method_call)),
+                                        ]
+                                    } else {
+                                        vec![(expr.span.shrink_to_hi(), method_call)]
+                                    }
+                                };
+                                if is_struct_pat_shorthand_field {
+                                    sugg.insert(
+                                        0,
+                                        (expr.span.shrink_to_lo(), format!("{}: ", receiver)),
+                                    );
                                 }
-                            };
-                            if is_struct_pat_shorthand_field {
-                                sugg.insert(
-                                    0,
-                                    (expr.span.shrink_to_lo(), format!("{}: ", receiver)),
+                                Some(sugg)
+                            }
+                        })
+                        .peekable();
+                    if suggestions.peek().is_some() {
+                        err.multipart_suggestions(
+                            "try using a conversion method",
+                            suggestions,
+                            Applicability::MaybeIncorrect,
+                        );
+                    }
+                }
+            } else if found.to_string().starts_with("Option<")
+                && expected.to_string() == "Option<&str>"
+            {
+                if let ty::Adt(_def, subst) = found.kind() {
+                    if subst.len() != 0 {
+                        if let GenericArgKind::Type(ty) = subst[0].unpack() {
+                            let peeled = ty.peel_refs().to_string();
+                            if peeled == "String" {
+                                let ref_cnt = ty.to_string().len() - peeled.len();
+                                let result = format!(".map(|x| &*{}x)", "*".repeat(ref_cnt));
+                                err.span_suggestion_verbose(
+                                    expr.span.shrink_to_hi(),
+                                    "try converting the passed type into a `&str`",
+                                    result,
+                                    Applicability::MaybeIncorrect,
                                 );
                             }
-                            Some(sugg)
                         }
-                    })
-                    .peekable();
-                if suggestions.peek().is_some() {
-                    err.multipart_suggestions(
-                        "try using a conversion method",
-                        suggestions,
-                        Applicability::MaybeIncorrect,
-                    );
+                    }
                 }
             }
         }
@@ -341,12 +366,16 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 for (sp, label) in spans_and_labels {
                     multi_span.push_span_label(sp, label);
                 }
-                err.span_note(multi_span, "closures can only be coerced to `fn` types if they do not capture any variables");
+                err.span_note(
+                    multi_span,
+                    "closures can only be coerced to `fn` types if they do not capture any variables"
+                );
             }
         }
     }
 
     /// When encountering an `impl Future` where `BoxFuture` is expected, suggest `Box::pin`.
+    #[instrument(skip(self, err))]
     pub(in super::super) fn suggest_calling_boxed_future_when_appropriate(
         &self,
         err: &mut DiagnosticBuilder<'_>,
@@ -361,33 +390,74 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             return false;
         }
         let pin_did = self.tcx.lang_items().pin_type();
-        match expected.kind() {
-            ty::Adt(def, _) if Some(def.did) != pin_did => return false,
-            // This guards the `unwrap` and `mk_box` below.
-            _ if pin_did.is_none() || self.tcx.lang_items().owned_box().is_none() => return false,
-            _ => {}
+        // This guards the `unwrap` and `mk_box` below.
+        if pin_did.is_none() || self.tcx.lang_items().owned_box().is_none() {
+            return false;
         }
-        let boxed_found = self.tcx.mk_box(found);
-        let new_found = self.tcx.mk_lang_item(boxed_found, LangItem::Pin).unwrap();
-        if self.can_coerce(new_found, expected) {
-            match found.kind() {
-                ty::Adt(def, _) if def.is_box() => {
-                    err.help("use `Box::pin`");
-                }
-                _ => {
-                    err.multipart_suggestion(
-                        "you need to pin and box this expression",
-                        vec![
-                            (expr.span.shrink_to_lo(), "Box::pin(".to_string()),
-                            (expr.span.shrink_to_hi(), ")".to_string()),
-                        ],
-                        Applicability::MachineApplicable,
-                    );
+        let box_found = self.tcx.mk_box(found);
+        let pin_box_found = self.tcx.mk_lang_item(box_found, LangItem::Pin).unwrap();
+        let pin_found = self.tcx.mk_lang_item(found, LangItem::Pin).unwrap();
+        match expected.kind() {
+            ty::Adt(def, _) if Some(def.did) == pin_did => {
+                if self.can_coerce(pin_box_found, expected) {
+                    debug!("can coerce {:?} to {:?}, suggesting Box::pin", pin_box_found, expected);
+                    match found.kind() {
+                        ty::Adt(def, _) if def.is_box() => {
+                            err.help("use `Box::pin`");
+                        }
+                        _ => {
+                            err.multipart_suggestion(
+                                "you need to pin and box this expression",
+                                vec![
+                                    (expr.span.shrink_to_lo(), "Box::pin(".to_string()),
+                                    (expr.span.shrink_to_hi(), ")".to_string()),
+                                ],
+                                Applicability::MaybeIncorrect,
+                            );
+                        }
+                    }
+                    true
+                } else if self.can_coerce(pin_found, expected) {
+                    match found.kind() {
+                        ty::Adt(def, _) if def.is_box() => {
+                            err.help("use `Box::pin`");
+                            true
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
                 }
             }
-            true
-        } else {
-            false
+            ty::Adt(def, _) if def.is_box() && self.can_coerce(box_found, expected) => {
+                // Check if the parent expression is a call to Pin::new.  If it
+                // is and we were expecting a Box, ergo Pin<Box<expected>>, we
+                // can suggest Box::pin.
+                let parent = self.tcx.hir().get_parent_node(expr.hir_id);
+                let fn_name = match self.tcx.hir().find(parent) {
+                    Some(Node::Expr(Expr { kind: ExprKind::Call(fn_name, _), .. })) => fn_name,
+                    _ => return false,
+                };
+                match fn_name.kind {
+                    ExprKind::Path(QPath::TypeRelative(
+                        hir::Ty {
+                            kind: TyKind::Path(QPath::Resolved(_, Path { res: recv_ty, .. })),
+                            ..
+                        },
+                        method,
+                    )) if recv_ty.opt_def_id() == pin_did && method.ident.name == sym::new => {
+                        err.span_suggestion(
+                            fn_name.span,
+                            "use `Box::pin` to pin and box this expression",
+                            "Box::pin".to_string(),
+                            Applicability::MachineApplicable,
+                        );
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
         }
     }
 

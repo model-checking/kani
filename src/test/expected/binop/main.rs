@@ -55,7 +55,7 @@ fn ibxor_test(a: i32, b: i32, correct: i32, wrong: i32) {
     assert!(a ^ b == wrong);
 }
 
-pub fn main() {
+fn main() {
     iadd_test(1, 2, 3, 4);
     isub_test(3, 4, -1, 0);
     imul_test(5, 6, 30, 60);

@@ -8,7 +8,7 @@ use clippy_utils::{
     paths, SpanlessEq,
 };
 use if_chain::if_chain;
-use rustc_ast::ast::{Crate as AstCrate, ItemKind, LitKind, ModKind, NodeId};
+use rustc_ast::ast::{Crate, ItemKind, LitKind, ModKind, NodeId};
 use rustc_ast::visit::FnKind;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_errors::Applicability;
@@ -18,8 +18,8 @@ use rustc_hir::def_id::DefId;
 use rustc_hir::hir_id::CRATE_HIR_ID;
 use rustc_hir::intravisit::{NestedVisitorMap, Visitor};
 use rustc_hir::{
-    BinOpKind, Block, Crate, Expr, ExprKind, HirId, Item, Local, MutTy, Mutability, Node, Path, Stmt, StmtKind, Ty,
-    TyKind, UnOp,
+    BinOpKind, Block, Expr, ExprKind, HirId, Item, Local, MutTy, Mutability, Node, Path, Stmt, StmtKind, Ty, TyKind,
+    UnOp,
 };
 use rustc_lint::{EarlyContext, EarlyLintPass, LateContext, LateLintPass, LintContext};
 use rustc_middle::hir::map::Map;
@@ -242,7 +242,7 @@ declare_clippy_lint! {
     ///
     /// Good:
     /// ```rust,ignore
-    /// utils::is_type_diagnostic_item(cx, ty, sym::vec_type)
+    /// utils::is_type_diagnostic_item(cx, ty, sym::Vec)
     /// ```
     pub MATCH_TYPE_ON_DIAGNOSTIC_ITEM,
     internal,
@@ -317,7 +317,7 @@ declare_clippy_lint! {
 declare_lint_pass!(ClippyLintsInternal => [CLIPPY_LINTS_INTERNAL]);
 
 impl EarlyLintPass for ClippyLintsInternal {
-    fn check_crate(&mut self, cx: &EarlyContext<'_>, krate: &AstCrate) {
+    fn check_crate(&mut self, cx: &EarlyContext<'_>, krate: &Crate) {
         if let Some(utils) = krate.items.iter().find(|item| item.ident.name.as_str() == "utils") {
             if let ItemKind::Mod(_, ModKind::Loaded(ref items, ..)) = utils.kind {
                 if let Some(paths) = items.iter().find(|item| item.ident.name.as_str() == "paths") {
@@ -412,7 +412,7 @@ impl<'tcx> LateLintPass<'tcx> for LintWithoutLintPass {
         }
     }
 
-    fn check_crate_post(&mut self, cx: &LateContext<'tcx>, _: &'tcx Crate<'_>) {
+    fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
         if is_lint_allowed(cx, LINT_WITHOUT_LINT_PASS, CRATE_HIR_ID) {
             return;
         }
@@ -561,9 +561,7 @@ declare_lint_pass!(ProduceIce => [PRODUCE_ICE]);
 
 impl EarlyLintPass for ProduceIce {
     fn check_fn(&mut self, _: &EarlyContext<'_>, fn_kind: FnKind<'_>, _: Span, _: NodeId) {
-        if is_trigger_fn(fn_kind) {
-            panic!("Would you like some help with that?");
-        }
+        assert!(!is_trigger_fn(fn_kind), "Would you like some help with that?");
     }
 }
 
@@ -772,8 +770,7 @@ impl<'tcx> LateLintPass<'tcx> for MatchTypeOnDiagItem {
             let segments: Vec<&str> = segments.iter().map(|sym| &**sym).collect();
             if let Some(ty_did) = path_to_res(cx, &segments[..]).opt_def_id();
             // Check if the matched type is a diagnostic item
-            let diag_items = cx.tcx.diagnostic_items(ty_did.krate);
-            if let Some(item_name) = diag_items.iter().find_map(|(k, v)| if *v == ty_did { Some(k) } else { None });
+            if let Some(item_name) = cx.tcx.get_diagnostic_name(ty_did);
             then {
                 // TODO: check paths constants from external crates.
                 let cx_snippet = snippet(cx, context.span, "_");
@@ -894,7 +891,7 @@ impl<'tcx> LateLintPass<'tcx> for InvalidPaths {
                 }).collect();
             if !check_path(cx, &path[..]);
             then {
-                span_lint(cx, CLIPPY_LINTS_INTERNAL, item.span, "invalid path");
+                span_lint(cx, INVALID_PATHS, item.span, "invalid path");
             }
         }
     }
@@ -909,7 +906,7 @@ pub struct InterningDefinedSymbol {
 impl_lint_pass!(InterningDefinedSymbol => [INTERNING_DEFINED_SYMBOL, UNNECESSARY_SYMBOL_STR]);
 
 impl<'tcx> LateLintPass<'tcx> for InterningDefinedSymbol {
-    fn check_crate(&mut self, cx: &LateContext<'_>, _: &Crate<'_>) {
+    fn check_crate(&mut self, cx: &LateContext<'_>) {
         if !self.symbol_map.is_empty() {
             return;
         }
@@ -1224,5 +1221,10 @@ fn if_chain_local_span(cx: &LateContext<'_>, local: &Local<'_>, if_chain_span: S
     let sm = cx.sess().source_map();
     let span = sm.span_extend_to_prev_str(span, "let", false);
     let span = sm.span_extend_to_next_char(span, ';', false);
-    Span::new(span.lo() - BytePos(3), span.hi() + BytePos(1), span.ctxt())
+    Span::new(
+        span.lo() - BytePos(3),
+        span.hi() + BytePos(1),
+        span.ctxt(),
+        span.parent(),
+    )
 }

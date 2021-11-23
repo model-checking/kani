@@ -197,7 +197,7 @@ fn copy_self_contained_objects(
     t!(fs::create_dir_all(&libdir_self_contained));
     let mut target_deps = vec![];
 
-    // Copies the CRT objects.
+    // Copies the libc and CRT objects.
     //
     // rustc historically provides a more self-contained installation for musl targets
     // not requiring the presence of a native musl toolchain. For example, it can fall back
@@ -208,7 +208,7 @@ fn copy_self_contained_objects(
         let srcdir = builder.musl_libdir(target).unwrap_or_else(|| {
             panic!("Target {:?} does not have a \"musl-libdir\" key", target.triple)
         });
-        for &obj in &["crt1.o", "Scrt1.o", "rcrt1.o", "crti.o", "crtn.o"] {
+        for &obj in &["libc.a", "crt1.o", "Scrt1.o", "rcrt1.o", "crti.o", "crtn.o"] {
             copy_and_stamp(
                 builder,
                 &libdir_self_contained,
@@ -235,7 +235,7 @@ fn copy_self_contained_objects(
                 panic!("Target {:?} does not have a \"wasi-root\" key", target.triple)
             })
             .join("lib/wasm32-wasi");
-        for &obj in &["crt1-command.o", "crt1-reactor.o"] {
+        for &obj in &["libc.a", "crt1-command.o", "crt1-reactor.o"] {
             copy_and_stamp(
                 builder,
                 &libdir_self_contained,
@@ -528,7 +528,7 @@ impl Step for Rustc {
     const DEFAULT: bool = false;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("compiler/rustc")
+        run.never()
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -1023,9 +1023,16 @@ pub struct Assemble {
 
 impl Step for Assemble {
     type Output = Compiler;
+    const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.never()
+        run.path("compiler/rustc")
+    }
+
+    fn make_run(run: RunConfig<'_>) {
+        run.builder.ensure(Assemble {
+            target_compiler: run.builder.compiler(run.builder.top_stage + 1, run.target),
+        });
     }
 
     /// Prepare a new compiler from the artifacts in `stage`
@@ -1136,14 +1143,14 @@ impl Step for Assemble {
             // for `-Z gcc-ld=lld`
             let gcc_ld_dir = libdir_bin.join("gcc-ld");
             t!(fs::create_dir(&gcc_ld_dir));
-            builder.copy(
-                &lld_install.join("bin").join(&src_exe),
-                &gcc_ld_dir.join(exe("ld", target_compiler.host)),
-            );
-            builder.copy(
-                &lld_install.join("bin").join(&src_exe),
-                &gcc_ld_dir.join(exe("ld64", target_compiler.host)),
-            );
+            for flavor in ["ld", "ld64"] {
+                let lld_wrapper_exe = builder.ensure(crate::tool::LldWrapper {
+                    compiler: build_compiler,
+                    target: target_compiler.host,
+                    flavor_feature: flavor,
+                });
+                builder.copy(&lld_wrapper_exe, &gcc_ld_dir.join(exe(flavor, target_compiler.host)));
+            }
         }
 
         // Similarly, copy `llvm-dwp` into libdir for Split DWARF. Only copy it when the LLVM

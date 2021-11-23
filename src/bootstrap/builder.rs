@@ -370,7 +370,7 @@ impl<'a> Builder<'a> {
         match kind {
             Kind::Build => describe!(
                 compile::Std,
-                compile::Rustc,
+                compile::Assemble,
                 compile::CodegenBackend,
                 compile::StartupObjects,
                 tool::BuildManifest,
@@ -473,6 +473,7 @@ impl<'a> Builder<'a> {
                 test::Expected,
                 test::Dashboard,
                 test::Stub,
+                test::RmcDocs,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),
@@ -493,6 +494,7 @@ impl<'a> Builder<'a> {
                 doc::RustByExample,
                 doc::RustcBook,
                 doc::CargoBook,
+                doc::Clippy,
                 doc::EmbeddedBook,
                 doc::EditionGuide,
             ),
@@ -988,8 +990,26 @@ impl<'a> Builder<'a> {
             }
         }
 
-        if self.config.rust_new_symbol_mangling {
+        let use_new_symbol_mangling = match self.config.rust_new_symbol_mangling {
+            Some(setting) => {
+                // If an explicit setting is given, use that
+                setting
+            }
+            None => {
+                if mode == Mode::Std {
+                    // The standard library defaults to the legacy scheme
+                    false
+                } else {
+                    // The compiler and tools default to the new scheme
+                    true
+                }
+            }
+        };
+
+        if use_new_symbol_mangling {
             rustflags.arg("-Zsymbol-mangling-version=v0");
+        } else {
+            rustflags.arg("-Zsymbol-mangling-version=legacy");
         }
 
         // FIXME: It might be better to use the same value for both `RUSTFLAGS` and `RUSTDOCFLAGS`,
@@ -1358,12 +1378,6 @@ impl<'a> Builder<'a> {
                 rustdocflags.arg("-Dwarnings");
             }
 
-            // FIXME(#58633) hide "unused attribute" errors in incremental
-            // builds of the standard library, as the underlying checks are
-            // not yet properly integrated with incremental recompilation.
-            if mode == Mode::Std && compiler.stage == 0 && self.config.incremental {
-                lint_flags.push("-Aunused-attributes");
-            }
             // This does not use RUSTFLAGS due to caching issues with Cargo.
             // Clippy is treated as an "in tree" tool, but shares the same
             // cache as other "submodule" tools. With these options set in
@@ -1505,7 +1519,7 @@ impl<'a> Builder<'a> {
             cargo.env("WINAPI_NO_BUNDLED_LIBRARIES", "1");
         }
 
-        for _ in 1..self.verbosity {
+        for _ in 0..self.verbosity {
             cargo.arg("-v");
         }
 

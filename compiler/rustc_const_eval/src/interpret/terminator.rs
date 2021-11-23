@@ -231,7 +231,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
     }
 
     /// Call this function -- pushing the stack frame and initializing the arguments.
-    fn eval_fn_call(
+    pub(crate) fn eval_fn_call(
         &mut self,
         fn_val: FnVal<'tcx, M::ExtraFnVal>,
         caller_abi: Abi,
@@ -345,10 +345,8 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
 
                     // Figure out how to pass which arguments.
                     // The Rust ABI is special: ZST get skipped.
-                    let rust_abi = match caller_abi {
-                        Abi::Rust | Abi::RustCall => true,
-                        _ => false,
-                    };
+                    let rust_abi = matches!(caller_abi, Abi::Rust | Abi::RustCall);
+
                     // We have two iterators: Where the arguments come from,
                     // and where they go to.
 

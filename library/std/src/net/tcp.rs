@@ -90,6 +90,7 @@ pub struct TcpListener(net_imp::TcpListener);
 /// See its documentation for more.
 ///
 /// [`accept`]: TcpListener::accept
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[stable(feature = "rust1", since = "1.0.0")]
 #[derive(Debug)]
 pub struct Incoming<'a> {
@@ -883,6 +884,7 @@ impl TcpListener {
     ///     Ok(())
     /// }
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[unstable(feature = "tcplistener_into_incoming", issue = "88339")]
     pub fn into_incoming(self) -> IntoIncoming {
         IntoIncoming { listener: self }

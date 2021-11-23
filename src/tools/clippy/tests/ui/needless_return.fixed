@@ -1,12 +1,12 @@
 // run-rustfix
-// edition:2018
 
+#![feature(let_else)]
 #![allow(unused)]
 #![allow(
     clippy::if_same_then_else,
     clippy::single_match,
-    clippy::branches_sharing_code,
-    clippy::needless_bool
+    clippy::needless_bool,
+    clippy::equatable_if_let
 )]
 #![warn(clippy::needless_return)]
 
@@ -205,6 +205,10 @@ async fn async_borrows_but_not_last(value: bool) -> String {
 async fn async_test_return_in_macro() {
     needed_return!(10);
     needed_return!(0);
+}
+
+fn let_else() {
+    let Some(1) = Some(1) else { return };
 }
 
 fn main() {}

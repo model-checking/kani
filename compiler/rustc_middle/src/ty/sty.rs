@@ -704,6 +704,66 @@ impl<'tcx> UpvarSubsts<'tcx> {
     }
 }
 
+/// An inline const is modeled like
+///
+///     const InlineConst<'l0...'li, T0...Tj, R>: R;
+///
+/// where:
+///
+/// - 'l0...'li and T0...Tj are the generic parameters
+///   inherited from the item that defined the inline const,
+/// - R represents the type of the constant.
+///
+/// When the inline const is instantiated, `R` is substituted as the actual inferred
+/// type of the constant. The reason that `R` is represented as an extra type parameter
+/// is the same reason that [`ClosureSubsts`] have `CS` and `U` as type parameters:
+/// inline const can reference lifetimes that are internal to the creating function.
+#[derive(Copy, Clone, Debug, TypeFoldable)]
+pub struct InlineConstSubsts<'tcx> {
+    /// Generic parameters from the enclosing item,
+    /// concatenated with the inferred type of the constant.
+    pub substs: SubstsRef<'tcx>,
+}
+
+/// Struct returned by `split()`.
+pub struct InlineConstSubstsParts<'tcx, T> {
+    pub parent_substs: &'tcx [GenericArg<'tcx>],
+    pub ty: T,
+}
+
+impl<'tcx> InlineConstSubsts<'tcx> {
+    /// Construct `InlineConstSubsts` from `InlineConstSubstsParts`.
+    pub fn new(
+        tcx: TyCtxt<'tcx>,
+        parts: InlineConstSubstsParts<'tcx, Ty<'tcx>>,
+    ) -> InlineConstSubsts<'tcx> {
+        InlineConstSubsts {
+            substs: tcx.mk_substs(
+                parts.parent_substs.iter().copied().chain(std::iter::once(parts.ty.into())),
+            ),
+        }
+    }
+
+    /// Divides the inline const substs into their respective components.
+    /// The ordering assumed here must match that used by `InlineConstSubsts::new` above.
+    fn split(self) -> InlineConstSubstsParts<'tcx, GenericArg<'tcx>> {
+        match self.substs[..] {
+            [ref parent_substs @ .., ty] => InlineConstSubstsParts { parent_substs, ty },
+            _ => bug!("inline const substs missing synthetics"),
+        }
+    }
+
+    /// Returns the substitutions of the inline const's parent.
+    pub fn parent_substs(self) -> &'tcx [GenericArg<'tcx>] {
+        self.split().parent_substs
+    }
+
+    /// Returns the type of this inline const.
+    pub fn ty(self) -> Ty<'tcx> {
+        self.split().ty.expect_ty()
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq, Hash, TyEncodable, TyDecodable)]
 #[derive(HashStable, TypeFoldable)]
 pub enum ExistentialPredicate<'tcx> {
@@ -882,6 +942,7 @@ impl<'tcx> PolyTraitRef<'tcx> {
         self.map_bound(|trait_ref| ty::TraitPredicate {
             trait_ref,
             constness: ty::BoundConstness::NotConst,
+            polarity: ty::ImplPolarity::Positive,
         })
     }
 }
@@ -2006,7 +2067,9 @@ impl<'tcx> TyS<'tcx> {
     ) -> Option<Discr<'tcx>> {
         match self.kind() {
             TyKind::Adt(adt, _) if adt.variants.is_empty() => {
-                bug!("discriminant_for_variant called on zero variant enum");
+                // This can actually happen during CTFE, see
+                // https://github.com/rust-lang/rust/issues/89765.
+                None
             }
             TyKind::Adt(adt, _) if adt.is_enum() => {
                 Some(adt.discriminant_for_variant(tcx, variant_index))
@@ -2025,10 +2088,10 @@ impl<'tcx> TyS<'tcx> {
             ty::Generator(_, substs, _) => substs.as_generator().discr_ty(tcx),
 
             ty::Param(_) | ty::Projection(_) | ty::Opaque(..) | ty::Infer(ty::TyVar(_)) => {
-                let assoc_items =
-                    tcx.associated_items(tcx.lang_items().discriminant_kind_trait().unwrap());
-                let discriminant_def_id = assoc_items.in_definition_order().next().unwrap().def_id;
-                tcx.mk_projection(discriminant_def_id, tcx.mk_substs([self.into()].iter()))
+                let assoc_items = tcx.associated_item_def_ids(
+                    tcx.require_lang_item(hir::LangItem::DiscriminantKind, None),
+                );
+                tcx.mk_projection(assoc_items[0], tcx.intern_substs(&[self.into()]))
             }
 
             ty::Bool

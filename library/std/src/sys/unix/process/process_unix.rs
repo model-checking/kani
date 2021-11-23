@@ -166,6 +166,12 @@ impl Command {
             fn clone3(cl_args: *mut clone_args, len: libc::size_t) -> libc::c_long
         }
 
+        // Bypassing libc for `clone3` can make further libc calls unsafe,
+        // so we use it sparingly for now. See #89522 for details.
+        // Some tools (e.g. sandboxing tools) may also expect `fork`
+        // rather than `clone3`.
+        let want_clone3_pidfd = self.get_create_pidfd();
+
         // If we fail to create a pidfd for any reason, this will
         // stay as -1, which indicates an error.
         let mut pidfd: pid_t = -1;
@@ -173,14 +179,9 @@ impl Command {
         // Attempt to use the `clone3` syscall, which supports more arguments
         // (in particular, the ability to create a pidfd). If this fails,
         // we will fall through this block to a call to `fork()`
-        if HAS_CLONE3.load(Ordering::Relaxed) {
-            let mut flags = 0;
-            if self.get_create_pidfd() {
-                flags |= CLONE_PIDFD;
-            }
-
+        if want_clone3_pidfd && HAS_CLONE3.load(Ordering::Relaxed) {
             let mut args = clone_args {
-                flags,
+                flags: CLONE_PIDFD,
                 pidfd: &mut pidfd as *mut pid_t as u64,
                 child_tid: 0,
                 parent_tid: 0,
@@ -212,8 +213,8 @@ impl Command {
             }
         }
 
-        // If we get here, the 'clone3' syscall does not exist
-        // or we do not have permission to call it
+        // Generally, we just call `fork`. If we get here after wanting `clone3`,
+        // then the syscall does not exist or we do not have permission to call it.
         cvt(libc::fork()).map(|res| (res, pidfd))
     }
 
@@ -333,9 +334,19 @@ impl Command {
             let mut set = MaybeUninit::<libc::sigset_t>::uninit();
             cvt(sigemptyset(set.as_mut_ptr()))?;
             cvt(libc::pthread_sigmask(libc::SIG_SETMASK, set.as_ptr(), ptr::null_mut()))?;
-            let ret = sys::signal(libc::SIGPIPE, libc::SIG_DFL);
-            if ret == libc::SIG_ERR {
-                return Err(io::Error::last_os_error());
+
+            #[cfg(target_os = "android")] // see issue #88585
+            {
+                let mut action: libc::sigaction = mem::zeroed();
+                action.sa_sigaction = libc::SIG_DFL;
+                cvt(libc::sigaction(libc::SIGPIPE, &action, ptr::null_mut()))?;
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                let ret = sys::signal(libc::SIGPIPE, libc::SIG_DFL);
+                if ret == libc::SIG_ERR {
+                    return Err(io::Error::last_os_error());
+                }
             }
         }
 
@@ -552,8 +563,7 @@ impl Process {
         use crate::os::unix::io::FromRawFd;
         use crate::sys_common::FromInner;
         // Safety: If `pidfd` is nonnegative, we assume it's valid and otherwise unowned.
-        let pidfd = (pidfd >= 0)
-            .then(|| PidFd::from_inner(unsafe { sys::fd::FileDesc::from_raw_fd(pidfd) }));
+        let pidfd = (pidfd >= 0).then(|| PidFd::from_inner(sys::fd::FileDesc::from_raw_fd(pidfd)));
         Process { pid, status: None, pidfd }
     }
 
@@ -607,8 +617,17 @@ impl Process {
 }
 
 /// Unix exit statuses
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+//
+// This is not actually an "exit status" in Unix terminology.  Rather, it is a "wait status".
+// See the discussion in comments and doc comments for `std::process::ExitStatus`.
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct ExitStatus(c_int);
+
+impl fmt::Debug for ExitStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("unix_wait_status").field(&self.0).finish()
+    }
+}
 
 impl ExitStatus {
     pub fn new(status: c_int) -> ExitStatus {
@@ -683,12 +702,18 @@ impl fmt::Display for ExitStatus {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct ExitStatusError(NonZero_c_int);
 
 impl Into<ExitStatus> for ExitStatusError {
     fn into(self) -> ExitStatus {
         ExitStatus(self.0.into())
+    }
+}
+
+impl fmt::Debug for ExitStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("unix_wait_status").field(&self.0).finish()
     }
 }
 

@@ -52,6 +52,7 @@ impl<'a, T, A: Allocator> Drain<'a, T, A> {
     /// let _ = drain.next().unwrap();
     /// assert_eq!(drain.as_slice(), &['b', 'c']);
     /// ```
+    #[must_use]
     #[stable(feature = "vec_drain_as_slice", since = "1.46.0")]
     pub fn as_slice(&self) -> &[T] {
         self.iter.as_slice()
@@ -59,6 +60,7 @@ impl<'a, T, A: Allocator> Drain<'a, T, A> {
 
     /// Returns a reference to the underlying allocator.
     #[unstable(feature = "allocator_api", issue = "32838")]
+    #[must_use]
     #[inline]
     pub fn allocator(&self) -> &A {
         unsafe { self.vec.as_ref().allocator() }

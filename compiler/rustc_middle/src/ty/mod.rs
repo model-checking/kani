@@ -20,8 +20,6 @@ pub use generics::*;
 pub use vtable::*;
 
 use crate::hir::exports::ExportMap;
-use crate::ich::StableHashingContext;
-use crate::middle::cstore::CrateStoreDyn;
 use crate::mir::{Body, GeneratorLayout};
 use crate::traits::{self, Reveal};
 use crate::ty;
@@ -29,18 +27,18 @@ use crate::ty::subst::{GenericArg, InternalSubsts, Subst, SubstsRef};
 use crate::ty::util::Discr;
 use rustc_ast as ast;
 use rustc_attr as attr;
-use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
-use rustc_data_structures::sync::{self, par_iter, ParallelIterator};
 use rustc_data_structures::tagged_ptr::CopyTaggedPtr;
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, CtorOf, DefKind, Res};
 use rustc_hir::def_id::{CrateNum, DefId, LocalDefId, LocalDefIdMap, CRATE_DEF_INDEX};
 use rustc_hir::Node;
 use rustc_macros::HashStable;
+use rustc_query_system::ich::StableHashingContext;
+use rustc_session::cstore::CrateStoreDyn;
 use rustc_span::symbol::{kw, Ident, Symbol};
-use rustc_span::Span;
+use rustc_span::{sym, Span};
 use rustc_target::abi::Align;
 
 use std::cmp::Ordering;
@@ -76,9 +74,10 @@ pub use self::sty::{
     Binder, BoundRegion, BoundRegionKind, BoundTy, BoundTyKind, BoundVar, BoundVariableKind,
     CanonicalPolyFnSig, ClosureSubsts, ClosureSubstsParts, ConstVid, EarlyBoundRegion,
     ExistentialPredicate, ExistentialProjection, ExistentialTraitRef, FnSig, FreeRegion, GenSig,
-    GeneratorSubsts, GeneratorSubstsParts, ParamConst, ParamTy, PolyExistentialProjection,
-    PolyExistentialTraitRef, PolyFnSig, PolyGenSig, PolyTraitRef, ProjectionTy, Region, RegionKind,
-    RegionVid, TraitRef, TyKind, TypeAndMut, UpvarSubsts, VarianceDiagInfo, VarianceDiagMutKind,
+    GeneratorSubsts, GeneratorSubstsParts, InlineConstSubsts, InlineConstSubstsParts, ParamConst,
+    ParamTy, PolyExistentialProjection, PolyExistentialTraitRef, PolyFnSig, PolyGenSig,
+    PolyTraitRef, ProjectionTy, Region, RegionKind, RegionVid, TraitRef, TyKind, TypeAndMut,
+    UpvarSubsts, VarianceDiagInfo, VarianceDiagMutKind,
 };
 pub use self::trait_def::TraitDef;
 
@@ -94,7 +93,6 @@ pub mod fold;
 pub mod inhabitedness;
 pub mod layout;
 pub mod normalize_erasing_regions;
-pub mod outlives;
 pub mod print;
 pub mod query;
 pub mod relate;
@@ -112,6 +110,7 @@ mod context;
 mod diagnostics;
 mod erase_regions;
 mod generics;
+mod impls_ty;
 mod instance;
 mod list;
 mod structural_impls;
@@ -166,7 +165,18 @@ pub struct ImplHeader<'tcx> {
     pub predicates: Vec<Predicate<'tcx>>,
 }
 
-#[derive(Copy, Clone, PartialEq, TyEncodable, TyDecodable, HashStable, Debug)]
+#[derive(
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    TyEncodable,
+    TyDecodable,
+    HashStable,
+    Debug,
+    TypeFoldable
+)]
 pub enum ImplPolarity {
     /// `impl Trait for Type`
     Positive,
@@ -177,6 +187,27 @@ pub enum ImplPolarity {
     /// This is a "stability hack", not a real Rust feature.
     /// See #64631 for details.
     Reservation,
+}
+
+impl ImplPolarity {
+    /// Flips polarity by turning `Positive` into `Negative` and `Negative` into `Positive`.
+    pub fn flip(&self) -> Option<ImplPolarity> {
+        match self {
+            ImplPolarity::Positive => Some(ImplPolarity::Negative),
+            ImplPolarity::Negative => Some(ImplPolarity::Positive),
+            ImplPolarity::Reservation => None,
+        }
+    }
+}
+
+impl fmt::Display for ImplPolarity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Positive => f.write_str("positive"),
+            Self::Negative => f.write_str("negative"),
+            Self::Reservation => f.write_str("reservation"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash, TyEncodable, TyDecodable, HashStable)]
@@ -301,6 +332,10 @@ impl Visibility {
             Visibility::Restricted(def_id) => def_id.is_local(),
             Visibility::Invisible => false,
         }
+    }
+
+    pub fn is_public(self) -> bool {
+        matches!(self, Visibility::Public)
     }
 }
 
@@ -461,6 +496,29 @@ impl<'tcx> Predicate<'tcx> {
     pub fn kind(self) -> Binder<'tcx, PredicateKind<'tcx>> {
         self.inner.kind
     }
+
+    /// Flips the polarity of a Predicate.
+    ///
+    /// Given `T: Trait` predicate it returns `T: !Trait` and given `T: !Trait` returns `T: Trait`.
+    pub fn flip_polarity(&self, tcx: TyCtxt<'tcx>) -> Option<Predicate<'tcx>> {
+        let kind = self
+            .inner
+            .kind
+            .map_bound(|kind| match kind {
+                PredicateKind::Trait(TraitPredicate { trait_ref, constness, polarity }) => {
+                    Some(PredicateKind::Trait(TraitPredicate {
+                        trait_ref,
+                        constness,
+                        polarity: polarity.flip()?,
+                    }))
+                }
+
+                _ => None,
+            })
+            .transpose()?;
+
+        Some(tcx.mk_predicate(kind))
+    }
 }
 
 impl<'a, 'tcx> HashStable<StableHashingContext<'a>> for Predicate<'tcx> {
@@ -601,7 +659,7 @@ impl<'tcx> Predicate<'tcx> {
         //   where both `'x` and `'b` would have a DB index of 1.
         //   The substitution from the input trait-ref is therefore going to be
         //   `'a => 'x` (where `'x` has a DB index of 1).
-        // - The super-trait-ref is `for<'b> Bar1<'a,'b>`, where `'a` is an
+        // - The supertrait-ref is `for<'b> Bar1<'a,'b>`, where `'a` is an
         //   early-bound parameter and `'b' is a late-bound parameter with a
         //   DB index of 1.
         // - If we replace `'a` with `'x` from the input, it too will have
@@ -656,6 +714,8 @@ pub struct TraitPredicate<'tcx> {
     pub trait_ref: TraitRef<'tcx>,
 
     pub constness: BoundConstness,
+
+    pub polarity: ImplPolarity,
 }
 
 pub type PolyTraitPredicate<'tcx> = ty::Binder<'tcx, TraitPredicate<'tcx>>;
@@ -790,7 +850,11 @@ impl<'tcx> ToPredicate<'tcx> for ConstnessAnd<PolyTraitRef<'tcx>> {
     fn to_predicate(self, tcx: TyCtxt<'tcx>) -> Predicate<'tcx> {
         self.value
             .map_bound(|trait_ref| {
-                PredicateKind::Trait(ty::TraitPredicate { trait_ref, constness: self.constness })
+                PredicateKind::Trait(ty::TraitPredicate {
+                    trait_ref,
+                    constness: self.constness,
+                    polarity: ty::ImplPolarity::Positive,
+                })
             })
             .to_predicate(tcx)
     }
@@ -1491,6 +1555,9 @@ bitflags! {
         const IS_LINEAR          = 1 << 3;
         // If true, don't expose any niche to type's context.
         const HIDE_NICHE         = 1 << 4;
+        // If true, the type's layout can be randomized using
+        // the seed stored in `ReprOptions.layout_seed`
+        const RANDOMIZE_LAYOUT   = 1 << 5;
         // Any of these flags being set prevent field reordering optimisation.
         const IS_UNOPTIMISABLE   = ReprFlags::IS_C.bits |
                                    ReprFlags::IS_SIMD.bits |
@@ -1505,6 +1572,14 @@ pub struct ReprOptions {
     pub align: Option<Align>,
     pub pack: Option<Align>,
     pub flags: ReprFlags,
+    /// The seed to be used for randomizing a type's layout
+    ///
+    /// Note: This could technically be a `[u8; 16]` (a `u128`) which would
+    /// be the "most accurate" hash as it'd encompass the item and crate
+    /// hash without loss, but it does pay the price of being larger.
+    /// Everything's a tradeoff, a `u64` seed should be sufficient for our
+    /// purposes (primarily `-Z randomize-layout`)
+    pub field_shuffle_seed: u64,
 }
 
 impl ReprOptions {
@@ -1513,6 +1588,11 @@ impl ReprOptions {
         let mut size = None;
         let mut max_align: Option<Align> = None;
         let mut min_pack: Option<Align> = None;
+
+        // Generate a deterministically-derived seed from the item's path hash
+        // to allow for cross-crate compilation to actually work
+        let field_shuffle_seed = tcx.def_path_hash(did).0.to_smaller_hash();
+
         for attr in tcx.get_attrs(did).iter() {
             for r in attr::find_repr_attrs(&tcx.sess, attr) {
                 flags.insert(match r {
@@ -1541,33 +1621,45 @@ impl ReprOptions {
             }
         }
 
+        // If `-Z randomize-layout` was enabled for the type definition then we can
+        // consider performing layout randomization
+        if tcx.sess.opts.debugging_opts.randomize_layout {
+            flags.insert(ReprFlags::RANDOMIZE_LAYOUT);
+        }
+
         // This is here instead of layout because the choice must make it into metadata.
         if !tcx.consider_optimizing(|| format!("Reorder fields of {:?}", tcx.def_path_str(did))) {
             flags.insert(ReprFlags::IS_LINEAR);
         }
-        ReprOptions { int: size, align: max_align, pack: min_pack, flags }
+
+        Self { int: size, align: max_align, pack: min_pack, flags, field_shuffle_seed }
     }
 
     #[inline]
     pub fn simd(&self) -> bool {
         self.flags.contains(ReprFlags::IS_SIMD)
     }
+
     #[inline]
     pub fn c(&self) -> bool {
         self.flags.contains(ReprFlags::IS_C)
     }
+
     #[inline]
     pub fn packed(&self) -> bool {
         self.pack.is_some()
     }
+
     #[inline]
     pub fn transparent(&self) -> bool {
         self.flags.contains(ReprFlags::IS_TRANSPARENT)
     }
+
     #[inline]
     pub fn linear(&self) -> bool {
         self.flags.contains(ReprFlags::IS_LINEAR)
     }
+
     #[inline]
     pub fn hide_niche(&self) -> bool {
         self.flags.contains(ReprFlags::HIDE_NICHE)
@@ -1594,7 +1686,15 @@ impl ReprOptions {
                 return true;
             }
         }
+
         self.flags.intersects(ReprFlags::IS_UNOPTIMISABLE) || self.int.is_some()
+    }
+
+    /// Returns `true` if this type is valid for reordering and `-Z randomize-layout`
+    /// was enabled for its declaration crate
+    pub fn can_randomize_type_layout(&self) -> bool {
+        !self.inhibit_struct_field_reordering_opt()
+            && self.flags.contains(ReprFlags::RANDOMIZE_LAYOUT)
     }
 
     /// Returns `true` if this `#[repr()]` should inhibit union ABI optimisations.
@@ -1604,8 +1704,8 @@ impl ReprOptions {
 }
 
 impl<'tcx> FieldDef {
-    /// Returns the type of this field. The `subst` is typically obtained
-    /// via the second field of `TyKind::AdtDef`.
+    /// Returns the type of this field. The resulting type is not normalized. The `subst` is
+    /// typically obtained via the second field of `TyKind::AdtDef`.
     pub fn ty(&self, tcx: TyCtxt<'tcx>, subst: SubstsRef<'tcx>) -> Ty<'tcx> {
         tcx.type_of(self.did).subst(tcx, subst)
     }
@@ -1658,18 +1758,6 @@ pub enum ImplOverlapKind {
 impl<'tcx> TyCtxt<'tcx> {
     pub fn typeck_body(self, body: hir::BodyId) -> &'tcx TypeckResults<'tcx> {
         self.typeck(self.hir().body_owner_def_id(body))
-    }
-
-    /// Returns an iterator of the `DefId`s for all body-owners in this
-    /// crate. If you would prefer to iterate over the bodies
-    /// themselves, you can do `self.hir().krate().body_ids.iter()`.
-    pub fn body_owners(self) -> impl Iterator<Item = LocalDefId> + Captures<'tcx> + 'tcx {
-        self.hir().krate().bodies.keys().map(move |&body_id| self.hir().body_owner_def_id(body_id))
-    }
-
-    pub fn par_body_owners<F: Fn(LocalDefId) + sync::Sync + sync::Send>(self, f: F) {
-        par_iter(&self.hir().krate().bodies)
-            .for_each(|(&body_id, _)| f(self.hir().body_owner_def_id(body_id)));
     }
 
     pub fn provided_trait_methods(self, id: DefId) -> impl 'tcx + Iterator<Item = &'tcx AssocItem> {
@@ -1844,7 +1932,8 @@ impl<'tcx> TyCtxt<'tcx> {
                 | DefKind::Static
                 | DefKind::AssocConst
                 | DefKind::Ctor(..)
-                | DefKind::AnonConst => self.mir_for_ctfe_opt_const_arg(def),
+                | DefKind::AnonConst
+                | DefKind::InlineConst => self.mir_for_ctfe_opt_const_arg(def),
                 // If the caller wants `mir_for_ctfe` of a function they should not be using
                 // `instance_mir`, so we'll assume const fn also wants the optimized version.
                 _ => {
@@ -1875,6 +1964,14 @@ impl<'tcx> TyCtxt<'tcx> {
     /// Determines whether an item is annotated with an attribute.
     pub fn has_attr(self, did: DefId, attr: Symbol) -> bool {
         self.sess.contains_name(&self.get_attrs(did), attr)
+    }
+
+    /// Determines whether an item is annotated with `doc(hidden)`.
+    pub fn is_doc_hidden(self, did: DefId) -> bool {
+        self.get_attrs(did)
+            .iter()
+            .filter_map(|attr| if attr.has_name(sym::doc) { attr.meta_item_list() } else { None })
+            .any(|items| items.iter().any(|item| item.has_name(sym::hidden)))
     }
 
     /// Returns `true` if this is an `auto trait`.
@@ -2028,6 +2125,7 @@ pub fn provide(providers: &mut ty::query::Providers) {
         trait_impls_of: trait_def::trait_impls_of_provider,
         type_uninhabited_from: inhabitedness::type_uninhabited_from,
         const_param_default: consts::const_param_default,
+        vtable_allocation: vtable::vtable_allocation_provider,
         ..*providers
     };
 }

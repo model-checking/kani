@@ -66,7 +66,7 @@ assert_eq!(x, 5);
 This will write the value `5` into the `u64` variable `x`.
 You can see that the string literal we use to specify instructions is actually a template string.
 It is governed by the same rules as Rust [format strings][format-syntax].
-The arguments that are inserted into the template however look a bit different then you may
+The arguments that are inserted into the template however look a bit different than you may
 be familiar with. First we need to specify if the variable is an input or an output of the
 inline assembly. In this case it is an output. We declared this by writing `out`.
 We also need to specify in what kind of register the assembly expects the variable.
@@ -106,7 +106,7 @@ code.
 Second, we can see that inputs are declared by writing `in` instead of `out`.
 
 Third, one of our operands has a type we haven't seen yet, `const`.
-This tells the compiler to expand this argument to value directly inside the assembly template.
+This tells the compiler to expand this argument to a value directly inside the assembly template.
 This is only possible for constants and literals.
 
 Fourth, we can see that we can specify an argument number, or name as in any format string.
@@ -257,7 +257,7 @@ unsafe {
 }
 
 println!(
-    "L1 Cache: {}",
+    "L0 Cache: {}",
     ((ebx >> 22) + 1) * (((ebx >> 12) & 0x3ff) + 1) * ((ebx & 0xfff) + 1) * (ecx + 1)
 );
 ```
@@ -319,7 +319,7 @@ fn call_foo(arg: i32) -> i32 {
 
 Note that the `fn` or `static` item does not need to be public or `#[no_mangle]`: the compiler will automatically insert the appropriate mangled symbol name into the assembly code.
 
-By default, `asm!` assumes that any register not specified as an output will have its contents preserved by the assembly code. The [`clobber_abi`](#abi-clobbers) argument to `asm!` tells the compiler to automatically insert the necessary clobber operands according to the given calling convention ABI: any register which is not fully preserved in that ABI will be treated as clobbered.
+By default, `asm!` assumes that any register not specified as an output will have its contents preserved by the assembly code. The [`clobber_abi`](#abi-clobbers) argument to `asm!` tells the compiler to automatically insert the necessary clobber operands according to the given calling convention ABI: any register which is not fully preserved in that ABI will be treated as clobbered.  Multiple `clobber_abi` arguments may be provided and all clobbers from all specified ABIs will be inserted.
 
 ## Register template modifiers
 
@@ -453,10 +453,10 @@ reg_spec := <register class> / "<explicit register>"
 operand_expr := expr / "_" / expr "=>" expr / expr "=>" "_"
 reg_operand := dir_spec "(" reg_spec ")" operand_expr
 operand := reg_operand / "const" const_expr / "sym" path
-clobber_abi := "clobber_abi(" <abi> ")"
+clobber_abi := "clobber_abi(" <abi> *["," <abi>] [","] ")"
 option := "pure" / "nomem" / "readonly" / "preserves_flags" / "noreturn" / "nostack" / "att_syntax" / "raw"
 options := "options(" option *["," option] [","] ")"
-asm := "asm!(" format_string *("," format_string) *("," [ident "="] operand) ["," clobber_abi]  ["," options] [","] ")"
+asm := "asm!(" format_string *("," format_string) *("," [ident "="] operand) *("," clobber_abi) *("," options) [","] ")"
 ```
 
 Inline assembly is currently supported on the following architectures:
@@ -562,9 +562,12 @@ Here is the list of currently supported register classes:
 | AArch64 | `vreg` | `v[0-31]` | `w` |
 | AArch64 | `vreg_low16` | `v[0-15]` | `x` |
 | AArch64 | `preg` | `p[0-15]`, `ffr` | Only clobbers |
-| ARM | `reg` | `r[0-12]`, `r14` | `r` |
-| ARM (Thumb) | `reg_thumb` | `r[0-r7]` | `l` |
+| ARM (ARM) | `reg` | `r[0-12]`, `r14` | `r` |
+| ARM (Thumb2) | `reg` | `r[0-12]`, `r14` | `r` |
+| ARM (Thumb1) | `reg` | `r[0-7]` | `r` |
 | ARM (ARM) | `reg_thumb` | `r[0-r12]`, `r14` | `l` |
+| ARM (Thumb2) | `reg_thumb` | `r[0-7]` | `l` |
+| ARM (Thumb1) | `reg_thumb` | `r[0-7]` | `l` |
 | ARM | `sreg` | `s[0-31]` | `t` |
 | ARM | `sreg_low16` | `s[0-15]` | `x` |
 | ARM | `dreg` | `d[0-31]` | `w` |
@@ -613,8 +616,8 @@ Each register class has constraints on which value types they can be used with. 
 | x86 | `xmm_reg` | `sse` | `i32`, `f32`, `i64`, `f64`, <br> `i8x16`, `i16x8`, `i32x4`, `i64x2`, `f32x4`, `f64x2` |
 | x86 | `ymm_reg` | `avx` | `i32`, `f32`, `i64`, `f64`, <br> `i8x16`, `i16x8`, `i32x4`, `i64x2`, `f32x4`, `f64x2` <br> `i8x32`, `i16x16`, `i32x8`, `i64x4`, `f32x8`, `f64x4` |
 | x86 | `zmm_reg` | `avx512f` | `i32`, `f32`, `i64`, `f64`, <br> `i8x16`, `i16x8`, `i32x4`, `i64x2`, `f32x4`, `f64x2` <br> `i8x32`, `i16x16`, `i32x8`, `i64x4`, `f32x8`, `f64x4` <br> `i8x64`, `i16x32`, `i32x16`, `i64x8`, `f32x16`, `f64x8` |
-| x86 | `kreg` | `axv512f` | `i8`, `i16` |
-| x86 | `kreg` | `axv512bw` | `i32`, `i64` |
+| x86 | `kreg` | `avx512f` | `i8`, `i16` |
+| x86 | `kreg` | `avx512bw` | `i32`, `i64` |
 | x86 | `mmx_reg` | N/A | Only clobbers |
 | x86 | `x87_reg` | N/A | Only clobbers |
 | AArch64 | `reg` | None | `i8`, `i16`, `i32`, `f32`, `i64`, `f64` |
@@ -799,6 +802,8 @@ As stated in the previous section, passing an input value smaller than the regis
 
 The `clobber_abi` keyword can be used to apply a default set of clobbers to an `asm` block. This will automatically insert the necessary clobber constraints as needed for calling a function with a particular calling convention: if the calling convention does not fully preserve the value of a register across a call then a `lateout("reg") _` is implicitly added to the operands list.
 
+`clobber_abi` may be specified any number of times. It will insert a clobber for all unique registers in the union of all specified calling conventions.
+
 Generic register class outputs are disallowed by the compiler when `clobber_abi` is used: all outputs must specify an explicit register. Explicit register outputs have precedence over the implicit clobbers inserted by `clobber_abi`: a clobber will only be inserted for a register if that register is not used as an output.
 The following ABIs can be used with `clobber_abi`:
 
@@ -885,5 +890,7 @@ The compiler performs some additional checks on options:
     - You are responsible for switching any target-specific state (e.g. thread-local storage, stack bounds).
     - The set of memory locations that you may access is the intersection of those allowed by the `asm!` blocks you entered and exited.
 - You cannot assume that an `asm!` block will appear exactly once in the output binary. The compiler is allowed to instantiate multiple copies of the `asm!` block, for example when the function containing it is inlined in multiple places.
+- On x86, inline assembly must not end with an instruction prefix (such as `LOCK`) that would apply to instructions generated by the compiler.
+  - The compiler is currently unable to detect this due to the way inline assembly is compiled, but may catch and reject this in the future.
 
 > **Note**: As a general rule, the flags covered by `preserves_flags` are those which are *not* preserved when performing a function call.

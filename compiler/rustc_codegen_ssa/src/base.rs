@@ -18,8 +18,8 @@ use rustc_hir as hir;
 use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_hir::lang_items::LangItem;
 use rustc_index::vec::Idx;
+use rustc_metadata::EncodedMetadata;
 use rustc_middle::middle::codegen_fn_attrs::CodegenFnAttrs;
-use rustc_middle::middle::cstore::EncodedMetadata;
 use rustc_middle::middle::lang_items;
 use rustc_middle::mir::mono::{CodegenUnit, CodegenUnitNameBuilder, MonoItem};
 use rustc_middle::ty::layout::{HasTyCtxt, LayoutOf, TyAndLayout};
@@ -874,7 +874,6 @@ impl CrateInfo {
 }
 
 pub fn provide(providers: &mut Providers) {
-    providers.skip_monomorphize = |_, _| false;
     providers.backend_optimization_level = |tcx, cratenum| {
         let for_speed = match tcx.sess.opts.optimize {
             // If globally no optimisation is done, #[optimize] has no effect.

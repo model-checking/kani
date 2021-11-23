@@ -101,9 +101,9 @@ endif
 # Extra flags needed to compile a working executable with the standard library
 ifdef IS_WINDOWS
 ifdef IS_MSVC
-	EXTRACFLAGS := ws2_32.lib userenv.lib advapi32.lib
+	EXTRACFLAGS := ws2_32.lib userenv.lib advapi32.lib bcrypt.lib
 else
-	EXTRACFLAGS := -lws2_32 -luserenv
+	EXTRACFLAGS := -lws2_32 -luserenv -lbcrypt
 	EXTRACXXFLAGS := -lstdc++
 	# So this is a bit hacky: we can't use the DLL version of libstdc++ because
 	# it pulls in the DLL version of libgcc, which means that we end up with 2
@@ -117,10 +117,10 @@ else
 	# that it is compiled with the expectation that pthreads is dynamically
 	# linked as a DLL and will fail to link with a statically linked libpthread.
 	#
-	# So we end up with the following hack: we link use static-nobundle to only
+	# So we end up with the following hack: we link use static:-bundle to only
 	# link the parts of libstdc++ that we actually use, which doesn't include
 	# the dependency on the pthreads DLL.
-	EXTRARSCXXFLAGS := -l static-nobundle=stdc++
+	EXTRARSCXXFLAGS := -l static:-bundle=stdc++ -Z unstable-options
 endif
 else
 ifeq ($(UNAME),Darwin)

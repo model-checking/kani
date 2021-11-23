@@ -80,9 +80,8 @@ pub fn is_const_evaluatable<'cx, 'tcx>(
                     Concrete,
                 }
                 let mut failure_kind = FailureKind::Concrete;
-                walk_abstract_const::<!, _>(tcx, ct, |node| match node.root() {
+                walk_abstract_const::<!, _>(tcx, ct, |node| match node.root(tcx) {
                     Node::Leaf(leaf) => {
-                        let leaf = leaf.subst(tcx, ct.substs);
                         if leaf.has_infer_types_or_consts() {
                             failure_kind = FailureKind::MentionsInfer;
                         } else if leaf.definitely_has_param_types_or_consts(tcx) {
@@ -92,7 +91,6 @@ pub fn is_const_evaluatable<'cx, 'tcx>(
                         ControlFlow::CONTINUE
                     }
                     Node::Cast(_, _, ty) => {
-                        let ty = ty.subst(tcx, ct.substs);
                         if ty.has_infer_types_or_consts() {
                             failure_kind = FailureKind::MentionsInfer;
                         } else if ty.definitely_has_param_types_or_consts(tcx) {
@@ -153,7 +151,7 @@ pub fn is_const_evaluatable<'cx, 'tcx>(
 
     if concrete.is_ok() && uv.substs(infcx.tcx).definitely_has_param_types_or_consts(infcx.tcx) {
         match infcx.tcx.def_kind(uv.def.did) {
-            DefKind::AnonConst => {
+            DefKind::AnonConst | DefKind::InlineConst => {
                 let mir_body = infcx.tcx.mir_for_ctfe_opt_const_arg(uv.def);
 
                 if mir_body.is_polymorphic {
@@ -187,8 +185,8 @@ pub fn is_const_evaluatable<'cx, 'tcx>(
 pub struct AbstractConst<'tcx> {
     // FIXME: Consider adding something like `IndexSlice`
     // and use this here.
-    pub inner: &'tcx [Node<'tcx>],
-    pub substs: SubstsRef<'tcx>,
+    inner: &'tcx [Node<'tcx>],
+    substs: SubstsRef<'tcx>,
 }
 
 impl<'tcx> AbstractConst<'tcx> {
@@ -218,8 +216,14 @@ impl<'tcx> AbstractConst<'tcx> {
     }
 
     #[inline]
-    pub fn root(self) -> Node<'tcx> {
-        self.inner.last().copied().unwrap()
+    pub fn root(self, tcx: TyCtxt<'tcx>) -> Node<'tcx> {
+        let node = self.inner.last().copied().unwrap();
+        match node {
+            Node::Leaf(leaf) => Node::Leaf(leaf.subst(tcx, self.substs)),
+            Node::Cast(kind, operand, ty) => Node::Cast(kind, operand, ty.subst(tcx, self.substs)),
+            // Don't perform substitution on the following as they can't directly contain generic params
+            Node::Binop(_, _, _) | Node::UnaryOp(_, _) | Node::FunctionCall(_, _) => node,
+        }
     }
 }
 
@@ -236,12 +240,23 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
         self.body.exprs[self.body_id].span
     }
 
-    fn error(&mut self, span: Option<Span>, msg: &str) -> Result<!, ErrorReported> {
+    fn error(&mut self, span: Span, msg: &str) -> Result<!, ErrorReported> {
         self.tcx
             .sess
             .struct_span_err(self.root_span(), "overly complex generic constant")
-            .span_label(span.unwrap_or(self.root_span()), msg)
+            .span_label(span, msg)
             .help("consider moving this anonymous constant into a `const` function")
+            .emit();
+
+        Err(ErrorReported)
+    }
+    fn maybe_supported_error(&mut self, span: Span, msg: &str) -> Result<!, ErrorReported> {
+        self.tcx
+            .sess
+            .struct_span_err(self.root_span(), "overly complex generic constant")
+            .span_label(span, msg)
+            .help("consider moving this anonymous constant into a `const` function")
+            .note("this operation may be supported in the future")
             .emit();
 
         Err(ErrorReported)
@@ -267,14 +282,14 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
 
             fn visit_expr(&mut self, expr: &thir::Expr<'tcx>) {
                 self.is_poly |= expr.ty.definitely_has_param_types_or_consts(self.tcx);
-                if self.is_poly == false {
+                if !self.is_poly {
                     visit::walk_expr(self, expr)
                 }
             }
 
             fn visit_pat(&mut self, pat: &thir::Pat<'tcx>) {
                 self.is_poly |= pat.ty.definitely_has_param_types_or_consts(self.tcx);
-                if self.is_poly == false {
+                if !self.is_poly {
                     visit::walk_pat(self, pat);
                 }
             }
@@ -287,7 +302,7 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
         let mut is_poly_vis = IsThirPolymorphic { is_poly: false, thir: body, tcx };
         visit::walk_expr(&mut is_poly_vis, &body[body_id]);
         debug!("AbstractConstBuilder: is_poly={}", is_poly_vis.is_poly);
-        if is_poly_vis.is_poly == false {
+        if !is_poly_vis.is_poly {
             return Ok(None);
         }
 
@@ -337,14 +352,14 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
         Ok(match &node.kind {
             // I dont know if handling of these 3 is correct
             &ExprKind::Scope { value, .. } => self.recurse_build(value)?,
-            &ExprKind::PlaceTypeAscription { source, .. } |
-            &ExprKind::ValueTypeAscription { source, .. } => self.recurse_build(source)?,
+            &ExprKind::PlaceTypeAscription { source, .. }
+            | &ExprKind::ValueTypeAscription { source, .. } => self.recurse_build(source)?,
 
             // subtle: associated consts are literals this arm handles
             // `<T as Trait>::ASSOC` as well as `12`
             &ExprKind::Literal { literal, .. } => self.nodes.push(Node::Leaf(literal)),
 
-            ExprKind::Call { fun, args,  .. } => {
+            ExprKind::Call { fun, args, .. } => {
                 let fun = self.recurse_build(*fun)?;
 
                 let mut new_args = Vec::<NodeId>::with_capacity(args.len());
@@ -353,7 +368,7 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
                 }
                 let new_args = self.tcx.arena.alloc_slice(&new_args);
                 self.nodes.push(Node::FunctionCall(fun, new_args))
-            },
+            }
             &ExprKind::Binary { op, lhs, rhs } if Self::check_binop(op) => {
                 let lhs = self.recurse_build(lhs)?;
                 let rhs = self.recurse_build(rhs)?;
@@ -362,7 +377,7 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
             &ExprKind::Unary { op, arg } if Self::check_unop(op) => {
                 let arg = self.recurse_build(arg)?;
                 self.nodes.push(Node::UnaryOp(op, arg))
-            },
+            }
             // This is necessary so that the following compiles:
             //
             // ```
@@ -370,60 +385,100 @@ impl<'a, 'tcx> AbstractConstBuilder<'a, 'tcx> {
             //     bar::<{ N + 1 }>();
             // }
             // ```
-            ExprKind::Block { body: thir::Block { stmts: box [], expr: Some(e), .. }} => self.recurse_build(*e)?,
+            ExprKind::Block { body: thir::Block { stmts: box [], expr: Some(e), .. } } => {
+                self.recurse_build(*e)?
+            }
             // `ExprKind::Use` happens when a `hir::ExprKind::Cast` is a
             // "coercion cast" i.e. using a coercion or is a no-op.
             // This is important so that `N as usize as usize` doesnt unify with `N as usize`. (untested)
             &ExprKind::Use { source } => {
                 let arg = self.recurse_build(source)?;
                 self.nodes.push(Node::Cast(abstract_const::CastKind::Use, arg, node.ty))
-            },
+            }
             &ExprKind::Cast { source } => {
                 let arg = self.recurse_build(source)?;
                 self.nodes.push(Node::Cast(abstract_const::CastKind::As, arg, node.ty))
-            },
+            }
 
             // FIXME(generic_const_exprs): We may want to support these.
             ExprKind::AddressOf { .. }
             | ExprKind::Borrow { .. }
-            | ExprKind::Deref { .. }
-            | ExprKind::Repeat { .. }
-            | ExprKind::Array { .. }
-            | ExprKind::Block { .. }
-            | ExprKind::NeverToAny { .. }
-            | ExprKind::Tuple { .. }
-            | ExprKind::Index { .. }
-            | ExprKind::Field { .. }
-            | ExprKind::ConstBlock { .. }
-            | ExprKind::Adt(_) => self.error(
-                    Some(node.span),
-                    "unsupported operation in generic constant, this may be supported in the future",
+            | ExprKind::Deref { .. } => self.maybe_supported_error(
+                node.span,
+                "dereferencing is not supported in generic constants",
+            )?,
+            ExprKind::Repeat { .. } | ExprKind::Array { .. } =>  self.maybe_supported_error(
+                node.span,
+                "array construction is not supported in generic constants",
+            )?,
+            ExprKind::Block { .. } => self.maybe_supported_error(
+                node.span,
+                "blocks are not supported in generic constant",
+            )?,
+            ExprKind::NeverToAny { .. } => self.maybe_supported_error(
+                node.span,
+                "converting nevers to any is not supported in generic constant",
+            )?,
+            ExprKind::Tuple { .. } => self.maybe_supported_error(
+                node.span,
+                "tuple construction is not supported in generic constants",
+            )?,
+            ExprKind::Index { .. } => self.maybe_supported_error(
+                node.span,
+                "indexing is not supported in generic constant",
+            )?,
+            ExprKind::Field { .. } => self.maybe_supported_error(
+                node.span,
+                "field access is not supported in generic constant",
+            )?,
+            ExprKind::ConstBlock { .. } => self.maybe_supported_error(
+                node.span,
+                "const blocks are not supported in generic constant",
+            )?,
+            ExprKind::Adt(_) => self.maybe_supported_error(
+                node.span,
+                "struct/enum construction is not supported in generic constants",
+            )?,
+            // dont know if this is correct
+            ExprKind::Pointer { .. } =>
+                self.error(node.span, "pointer casts are not allowed in generic constants")?,
+            ExprKind::Yield { .. } =>
+                self.error(node.span, "generator control flow is not allowed in generic constants")?,
+            ExprKind::Continue { .. } | ExprKind::Break { .. } | ExprKind::Loop { .. } => self
+                .error(
+                    node.span,
+                    "loops and loop control flow are not supported in generic constants",
                 )?,
+            ExprKind::Box { .. } =>
+                self.error(node.span, "allocations are not allowed in generic constants")?,
 
-            ExprKind::Match { .. }
-            // we dont permit let stmts so `VarRef` and `UpvarRef` cant happen
-            | ExprKind::VarRef { .. }
-            | ExprKind::UpvarRef { .. }
-            | ExprKind::Closure { .. }
-            | ExprKind::Let { .. } // let expressions imply control flow
-            | ExprKind::Loop { .. }
-            | ExprKind::Assign { .. }
-            | ExprKind::StaticRef { .. }
-            | ExprKind::LogicalOp { .. }
+            ExprKind::Unary { .. } => unreachable!(),
             // we handle valid unary/binary ops above
-            | ExprKind::Unary { .. }
-            | ExprKind::Binary { .. }
-            | ExprKind::Break { .. }
-            | ExprKind::Continue { .. }
-            | ExprKind::If { .. }
-            | ExprKind::Pointer { .. } // dont know if this is correct
-            | ExprKind::ThreadLocalRef(_)
-            | ExprKind::LlvmInlineAsm { .. }
-            | ExprKind::Return { .. }
-            | ExprKind::Box { .. } // allocations not allowed in constants
-            | ExprKind::AssignOp { .. }
-            | ExprKind::InlineAsm { .. }
-            | ExprKind::Yield { .. } => self.error(Some(node.span), "unsupported operation in generic constant")?,
+            ExprKind::Binary { .. } =>
+                self.error(node.span, "unsupported binary operation in generic constants")?,
+            ExprKind::LogicalOp { .. } =>
+                self.error(node.span, "unsupported operation in generic constants, short-circuiting operations would imply control flow")?,
+            ExprKind::Assign { .. } | ExprKind::AssignOp { .. } => {
+                self.error(node.span, "assignment is not supported in generic constants")?
+            }
+            ExprKind::Closure { .. } | ExprKind::Return { .. } => self.error(
+                node.span,
+                "closures and function keywords are not supported in generic constants",
+            )?,
+            // let expressions imply control flow
+            ExprKind::Match { .. } | ExprKind::If { .. } | ExprKind::Let { .. } =>
+                self.error(node.span, "control flow is not supported in generic constants")?,
+            ExprKind::LlvmInlineAsm { .. } | ExprKind::InlineAsm { .. } => {
+                self.error(node.span, "assembly is not supported in generic constants")?
+            }
+
+            // we dont permit let stmts so `VarRef` and `UpvarRef` cant happen
+            ExprKind::VarRef { .. }
+            | ExprKind::UpvarRef { .. }
+            | ExprKind::StaticRef { .. }
+            | ExprKind::ThreadLocalRef(_) => {
+                self.error(node.span, "unsupported operation in generic constant")?
+            }
         })
     }
 }
@@ -440,7 +495,7 @@ pub(super) fn thir_abstract_const<'tcx>(
             // we want to look into them or treat them as opaque projections.
             //
             // Right now we do neither of that and simply always fail to unify them.
-            DefKind::AnonConst => (),
+            DefKind::AnonConst | DefKind::InlineConst => (),
             _ => return Ok(None),
         }
 
@@ -491,7 +546,7 @@ where
         f: &mut dyn FnMut(AbstractConst<'tcx>) -> ControlFlow<R>,
     ) -> ControlFlow<R> {
         f(ct)?;
-        let root = ct.root();
+        let root = ct.root(tcx);
         match root {
             Node::Leaf(_) => ControlFlow::CONTINUE,
             Node::Binop(_, l, r) => {
@@ -519,16 +574,14 @@ pub(super) fn try_unify<'tcx>(
     // We substitute generics repeatedly to allow AbstractConsts to unify where a
     // ConstKind::Unevalated could be turned into an AbstractConst that would unify e.g.
     // Param(N) should unify with Param(T), substs: [Unevaluated("T2", [Unevaluated("T3", [Param(N)])])]
-    while let Node::Leaf(a_ct) = a.root() {
-        let a_ct = a_ct.subst(tcx, a.substs);
+    while let Node::Leaf(a_ct) = a.root(tcx) {
         match AbstractConst::from_const(tcx, a_ct) {
             Ok(Some(a_act)) => a = a_act,
             Ok(None) => break,
             Err(_) => return true,
         }
     }
-    while let Node::Leaf(b_ct) = b.root() {
-        let b_ct = b_ct.subst(tcx, b.substs);
+    while let Node::Leaf(b_ct) = b.root(tcx) {
         match AbstractConst::from_const(tcx, b_ct) {
             Ok(Some(b_act)) => b = b_act,
             Ok(None) => break,
@@ -536,10 +589,8 @@ pub(super) fn try_unify<'tcx>(
         }
     }
 
-    match (a.root(), b.root()) {
+    match (a.root(tcx), b.root(tcx)) {
         (Node::Leaf(a_ct), Node::Leaf(b_ct)) => {
-            let a_ct = a_ct.subst(tcx, a.substs);
-            let b_ct = b_ct.subst(tcx, b.substs);
             if a_ct.ty != b_ct.ty {
                 return false;
             }

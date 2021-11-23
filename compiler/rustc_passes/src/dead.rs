@@ -243,46 +243,15 @@ impl<'tcx> MarkSymbolVisitor<'tcx> {
     /// will be ignored for the purposes of dead code analysis (see PR #85200
     /// for discussion).
     fn should_ignore_item(&self, def_id: DefId) -> bool {
-        if !self.tcx.has_attr(def_id, sym::automatically_derived)
-            && !self
-                .tcx
-                .impl_of_method(def_id)
-                .map_or(false, |impl_id| self.tcx.has_attr(impl_id, sym::automatically_derived))
-        {
-            return false;
-        }
-
-        let has_attr = |def_id| self.tcx.has_attr(def_id, sym::rustc_trivial_field_reads);
-
-        if has_attr(def_id) {
-            return true;
-        }
-
         if let Some(impl_of) = self.tcx.impl_of_method(def_id) {
-            if has_attr(impl_of) {
-                return true;
+            if !self.tcx.has_attr(impl_of, sym::automatically_derived) {
+                return false;
             }
 
             if let Some(trait_of) = self.tcx.trait_id_of_impl(impl_of) {
-                if has_attr(trait_of) {
+                if self.tcx.has_attr(trait_of, sym::rustc_trivial_field_reads) {
                     return true;
                 }
-
-                if let Some(method_ident) = self.tcx.opt_item_name(def_id) {
-                    if let Some(trait_method) = self
-                        .tcx
-                        .associated_items(trait_of)
-                        .find_by_name_and_kind(self.tcx, method_ident, ty::AssocKind::Fn, trait_of)
-                    {
-                        if has_attr(trait_method.def_id) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        } else if let Some(trait_of) = self.tcx.trait_of_item(def_id) {
-            if has_attr(trait_of) {
-                return true;
             }
         }
 
@@ -291,10 +260,7 @@ impl<'tcx> MarkSymbolVisitor<'tcx> {
 
     fn visit_node(&mut self, node: Node<'tcx>) {
         if let Some(item_def_id) = match node {
-            Node::Item(hir::Item { def_id, .. })
-            | Node::ForeignItem(hir::ForeignItem { def_id, .. })
-            | Node::TraitItem(hir::TraitItem { def_id, .. })
-            | Node::ImplItem(hir::ImplItem { def_id, .. }) => Some(def_id.to_def_id()),
+            Node::ImplItem(hir::ImplItem { def_id, .. }) => Some(def_id.to_def_id()),
             _ => None,
         } {
             if self.should_ignore_item(item_def_id) {
@@ -510,15 +476,14 @@ fn has_allow_dead_code_or_lang_attr(tcx: TyCtxt<'_>, id: hir::HirId) -> bool {
 //   or
 //   2) We are not sure to be live or not
 //     * Implementations of traits and trait methods
-struct LifeSeeder<'k, 'tcx> {
+struct LifeSeeder<'tcx> {
     worklist: Vec<LocalDefId>,
-    krate: &'k hir::Crate<'k>,
     tcx: TyCtxt<'tcx>,
     // see `MarkSymbolVisitor::struct_constructors`
     struct_constructors: FxHashMap<LocalDefId, LocalDefId>,
 }
 
-impl<'v, 'k, 'tcx> ItemLikeVisitor<'v> for LifeSeeder<'k, 'tcx> {
+impl<'v, 'tcx> ItemLikeVisitor<'v> for LifeSeeder<'tcx> {
     fn visit_item(&mut self, item: &hir::Item<'_>) {
         let allow_dead_code = has_allow_dead_code_or_lang_attr(self.tcx, item.hir_id());
         if allow_dead_code {
@@ -545,7 +510,7 @@ impl<'v, 'k, 'tcx> ItemLikeVisitor<'v> for LifeSeeder<'k, 'tcx> {
                     self.worklist.push(item.def_id);
                 }
                 for impl_item_ref in items {
-                    let impl_item = self.krate.impl_item(impl_item_ref.id);
+                    let impl_item = self.tcx.hir().impl_item(impl_item_ref.id);
                     if of_trait.is_some()
                         || has_allow_dead_code_or_lang_attr(self.tcx, impl_item.hir_id())
                     {
@@ -589,7 +554,6 @@ impl<'v, 'k, 'tcx> ItemLikeVisitor<'v> for LifeSeeder<'k, 'tcx> {
 fn create_and_seed_worklist<'tcx>(
     tcx: TyCtxt<'tcx>,
     access_levels: &privacy::AccessLevels,
-    krate: &hir::Crate<'_>,
 ) -> (Vec<LocalDefId>, FxHashMap<LocalDefId, LocalDefId>) {
     let worklist = access_levels
         .map
@@ -604,9 +568,8 @@ fn create_and_seed_worklist<'tcx>(
         .collect::<Vec<_>>();
 
     // Seed implemented trait items
-    let mut life_seeder =
-        LifeSeeder { worklist, krate, tcx, struct_constructors: Default::default() };
-    krate.visit_all_item_likes(&mut life_seeder);
+    let mut life_seeder = LifeSeeder { worklist, tcx, struct_constructors: Default::default() };
+    tcx.hir().visit_all_item_likes(&mut life_seeder);
 
     (life_seeder.worklist, life_seeder.struct_constructors)
 }
@@ -614,9 +577,8 @@ fn create_and_seed_worklist<'tcx>(
 fn find_live<'tcx>(
     tcx: TyCtxt<'tcx>,
     access_levels: &privacy::AccessLevels,
-    krate: &hir::Crate<'_>,
 ) -> FxHashSet<LocalDefId> {
-    let (worklist, struct_constructors) = create_and_seed_worklist(tcx, access_levels, krate);
+    let (worklist, struct_constructors) = create_and_seed_worklist(tcx, access_levels);
     let mut symbol_visitor = MarkSymbolVisitor {
         worklist,
         tcx,
@@ -834,8 +796,7 @@ impl Visitor<'tcx> for DeadVisitor<'tcx> {
 
 pub fn check_crate(tcx: TyCtxt<'_>) {
     let access_levels = &tcx.privacy_access_levels(());
-    let krate = tcx.hir().krate();
-    let live_symbols = find_live(tcx, access_levels, krate);
+    let live_symbols = find_live(tcx, access_levels);
     let mut visitor = DeadVisitor { tcx, live_symbols };
     tcx.hir().walk_toplevel_module(&mut visitor);
 }

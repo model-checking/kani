@@ -15,7 +15,7 @@ use rustc_span::hygiene::MacroKind;
 use rustc_span::symbol::{kw, sym, Symbol};
 
 use crate::clean::{
-    self, utils, Attributes, AttributesExt, GetDefId, ItemId, NestedAttributesExt, Type,
+    self, utils, Attributes, AttributesExt, ImplKind, ItemId, NestedAttributesExt, Type,
 };
 use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
@@ -244,7 +244,7 @@ fn build_enum(cx: &mut DocContext<'_>, did: DefId) -> clean::Enum {
     clean::Enum {
         generics: (cx.tcx.generics_of(did), predicates).clean(cx),
         variants_stripped: false,
-        variants: cx.tcx.adt_def(did).variants.clean(cx),
+        variants: cx.tcx.adt_def(did).variants.iter().map(|v| v.clean(cx)).collect(),
     }
 }
 
@@ -255,7 +255,7 @@ fn build_struct(cx: &mut DocContext<'_>, did: DefId) -> clean::Struct {
     clean::Struct {
         struct_type: variant.ctor_kind,
         generics: (cx.tcx.generics_of(did), predicates).clean(cx),
-        fields: variant.fields.clean(cx),
+        fields: variant.fields.iter().map(|x| x.clean(cx)).collect(),
         fields_stripped: false,
     }
 }
@@ -264,11 +264,9 @@ fn build_union(cx: &mut DocContext<'_>, did: DefId) -> clean::Union {
     let predicates = cx.tcx.explicit_predicates_of(did);
     let variant = cx.tcx.adt_def(did).non_enum_variant();
 
-    clean::Union {
-        generics: (cx.tcx.generics_of(did), predicates).clean(cx),
-        fields: variant.fields.clean(cx),
-        fields_stripped: false,
-    }
+    let generics = (cx.tcx.generics_of(did), predicates).clean(cx);
+    let fields = variant.fields.iter().map(|x| x.clean(cx)).collect();
+    clean::Union { generics, fields, fields_stripped: false }
 }
 
 fn build_type_alias(cx: &mut DocContext<'_>, did: DefId) -> clean::Typedef {
@@ -318,14 +316,14 @@ fn merge_attrs(
             } else {
                 Attributes::from_ast(&both, None)
             },
-            both.cfg(cx.sess()),
+            both.cfg(cx.tcx, &cx.cache.hidden_cfg),
         )
     } else {
-        (old_attrs.clean(cx), old_attrs.cfg(cx.sess()))
+        (old_attrs.clean(cx), old_attrs.cfg(cx.tcx, &cx.cache.hidden_cfg))
     }
 }
 
-/// Builds a specific implementation of a type. The `did` could be a type method or trait method.
+/// Inline an `impl`, inherent or of a trait. The `did` must be for an `impl`.
 crate fn build_impl(
     cx: &mut DocContext<'_>,
     parent_module: impl Into<Option<DefId>>,
@@ -336,6 +334,8 @@ crate fn build_impl(
     if !cx.inlined.insert(did.into()) {
         return;
     }
+
+    let _prof_timer = cx.tcx.sess.prof.generic_activity("build_extern_trait_impl");
 
     let tcx = cx.tcx;
     let associated_trait = tcx.impl_trait_ref(did);
@@ -376,7 +376,7 @@ crate fn build_impl(
     // Only inline impl if the implementing type is
     // reachable in rustdoc generated documentation
     if !did.is_local() {
-        if let Some(did) = for_.def_id() {
+        if let Some(did) = for_.def_id(&cx.cache) {
             if !cx.cache.access_levels.is_public(did) {
                 return;
             }
@@ -435,7 +435,7 @@ crate fn build_impl(
             tcx.associated_items(did)
                 .in_definition_order()
                 .filter_map(|item| {
-                    if associated_trait.is_some() || item.vis == ty::Visibility::Public {
+                    if associated_trait.is_some() || item.vis.is_public() {
                         Some(item.clean(cx))
                     } else {
                         None
@@ -446,20 +446,26 @@ crate fn build_impl(
         ),
     };
     let polarity = tcx.impl_polarity(did);
-    let trait_ = associated_trait.clean(cx).map(|bound| match bound {
-        clean::GenericBound::TraitBound(polyt, _) => polyt.trait_,
-        clean::GenericBound::Outlives(..) => unreachable!(),
-    });
-    if trait_.def_id() == tcx.lang_items().deref_trait() {
+    let trait_ = associated_trait.map(|t| t.clean(cx));
+    if trait_.as_ref().map(|t| t.def_id()) == tcx.lang_items().deref_trait() {
         super::build_deref_target_impls(cx, &trait_items, ret);
     }
 
     // Return if the trait itself or any types of the generic parameters are doc(hidden).
-    let mut stack: Vec<&Type> = trait_.iter().collect();
-    stack.push(&for_);
+    let mut stack: Vec<&Type> = vec![&for_];
+
+    if let Some(did) = trait_.as_ref().map(|t| t.def_id()) {
+        if tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
+            return;
+        }
+    }
+    if let Some(generics) = trait_.as_ref().and_then(|t| t.generics()) {
+        stack.extend(generics);
+    }
+
     while let Some(ty) = stack.pop() {
-        if let Some(did) = ty.def_id() {
-            if cx.tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
+        if let Some(did) = ty.def_id(&cx.cache) {
+            if tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
                 return;
             }
         }
@@ -468,27 +474,29 @@ crate fn build_impl(
         }
     }
 
-    if let Some(trait_did) = trait_.def_id() {
-        record_extern_trait(cx, trait_did);
+    if let Some(did) = trait_.as_ref().map(|t| t.def_id()) {
+        record_extern_trait(cx, did);
     }
 
     let (merged_attrs, cfg) = merge_attrs(cx, parent_module.into(), load_attrs(cx, did), attrs);
     trace!("merged_attrs={:?}", merged_attrs);
 
-    trace!("build_impl: impl {:?} for {:?}", trait_.def_id(), for_.def_id());
+    trace!(
+        "build_impl: impl {:?} for {:?}",
+        trait_.as_ref().map(|t| t.def_id()),
+        for_.def_id(&cx.cache)
+    );
     ret.push(clean::Item::from_def_id_and_attrs_and_parts(
         did,
         None,
         clean::ImplItem(clean::Impl {
-            span: clean::types::rustc_span(did, cx.tcx),
             unsafety: hir::Unsafety::Normal,
             generics,
             trait_,
             for_,
             items: trait_items,
-            negative_polarity: polarity.clean(cx),
-            synthetic: false,
-            blanket_impl: None,
+            polarity,
+            kind: ImplKind::Normal,
         }),
         box merged_attrs,
         cx,
@@ -507,7 +515,7 @@ fn build_module(
     // two namespaces, so the target may be listed twice. Make sure we only
     // visit each node at most once.
     for &item in cx.tcx.item_children(did).iter() {
-        if item.vis == ty::Visibility::Public {
+        if item.vis.is_public() {
             let res = item.res.expect_non_local();
             if let Some(def_id) = res.mod_def_id() {
                 if did == def_id || !visited.insert(def_id) {
@@ -526,7 +534,6 @@ fn build_module(
                         item.ident.name,
                         clean::ImportSource {
                             path: clean::Path {
-                                global: false,
                                 res,
                                 segments: vec![clean::PathSegment {
                                     name: prim_ty.as_sym(),
@@ -621,11 +628,10 @@ fn filter_non_trait_generics(trait_did: DefId, mut g: clean::Generics) -> clean:
                 ref mut bounds,
                 ..
             } if *s == kw::SelfUpper => {
-                bounds.retain(|bound| match *bound {
-                    clean::GenericBound::TraitBound(
-                        clean::PolyTrait { trait_: clean::ResolvedPath { did, .. }, .. },
-                        _,
-                    ) => did != trait_did,
+                bounds.retain(|bound| match bound {
+                    clean::GenericBound::TraitBound(clean::PolyTrait { trait_, .. }, _) => {
+                        trait_.def_id() != trait_did
+                    }
                     _ => true,
                 });
             }
@@ -633,18 +639,12 @@ fn filter_non_trait_generics(trait_did: DefId, mut g: clean::Generics) -> clean:
         }
     }
 
-    g.where_predicates.retain(|pred| match *pred {
+    g.where_predicates.retain(|pred| match pred {
         clean::WherePredicate::BoundPredicate {
-            ty:
-                clean::QPath {
-                    self_type: box clean::Generic(ref s),
-                    trait_: box clean::ResolvedPath { did, .. },
-                    name: ref _name,
-                    ..
-                },
-            ref bounds,
+            ty: clean::QPath { self_type: box clean::Generic(ref s), trait_, name: _, .. },
+            bounds,
             ..
-        } => !(bounds.is_empty() || *s == kw::SelfUpper && did == trait_did),
+        } => !(bounds.is_empty() || *s == kw::SelfUpper && trait_.def_id() == trait_did),
         _ => true,
     });
     g

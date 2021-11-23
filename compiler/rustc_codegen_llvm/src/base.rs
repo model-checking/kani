@@ -25,9 +25,9 @@ use rustc_codegen_ssa::mono_item::MonoItemExt;
 use rustc_codegen_ssa::traits::*;
 use rustc_codegen_ssa::{ModuleCodegen, ModuleKind};
 use rustc_data_structures::small_c_str::SmallCStr;
+use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph;
 use rustc_middle::middle::codegen_fn_attrs::CodegenFnAttrs;
-use rustc_middle::middle::cstore::EncodedMetadata;
 use rustc_middle::middle::exported_symbols;
 use rustc_middle::mir::mono::{Linkage, Visibility};
 use rustc_middle::ty::TyCtxt;
@@ -64,7 +64,7 @@ pub fn write_compressed_metadata<'tcx>(
 
     let (metadata_llcx, metadata_llmod) = (&*llvm_module.llcx, llvm_module.llmod());
     let mut compressed = rustc_metadata::METADATA_HEADER.to_vec();
-    FrameEncoder::new(&mut compressed).write_all(&metadata.raw_data).unwrap();
+    FrameEncoder::new(&mut compressed).write_all(metadata.raw_data()).unwrap();
 
     let llmeta = common::bytes_in_context(metadata_llcx, &compressed);
     let llconst = common::struct_in_context(metadata_llcx, &[llmeta], false);
@@ -113,8 +113,13 @@ pub fn compile_codegen_unit(
     let start_time = Instant::now();
 
     let dep_node = tcx.codegen_unit(cgu_name).codegen_dep_node(tcx);
-    let (module, _) =
-        tcx.dep_graph.with_task(dep_node, tcx, cgu_name, module_codegen, dep_graph::hash_result);
+    let (module, _) = tcx.dep_graph.with_task(
+        dep_node,
+        tcx,
+        cgu_name,
+        module_codegen,
+        Some(dep_graph::hash_result),
+    );
     let time_to_codegen = start_time.elapsed();
 
     // We assume that the cost to run LLVM on a CGU is proportional to

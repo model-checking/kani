@@ -1,11 +1,11 @@
 use crate::clean;
 use crate::docfs::PathError;
 use crate::error::Error;
-use crate::fold::DocFolder;
 use crate::html::format::Buffer;
 use crate::html::highlight;
 use crate::html::layout;
 use crate::html::render::{Context, BASIC_KEYWORDS};
+use crate::visit::DocVisitor;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::ty::TyCtxt;
@@ -16,23 +16,25 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-crate fn render(cx: &mut Context<'_>, krate: clean::Crate) -> Result<clean::Crate, Error> {
+crate fn render(cx: &mut Context<'_>, krate: &clean::Crate) -> Result<(), Error> {
     info!("emitting source files");
-    let dst = cx.dst.join("src").join(&*krate.name.as_str());
+
+    let dst = cx.dst.join("src").join(&*krate.name(cx.tcx()).as_str());
     cx.shared.ensure_dir(&dst)?;
-    let mut folder = SourceCollector { dst, cx, emitted_local_sources: FxHashSet::default() };
-    Ok(folder.fold_crate(krate))
+
+    let mut collector = SourceCollector { dst, cx, emitted_local_sources: FxHashSet::default() };
+    collector.visit_crate(krate);
+    Ok(())
 }
 
 crate fn collect_local_sources<'tcx>(
     tcx: TyCtxt<'tcx>,
     src_root: &Path,
-    krate: clean::Crate,
-) -> (clean::Crate, FxHashMap<PathBuf, String>) {
+    krate: &clean::Crate,
+) -> FxHashMap<PathBuf, String> {
     let mut lsc = LocalSourcesCollector { tcx, local_sources: FxHashMap::default(), src_root };
-
-    let krate = lsc.fold_crate(krate);
-    (krate, lsc.local_sources)
+    lsc.visit_crate(krate);
+    lsc.local_sources
 }
 
 struct LocalSourcesCollector<'a, 'tcx> {
@@ -42,7 +44,7 @@ struct LocalSourcesCollector<'a, 'tcx> {
 }
 
 fn is_real_and_local(span: clean::Span, sess: &Session) -> bool {
-    span.filename(sess).is_real() && span.cnum(sess) == LOCAL_CRATE
+    span.cnum(sess) == LOCAL_CRATE && span.filename(sess).is_real()
 }
 
 impl LocalSourcesCollector<'_, '_> {
@@ -54,12 +56,13 @@ impl LocalSourcesCollector<'_, '_> {
             return;
         }
         let filename = span.filename(sess);
-        let p = match filename {
-            FileName::Real(ref file) => match file.local_path() {
-                Some(p) => p.to_path_buf(),
-                _ => return,
-            },
-            _ => return,
+        let p = if let FileName::Real(file) = filename {
+            match file.into_local_path() {
+                Some(p) => p,
+                None => return,
+            }
+        } else {
+            return;
         };
         if self.local_sources.contains_key(&*p) {
             // We've already emitted this source
@@ -67,7 +70,7 @@ impl LocalSourcesCollector<'_, '_> {
         }
 
         let mut href = String::new();
-        clean_path(&self.src_root, &p, false, |component| {
+        clean_path(self.src_root, &p, false, |component| {
             href.push_str(&component.to_string_lossy());
             href.push('/');
         });
@@ -79,13 +82,11 @@ impl LocalSourcesCollector<'_, '_> {
     }
 }
 
-impl DocFolder for LocalSourcesCollector<'_, '_> {
-    fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {
-        self.add_local_source(&item);
+impl DocVisitor for LocalSourcesCollector<'_, '_> {
+    fn visit_item(&mut self, item: &clean::Item) {
+        self.add_local_source(item);
 
-        // FIXME: if `include_sources` isn't set and DocFolder didn't require consuming the crate by value,
-        // we could return None here without having to walk the rest of the crate.
-        Some(self.fold_item_recur(item))
+        self.visit_item_recur(item)
     }
 }
 
@@ -98,8 +99,12 @@ struct SourceCollector<'a, 'tcx> {
     emitted_local_sources: FxHashSet<PathBuf>,
 }
 
-impl DocFolder for SourceCollector<'_, '_> {
-    fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {
+impl DocVisitor for SourceCollector<'_, '_> {
+    fn visit_item(&mut self, item: &clean::Item) {
+        if !self.cx.include_sources {
+            return;
+        }
+
         let tcx = self.cx.tcx();
         let span = item.span(tcx);
         let sess = tcx.sess;
@@ -107,7 +112,7 @@ impl DocFolder for SourceCollector<'_, '_> {
         // If we're not rendering sources, there's nothing to do.
         // If we're including source files, and we haven't seen this file yet,
         // then we need to render it out to the filesystem.
-        if self.cx.include_sources && is_real_and_local(span, sess) {
+        if is_real_and_local(span, sess) {
             let filename = span.filename(sess);
             let span = span.inner();
             let pos = sess.source_map().lookup_source_file(span.lo());
@@ -132,9 +137,8 @@ impl DocFolder for SourceCollector<'_, '_> {
                 }
             };
         }
-        // FIXME: if `include_sources` isn't set and DocFolder didn't require consuming the crate by value,
-        // we could return None here without having to walk the rest of the crate.
-        Some(self.fold_item_recur(item))
+
+        self.visit_item_recur(item)
     }
 }
 
@@ -168,7 +172,7 @@ impl SourceCollector<'_, 'tcx> {
         };
 
         // Remove the utf-8 BOM if any
-        let contents = if contents.starts_with('\u{feff}') { &contents[3..] } else { &contents };
+        let contents = contents.strip_prefix('\u{feff}').unwrap_or(&contents);
 
         // Create the intermediate directories
         let mut cur = self.dst.clone();
@@ -204,7 +208,16 @@ impl SourceCollector<'_, 'tcx> {
             &page,
             "",
             |buf: &mut _| {
-                print_src(buf, contents, self.cx.shared.edition(), file_span, &self.cx, &root_path)
+                print_src(
+                    buf,
+                    contents,
+                    self.cx.shared.edition(),
+                    file_span,
+                    self.cx,
+                    &root_path,
+                    None,
+                    SourceContext::Standalone,
+                )
             },
             &self.cx.shared.style_files,
         );
@@ -241,15 +254,22 @@ where
     }
 }
 
+crate enum SourceContext {
+    Standalone,
+    Embedded { offset: usize },
+}
+
 /// Wrapper struct to render the source code of a file. This will do things like
 /// adding line numbers to the left-hand side.
-fn print_src(
+crate fn print_src(
     buf: &mut Buffer,
     s: &str,
     edition: Edition,
     file_span: rustc_span::Span,
     context: &Context<'_>,
     root_path: &str,
+    decoration_info: Option<highlight::DecorationInfo>,
+    source_context: SourceContext,
 ) {
     let lines = s.lines().count();
     let mut line_numbers = Buffer::empty_from(buf);
@@ -261,7 +281,14 @@ fn print_src(
     }
     line_numbers.write_str("<pre class=\"line-numbers\">");
     for i in 1..=lines {
-        writeln!(line_numbers, "<span id=\"{0}\">{0:1$}</span>", i, cols);
+        match source_context {
+            SourceContext::Standalone => {
+                writeln!(line_numbers, "<span id=\"{0}\">{0:1$}</span>", i, cols)
+            }
+            SourceContext::Embedded { offset } => {
+                writeln!(line_numbers, "<span>{0:1$}</span>", i + offset, cols)
+            }
+        }
     }
     line_numbers.write_str("</pre>");
     highlight::render_with_highlighting(
@@ -273,5 +300,6 @@ fn print_src(
         edition,
         Some(line_numbers),
         Some(highlight::ContextInfo { context, file_span, root_path }),
+        decoration_info,
     );
 }

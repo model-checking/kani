@@ -1,4 +1,12 @@
-Rust 1.56.0 (2021-10-21)
+Version 1.56.1 (2021-11-01)
+===========================
+
+- New lints to detect the presence of bidirectional-override Unicode
+  codepoints in the compiled source code ([CVE-2021-42574])
+
+[CVE-2021-42574]: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-42574
+
+Version 1.56.0 (2021-10-21)
 ========================
 
 Language
@@ -6,7 +14,6 @@ Language
 
 - [The 2021 Edition is now stable.][rust#88100]
   See [the edition guide][rust-2021-edition-guide] for more details.
-- [You can now specify explicit discriminant values on any Rust enum.][rust#86860]
 - [The pattern in `binding @ pattern` can now also introduce new bindings.][rust#85305]
 - [Union field access is permitted in `const fn`.][rust#85769]
 
@@ -22,6 +29,7 @@ Compiler
   This feature is primarily intended for usage by `cargo fix`, rather than end users.
 - [Promote `aarch64-apple-ios-sim` to Tier 2\*.][rust#87760]
 - [Add `powerpc-unknown-freebsd` at Tier 3\*.][rust#87370]
+- [Add `riscv32imc-esp-espidf` at Tier 3\*.][rust#87666]
 
 \* Refer to Rust's [platform support page][platform-support-doc] for more
 information on Rust's tiered platform support.
@@ -50,8 +58,6 @@ Stabilised APIs
 ---------------
 
 - [`std::os::unix::fs::chroot`]
-- [`Iterator::intersperse`]
-- [`Iterator::intersperse_with`]
 - [`UnsafeCell::raw_get`]
 - [`BufWriter::into_parts`]
 - [`core::panic::{UnwindSafe, RefUnwindSafe, AssertUnwindSafe}`]
@@ -64,7 +70,6 @@ Stabilised APIs
 - [`VecDeque::shrink_to`]
 - [`HashMap::shrink_to`]
 - [`HashSet::shrink_to`]
-- [`task::ready!`]
 
 These APIs are now usable in const contexts:
 
@@ -80,7 +85,7 @@ Cargo
 - [Cargo supports specifying a minimum supported Rust version in Cargo.toml.][`rust-version`]
   This has no effect at present on dependency version selection.
   We encourage crates to specify their minimum supported Rust version, and we encourage CI systems
-  that support Rust code to include a crate's specified minimum version in the text matrix for that
+  that support Rust code to include a crate's specified minimum version in the test matrix for that
   crate by default.
 
 Compatibility notes
@@ -128,7 +133,6 @@ and related tools.
 [`VecDeque::shrink_to`]: https://doc.rust-lang.org/stable/std/collections/struct.VecDeque.html#method.shrink_to
 [`HashMap::shrink_to`]: https://doc.rust-lang.org/stable/std/collections/hash_map/struct.HashMap.html#method.shrink_to
 [`HashSet::shrink_to`]: https://doc.rust-lang.org/stable/std/collections/hash_set/struct.HashSet.html#method.shrink_to
-[`task::ready!`]: https://doc.rust-lang.org/stable/std/task/macro.ready.html
 [`std::mem::transmute`]: https://doc.rust-lang.org/stable/std/mem/fn.transmute.html
 [`slice::first`]: https://doc.rust-lang.org/stable/std/primitive.slice.html#method.first
 [`slice::split_first`]: https://doc.rust-lang.org/stable/std/primitive.slice.html#method.split_first
@@ -182,6 +186,7 @@ and related tools.
 [rust#87619]: https://github.com/rust-lang/rust/pull/87619
 [rust#81825]: https://github.com/rust-lang/rust/pull/81825#issuecomment-808406918
 [rust#88019]: https://github.com/rust-lang/rust/pull/88019
+[rust#87666]: https://github.com/rust-lang/rust/pull/87666
 
 Version 1.55.0 (2021-09-09)
 ============================

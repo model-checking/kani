@@ -1,9 +1,8 @@
-// min-llvm-version: 10.0.1
 // assembly-output: emit-asm
 // compile-flags: --target hexagon-unknown-linux-musl
 // needs-llvm-components: hexagon
 
-#![feature(no_core, lang_items, rustc_attrs, repr_simd)]
+#![feature(no_core, lang_items, rustc_attrs, repr_simd, asm_sym, asm_experimental_arch)]
 #![crate_type = "rlib"]
 #![no_core]
 #![allow(asm_sub_register, non_camel_case_types)]

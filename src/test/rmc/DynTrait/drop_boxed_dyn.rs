@@ -3,8 +3,6 @@
 
 // Check drop implementation for a boxed dynamic trait object.
 
-include!("../../rmc-prelude.rs");
-
 static mut CELL: i32 = 0;
 
 trait T {
@@ -35,10 +33,10 @@ impl Drop for Concrete2 {
     }
 }
 
-pub fn main() {
+fn main() {
     {
         let x: Box<dyn T>;
-        if __nondet() {
+        if rmc::nondet() {
             x = Box::new(Concrete1 {});
         } else {
             x = Box::new(Concrete2 {});

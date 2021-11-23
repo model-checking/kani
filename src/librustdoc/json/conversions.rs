@@ -9,7 +9,7 @@ use std::fmt;
 
 use rustc_ast::ast;
 use rustc_hir::{def::CtorKind, def_id::DefId};
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::def_id::CRATE_DEF_INDEX;
 use rustc_span::Pos;
 
@@ -218,6 +218,7 @@ fn from_clean_item(item: clean::Item, tcx: TyCtxt<'_>) -> ItemEnum {
         ConstantItem(c) => ItemEnum::Constant(c.into_tcx(tcx)),
         MacroItem(m) => ItemEnum::Macro(m.source),
         ProcMacroItem(m) => ItemEnum::ProcMacro(m.into_tcx(tcx)),
+        PrimitiveItem(p) => ItemEnum::PrimitiveType(p.as_sym().to_string()),
         AssocConstItem(t, s) => ItemEnum::AssocConst { type_: t.into_tcx(tcx), default: s },
         AssocTypeItem(g, t) => ItemEnum::AssocType {
             bounds: g.into_iter().map(|x| x.into_tcx(tcx)).collect(),
@@ -225,7 +226,7 @@ fn from_clean_item(item: clean::Item, tcx: TyCtxt<'_>) -> ItemEnum {
         },
         // `convert_item` early returns `None` for striped items
         StrippedItem(_) => unreachable!(),
-        PrimitiveItem(_) | KeywordItem(_) => {
+        KeywordItem(_) => {
             panic!("{:?} is not supported for JSON output", item)
         }
         ExternCrateItem { ref src } => ItemEnum::ExternCrate {
@@ -329,10 +330,10 @@ impl FromWithTcx<clean::GenericParamDefKind> for GenericParamDefKind {
             },
             Type { did: _, bounds, default, synthetic: _ } => GenericParamDefKind::Type {
                 bounds: bounds.into_iter().map(|x| x.into_tcx(tcx)).collect(),
-                default: default.map(|x| x.into_tcx(tcx)),
+                default: default.map(|x| (*x).into_tcx(tcx)),
             },
             Const { did: _, ty, default } => {
-                GenericParamDefKind::Const { ty: ty.into_tcx(tcx), default }
+                GenericParamDefKind::Const { ty: (*ty).into_tcx(tcx), default: default.map(|x| *x) }
             }
         }
     }
@@ -363,8 +364,11 @@ impl FromWithTcx<clean::GenericBound> for GenericBound {
         use clean::GenericBound::*;
         match bound {
             TraitBound(clean::PolyTrait { trait_, generic_params }, modifier) => {
+                // FIXME: should `trait_` be a clean::Path equivalent in JSON?
+                let trait_ =
+                    clean::ResolvedPath { did: trait_.def_id(), path: trait_ }.into_tcx(tcx);
                 GenericBound::TraitBound {
-                    trait_: trait_.into_tcx(tcx),
+                    trait_,
                     generic_params: generic_params.into_iter().map(|x| x.into_tcx(tcx)).collect(),
                     modifier: from_trait_bound_modifier(modifier),
                 }
@@ -394,15 +398,12 @@ impl FromWithTcx<clean::Type> for Type {
                 param_names: Vec::new(),
             },
             DynTrait(mut bounds, lt) => {
-                let (path, id) = match bounds.remove(0).trait_ {
-                    ResolvedPath { path, did, .. } => (path, did),
-                    _ => unreachable!(),
-                };
+                let first_trait = bounds.remove(0).trait_;
 
                 Type::ResolvedPath {
-                    name: path.whole_name(),
-                    id: from_item_id(id.into()),
-                    args: path
+                    name: first_trait.whole_name(),
+                    id: from_item_id(first_trait.def_id().into()),
+                    args: first_trait
                         .segments
                         .last()
                         .map(|args| Box::new(args.clone().args.into_tcx(tcx))),
@@ -411,7 +412,7 @@ impl FromWithTcx<clean::Type> for Type {
                         .map(|t| {
                             clean::GenericBound::TraitBound(t, rustc_hir::TraitBoundModifier::None)
                         })
-                        .chain(lt.into_iter().map(|lt| clean::GenericBound::Outlives(lt)))
+                        .chain(lt.map(clean::GenericBound::Outlives))
                         .map(|bound| bound.into_tcx(tcx))
                         .collect(),
                 }
@@ -423,7 +424,6 @@ impl FromWithTcx<clean::Type> for Type {
             Slice(t) => Type::Slice(Box::new((*t).into_tcx(tcx))),
             Array(t, s) => Type::Array { type_: Box::new((*t).into_tcx(tcx)), len: s },
             ImplTrait(g) => Type::ImplTrait(g.into_iter().map(|x| x.into_tcx(tcx)).collect()),
-            Never => Type::Never,
             Infer => Type::Infer,
             RawPointer(mutability, type_) => Type::RawPointer {
                 mutable: mutability == ast::Mutability::Mut,
@@ -434,11 +434,15 @@ impl FromWithTcx<clean::Type> for Type {
                 mutable: mutability == ast::Mutability::Mut,
                 type_: Box::new((*type_).into_tcx(tcx)),
             },
-            QPath { name, self_type, trait_, .. } => Type::QualifiedPath {
-                name: name.to_string(),
-                self_type: Box::new((*self_type).into_tcx(tcx)),
-                trait_: Box::new((*trait_).into_tcx(tcx)),
-            },
+            QPath { name, self_type, trait_, .. } => {
+                // FIXME: should `trait_` be a clean::Path equivalent in JSON?
+                let trait_ = ResolvedPath { did: trait_.def_id(), path: trait_ }.into_tcx(tcx);
+                Type::QualifiedPath {
+                    name: name.to_string(),
+                    self_type: Box::new((*self_type).into_tcx(tcx)),
+                    trait_: Box::new(trait_),
+                }
+            }
         }
     }
 }
@@ -496,17 +500,22 @@ impl FromWithTcx<clean::Trait> for Trait {
 impl FromWithTcx<clean::Impl> for Impl {
     fn from_tcx(impl_: clean::Impl, tcx: TyCtxt<'_>) -> Self {
         let provided_trait_methods = impl_.provided_trait_methods(tcx);
-        let clean::Impl {
-            unsafety,
-            generics,
-            trait_,
-            for_,
-            items,
-            negative_polarity,
-            synthetic,
-            blanket_impl,
-            span: _span,
-        } = impl_;
+        let clean::Impl { unsafety, generics, trait_, for_, items, polarity, kind } = impl_;
+        // FIXME: should `trait_` be a clean::Path equivalent in JSON?
+        let trait_ = trait_.map(|path| {
+            let did = path.def_id();
+            clean::ResolvedPath { path, did }.into_tcx(tcx)
+        });
+        // FIXME: use something like ImplKind in JSON?
+        let (synthetic, blanket_impl) = match kind {
+            clean::ImplKind::Normal => (false, None),
+            clean::ImplKind::Auto => (true, None),
+            clean::ImplKind::Blanket(ty) => (false, Some(*ty)),
+        };
+        let negative_polarity = match polarity {
+            ty::ImplPolarity::Positive | ty::ImplPolarity::Reservation => false,
+            ty::ImplPolarity::Negative => true,
+        };
         Impl {
             is_unsafe: unsafety == rustc_hir::Unsafety::Unsafe,
             generics: generics.into_tcx(tcx),
@@ -514,12 +523,12 @@ impl FromWithTcx<clean::Impl> for Impl {
                 .into_iter()
                 .map(|x| x.to_string())
                 .collect(),
-            trait_: trait_.map(|x| x.into_tcx(tcx)),
+            trait_,
             for_: for_.into_tcx(tcx),
             items: ids(items),
             negative: negative_polarity,
             synthetic,
-            blanket_impl: blanket_impl.map(|x| (*x).into_tcx(tcx)),
+            blanket_impl: blanket_impl.map(|x| x.into_tcx(tcx)),
         }
     }
 }
@@ -688,6 +697,7 @@ impl FromWithTcx<ItemType> for ItemKind {
             TraitAlias => ItemKind::TraitAlias,
             ProcAttribute => ItemKind::ProcAttribute,
             ProcDerive => ItemKind::ProcDerive,
+            Generic => unreachable!(),
         }
     }
 }

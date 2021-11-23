@@ -34,11 +34,18 @@ pub enum LLVMRustResult {
 #[repr(C)]
 pub struct LLVMRustCOFFShortExport {
     pub name: *const c_char,
+    pub ordinal_present: bool,
+    // value of `ordinal` only important when `ordinal_present` is true
+    pub ordinal: u16,
 }
 
 impl LLVMRustCOFFShortExport {
-    pub fn from_name(name: *const c_char) -> LLVMRustCOFFShortExport {
-        LLVMRustCOFFShortExport { name }
+    pub fn new(name: *const c_char, ordinal: Option<u16>) -> LLVMRustCOFFShortExport {
+        LLVMRustCOFFShortExport {
+            name,
+            ordinal_present: ordinal.is_some(),
+            ordinal: ordinal.unwrap_or(0),
+        }
     }
 }
 
@@ -216,6 +223,33 @@ pub enum RealPredicate {
     RealPredicateTrue = 15,
 }
 
+impl RealPredicate {
+    pub fn from_generic(realp: rustc_codegen_ssa::common::RealPredicate) -> Self {
+        match realp {
+            rustc_codegen_ssa::common::RealPredicate::RealPredicateFalse => {
+                RealPredicate::RealPredicateFalse
+            }
+            rustc_codegen_ssa::common::RealPredicate::RealOEQ => RealPredicate::RealOEQ,
+            rustc_codegen_ssa::common::RealPredicate::RealOGT => RealPredicate::RealOGT,
+            rustc_codegen_ssa::common::RealPredicate::RealOGE => RealPredicate::RealOGE,
+            rustc_codegen_ssa::common::RealPredicate::RealOLT => RealPredicate::RealOLT,
+            rustc_codegen_ssa::common::RealPredicate::RealOLE => RealPredicate::RealOLE,
+            rustc_codegen_ssa::common::RealPredicate::RealONE => RealPredicate::RealONE,
+            rustc_codegen_ssa::common::RealPredicate::RealORD => RealPredicate::RealORD,
+            rustc_codegen_ssa::common::RealPredicate::RealUNO => RealPredicate::RealUNO,
+            rustc_codegen_ssa::common::RealPredicate::RealUEQ => RealPredicate::RealUEQ,
+            rustc_codegen_ssa::common::RealPredicate::RealUGT => RealPredicate::RealUGT,
+            rustc_codegen_ssa::common::RealPredicate::RealUGE => RealPredicate::RealUGE,
+            rustc_codegen_ssa::common::RealPredicate::RealULT => RealPredicate::RealULT,
+            rustc_codegen_ssa::common::RealPredicate::RealULE => RealPredicate::RealULE,
+            rustc_codegen_ssa::common::RealPredicate::RealUNE => RealPredicate::RealUNE,
+            rustc_codegen_ssa::common::RealPredicate::RealPredicateTrue => {
+                RealPredicate::RealPredicateTrue
+            }
+        }
+    }
+}
+
 /// LLVMTypeKind
 #[derive(Copy, Clone, PartialEq, Debug)]
 #[repr(C)]
@@ -382,6 +416,7 @@ pub enum MetadataType {
     MD_nontemporal = 9,
     MD_mem_parallel_loop_access = 10,
     MD_nonnull = 11,
+    MD_type = 19,
 }
 
 /// LLVMRustAsmDialect
@@ -789,7 +824,7 @@ pub mod coverageinfo {
                 start_line,
                 start_col,
                 end_line,
-                end_col: ((1 as u32) << 31) | end_col,
+                end_col: (1_u32 << 31) | end_col,
                 kind: RegionKind::GapRegion,
             }
         }
@@ -968,6 +1003,8 @@ extern "C" {
     pub fn LLVMSetValueName2(Val: &Value, Name: *const c_char, NameLen: size_t);
     pub fn LLVMReplaceAllUsesWith(OldVal: &'a Value, NewVal: &'a Value);
     pub fn LLVMSetMetadata(Val: &'a Value, KindID: c_uint, Node: &'a Value);
+    pub fn LLVMGlobalSetMetadata(Val: &'a Value, KindID: c_uint, Metadata: &'a Metadata);
+    pub fn LLVMValueAsMetadata(Node: &'a Value) -> &Metadata;
 
     // Operations on constants of any type
     pub fn LLVMConstNull(Ty: &Type) -> &Value;
@@ -1700,6 +1737,8 @@ extern "C" {
 
     pub fn LLVMTimeTraceProfilerInitialize();
 
+    pub fn LLVMTimeTraceProfilerFinishThread();
+
     pub fn LLVMTimeTraceProfilerFinish(FileName: *const c_char);
 
     pub fn LLVMAddAnalysisPasses(T: &'a TargetMachine, PM: &PassManager<'a>);
@@ -1736,7 +1775,7 @@ extern "C" {
 
     pub fn LLVMDisposeMessage(message: *mut c_char);
 
-    pub fn LLVMStartMultithreaded() -> Bool;
+    pub fn LLVMIsMultithreaded() -> Bool;
 
     /// Returns a string describing the last error caused by an LLVMRust* call.
     pub fn LLVMRustGetLastError() -> *const c_char;
@@ -2153,6 +2192,7 @@ extern "C" {
         UseSoftFP: bool,
         FunctionSections: bool,
         DataSections: bool,
+        UniqueSectionNames: bool,
         TrapUnreachable: bool,
         Singlethread: bool,
         AsmComments: bool,
@@ -2176,6 +2216,7 @@ extern "C" {
         PrepareForThinLTO: bool,
         PGOGenPath: *const c_char,
         PGOUsePath: *const c_char,
+        PGOSampleUsePath: *const c_char,
     );
     pub fn LLVMRustAddLibraryInfo(
         PM: &PassManager<'a>,
@@ -2210,6 +2251,8 @@ extern "C" {
         PGOUsePath: *const c_char,
         InstrumentCoverage: bool,
         InstrumentGCOV: bool,
+        PGOSampleUsePath: *const c_char,
+        DebugInfoForProfiling: bool,
         llvm_selfprofiler: *mut c_void,
         begin_callback: SelfProfileBeforePassCallback,
         end_callback: SelfProfileAfterPassCallback,

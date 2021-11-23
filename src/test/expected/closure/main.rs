@@ -8,10 +8,8 @@ where
     some_closure(1, 1);
 }
 
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
-    let mut num: i32 = __nondet();
+fn main() {
+    let mut num: i32 = rmc::nondet();
     let y = 2;
     if num <= std::i32::MAX - 100 {
         // avoid overflow

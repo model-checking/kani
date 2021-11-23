@@ -18,7 +18,6 @@ use rustc_hir::{AnonConst, GenericParamKind};
 use rustc_index::bit_set::GrowableBitSet;
 use rustc_index::vec::Idx;
 use rustc_middle::hir::map::Map;
-use rustc_middle::middle::cstore::{EncodedMetadata, ForeignModule, LinkagePreference, NativeLib};
 use rustc_middle::middle::dependency_format::Linkage;
 use rustc_middle::middle::exported_symbols::{
     metadata_symbol_name, ExportedSymbol, SymbolExportLevel,
@@ -30,6 +29,7 @@ use rustc_middle::ty::codec::TyEncoder;
 use rustc_middle::ty::{self, SymbolName, Ty, TyCtxt};
 use rustc_serialize::{opaque, Encodable, Encoder};
 use rustc_session::config::CrateType;
+use rustc_session::cstore::{ForeignModule, LinkagePreference, NativeLib};
 use rustc_span::symbol::{sym, Ident, Symbol};
 use rustc_span::{self, ExternalSource, FileName, SourceFile, Span, SyntaxContext};
 use rustc_span::{
@@ -440,8 +440,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
     }
 
     fn encode_info_for_items(&mut self) {
-        let krate = self.tcx.hir().krate();
-        self.encode_info_for_mod(CRATE_DEF_ID, krate.module());
+        self.encode_info_for_mod(CRATE_DEF_ID, self.tcx.hir().root_module());
 
         // Proc-macro crates only export proc-macro items, which are looked
         // up using `proc_macro_data`
@@ -449,7 +448,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
             return;
         }
 
-        krate.visit_all_item_likes(&mut self.as_deep_visitor());
+        self.tcx.hir().visit_all_item_likes(&mut self.as_deep_visitor());
     }
 
     fn encode_def_path_table(&mut self) {
@@ -798,6 +797,7 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::ConstParam
         | DefKind::LifetimeParam
         | DefKind::AnonConst
+        | DefKind::InlineConst
         | DefKind::GlobalAsm
         | DefKind::Closure
         | DefKind::Generator
@@ -833,6 +833,7 @@ fn should_encode_stability(def_kind: DefKind) -> bool {
         DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::AnonConst
+        | DefKind::InlineConst
         | DefKind::GlobalAsm
         | DefKind::Closure
         | DefKind::Generator
@@ -857,9 +858,11 @@ fn should_encode_mir(tcx: TyCtxt<'_>, def_id: LocalDefId) -> (bool, bool) {
             (true, mir_opt_base)
         }
         // Constants
-        DefKind::AnonConst | DefKind::AssocConst | DefKind::Static | DefKind::Const => {
-            (true, false)
-        }
+        DefKind::AnonConst
+        | DefKind::InlineConst
+        | DefKind::AssocConst
+        | DefKind::Static
+        | DefKind::Const => (true, false),
         // Full-fledged functions
         DefKind::AssocFn | DefKind::Fn => {
             let generics = tcx.generics_of(def_id);
@@ -915,6 +918,7 @@ fn should_encode_variances(def_kind: DefKind) -> bool {
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::AnonConst
+        | DefKind::InlineConst
         | DefKind::GlobalAsm
         | DefKind::Closure
         | DefKind::Generator
@@ -940,6 +944,7 @@ fn should_encode_generics(def_kind: DefKind) -> bool {
         | DefKind::AssocFn
         | DefKind::AssocConst
         | DefKind::AnonConst
+        | DefKind::InlineConst
         | DefKind::OpaqueTy
         | DefKind::Impl
         | DefKind::Field
@@ -1087,11 +1092,11 @@ impl EncodeContext<'a, 'tcx> {
             Lazy::empty()
         };
 
-        let data = ModData { reexports, expansion: tcx.expn_that_defined(local_def_id) };
-
-        record!(self.tables.kind[def_id] <- EntryKind::Mod(self.lazy(data)));
+        record!(self.tables.kind[def_id] <- EntryKind::Mod(reexports));
         if self.is_proc_macro {
             record!(self.tables.children[def_id] <- &[]);
+            // Encode this here because we don't do it in encode_def_ids.
+            record!(self.tables.expn_that_defined[def_id] <- tcx.expn_that_defined(local_def_id));
         } else {
             record!(self.tables.children[def_id] <- md.item_ids.iter().map(|item_id| {
                 item_id.def_id.local_def_index
@@ -1320,7 +1325,9 @@ impl EncodeContext<'a, 'tcx> {
             }
             record!(self.tables.promoted_mir[def_id.to_def_id()] <- self.tcx.promoted_mir(def_id));
 
-            let unused = self.tcx.unused_generic_params(def_id);
+            let instance =
+                ty::InstanceDef::Item(ty::WithOptConstParam::unknown(def_id.to_def_id()));
+            let unused = self.tcx.unused_generic_params(instance);
             if !unused.is_empty() {
                 record!(self.tables.unused_generic_params[def_id.to_def_id()] <- unused);
             }
@@ -1751,7 +1758,7 @@ impl EncodeContext<'a, 'tcx> {
     fn encode_diagnostic_items(&mut self) -> Lazy<[(Symbol, DefIndex)]> {
         empty_proc_macro!(self);
         let tcx = self.tcx;
-        let diagnostic_items = tcx.diagnostic_items(LOCAL_CRATE);
+        let diagnostic_items = &tcx.diagnostic_items(LOCAL_CRATE).name_to_id;
         self.lazy(diagnostic_items.iter().map(|(&name, def_id)| (name, def_id.index)))
     }
 
@@ -1782,7 +1789,7 @@ impl EncodeContext<'a, 'tcx> {
         debug!("EncodeContext::encode_impls()");
         let tcx = self.tcx;
         let mut visitor = ImplVisitor { tcx, impls: FxHashMap::default() };
-        tcx.hir().krate().visit_all_item_likes(&mut visitor);
+        tcx.hir().visit_all_item_likes(&mut visitor);
 
         let mut all_impls: Vec<_> = visitor.impls.into_iter().collect();
 
@@ -2101,7 +2108,26 @@ fn prefetch_mir(tcx: TyCtxt<'_>) {
 // will allow us to slice the metadata to the precise length that we just
 // generated regardless of trailing bytes that end up in it.
 
-pub(super) fn encode_metadata(tcx: TyCtxt<'_>) -> EncodedMetadata {
+#[derive(Encodable, Decodable)]
+pub struct EncodedMetadata {
+    raw_data: Vec<u8>,
+}
+
+impl EncodedMetadata {
+    #[inline]
+    pub fn new() -> EncodedMetadata {
+        EncodedMetadata { raw_data: Vec::new() }
+    }
+
+    #[inline]
+    pub fn raw_data(&self) -> &[u8] {
+        &self.raw_data[..]
+    }
+}
+
+pub fn encode_metadata(tcx: TyCtxt<'_>) -> EncodedMetadata {
+    let _prof_timer = tcx.prof.verbose_generic_activity("generate_crate_metadata");
+
     // Since encoding metadata is not in a query, and nothing is cached,
     // there's no need to do dep-graph tracking for any of it.
     tcx.dep_graph.assert_ignored();
@@ -2166,6 +2192,9 @@ fn encode_metadata_impl(tcx: TyCtxt<'_>) -> EncodedMetadata {
     result[header + 1] = (pos >> 16) as u8;
     result[header + 2] = (pos >> 8) as u8;
     result[header + 3] = (pos >> 0) as u8;
+
+    // Record metadata size for self-profiling
+    tcx.prof.artifact_size("crate_metadata", "crate_metadata", result.len() as u64);
 
     EncodedMetadata { raw_data: result }
 }

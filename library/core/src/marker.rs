@@ -30,7 +30,7 @@ use crate::hash::Hasher;
 /// [arc]: ../../std/sync/struct.Arc.html
 /// [ub]: ../../reference/behavior-considered-undefined.html
 #[stable(feature = "rust1", since = "1.0.0")]
-#[cfg_attr(not(test), rustc_diagnostic_item = "send_trait")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "Send")]
 #[rustc_on_unimplemented(
     message = "`{Self}` cannot be sent between threads safely",
     label = "`{Self}` cannot be sent between threads safely"
@@ -359,7 +359,6 @@ pub trait StructuralEq {
 ///
 /// * Function item types (i.e., the distinct types defined for each function)
 /// * Function pointer types (e.g., `fn() -> i32`)
-/// * Array types, for all sizes, if the item type also implements `Copy` (e.g., `[i32; 123456]`)
 /// * Tuple types, if each component also implements `Copy` (e.g., `()`, `(i32, bool)`)
 /// * Closure types, if they capture no value from the environment
 ///   or if all such captured values implement `Copy` themselves.
@@ -459,7 +458,7 @@ pub macro Copy($item:item) {
 /// [transmute]: crate::mem::transmute
 /// [nomicon-send-and-sync]: ../../nomicon/send-and-sync.html
 #[stable(feature = "rust1", since = "1.0.0")]
-#[cfg_attr(not(test), rustc_diagnostic_item = "sync_trait")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "Sync")]
 #[lang = "sync"]
 #[rustc_on_unimplemented(
     message = "`{Self}` cannot be shared between threads safely",

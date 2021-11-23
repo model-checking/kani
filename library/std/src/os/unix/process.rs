@@ -39,7 +39,7 @@ pub trait CommandExt: Sealed {
 
     /// Sets the supplementary group IDs for the calling process. Translates to
     /// a `setgroups` call in the child process.
-    #[unstable(feature = "setgroups", issue = "38527", reason = "")]
+    #[unstable(feature = "setgroups", issue = "90747")]
     fn groups(
         &mut self,
         #[cfg(not(target_os = "vxworks"))] groups: &[u32],
@@ -207,7 +207,7 @@ impl CommandExt for process::Command {
 /// [`ExitStatusError`](process::ExitStatusError).
 ///
 /// On Unix, `ExitStatus` **does not necessarily represent an exit status**, as
-/// passed to the `exit` system call or returned by
+/// passed to the `_exit` system call or returned by
 /// [`ExitStatus::code()`](crate::process::ExitStatus::code).  It represents **any wait status**
 /// as returned by one of the `wait` family of system
 /// calls.
@@ -239,27 +239,27 @@ pub trait ExitStatusExt: Sealed {
     fn signal(&self) -> Option<i32>;
 
     /// If the process was terminated by a signal, says whether it dumped core.
-    #[unstable(feature = "unix_process_wait_more", issue = "80695")]
+    #[stable(feature = "unix_process_wait_more", since = "1.58.0")]
     fn core_dumped(&self) -> bool;
 
     /// If the process was stopped by a signal, returns that signal.
     ///
     /// In other words, if `WIFSTOPPED`, this returns `WSTOPSIG`.  This is only possible if the status came from
     /// a `wait` system call which was passed `WUNTRACED`, and was then converted into an `ExitStatus`.
-    #[unstable(feature = "unix_process_wait_more", issue = "80695")]
+    #[stable(feature = "unix_process_wait_more", since = "1.58.0")]
     fn stopped_signal(&self) -> Option<i32>;
 
     /// Whether the process was continued from a stopped status.
     ///
     /// Ie, `WIFCONTINUED`.  This is only possible if the status came from a `wait` system call
     /// which was passed `WCONTINUED`, and was then converted into an `ExitStatus`.
-    #[unstable(feature = "unix_process_wait_more", issue = "80695")]
+    #[stable(feature = "unix_process_wait_more", since = "1.58.0")]
     fn continued(&self) -> bool;
 
     /// Returns the underlying raw `wait` status.
     ///
     /// The returned integer is a **wait status, not an exit status**.
-    #[unstable(feature = "unix_process_wait_more", issue = "80695")]
+    #[stable(feature = "unix_process_wait_more", since = "1.58.0")]
     fn into_raw(self) -> i32;
 }
 
@@ -436,6 +436,7 @@ impl From<crate::process::ChildStderr> for OwnedFd {
 }
 
 /// Returns the OS-assigned process identifier associated with this process's parent.
+#[must_use]
 #[stable(feature = "unix_ppid", since = "1.27.0")]
 pub fn parent_id() -> u32 {
     crate::sys::os::getppid()

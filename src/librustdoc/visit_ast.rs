@@ -6,18 +6,40 @@ use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::Node;
+use rustc_hir::CRATE_HIR_ID;
 use rustc_middle::middle::privacy::AccessLevel;
 use rustc_middle::ty::TyCtxt;
-use rustc_span;
 use rustc_span::def_id::{CRATE_DEF_ID, LOCAL_CRATE};
-use rustc_span::source_map::Spanned;
 use rustc_span::symbol::{kw, sym, Symbol};
+use rustc_span::Span;
 
 use std::mem;
 
-use crate::clean::{self, AttributesExt, NestedAttributesExt};
+use crate::clean::{self, cfg::Cfg, AttributesExt, NestedAttributesExt};
 use crate::core;
-use crate::doctree::*;
+
+/// This module is used to store stuff from Rust's AST in a more convenient
+/// manner (and with prettier names) before cleaning.
+#[derive(Debug)]
+crate struct Module<'hir> {
+    crate name: Symbol,
+    crate where_inner: Span,
+    crate mods: Vec<Module<'hir>>,
+    crate id: hir::HirId,
+    // (item, renamed)
+    crate items: Vec<(&'hir hir::Item<'hir>, Option<Symbol>)>,
+    crate foreigns: Vec<(&'hir hir::ForeignItem<'hir>, Option<Symbol>)>,
+}
+
+impl Module<'hir> {
+    crate fn new(name: Symbol, id: hir::HirId, where_inner: Span) -> Module<'hir> {
+        Module { name, id, where_inner, mods: Vec::new(), items: Vec::new(), foreigns: Vec::new() }
+    }
+
+    crate fn where_outer(&self, tcx: TyCtxt<'_>) -> Span {
+        tcx.hir().span(self.id)
+    }
+}
 
 // FIXME: Should this be replaced with tcx.def_path_str?
 fn def_id_to_path(tcx: TyCtxt<'_>, did: DefId) -> Vec<String> {
@@ -71,12 +93,10 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
         self.exact_paths.entry(did).or_insert_with(|| def_id_to_path(tcx, did));
     }
 
-    crate fn visit(mut self, krate: &'tcx hir::Crate<'_>) -> Module<'tcx> {
-        let span = krate.module().inner;
+    crate fn visit(mut self) -> Module<'tcx> {
         let mut top_level_module = self.visit_mod_contents(
-            &Spanned { span, node: hir::VisibilityKind::Public },
             hir::CRATE_HIR_ID,
-            &krate.module(),
+            self.cx.tcx.hir().root_module(),
             self.cx.tcx.crate_name(LOCAL_CRATE),
         );
 
@@ -86,32 +106,63 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
         // the rexport defines the path that a user will actually see. Accordingly,
         // we add the rexport as an item here, and then skip over the original
         // definition in `visit_item()` below.
+        //
+        // We also skip `#[macro_export] macro_rules!` that have already been inserted,
+        // it can happen if within the same module a `#[macro_export] macro_rules!`
+        // is declared but also a reexport of itself producing two exports of the same
+        // macro in the same module.
+        let mut inserted = FxHashSet::default();
         for export in self.cx.tcx.module_exports(CRATE_DEF_ID).unwrap_or(&[]) {
             if let Res::Def(DefKind::Macro(_), def_id) = export.res {
                 if let Some(local_def_id) = def_id.as_local() {
                     if self.cx.tcx.has_attr(def_id, sym::macro_export) {
-                        let hir_id = self.cx.tcx.hir().local_def_id_to_hir_id(local_def_id);
-                        let item = self.cx.tcx.hir().expect_item(hir_id);
-                        top_level_module.items.push((item, None));
+                        if inserted.insert(def_id) {
+                            let hir_id = self.cx.tcx.hir().local_def_id_to_hir_id(local_def_id);
+                            let item = self.cx.tcx.hir().expect_item(hir_id);
+                            top_level_module.items.push((item, None));
+                        }
                     }
                 }
             }
         }
+
+        self.cx.cache.hidden_cfg = self
+            .cx
+            .tcx
+            .hir()
+            .attrs(CRATE_HIR_ID)
+            .iter()
+            .filter(|attr| attr.has_name(sym::doc))
+            .flat_map(|attr| attr.meta_item_list().into_iter().flatten())
+            .filter(|attr| attr.has_name(sym::cfg_hide))
+            .flat_map(|attr| {
+                attr.meta_item_list()
+                    .unwrap_or(&[])
+                    .iter()
+                    .filter_map(|attr| {
+                        Cfg::parse(attr.meta_item()?)
+                            .map_err(|e| self.cx.sess().diagnostic().span_err(e.span, e.msg))
+                            .ok()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
         self.cx.cache.exact_paths = self.exact_paths;
         top_level_module
     }
 
     fn visit_mod_contents(
         &mut self,
-        vis: &hir::Visibility<'_>,
         id: hir::HirId,
         m: &'tcx hir::Mod<'tcx>,
         name: Symbol,
     ) -> Module<'tcx> {
         let mut om = Module::new(name, id, m.inner);
+        let def_id = self.cx.tcx.hir().local_def_id(id).to_def_id();
         // Keep track of if there were any private modules in the path.
         let orig_inside_public_path = self.inside_public_path;
-        self.inside_public_path &= vis.node.is_pub();
+        self.inside_public_path &= self.cx.tcx.visibility(def_id).is_public();
         for &i in m.item_ids {
             let item = self.cx.tcx.hir().item(i);
             self.visit_item(item, None, &mut om);
@@ -228,7 +279,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
         let name = renamed.unwrap_or(item.ident.name);
 
         let def_id = item.def_id.to_def_id();
-        let is_pub = item.vis.node.is_pub() || self.cx.tcx.has_attr(def_id, sym::macro_export);
+        let is_pub = self.cx.tcx.visibility(def_id).is_public();
 
         if is_pub {
             self.store_path(item.def_id.to_def_id());
@@ -245,7 +296,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             _ if self.inlining && !is_pub => {}
             hir::ItemKind::GlobalAsm(..) => {}
             hir::ItemKind::Use(_, hir::UseKind::ListStem) => {}
-            hir::ItemKind::Use(ref path, kind) => {
+            hir::ItemKind::Use(path, kind) => {
                 let is_glob = kind == hir::UseKind::Glob;
 
                 // Struct and variant constructors and proc macro stubs always show up alongside
@@ -301,7 +352,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                 }
             }
             hir::ItemKind::Mod(ref m) => {
-                om.mods.push(self.visit_mod_contents(&item.vis, item.hir_id(), m, name));
+                om.mods.push(self.visit_mod_contents(item.hir_id(), m, name));
             }
             hir::ItemKind::Fn(..)
             | hir::ItemKind::ExternCrate(..)
@@ -337,7 +388,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
         om: &mut Module<'tcx>,
     ) {
         // If inlining we only want to include public functions.
-        if !self.inlining || item.vis.node.is_pub() {
+        if !self.inlining || self.cx.tcx.visibility(item.def_id).is_public() {
             om.foreigns.push((item, renamed));
         }
     }

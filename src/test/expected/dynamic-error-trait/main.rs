@@ -5,8 +5,6 @@
 
 use std::io::{self, Read, Write};
 
-include!("../../rmc-prelude.rs");
-
 type Result<T> = std::result::Result<T, io::Error>;
 
 pub struct MemoryMapping {
@@ -16,7 +14,7 @@ pub struct MemoryMapping {
 
 impl MemoryMapping {
     pub fn new(size: usize) -> Result<MemoryMapping> {
-        if __nondet() {
+        if rmc::nondet() {
             let mm = MemoryMapping { addr: std::ptr::null_mut(), size: size };
             Ok(mm)
         } else {
@@ -25,7 +23,7 @@ impl MemoryMapping {
     }
 }
 
-pub fn main() {
+fn main() {
     let mm = MemoryMapping::new(2);
     if mm.is_ok() {
         let mm = mm.expect("foo");

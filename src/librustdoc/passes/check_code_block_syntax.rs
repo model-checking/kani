@@ -8,9 +8,9 @@ use rustc_span::{hygiene::AstPass, ExpnData, ExpnKind, FileName, InnerSpan, DUMM
 
 use crate::clean;
 use crate::core::DocContext;
-use crate::fold::DocFolder;
 use crate::html::markdown::{self, RustCodeBlock};
 use crate::passes::Pass;
+use crate::visit::DocVisitor;
 
 crate const CHECK_CODE_BLOCK_SYNTAX: Pass = Pass {
     name: "check-code-block-syntax",
@@ -19,7 +19,8 @@ crate const CHECK_CODE_BLOCK_SYNTAX: Pass = Pass {
 };
 
 crate fn check_code_block_syntax(krate: clean::Crate, cx: &mut DocContext<'_>) -> clean::Crate {
-    SyntaxChecker { cx }.fold_crate(krate)
+    SyntaxChecker { cx }.visit_crate(&krate);
+    krate
 }
 
 struct SyntaxChecker<'a, 'tcx> {
@@ -36,7 +37,7 @@ impl<'a, 'tcx> SyntaxChecker<'a, 'tcx> {
         let source = dox[code_block.code].to_owned();
         let sess = ParseSess::with_span_handler(handler, sm);
 
-        let edition = code_block.lang_string.edition.unwrap_or(self.cx.tcx.sess.edition());
+        let edition = code_block.lang_string.edition.unwrap_or_else(|| self.cx.tcx.sess.edition());
         let expn_data = ExpnData::default(
             ExpnKind::AstPass(AstPass::TestHarness),
             DUMMY_SP,
@@ -77,7 +78,7 @@ impl<'a, 'tcx> SyntaxChecker<'a, 'tcx> {
         // The span and whether it is precise or not.
         let (sp, precise_span) = match super::source_span_for_markdown_range(
             self.cx.tcx,
-            &dox,
+            dox,
             &code_block.range,
             &item.attrs,
         ) {
@@ -123,7 +124,7 @@ impl<'a, 'tcx> SyntaxChecker<'a, 'tcx> {
 
             // FIXME(#67563): Provide more context for these errors by displaying the spans inline.
             for message in buffer.messages.iter() {
-                diag.note(&message);
+                diag.note(message);
             }
 
             diag.emit();
@@ -141,8 +142,8 @@ impl<'a, 'tcx> SyntaxChecker<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> DocFolder for SyntaxChecker<'a, 'tcx> {
-    fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {
+impl<'a, 'tcx> DocVisitor for SyntaxChecker<'a, 'tcx> {
+    fn visit_item(&mut self, item: &clean::Item) {
         if let Some(dox) = &item.attrs.collapsed_doc_value() {
             let sp = item.attr_span(self.cx.tcx);
             let extra = crate::html::markdown::ExtraInfo::new_did(
@@ -150,12 +151,12 @@ impl<'a, 'tcx> DocFolder for SyntaxChecker<'a, 'tcx> {
                 item.def_id.expect_def_id(),
                 sp,
             );
-            for code_block in markdown::rust_code_blocks(&dox, &extra) {
-                self.check_rust_syntax(&item, &dox, code_block);
+            for code_block in markdown::rust_code_blocks(dox, &extra) {
+                self.check_rust_syntax(&item, dox, code_block);
             }
         }
 
-        Some(self.fold_item_recur(item))
+        self.visit_item_recur(item)
     }
 }
 

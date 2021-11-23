@@ -168,6 +168,7 @@ pub fn provide(providers: &mut Providers) {
     use self::builtin::coerce_unsized_info;
     use self::inherent_impls::{crate_inherent_impls, inherent_impls};
     use self::inherent_impls_overlap::crate_inherent_impls_overlap_check;
+    use self::orphan::orphan_check_crate;
 
     *providers = Providers {
         coherent_trait,
@@ -175,6 +176,7 @@ pub fn provide(providers: &mut Providers) {
         inherent_impls,
         crate_inherent_impls_overlap_check,
         coerce_unsized_info,
+        orphan_check_crate,
         ..*providers
     };
 }
@@ -195,12 +197,12 @@ fn coherent_trait(tcx: TyCtxt<'_>, def_id: DefId) {
 }
 
 pub fn check_coherence(tcx: TyCtxt<'_>) {
+    tcx.sess.time("unsafety_checking", || unsafety::check(tcx));
+    tcx.ensure().orphan_check_crate(());
+
     for &trait_def_id in tcx.all_local_trait_impls(()).keys() {
         tcx.ensure().coherent_trait(trait_def_id);
     }
-
-    tcx.sess.time("unsafety_checking", || unsafety::check(tcx));
-    tcx.sess.time("orphan_checking", || orphan::check(tcx));
 
     // these queries are executed for side-effects (error reporting):
     tcx.ensure().crate_inherent_impls(());
@@ -221,7 +223,7 @@ fn check_object_overlap<'tcx>(
     }
 
     // check for overlap with the automatic `impl Trait for dyn Trait`
-    if let ty::Dynamic(ref data, ..) = trait_ref.self_ty().kind() {
+    if let ty::Dynamic(data, ..) = trait_ref.self_ty().kind() {
         // This is something like impl Trait1 for Trait2. Illegal
         // if Trait1 is a supertrait of Trait2 or Trait2 is not object safe.
 

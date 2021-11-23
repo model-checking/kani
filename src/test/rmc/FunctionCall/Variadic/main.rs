@@ -1,5 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// https://github.com/model-checking/rmc/issues/555
+// rmc-flags: --no-undefined-function-checks
+
 // Minimized from vmm-sys-util/src/linux/aio.rs new()
 #![feature(c_variadic)]
 
@@ -8,7 +12,7 @@ type c_long = i64;
 
 pub unsafe extern "C" fn syscall(_num: c_long, _: ...) {}
 
-pub fn main() {
+fn main() {
     let arg0: c_long = 0;
     let arg1: c_long = 1;
     let _x = unsafe { syscall(0, arg0, arg1) };

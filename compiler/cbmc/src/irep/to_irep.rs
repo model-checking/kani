@@ -1,11 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Converts a typed goto-program into the `Irep` serilization format of CBMC
-// TODO: consider making a macro to replace `btree_map![])` for initilizing btrees.
+// TODO: consider making a macro to replace `vector_map![])` for initilizing btrees.
 use super::super::goto_program;
 use super::super::MachineModel;
 use super::{Irep, IrepId};
-use crate::btree_map;
+use crate::vector_map;
 use goto_program::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
     Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperand,
@@ -20,21 +20,21 @@ fn arguments_irep(arguments: &[Expr], mm: &MachineModel) -> Irep {
     Irep {
         id: IrepId::Arguments,
         sub: arguments.iter().map(|x| x.to_irep(mm)).collect(),
-        named_sub: btree_map![],
+        named_sub: vector_map![],
     }
 }
 fn code_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
     Irep {
         id: IrepId::Code,
         sub: ops,
-        named_sub: btree_map![(IrepId::Statement, Irep::just_id(kind))],
+        named_sub: vector_map![(IrepId::Statement, Irep::just_id(kind))],
     }
 }
 fn side_effect_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
     Irep {
         id: IrepId::SideEffect,
         sub: ops,
-        named_sub: btree_map![(IrepId::Statement, Irep::just_id(kind))],
+        named_sub: vector_map![(IrepId::Statement, Irep::just_id(kind))],
     }
 }
 fn switch_default_irep(body: &Stmt, mm: &MachineModel) -> Irep {
@@ -116,12 +116,12 @@ impl ToIrepId for UnaryOperand {
 impl ToIrep for DatatypeComponent {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         match self {
-            DatatypeComponent::Field { name, typ } => Irep::just_named_sub(btree_map![
+            DatatypeComponent::Field { name, typ } => Irep::just_named_sub(vector_map![
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
                 (IrepId::PrettyName, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, typ.to_irep(mm)),
             ]),
-            DatatypeComponent::Padding { name, bits } => Irep::just_named_sub(btree_map![
+            DatatypeComponent::Padding { name, bits } => Irep::just_named_sub(vector_map![
                 (IrepId::CIsPadding, Irep::one()),
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, Type::unsigned_int(*bits).to_irep(mm)),
@@ -140,15 +140,15 @@ impl ToIrep for ExprValue {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         match self {
             ExprValue::AddressOf(e) => {
-                Irep { id: IrepId::AddressOf, sub: vec![e.to_irep(mm)], named_sub: btree_map![] }
+                Irep { id: IrepId::AddressOf, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
             }
             ExprValue::Array { elems } => Irep {
                 id: IrepId::Array,
                 sub: elems.iter().map(|x| x.to_irep(mm)).collect(),
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
             ExprValue::ArrayOf { elem } => {
-                Irep { id: IrepId::ArrayOf, sub: vec![elem.to_irep(mm)], named_sub: btree_map![] }
+                Irep { id: IrepId::ArrayOf, sub: vec![elem.to_irep(mm)], named_sub: vector_map![] }
             }
             ExprValue::Assign { left, right } => {
                 side_effect_irep(IrepId::Assign, vec![left.to_irep(mm), right.to_irep(mm)])
@@ -156,12 +156,12 @@ impl ToIrep for ExprValue {
             ExprValue::BinOp { op, lhs, rhs } => Irep {
                 id: op.to_irep_id(),
                 sub: vec![lhs.to_irep(mm), rhs.to_irep(mm)],
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
             ExprValue::BoolConstant(c) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: btree_map![(
+                named_sub: vector_map![(
                     IrepId::Value,
                     if *c { Irep::just_id(IrepId::True) } else { Irep::just_id(IrepId::False) },
                 )],
@@ -173,15 +173,15 @@ impl ToIrep for ExprValue {
                     IrepId::ByteExtractLittleEndian
                 },
                 sub: vec![e.to_irep(mm), Expr::int_constant(*offset, Type::ssize_t()).to_irep(mm)],
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
             ExprValue::CBoolConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(if *i { 1 } else { 0 }),)],
+                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(if *i { 1 } else { 0 }),)],
             },
             ExprValue::Dereference(e) => {
-                Irep { id: IrepId::Dereference, sub: vec![e.to_irep(mm)], named_sub: btree_map![] }
+                Irep { id: IrepId::Dereference, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
             }
             //TODO, determine if there is an endineness problem here
             ExprValue::DoubleConstant(i) => {
@@ -189,7 +189,7 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(c))],
+                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c))],
                 }
             }
             ExprValue::FloatConstant(i) => {
@@ -197,7 +197,7 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(c))],
+                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c))],
                 }
             }
             ExprValue::FunctionCall { function, arguments } => side_effect_irep(
@@ -207,22 +207,22 @@ impl ToIrep for ExprValue {
             ExprValue::If { c, t, e } => Irep {
                 id: IrepId::If,
                 sub: vec![c.to_irep(mm), t.to_irep(mm), e.to_irep(mm)],
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
             ExprValue::Index { array, index } => Irep {
                 id: IrepId::Index,
                 sub: vec![array.to_irep(mm), index.to_irep(mm)],
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
             ExprValue::IntConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(i.clone()))],
+                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(i.clone()))],
             },
             ExprValue::Member { lhs, field } => Irep {
                 id: IrepId::Member,
                 sub: vec![lhs.to_irep(mm)],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::CLvalue, Irep::one()),
                     (IrepId::ComponentName, Irep::just_string_id(field.to_string())),
                 ],
@@ -231,7 +231,7 @@ impl ToIrep for ExprValue {
             ExprValue::PointerConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Value, Irep::just_hex_id(*i))],
+                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(*i))],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
             ExprValue::StatementExpression { statements: ops } => side_effect_irep(
@@ -241,28 +241,28 @@ impl ToIrep for ExprValue {
             ExprValue::StringConstant { s } => Irep {
                 id: IrepId::StringConstant,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Value, Irep::just_string_id(s.to_string()),)],
+                named_sub: vector_map![(IrepId::Value, Irep::just_string_id(s.to_string()),)],
             },
             ExprValue::Struct { values } => Irep {
                 id: IrepId::Struct,
                 sub: values.iter().map(|x| x.to_irep(mm)).collect(),
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
             ExprValue::Symbol { identifier } => Irep {
                 id: IrepId::Symbol,
                 sub: vec![],
-                named_sub: btree_map![(
+                named_sub: vector_map![(
                     IrepId::Identifier,
                     Irep::just_string_id(identifier.to_string()),
                 )],
             },
             ExprValue::Typecast(e) => {
-                Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: btree_map![] }
+                Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
             }
             ExprValue::Union { value, field } => Irep {
                 id: IrepId::Union,
                 sub: vec![value.to_irep(mm)],
-                named_sub: btree_map![(
+                named_sub: vector_map![(
                     IrepId::ComponentName,
                     Irep::just_string_id(field.to_string()),
                 )],
@@ -270,12 +270,12 @@ impl ToIrep for ExprValue {
             ExprValue::UnOp { op: UnaryOperand::Bswap, e } => Irep {
                 id: IrepId::Bswap,
                 sub: vec![e.to_irep(mm)],
-                named_sub: btree_map![(IrepId::BitsPerByte, Irep::just_int_id(8))],
+                named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8))],
             },
             ExprValue::UnOp { op: UnaryOperand::CountLeadingZeros { allow_zero }, e } => Irep {
                 id: IrepId::CountLeadingZeros,
                 sub: vec![e.to_irep(mm)],
-                named_sub: btree_map![(
+                named_sub: vector_map![(
                     IrepId::CBoundsCheck,
                     if *allow_zero { Irep::zero() } else { Irep::one() }
                 )],
@@ -283,18 +283,18 @@ impl ToIrep for ExprValue {
             ExprValue::UnOp { op: UnaryOperand::CountTrailingZeros { allow_zero }, e } => Irep {
                 id: IrepId::CountTrailingZeros,
                 sub: vec![e.to_irep(mm)],
-                named_sub: btree_map![(
+                named_sub: vector_map![(
                     IrepId::CBoundsCheck,
                     if *allow_zero { Irep::zero() } else { Irep::one() }
                 )],
             },
             ExprValue::UnOp { op, e } => {
-                Irep { id: op.to_irep_id(), sub: vec![e.to_irep(mm)], named_sub: btree_map![] }
+                Irep { id: op.to_irep_id(), sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
             }
             ExprValue::Vector { elems } => Irep {
                 id: IrepId::Vector,
                 sub: elems.iter().map(|x| x.to_irep(mm)).collect(),
-                named_sub: btree_map![],
+                named_sub: vector_map![],
             },
         }
     }
@@ -304,7 +304,7 @@ impl ToIrep for Location {
     fn to_irep(&self, _mm: &MachineModel) -> Irep {
         match self {
             Location::None => Irep::nil(),
-            Location::BuiltinFunction { line, function_name } => Irep::just_named_sub(btree_map![
+            Location::BuiltinFunction { line, function_name } => Irep::just_named_sub(vector_map![
                 (
                     IrepId::File,
                     Irep::just_string_id(format!("<builtin-library-{}>", function_name)),
@@ -312,12 +312,12 @@ impl ToIrep for Location {
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])
             .with_named_sub_option(IrepId::Line, line.map(Irep::just_int_id)),
-            Location::Loc { file, function, line, col } => Irep::just_named_sub(btree_map![
+            Location::Loc { file, function, line, col } => Irep::just_named_sub(vector_map![
                 (IrepId::File, Irep::just_string_id(file.to_string())),
                 (IrepId::Line, Irep::just_int_id(*line)),
             ])
             .with_named_sub_option(IrepId::Column, col.map(Irep::just_int_id))
-            .with_named_sub_option(IrepId::Function, function.clone().map(Irep::just_string_id)),
+            .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id)),
         }
     }
 }
@@ -327,16 +327,10 @@ impl ToIrep for Parameter {
         Irep {
             id: IrepId::Parameter,
             sub: vec![],
-            named_sub: btree_map![(IrepId::Type, self.typ().to_irep(mm))],
+            named_sub: vector_map![(IrepId::Type, self.typ().to_irep(mm))],
         }
-        .with_named_sub_option(
-            IrepId::CIdentifier,
-            self.identifier().cloned().map(Irep::just_string_id),
-        )
-        .with_named_sub_option(
-            IrepId::CBaseName,
-            self.base_name().cloned().map(Irep::just_string_id),
-        )
+        .with_named_sub_option(IrepId::CIdentifier, self.identifier().map(Irep::just_string_id))
+        .with_named_sub_option(IrepId::CBaseName, self.base_name().map(Irep::just_string_id))
     }
 }
 
@@ -439,16 +433,16 @@ impl goto_program::Symbol {
             },
             location: self.location.to_irep(mm),
             /// Unique identifier, same as key in symbol table `foo::x`
-            name: self.name.to_string(),
+            name: self.name,
             /// Only used by verilog
-            module: self.module.clone().unwrap_or_default(),
+            module: self.module.unwrap_or("".into()),
             /// Local identifier `x`
-            base_name: self.base_name.clone().unwrap_or_default(),
+            base_name: self.base_name.unwrap_or("".into()),
             /// Almost always the same as base_name, but with name mangling can be relevant
-            pretty_name: self.pretty_name.clone().unwrap_or_default(),
+            pretty_name: self.pretty_name.unwrap_or("".into()),
             /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
             /// https://github.com/model-checking/rmc/issues/1
-            mode: self.mode.to_string(),
+            mode: self.mode.to_string().into(),
 
             // global properties
             is_type: self.is_type,
@@ -493,45 +487,45 @@ impl ToIrep for Type {
                 Irep {
                     id: IrepId::Array,
                     sub: vec![typ.to_irep(mm)],
-                    named_sub: btree_map![(IrepId::Size, size.to_irep(mm))],
+                    named_sub: vector_map![(IrepId::Size, size.to_irep(mm))],
                 }
             }
             //TODO make from_irep that matches this.
             Type::CBitField { typ, width } => Irep {
                 id: IrepId::CBitField,
                 sub: vec![typ.to_irep(mm)],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(*width))],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(*width))],
             },
             Type::Bool => Irep::just_id(IrepId::Bool),
             Type::CInteger(CIntType::Bool) => Irep {
                 id: IrepId::CBool,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(mm.bool_width()))],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(mm.bool_width()))],
             },
             Type::CInteger(CIntType::Char) => Irep {
                 id: if mm.char_is_unsigned() { IrepId::Unsignedbv } else { IrepId::Signedbv },
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(mm.char_width()),)],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(mm.char_width()),)],
             },
             Type::CInteger(CIntType::Int) => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(mm.int_width()),)],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(mm.int_width()),)],
             },
             Type::CInteger(CIntType::SizeT) => Irep {
                 id: IrepId::Unsignedbv,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
             },
             Type::CInteger(CIntType::SSizeT) => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
             },
             Type::Code { parameters, return_type } => Irep {
                 id: IrepId::Code,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (
                         IrepId::Parameters,
                         Irep::just_sub(parameters.iter().map(|x| x.to_irep(mm)).collect()),
@@ -543,7 +537,7 @@ impl ToIrep for Type {
             Type::Double => Irep {
                 id: IrepId::Floatbv,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::F, Irep::just_int_id(52)),
                     (IrepId::Width, Irep::just_int_id(64)),
                     (IrepId::CCType, Irep::just_id(IrepId::Double)),
@@ -557,13 +551,13 @@ impl ToIrep for Type {
                 Irep {
                     id: IrepId::Array,
                     sub: vec![typ.to_irep(mm)],
-                    named_sub: btree_map![(IrepId::Size, size.to_irep(mm))],
+                    named_sub: vector_map![(IrepId::Size, size.to_irep(mm))],
                 }
             }
             Type::Float => Irep {
                 id: IrepId::Floatbv,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::F, Irep::just_int_id(23)),
                     (IrepId::Width, Irep::just_int_id(32)),
                     (IrepId::CCType, Irep::just_id(IrepId::Float)),
@@ -572,7 +566,7 @@ impl ToIrep for Type {
             Type::IncompleteStruct { tag } => Irep {
                 id: IrepId::Struct,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::Tag, Irep::just_string_id(tag.to_string())),
                     (IrepId::Incomplete, Irep::one()),
                 ],
@@ -580,7 +574,7 @@ impl ToIrep for Type {
             Type::IncompleteUnion { tag } => Irep {
                 id: IrepId::Union,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::Tag, Irep::just_string_id(tag.to_string())),
                     (IrepId::Incomplete, Irep::one()),
                 ],
@@ -590,23 +584,23 @@ impl ToIrep for Type {
                 Irep {
                     id: IrepId::Array,
                     sub: vec![typ.to_irep(mm)],
-                    named_sub: btree_map![(IrepId::Size, infinity)],
+                    named_sub: vector_map![(IrepId::Size, infinity)],
                 }
             }
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,
                 sub: vec![typ.to_irep(mm)],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
             },
             Type::Signedbv { width } => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(*width))],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(*width))],
             },
             Type::Struct { tag, components } => Irep {
                 id: IrepId::Struct,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::Tag, Irep::just_string_id(tag.to_string())),
                     (
                         IrepId::Components,
@@ -617,14 +611,15 @@ impl ToIrep for Type {
             Type::StructTag(name) => Irep {
                 id: IrepId::StructTag,
                 sub: vec![],
-                named_sub: btree_map![
-                    (IrepId::Identifier, Irep::just_string_id(name.to_string()),)
-                ],
+                named_sub: vector_map![(
+                    IrepId::Identifier,
+                    Irep::just_string_id(name.to_string()),
+                )],
             },
             Type::Union { tag, components } => Irep {
                 id: IrepId::Union,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (IrepId::Tag, Irep::just_string_id(tag.to_string())),
                     (
                         IrepId::Components,
@@ -635,19 +630,20 @@ impl ToIrep for Type {
             Type::UnionTag(name) => Irep {
                 id: IrepId::UnionTag,
                 sub: vec![],
-                named_sub: btree_map![
-                    (IrepId::Identifier, Irep::just_string_id(name.to_string()),)
-                ],
+                named_sub: vector_map![(
+                    IrepId::Identifier,
+                    Irep::just_string_id(name.to_string()),
+                )],
             },
             Type::Unsignedbv { width } => Irep {
                 id: IrepId::Unsignedbv,
                 sub: Vec::new(),
-                named_sub: btree_map![(IrepId::Width, Irep::just_int_id(*width))],
+                named_sub: vector_map![(IrepId::Width, Irep::just_int_id(*width))],
             },
             Type::VariadicCode { parameters, return_type } => Irep {
                 id: IrepId::Code,
                 sub: vec![],
-                named_sub: btree_map![
+                named_sub: vector_map![
                     (
                         IrepId::Parameters,
                         Irep::just_sub(parameters.iter().map(|x| x.to_irep(mm)).collect())
@@ -661,7 +657,7 @@ impl ToIrep for Type {
                 Irep {
                     id: IrepId::Vector,
                     sub: vec![typ.to_irep(mm)],
-                    named_sub: btree_map![(IrepId::Size, size.to_irep(mm))],
+                    named_sub: vector_map![(IrepId::Size, size.to_irep(mm))],
                 }
             }
         }

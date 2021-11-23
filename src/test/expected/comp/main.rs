@@ -12,11 +12,9 @@ fn eq2(a: i32, b: i32) {
     assert!(a - b < a);
 }
 
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
-    let a = __nondet();
-    let b = __nondet();
+fn main() {
+    let a = rmc::nondet();
+    let b = rmc::nondet();
     if a > -400 && a < 100 && b < 200 && b > 0 {
         eq1(a, b);
         eq2(a, b);

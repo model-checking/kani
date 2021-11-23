@@ -35,7 +35,6 @@ use rustc_span::source_map::{original_sp, DUMMY_SP};
 use rustc_span::symbol::{kw, sym, Ident};
 use rustc_span::{self, BytePos, MultiSpan, Span};
 use rustc_trait_selection::infer::InferCtxtExt as _;
-use rustc_trait_selection::opaque_types::InferCtxtExt as _;
 use rustc_trait_selection::traits::error_reporting::InferCtxtExt as _;
 use rustc_trait_selection::traits::{
     self, ObligationCause, ObligationCauseCode, StatementAsExpression, TraitEngine, TraitEngineExt,
@@ -643,11 +642,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     #[instrument(skip(self), level = "debug")]
     pub(in super::super) fn select_all_obligations_or_error(&self) {
-        if let Err(errors) = self
+        let errors = self
             .fulfillment_cx
             .borrow_mut()
-            .select_all_with_constness_or_error(&self, self.inh.constness)
-        {
+            .select_all_with_constness_or_error(&self, self.inh.constness);
+
+        if !errors.is_empty() {
             self.report_fulfillment_errors(&errors, self.inh.body_id, false);
         }
     }
@@ -658,13 +658,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         fallback_has_occurred: bool,
         mutate_fulfillment_errors: impl Fn(&mut Vec<traits::FulfillmentError<'tcx>>),
     ) {
-        let result = self
+        let mut result = self
             .fulfillment_cx
             .borrow_mut()
             .select_with_constness_where_possible(self, self.inh.constness);
-        if let Err(mut errors) = result {
-            mutate_fulfillment_errors(&mut errors);
-            self.report_fulfillment_errors(&errors, self.inh.body_id, fallback_has_occurred);
+        if !result.is_empty() {
+            mutate_fulfillment_errors(&mut result);
+            self.report_fulfillment_errors(&result, self.inh.body_id, fallback_has_occurred);
         }
     }
 
@@ -794,14 +794,17 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         // we can.  We don't care if some things turn
                         // out unconstrained or ambiguous, as we're
                         // just trying to get hints here.
-                        self.save_and_restore_in_snapshot_flag(|_| {
+                        let errors = self.save_and_restore_in_snapshot_flag(|_| {
                             let mut fulfill = <dyn TraitEngine<'_>>::new(self.tcx);
                             for obligation in ok.obligations {
                                 fulfill.register_predicate_obligation(self, obligation);
                             }
                             fulfill.select_where_possible(self)
-                        })
-                        .map_err(|_| ())?;
+                        });
+
+                        if !errors.is_empty() {
+                            return Err(());
+                        }
                     }
                     Err(_) => return Err(()),
                 }
@@ -949,7 +952,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     let mut err = rustc_errors::struct_span_err!(
                         self.sess(),
                         self_ty.span,
-                        E0783,
+                        E0782,
                         "{}",
                         msg,
                     );
@@ -1171,8 +1174,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         {
             return None;
         }
-        let original_span = original_sp(last_stmt.span, blk.span);
-        Some((original_span.with_lo(original_span.hi() - BytePos(1)), needs_box))
+        let span = if last_stmt.span.from_expansion() {
+            let mac_call = original_sp(last_stmt.span, blk.span);
+            self.tcx.sess.source_map().mac_call_stmt_semi_span(mac_call)?
+        } else {
+            last_stmt.span.with_lo(last_stmt.span.hi() - BytePos(1))
+        };
+        Some((span, needs_box))
     }
 
     // Instantiates the given path, which must refer to an item with the given

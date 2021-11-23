@@ -1,6 +1,6 @@
 [package]
 name = "clippy"
-version = "0.1.57"
+version = "0.1.58"
 description = "A bunch of helpful lints to avoid common pitfalls in Rust"
 repository = "https://github.com/rust-lang/rust-clippy"
 readme = "README.md"
@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["clippy", "lint", "plugin"]
 categories = ["development-tools", "development-tools::cargo-plugins"]
 build = "build.rs"
-edition = "2018"
+edition = "2021"
 publish = false
 
 [[bin]]
@@ -22,13 +22,13 @@ path = "src/driver.rs"
 
 [dependencies]
 clippy_lints = { version = "0.1", path = "clippy_lints" }
-semver = "0.11"
+semver = "1.0"
 rustc_tools_util = { version = "0.2", path = "rustc_tools_util" }
 tempfile = { version = "3.2", optional = true }
 
 [dev-dependencies]
-cargo_metadata = "0.12"
-compiletest_rs = { version = "0.7", features = ["tmp"] }
+cargo_metadata = "0.14"
+compiletest_rs = { version = "0.7.1", features = ["tmp"] }
 tester = "0.9"
 regex = "1.5"
 # This is used by the `collect-metadata` alias.

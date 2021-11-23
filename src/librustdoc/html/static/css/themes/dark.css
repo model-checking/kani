@@ -93,7 +93,7 @@ pre, .rustdoc.source .example-wrap {
 	background-color: #0a042f !important;
 }
 
-.docblock h1, .docblock h2, .docblock h3, .docblock h4, .docblock h5 {
+.docblock h1, .docblock h2, .docblock h3, .docblock h4, .docblock h5, .docblock h6 {
 	border-bottom-color: #DDD;
 }
 
@@ -181,7 +181,7 @@ body.source .example-wrap pre.rust a {
 	background: #333;
 }
 
-.docblock:not(.type-decl) a:not(.srclink):not(.test-arrow),
+.docblock:not(.item-decl) a:not(.srclink):not(.test-arrow),
 .docblock-short a:not(.srclink):not(.test-arrow), .item-info a,
 #help a {
 	color: #D2991D;
@@ -217,10 +217,6 @@ details.undocumented > summary::before {
 
 .search-input:focus {
 	border-color: #008dfd;
-}
-
-.search-input:disabled {
-	background-color: #c5c4c4;
 }
 
 #crate-search + .search-input:focus {
@@ -484,4 +480,23 @@ div.files > .selected {
 }
 .setting-line > .title {
 	border-bottom-color: #ddd;
+}
+
+.scraped-example .example-wrap .rust span.highlight {
+	background: rgb(91, 59, 1);
+}
+.scraped-example .example-wrap .rust span.highlight.focus {
+	background: rgb(124, 75, 15);
+}
+.scraped-example:not(.expanded) .code-wrapper:before {
+	background: linear-gradient(to bottom, rgba(53, 53, 53, 1), rgba(53, 53, 53, 0));
+}
+.scraped-example:not(.expanded) .code-wrapper:after {
+	background: linear-gradient(to top, rgba(53, 53, 53, 1), rgba(53, 53, 53, 0));
+}
+.toggle-line-inner {
+	background: #616161;
+}
+.toggle-line:hover .toggle-line-inner {
+	background: ##898989;
 }

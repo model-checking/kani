@@ -18,6 +18,7 @@ use rustc_span::source_map::Spanned;
 use rustc_span::symbol::{sym, Ident};
 use rustc_span::Span;
 use rustc_trait_selection::infer::InferCtxtExt;
+use rustc_trait_selection::traits::{FulfillmentError, TraitEngine, TraitEngineExt};
 
 use std::ops::ControlFlow;
 
@@ -257,12 +258,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 method.sig.output()
             }
             // error types are considered "builtin"
-            Err(()) if lhs_ty.references_error() || rhs_ty.references_error() => {
-                self.tcx.ty_error()
-            }
-            Err(()) => {
+            Err(_) if lhs_ty.references_error() || rhs_ty.references_error() => self.tcx.ty_error(),
+            Err(errors) => {
                 let source_map = self.tcx.sess.source_map();
-                let (mut err, missing_trait, use_output, involves_fn) = match is_assign {
+                let (mut err, missing_trait, use_output) = match is_assign {
                     IsAssign::Yes => {
                         let mut err = struct_span_err!(
                             self.tcx.sess,
@@ -289,7 +288,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             hir::BinOpKind::Shr => Some("std::ops::ShrAssign"),
                             _ => None,
                         };
-                        (err, missing_trait, false, false)
+                        self.note_unmet_impls_on_type(&mut err, errors);
+                        (err, missing_trait, false)
                     }
                     IsAssign::No => {
                         let (message, missing_trait, use_output) = match op.node {
@@ -376,9 +376,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         };
                         let mut err =
                             struct_span_err!(self.tcx.sess, op.span, E0369, "{}", message.as_str());
-                        let mut involves_fn = false;
                         if !lhs_expr.span.eq(&rhs_expr.span) {
-                            involves_fn |= self.add_type_neq_err_label(
+                            self.add_type_neq_err_label(
                                 &mut err,
                                 lhs_expr.span,
                                 lhs_ty,
@@ -386,7 +385,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 op,
                                 is_assign,
                             );
-                            involves_fn |= self.add_type_neq_err_label(
+                            self.add_type_neq_err_label(
                                 &mut err,
                                 rhs_expr.span,
                                 rhs_ty,
@@ -395,17 +394,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 is_assign,
                             );
                         }
-                        (err, missing_trait, use_output, involves_fn)
+                        self.note_unmet_impls_on_type(&mut err, errors);
+                        (err, missing_trait, use_output)
                     }
                 };
-                let mut suggested_deref = false;
                 if let Ref(_, rty, _) = lhs_ty.kind() {
-                    if {
-                        self.infcx.type_is_copy_modulo_regions(self.param_env, rty, lhs_expr.span)
-                            && self
-                                .lookup_op_method(rty, &[rhs_ty], Op::Binary(op, is_assign))
-                                .is_ok()
-                    } {
+                    if self.infcx.type_is_copy_modulo_regions(self.param_env, rty, lhs_expr.span)
+                        && self.lookup_op_method(rty, &[rhs_ty], Op::Binary(op, is_assign)).is_ok()
+                    {
                         if let Ok(lstring) = source_map.span_to_snippet(lhs_expr.span) {
                             let msg = &format!(
                                 "`{}{}` can be used on `{}`, you can dereference `{}`",
@@ -423,7 +419,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 "*".to_string(),
                                 rustc_errors::Applicability::MachineApplicable,
                             );
-                            suggested_deref = true;
                         }
                     }
                 }
@@ -444,7 +439,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             // Check if the method would be found if the type param wasn't
                             // involved. If so, it means that adding a trait bound to the param is
                             // enough. Otherwise we do not give the suggestion.
-                            let mut eraser = TypeParamEraser(&self, expr.span);
+                            let mut eraser = TypeParamEraser(self, expr.span);
                             let needs_bound = self
                                 .lookup_op_method(
                                     eraser.fold_ty(lhs_ty),
@@ -474,8 +469,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         } else {
                             bug!("type param visitor stored a non type param: {:?}", ty.kind());
                         }
-                    } else if !suggested_deref && !involves_fn {
-                        suggest_impl_missing(&mut err, lhs_ty, &missing_trait);
                     }
                 }
                 err.emit();
@@ -496,7 +489,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         other_ty: Ty<'tcx>,
         op: hir::BinOp,
         is_assign: IsAssign,
-    ) -> bool /* did we suggest to call a function because of missing parenthesis? */ {
+    ) -> bool /* did we suggest to call a function because of missing parentheses? */ {
         err.span_label(span, ty.to_string());
         if let FnDef(def_id, _) = *ty.kind() {
             let source_map = self.tcx.sess.source_map();
@@ -506,9 +499,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             // FIXME: Instead of exiting early when encountering bound vars in
             // the function signature, consider keeping the binder here and
             // propagating it downwards.
-            let fn_sig = if let Some(fn_sig) = self.tcx.fn_sig(def_id).no_bound_vars() {
-                fn_sig
-            } else {
+            let Some(fn_sig) = self.tcx.fn_sig(def_id).no_bound_vars() else {
                 return false;
             };
 
@@ -572,7 +563,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                    on the left and may require reallocation. This \
                    requires ownership of the string on the left";
 
-        let string_type = self.tcx.get_diagnostic_item(sym::string_type);
+        let string_type = self.tcx.get_diagnostic_item(sym::String);
         let is_std_string = |ty: Ty<'tcx>| match ty.ty_adt_def() {
             Some(ty_def) => Some(ty_def.did) == string_type,
             None => false,
@@ -665,7 +656,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.write_method_call(ex.hir_id, method);
                 method.sig.output()
             }
-            Err(()) => {
+            Err(errors) => {
                 let actual = self.resolve_vars_if_possible(operand_ty);
                 if !actual.references_error() {
                     let mut err = struct_span_err!(
@@ -718,14 +709,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 }
                             }
                             Str | Never | Char | Tuple(_) | Array(_, _) => {}
-                            Ref(_, ref lty, _) if *lty.kind() == Str => {}
+                            Ref(_, lty, _) if *lty.kind() == Str => {}
                             _ => {
-                                let missing_trait = match op {
-                                    hir::UnOp::Neg => "std::ops::Neg",
-                                    hir::UnOp::Not => "std::ops::Not",
-                                    hir::UnOp::Deref => "std::ops::UnDerf",
-                                };
-                                suggest_impl_missing(&mut err, operand_ty, &missing_trait);
+                                self.note_unmet_impls_on_type(&mut err, errors);
                             }
                         }
                     }
@@ -741,7 +727,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         lhs_ty: Ty<'tcx>,
         other_tys: &[Ty<'tcx>],
         op: Op,
-    ) -> Result<MethodCallee<'tcx>, ()> {
+    ) -> Result<MethodCallee<'tcx>, Vec<FulfillmentError<'tcx>>> {
         let lang = self.tcx.lang_items();
 
         let span = match op {
@@ -820,22 +806,28 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 Op::Unary(..) => 0,
             },
         ) {
-            return Err(());
+            return Err(vec![]);
         }
 
+        let opname = Ident::with_dummy_span(opname);
         let method = trait_did.and_then(|trait_did| {
-            let opname = Ident::with_dummy_span(opname);
             self.lookup_method_in_trait(span, opname, trait_did, lhs_ty, Some(other_tys))
         });
 
-        match method {
-            Some(ok) => {
+        match (method, trait_did) {
+            (Some(ok), _) => {
                 let method = self.register_infer_ok_obligations(ok);
                 self.select_obligations_where_possible(false, |_| {});
-
                 Ok(method)
             }
-            None => Err(()),
+            (None, None) => Err(vec![]),
+            (None, Some(trait_did)) => {
+                let (obligation, _) =
+                    self.obligation_for_method(span, trait_did, lhs_ty, Some(other_tys));
+                let mut fulfill = <dyn TraitEngine<'_>>::new(self.tcx);
+                fulfill.register_predicate_obligation(self, obligation);
+                Err(fulfill.select_where_possible(&self.infcx))
+            }
         }
     }
 }
@@ -958,18 +950,6 @@ fn is_builtin_binop<'tcx>(lhs: Ty<'tcx>, rhs: Ty<'tcx>, op: hir::BinOp) -> bool 
 
         BinOpCategory::Comparison => {
             lhs.references_error() || rhs.references_error() || lhs.is_scalar() && rhs.is_scalar()
-        }
-    }
-}
-
-/// If applicable, note that an implementation of `trait` for `ty` may fix the error.
-fn suggest_impl_missing(err: &mut DiagnosticBuilder<'_>, ty: Ty<'_>, missing_trait: &str) {
-    if let Adt(def, _) = ty.peel_refs().kind() {
-        if def.did.is_local() {
-            err.note(&format!(
-                "an implementation of `{}` might be missing for `{}`",
-                missing_trait, ty
-            ));
         }
     }
 }

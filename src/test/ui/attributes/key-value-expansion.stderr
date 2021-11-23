@@ -11,7 +11,7 @@ LL |         bug!("bug" + stringify!(found));
    |              ^^^^^^^^^^^^^^^^^^^^^^^^^
 ...
 LL | bug!();
-   | ------- in this macro invocation
+   | ------ in this macro invocation
    |
    = note: this error originates in the macro `bug` (in Nightly builds, run with -Z macro-backtrace for more info)
 
@@ -19,8 +19,8 @@ error: unexpected token: `{
     let res =
         ::alloc::fmt::format(::core::fmt::Arguments::new_v1(&[""],
                                                             &match (&"u8",) {
-                                                                 (arg0,) =>
-                                                                 [::core::fmt::ArgumentV1::new(arg0,
+                                                                 _args =>
+                                                                 [::core::fmt::ArgumentV1::new(_args.0,
                                                                                                ::core::fmt::Display::fmt)],
                                                              }));
     res
@@ -31,7 +31,7 @@ LL |         doc_comment! {format!("{coor}", coor = stringify!($t1)).as_str()}
    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ...
 LL | some_macro!(u8);
-   | ---------------- in this macro invocation
+   | --------------- in this macro invocation
    |
    = note: this error originates in the macro `some_macro` (in Nightly builds, run with -Z macro-backtrace for more info)
 

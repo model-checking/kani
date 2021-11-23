@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // ANCHOR: code
 /// Wrap "too-large" indexes back into a valid range for the array
@@ -29,20 +30,13 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
-fn __VERIFIER_assume(cond: bool) {
-    unimplemented!()
-}
-
 // ANCHOR: rmc
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let size: usize = __nondet();
-    __VERIFIER_assume(size < 4096);
-    let index: usize = __nondet();
+    let size: usize = rmc::nondet();
+    rmc::assume(size < 4096);
+    let index: usize = rmc::nondet();
     let array: Vec<u32> = vec![0; size];
     get_wrapped(index, &array);
 }

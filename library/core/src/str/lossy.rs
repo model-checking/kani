@@ -12,10 +12,12 @@ pub struct Utf8Lossy {
 }
 
 impl Utf8Lossy {
+    #[must_use]
     pub fn from_str(s: &str) -> &Utf8Lossy {
         Utf8Lossy::from_bytes(s.as_bytes())
     }
 
+    #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> &Utf8Lossy {
         // SAFETY: Both use the same memory layout, and UTF-8 correctness isn't required.
         unsafe { mem::transmute(bytes) }
@@ -27,6 +29,7 @@ impl Utf8Lossy {
 }
 
 /// Iterator over lossy UTF-8 string
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[unstable(feature = "str_internals", issue = "none")]
 #[allow(missing_debug_implementations)]
 pub struct Utf8LossyChunksIter<'a> {

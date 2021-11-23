@@ -833,20 +833,11 @@ fn symlink_noexist() {
 fn read_link() {
     if cfg!(windows) {
         // directory symlink
-        assert_eq!(
-            check!(fs::read_link(r"C:\Users\All Users")).to_str().unwrap(),
-            r"C:\ProgramData"
-        );
+        assert_eq!(check!(fs::read_link(r"C:\Users\All Users")), Path::new(r"C:\ProgramData"));
         // junction
-        assert_eq!(
-            check!(fs::read_link(r"C:\Users\Default User")).to_str().unwrap(),
-            r"C:\Users\Default"
-        );
+        assert_eq!(check!(fs::read_link(r"C:\Users\Default User")), Path::new(r"C:\Users\Default"));
         // junction with special permissions
-        assert_eq!(
-            check!(fs::read_link(r"C:\Documents and Settings\")).to_str().unwrap(),
-            r"C:\Users"
-        );
+        assert_eq!(check!(fs::read_link(r"C:\Documents and Settings\")), Path::new(r"C:\Users"));
     }
     let tmpdir = tmpdir();
     let link = tmpdir.join("link");
@@ -1410,4 +1401,33 @@ fn symlink_hard_link() {
 
     // "hard_link" should still appear as a symlink.
     assert!(check!(fs::symlink_metadata(tmpdir.join("hard_link"))).file_type().is_symlink());
+}
+
+/// Ensure `fs::create_dir` works on Windows with longer paths.
+#[test]
+#[cfg(windows)]
+fn create_dir_long_paths() {
+    use crate::{ffi::OsStr, iter, os::windows::ffi::OsStrExt};
+    const PATH_LEN: usize = 247;
+
+    let tmpdir = tmpdir();
+    let mut path = tmpdir.path().to_path_buf();
+    path.push("a");
+    let mut path = path.into_os_string();
+
+    let utf16_len = path.encode_wide().count();
+    if utf16_len >= PATH_LEN {
+        // Skip the test in the unlikely event the local user has a long temp directory path.
+        // This should not affect CI.
+        return;
+    }
+    // Increase the length of the path.
+    path.extend(iter::repeat(OsStr::new("a")).take(PATH_LEN - utf16_len));
+
+    // This should succeed.
+    fs::create_dir(&path).unwrap();
+
+    // This will fail if the path isn't converted to verbatim.
+    path.push("a");
+    fs::create_dir(&path).unwrap();
 }

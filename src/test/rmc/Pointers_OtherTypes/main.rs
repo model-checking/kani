@@ -8,9 +8,7 @@
 // [main.NaN.1] line 25 NaN on * in var_30 * 0.0f: FAILURE
 // Tracking issue: https://github.com/model-checking/rmc/issues/307
 
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
+fn main() {
     let mut x = 1;
     add_two(&mut x);
     assert!(x == 3);
@@ -23,7 +21,7 @@ pub fn main() {
     make_true(&mut z);
     assert!(z);
 
-    let mut a: f32 = __nondet();
+    let mut a: f32 = rmc::nondet();
     let b = a;
     div_by_two(&mut a);
     //       NaN

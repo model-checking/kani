@@ -6,13 +6,14 @@ use crate::{CodegenResults, ModuleCodegen};
 use rustc_ast::expand::allocator::AllocatorKind;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;
+use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
-use rustc_middle::middle::cstore::{EncodedMetadata, MetadataLoaderDyn};
 use rustc_middle::ty::layout::{FnAbiOf, HasTyCtxt, LayoutOf, TyAndLayout};
-use rustc_middle::ty::query::Providers;
+use rustc_middle::ty::query::{ExternProviders, Providers};
 use rustc_middle::ty::{Ty, TyCtxt};
 use rustc_session::{
     config::{self, OutputFilenames, PrintRequest},
+    cstore::MetadataLoaderDyn,
     Session,
 };
 use rustc_span::symbol::Symbol;
@@ -79,7 +80,7 @@ pub trait CodegenBackend {
     }
 
     fn provide(&self, _providers: &mut Providers) {}
-    fn provide_extern(&self, _providers: &mut Providers) {}
+    fn provide_extern(&self, _providers: &mut ExternProviders) {}
     fn codegen_crate<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
@@ -141,4 +142,26 @@ pub trait ExtraBackendMethods: CodegenBackend + WriteBackendMethods + Sized + Se
     ) -> TargetMachineFactoryFn<Self>;
     fn target_cpu<'b>(&self, sess: &'b Session) -> &'b str;
     fn tune_cpu<'b>(&self, sess: &'b Session) -> Option<&'b str>;
+
+    fn spawn_thread<F, T>(_time_trace: bool, f: F) -> std::thread::JoinHandle<T>
+    where
+        F: FnOnce() -> T,
+        F: Send + 'static,
+        T: Send + 'static,
+    {
+        std::thread::spawn(f)
+    }
+
+    fn spawn_named_thread<F, T>(
+        _time_trace: bool,
+        name: String,
+        f: F,
+    ) -> std::io::Result<std::thread::JoinHandle<T>>
+    where
+        F: FnOnce() -> T,
+        F: Send + 'static,
+        T: Send + 'static,
+    {
+        std::thread::Builder::new().name(name).spawn(f)
+    }
 }

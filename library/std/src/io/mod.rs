@@ -299,9 +299,7 @@ mod util;
 
 const DEFAULT_BUF_SIZE: usize = crate::sys_common::io::DEFAULT_BUF_SIZE;
 
-pub(crate) fn cleanup() {
-    stdio::cleanup()
-}
+pub(crate) use stdio::cleanup;
 
 struct Guard<'a> {
     buf: &'a mut Vec<u8>,
@@ -316,11 +314,12 @@ impl Drop for Guard<'_> {
     }
 }
 
-// A few methods below (read_to_string, read_line) will append data into a
-// `String` buffer, but we need to be pretty careful when doing this. The
-// implementation will just call `.as_mut_vec()` and then delegate to a
-// byte-oriented reading method, but we must ensure that when returning we never
-// leave `buf` in a state such that it contains invalid UTF-8 in its bounds.
+// Several `read_to_string` and `read_line` methods in the standard library will
+// append data into a `String` buffer, but we need to be pretty careful when
+// doing this. The implementation will just call `.as_mut_vec()` and then
+// delegate to a byte-oriented reading method, but we must ensure that when
+// returning we never leave `buf` in a state such that it contains invalid UTF-8
+// in its bounds.
 //
 // To this end, we use an RAII guard (to protect against panics) which updates
 // the length of the string when it is dropped. This guard initially truncates
@@ -334,21 +333,19 @@ impl Drop for Guard<'_> {
 // 2. We're passing a raw buffer to the function `f`, and it is expected that
 //    the function only *appends* bytes to the buffer. We'll get undefined
 //    behavior if existing bytes are overwritten to have non-UTF-8 data.
-fn append_to_string<F>(buf: &mut String, f: F) -> Result<usize>
+pub(crate) unsafe fn append_to_string<F>(buf: &mut String, f: F) -> Result<usize>
 where
     F: FnOnce(&mut Vec<u8>) -> Result<usize>,
 {
-    unsafe {
-        let mut g = Guard { len: buf.len(), buf: buf.as_mut_vec() };
-        let ret = f(g.buf);
-        if str::from_utf8(&g.buf[g.len..]).is_err() {
-            ret.and_then(|_| {
-                Err(Error::new_const(ErrorKind::InvalidData, &"stream did not contain valid UTF-8"))
-            })
-        } else {
-            g.len = g.buf.len();
-            ret
-        }
+    let mut g = Guard { len: buf.len(), buf: buf.as_mut_vec() };
+    let ret = f(g.buf);
+    if str::from_utf8(&g.buf[g.len..]).is_err() {
+        ret.and_then(|_| {
+            Err(Error::new_const(ErrorKind::InvalidData, &"stream did not contain valid UTF-8"))
+        })
+    } else {
+        g.len = g.buf.len();
+        ret
     }
 }
 
@@ -361,23 +358,19 @@ where
 //
 // Because we're extending the buffer with uninitialized data for trusted
 // readers, we need to make sure to truncate that if any of this panics.
-fn read_to_end<R: Read + ?Sized>(r: &mut R, buf: &mut Vec<u8>) -> Result<usize> {
-    read_to_end_with_reservation(r, buf, |_| 32)
-}
-
-fn read_to_end_with_reservation<R, F>(
-    r: &mut R,
-    buf: &mut Vec<u8>,
-    mut reservation_size: F,
-) -> Result<usize>
-where
-    R: Read + ?Sized,
-    F: FnMut(&R) -> usize,
-{
+pub(crate) fn default_read_to_end<R: Read + ?Sized>(r: &mut R, buf: &mut Vec<u8>) -> Result<usize> {
     let start_len = buf.len();
+    let start_cap = buf.capacity();
     let mut g = Guard { len: buf.len(), buf };
     loop {
-        if g.len == g.buf.len() {
+        // If we've read all the way up to the capacity, reserve more space.
+        if g.len == g.buf.capacity() {
+            g.buf.reserve(32);
+        }
+
+        // Initialize any excess capacity and adjust the length so we can write
+        // to it.
+        if g.buf.len() < g.buf.capacity() {
             unsafe {
                 // FIXME(danielhenrymantilla): #42788
                 //
@@ -387,7 +380,6 @@ where
                 //   - Only the standard library gets to soundly "ignore" this,
                 //     based on its privileged knowledge of unstable rustc
                 //     internals;
-                g.buf.reserve(reservation_size(r));
                 let capacity = g.buf.capacity();
                 g.buf.set_len(capacity);
                 r.initializer().initialize(&mut g.buf[g.len..]);
@@ -404,10 +396,47 @@ where
                 assert!(n <= buf.len());
                 g.len += n;
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         }
+
+        if g.len == g.buf.capacity() && g.buf.capacity() == start_cap {
+            // The buffer might be an exact fit. Let's read into a probe buffer
+            // and see if it returns `Ok(0)`. If so, we've avoided an
+            // unnecessary doubling of the capacity. But if not, append the
+            // probe buffer to the primary buffer and let its capacity grow.
+            let mut probe = [0u8; 32];
+
+            loop {
+                match r.read(&mut probe) {
+                    Ok(0) => return Ok(g.len - start_len),
+                    Ok(n) => {
+                        g.buf.extend_from_slice(&probe[..n]);
+                        g.len += n;
+                        break;
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e),
+                }
+            }
+        }
     }
+}
+
+pub(crate) fn default_read_to_string<R: Read + ?Sized>(
+    r: &mut R,
+    buf: &mut String,
+) -> Result<usize> {
+    // Note that we do *not* call `r.read_to_end()` here. We are passing
+    // `&mut Vec<u8>` (the raw contents of `buf`) into the `read_to_end`
+    // method to fill it up. An arbitrary implementation could overwrite the
+    // entire contents of the vector, not just append to it (which is what
+    // we are expecting).
+    //
+    // To prevent extraneously checking the UTF-8-ness of the entire buffer
+    // we pass it to our hardcoded `default_read_to_end` implementation which
+    // we know is guaranteed to only read data into the end of the buffer.
+    unsafe { append_to_string(buf, |b| default_read_to_end(r, b)) }
 }
 
 pub(crate) fn default_read_vectored<F>(read: F, bufs: &mut [IoSliceMut<'_>]) -> Result<usize>
@@ -700,7 +729,7 @@ pub trait Read {
     /// [`std::fs::read`]: crate::fs::read
     #[stable(feature = "rust1", since = "1.0.0")]
     fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
-        read_to_end(self, buf)
+        default_read_to_end(self, buf)
     }
 
     /// Read all bytes until EOF in this source, appending them to `buf`.
@@ -743,16 +772,7 @@ pub trait Read {
     /// [`std::fs::read_to_string`]: crate::fs::read_to_string
     #[stable(feature = "rust1", since = "1.0.0")]
     fn read_to_string(&mut self, buf: &mut String) -> Result<usize> {
-        // Note that we do *not* call `.read_to_end()` here. We are passing
-        // `&mut Vec<u8>` (the raw contents of `buf`) into the `read_to_end`
-        // method to fill it up. An arbitrary implementation could overwrite the
-        // entire contents of the vector, not just append to it (which is what
-        // we are expecting).
-        //
-        // To prevent extraneously checking the UTF-8-ness of the entire buffer
-        // we pass it to our hardcoded `read_to_end` implementation which we
-        // know is guaranteed to only read data into the end of the buffer.
-        append_to_string(buf, |b| read_to_end(self, b))
+        default_read_to_string(self, buf)
     }
 
     /// Read the exact number of bytes required to fill `buf`.
@@ -989,6 +1009,11 @@ pub trait Read {
 /// need more control over performance, and in those cases you should definitely use
 /// [`Read::read_to_string`] directly.
 ///
+/// Note that in some special cases, such as when reading files, this function will
+/// pre-allocate memory based on the size of the input it is reading. In those
+/// cases, the performance should be as good as if you had used
+/// [`Read::read_to_string`] with a manually pre-allocated buffer.
+///
 /// # Errors
 ///
 /// This function forces you to handle errors because the output (the `String`)
@@ -1179,6 +1204,7 @@ impl<'a> IoSlice<'a> {
     ///
     /// Panics on Windows if the slice is larger than 4GB.
     #[stable(feature = "iovec", since = "1.36.0")]
+    #[must_use]
     #[inline]
     pub fn new(buf: &'a [u8]) -> IoSlice<'a> {
         IoSlice(sys::io::IoSlice::new(buf))
@@ -1282,6 +1308,7 @@ pub struct Initializer(bool);
 impl Initializer {
     /// Returns a new `Initializer` which will zero out buffers.
     #[unstable(feature = "read_initializer", issue = "42788")]
+    #[must_use]
     #[inline]
     pub fn zeroing() -> Initializer {
         Initializer(true)
@@ -1296,6 +1323,7 @@ impl Initializer {
     /// the method accurately reflects the number of bytes that have been
     /// written to the head of the buffer.
     #[unstable(feature = "read_initializer", issue = "42788")]
+    #[must_use]
     #[inline]
     pub unsafe fn nop() -> Initializer {
         Initializer(false)
@@ -1303,6 +1331,7 @@ impl Initializer {
 
     /// Indicates if a buffer should be initialized.
     #[unstable(feature = "read_initializer", issue = "42788")]
+    #[must_use]
     #[inline]
     pub fn should_initialize(&self) -> bool {
         self.0
@@ -2185,7 +2214,7 @@ pub trait BufRead: Read {
         // Note that we are not calling the `.read_until` method here, but
         // rather our hardcoded implementation. For more details as to why, see
         // the comments in `read_to_end`.
-        append_to_string(buf, |b| read_until(self, b'\n', b))
+        unsafe { append_to_string(buf, |b| read_until(self, b'\n', b)) }
     }
 
     /// Returns an iterator over the contents of this reader split on the byte
@@ -2583,13 +2612,6 @@ impl<T: Read> Read for Take<T> {
 
     unsafe fn initializer(&self) -> Initializer {
         self.inner.initializer()
-    }
-
-    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
-        // Pass in a reservation_size closure that respects the current value
-        // of limit for each read. If we hit the read limit, this prevents the
-        // final zero-byte read from allocating again.
-        read_to_end_with_reservation(self, buf, |self_| cmp::min(self_.limit, 32) as usize)
     }
 }
 

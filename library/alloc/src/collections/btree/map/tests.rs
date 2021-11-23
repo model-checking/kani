@@ -744,35 +744,35 @@ fn test_range_equal_empty_cases() {
 #[should_panic]
 fn test_range_equal_excluded() {
     let map: BTreeMap<_, _> = (0..5).map(|i| (i, i)).collect();
-    map.range((Excluded(2), Excluded(2)));
+    let _ = map.range((Excluded(2), Excluded(2)));
 }
 
 #[test]
 #[should_panic]
 fn test_range_backwards_1() {
     let map: BTreeMap<_, _> = (0..5).map(|i| (i, i)).collect();
-    map.range((Included(3), Included(2)));
+    let _ = map.range((Included(3), Included(2)));
 }
 
 #[test]
 #[should_panic]
 fn test_range_backwards_2() {
     let map: BTreeMap<_, _> = (0..5).map(|i| (i, i)).collect();
-    map.range((Included(3), Excluded(2)));
+    let _ = map.range((Included(3), Excluded(2)));
 }
 
 #[test]
 #[should_panic]
 fn test_range_backwards_3() {
     let map: BTreeMap<_, _> = (0..5).map(|i| (i, i)).collect();
-    map.range((Excluded(3), Included(2)));
+    let _ = map.range((Excluded(3), Included(2)));
 }
 
 #[test]
 #[should_panic]
 fn test_range_backwards_4() {
     let map: BTreeMap<_, _> = (0..5).map(|i| (i, i)).collect();
-    map.range((Excluded(3), Excluded(2)));
+    let _ = map.range((Excluded(3), Excluded(2)));
 }
 
 #[test]
@@ -783,7 +783,7 @@ fn test_range_finding_ill_order_in_map() {
     // we cause a different panic than `test_range_backwards_1` does.
     // A more refined `should_panic` would be welcome.
     if Cyclic3::C < Cyclic3::A {
-        map.range(Cyclic3::C..=Cyclic3::A);
+        let _ = map.range(Cyclic3::C..=Cyclic3::A);
     }
 }
 
@@ -824,7 +824,7 @@ fn test_range_finding_ill_order_in_range_ord() {
     }
 
     let map = (0..12).map(|i| (CompositeKey(i, EvilTwin(i)), ())).collect::<BTreeMap<_, _>>();
-    map.range(EvilTwin(5)..=EvilTwin(7));
+    let _ = map.range(EvilTwin(5)..=EvilTwin(7));
 }
 
 #[test]
@@ -1239,32 +1239,32 @@ fn test_borrow() {
 
     #[allow(dead_code)]
     fn get<T: Ord>(v: &BTreeMap<Box<T>, ()>, t: &T) {
-        v.get(t);
+        let _ = v.get(t);
     }
 
     #[allow(dead_code)]
     fn get_mut<T: Ord>(v: &mut BTreeMap<Box<T>, ()>, t: &T) {
-        v.get_mut(t);
+        let _ = v.get_mut(t);
     }
 
     #[allow(dead_code)]
     fn get_key_value<T: Ord>(v: &BTreeMap<Box<T>, ()>, t: &T) {
-        v.get_key_value(t);
+        let _ = v.get_key_value(t);
     }
 
     #[allow(dead_code)]
     fn contains_key<T: Ord>(v: &BTreeMap<Box<T>, ()>, t: &T) {
-        v.contains_key(t);
+        let _ = v.contains_key(t);
     }
 
     #[allow(dead_code)]
     fn range<T: Ord>(v: &BTreeMap<Box<T>, ()>, t: T) {
-        v.range(t..);
+        let _ = v.range(t..);
     }
 
     #[allow(dead_code)]
     fn range_mut<T: Ord>(v: &mut BTreeMap<Box<T>, ()>, t: T) {
-        v.range_mut(t..);
+        let _ = v.range_mut(t..);
     }
 
     #[allow(dead_code)]
@@ -1494,33 +1494,40 @@ fn test_clone() {
     map.check();
 }
 
+fn test_clone_panic_leak(size: usize) {
+    for i in 0..size {
+        let dummies: Vec<CrashTestDummy> = (0..size).map(|id| CrashTestDummy::new(id)).collect();
+        let map: BTreeMap<_, ()> = dummies
+            .iter()
+            .map(|dummy| {
+                let panic = if dummy.id == i { Panic::InClone } else { Panic::Never };
+                (dummy.spawn(panic), ())
+            })
+            .collect();
+
+        catch_unwind(|| map.clone()).unwrap_err();
+        for d in &dummies {
+            assert_eq!(d.cloned(), if d.id <= i { 1 } else { 0 }, "id={}/{}", d.id, i);
+            assert_eq!(d.dropped(), if d.id < i { 1 } else { 0 }, "id={}/{}", d.id, i);
+        }
+        assert_eq!(map.len(), size);
+
+        drop(map);
+        for d in &dummies {
+            assert_eq!(d.cloned(), if d.id <= i { 1 } else { 0 }, "id={}/{}", d.id, i);
+            assert_eq!(d.dropped(), if d.id < i { 2 } else { 1 }, "id={}/{}", d.id, i);
+        }
+    }
+}
+
 #[test]
-fn test_clone_panic_leak() {
-    let a = CrashTestDummy::new(0);
-    let b = CrashTestDummy::new(1);
-    let c = CrashTestDummy::new(2);
+fn test_clone_panic_leak_height_0() {
+    test_clone_panic_leak(3)
+}
 
-    let mut map = BTreeMap::new();
-    map.insert(a.spawn(Panic::Never), ());
-    map.insert(b.spawn(Panic::InClone), ());
-    map.insert(c.spawn(Panic::Never), ());
-
-    catch_unwind(|| map.clone()).unwrap_err();
-    assert_eq!(a.cloned(), 1);
-    assert_eq!(b.cloned(), 1);
-    assert_eq!(c.cloned(), 0);
-    assert_eq!(a.dropped(), 1);
-    assert_eq!(b.dropped(), 0);
-    assert_eq!(c.dropped(), 0);
-    assert_eq!(map.len(), 3);
-
-    drop(map);
-    assert_eq!(a.cloned(), 1);
-    assert_eq!(b.cloned(), 1);
-    assert_eq!(c.cloned(), 0);
-    assert_eq!(a.dropped(), 2);
-    assert_eq!(b.dropped(), 1);
-    assert_eq!(c.dropped(), 1);
+#[test]
+fn test_clone_panic_leak_height_1() {
+    test_clone_panic_leak(MIN_INSERTS_HEIGHT_1)
 }
 
 #[test]
@@ -1748,20 +1755,20 @@ fn test_send() {
 #[test]
 fn test_ord_absence() {
     fn map<K>(mut map: BTreeMap<K, ()>) {
-        map.is_empty();
-        map.len();
+        let _ = map.is_empty();
+        let _ = map.len();
         map.clear();
-        map.iter();
-        map.iter_mut();
-        map.keys();
-        map.values();
-        map.values_mut();
+        let _ = map.iter();
+        let _ = map.iter_mut();
+        let _ = map.keys();
+        let _ = map.values();
+        let _ = map.values_mut();
         if true {
-            map.into_values();
+            let _ = map.into_values();
         } else if true {
-            map.into_iter();
+            let _ = map.into_iter();
         } else {
-            map.into_keys();
+            let _ = map.into_keys();
         }
     }
 

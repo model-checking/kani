@@ -164,7 +164,7 @@ impl ParseSess {
     }
 
     pub(crate) fn ignore_file(&self, path: &FileName) -> bool {
-        self.ignore_path_set.as_ref().is_match(&path)
+        self.ignore_path_set.as_ref().is_match(path)
     }
 
     pub(crate) fn set_silent_emitter(&mut self) {
@@ -173,6 +173,12 @@ impl ParseSess {
 
     pub(crate) fn span_to_filename(&self, span: Span) -> FileName {
         self.parse_sess.source_map().span_to_filename(span).into()
+    }
+
+    pub(crate) fn span_to_file_contents(&self, span: Span) -> Lrc<rustc_span::SourceFile> {
+        self.parse_sess
+            .source_map()
+            .lookup_source_file(span.data().lo)
     }
 
     pub(crate) fn span_to_first_line_string(&self, span: Span) -> String {

@@ -219,7 +219,7 @@ top_level_options!(
 /// generated code to parse an option into its respective field in the struct. There are a few
 /// hand-written parsers for parsing specific types of values in this module.
 macro_rules! options {
-    ($struct_name:ident, $stat:ident, $prefix:expr, $outputname:expr,
+    ($struct_name:ident, $stat:ident, $optmod:ident, $prefix:expr, $outputname:expr,
      $($( #[$attr:meta] )* $opt:ident : $t:ty = (
         $init:expr,
         $parse:ident,
@@ -264,13 +264,15 @@ macro_rules! options {
     }
 
     pub const $stat: OptionDescrs<$struct_name> =
-        &[ $( (stringify!($opt), $opt, desc::$parse, $desc) ),* ];
+        &[ $( (stringify!($opt), $optmod::$opt, desc::$parse, $desc) ),* ];
 
+    mod $optmod {
     $(
-        fn $opt(cg: &mut $struct_name, v: Option<&str>) -> bool {
-            parse::$parse(&mut redirect_field!(cg.$opt), v)
+        pub(super) fn $opt(cg: &mut super::$struct_name, v: Option<&str>) -> bool {
+            super::parse::$parse(&mut redirect_field!(cg.$opt), v)
         }
     )*
+    }
 
 ) }
 
@@ -351,8 +353,7 @@ mod desc {
     pub const parse_panic_strategy: &str = "either `unwind` or `abort`";
     pub const parse_opt_panic_strategy: &str = parse_panic_strategy;
     pub const parse_relro_level: &str = "one of: `full`, `partial`, or `off`";
-    pub const parse_sanitizers: &str =
-        "comma separated list of sanitizers: `address`, `hwaddress`, `leak`, `memory` or `thread`";
+    pub const parse_sanitizers: &str = "comma separated list of sanitizers: `address`, `cfi`, `hwaddress`, `leak`, `memory` or `thread`";
     pub const parse_sanitizer_memory_track_origins: &str = "0, 1, or 2";
     pub const parse_cfguard: &str =
         "either a boolean (`yes`, `no`, `on`, `off`, etc), `checks`, or `nochecks`";
@@ -368,6 +369,8 @@ mod desc {
         "either a boolean (`yes`, `no`, `on`, `off`, etc), `thin`, `fat`, or omitted";
     pub const parse_linker_plugin_lto: &str =
         "either a boolean (`yes`, `no`, `on`, `off`, etc), or the path to the linker plugin";
+    pub const parse_location_detail: &str =
+        "comma seperated list of location details to track: `file`, `line`, or `column`";
     pub const parse_switch_with_opt_path: &str =
         "an optional path to the profiling data output directory";
     pub const parse_merge_functions: &str = "one of: `disabled`, `trampolines`, or `aliases`";
@@ -484,6 +487,25 @@ mod parse {
         }
     }
 
+    crate fn parse_location_detail(ld: &mut LocationDetail, v: Option<&str>) -> bool {
+        if let Some(v) = v {
+            ld.line = false;
+            ld.file = false;
+            ld.column = false;
+            for s in v.split(',') {
+                match s {
+                    "file" => ld.file = true,
+                    "line" => ld.line = true,
+                    "column" => ld.column = true,
+                    _ => return false,
+                }
+            }
+            true
+        } else {
+            false
+        }
+    }
+
     crate fn parse_opt_comma_list(slot: &mut Option<Vec<String>>, v: Option<&str>) -> bool {
         match v {
             Some(s) => {
@@ -584,6 +606,7 @@ mod parse {
             for s in v.split(',') {
                 *slot |= match s {
                     "address" => SanitizerSet::ADDRESS,
+                    "cfi" => SanitizerSet::CFI,
                     "leak" => SanitizerSet::LEAK,
                     "memory" => SanitizerSet::MEMORY,
                     "thread" => SanitizerSet::THREAD,
@@ -860,7 +883,7 @@ mod parse {
         match v {
             Some(s) => {
                 if !slot.is_empty() {
-                    slot.push_str(",");
+                    slot.push(',');
                 }
                 slot.push_str(s);
                 true
@@ -897,7 +920,7 @@ mod parse {
 }
 
 options! {
-    CodegenOptions, CG_OPTIONS, "C", "codegen",
+    CodegenOptions, CG_OPTIONS, cgopts, "C", "codegen",
 
     // This list is in alphabetical order.
     //
@@ -992,6 +1015,8 @@ options! {
         "use soft float ABI (*eabihf targets only) (default: no)"),
     split_debuginfo: Option<SplitDebuginfo> = (None, parse_split_debuginfo, [TRACKED],
         "how to handle split-debuginfo, a platform-specific option"),
+    strip: Strip = (Strip::None, parse_strip, [UNTRACKED],
+        "tell the linker which information to strip (`none` (default), `debuginfo` or `symbols`)"),
     target_cpu: Option<String> = (None, parse_opt_string, [TRACKED],
         "select target processor (`rustc --print target-cpus` for details)"),
     target_feature: String = (String::new(), parse_target_feature, [TRACKED],
@@ -1006,7 +1031,7 @@ options! {
 }
 
 options! {
-    DebuggingOptions, DB_OPTIONS, "Z", "debugging",
+    DebuggingOptions, DB_OPTIONS, dbopts, "Z", "debugging",
 
     // This list is in alphabetical order.
     //
@@ -1040,6 +1065,8 @@ options! {
         "combine CGUs into a single one"),
     crate_attr: Vec<String> = (Vec::new(), parse_string_push, [TRACKED],
         "inject the given attribute in the crate"),
+    debug_info_for_profiling: bool = (false, parse_bool, [TRACKED],
+        "emit discriminators and other data necessary for AutoFDO"),
     debug_macros: bool = (false, parse_bool, [TRACKED],
         "emit line numbers debug info inside macros (default: no)"),
     deduplicate_diagnostics: bool = (true, parse_bool, [UNTRACKED],
@@ -1150,6 +1177,9 @@ options! {
         "a list LLVM plugins to enable (space separated)"),
     llvm_time_trace: bool = (false, parse_bool, [UNTRACKED],
         "generate JSON tracing data file from LLVM data (default: no)"),
+    location_detail: LocationDetail = (LocationDetail::all(), parse_location_detail, [TRACKED],
+        "comma seperated list of location details to be tracked when using caller_location \
+        valid options are `file`, `line`, and `column` (default: all)"),
     ls: bool = (false, parse_bool, [UNTRACKED],
         "list the symbols defined by a library crate (default: no)"),
     macro_backtrace: bool = (false, parse_bool, [UNTRACKED],
@@ -1167,7 +1197,7 @@ options! {
     move_size_limit: Option<usize> = (None, parse_opt_number, [TRACKED],
         "the size at which the `large_assignments` lint starts to be emitted"),
     mutable_noalias: Option<bool> = (None, parse_opt_bool, [TRACKED],
-        "emit noalias metadata for mutable references (default: yes for LLVM >= 12, otherwise no)"),
+        "emit noalias metadata for mutable references (default: yes)"),
     new_llvm_pass_manager: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "use new LLVM pass manager (default: no)"),
     nll_facts: bool = (false, parse_bool, [UNTRACKED],
@@ -1188,6 +1218,8 @@ options! {
         "compile without linking"),
     no_parallel_llvm: bool = (false, parse_no_flag, [UNTRACKED],
         "run LLVM in non-parallel mode (while keeping codegen-units and ThinLTO)"),
+    no_unique_section_names: bool = (false, parse_bool, [TRACKED],
+        "do not use unique names for text and data sections when -Z function-sections is used"),
     no_profiler_runtime: bool = (false, parse_no_flag, [TRACKED],
         "prevent automatic injection of the profiler_builtins crate"),
     normalize_docs: bool = (false, parse_bool, [TRACKED],
@@ -1242,10 +1274,14 @@ options! {
         (default based on relative source path)"),
     profiler_runtime: String = (String::from("profiler_builtins"), parse_string, [TRACKED],
         "name of the profiler runtime crate to automatically inject (default: `profiler_builtins`)"),
+    profile_sample_use: Option<PathBuf> = (None, parse_opt_pathbuf, [TRACKED],
+        "use the given `.prof` file for sampled profile-guided optimization (also known as AutoFDO)"),
     query_dep_graph: bool = (false, parse_bool, [UNTRACKED],
         "enable queries of the dependency graph for regression testing (default: no)"),
     query_stats: bool = (false, parse_bool, [UNTRACKED],
         "print some statistics about the query system (default: no)"),
+    randomize_layout: bool = (false, parse_bool, [TRACKED],
+        "randomize the layout of types (default: no)"),
     relax_elf_relocations: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "whether ELF relocations can be relaxed"),
     relro_level: Option<RelroLevel> = (None, parse_relro_level, [TRACKED],
@@ -1277,7 +1313,7 @@ options! {
         "specify the events recorded by the self profiler;
         for example: `-Z self-profile-events=default,query-keys`
         all options: none, all, default, generic-activity, query-provider, query-cache-hit
-                     query-blocked, incr-cache-load, incr-result-hashing, query-keys, function-args, args, llvm"),
+                     query-blocked, incr-cache-load, incr-result-hashing, query-keys, function-args, args, llvm, artifact-sizes"),
     share_generics: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "make the current crate share its generic instantiations"),
     show_span: Option<String> = (None, parse_opt_string, [TRACKED],
@@ -1302,6 +1338,8 @@ options! {
         space separated"),
     teach: bool = (false, parse_bool, [TRACKED],
         "show extended diagnostic help (default: no)"),
+    temps_dir: Option<String> = (None, parse_opt_string, [UNTRACKED],
+        "the directory the intermediate files are written to"),
     terminal_width: Option<usize> = (None, parse_opt_number, [UNTRACKED],
         "set the current terminal width"),
     tune_cpu: Option<String> = (None, parse_opt_string, [TRACKED],

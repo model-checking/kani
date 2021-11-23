@@ -540,7 +540,7 @@ fn is_late_bound_map<'tcx>(
     def_id: LocalDefId,
 ) -> Option<(LocalDefId, &'tcx FxHashSet<ItemLocalId>)> {
     match tcx.def_kind(def_id) {
-        DefKind::AnonConst => {
+        DefKind::AnonConst | DefKind::InlineConst => {
             let mut def_id = tcx
                 .parent(def_id.to_def_id())
                 .unwrap_or_else(|| bug!("anon const or closure without a parent"));
@@ -887,10 +887,7 @@ impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
                 let (lifetimes, binders): (FxIndexMap<hir::ParamName, Region>, Vec<_>) = c
                     .generic_params
                     .iter()
-                    .filter_map(|param| match param.kind {
-                        GenericParamKind::Lifetime { .. } => Some(param),
-                        _ => None,
-                    })
+                    .filter(|param| matches!(param.kind, GenericParamKind::Lifetime { .. }))
                     .enumerate()
                     .map(|(late_bound_idx, param)| {
                         let pair = Region::late(late_bound_idx as u32, &self.tcx.hir(), param);
@@ -1057,9 +1054,7 @@ impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
                     match param.kind {
                         GenericParamKind::Lifetime { .. } => {
                             let (name, reg) = Region::early(&self.tcx.hir(), &mut index, &param);
-                            let def_id = if let Region::EarlyBound(_, def_id, _) = reg {
-                                def_id
-                            } else {
+                            let Region::EarlyBound(_, def_id, _) = reg else {
                                 bug!();
                             };
                             // We cannot predict what lifetimes are unused in opaque type.
@@ -1372,9 +1367,8 @@ impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
                         let (lifetimes, binders): (FxIndexMap<hir::ParamName, Region>, Vec<_>) =
                             bound_generic_params
                                 .iter()
-                                .filter_map(|param| match param.kind {
-                                    GenericParamKind::Lifetime { .. } => Some(param),
-                                    _ => None,
+                                .filter(|param| {
+                                    matches!(param.kind, GenericParamKind::Lifetime { .. })
                                 })
                                 .enumerate()
                                 .map(|(late_bound_idx, param)| {
@@ -1471,10 +1465,7 @@ impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
         let binders_iter = trait_ref
             .bound_generic_params
             .iter()
-            .filter_map(|param| match param.kind {
-                GenericParamKind::Lifetime { .. } => Some(param),
-                _ => None,
-            })
+            .filter(|param| matches!(param.kind, GenericParamKind::Lifetime { .. }))
             .enumerate()
             .map(|(late_bound_idx, param)| {
                 let pair = Region::late(
@@ -1933,20 +1924,18 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                             break;
                         }
                     }
-                    hir::TyKind::Path(ref qpath) => {
-                        if let QPath::Resolved(_, path) = qpath {
-                            let last_segment = &path.segments[path.segments.len() - 1];
-                            let generics = last_segment.args();
-                            for arg in generics.args.iter() {
-                                if let GenericArg::Lifetime(lt) = arg {
-                                    if lt.name.ident() == name {
-                                        elide_use = Some(lt.span);
-                                        break;
-                                    }
+                    hir::TyKind::Path(QPath::Resolved(_, path)) => {
+                        let last_segment = &path.segments[path.segments.len() - 1];
+                        let generics = last_segment.args();
+                        for arg in generics.args.iter() {
+                            if let GenericArg::Lifetime(lt) = arg {
+                                if lt.name.ident() == name {
+                                    elide_use = Some(lt.span);
+                                    break;
                                 }
                             }
-                            break;
                         }
+                        break;
                     }
                     _ => {}
                 }
@@ -2239,19 +2228,14 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         let binders: Vec<_> = generics
             .params
             .iter()
-            .filter_map(|param| match param.kind {
-                GenericParamKind::Lifetime { .. }
-                    if self.map.late_bound.contains(&param.hir_id) =>
-                {
-                    Some(param)
-                }
-                _ => None,
+            .filter(|param| {
+                matches!(param.kind, GenericParamKind::Lifetime { .. })
+                    && self.map.late_bound.contains(&param.hir_id)
             })
             .enumerate()
             .map(|(late_bound_idx, param)| {
                 let pair = Region::late(late_bound_idx as u32, &self.tcx.hir(), param);
-                let r = late_region_as_bound_region(self.tcx, &pair.1);
-                r
+                late_region_as_bound_region(self.tcx, &pair.1)
             })
             .collect();
         self.map.late_bound_vars.insert(hir_id, binders);

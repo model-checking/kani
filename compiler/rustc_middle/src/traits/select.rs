@@ -12,12 +12,14 @@ use rustc_hir::def_id::DefId;
 use rustc_query_system::cache::Cache;
 
 pub type SelectionCache<'tcx> = Cache<
-    ty::ConstnessAnd<ty::ParamEnvAnd<'tcx, ty::TraitRef<'tcx>>>,
+    (ty::ConstnessAnd<ty::ParamEnvAnd<'tcx, ty::TraitRef<'tcx>>>, ty::ImplPolarity),
     SelectionResult<'tcx, SelectionCandidate<'tcx>>,
 >;
 
-pub type EvaluationCache<'tcx> =
-    Cache<ty::ParamEnvAnd<'tcx, ty::ConstnessAnd<ty::PolyTraitRef<'tcx>>>, EvaluationResult>;
+pub type EvaluationCache<'tcx> = Cache<
+    (ty::ParamEnvAnd<'tcx, ty::ConstnessAnd<ty::PolyTraitRef<'tcx>>>, ty::ImplPolarity),
+    EvaluationResult,
+>;
 
 /// The selection process begins by considering all impls, where
 /// clauses, and so forth that might resolve an obligation. Sometimes
@@ -101,7 +103,7 @@ pub enum SelectionCandidate<'tcx> {
         /// `false` if there are no *further* obligations.
         has_nested: bool,
     },
-    ParamCandidate(ty::ConstnessAnd<ty::PolyTraitRef<'tcx>>),
+    ParamCandidate((ty::ConstnessAnd<ty::PolyTraitRef<'tcx>>, ty::ImplPolarity)),
     ImplCandidate(DefId),
     AutoImplCandidate(DefId),
 
@@ -120,7 +122,9 @@ pub enum SelectionCandidate<'tcx> {
 
     /// Implementation of a `Fn`-family trait by one of the anonymous
     /// types generated for a fn pointer type (e.g., `fn(int) -> int`)
-    FnPointerCandidate,
+    FnPointerCandidate {
+        is_const: bool,
+    },
 
     /// Builtin implementation of `DiscriminantKind`.
     DiscriminantKindCandidate,
@@ -259,12 +263,18 @@ impl EvaluationResult {
     }
 }
 
-/// Indicates that trait evaluation caused overflow.
+/// Indicates that trait evaluation caused overflow and in which pass.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, HashStable)]
-pub struct OverflowError;
+pub enum OverflowError {
+    Canonical,
+    ErrorReporting,
+}
 
 impl<'tcx> From<OverflowError> for SelectionError<'tcx> {
-    fn from(OverflowError: OverflowError) -> SelectionError<'tcx> {
-        SelectionError::Overflow
+    fn from(overflow_error: OverflowError) -> SelectionError<'tcx> {
+        match overflow_error {
+            OverflowError::Canonical => SelectionError::Overflow,
+            OverflowError::ErrorReporting => SelectionError::ErrorReporting,
+        }
     }
 }

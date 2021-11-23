@@ -20,10 +20,15 @@ use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self) -> Stmt {
-        let name = &FN_RETURN_VOID_VAR_NAME.to_string();
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var = self.ensure_global_var(name, is_file_local, ty, Location::none(), |_, _| None);
+        let var = self.ensure_global_var(
+            FN_RETURN_VOID_VAR_NAME,
+            is_file_local,
+            ty,
+            Location::none(),
+            |_, _| None,
+        );
         Stmt::ret(Some(var), Location::none())
     }
 
@@ -56,7 +61,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
-            TerminatorKind::Unreachable => Stmt::assert_false("unreachable code", loc),
+            TerminatorKind::Unreachable => Stmt::block(
+                vec![
+                    Stmt::assert_false("unreachable code", loc.clone()),
+                    Stmt::assume(Expr::bool_false(), loc.clone()),
+                ],
+                loc,
+            ),
             TerminatorKind::Drop { place, target, unwind: _ } => self.codegen_drop(place, target),
             TerminatorKind::DropAndReplace { .. } => {
                 unreachable!("this instruction is unreachable")
@@ -265,30 +276,24 @@ impl<'tcx> GotocCtx<'tcx> {
         // Therefore, we have to project out the corresponding fields when we detect
         // an invocation of a closure.
         //
-        // Note: In some cases, the enviroment struct has type FnDef, so we skip it in
+        // Note: In some cases, the environment struct has type FnDef, so we skip it in
         // ignore_var_ty. So the tuple is always the last arg, but it might be in the
         // first or the second position.
+        // Note 2: For empty closures, the only argument needed is the environment struct.
         if fargs.len() > 0 {
             let tupe = fargs.remove(fargs.len() - 1);
             let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
                 ty::Tuple(tupled_args) => {
-                    // The tuple needs to be added back for type checking even if empty
-                    if tupled_args.is_empty() {
-                        fargs.push(tupe);
-                        return;
-                    }
                     tupled_args.iter().map(|s| self.codegen_ty(s.expect_ty())).collect()
                 }
                 _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
             };
 
             // Unwrap as needed
-            for (i, t) in tupled_args.iter().enumerate() {
-                if !t.is_unit() {
-                    // Access the tupled parameters through the `member` operation
-                    let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
-                    fargs.push(index_param);
-                }
+            for (i, _) in tupled_args.iter().enumerate() {
+                // Access the tupled parameters through the `member` operation
+                let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
+                fargs.push(index_param);
             }
         }
     }
@@ -430,7 +435,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // arg0.vtable->f(arg0.data,arg1);
         let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
         let vtable = vtable_ref.dereference();
-        let fn_ptr = vtable.member(&vtable_field_name, &self.symbol_table);
+        let fn_ptr = vtable.member(vtable_field_name, &self.symbol_table);
 
         // Update the argument from arg0 to arg0.data
         fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);

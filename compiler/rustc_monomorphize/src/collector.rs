@@ -200,7 +200,6 @@ use rustc_session::config::EntryFnType;
 use rustc_session::lint::builtin::LARGE_ASSIGNMENTS;
 use rustc_session::Limit;
 use rustc_span::source_map::{dummy_spanned, respan, Span, Spanned, DUMMY_SP};
-use rustc_span::Symbol;
 use rustc_target::abi::Size;
 use smallvec::SmallVec;
 use std::iter;
@@ -318,7 +317,6 @@ pub fn collect_crate_mono_items(
     (visited.into_inner(), inlining_map.into_inner())
 }
 
-// Temporary function that allow us to skip monomorphizing lang_start.
 // Find all non-generic items by walking the HIR. These items serve as roots to
 // start monomorphizing from.
 fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<'_>> {
@@ -332,7 +330,7 @@ fn collect_roots(tcx: TyCtxt<'_>, mode: MonoItemCollectionMode) -> Vec<MonoItem<
 
         let mut visitor = RootCollector { tcx, mode, entry_fn, output: &mut roots };
 
-        tcx.hir().krate().visit_all_item_likes(&mut visitor);
+        tcx.hir().visit_all_item_likes(&mut visitor);
 
         visitor.push_extra_entry_roots();
     }
@@ -452,7 +450,9 @@ fn collect_items_rec<'tcx>(
     // involving a dependency, and the lack of context is confusing) in this MVP, we focus on
     // diagnostics on edges crossing a crate boundary: the collected mono items which are not
     // defined in the local crate.
-    if tcx.sess.diagnostic().err_count() > error_count && starting_point.node.krate() != LOCAL_CRATE
+    if tcx.sess.diagnostic().err_count() > error_count
+        && starting_point.node.krate() != LOCAL_CRATE
+        && starting_point.node.is_user_defined()
     {
         let formatted_item = with_no_trimmed_paths(|| starting_point.node.to_string());
         tcx.sess.span_note_without_error(
@@ -806,13 +806,22 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirNeighborCollector<'a, 'tcx> {
                     }
                 }
             }
+            mir::TerminatorKind::Assert { ref msg, .. } => {
+                let lang_item = match msg {
+                    mir::AssertKind::BoundsCheck { .. } => LangItem::PanicBoundsCheck,
+                    _ => LangItem::Panic,
+                };
+                let instance = Instance::mono(tcx, tcx.require_lang_item(lang_item, Some(source)));
+                if should_codegen_locally(tcx, &instance) {
+                    self.output.push(create_fn_mono_item(tcx, instance, source));
+                }
+            }
             mir::TerminatorKind::Goto { .. }
             | mir::TerminatorKind::SwitchInt { .. }
             | mir::TerminatorKind::Resume
             | mir::TerminatorKind::Abort
             | mir::TerminatorKind::Return
-            | mir::TerminatorKind::Unreachable
-            | mir::TerminatorKind::Assert { .. } => {}
+            | mir::TerminatorKind::Unreachable => {}
             mir::TerminatorKind::GeneratorDrop
             | mir::TerminatorKind::Yield { .. }
             | mir::TerminatorKind::FalseEdge { .. }
@@ -912,10 +921,6 @@ fn visit_instance_use<'tcx>(
         return;
     }
 
-    if tcx.skip_monomorphize(instance) {
-        return;
-    }
-
     match instance.def {
         ty::InstanceDef::Virtual(..) | ty::InstanceDef::Intrinsic(_) => {
             if !is_direct_call {
@@ -940,21 +945,13 @@ fn visit_instance_use<'tcx>(
     }
 }
 
-// Returns `true` if we should codegen an instance in the local crate.
-// Returns `false` if we can just link to the upstream crate and therefore don't
-// need a mono item.
+/// Returns `true` if we should codegen an instance in the local crate, or returns `false` if we
+/// can just link to the upstream crate and therefore don't need a mono item.
 fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) -> bool {
-    let def_id = match instance.def {
-        ty::InstanceDef::Item(def) => def.did,
-        ty::InstanceDef::DropGlue(def_id, Some(_)) => def_id,
-        ty::InstanceDef::VtableShim(..)
-        | ty::InstanceDef::ReifyShim(..)
-        | ty::InstanceDef::ClosureOnceShim { .. }
-        | ty::InstanceDef::Virtual(..)
-        | ty::InstanceDef::FnPtrShim(..)
-        | ty::InstanceDef::DropGlue(..)
-        | ty::InstanceDef::Intrinsic(_)
-        | ty::InstanceDef::CloneShim(..) => return true,
+    let def_id = if let Some(def_id) = instance.def.def_id_if_not_guaranteed_local_codegen() {
+        def_id
+    } else {
+        return true;
     };
 
     if tcx.is_foreign_item(def_id) {

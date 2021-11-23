@@ -61,6 +61,7 @@ impl WaitTimeoutResult {
     ///     }
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "wait_timeout", since = "1.5.0")]
     pub fn timed_out(&self) -> bool {
         self.0
@@ -121,6 +122,7 @@ impl Condvar {
     /// let condvar = Condvar::new();
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn new() -> Condvar {
         Condvar { inner: sys::Condvar::new() }
     }

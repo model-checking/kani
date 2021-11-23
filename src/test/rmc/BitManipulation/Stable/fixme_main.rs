@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // rmc-verify-fail
 
-pub fn main() {
+fn main() {
     // Intrinsics implemented as integer primitives
     // https://doc.rust-lang.org/core/intrinsics/fn.cttz.html
     // https://doc.rust-lang.org/core/intrinsics/fn.ctlz.html

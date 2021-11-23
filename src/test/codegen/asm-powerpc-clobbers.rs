@@ -1,4 +1,3 @@
-// min-llvm-version: 10.0.1
 // revisions: powerpc powerpc64 powerpc64le
 //[powerpc] compile-flags: --target powerpc-unknown-linux-gnu
 //[powerpc] needs-llvm-components: powerpc
@@ -8,7 +7,7 @@
 //[powerpc64le] needs-llvm-components: powerpc
 
 #![crate_type = "rlib"]
-#![feature(no_core, rustc_attrs, lang_items)]
+#![feature(no_core, rustc_attrs, lang_items, asm_experimental_arch)]
 #![no_core]
 
 #[lang = "sized"]

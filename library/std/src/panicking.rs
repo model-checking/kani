@@ -160,6 +160,7 @@ pub fn set_hook(hook: Box<dyn Fn(&PanicInfo<'_>) + 'static + Sync + Send>) {
 ///
 /// panic!("Normal panic");
 /// ```
+#[must_use]
 #[stable(feature = "panic_hooks", since = "1.10.0")]
 pub fn take_hook() -> Box<dyn Fn(&PanicInfo<'_>) + 'static + Sync + Send> {
     if thread::panicking() {
@@ -284,11 +285,13 @@ pub mod panic_count {
     }
 
     // Disregards ALWAYS_ABORT_FLAG
+    #[must_use]
     pub fn get_count() -> usize {
         LOCAL_PANIC_COUNT.with(|c| c.get())
     }
 
     // Disregards ALWAYS_ABORT_FLAG
+    #[must_use]
     #[inline]
     pub fn count_is_zero() -> bool {
         if GLOBAL_PANIC_COUNT.load(Ordering::Relaxed) & !ALWAYS_ABORT_FLAG == 0 {
@@ -437,31 +440,9 @@ pub fn panicking() -> bool {
     !panic_count::count_is_zero()
 }
 
-/// The entry point for panicking with a formatted message.
-///
-/// This is designed to reduce the amount of code required at the call
-/// site as much as possible (so that `panic!()` has as low an impact
-/// on (e.g.) the inlining of other functions as possible), by moving
-/// the actual formatting into this shared place.
-#[unstable(feature = "libstd_sys_internals", reason = "used by the panic! macro", issue = "none")]
-#[cold]
-// If panic_immediate_abort, inline the abort call,
-// otherwise avoid inlining because of it is cold path.
-#[cfg_attr(not(feature = "panic_immediate_abort"), track_caller)]
-#[cfg_attr(not(feature = "panic_immediate_abort"), inline(never))]
-#[cfg_attr(feature = "panic_immediate_abort", inline)]
-#[cfg_attr(not(test), lang = "begin_panic_fmt")]
-pub fn begin_panic_fmt(msg: &fmt::Arguments<'_>) -> ! {
-    if cfg!(feature = "panic_immediate_abort") {
-        intrinsics::abort()
-    }
-
-    let info = PanicInfo::internal_constructor(Some(msg), Location::caller());
-    begin_panic_handler(&info)
-}
-
 /// Entry point of panics from the libcore crate (`panic_impl` lang item).
-#[cfg_attr(not(test), panic_handler)]
+#[cfg(not(test))]
+#[panic_handler]
 pub fn begin_panic_handler(info: &PanicInfo<'_>) -> ! {
     struct PanicPayload<'a> {
         inner: &'a fmt::Arguments<'a>,
@@ -534,7 +515,8 @@ pub fn begin_panic_handler(info: &PanicInfo<'_>) -> ! {
 #[cfg_attr(not(feature = "panic_immediate_abort"), inline(never))]
 #[cold]
 #[track_caller]
-pub fn begin_panic<M: Any + Send>(msg: M) -> ! {
+#[rustc_do_not_const_check] // hooked by const-eval
+pub const fn begin_panic<M: Any + Send>(msg: M) -> ! {
     if cfg!(feature = "panic_immediate_abort") {
         intrinsics::abort()
     }

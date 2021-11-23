@@ -134,6 +134,40 @@ fn func() -> Option<i32> {
     Some(0)
 }
 
+fn func_returning_result() -> Result<i32, i32> {
+    Ok(1)
+}
+
+fn result_func(x: Result<i32, i32>) -> Result<i32, i32> {
+    let _ = if let Ok(x) = x { x } else { return x };
+
+    if x.is_err() {
+        return x;
+    }
+
+    // No warning
+    let y = if let Ok(x) = x {
+        x
+    } else {
+        return Err(0);
+    };
+
+    // issue #7859
+    // no warning
+    let _ = if let Ok(x) = func_returning_result() {
+        x
+    } else {
+        return Err(0);
+    };
+
+    // no warning
+    if func_returning_result().is_err() {
+        return func_returning_result();
+    }
+
+    Ok(y)
+}
+
 fn main() {
     some_func(Some(42));
     some_func(None);
@@ -153,4 +187,6 @@ fn main() {
     returns_something_similar_to_option(so);
 
     func();
+
+    let _ = result_func(Ok(42));
 }

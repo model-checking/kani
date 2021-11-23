@@ -12,12 +12,16 @@ doctest = false
 
 [dependencies]
 bitflags = "1.0"
+lazy_static = "1.4.0"
 cstr = "0.2"
 libc = "0.2"
 measureme = "9.1.0"
 num = "0.4.0"
+serde = {version = "1", features = ["derive"]}
 snap = "1"
+string-interner = "0.14.0"
 tracing = "0.1"
+vector-map = "1.0.1"
 rustc_middle = { path = "../rustc_middle" }
 rustc-demangle = "0.1.21"
 rustc_arena = { path = "../rustc_arena" }
@@ -36,3 +40,6 @@ rustc_target = { path = "../rustc_target" }
 smallvec = { version = "1.6.1", features = ["union", "may_dangle"] }
 rustc_ast = { path = "../rustc_ast" }
 rustc_span = { path = "../rustc_span" }
+
+[dev-dependencies]
+serde_test = "1"

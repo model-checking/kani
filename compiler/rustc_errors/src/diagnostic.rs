@@ -114,7 +114,7 @@ impl Diagnostic {
 
     pub fn is_error(&self) -> bool {
         match self.level {
-            Level::Bug | Level::Fatal | Level::Error | Level::FailureNote => true,
+            Level::Bug | Level::Fatal | Level::Error { .. } | Level::FailureNote => true,
 
             Level::Warning | Level::Note | Level::Help | Level::Cancelled | Level::Allow => false,
         }
@@ -465,10 +465,14 @@ impl Diagnostic {
         suggestions: impl Iterator<Item = String>,
         applicability: Applicability,
     ) -> &mut Self {
+        let mut suggestions: Vec<_> = suggestions.collect();
+        suggestions.sort();
+        let substitutions = suggestions
+            .into_iter()
+            .map(|snippet| Substitution { parts: vec![SubstitutionPart { snippet, span: sp }] })
+            .collect();
         self.suggestions.push(CodeSuggestion {
-            substitutions: suggestions
-                .map(|snippet| Substitution { parts: vec![SubstitutionPart { snippet, span: sp }] })
-                .collect(),
+            substitutions,
             msg: msg.to_owned(),
             style: SuggestionStyle::ShowCode,
             applicability,

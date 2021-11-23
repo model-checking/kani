@@ -15,8 +15,6 @@ use std::intrinsics::size_of;
 use std::ptr::drop_in_place;
 
 include!("../Helpers/vtable_utils_ignore.rs");
-include!("../../rmc-prelude.rs");
-
 // Different sized data fields on each struct
 struct Sheep {
     pub sheep_num: i32,
@@ -49,7 +47,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
     if random_number < 5 { Box::new(Sheep { sheep_num: 7 }) } else { Box::new(Cow { cow_num: 9 }) }
 }
 
-pub fn main() {
+fn main() {
     let ptr_size = size_of::<&usize>() as isize;
 
     // The vtable is laid out as the right hand side here:
@@ -74,19 +72,19 @@ pub fn main() {
         let data_ptr = data!(animal_sheep);
 
         // Note: i32 ptr cast
-        __VERIFIER_expect_fail(*(data_ptr as *mut i32) != 7, "Wrong data"); // From Sheep
+        rmc::expect_fail(*(data_ptr as *mut i32) != 7, "Wrong data"); // From Sheep
 
         let vtable_ptr = vtable!(animal_sheep);
 
         // Drop pointer
-        __VERIFIER_expect_fail(
+        rmc::expect_fail(
             drop_from_vtable(vtable_ptr) != drop_in_place::<Sheep> as *mut (),
             "Wrong drop",
         );
 
         // Size and align as usizes
-        __VERIFIER_expect_fail(size_from_vtable(vtable_ptr) != size_of::<i32>(), "Wrong size");
-        __VERIFIER_expect_fail(align_from_vtable(vtable_ptr) != size_of::<i32>(), "Wrong align");
+        rmc::expect_fail(size_from_vtable(vtable_ptr) != size_of::<i32>(), "Wrong size");
+        rmc::expect_fail(align_from_vtable(vtable_ptr) != size_of::<i32>(), "Wrong align");
     }
     // Check layout/values for Cow
     unsafe {
@@ -96,18 +94,18 @@ pub fn main() {
         let data_ptr = data!(animal_cow);
 
         // Note: i8 ptr cast
-        __VERIFIER_expect_fail(*(data_ptr as *mut i8) != 9, "Wrong data"); // From Cow
+        rmc::expect_fail(*(data_ptr as *mut i8) != 9, "Wrong data"); // From Cow
 
         let vtable_ptr = vtable!(animal_cow);
 
         // Drop pointer
-        __VERIFIER_expect_fail(
+        rmc::expect_fail(
             drop_from_vtable(vtable_ptr) != drop_in_place::<Cow> as *mut (),
             "Wrong drop",
         );
 
         // Size and align as usizes
-        __VERIFIER_expect_fail(size_from_vtable(vtable_ptr) != size_of::<i8>(), "Wrong size");
-        __VERIFIER_expect_fail(align_from_vtable(vtable_ptr) != size_of::<i8>(), "Wrong align");
+        rmc::expect_fail(size_from_vtable(vtable_ptr) != size_of::<i8>(), "Wrong size");
+        rmc::expect_fail(align_from_vtable(vtable_ptr) != size_of::<i8>(), "Wrong align");
     }
 }

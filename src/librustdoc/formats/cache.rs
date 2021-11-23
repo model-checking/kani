@@ -6,7 +6,7 @@ use rustc_middle::middle::privacy::AccessLevels;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::symbol::sym;
 
-use crate::clean::{self, GetDefId, ItemId, PrimitiveType};
+use crate::clean::{self, ItemId, PrimitiveType};
 use crate::config::RenderOptions;
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
@@ -119,6 +119,8 @@ crate struct Cache {
     ///
     /// Links are indexed by the DefId of the item they document.
     crate intra_doc_links: FxHashMap<ItemId, Vec<clean::ItemLink>>,
+    /// Cfg that have been hidden via #![doc(cfg_hide(...))]
+    crate hidden_cfg: FxHashSet<clean::cfg::Cfg>,
 }
 
 /// This struct is used to wrap the `cache` and `tcx` in order to run `DocFolder`.
@@ -201,8 +203,12 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
         // masked crate then remove it completely.
         if let clean::ImplItem(ref i) = *item.kind {
             if self.cache.masked_crates.contains(&item.def_id.krate())
-                || i.trait_.def_id().map_or(false, |d| self.cache.masked_crates.contains(&d.krate))
-                || i.for_.def_id().map_or(false, |d| self.cache.masked_crates.contains(&d.krate))
+                || i.trait_
+                    .as_ref()
+                    .map_or(false, |t| self.cache.masked_crates.contains(&t.def_id().krate))
+                || i.for_
+                    .def_id(self.cache)
+                    .map_or(false, |d| self.cache.masked_crates.contains(&d.krate))
             {
                 return None;
             }
@@ -221,11 +227,11 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
 
         // Collect all the implementors of traits.
         if let clean::ImplItem(ref i) = *item.kind {
-            if let Some(did) = i.trait_.def_id() {
-                if i.blanket_impl.is_none() {
+            if let Some(trait_) = &i.trait_ {
+                if !i.kind.is_blanket() {
                     self.cache
                         .implementors
-                        .entry(did)
+                        .entry(trait_.def_id())
                         .or_default()
                         .push(Impl { impl_item: item.clone() });
                 }
@@ -288,7 +294,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
                     // inserted later on when serializing the search-index.
                     if item.def_id.index().map_or(false, |idx| idx != CRATE_DEF_INDEX) {
                         let desc = item.doc_value().map_or_else(String::new, |x| {
-                            short_markdown_summary(&x.as_str(), &item.link_names(&self.cache))
+                            short_markdown_summary(x.as_str(), &item.link_names(self.cache))
                         });
                         self.cache.search_index.push(IndexItem {
                             ty: item.type_(),
@@ -297,7 +303,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
                             desc,
                             parent,
                             parent_idx: None,
-                            search_type: get_index_search_type(&item, self.tcx),
+                            search_type: get_index_search_type(&item, self.tcx, self.cache),
                             aliases: item.attrs.get_doc_aliases(),
                         });
                     }
@@ -400,12 +406,8 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
                     }
                     clean::DynTrait(ref bounds, _)
                     | clean::BorrowedRef { type_: box clean::DynTrait(ref bounds, _), .. } => {
-                        if let Some(did) = bounds[0].trait_.def_id() {
-                            self.cache.parent_stack.push(did);
-                            true
-                        } else {
-                            false
-                        }
+                        self.cache.parent_stack.push(bounds[0].trait_.def_id());
+                        true
                     }
                     ref t => {
                         let prim_did = t
@@ -439,9 +441,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
                 }
                 clean::DynTrait(ref bounds, _)
                 | clean::BorrowedRef { type_: box clean::DynTrait(ref bounds, _), .. } => {
-                    if let Some(did) = bounds[0].trait_.def_id() {
-                        dids.insert(did);
-                    }
+                    dids.insert(bounds[0].trait_.def_id());
                 }
                 ref t => {
                     let did = t
@@ -456,7 +456,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
 
             if let Some(generics) = i.trait_.as_ref().and_then(|t| t.generics()) {
                 for bound in generics {
-                    if let Some(did) = bound.def_id() {
+                    if let Some(did) = bound.def_id(self.cache) {
                         dids.insert(did);
                     }
                 }
@@ -464,7 +464,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
             let impl_item = Impl { impl_item: item };
             if impl_item.trait_did().map_or(true, |d| self.cache.traits.contains_key(&d)) {
                 for did in dids {
-                    self.cache.impls.entry(did).or_insert(vec![]).push(impl_item.clone());
+                    self.cache.impls.entry(did).or_insert_with(Vec::new).push(impl_item.clone());
                 }
             } else {
                 let trait_did = impl_item.trait_did().expect("no trait did");

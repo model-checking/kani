@@ -80,6 +80,7 @@ impl Barrier {
     /// let barrier = Barrier::new(10);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn new(n: usize) -> Barrier {
         Barrier {
             lock: Mutex::new(BarrierState { count: 0, generation_id: 0 }),
@@ -129,7 +130,7 @@ impl Barrier {
         if lock.count < self.num_threads {
             // We need a while loop to guard against spurious wakeups.
             // https://en.wikipedia.org/wiki/Spurious_wakeup
-            while local_gen == lock.generation_id && lock.count < self.num_threads {
+            while local_gen == lock.generation_id {
                 lock = self.cvar.wait(lock).unwrap();
             }
             BarrierWaitResult(false)
@@ -166,6 +167,7 @@ impl BarrierWaitResult {
     /// println!("{:?}", barrier_wait_result.is_leader());
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn is_leader(&self) -> bool {
         self.0
     }

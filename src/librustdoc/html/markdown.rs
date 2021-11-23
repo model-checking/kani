@@ -8,11 +8,19 @@
 //! extern crate rustc_span;
 //!
 //! use rustc_span::edition::Edition;
-//! use rustdoc::html::markdown::{IdMap, Markdown, ErrorCodes};
+//! use rustdoc::html::markdown::{HeadingOffset, IdMap, Markdown, ErrorCodes};
 //!
 //! let s = "My *markdown* _text_";
 //! let mut id_map = IdMap::new();
-//! let md = Markdown(s, &[], &mut id_map, ErrorCodes::Yes, Edition::Edition2015, &None);
+//! let md = Markdown {
+//!     content: s,
+//!     links: &[],
+//!     ids: &mut id_map,
+//!     error_codes: ErrorCodes::Yes,
+//!     edition: Edition::Edition2015,
+//!     playground: &None,
+//!     heading_offset: HeadingOffset::H2,
+//! };
 //! let html = md.into_string();
 //! // ... something using html
 //! ```
@@ -47,6 +55,8 @@ use pulldown_cmark::{
 #[cfg(test)]
 mod tests;
 
+const MAX_HEADER_LEVEL: u32 = 6;
+
 /// Options for rendering Markdown in the main body of documentation.
 pub(crate) fn main_body_opts() -> Options {
     Options::ENABLE_TABLES
@@ -65,20 +75,33 @@ pub(crate) fn summary_opts() -> Options {
         | Options::ENABLE_SMART_PUNCTUATION
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum HeadingOffset {
+    H1 = 0,
+    H2,
+    H3,
+    H4,
+    H5,
+    H6,
+}
+
 /// When `to_string` is called, this struct will emit the HTML corresponding to
 /// the rendered version of the contained markdown string.
-pub struct Markdown<'a>(
-    pub &'a str,
+pub struct Markdown<'a> {
+    pub content: &'a str,
     /// A list of link replacements.
-    pub &'a [RenderedLink],
+    pub links: &'a [RenderedLink],
     /// The current list of used header IDs.
-    pub &'a mut IdMap,
+    pub ids: &'a mut IdMap,
     /// Whether to allow the use of explicit error codes in doctest lang strings.
-    pub ErrorCodes,
+    pub error_codes: ErrorCodes,
     /// Default edition to use when parsing doctests (to add a `fn main`).
-    pub Edition,
-    pub &'a Option<Playground>,
-);
+    pub edition: Edition,
+    pub playground: &'a Option<Playground>,
+    /// Offset at which we render headings.
+    /// E.g. if `heading_offset: HeadingOffset::H2`, then `# something` renders an `<h2>`.
+    pub heading_offset: HeadingOffset,
+}
 /// A tuple struct like `Markdown` that renders the markdown with a table of contents.
 crate struct MarkdownWithToc<'a>(
     crate &'a str,
@@ -155,7 +178,7 @@ fn map_line(s: &str) -> Line<'_> {
         Line::Shown(Cow::Owned(s.replacen("##", "#", 1)))
     } else if let Some(stripped) = trimmed.strip_prefix("# ") {
         // # text
-        Line::Hidden(&stripped)
+        Line::Hidden(stripped)
     } else if trimmed == "#" {
         // We cannot handle '#text' because it could be #[attr].
         Line::Hidden("")
@@ -235,7 +258,7 @@ impl<'a, I: Iterator<Item = Event<'a>>> Iterator for CodeBlocks<'_, 'a, I> {
         let parse_result = match kind {
             CodeBlockKind::Fenced(ref lang) => {
                 let parse_result =
-                    LangString::parse_without_check(&lang, self.check_error_codes, false);
+                    LangString::parse_without_check(lang, self.check_error_codes, false);
                 if !parse_result.rust {
                     return Some(Event::Html(
                         format!(
@@ -335,6 +358,7 @@ impl<'a, I: Iterator<Item = Event<'a>>> Iterator for CodeBlocks<'_, 'a, I> {
             playground_button.as_deref(),
             tooltip,
             edition,
+            None,
             None,
             None,
         );
@@ -489,11 +513,17 @@ struct HeadingLinks<'a, 'b, 'ids, I> {
     toc: Option<&'b mut TocBuilder>,
     buf: VecDeque<SpannedEvent<'a>>,
     id_map: &'ids mut IdMap,
+    heading_offset: HeadingOffset,
 }
 
 impl<'a, 'b, 'ids, I> HeadingLinks<'a, 'b, 'ids, I> {
-    fn new(iter: I, toc: Option<&'b mut TocBuilder>, ids: &'ids mut IdMap) -> Self {
-        HeadingLinks { inner: iter, toc, buf: VecDeque::new(), id_map: ids }
+    fn new(
+        iter: I,
+        toc: Option<&'b mut TocBuilder>,
+        ids: &'ids mut IdMap,
+        heading_offset: HeadingOffset,
+    ) -> Self {
+        HeadingLinks { inner: iter, toc, buf: VecDeque::new(), id_map: ids, heading_offset }
     }
 }
 
@@ -530,6 +560,7 @@ impl<'a, 'b, 'ids, I: Iterator<Item = SpannedEvent<'a>>> Iterator
                 self.buf.push_front((Event::Html(format!("{} ", sec).into()), 0..0));
             }
 
+            let level = std::cmp::min(level + (self.heading_offset as u32), MAX_HEADER_LEVEL);
             self.buf.push_back((Event::Html(format!("</a></h{}>", level).into()), 0..0));
 
             let start_tags = format!(
@@ -638,7 +669,7 @@ impl<'a, I: Iterator<Item = SpannedEvent<'a>>> Iterator for Footnotes<'a, I> {
         loop {
             match self.inner.next() {
                 Some((Event::FootnoteReference(ref reference), range)) => {
-                    let entry = self.get_entry(&reference);
+                    let entry = self.get_entry(reference);
                     let reference = format!(
                         "<sup id=\"fnref{0}\"><a href=\"#fn{0}\">{0}</a></sup>",
                         (*entry).1
@@ -735,7 +766,7 @@ pub fn find_testable_code<T: doctest::Tester>(
                 // If there are characters between the preceding line ending and
                 // this code block, `str::lines` will return an additional line,
                 // which we subtract here.
-                if nb_lines != 0 && !&doc[prev_offset..offset.start].ends_with("\n") {
+                if nb_lines != 0 && !&doc[prev_offset..offset.start].ends_with('\n') {
                     nb_lines -= 1;
                 }
                 let line = tests.get_line() + nb_lines + 1;
@@ -873,7 +904,7 @@ impl LangString {
         string
             .split(|c| c == ',' || c == ' ' || c == '\t')
             .map(str::trim)
-            .map(|token| if token.chars().next() == Some('.') { &token[1..] } else { token })
+            .map(|token| token.strip_prefix('.').unwrap_or(token))
             .filter(|token| !token.is_empty())
     }
 
@@ -943,7 +974,10 @@ impl LangString {
                 }
                 x if extra.is_some() => {
                     let s = x.to_lowercase();
-                    match if s == "compile-fail" || s == "compile_fail" || s == "compilefail" {
+                    if let Some((flag, help)) = if s == "compile-fail"
+                        || s == "compile_fail"
+                        || s == "compilefail"
+                    {
                         Some((
                             "compile_fail",
                             "the code block will either not be tested if not marked as a rust one \
@@ -976,15 +1010,12 @@ impl LangString {
                     } else {
                         None
                     } {
-                        Some((flag, help)) => {
-                            if let Some(ref extra) = extra {
-                                extra.error_invalid_codeblock_attr(
-                                    &format!("unknown attribute `{}`. Did you mean `{}`?", x, flag),
-                                    help,
-                                );
-                            }
+                        if let Some(extra) = extra {
+                            extra.error_invalid_codeblock_attr(
+                                &format!("unknown attribute `{}`. Did you mean `{}`?", x, flag),
+                                help,
+                            );
                         }
-                        None => {}
                     }
                     seen_other_tags = true;
                 }
@@ -1005,20 +1036,25 @@ impl LangString {
 
 impl Markdown<'_> {
     pub fn into_string(self) -> String {
-        let Markdown(md, links, mut ids, codes, edition, playground) = self;
+        let Markdown {
+            content: md,
+            links,
+            mut ids,
+            error_codes: codes,
+            edition,
+            playground,
+            heading_offset,
+        } = self;
 
         // This is actually common enough to special-case
         if md.is_empty() {
             return String::new();
         }
         let mut replacer = |broken_link: BrokenLink<'_>| {
-            if let Some(link) =
-                links.iter().find(|link| &*link.original_text == broken_link.reference)
-            {
-                Some((link.href.as_str().into(), link.new_text.as_str().into()))
-            } else {
-                None
-            }
+            links
+                .iter()
+                .find(|link| &*link.original_text == broken_link.reference)
+                .map(|link| (link.href.as_str().into(), link.new_text.as_str().into()))
         };
 
         let p = Parser::new_with_broken_link_callback(md, main_body_opts(), Some(&mut replacer));
@@ -1026,7 +1062,7 @@ impl Markdown<'_> {
 
         let mut s = String::with_capacity(md.len() * 3 / 2);
 
-        let p = HeadingLinks::new(p, None, &mut ids);
+        let p = HeadingLinks::new(p, None, &mut ids, heading_offset);
         let p = Footnotes::new(p);
         let p = LinkReplacer::new(p.map(|(ev, _)| ev), links);
         let p = TableWrapper::new(p);
@@ -1048,7 +1084,7 @@ impl MarkdownWithToc<'_> {
         let mut toc = TocBuilder::new();
 
         {
-            let p = HeadingLinks::new(p, Some(&mut toc), &mut ids);
+            let p = HeadingLinks::new(p, Some(&mut toc), &mut ids, HeadingOffset::H1);
             let p = Footnotes::new(p);
             let p = TableWrapper::new(p.map(|(ev, _)| ev));
             let p = CodeBlocks::new(p, codes, edition, playground);
@@ -1077,7 +1113,7 @@ impl MarkdownHtml<'_> {
 
         let mut s = String::with_capacity(md.len() * 3 / 2);
 
-        let p = HeadingLinks::new(p, None, &mut ids);
+        let p = HeadingLinks::new(p, None, &mut ids, HeadingOffset::H1);
         let p = Footnotes::new(p);
         let p = TableWrapper::new(p.map(|(ev, _)| ev));
         let p = CodeBlocks::new(p, codes, edition, playground);
@@ -1096,13 +1132,10 @@ impl MarkdownSummaryLine<'_> {
         }
 
         let mut replacer = |broken_link: BrokenLink<'_>| {
-            if let Some(link) =
-                links.iter().find(|link| &*link.original_text == broken_link.reference)
-            {
-                Some((link.href.as_str().into(), link.new_text.as_str().into()))
-            } else {
-                None
-            }
+            links
+                .iter()
+                .find(|link| &*link.original_text == broken_link.reference)
+                .map(|link| (link.href.as_str().into(), link.new_text.as_str().into()))
         };
 
         let p = Parser::new_with_broken_link_callback(md, summary_opts(), Some(&mut replacer));
@@ -1133,13 +1166,10 @@ fn markdown_summary_with_limit(
     }
 
     let mut replacer = |broken_link: BrokenLink<'_>| {
-        if let Some(link) =
-            link_names.iter().find(|link| &*link.original_text == broken_link.reference)
-        {
-            Some((link.href.as_str().into(), link.new_text.as_str().into()))
-        } else {
-            None
-        }
+        link_names
+            .iter()
+            .find(|link| &*link.original_text == broken_link.reference)
+            .map(|link| (link.href.as_str().into(), link.new_text.as_str().into()))
     };
 
     let p = Parser::new_with_broken_link_callback(md, summary_opts(), Some(&mut replacer));
@@ -1295,7 +1325,7 @@ crate fn markdown_links(md: &str) -> Vec<MarkdownLink> {
     // There's no need to thread an IdMap through to here because
     // the IDs generated aren't going to be emitted anywhere.
     let mut ids = IdMap::new();
-    let iter = Footnotes::new(HeadingLinks::new(p, None, &mut ids));
+    let iter = Footnotes::new(HeadingLinks::new(p, None, &mut ids, HeadingOffset::H1));
 
     for ev in iter {
         if let Event::Start(Tag::Link(kind, dest, _)) = ev.0 {
@@ -1374,7 +1404,7 @@ crate fn rust_code_blocks(md: &str, extra_info: &ExtraInfo<'_>) -> Vec<RustCodeB
                 CodeBlockKind::Indented => {
                     // The ending of the offset goes too far sometime so we reduce it by one in
                     // these cases.
-                    if offset.end > offset.start && md.get(offset.end..=offset.end) == Some(&"\n") {
+                    if offset.end > offset.start && md.get(offset.end..=offset.end) == Some("\n") {
                         (
                             LangString::default(),
                             offset.start,

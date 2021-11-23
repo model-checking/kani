@@ -1,27 +1,9 @@
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
-use rustc_middle::hir::map::blocks::FnLikeNode;
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::symbol::Symbol;
 use rustc_target::spec::abi::Abi;
-
-/// Whether the `def_id` counts as const fn in your current crate, considering all active
-/// feature gates
-pub fn is_const_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.is_const_fn_raw(def_id)
-        && match is_unstable_const_fn(tcx, def_id) {
-            Some(feature_name) => {
-                // has a `rustc_const_unstable` attribute, check whether the user enabled the
-                // corresponding feature gate.
-                tcx.features().declared_lib_features.iter().any(|&(sym, _)| sym == feature_name)
-            }
-            // functions without const stability are either stable user written
-            // const fn or the user is using feature gates and we thus don't
-            // care what they do
-            None => true,
-        }
-}
 
 /// Whether the `def_id` is an unstable const fn and what feature gate is necessary to enable it
 pub fn is_unstable_const_fn(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
@@ -61,23 +43,21 @@ fn is_const_fn_raw(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         } else {
             false
         }
-    } else if let Some(fn_like) = FnLikeNode::from_node(node) {
-        if fn_like.constness() == hir::Constness::Const {
+    } else if let Some(fn_kind) = node.fn_kind() {
+        if fn_kind.constness() == hir::Constness::Const {
             return true;
         }
 
         // If the function itself is not annotated with `const`, it may still be a `const fn`
         // if it resides in a const trait impl.
         is_parent_const_impl_raw(tcx, hir_id)
-    } else if let hir::Node::Ctor(_) = node {
-        true
     } else {
-        false
+        matches!(node, hir::Node::Ctor(_))
     }
 }
 
 fn is_promotable_const_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    is_const_fn(tcx, def_id)
+    tcx.is_const_fn(def_id)
         && match tcx.lookup_const_stability(def_id) {
             Some(stab) => {
                 if cfg!(debug_assertions) && stab.promotable {

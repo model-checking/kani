@@ -146,7 +146,7 @@ macro_rules! acquire {
 /// use std::sync::Arc;
 ///
 /// let my_arc = Arc::new(());
-/// Arc::downgrade(&my_arc);
+/// let my_weak = Arc::downgrade(&my_arc);
 /// ```
 ///
 /// `Arc<T>`'s implementations of traits like `Clone` may also be called using
@@ -448,6 +448,7 @@ impl<T> Arc<T> {
     /// ```
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_uninit() -> Arc<mem::MaybeUninit<T>> {
         unsafe {
             Arc::from_ptr(Arc::allocate_for_layout(
@@ -480,6 +481,7 @@ impl<T> Arc<T> {
     /// [zeroed]: mem::MaybeUninit::zeroed
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_zeroed() -> Arc<mem::MaybeUninit<T>> {
         unsafe {
             Arc::from_ptr(Arc::allocate_for_layout(
@@ -494,6 +496,7 @@ impl<T> Arc<T> {
     /// `data` will be pinned in memory and unable to be moved.
     #[cfg(not(no_global_oom_handling))]
     #[stable(feature = "pin", since = "1.33.0")]
+    #[must_use]
     pub fn pin(data: T) -> Pin<Arc<T>> {
         unsafe { Pin::new_unchecked(Arc::new(data)) }
     }
@@ -662,6 +665,7 @@ impl<T> Arc<[T]> {
     /// ```
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_uninit_slice(len: usize) -> Arc<[mem::MaybeUninit<T>]> {
         unsafe { Arc::from_ptr(Arc::allocate_for_slice(len)) }
     }
@@ -688,6 +692,7 @@ impl<T> Arc<[T]> {
     /// [zeroed]: mem::MaybeUninit::zeroed
     #[cfg(not(no_global_oom_handling))]
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use]
     pub fn new_zeroed_slice(len: usize) -> Arc<[mem::MaybeUninit<T>]> {
         unsafe {
             Arc::from_ptr(Arc::allocate_for_layout(
@@ -735,6 +740,7 @@ impl<T> Arc<mem::MaybeUninit<T>> {
     /// assert_eq!(*five, 5)
     /// ```
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[inline]
     pub unsafe fn assume_init(self) -> Arc<T> {
         Arc::from_inner(mem::ManuallyDrop::new(self).ptr.cast())
@@ -776,6 +782,7 @@ impl<T> Arc<[mem::MaybeUninit<T>]> {
     /// assert_eq!(*values, [1, 2, 3])
     /// ```
     #[unstable(feature = "new_uninit", issue = "63291")]
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[inline]
     pub unsafe fn assume_init(self) -> Arc<[T]> {
         unsafe { Arc::from_ptr(mem::ManuallyDrop::new(self).ptr.as_ptr() as _) }
@@ -797,6 +804,7 @@ impl<T: ?Sized> Arc<T> {
     /// let x_ptr = Arc::into_raw(x);
     /// assert_eq!(unsafe { &*x_ptr }, "hello");
     /// ```
+    #[must_use = "losing the pointer will leak memory"]
     #[stable(feature = "rc_raw", since = "1.17.0")]
     pub fn into_raw(this: Self) -> *const T {
         let ptr = Self::as_ptr(&this);
@@ -820,6 +828,7 @@ impl<T: ?Sized> Arc<T> {
     /// assert_eq!(x_ptr, Arc::as_ptr(&y));
     /// assert_eq!(unsafe { &*x_ptr }, "hello");
     /// ```
+    #[must_use]
     #[stable(feature = "rc_as_ptr", since = "1.45.0")]
     pub fn as_ptr(this: &Self) -> *const T {
         let ptr: *mut ArcInner<T> = NonNull::as_ptr(this.ptr);
@@ -890,6 +899,8 @@ impl<T: ?Sized> Arc<T> {
     ///
     /// let weak_five = Arc::downgrade(&five);
     /// ```
+    #[must_use = "this returns a new `Weak` pointer, \
+                  without modifying the original `Arc`"]
     #[stable(feature = "arc_weak", since = "1.4.0")]
     pub fn downgrade(this: &Self) -> Weak<T> {
         // This Relaxed is OK because we're checking the value in the CAS
@@ -943,6 +954,7 @@ impl<T: ?Sized> Arc<T> {
     /// assert_eq!(1, Arc::weak_count(&five));
     /// ```
     #[inline]
+    #[must_use]
     #[stable(feature = "arc_counts", since = "1.15.0")]
     pub fn weak_count(this: &Self) -> usize {
         let cnt = this.inner().weak.load(SeqCst);
@@ -972,6 +984,7 @@ impl<T: ?Sized> Arc<T> {
     /// assert_eq!(2, Arc::strong_count(&five));
     /// ```
     #[inline]
+    #[must_use]
     #[stable(feature = "arc_counts", since = "1.15.0")]
     pub fn strong_count(this: &Self) -> usize {
         this.inner().strong.load(SeqCst)
@@ -1069,8 +1082,6 @@ impl<T: ?Sized> Arc<T> {
         drop(Weak { ptr: self.ptr });
     }
 
-    #[inline]
-    #[stable(feature = "ptr_eq", since = "1.17.0")]
     /// Returns `true` if the two `Arc`s point to the same allocation
     /// (in a vein similar to [`ptr::eq`]).
     ///
@@ -1088,6 +1099,9 @@ impl<T: ?Sized> Arc<T> {
     /// ```
     ///
     /// [`ptr::eq`]: core::ptr::eq "ptr::eq"
+    #[inline]
+    #[must_use]
+    #[stable(feature = "ptr_eq", since = "1.17.0")]
     pub fn ptr_eq(this: &Self, other: &Self) -> bool {
         this.ptr.as_ptr() == other.ptr.as_ptr()
     }
@@ -1678,6 +1692,7 @@ impl<T> Weak<T> {
     /// assert!(empty.upgrade().is_none());
     /// ```
     #[stable(feature = "downgraded_weak", since = "1.10.0")]
+    #[must_use]
     pub fn new() -> Weak<T> {
         Weak { ptr: NonNull::new(usize::MAX as *mut ArcInner<T>).expect("MAX is not 0") }
     }
@@ -1716,6 +1731,7 @@ impl<T: ?Sized> Weak<T> {
     /// ```
     ///
     /// [`null`]: core::ptr::null "ptr::null"
+    #[must_use]
     #[stable(feature = "weak_into_raw", since = "1.45.0")]
     pub fn as_ptr(&self) -> *const T {
         let ptr: *mut ArcInner<T> = NonNull::as_ptr(self.ptr);
@@ -1759,6 +1775,7 @@ impl<T: ?Sized> Weak<T> {
     ///
     /// [`from_raw`]: Weak::from_raw
     /// [`as_ptr`]: Weak::as_ptr
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "weak_into_raw", since = "1.45.0")]
     pub fn into_raw(self) -> *const T {
         let result = self.as_ptr();
@@ -1852,6 +1869,8 @@ impl<T: ?Sized> Weak<T> {
     ///
     /// assert!(weak_five.upgrade().is_none());
     /// ```
+    #[must_use = "this returns a new `Arc`, \
+                  without modifying the original weak pointer"]
     #[stable(feature = "arc_weak", since = "1.4.0")]
     pub fn upgrade(&self) -> Option<Arc<T>> {
         // We use a CAS loop to increment the strong count instead of a
@@ -1889,6 +1908,7 @@ impl<T: ?Sized> Weak<T> {
     /// Gets the number of strong (`Arc`) pointers pointing to this allocation.
     ///
     /// If `self` was created using [`Weak::new`], this will return 0.
+    #[must_use]
     #[stable(feature = "weak_counts", since = "1.41.0")]
     pub fn strong_count(&self) -> usize {
         if let Some(inner) = self.inner() { inner.strong.load(SeqCst) } else { 0 }
@@ -1905,6 +1925,7 @@ impl<T: ?Sized> Weak<T> {
     /// Due to implementation details, the returned value can be off by 1 in
     /// either direction when other threads are manipulating any `Arc`s or
     /// `Weak`s pointing to the same allocation.
+    #[must_use]
     #[stable(feature = "weak_counts", since = "1.41.0")]
     pub fn weak_count(&self) -> usize {
         self.inner()
@@ -1984,6 +2005,7 @@ impl<T: ?Sized> Weak<T> {
     ///
     /// [`ptr::eq`]: core::ptr::eq "ptr::eq"
     #[inline]
+    #[must_use]
     #[stable(feature = "weak_ptr_eq", since = "1.39.0")]
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.ptr.as_ptr() == other.ptr.as_ptr()

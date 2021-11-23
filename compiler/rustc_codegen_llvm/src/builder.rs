@@ -86,7 +86,7 @@ impl ty::layout::HasParamEnv<'tcx> for Builder<'_, '_, 'tcx> {
 impl HasTargetSpec for Builder<'_, '_, 'tcx> {
     #[inline]
     fn target_spec(&self) -> &Target {
-        &self.cx.target_spec()
+        self.cx.target_spec()
     }
 }
 
@@ -604,6 +604,32 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
+    fn type_metadata(&mut self, function: &'ll Value, typeid: String) {
+        let typeid_metadata = self.typeid_metadata(typeid);
+        let v = [self.const_usize(0), typeid_metadata];
+        unsafe {
+            llvm::LLVMGlobalSetMetadata(
+                function,
+                llvm::MD_type as c_uint,
+                llvm::LLVMValueAsMetadata(llvm::LLVMMDNodeInContext(
+                    self.cx.llcx,
+                    v.as_ptr(),
+                    v.len() as c_uint,
+                )),
+            )
+        }
+    }
+
+    fn typeid_metadata(&mut self, typeid: String) -> Self::Value {
+        unsafe {
+            llvm::LLVMMDStringInContext(
+                self.cx.llcx,
+                typeid.as_ptr() as *const c_char,
+                typeid.as_bytes().len() as c_uint,
+            )
+        }
+    }
+
     fn store(&mut self, val: &'ll Value, ptr: &'ll Value, align: Align) -> &'ll Value {
         self.store_with_flags(val, ptr, align, MemFlags::empty())
     }
@@ -705,7 +731,7 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     fn fptoui_sat(&mut self, val: &'ll Value, dest_ty: &'ll Type) -> Option<&'ll Value> {
-        if llvm_util::get_version() >= (12, 0, 0) && !self.fptoint_sat_broken_in_llvm() {
+        if !self.fptoint_sat_broken_in_llvm() {
             let src_ty = self.cx.val_ty(val);
             let float_width = self.cx.float_width(src_ty);
             let int_width = self.cx.int_width(dest_ty);
@@ -717,7 +743,7 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     fn fptosi_sat(&mut self, val: &'ll Value, dest_ty: &'ll Type) -> Option<&'ll Value> {
-        if llvm_util::get_version() >= (12, 0, 0) && !self.fptoint_sat_broken_in_llvm() {
+        if !self.fptoint_sat_broken_in_llvm() {
             let src_ty = self.cx.val_ty(val);
             let float_width = self.cx.float_width(src_ty);
             let int_width = self.cx.int_width(dest_ty);
@@ -828,6 +854,7 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     fn fcmp(&mut self, op: RealPredicate, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
+        let op = llvm::RealPredicate::from_generic(op);
         unsafe { llvm::LLVMBuildFCmp(self.llbuilder, op as c_uint, lhs, rhs, UNNAMED) }
     }
 

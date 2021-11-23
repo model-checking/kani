@@ -90,9 +90,7 @@ impl OutlivesSuggestionBuilder {
         let mut unified_already = FxHashSet::default();
 
         for (fr, outlived) in &self.constraints_to_add {
-            let fr_name = if let Some(fr_name) = self.region_vid_to_name(mbcx, *fr) {
-                fr_name
-            } else {
+            let Some(fr_name) = self.region_vid_to_name(mbcx, *fr) else {
                 continue;
             };
 
@@ -171,9 +169,7 @@ impl OutlivesSuggestionBuilder {
         let outlived_fr_name = self.region_vid_to_name(mbcx, errci.outlived_fr);
 
         if let (Some(fr_name), Some(outlived_fr_name)) = (fr_name, outlived_fr_name) {
-            if let RegionNameSource::Static = outlived_fr_name.source {
-                diag.help(&format!("consider replacing `{}` with `'static`", fr_name));
-            } else {
+            if !matches!(outlived_fr_name.source, RegionNameSource::Static) {
                 diag.help(&format!(
                     "consider adding the following bound: `{}: {}`",
                     fr_name, outlived_fr_name

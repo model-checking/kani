@@ -147,7 +147,7 @@ impl Inliner<'tcx> {
         self.check_mir_body(callsite, callee_body, callee_attrs)?;
 
         if !self.tcx.consider_optimizing(|| {
-            format!("Inline {:?} into {}", callee_body.span, callsite.callee)
+            format!("Inline {:?} into {:?}", callsite.callee, caller_body.source)
         }) {
             return Err("optimization fuel exhausted");
         }
@@ -673,9 +673,7 @@ impl Inliner<'tcx> {
             assert!(args.next().is_none());
 
             let tuple = Place::from(tuple);
-            let tuple_tys = if let ty::Tuple(s) = tuple.ty(caller_body, tcx).ty.kind() {
-                s
-            } else {
+            let ty::Tuple(tuple_tys) = tuple.ty(caller_body, tcx).ty.kind() else {
                 bug!("Closure arguments are not passed as a tuple");
             };
 

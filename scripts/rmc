@@ -27,30 +27,48 @@ def main():
         json_runnable_filename = base + "_runnable.json"
         goto_runnable_filename = base + "_runnable.goto"
         c_runnable_filename = base + "_runnable.c"
-        if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_runnable_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, ["gen-c"]):
+        if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(
+                args.input,
+                base,
+                json_runnable_filename,
+                args.verbose,
+                args.debug,
+                args.keep_temps,
+                args.mangler,
+                args.dry_run,
+                ["gen-c"]):
             return 1
 
-        if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_runnable_filename, goto_runnable_filename, args.verbose, args.keep_temps, args.dry_run):
-            return 1
+        out_files = rmc.symbol_table_to_gotoc([json_runnable_filename], args.verbose, args.keep_temps, args.dry_run)
 
-        if EXIT_CODE_SUCCESS != rmc.link_c_lib(goto_runnable_filename, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
-            return 1
+        rmc.link_c_lib(out_files, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
+                       args.dry_run, args.keep_temps)
 
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_runnable_filename, c_runnable_filename, args.verbose, args.dry_run):
             return 1
 
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    json_filename = base + ".json"
+    symbol_table_json_filename = base + ".symtab.json"
     goto_filename = base + ".goto"
     c_filename = base + ".c"
     symbols_filename = base + ".symbols"
 
-    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, json_filename, args.verbose, args.debug, args.keep_temps, args.mangler, args.dry_run, args.use_abs, args.abs_type, []):
+    if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(
+            args.input,
+            base,
+            symbol_table_json_filename,
+            args.verbose,
+            args.debug,
+            args.keep_temps,
+            args.mangler,
+            args.dry_run,
+            args.use_abs,
+            args.abs_type,
+            []):
         return 1
 
-    if EXIT_CODE_SUCCESS != rmc.symbol_table_to_gotoc(json_filename, goto_filename, args.verbose, args.keep_temps, args.dry_run):
-        return 1
+    out_files = rmc.symbol_table_to_gotoc([symbol_table_json_filename], args.verbose, args.keep_temps, args.dry_run)
 
     args.c_lib.append(str(RMC_C_LIB))
 
@@ -63,8 +81,8 @@ def main():
         RMC_C_HASHSET = RMC_C_STUB / "hashset" / "hashset.c"
         args.c_lib.append(str(RMC_C_HASHSET))
 
-    if EXIT_CODE_SUCCESS != rmc.link_c_lib(goto_filename, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run):
-        return 1
+    rmc.link_c_lib(out_files, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run,
+                   args.keep_temps)
 
     if args.gen_c:
         if EXIT_CODE_SUCCESS != rmc.goto_to_c(goto_filename, c_filename, args.verbose, args.dry_run):
@@ -74,14 +92,34 @@ def main():
         if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(goto_filename, symbols_filename, args.verbose, args.dry_run):
             return 1
 
+    if args.undefined_function_checks:
+        # https://github.com/diffblue/cbmc/issues/6393
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                goto_filename, goto_filename,
+                ['--add-library'],
+                args.verbose, dry_run=args.dry_run):
+            return 1
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                goto_filename, goto_filename,
+                ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
+                args.verbose, dry_run=args.dry_run):
+            return 1
+    else:
+        # Apply --drop-unused-functions if undefined-function-checks was turned off
+        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+                goto_filename, goto_filename,
+                ['--drop-unused-functions'],
+                args.verbose, dry_run=args.dry_run):
+            return 1
+
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
 
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
-        retcode = rmc.run_visualize(goto_filename, args.cbmc_args, cover_args, \
-                                    args.verbose, args.quiet, args.keep_temps, \
+        retcode = rmc.run_visualize(goto_filename, args.cbmc_args, cover_args,
+                                    args.verbose, args.quiet, args.keep_temps,
                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
         retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
@@ -94,9 +132,11 @@ def main():
 def parse_args():
     # Create parser
     def create_parser():
-        parser = argparse.ArgumentParser(description="Verify a single Rust file. For more information, see https://github.com/model-checking/rmc.")
+        parser = argparse.ArgumentParser(
+            description="Verify a single Rust file. For more information, see https://github.com/model-checking/rmc.")
 
-        input_group = parser.add_argument_group("Input", "You can pass in the rust file positionally or with the --input flag.")
+        input_group = parser.add_argument_group(
+            "Input", "You can pass in the rust file positionally or with the --input flag.")
         input_group.add_argument("input", help="Rust file to verify", nargs="?")
         input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
 
@@ -120,7 +160,10 @@ def parse_args():
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:
-            rmc.add_selected_default_cbmc_flags(args)
+            rmc.add_selected_default_cbmc_checks(args)
+
+        # Conditionally add common CBMC flags
+        rmc.process_common_cbmc_flags(args)
 
     parser = create_parser()
     args = parser.parse_args()
@@ -128,6 +171,7 @@ def parse_args():
     post_process(args)
 
     return args
+
 
 if __name__ == "__main__":
     sys.exit(main())

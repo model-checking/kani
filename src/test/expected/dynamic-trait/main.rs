@@ -47,7 +47,7 @@ fn impl_area(a: impl Shape) -> u32 {
     a.area()
 }
 
-pub fn main() {
+fn main() {
     let rec = Rectangle { w: 10, h: 5 };
     assert!(rec.vol(3) == 150);
     assert!(impl_area(rec.clone()) == 50);

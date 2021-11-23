@@ -4,6 +4,7 @@
 
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use cbmc::NO_PRETTY_NAME;
 use rustc_middle::mir::interpret::{ConstValue, Scalar};
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
@@ -586,7 +587,7 @@ impl<'tcx> GotocCtx<'tcx> {
             fname,
             Type::code(vec![var.to_function_parameter()], Type::bool()),
             Some(body),
-            None,
+            NO_PRETTY_NAME,
             Location::none(),
         )
     }

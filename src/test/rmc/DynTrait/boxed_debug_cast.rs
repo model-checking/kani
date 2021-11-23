@@ -22,7 +22,7 @@ fn f<'a>(x: &'a &Box<dyn Error + Send + Sync>) -> Box<&'a dyn Debug> {
     Box::new(d)
 }
 
-pub fn main() {
+fn main() {
     let c = Concrete {};
     let x = Box::new(c) as Box<dyn Error + Send + Sync>;
     let d = f(&&x);

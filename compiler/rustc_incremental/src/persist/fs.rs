@@ -139,9 +139,6 @@ pub fn dep_graph_path(sess: &Session) -> PathBuf {
 pub fn staging_dep_graph_path(sess: &Session) -> PathBuf {
     in_incr_comp_dir_sess(sess, STAGING_DEP_GRAPH_FILENAME)
 }
-pub fn dep_graph_path_from(incr_comp_session_dir: &Path) -> PathBuf {
-    in_incr_comp_dir(incr_comp_session_dir, DEP_GRAPH_FILENAME)
-}
 
 pub fn work_products_path(sess: &Session) -> PathBuf {
     in_incr_comp_dir_sess(sess, WORK_PRODUCTS_FILENAME)
@@ -241,9 +238,7 @@ pub fn prepare_session_directory(
         // have already tried before.
         let source_directory = find_source_directory(&crate_dir, &source_directories_already_tried);
 
-        let source_directory = if let Some(dir) = source_directory {
-            dir
-        } else {
+        let Some(source_directory) = source_directory else {
             // There's nowhere to copy from, we're done
             debug!(
                 "no source directory found. Continuing with empty session \
@@ -397,15 +392,14 @@ fn copy_files(sess: &Session, target_dir: &Path, source_dir: &Path) -> Result<bo
     // We acquire a shared lock on the lock file of the directory, so that
     // nobody deletes it out from under us while we are reading from it.
     let lock_file_path = lock_file_path(source_dir);
-    let _lock = if let Ok(lock) = flock::Lock::new(
+
+    // not exclusive
+    let Ok(_lock) = flock::Lock::new(
         &lock_file_path,
         false, // don't wait,
         false, // don't create
         false,
-    ) {
-        // not exclusive
-        lock
-    } else {
+    ) else {
         // Could not acquire the lock, don't try to copy from here
         return Err(());
     };

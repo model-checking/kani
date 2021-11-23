@@ -10,10 +10,11 @@ set -eux
 #brew update
 
 # Install dependencies via `brew`
-brew install ctags
+brew install ctags wget
 
 # Add Python package dependencies
 PYTHON_DEPS=(
+  autopep8
   toml # Used for parsing `cargo-rmc` config toml
 )
 

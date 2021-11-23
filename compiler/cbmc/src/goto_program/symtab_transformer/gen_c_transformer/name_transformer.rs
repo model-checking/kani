@@ -5,6 +5,7 @@ use super::super::Transformer;
 use crate::goto_program::{
     DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
 };
+use crate::InternedString;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 
 /// Struct for replacing names with valid C identifiers for --gen-c-runnable.
@@ -15,6 +16,7 @@ pub struct NameTransformer {
     /// injective (two distinct Rust names map to two distinct C names).
     /// To do this, `mapped_names` remembers what each Rust name gets transformed to,
     /// and `used_names` keeps track of what C names have been used.
+    // TODO: use InternedString to save memory.
     mapped_names: FxHashMap<String, String>,
     used_names: FxHashSet<String>,
 }
@@ -31,8 +33,12 @@ impl NameTransformer {
         .transform_symbol_table(original_symbol_table)
     }
 
+    fn normalize_identifier(&mut self, orig_name: InternedString) -> InternedString {
+        self.normalize_identifier_inner(&orig_name.to_string()).into()
+    }
+
     /// Converts an arbitrary identifier into a valid C identifier.
-    fn normalize_identifier(&mut self, orig_name: &str) -> String {
+    fn normalize_identifier_inner(&mut self, orig_name: &str) -> String {
         assert!(!orig_name.is_empty(), "Received empty identifier.");
 
         // If name already encountered, return same result;
@@ -144,95 +150,101 @@ impl Transformer for NameTransformer {
 
     /// Normalize parameter identifier.
     fn transform_type_parameter(&mut self, parameter: &Parameter) -> Parameter {
-        Type::parameter(
+        self.transform_type(parameter.typ()).as_parameter(
             parameter.identifier().map(|name| self.normalize_identifier(name)),
             parameter.base_name().map(|name| self.normalize_identifier(name)),
-            self.transform_type(parameter.typ()),
         )
     }
 
     /// Normalize field names.
-    fn transform_expr_member(&mut self, _typ: &Type, lhs: &Expr, field: &str) -> Expr {
+    fn transform_expr_member(&mut self, _typ: &Type, lhs: &Expr, field: InternedString) -> Expr {
         let transformed_lhs = self.transform_expr(lhs);
-        transformed_lhs.member(&self.normalize_identifier(field), self.symbol_table())
+        transformed_lhs.member(self.normalize_identifier(field), self.symbol_table())
     }
 
     /// Normalize name in identifier expression.
-    fn transform_expr_symbol(&mut self, typ: &Type, identifier: &str) -> Expr {
+    fn transform_expr_symbol(&mut self, typ: &Type, identifier: InternedString) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::symbol_expression(self.normalize_identifier(identifier), transformed_typ)
     }
 
     /// Normalize union field names.
-    fn transform_expr_union(&mut self, typ: &Type, value: &Expr, field: &str) -> Expr {
+    fn transform_expr_union(&mut self, typ: &Type, value: &Expr, field: InternedString) -> Expr {
         let transformed_typ = self.transform_type(typ);
         let transformed_value = self.transform_expr(value);
         Expr::union_expr(
             transformed_typ,
-            &self.normalize_identifier(field),
+            self.normalize_identifier(field),
             transformed_value,
             self.symbol_table(),
         )
     }
 
     /// Normalize incomplete struct tag name.
-    fn transform_type_incomplete_struct(&mut self, tag: &str) -> Type {
-        Type::incomplete_struct(&self.normalize_identifier(tag))
+    fn transform_type_incomplete_struct(&mut self, tag: InternedString) -> Type {
+        Type::incomplete_struct(self.normalize_identifier(tag))
     }
 
     /// Normalize incomplete union tag name.
-    fn transform_type_incomplete_union(&mut self, tag: &str) -> Type {
-        Type::incomplete_union(&self.normalize_identifier(tag))
+    fn transform_type_incomplete_union(&mut self, tag: InternedString) -> Type {
+        Type::incomplete_union(self.normalize_identifier(tag))
     }
 
     /// Normalize union/struct component name.
     fn transform_datatype_component(&mut self, component: &DatatypeComponent) -> DatatypeComponent {
         match component {
-            DatatypeComponent::Field { name, typ } => DatatypeComponent::Field {
-                name: self.normalize_identifier(name),
-                typ: self.transform_type(typ),
-            },
+            DatatypeComponent::Field { name, typ } => {
+                DatatypeComponent::field(self.normalize_identifier(*name), self.transform_type(typ))
+            }
             DatatypeComponent::Padding { name, bits } => {
-                DatatypeComponent::Padding { name: self.normalize_identifier(name), bits: *bits }
+                DatatypeComponent::padding(self.normalize_identifier(*name), *bits)
             }
         }
     }
 
     /// Normalize struct type name.
-    fn transform_type_struct(&mut self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_struct(
+        &mut self,
+        tag: InternedString,
+        components: &[DatatypeComponent],
+    ) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
             .collect();
-        Type::struct_type(&self.normalize_identifier(tag), transformed_components)
+        Type::struct_type(self.normalize_identifier(tag), transformed_components)
     }
 
     /// Normalize struct tag name.
-    fn transform_type_struct_tag(&mut self, tag: &str) -> Type {
-        Type::struct_tag_raw(&self.normalize_identifier(tag))
+    fn transform_type_struct_tag(&mut self, tag: InternedString) -> Type {
+        Type::struct_tag_raw(self.normalize_identifier(tag))
     }
 
     /// Normalize union type name.
-    fn transform_type_union(&mut self, tag: &str, components: &[DatatypeComponent]) -> Type {
+    fn transform_type_union(
+        &mut self,
+        tag: InternedString,
+        components: &[DatatypeComponent],
+    ) -> Type {
         let transformed_components = components
             .iter()
             .map(|component| self.transform_datatype_component(component))
             .collect();
-        Type::union_type(&self.normalize_identifier(tag), transformed_components)
+        Type::union_type(self.normalize_identifier(tag), transformed_components)
     }
 
     /// Normalize union tag name.
-    fn transform_type_union_tag(&mut self, tag: &str) -> Type {
-        Type::union_tag_raw(&self.normalize_identifier(tag))
+    fn transform_type_union_tag(&mut self, tag: InternedString) -> Type {
+        Type::union_tag_raw(self.normalize_identifier(tag))
     }
 
     /// Normalize goto label name.
-    fn transform_stmt_goto(&mut self, label: &str) -> Stmt {
+    fn transform_stmt_goto(&mut self, label: InternedString) -> Stmt {
         Stmt::goto(self.normalize_identifier(label), Location::none())
     }
 
     /// Normalize label name.
-    fn transform_stmt_label(&mut self, label: &str, body: &Stmt) -> Stmt {
+    fn transform_stmt_label(&mut self, label: InternedString, body: &Stmt) -> Stmt {
         let transformed_body = self.transform_stmt(body);
         transformed_body.with_label(self.normalize_identifier(label))
     }
@@ -243,10 +255,9 @@ impl Transformer for NameTransformer {
         new_symbol.typ = self.transform_type(&symbol.typ);
         new_symbol.value = self.transform_value(&symbol.value);
 
-        new_symbol.name = self.normalize_identifier(&new_symbol.name);
-        new_symbol.base_name = new_symbol.base_name.map(|name| self.normalize_identifier(&name));
-        new_symbol.pretty_name =
-            new_symbol.pretty_name.map(|name| self.normalize_identifier(&name));
+        new_symbol.name = self.normalize_identifier(new_symbol.name);
+        new_symbol.base_name = new_symbol.base_name.map(|name| self.normalize_identifier(name));
+        new_symbol.pretty_name = new_symbol.pretty_name.map(|name| self.normalize_identifier(name));
 
         new_symbol
     }

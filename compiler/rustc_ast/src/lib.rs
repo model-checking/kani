@@ -1,4 +1,4 @@
-//! The Rust parser and macro expander.
+//! The Rust Abstract Syntax Tree (AST).
 //!
 //! # Note
 //!
@@ -16,25 +16,17 @@
 #![feature(nll)]
 #![feature(min_specialization)]
 #![recursion_limit = "256"]
+#![feature(slice_internals)]
 
 #[macro_use]
 extern crate rustc_macros;
-
-#[macro_export]
-macro_rules! unwrap_or {
-    ($opt:expr, $default:expr) => {
-        match $opt {
-            Some(x) => x,
-            None => $default,
-        }
-    };
-}
 
 pub mod util {
     pub mod classify;
     pub mod comments;
     pub mod literal;
     pub mod parser;
+    pub mod unicode;
 }
 
 pub mod ast;

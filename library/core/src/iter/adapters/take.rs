@@ -111,17 +111,33 @@ where
 
         self.try_fold(init, ok(fold)).unwrap()
     }
+
+    #[inline]
+    #[rustc_inherit_overflow_checks]
+    fn advance_by(&mut self, n: usize) -> Result<(), usize> {
+        let min = self.n.min(n);
+        match self.iter.advance_by(min) {
+            Ok(_) => {
+                self.n -= min;
+                if min < n { Err(min) } else { Ok(()) }
+            }
+            ret @ Err(advanced) => {
+                self.n -= advanced;
+                ret
+            }
+        }
+    }
 }
 
 #[unstable(issue = "none", feature = "inplace_iteration")]
-unsafe impl<S: Iterator, I: Iterator> SourceIter for Take<I>
+unsafe impl<I> SourceIter for Take<I>
 where
-    I: SourceIter<Source = S>,
+    I: SourceIter,
 {
-    type Source = S;
+    type Source = I::Source;
 
     #[inline]
-    unsafe fn as_inner(&mut self) -> &mut S {
+    unsafe fn as_inner(&mut self) -> &mut I::Source {
         // SAFETY: unsafe function forwarding to unsafe function with the same requirements
         unsafe { SourceIter::as_inner(&mut self.iter) }
     }
@@ -195,6 +211,24 @@ where
             } else {
                 self.iter.rfold(init, fold)
             }
+        }
+    }
+
+    #[inline]
+    fn advance_back_by(&mut self, n: usize) -> Result<(), usize> {
+        let inner_len = self.iter.len();
+        let len = self.n;
+        let remainder = len.saturating_sub(n);
+        let to_advance = inner_len - remainder;
+        match self.iter.advance_back_by(to_advance) {
+            Ok(_) => {
+                self.n = remainder;
+                if n > len {
+                    return Err(len);
+                }
+                return Ok(());
+            }
+            _ => panic!("ExactSizeIterator contract violation"),
         }
     }
 }

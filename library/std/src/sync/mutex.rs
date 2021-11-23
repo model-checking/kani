@@ -162,7 +162,7 @@ use crate::sys_common::mutex as sys;
 /// assert_eq!(*res_mutex.lock().unwrap(), 800);
 /// ```
 #[stable(feature = "rust1", since = "1.0.0")]
-#[cfg_attr(not(test), rustc_diagnostic_item = "mutex_type")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "Mutex")]
 pub struct Mutex<T: ?Sized> {
     inner: sys::MovableMutex,
     poison: poison::Flag,
@@ -188,6 +188,12 @@ unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
 #[must_use = "if unused the Mutex will immediately unlock"]
+#[cfg_attr(
+    not(bootstrap),
+    must_not_suspend = "holding a MutexGuard across suspend \
+                      points can cause deadlocks, delays, \
+                      and cause Futures to not implement `Send`"
+)]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct MutexGuard<'a, T: ?Sized + 'a> {
     lock: &'a Mutex<T>,

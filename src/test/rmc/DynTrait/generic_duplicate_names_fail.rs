@@ -5,8 +5,6 @@
 // generic types give the same Trait::function name pairs. Test the
 // wrong result for this _fail test.
 
-include!("../../rmc-prelude.rs");
-
 trait Foo<T> {
     fn method(&self, t: T) -> T;
 }
@@ -21,10 +19,10 @@ impl<T> Foo<T> for () {
 
 impl Bar for () {}
 
-pub fn main() {
+fn main() {
     let b: &dyn Bar = &();
     // The vtable for b will now have two Foo::method entries,
     // one for Foo<u32> and one for Foo<i32>.
     let result = <dyn Bar as Foo<u32>>::method(b, 22_u32);
-    __VERIFIER_expect_fail(result == 0, "Wrong result");
+    rmc::expect_fail(result == 0, "Wrong result");
 }

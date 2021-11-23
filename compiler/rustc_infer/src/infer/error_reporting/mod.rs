@@ -116,7 +116,7 @@ pub(super) fn note_and_explain_region(
     emit_msg_span(err, prefix, description, span, suffix);
 }
 
-pub(super) fn note_and_explain_free_region(
+fn explain_free_region(
     tcx: TyCtxt<'tcx>,
     err: &mut DiagnosticBuilder<'_>,
     prefix: &str,
@@ -125,7 +125,7 @@ pub(super) fn note_and_explain_free_region(
 ) {
     let (description, span) = msg_span_from_free_region(tcx, region, None);
 
-    emit_msg_span(err, prefix, description, span, suffix);
+    label_msg_span(err, prefix, description, span, suffix);
 }
 
 fn msg_span_from_free_region(
@@ -135,7 +135,8 @@ fn msg_span_from_free_region(
 ) -> (String, Option<Span>) {
     match *region {
         ty::ReEarlyBound(_) | ty::ReFree(_) => {
-            msg_span_from_early_bound_and_free_regions(tcx, region)
+            let (msg, span) = msg_span_from_early_bound_and_free_regions(tcx, region);
+            (msg, Some(span))
         }
         ty::ReStatic => ("the static lifetime".to_owned(), alt_span),
         ty::ReEmpty(ty::UniverseIndex::ROOT) => ("an empty lifetime".to_owned(), alt_span),
@@ -147,20 +148,12 @@ fn msg_span_from_free_region(
 fn msg_span_from_early_bound_and_free_regions(
     tcx: TyCtxt<'tcx>,
     region: ty::Region<'tcx>,
-) -> (String, Option<Span>) {
+) -> (String, Span) {
     let sm = tcx.sess.source_map();
 
     let scope = region.free_region_binding_scope(tcx);
     let node = tcx.hir().local_def_id_to_hir_id(scope.expect_local());
-    let tag = match tcx.hir().find(node) {
-        Some(Node::Block(_) | Node::Expr(_)) => "body",
-        Some(Node::Item(it)) => item_scope_tag(&it),
-        Some(Node::TraitItem(it)) => trait_item_scope_tag(&it),
-        Some(Node::ImplItem(it)) => impl_item_scope_tag(&it),
-        Some(Node::ForeignItem(it)) => foreign_item_scope_tag(&it),
-        _ => unreachable!(),
-    };
-    let (prefix, span) = match *region {
+    match *region {
         ty::ReEarlyBound(ref br) => {
             let mut sp = sm.guess_head_span(tcx.hir().span(node));
             if let Some(param) =
@@ -168,7 +161,7 @@ fn msg_span_from_early_bound_and_free_regions(
             {
                 sp = param.span;
             }
-            (format!("the lifetime `{}` as defined on", br.name), sp)
+            (format!("the lifetime `{}` as defined here", br.name), sp)
         }
         ty::ReFree(ty::FreeRegion {
             bound_region: ty::BoundRegionKind::BrNamed(_, name), ..
@@ -179,28 +172,26 @@ fn msg_span_from_early_bound_and_free_regions(
             {
                 sp = param.span;
             }
-            (format!("the lifetime `{}` as defined on", name), sp)
+            (format!("the lifetime `{}` as defined here", name), sp)
         }
         ty::ReFree(ref fr) => match fr.bound_region {
             ty::BrAnon(idx) => {
                 if let Some((ty, _)) = find_anon_type(tcx, region, &fr.bound_region) {
-                    ("the anonymous lifetime defined on".to_string(), ty.span)
+                    ("the anonymous lifetime defined here".to_string(), ty.span)
                 } else {
                     (
-                        format!("the anonymous lifetime #{} defined on", idx + 1),
+                        format!("the anonymous lifetime #{} defined here", idx + 1),
                         tcx.hir().span(node),
                     )
                 }
             }
             _ => (
-                format!("the lifetime `{}` as defined on", region),
+                format!("the lifetime `{}` as defined here", region),
                 sm.guess_head_span(tcx.hir().span(node)),
             ),
         },
         _ => bug!(),
-    };
-    let (msg, opt_span) = explain_span(tcx, tag, span);
-    (format!("{} {}", prefix, msg), opt_span)
+    }
 }
 
 fn emit_msg_span(
@@ -219,42 +210,20 @@ fn emit_msg_span(
     }
 }
 
-fn item_scope_tag(item: &hir::Item<'_>) -> &'static str {
-    match item.kind {
-        hir::ItemKind::Impl { .. } => "impl",
-        hir::ItemKind::Struct(..) => "struct",
-        hir::ItemKind::Union(..) => "union",
-        hir::ItemKind::Enum(..) => "enum",
-        hir::ItemKind::Trait(..) => "trait",
-        hir::ItemKind::Fn(..) => "function body",
-        _ => "item",
-    }
-}
+fn label_msg_span(
+    err: &mut DiagnosticBuilder<'_>,
+    prefix: &str,
+    description: String,
+    span: Option<Span>,
+    suffix: &str,
+) {
+    let message = format!("{}{}{}", prefix, description, suffix);
 
-fn trait_item_scope_tag(item: &hir::TraitItem<'_>) -> &'static str {
-    match item.kind {
-        hir::TraitItemKind::Fn(..) => "method body",
-        hir::TraitItemKind::Const(..) | hir::TraitItemKind::Type(..) => "associated item",
+    if let Some(span) = span {
+        err.span_label(span, &message);
+    } else {
+        err.note(&message);
     }
-}
-
-fn impl_item_scope_tag(item: &hir::ImplItem<'_>) -> &'static str {
-    match item.kind {
-        hir::ImplItemKind::Fn(..) => "method body",
-        hir::ImplItemKind::Const(..) | hir::ImplItemKind::TyAlias(..) => "associated item",
-    }
-}
-
-fn foreign_item_scope_tag(item: &hir::ForeignItem<'_>) -> &'static str {
-    match item.kind {
-        hir::ForeignItemKind::Fn(..) => "method body",
-        hir::ForeignItemKind::Static(..) | hir::ForeignItemKind::Type => "associated item",
-    }
-}
-
-fn explain_span(tcx: TyCtxt<'tcx>, heading: &str, span: Span) -> (String, Option<Span>) {
-    let lo = tcx.sess.source_map().lookup_char_pos(span.lo());
-    (format!("the {} at {}:{}", heading, lo.line, lo.col.to_usize() + 1), Some(span))
 }
 
 pub fn unexpected_hidden_region_diagnostic(
@@ -291,13 +260,25 @@ pub fn unexpected_hidden_region_diagnostic(
             //
             // (*) if not, the `tainted_by_errors` field would be set to
             // `Some(ErrorReported)` in any case, so we wouldn't be here at all.
-            note_and_explain_free_region(
+            explain_free_region(
                 tcx,
                 &mut err,
                 &format!("hidden type `{}` captures ", hidden_ty),
                 hidden_region,
                 "",
             );
+            if let Some(reg_info) = tcx.is_suitable_region(hidden_region) {
+                let fn_returns = tcx.return_type_impl_or_dyn_traits(reg_info.def_id);
+                nice_region_error::suggest_new_region_bound(
+                    tcx,
+                    &mut err,
+                    fn_returns,
+                    hidden_region.to_string(),
+                    None,
+                    format!("captures {}", hidden_region),
+                    None,
+                )
+            }
         }
         _ => {
             // Ugh. This is a painful case: the hidden region is not one
@@ -405,21 +386,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 
                         self.report_placeholder_failure(sup_origin, sub_r, sup_r).emit();
                     }
-
-                    RegionResolutionError::MemberConstraintFailure {
-                        hidden_ty,
-                        member_region,
-                        span,
-                    } => {
-                        let hidden_ty = self.resolve_vars_if_possible(hidden_ty);
-                        unexpected_hidden_region_diagnostic(
-                            self.tcx,
-                            span,
-                            hidden_ty,
-                            member_region,
-                        )
-                        .emit();
-                    }
                 }
             }
         }
@@ -457,8 +423,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             RegionResolutionError::GenericBoundFailure(..) => true,
             RegionResolutionError::ConcreteFailure(..)
             | RegionResolutionError::SubSupConflict(..)
-            | RegionResolutionError::UpperBoundUniverseConflict(..)
-            | RegionResolutionError::MemberConstraintFailure { .. } => false,
+            | RegionResolutionError::UpperBoundUniverseConflict(..) => false,
         };
 
         let mut errors = if errors.iter().all(|e| is_bound_failure(e)) {
@@ -473,7 +438,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             RegionResolutionError::GenericBoundFailure(ref sro, _, _) => sro.span(),
             RegionResolutionError::SubSupConflict(_, ref rvo, _, _, _, _) => rvo.span(),
             RegionResolutionError::UpperBoundUniverseConflict(_, ref rvo, _, _, _) => rvo.span(),
-            RegionResolutionError::MemberConstraintFailure { span, .. } => span,
         });
         errors
     }
@@ -1502,7 +1466,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                     let mut returned_async_output_error = false;
                     for &sp in values {
                         if sp.is_desugaring(DesugaringKind::Async) && !returned_async_output_error {
-                            if &[sp] != err.span.primary_spans() {
+                            if [sp] != err.span.primary_spans() {
                                 let mut span: MultiSpan = sp.into();
                                 span.push_span_label(
                                     sp,
@@ -1740,13 +1704,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         if let ty::Opaque(def_id, substs) = ty.kind() {
             let future_trait = self.tcx.require_lang_item(LangItem::Future, None);
             // Future::Output
-            let item_def_id = self
-                .tcx
-                .associated_items(future_trait)
-                .in_definition_order()
-                .next()
-                .unwrap()
-                .def_id;
+            let item_def_id = self.tcx.associated_item_def_ids(future_trait)[0];
 
             let bounds = self.tcx.explicit_item_bounds(*def_id);
 
@@ -2060,14 +2018,24 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                     expected: exp_found.expected.print_only_trait_path(),
                     found: exp_found.found.print_only_trait_path(),
                 };
-                self.expected_found_str(pretty_exp_found)
+                match self.expected_found_str(pretty_exp_found) {
+                    Some((expected, found)) if expected == found => {
+                        self.expected_found_str(exp_found)
+                    }
+                    ret => ret,
+                }
             }
             infer::PolyTraitRefs(exp_found) => {
                 let pretty_exp_found = ty::error::ExpectedFound {
                     expected: exp_found.expected.print_only_trait_path(),
                     found: exp_found.found.print_only_trait_path(),
                 };
-                self.expected_found_str(pretty_exp_found)
+                match self.expected_found_str(pretty_exp_found) {
+                    Some((expected, found)) if expected == found => {
+                        self.expected_found_str(exp_found)
+                    }
+                    ret => ret,
+                }
             }
         }
     }
@@ -2216,14 +2184,12 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 
         if let Some(SubregionOrigin::CompareImplMethodObligation {
             span,
-            item_name,
             impl_item_def_id,
             trait_item_def_id,
         }) = origin
         {
             return self.report_extra_impl_obligation(
                 span,
-                item_name,
                 impl_item_def_id,
                 trait_item_def_id,
                 &format!("`{}: {}`", bound_kind, sub),
@@ -2533,7 +2499,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     /// within `?` desugaring.
     pub fn is_try_conversion(&self, span: Span, trait_def_id: DefId) -> bool {
         span.is_desugaring(DesugaringKind::QuestionMark)
-            && self.tcx.is_diagnostic_item(sym::from_trait, trait_def_id)
+            && self.tcx.is_diagnostic_item(sym::From, trait_def_id)
     }
 }
 
@@ -2556,7 +2522,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             infer::MiscVariable(_) => String::new(),
             infer::PatternRegion(_) => " for pattern".to_string(),
             infer::AddrOfRegion(_) => " for borrow expression".to_string(),
-            infer::Autoref(_, _) => " for autoref".to_string(),
+            infer::Autoref(_) => " for autoref".to_string(),
             infer::Coercion(_) => " for automatic coercion".to_string(),
             infer::LateBoundRegion(_, br, infer::FnCall) => {
                 format!(" for lifetime parameter {}in function call", br_string(br))

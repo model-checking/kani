@@ -64,7 +64,7 @@ impl Step for Docs {
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
         let default = run.builder.config.docs;
-        run.path("src/doc").default_condition(default)
+        run.path("rust-docs").default_condition(default)
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -96,7 +96,8 @@ impl Step for RustcDocs {
     const DEFAULT: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("src/librustc")
+        let builder = run.builder;
+        run.path("rustc-docs").default_condition(builder.config.compiler_docs)
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -106,9 +107,6 @@ impl Step for RustcDocs {
     /// Builds the `rustc-docs` installer component.
     fn run(self, builder: &Builder<'_>) -> Option<GeneratedTarball> {
         let host = self.host;
-        if !builder.config.compiler_docs {
-            return None;
-        }
         builder.default_doc(&[]);
 
         let mut tarball = Tarball::new(builder, "rustc-docs", &host.triple);
@@ -277,7 +275,7 @@ impl Step for Mingw {
     const DEFAULT: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.never()
+        run.path("rust-mingw")
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -318,7 +316,7 @@ impl Step for Rustc {
     const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("src/librustc")
+        run.path("rustc")
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -409,11 +407,14 @@ impl Step for Rustc {
                 let rust_lld = exe("rust-lld", compiler.host);
                 builder.copy(&src_dir.join(&rust_lld), &dst_dir.join(&rust_lld));
                 // for `-Z gcc-ld=lld`
-                let gcc_lld_dir = dst_dir.join("gcc-ld");
-                t!(fs::create_dir(&gcc_lld_dir));
-                builder.copy(&src_dir.join(&rust_lld), &gcc_lld_dir.join(exe("ld", compiler.host)));
-                builder
-                    .copy(&src_dir.join(&rust_lld), &gcc_lld_dir.join(exe("ld64", compiler.host)));
+                let gcc_lld_src_dir = src_dir.join("gcc-ld");
+                let gcc_lld_dst_dir = dst_dir.join("gcc-ld");
+                t!(fs::create_dir(&gcc_lld_dst_dir));
+                for flavor in ["ld", "ld64"] {
+                    let exe_name = exe(flavor, compiler.host);
+                    builder
+                        .copy(&gcc_lld_src_dir.join(&exe_name), &gcc_lld_dst_dir.join(&exe_name));
+                }
             }
 
             // Copy over llvm-dwp if it's there
@@ -571,7 +572,7 @@ impl Step for Std {
     const DEFAULT: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("library/std")
+        run.path("rust-std")
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -685,7 +686,7 @@ impl Step for Analysis {
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
         let default = should_build_extended_tool(&run.builder, "analysis");
-        run.path("analysis").default_condition(default)
+        run.path("rust-analysis").default_condition(default)
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -820,7 +821,7 @@ impl Step for Src {
     const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("src")
+        run.path("rust-src")
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -873,7 +874,7 @@ impl Step for PlainSourceTarball {
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
         let builder = run.builder;
-        run.path("src").default_condition(builder.config.rust_dist_src)
+        run.path("rustc-src").default_condition(builder.config.rust_dist_src)
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -2119,7 +2120,7 @@ impl Step for BuildManifest {
     const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("src/tools/build-manifest")
+        run.path("build-manifest")
     }
 
     fn make_run(run: RunConfig<'_>) {
@@ -2151,7 +2152,7 @@ impl Step for ReproducibleArtifacts {
     const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("reproducible")
+        run.path("reproducible-artifacts")
     }
 
     fn make_run(run: RunConfig<'_>) {

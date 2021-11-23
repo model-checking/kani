@@ -83,6 +83,7 @@ impl<T: Sized> NonNull<T> {
     /// ```
     #[stable(feature = "nonnull", since = "1.25.0")]
     #[rustc_const_stable(feature = "const_nonnull_dangling", since = "1.36.0")]
+    #[must_use]
     #[inline]
     pub const fn dangling() -> Self {
         // SAFETY: mem::align_of() returns a non-zero usize which is then casted
@@ -119,6 +120,7 @@ impl<T: Sized> NonNull<T> {
     ///
     /// [the module documentation]: crate::ptr#safety
     #[inline]
+    #[must_use]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
     pub unsafe fn as_uninit_ref<'a>(&self) -> &'a MaybeUninit<T> {
         // SAFETY: the caller must guarantee that `self` meets all the
@@ -151,6 +153,7 @@ impl<T: Sized> NonNull<T> {
     ///
     /// [the module documentation]: crate::ptr#safety
     #[inline]
+    #[must_use]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
     pub unsafe fn as_uninit_mut<'a>(&mut self) -> &'a mut MaybeUninit<T> {
         // SAFETY: the caller must guarantee that `self` meets all the
@@ -240,6 +243,8 @@ impl<T: ?Sized> NonNull<T> {
     /// The pointer can be later reconstructed with [`NonNull::from_raw_parts`].
     #[unstable(feature = "ptr_metadata", issue = "81513")]
     #[rustc_const_unstable(feature = "ptr_metadata", issue = "81513")]
+    #[must_use = "this returns the result of the operation, \
+                  without modifying the original"]
     #[inline]
     pub const fn to_raw_parts(self) -> (NonNull<()>, <T as super::Pointee>::Metadata) {
         (self.cast(), super::metadata(self.as_ptr()))
@@ -264,6 +269,7 @@ impl<T: ?Sized> NonNull<T> {
     /// ```
     #[stable(feature = "nonnull", since = "1.25.0")]
     #[rustc_const_stable(feature = "const_nonnull_as_ptr", since = "1.32.0")]
+    #[must_use]
     #[inline]
     pub const fn as_ptr(self) -> *mut T {
         self.pointer as *mut T
@@ -310,6 +316,7 @@ impl<T: ?Sized> NonNull<T> {
     ///
     /// [the module documentation]: crate::ptr#safety
     #[stable(feature = "nonnull", since = "1.25.0")]
+    #[must_use]
     #[inline]
     pub unsafe fn as_ref<'a>(&self) -> &'a T {
         // SAFETY: the caller must guarantee that `self` meets all the
@@ -359,6 +366,7 @@ impl<T: ?Sized> NonNull<T> {
     ///
     /// [the module documentation]: crate::ptr#safety
     #[stable(feature = "nonnull", since = "1.25.0")]
+    #[must_use]
     #[inline]
     pub unsafe fn as_mut<'a>(&mut self) -> &'a mut T {
         // SAFETY: the caller must guarantee that `self` meets all the
@@ -381,6 +389,8 @@ impl<T: ?Sized> NonNull<T> {
     /// ```
     #[stable(feature = "nonnull_cast", since = "1.27.0")]
     #[rustc_const_stable(feature = "const_nonnull_cast", since = "1.36.0")]
+    #[must_use = "this returns the result of the operation, \
+                  without modifying the original"]
     #[inline]
     pub const fn cast<U>(self) -> NonNull<U> {
         // SAFETY: `self` is a `NonNull` pointer which is necessarily non-null
@@ -414,6 +424,7 @@ impl<T> NonNull<[T]> {
     /// but `let slice = NonNull::from(&x[..]);` would be a better way to write code like this.)
     #[unstable(feature = "nonnull_slice_from_raw_parts", issue = "71941")]
     #[rustc_const_unstable(feature = "const_nonnull_slice_from_raw_parts", issue = "71941")]
+    #[must_use]
     #[inline]
     pub const fn slice_from_raw_parts(data: NonNull<T>, len: usize) -> Self {
         // SAFETY: `data` is a `NonNull` pointer which is necessarily non-null
@@ -438,6 +449,7 @@ impl<T> NonNull<[T]> {
     /// ```
     #[unstable(feature = "slice_ptr_len", issue = "71146")]
     #[rustc_const_unstable(feature = "const_slice_ptr_len", issue = "71146")]
+    #[must_use]
     #[inline]
     pub const fn len(self) -> usize {
         self.as_ptr().len()
@@ -455,6 +467,7 @@ impl<T> NonNull<[T]> {
     /// assert_eq!(slice.as_non_null_ptr(), NonNull::new(1 as *mut i8).unwrap());
     /// ```
     #[inline]
+    #[must_use]
     #[unstable(feature = "slice_ptr_get", issue = "74265")]
     #[rustc_const_unstable(feature = "slice_ptr_get", issue = "74265")]
     pub const fn as_non_null_ptr(self) -> NonNull<T> {
@@ -474,6 +487,7 @@ impl<T> NonNull<[T]> {
     /// assert_eq!(slice.as_mut_ptr(), 1 as *mut i8);
     /// ```
     #[inline]
+    #[must_use]
     #[unstable(feature = "slice_ptr_get", issue = "74265")]
     #[rustc_const_unstable(feature = "slice_ptr_get", issue = "74265")]
     pub const fn as_mut_ptr(self) -> *mut T {
@@ -518,6 +532,7 @@ impl<T> NonNull<[T]> {
     ///
     /// [valid]: crate::ptr#safety
     #[inline]
+    #[must_use]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
     pub unsafe fn as_uninit_slice<'a>(&self) -> &'a [MaybeUninit<T>] {
         // SAFETY: the caller must uphold the safety contract for `as_uninit_slice`.
@@ -579,6 +594,7 @@ impl<T> NonNull<[T]> {
     /// # Ok::<_, std::alloc::AllocError>(())
     /// ```
     #[inline]
+    #[must_use]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
     pub unsafe fn as_uninit_slice_mut<'a>(&self) -> &'a mut [MaybeUninit<T>] {
         // SAFETY: the caller must uphold the safety contract for `as_uninit_slice_mut`.
@@ -685,7 +701,8 @@ impl<T: ?Sized> hash::Hash for NonNull<T> {
 }
 
 #[unstable(feature = "ptr_internals", issue = "none")]
-impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<T: ?Sized> const From<Unique<T>> for NonNull<T> {
     #[inline]
     fn from(unique: Unique<T>) -> Self {
         // SAFETY: A Unique pointer cannot be null, so the conditions for
@@ -695,7 +712,8 @@ impl<T: ?Sized> From<Unique<T>> for NonNull<T> {
 }
 
 #[stable(feature = "nonnull", since = "1.25.0")]
-impl<T: ?Sized> From<&mut T> for NonNull<T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<T: ?Sized> const From<&mut T> for NonNull<T> {
     #[inline]
     fn from(reference: &mut T) -> Self {
         // SAFETY: A mutable reference cannot be null.
@@ -704,7 +722,8 @@ impl<T: ?Sized> From<&mut T> for NonNull<T> {
 }
 
 #[stable(feature = "nonnull", since = "1.25.0")]
-impl<T: ?Sized> From<&T> for NonNull<T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<T: ?Sized> const From<&T> for NonNull<T> {
     #[inline]
     fn from(reference: &T) -> Self {
         // SAFETY: A reference cannot be null, so the conditions for

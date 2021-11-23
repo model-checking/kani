@@ -81,6 +81,44 @@ impl UnixListener {
         }
     }
 
+    /// Creates a new `UnixListener` bound to the specified [`socket address`].
+    ///
+    /// [`socket address`]: crate::os::unix::net::SocketAddr
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// #![feature(unix_socket_abstract)]
+    /// use std::os::unix::net::{UnixListener};
+    ///
+    /// fn main() -> std::io::Result<()> {
+    ///     let listener1 = UnixListener::bind("path/to/socket")?;
+    ///     let addr = listener1.local_addr()?;
+    ///
+    ///     let listener2 = match UnixListener::bind_addr(&addr) {
+    ///         Ok(sock) => sock,
+    ///         Err(err) => {
+    ///             println!("Couldn't bind: {:?}", err);
+    ///             return Err(err);
+    ///         }
+    ///     };
+    ///     Ok(())
+    /// }
+    /// ```
+    #[unstable(feature = "unix_socket_abstract", issue = "85410")]
+    pub fn bind_addr(socket_addr: &SocketAddr) -> io::Result<UnixListener> {
+        unsafe {
+            let inner = Socket::new_raw(libc::AF_UNIX, libc::SOCK_STREAM)?;
+            cvt(libc::bind(
+                inner.as_raw_fd(),
+                &socket_addr.addr as *const _ as *const _,
+                socket_addr.len as _,
+            ))?;
+            cvt(libc::listen(inner.as_raw_fd(), 128))?;
+            Ok(UnixListener(inner))
+        }
+    }
+
     /// Accepts a new incoming connection to this listener.
     ///
     /// This function will block the calling thread until a new Unix connection
@@ -327,6 +365,7 @@ impl<'a> IntoIterator for &'a UnixListener {
 /// }
 /// ```
 #[derive(Debug)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[stable(feature = "unix_socket", since = "1.10.0")]
 pub struct Incoming<'a> {
     listener: &'a UnixListener,

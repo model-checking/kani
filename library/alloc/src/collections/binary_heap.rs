@@ -162,9 +162,9 @@ use super::SpecExtend;
 /// item's ordering relative to any other item, as determined by the [`Ord`]
 /// trait, changes while it is in the heap. This is normally only possible
 /// through [`Cell`], [`RefCell`], global state, I/O, or unsafe code. The
-/// behavior resulting from such a logic error is not specified, but will
-/// not result in undefined behavior. This could include panics, incorrect
-/// results, aborts, memory leaks, and non-termination.
+/// behavior resulting from such a logic error is not specified (it
+/// could include panics, incorrect results, aborts, memory leaks, or
+/// non-termination) but will not be undefined behavior.
 ///
 /// # Examples
 ///
@@ -364,6 +364,7 @@ impl<T: Ord> BinaryHeap<T> {
     /// heap.push(4);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn new() -> BinaryHeap<T> {
         BinaryHeap { data: vec![] }
     }
@@ -383,6 +384,7 @@ impl<T: Ord> BinaryHeap<T> {
     /// heap.push(4);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> BinaryHeap<T> {
         BinaryHeap { data: Vec::with_capacity(capacity) }
     }
@@ -510,6 +512,7 @@ impl<T: Ord> BinaryHeap<T> {
     /// let vec = heap.into_sorted_vec();
     /// assert_eq!(vec, [1, 2, 3, 4, 5, 6, 7]);
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "binary_heap_extras_15", since = "1.5.0")]
     pub fn into_sorted_vec(mut self) -> Vec<T> {
         let mut end = self.len();
@@ -874,6 +877,7 @@ impl<T> BinaryHeap<T> {
     /// # Time complexity
     ///
     /// Cost is *O*(1) in the worst case.
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn peek(&self) -> Option<&T> {
         self.data.get(0)
@@ -891,6 +895,7 @@ impl<T> BinaryHeap<T> {
     /// assert!(heap.capacity() >= 100);
     /// heap.push(4);
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
@@ -1006,6 +1011,7 @@ impl<T> BinaryHeap<T> {
     ///
     /// io::sink().write(heap.as_slice()).unwrap();
     /// ```
+    #[must_use]
     #[unstable(feature = "binary_heap_as_slice", issue = "83659")]
     pub fn as_slice(&self) -> &[T] {
         self.data.as_slice()
@@ -1028,6 +1034,7 @@ impl<T> BinaryHeap<T> {
     ///     println!("{}", x);
     /// }
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "binary_heap_extras_15", since = "1.5.0")]
     pub fn into_vec(self) -> Vec<T> {
         self.into()
@@ -1045,6 +1052,7 @@ impl<T> BinaryHeap<T> {
     ///
     /// assert_eq!(heap.len(), 2);
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn len(&self) -> usize {
         self.data.len()
@@ -1068,6 +1076,7 @@ impl<T> BinaryHeap<T> {
     ///
     /// assert!(!heap.is_empty());
     /// ```
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -1198,6 +1207,7 @@ impl<T> Drop for Hole<'_, T> {
 /// documentation for more.
 ///
 /// [`iter`]: BinaryHeap::iter
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Iter<'a, T: 'a> {
     iter: slice::Iter<'a, T>,
@@ -1332,6 +1342,7 @@ impl<I> AsIntoIter for IntoIter<I> {
     }
 }
 
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[unstable(feature = "binary_heap_into_iter_sorted", issue = "59278")]
 #[derive(Clone, Debug)]
 pub struct IntoIterSorted<T> {
@@ -1570,6 +1581,14 @@ impl<T: Ord> Extend<T> for BinaryHeap<T> {
 impl<T: Ord, I: IntoIterator<Item = T>> SpecExtend<I> for BinaryHeap<T> {
     default fn spec_extend(&mut self, iter: I) {
         self.extend_desugared(iter.into_iter());
+    }
+}
+
+impl<T: Ord> SpecExtend<Vec<T>> for BinaryHeap<T> {
+    fn spec_extend(&mut self, ref mut other: Vec<T>) {
+        let start = self.data.len();
+        self.data.append(other);
+        self.rebuild_tail(start);
     }
 }
 

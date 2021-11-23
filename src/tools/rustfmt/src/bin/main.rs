@@ -20,7 +20,7 @@ use crate::rustfmt::{
 };
 
 fn main() {
-    env_logger::init();
+    env_logger::Builder::from_env("RUSTFMT_LOG").init();
     let opts = make_opts();
 
     let exit_code = match execute(&opts) {
@@ -121,7 +121,7 @@ fn make_opts() -> Options {
          found reverts to the input file path",
         "[Path for the configuration file]",
     );
-    opts.optopt("", "edition", "Rust edition to use", "[2015|2018]");
+    opts.optopt("", "edition", "Rust edition to use", "[2015|2018|2021]");
     opts.optopt(
         "",
         "color",

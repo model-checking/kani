@@ -71,6 +71,7 @@ pub enum PassWhere {
 ///   or `typeck` appears in the name.
 /// - `foo & nll | bar & typeck` == match if `foo` and `nll` both appear in the name
 ///   or `typeck` and `bar` both appear in the name.
+#[inline]
 pub fn dump_mir<'tcx, F>(
     tcx: TyCtxt<'tcx>,
     pass_num: Option<&dyn Display>,
@@ -957,7 +958,7 @@ fn write_mir_sig(tcx: TyCtxt<'_>, body: &Body<'_>, w: &mut dyn Write) -> io::Res
             write!(w, "static {}", if tcx.is_mutable_static(def_id) { "mut " } else { "" })?
         }
         (_, _) if is_function => write!(w, "fn ")?,
-        (DefKind::AnonConst, _) => {} // things like anon const, not an item
+        (DefKind::AnonConst | DefKind::InlineConst, _) => {} // things like anon const, not an item
         _ => bug!("Unexpected def kind {:?}", kind),
     }
 

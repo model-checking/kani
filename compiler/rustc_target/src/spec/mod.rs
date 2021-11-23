@@ -288,6 +288,7 @@ impl ToJson for MergeFunctions {
 pub enum RelocModel {
     Static,
     Pic,
+    Pie,
     DynamicNoPic,
     Ropi,
     Rwpi,
@@ -301,6 +302,7 @@ impl FromStr for RelocModel {
         Ok(match s {
             "static" => RelocModel::Static,
             "pic" => RelocModel::Pic,
+            "pie" => RelocModel::Pie,
             "dynamic-no-pic" => RelocModel::DynamicNoPic,
             "ropi" => RelocModel::Ropi,
             "rwpi" => RelocModel::Rwpi,
@@ -315,6 +317,7 @@ impl ToJson for RelocModel {
         match *self {
             RelocModel::Static => "static",
             RelocModel::Pic => "pic",
+            RelocModel::Pie => "pie",
             RelocModel::DynamicNoPic => "dynamic-no-pic",
             RelocModel::Ropi => "ropi",
             RelocModel::Rwpi => "rwpi",
@@ -599,6 +602,7 @@ bitflags::bitflags! {
         const MEMORY  = 1 << 2;
         const THREAD  = 1 << 3;
         const HWADDRESS = 1 << 4;
+        const CFI     = 1 << 5;
     }
 }
 
@@ -609,6 +613,7 @@ impl SanitizerSet {
     fn as_str(self) -> Option<&'static str> {
         Some(match self {
             SanitizerSet::ADDRESS => "address",
+            SanitizerSet::CFI => "cfi",
             SanitizerSet::LEAK => "leak",
             SanitizerSet::MEMORY => "memory",
             SanitizerSet::THREAD => "thread",
@@ -641,6 +646,7 @@ impl IntoIterator for SanitizerSet {
     fn into_iter(self) -> Self::IntoIter {
         [
             SanitizerSet::ADDRESS,
+            SanitizerSet::CFI,
             SanitizerSet::LEAK,
             SanitizerSet::MEMORY,
             SanitizerSet::THREAD,
@@ -949,6 +955,10 @@ supported_targets! {
     ("bpfel-unknown-none", bpfel_unknown_none),
 
     ("armv6k-nintendo-3ds", armv6k_nintendo_3ds),
+
+    ("armv7-unknown-linux-uclibceabihf", armv7_unknown_linux_uclibceabihf),
+
+    ("x86_64-unknown-none", x86_64_unknown_none),
 }
 
 /// Warnings encountered when parsing the target `json`.
@@ -1517,6 +1527,7 @@ impl Target {
             AmdGpuKernel => self.arch == "amdgcn",
             AvrInterrupt | AvrNonBlockingInterrupt => self.arch == "avr",
             Wasm => ["wasm32", "wasm64"].contains(&&self.arch[..]),
+            Thiscall { .. } => self.arch == "x86",
             // On windows these fall-back to platform native calling convention (C) when the
             // architecture is not supported.
             //
@@ -1547,15 +1558,13 @@ impl Target {
             // > convention is used.
             //
             // -- https://docs.microsoft.com/en-us/cpp/cpp/argument-passing-and-naming-conventions
-            Stdcall { .. } | Fastcall | Thiscall { .. } | Vectorcall if self.is_like_windows => {
-                true
-            }
+            Stdcall { .. } | Fastcall | Vectorcall if self.is_like_windows => true,
             // Outside of Windows we want to only support these calling conventions for the
             // architectures for which these calling conventions are actually well defined.
-            Stdcall { .. } | Fastcall | Thiscall { .. } if self.arch == "x86" => true,
+            Stdcall { .. } | Fastcall if self.arch == "x86" => true,
             Vectorcall if ["x86", "x86_64"].contains(&&self.arch[..]) => true,
             // Return a `None` for other cases so that we know to emit a future compat lint.
-            Stdcall { .. } | Fastcall | Thiscall { .. } | Vectorcall => return None,
+            Stdcall { .. } | Fastcall | Vectorcall => return None,
         })
     }
 
@@ -1800,6 +1809,7 @@ impl Target {
                         for s in a {
                             base.$key_name |= match s.as_string() {
                                 Some("address") => SanitizerSet::ADDRESS,
+                                Some("cfi") => SanitizerSet::CFI,
                                 Some("leak") => SanitizerSet::LEAK,
                                 Some("memory") => SanitizerSet::MEMORY,
                                 Some("thread") => SanitizerSet::THREAD,
@@ -2061,7 +2071,7 @@ impl Target {
     /// JSON decoding.
     pub fn search(
         target_triple: &TargetTriple,
-        sysroot: &PathBuf,
+        sysroot: &Path,
     ) -> Result<(Target, TargetWarnings), String> {
         use rustc_serialize::json;
         use std::env;

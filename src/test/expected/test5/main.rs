@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-pub fn main() {
+fn main() {
     // should succeed
     assert!(div(4, 2) == 2);
     // should fail

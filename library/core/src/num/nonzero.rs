@@ -50,6 +50,7 @@ macro_rules! nonzero_integers {
                 /// The value must not be zero.
                 #[$stability]
                 #[$const_new_unchecked_stability]
+                #[must_use]
                 #[inline]
                 pub const unsafe fn new_unchecked(n: $Int) -> Self {
                     // SAFETY: this is guaranteed to be safe by the caller.
@@ -59,6 +60,7 @@ macro_rules! nonzero_integers {
                 /// Creates a non-zero if the given value is not zero.
                 #[$stability]
                 #[rustc_const_stable(feature = "const_nonzero_int_methods", since = "1.47.0")]
+                #[must_use]
                 #[inline]
                 pub const fn new(n: $Int) -> Option<Self> {
                     if n != 0 {
@@ -80,7 +82,8 @@ macro_rules! nonzero_integers {
             }
 
             #[stable(feature = "from_nonzero", since = "1.31.0")]
-            impl From<$Ty> for $Int {
+            #[rustc_const_unstable(feature = "const_num_from_num", issue = "87852")]
+            impl const From<$Ty> for $Int {
                 #[doc = concat!("Converts a `", stringify!($Ty), "` into an `", stringify!($Int), "`")]
                 #[inline]
                 fn from(nonzero: $Ty) -> Self {
@@ -89,7 +92,8 @@ macro_rules! nonzero_integers {
             }
 
             #[stable(feature = "nonzero_bitor", since = "1.45.0")]
-            impl BitOr for $Ty {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const BitOr for $Ty {
                 type Output = Self;
                 #[inline]
                 fn bitor(self, rhs: Self) -> Self::Output {
@@ -100,7 +104,8 @@ macro_rules! nonzero_integers {
             }
 
             #[stable(feature = "nonzero_bitor", since = "1.45.0")]
-            impl BitOr<$Int> for $Ty {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const BitOr<$Int> for $Ty {
                 type Output = Self;
                 #[inline]
                 fn bitor(self, rhs: $Int) -> Self::Output {
@@ -112,7 +117,8 @@ macro_rules! nonzero_integers {
             }
 
             #[stable(feature = "nonzero_bitor", since = "1.45.0")]
-            impl BitOr<$Ty> for $Int {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const BitOr<$Ty> for $Int {
                 type Output = $Ty;
                 #[inline]
                 fn bitor(self, rhs: $Ty) -> Self::Output {
@@ -124,7 +130,8 @@ macro_rules! nonzero_integers {
             }
 
             #[stable(feature = "nonzero_bitor", since = "1.45.0")]
-            impl BitOrAssign for $Ty {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const BitOrAssign for $Ty {
                 #[inline]
                 fn bitor_assign(&mut self, rhs: Self) {
                     *self = *self | rhs;
@@ -132,7 +139,8 @@ macro_rules! nonzero_integers {
             }
 
             #[stable(feature = "nonzero_bitor", since = "1.45.0")]
-            impl BitOrAssign<$Int> for $Ty {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const BitOrAssign<$Int> for $Ty {
                 #[inline]
                 fn bitor_assign(&mut self, rhs: $Int) {
                     *self = *self | rhs;
@@ -198,6 +206,8 @@ macro_rules! nonzero_leading_trailing_zeros {
                 /// ```
                 #[stable(feature = "nonzero_leading_trailing_zeros", since = "1.53.0")]
                 #[rustc_const_stable(feature = "nonzero_leading_trailing_zeros", since = "1.53.0")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn leading_zeros(self) -> u32 {
                     // SAFETY: since `self` can not be zero it is safe to call ctlz_nonzero
@@ -220,6 +230,8 @@ macro_rules! nonzero_leading_trailing_zeros {
                 /// ```
                 #[stable(feature = "nonzero_leading_trailing_zeros", since = "1.53.0")]
                 #[rustc_const_stable(feature = "nonzero_leading_trailing_zeros", since = "1.53.0")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn trailing_zeros(self) -> u32 {
                     // SAFETY: since `self` can not be zero it is safe to call cttz_nonzero
@@ -250,7 +262,8 @@ macro_rules! nonzero_integers_div {
     ( $( $Ty: ident($Int: ty); )+ ) => {
         $(
             #[stable(feature = "nonzero_div", since = "1.51.0")]
-            impl Div<$Ty> for $Int {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const Div<$Ty> for $Int {
                 type Output = $Int;
                 /// This operation rounds towards zero,
                 /// truncating any fractional part of the exact result, and cannot panic.
@@ -263,7 +276,8 @@ macro_rules! nonzero_integers_div {
             }
 
             #[stable(feature = "nonzero_div", since = "1.51.0")]
-            impl Rem<$Ty> for $Int {
+            #[rustc_const_unstable(feature = "const_ops", issue = "90080")]
+            impl const Rem<$Ty> for $Int {
                 type Output = $Int;
                 /// This operation satisfies `n % d == n - (n / d) * d`, and cannot panic.
                 #[inline]
@@ -315,6 +329,8 @@ macro_rules! nonzero_unsigned_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn checked_add(self, other: $Int) -> Option<$Ty> {
                     if let Some(result) = self.get().checked_add(other) {
@@ -348,6 +364,8 @@ macro_rules! nonzero_unsigned_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn saturating_add(self, other: $Int) -> $Ty {
                     // SAFETY: $Int::saturating_add returns $Int::MAX on overflow
@@ -378,8 +396,10 @@ macro_rules! nonzero_unsigned_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
-                pub unsafe fn unchecked_add(self, other: $Int) -> $Ty {
+                pub const unsafe fn unchecked_add(self, other: $Int) -> $Ty {
                     // SAFETY: The caller ensures there is no overflow.
                     unsafe { $Ty::new_unchecked(self.get().unchecked_add(other)) }
                 }
@@ -410,6 +430,8 @@ macro_rules! nonzero_unsigned_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn checked_next_power_of_two(self) -> Option<$Ty> {
                     if let Some(nz) = self.get().checked_next_power_of_two() {
@@ -460,6 +482,8 @@ macro_rules! nonzero_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn abs(self) -> $Ty {
                     // SAFETY: This cannot overflow to zero.
@@ -490,6 +514,8 @@ macro_rules! nonzero_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn checked_abs(self) -> Option<$Ty> {
                     if let Some(nz) = self.get().checked_abs() {
@@ -524,6 +550,8 @@ macro_rules! nonzero_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn overflowing_abs(self) -> ($Ty, bool) {
                     let (nz, flag) = self.get().overflowing_abs();
@@ -562,6 +590,8 @@ macro_rules! nonzero_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn saturating_abs(self) -> $Ty {
                     // SAFETY: absolute value of nonzero cannot yield zero values.
@@ -595,6 +625,8 @@ macro_rules! nonzero_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn wrapping_abs(self) -> $Ty {
                     // SAFETY: absolute value of nonzero cannot yield zero values.
@@ -628,6 +660,8 @@ macro_rules! nonzero_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn unsigned_abs(self) -> $Uty {
                     // SAFETY: absolute value of nonzero cannot yield zero values.
@@ -675,6 +709,8 @@ macro_rules! nonzero_unsigned_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn checked_mul(self, other: $Ty) -> Option<$Ty> {
                     if let Some(result) = self.get().checked_mul(other.get()) {
@@ -709,6 +745,8 @@ macro_rules! nonzero_unsigned_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn saturating_mul(self, other: $Ty) -> $Ty {
                     // SAFETY: saturating_mul returns u*::MAX on overflow
@@ -749,8 +787,10 @@ macro_rules! nonzero_unsigned_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
-                pub unsafe fn unchecked_mul(self, other: $Ty) -> $Ty {
+                pub const unsafe fn unchecked_mul(self, other: $Ty) -> $Ty {
                     // SAFETY: The caller ensures there is no overflow.
                     unsafe { $Ty::new_unchecked(self.get().unchecked_mul(other.get())) }
                 }
@@ -778,6 +818,8 @@ macro_rules! nonzero_unsigned_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn checked_pow(self, other: u32) -> Option<$Ty> {
                     if let Some(result) = self.get().checked_pow(other) {
@@ -820,6 +862,8 @@ macro_rules! nonzero_unsigned_signed_operations {
                 /// # }
                 /// ```
                 #[unstable(feature = "nonzero_ops", issue = "84186")]
+                #[must_use = "this returns the result of the operation, \
+                              without modifying the original"]
                 #[inline]
                 pub const fn saturating_pow(self, other: u32) -> $Ty {
                     // SAFETY: saturating_pow returns u*::MAX on overflow
@@ -878,6 +922,7 @@ macro_rules! nonzero_unsigned_is_power_of_two {
                 #[doc = concat!("let ten = std::num::", stringify!($Ty), "::new(10).unwrap();")]
                 /// assert!(!ten.is_power_of_two());
                 /// ```
+                #[must_use]
                 #[unstable(feature = "nonzero_is_power_of_two", issue = "81106")]
                 #[inline]
                 pub const fn is_power_of_two(self) -> bool {

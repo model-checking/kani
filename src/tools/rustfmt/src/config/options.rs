@@ -20,7 +20,7 @@ pub enum NewlineStyle {
     Windows,
     /// Force CR (`\n).
     Unix,
-    /// `\r\n` in Windows, `\n`` on other platforms.
+    /// `\r\n` in Windows, `\n` on other platforms.
     Native,
 }
 
@@ -112,6 +112,8 @@ pub enum GroupImportsTactic {
     ///  2. other imports
     ///  3. `self` / `crate` / `super` imports
     StdExternalCrate,
+    /// Discard existing groups, and create a single group for everything
+    One,
 }
 
 #[config_type]
@@ -125,6 +127,19 @@ pub enum ImportGranularity {
     Module,
     /// Use one `use` statement per imported item.
     Item,
+    /// Use one `use` statement including all items.
+    One,
+}
+
+/// Controls how rustfmt should handle case in hexadecimal literals.
+#[config_type]
+pub enum HexLiteralCase {
+    /// Leave the literal as-is
+    Preserve,
+    /// Ensure all literals use uppercase lettering
+    Upper,
+    /// Ensure all literals use lowercase lettering
+    Lower,
 }
 
 #[config_type]

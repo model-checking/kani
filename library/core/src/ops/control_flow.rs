@@ -7,6 +7,10 @@ use crate::{convert, ops};
 /// Having the enum makes it clearer -- no more wondering "wait, what did `false`
 /// mean again?" -- and allows including a value.
 ///
+/// Similar to [`Option`] and [`Result`], this enum can be used with the `?` operator
+/// to return immediately if the [`Break`] variant is present or otherwise continue normally
+/// with the value inside the [`Continue`] variant.
+///
 /// # Examples
 ///
 /// Early-exiting from [`Iterator::try_for_each`]:
@@ -24,7 +28,7 @@ use crate::{convert, ops};
 /// ```
 ///
 /// A basic tree traversal:
-/// ```no_run
+/// ```
 /// use std::ops::ControlFlow;
 ///
 /// pub struct TreeNode<T> {
@@ -34,18 +38,46 @@ use crate::{convert, ops};
 /// }
 ///
 /// impl<T> TreeNode<T> {
-///     pub fn traverse_inorder<B>(&self, mut f: impl FnMut(&T) -> ControlFlow<B>) -> ControlFlow<B> {
+///     pub fn traverse_inorder<B>(&self, f: &mut impl FnMut(&T) -> ControlFlow<B>) -> ControlFlow<B> {
 ///         if let Some(left) = &self.left {
-///             left.traverse_inorder(&mut f)?;
+///             left.traverse_inorder(f)?;
 ///         }
 ///         f(&self.value)?;
 ///         if let Some(right) = &self.right {
-///             right.traverse_inorder(&mut f)?;
+///             right.traverse_inorder(f)?;
 ///         }
 ///         ControlFlow::Continue(())
 ///     }
+///     fn leaf(value: T) -> Option<Box<TreeNode<T>>> {
+///         Some(Box::new(Self { value, left: None, right: None }))
+///     }
 /// }
+///
+/// let node = TreeNode {
+///     value: 0,
+///     left: TreeNode::leaf(1),
+///     right: Some(Box::new(TreeNode {
+///         value: -1,
+///         left: TreeNode::leaf(5),
+///         right: TreeNode::leaf(2),
+///     }))
+/// };
+/// let mut sum = 0;
+///
+/// let res = node.traverse_inorder(&mut |val| {
+///     if *val < 0 {
+///         ControlFlow::Break(*val)
+///     } else {
+///         sum += *val;
+///         ControlFlow::Continue(())
+///     }
+/// });
+/// assert_eq!(res, ControlFlow::Break(-1));
+/// assert_eq!(sum, 6);
 /// ```
+///
+/// [`Break`]: ControlFlow::Break
+/// [`Continue`]: ControlFlow::Continue
 #[stable(feature = "control_flow_enum_type", since = "1.55.0")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ControlFlow<B, C = ()> {

@@ -77,16 +77,16 @@ pub fn has_iter_method(cx: &LateContext<'_>, probably_ref_ty: Ty<'_>) -> Option<
     // exists and has the desired signature. Unfortunately FnCtxt is not exported
     // so we can't use its `lookup_method` method.
     let into_iter_collections: &[Symbol] = &[
-        sym::vec_type,
-        sym::option_type,
-        sym::result_type,
+        sym::Vec,
+        sym::Option,
+        sym::Result,
         sym::BTreeMap,
         sym::BTreeSet,
-        sym::vecdeque_type,
+        sym::VecDeque,
         sym::LinkedList,
         sym::BinaryHeap,
-        sym::hashset_type,
-        sym::hashmap_type,
+        sym::HashSet,
+        sym::HashMap,
         sym::PathBuf,
         sym::Path,
         sym::Receiver,
@@ -224,15 +224,15 @@ fn is_normalizable_helper<'tcx>(
     result
 }
 
-/// Returns true iff the given type is a non aggregate primitive (a bool or char, any integer or
-/// floating-point number type). For checking aggregation of primitive types (e.g. tuples and slices
-/// of primitive type) see `is_recursively_primitive_type`
+/// Returns `true` if the given type is a non aggregate primitive (a `bool` or `char`, any
+/// integer or floating-point number type). For checking aggregation of primitive types (e.g.
+/// tuples and slices of primitive type) see `is_recursively_primitive_type`
 pub fn is_non_aggregate_primitive_type(ty: Ty<'_>) -> bool {
     matches!(ty.kind(), ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_))
 }
 
-/// Returns true iff the given type is a primitive (a bool or char, any integer or floating-point
-/// number type, a str, or an array, slice, or tuple of those types).
+/// Returns `true` if the given type is a primitive (a `bool` or `char`, any integer or
+/// floating-point number type, a `str`, or an array, slice, or tuple of those types).
 pub fn is_recursively_primitive_type(ty: Ty<'_>) -> bool {
     match ty.kind() {
         ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_) | ty::Str => true,
@@ -365,5 +365,15 @@ pub fn same_type_and_consts(a: Ty<'tcx>, b: Ty<'tcx>) -> bool {
                 })
         },
         _ => a == b,
+    }
+}
+
+/// Checks if a given type looks safe to be uninitialized.
+pub fn is_uninit_value_valid_for_ty(cx: &LateContext<'_>, ty: Ty<'_>) -> bool {
+    match ty.kind() {
+        ty::Array(component, _) => is_uninit_value_valid_for_ty(cx, component),
+        ty::Tuple(types) => types.types().all(|ty| is_uninit_value_valid_for_ty(cx, ty)),
+        ty::Adt(adt, _) => cx.tcx.lang_items().maybe_uninit() == Some(adt.did),
+        _ => false,
     }
 }

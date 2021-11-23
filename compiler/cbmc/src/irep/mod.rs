@@ -14,13 +14,12 @@
 //! TODO: Parser for json symbol tables into the internal irep format
 //! TODO: Investigate memory usage, and consider using sharing to reduce memory usage
 
-mod from_irep;
 mod irep;
 mod irep_id;
+pub mod serialize;
 mod symbol;
 mod symbol_table;
 mod to_irep;
-mod to_json;
 
 pub use irep::Irep;
 pub use irep_id::IrepId;

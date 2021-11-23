@@ -5,7 +5,7 @@ use rustc_hir as hir;
 use rustc_infer::infer::InferCtxt;
 use rustc_middle::ty::{self, TraitRef, Ty, TyCtxt, WithConstness};
 use rustc_middle::ty::{ToPredicate, TypeFoldable};
-use rustc_session::DiagnosticMessageId;
+use rustc_session::{DiagnosticMessageId, Limit};
 use rustc_span::def_id::LOCAL_CRATE;
 use rustc_span::Span;
 
@@ -152,11 +152,12 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
             },
             cause,
         );
-        if let Err(e) = fulfillcx.select_where_possible(&self.infcx) {
+        let errors = fulfillcx.select_where_possible(&self.infcx);
+        if !errors.is_empty() {
             // This shouldn't happen, except for evaluate/fulfill mismatches,
             // but that's not a reason for an ICE (`predicate_may_hold` is conservative
             // by design).
-            debug!("overloaded_deref_ty: encountered errors {:?} while fulfilling", e);
+            debug!("overloaded_deref_ty: encountered errors {:?} while fulfilling", errors);
             return None;
         }
         let obligations = fulfillcx.pending_obligations();
@@ -217,7 +218,10 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
 
 pub fn report_autoderef_recursion_limit_error<'tcx>(tcx: TyCtxt<'tcx>, span: Span, ty: Ty<'tcx>) {
     // We've reached the recursion limit, error gracefully.
-    let suggested_limit = tcx.recursion_limit() * 2;
+    let suggested_limit = match tcx.recursion_limit() {
+        Limit(0) => Limit(2),
+        limit => limit * 2,
+    };
     let msg = format!("reached the recursion limit while auto-dereferencing `{:?}`", ty);
     let error_id = (DiagnosticMessageId::ErrorId(55), Some(span), msg);
     let fresh = tcx.sess.one_time_diagnostics.borrow_mut().insert(error_id);
@@ -231,7 +235,8 @@ pub fn report_autoderef_recursion_limit_error<'tcx>(tcx: TyCtxt<'tcx>, span: Spa
         )
         .span_label(span, "deref recursion limit reached")
         .help(&format!(
-            "consider adding a `#![recursion_limit=\"{}\"]` attribute to your crate (`{}`)",
+            "consider increasing the recursion limit by adding a \
+             `#![recursion_limit = \"{}\"]` attribute to your crate (`{}`)",
             suggested_limit,
             tcx.crate_name(LOCAL_CRATE),
         ))

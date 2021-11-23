@@ -29,6 +29,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         expected_ty_expr: Option<&'tcx hir::Expr<'tcx>>,
     ) {
         self.annotate_expected_due_to_let_ty(err, expr);
+        self.suggest_box_deref(err, expr, expected, expr_ty);
         self.suggest_compatible_variants(err, expr, expected, expr_ty);
         self.suggest_deref_ref_or_into(err, expr, expected, expr_ty, expected_ty_expr);
         if self.suggest_calling_boxed_future_when_appropriate(err, expr, expected, expr_ty) {
@@ -140,16 +141,11 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             Err(e) => e,
         };
 
+        self.set_tainted_by_errors();
         let expr = expr.peel_drop_temps();
         let cause = self.misc(expr.span);
         let expr_ty = self.resolve_vars_with_obligations(checked_ty);
         let mut err = self.report_mismatched_types(&cause, expected, expr_ty, e);
-
-        if self.is_assign_to_bool(expr, expected) {
-            // Error reported in `check_assign` so avoid emitting error again.
-            err.delay_as_bug();
-            return (expected, None);
-        }
 
         self.emit_coerce_suggestions(&mut err, expr, expr_ty, expected, expected_ty_expr);
 
@@ -172,12 +168,21 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
-    /// Returns whether the expected type is `bool` and the expression is `x = y`.
-    pub fn is_assign_to_bool(&self, expr: &hir::Expr<'_>, expected: Ty<'tcx>) -> bool {
-        if let hir::ExprKind::Assign(..) = expr.kind {
-            return expected == self.tcx.types.bool;
+    fn suggest_box_deref(
+        &self,
+        err: &mut DiagnosticBuilder<'_>,
+        expr: &hir::Expr<'_>,
+        expected: Ty<'tcx>,
+        expr_ty: Ty<'tcx>,
+    ) {
+        if expr_ty.is_box() && expr_ty.boxed_ty() == expected {
+            err.span_suggestion_verbose(
+                expr.span.shrink_to_lo(),
+                "try dereferencing the `Box`",
+                "*".to_string(),
+                Applicability::MachineApplicable,
+            );
         }
-        false
     }
 
     /// If the expected type is an enum (Issue #55250) with any variants whose
@@ -441,7 +446,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 (&ty::Str, &ty::Array(arr, _) | &ty::Slice(arr)) if arr == self.tcx.types.u8 => {
                     if let hir::ExprKind::Lit(_) = expr.kind {
                         if let Ok(src) = sm.span_to_snippet(sp) {
-                            if let Some(_) = replace_prefix(&src, "b\"", "\"") {
+                            if replace_prefix(&src, "b\"", "\"").is_some() {
                                 let pos = sp.lo() + BytePos(1);
                                 return Some((
                                     sp.with_hi(pos),
@@ -457,7 +462,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 (&ty::Array(arr, _) | &ty::Slice(arr), &ty::Str) if arr == self.tcx.types.u8 => {
                     if let hir::ExprKind::Lit(_) = expr.kind {
                         if let Ok(src) = sm.span_to_snippet(sp) {
-                            if let Some(_) = replace_prefix(&src, "\"", "b\"") {
+                            if replace_prefix(&src, "\"", "b\"").is_some() {
                                 return Some((
                                     sp.shrink_to_lo(),
                                     "consider adding a leading `b`",
@@ -756,9 +761,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             return false;
         }
 
-        let src = if let Ok(src) = self.tcx.sess.source_map().span_to_snippet(expr.span) {
-            src
-        } else {
+        let Ok(src) = self.tcx.sess.source_map().span_to_snippet(expr.span) else {
             return false;
         };
 

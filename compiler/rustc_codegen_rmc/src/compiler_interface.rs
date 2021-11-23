@@ -3,26 +3,31 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::overrides::skip_monomorphize;
 use crate::GotocCtx;
+
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;
+use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
-use rustc_middle::middle::cstore::{EncodedMetadata, MetadataLoaderDyn};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, TyCtxt};
-use rustc_serialize::json::ToJson;
 use rustc_session::config::{OutputFilenames, OutputType};
+use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
+use std::collections::BTreeMap;
+use std::io::BufWriter;
+use std::iter::FromIterator;
+use std::path::PathBuf;
 use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
+    pub type_map: BTreeMap<String, String>,
     pub symtab: SymbolTable,
     pub crate_name: rustc_span::Symbol,
 }
@@ -41,11 +46,9 @@ impl CodegenBackend for GotocCodegenBackend {
         Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
     }
 
-    fn provide(&self, providers: &mut Providers) {
-        providers.skip_monomorphize = skip_monomorphize;
-    }
+    fn provide(&self, _providers: &mut Providers) {}
 
-    fn provide_extern(&self, _providers: &mut ty::query::Providers) {}
+    fn provide_extern(&self, _providers: &mut ty::query::ExternProviders) {}
 
     fn codegen_crate<'tcx>(
         &self,
@@ -123,7 +126,10 @@ impl CodegenBackend for GotocCodegenBackend {
             &tcx.sess.opts.debugging_opts.symbol_table_passes,
         );
 
+        let type_map = BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string())));
+
         Box::new(GotocCodegenResult {
+            type_map,
             symtab: symbol_table,
             crate_name: tcx.crate_name(LOCAL_CRATE) as rustc_span::Symbol,
         })
@@ -139,25 +145,33 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn link(
         &self,
-        _sess: &Session,
+        sess: &Session,
         codegen_results: Box<dyn Any>,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
-        use std::io::Write;
-
         let result = codegen_results
             .downcast::<GotocCodegenResult>()
             .expect("in link: codegen_results is not a GotocCodegenResult");
-        let symtab = result.symtab;
-        let irep_symtab = symtab.to_irep();
-        let json = irep_symtab.to_json();
-        let pretty_json = json.pretty();
 
-        let output_name = outputs.path(OutputType::Object).with_extension("json");
-        debug!("output to {:?}", output_name);
-        let mut out_file = ::std::fs::File::create(output_name).unwrap();
-        write!(out_file, "{}", pretty_json.to_string()).unwrap();
+        // No output should be generated if user selected no_codegen.
+        if !sess.opts.debugging_opts.no_codegen && sess.opts.output_types.should_codegen() {
+            // "path.o"
+            let base_filename = outputs.path(OutputType::Object);
+            write_file(&base_filename, "symtab.json", &result.symtab);
+            write_file(&base_filename, "type_map.json", &result.type_map);
+        }
 
         Ok(())
     }
+}
+
+fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T)
+where
+    T: serde::Serialize,
+{
+    let filename = base_filename.with_extension(extension);
+    debug!("output to {:?}", filename);
+    let out_file = ::std::fs::File::create(&filename).unwrap();
+    let writer = BufWriter::new(out_file);
+    serde_json::to_writer(writer, &source).unwrap();
 }

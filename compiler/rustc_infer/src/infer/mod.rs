@@ -417,26 +417,13 @@ pub enum SubregionOrigin<'tcx> {
     /// (&'a &'b T) where a >= b
     ReferenceOutlivesReferent(Ty<'tcx>, Span),
 
-    /// Region in return type of invoked fn must enclose call
-    CallReturn(Span),
-
     /// Comparing the signature and requirements of an impl method against
     /// the containing trait.
-    CompareImplMethodObligation {
-        span: Span,
-        item_name: Symbol,
-        impl_item_def_id: DefId,
-        trait_item_def_id: DefId,
-    },
+    CompareImplMethodObligation { span: Span, impl_item_def_id: DefId, trait_item_def_id: DefId },
 
     /// Comparing the signature and requirements of an impl associated type
     /// against the containing trait
-    CompareImplTypeObligation {
-        span: Span,
-        item_name: Symbol,
-        impl_item_def_id: DefId,
-        trait_item_def_id: DefId,
-    },
+    CompareImplTypeObligation { span: Span, impl_item_def_id: DefId, trait_item_def_id: DefId },
 }
 
 // `SubregionOrigin` is used a lot. Make sure it doesn't unintentionally get bigger.
@@ -472,7 +459,7 @@ pub enum RegionVariableOrigin {
     AddrOfRegion(Span),
 
     /// Regions created as part of an autoref of a method receiver
-    Autoref(Span, ty::AssocItem),
+    Autoref(Span),
 
     /// Regions created as part of an automatic coercion
     Coercion(Span),
@@ -1255,16 +1242,16 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         self.tainted_by_errors_flag.set(true)
     }
 
-    /// Process the region constraints and report any errors that
+    /// Process the region constraints and return any any errors that
     /// result. After this, no more unification operations should be
     /// done -- or the compiler will panic -- but it is legal to use
     /// `resolve_vars_if_possible` as well as `fully_resolve`.
-    pub fn resolve_regions_and_report_errors(
+    pub fn resolve_regions(
         &self,
         region_context: DefId,
         outlives_env: &OutlivesEnvironment<'tcx>,
         mode: RegionckMode,
-    ) {
+    ) -> Vec<RegionResolutionError<'tcx>> {
         let (var_infos, data) = {
             let mut inner = self.inner.borrow_mut();
             let inner = &mut *inner;
@@ -1289,6 +1276,21 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 
         let old_value = self.lexical_region_resolutions.replace(Some(lexical_region_resolutions));
         assert!(old_value.is_none());
+
+        errors
+    }
+
+    /// Process the region constraints and report any errors that
+    /// result. After this, no more unification operations should be
+    /// done -- or the compiler will panic -- but it is legal to use
+    /// `resolve_vars_if_possible` as well as `fully_resolve`.
+    pub fn resolve_regions_and_report_errors(
+        &self,
+        region_context: DefId,
+        outlives_env: &OutlivesEnvironment<'tcx>,
+        mode: RegionckMode,
+    ) {
+        let errors = self.resolve_regions(region_context, outlives_env, mode);
 
         if !self.is_tainted_by_errors() {
             // As a heuristic, just skip reporting region errors
@@ -1803,7 +1805,6 @@ impl<'tcx> SubregionOrigin<'tcx> {
             ReborrowUpvar(a, _) => a,
             DataBorrowed(_, a) => a,
             ReferenceOutlivesReferent(_, a) => a,
-            CallReturn(a) => a,
             CompareImplMethodObligation { span, .. } => span,
             CompareImplTypeObligation { span, .. } => span,
         }
@@ -1819,23 +1820,19 @@ impl<'tcx> SubregionOrigin<'tcx> {
             }
 
             traits::ObligationCauseCode::CompareImplMethodObligation {
-                item_name,
                 impl_item_def_id,
                 trait_item_def_id,
             } => SubregionOrigin::CompareImplMethodObligation {
                 span: cause.span,
-                item_name,
                 impl_item_def_id,
                 trait_item_def_id,
             },
 
             traits::ObligationCauseCode::CompareImplTypeObligation {
-                item_name,
                 impl_item_def_id,
                 trait_item_def_id,
             } => SubregionOrigin::CompareImplTypeObligation {
                 span: cause.span,
-                item_name,
                 impl_item_def_id,
                 trait_item_def_id,
             },
@@ -1851,7 +1848,7 @@ impl RegionVariableOrigin {
             MiscVariable(a)
             | PatternRegion(a)
             | AddrOfRegion(a)
-            | Autoref(a, _)
+            | Autoref(a)
             | Coercion(a)
             | EarlyBoundRegion(a, ..)
             | LateBoundRegion(a, ..)

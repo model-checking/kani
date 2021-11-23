@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-include!("../../rmc-prelude.rs");
-
 struct Sheep {}
 struct Cow {}
 
@@ -30,8 +28,8 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
     if random_number < 5 { Box::new(Sheep {}) } else { Box::new(Cow {}) }
 }
 
-pub fn main() {
-    let random_number = __nondet();
+fn main() {
+    let random_number = rmc::nondet();
     let animal = random_animal(random_number);
     let s = animal.noise();
     if (random_number < 5) {

@@ -3,8 +3,6 @@
 
 // cbmc-flags: --unwind 9
 
-include!("../../rmc-prelude.rs");
-
 // This example is a copy of the `cbmc` test in
 // `src/test/rmc/LoopLoop_NonReturning/main_no_unwind_asserts.rs`
 //
@@ -12,8 +10,8 @@ include!("../../rmc-prelude.rs");
 //
 // In this test, we check that RMC warns the user about unwinding failures
 // and makes a recommendation to fix the issue.
-pub fn main() {
-    let mut a: u32 = __nondet();
+fn main() {
+    let mut a: u32 = rmc::nondet();
 
     if a < 1024 {
         loop {

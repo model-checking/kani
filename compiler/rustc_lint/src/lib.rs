@@ -26,12 +26,11 @@
 //! This API is completely unstable and subject to change.
 
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/nightly-rustc/")]
-#![cfg_attr(test, feature(test))]
 #![feature(array_windows)]
 #![feature(bool_to_option)]
 #![feature(box_patterns)]
 #![feature(crate_visibility_modifier)]
-#![feature(format_args_capture)]
+#![cfg_attr(bootstrap, feature(format_args_capture))]
 #![feature(iter_order_by)]
 #![feature(iter_zip)]
 #![feature(never_type)]
@@ -48,6 +47,8 @@ mod array_into_iter;
 pub mod builtin;
 mod context;
 mod early;
+mod enum_intrinsics_non_enums;
+pub mod hidden_unicode_codepoints;
 mod internal;
 mod late;
 mod levels;
@@ -77,6 +78,8 @@ use rustc_span::Span;
 
 use array_into_iter::ArrayIntoIter;
 use builtin::*;
+use enum_intrinsics_non_enums::EnumIntrinsicsNonEnums;
+use hidden_unicode_codepoints::*;
 use internal::*;
 use methods::*;
 use non_ascii_idents::*;
@@ -128,6 +131,7 @@ macro_rules! early_lint_passes {
                 DeprecatedAttr: DeprecatedAttr::new(),
                 WhileTrue: WhileTrue,
                 NonAsciiIdents: NonAsciiIdents,
+                HiddenUnicodeCodepoints: HiddenUnicodeCodepoints,
                 IncompleteFeatures: IncompleteFeatures,
                 RedundantSemicolons: RedundantSemicolons,
                 UnusedDocComment: UnusedDocComment,
@@ -169,6 +173,7 @@ macro_rules! late_lint_passes {
                 TemporaryCStringAsPtr: TemporaryCStringAsPtr,
                 NonPanicFmt: NonPanicFmt,
                 NoopMethodCall: NoopMethodCall,
+                EnumIntrinsicsNonEnums: EnumIntrinsicsNonEnums,
                 InvalidAtomicOrdering: InvalidAtomicOrdering,
                 NamedAsmLabels: NamedAsmLabels,
             ]
@@ -298,7 +303,6 @@ fn register_builtins(store: &mut LintStore, no_interleave_lints: bool) {
         UNUSED_LABELS,
         UNUSED_PARENS,
         UNUSED_BRACES,
-        MUST_NOT_SUSPEND,
         REDUNDANT_SEMICOLONS
     );
 

@@ -2,7 +2,7 @@ use self::MemberDescriptionFactory::*;
 use self::RecursiveTypeDescription::*;
 
 use super::namespace::mangled_name_of_instance;
-use super::type_names::compute_debuginfo_type_name;
+use super::type_names::{compute_debuginfo_type_name, compute_debuginfo_vtable_name};
 use super::utils::{
     create_DIArray, debug_context, get_namespace_for_item, is_node_local_to_unit, DIB,
 };
@@ -26,13 +26,14 @@ use rustc_fs_util::path_to_c_string;
 use rustc_hir::def::CtorKind;
 use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_index::vec::{Idx, IndexVec};
-use rustc_middle::ich::NodeIdHashingMode;
 use rustc_middle::mir::{self, GeneratorLayout};
 use rustc_middle::ty::layout::{self, IntegerExt, LayoutOf, PrimitiveExt, TyAndLayout};
 use rustc_middle::ty::subst::GenericArgKind;
-use rustc_middle::ty::Instance;
-use rustc_middle::ty::{self, AdtKind, GeneratorSubsts, ParamEnv, Ty, TyCtxt};
+use rustc_middle::ty::{
+    self, AdtKind, GeneratorSubsts, Instance, ParamEnv, Ty, TyCtxt, COMMON_VTABLE_ENTRIES,
+};
 use rustc_middle::{bug, span_bug};
+use rustc_query_system::ich::NodeIdHashingMode;
 use rustc_session::config::{self, DebugInfo};
 use rustc_span::symbol::Symbol;
 use rustc_span::FileNameDisplayPreference;
@@ -477,7 +478,7 @@ fn subroutine_type_metadata(
     let signature_metadata: Vec<_> = iter::once(
         // return type
         match signature.output().kind() {
-            ty::Tuple(ref tys) if tys.is_empty() => None,
+            ty::Tuple(tys) if tys.is_empty() => None,
             _ => Some(type_metadata(cx, signature.output(), span)),
         },
     )
@@ -647,7 +648,7 @@ pub fn type_metadata(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>, usage_site_span: Sp
         ty::Never | ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_) => {
             MetadataCreationResult::new(basic_type_metadata(cx, t), false)
         }
-        ty::Tuple(ref elements) if elements.is_empty() => {
+        ty::Tuple(elements) if elements.is_empty() => {
             MetadataCreationResult::new(basic_type_metadata(cx, t), false)
         }
         ty::Array(typ, _) | ty::Slice(typ) => {
@@ -746,7 +747,7 @@ pub fn type_metadata(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>, usage_site_span: Sp
                     .finalize(cx)
             }
         },
-        ty::Tuple(ref elements) => {
+        ty::Tuple(elements) => {
             let tys: Vec<_> = elements.iter().map(|k| k.expect_ty()).collect();
             prepare_tuple_metadata(cx, t, &tys, unique_type_id, usage_site_span, NO_SCOPE_METADATA)
                 .finalize(cx)
@@ -932,7 +933,7 @@ fn basic_type_metadata(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>) -> &'ll DIType {
 
     let (name, encoding) = match t.kind() {
         ty::Never => ("!", DW_ATE_unsigned),
-        ty::Tuple(ref elements) if elements.is_empty() => ("()", DW_ATE_unsigned),
+        ty::Tuple(elements) if elements.is_empty() => ("()", DW_ATE_unsigned),
         ty::Bool => ("bool", DW_ATE_boolean),
         ty::Char => ("char", DW_ATE_unsigned_char),
         ty::Int(int_ty) if msvc_like_names => (int_ty.msvc_basic_name(), DW_ATE_signed),
@@ -1123,7 +1124,7 @@ pub fn compile_unit_metadata(
 
             let gcov_cu_info = [
                 path_to_mdstring(debug_context.llcontext, &output_filenames.with_extension("gcno")),
-                path_to_mdstring(debug_context.llcontext, &gcda_path),
+                path_to_mdstring(debug_context.llcontext, gcda_path),
                 cu_desc_metadata,
             ];
             let gcov_metadata = llvm::LLVMMDNodeInContext(
@@ -1963,17 +1964,13 @@ impl<'tcx> VariantInfo<'_, 'tcx> {
     }
 
     fn source_info(&self, cx: &CodegenCx<'ll, 'tcx>) -> Option<SourceInfo<'ll>> {
-        match self {
-            VariantInfo::Generator { def_id, variant_index, .. } => {
-                let span = cx.tcx.generator_layout(*def_id).unwrap().variant_source_info
-                    [*variant_index]
-                    .span;
-                if !span.is_dummy() {
-                    let loc = cx.lookup_debug_loc(span.lo());
-                    return Some(SourceInfo { file: file_metadata(cx, &loc.file), line: loc.line });
-                }
+        if let VariantInfo::Generator { def_id, variant_index, .. } = self {
+            let span =
+                cx.tcx.generator_layout(*def_id).unwrap().variant_source_info[*variant_index].span;
+            if !span.is_dummy() {
+                let loc = cx.lookup_debug_loc(span.lo());
+                return Some(SourceInfo { file: file_metadata(cx, &loc.file), line: loc.line });
             }
-            _ => {}
         }
         None
     }
@@ -1994,11 +1991,11 @@ fn describe_enum_variant(
         let unique_type_id = debug_context(cx)
             .type_map
             .borrow_mut()
-            .get_unique_type_id_of_enum_variant(cx, layout.ty, &variant_name);
+            .get_unique_type_id_of_enum_variant(cx, layout.ty, variant_name);
         create_struct_stub(
             cx,
             layout.ty,
-            &variant_name,
+            variant_name,
             unique_type_id,
             Some(containing_scope),
             DIFlags::FlagZero,
@@ -2385,7 +2382,7 @@ fn set_members_of_composite_type(
     {
         let mut composite_types_completed =
             debug_context(cx).composite_types_completed.borrow_mut();
-        if !composite_types_completed.insert(&composite_type_metadata) {
+        if !composite_types_completed.insert(composite_type_metadata) {
             bug!(
                 "debuginfo::set_members_of_composite_type() - \
                   Already completed forward declaration re-encountered."
@@ -2595,11 +2592,45 @@ pub fn create_global_var_metadata(cx: &CodegenCx<'ll, '_>, def_id: DefId, global
     }
 }
 
+/// Generates LLVM debuginfo for a vtable.
+fn vtable_type_metadata(
+    cx: &CodegenCx<'ll, 'tcx>,
+    ty: Ty<'tcx>,
+    poly_trait_ref: Option<ty::PolyExistentialTraitRef<'tcx>>,
+) -> &'ll DIType {
+    let tcx = cx.tcx;
+
+    let vtable_entries = if let Some(poly_trait_ref) = poly_trait_ref {
+        let trait_ref = poly_trait_ref.with_self_ty(tcx, ty);
+        let trait_ref = tcx.erase_regions(trait_ref);
+
+        tcx.vtable_entries(trait_ref)
+    } else {
+        COMMON_VTABLE_ENTRIES
+    };
+
+    // FIXME: We describe the vtable as an array of *const () pointers. The length of the array is
+    //        correct - but we could create a more accurate description, e.g. by describing it
+    //        as a struct where each field has a name that corresponds to the name of the method
+    //        it points to.
+    //        However, this is not entirely straightforward because there might be multiple
+    //        methods with the same name if the vtable is for multiple traits. So for now we keep
+    //        things simple instead of adding some ad-hoc disambiguation scheme.
+    let vtable_type = tcx.mk_array(tcx.mk_imm_ptr(tcx.types.unit), vtable_entries.len() as u64);
+
+    type_metadata(cx, vtable_type, rustc_span::DUMMY_SP)
+}
+
 /// Creates debug information for the given vtable, which is for the
 /// given type.
 ///
 /// Adds the created metadata nodes directly to the crate's IR.
-pub fn create_vtable_metadata(cx: &CodegenCx<'ll, 'tcx>, ty: Ty<'tcx>, vtable: &'ll Value) {
+pub fn create_vtable_metadata(
+    cx: &CodegenCx<'ll, 'tcx>,
+    ty: Ty<'tcx>,
+    poly_trait_ref: Option<ty::PolyExistentialTraitRef<'tcx>>,
+    vtable: &'ll Value,
+) {
     if cx.dbg_cx.is_none() {
         return;
     }
@@ -2609,42 +2640,16 @@ pub fn create_vtable_metadata(cx: &CodegenCx<'ll, 'tcx>, ty: Ty<'tcx>, vtable: &
         return;
     }
 
-    let type_metadata = type_metadata(cx, ty, rustc_span::DUMMY_SP);
+    let vtable_name = compute_debuginfo_vtable_name(cx.tcx, ty, poly_trait_ref);
+    let vtable_type = vtable_type_metadata(cx, ty, poly_trait_ref);
 
     unsafe {
-        // `LLVMRustDIBuilderCreateStructType()` wants an empty array. A null
-        // pointer will lead to hard to trace and debug LLVM assertions
-        // later on in `llvm/lib/IR/Value.cpp`.
-        let empty_array = create_DIArray(DIB(cx), &[]);
-        let name = "vtable";
-
-        // Create a new one each time. We don't want metadata caching
-        // here, because each vtable will refer to a unique containing
-        // type.
-        let vtable_type = llvm::LLVMRustDIBuilderCreateStructType(
-            DIB(cx),
-            NO_SCOPE_METADATA,
-            name.as_ptr().cast(),
-            name.len(),
-            unknown_file_metadata(cx),
-            UNKNOWN_LINE_NUMBER,
-            Size::ZERO.bits(),
-            cx.tcx.data_layout.pointer_align.abi.bits() as u32,
-            DIFlags::FlagArtificial,
-            None,
-            empty_array,
-            0,
-            Some(type_metadata),
-            name.as_ptr().cast(),
-            name.len(),
-        );
-
         let linkage_name = "";
         llvm::LLVMRustDIBuilderCreateStaticVariable(
             DIB(cx),
             NO_SCOPE_METADATA,
-            name.as_ptr().cast(),
-            name.len(),
+            vtable_name.as_ptr().cast(),
+            vtable_name.len(),
             linkage_name.as_ptr().cast(),
             linkage_name.len(),
             unknown_file_metadata(cx),

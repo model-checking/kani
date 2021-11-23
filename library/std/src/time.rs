@@ -239,6 +239,7 @@ impl Instant {
     ///
     /// let now = Instant::now();
     /// ```
+    #[must_use]
     #[stable(feature = "time2", since = "1.8.0")]
     pub fn now() -> Instant {
         let os_now = time::Instant::now();
@@ -268,6 +269,20 @@ impl Instant {
         //
         // To hopefully mitigate the impact of this, a few platforms are
         // excluded as "these at least haven't gone backwards yet".
+        //
+        // While issues have been seen on arm64 platforms the Arm architecture
+        // requires that the counter monotonically increases and that it must
+        // provide a uniform view of system time (e.g. it must not be possible
+        // for a core to recieve a message from another core with a time stamp
+        // and observe time going backwards (ARM DDI 0487G.b D11.1.2). While
+        // there have been a few 64bit SoCs that have bugs which cause time to
+        // not monoticially increase, these have been fixed in the Linux kernel
+        // and we shouldn't penalize all Arm SoCs for those who refuse to
+        // update their kernels:
+        // SUN50I_ERRATUM_UNKNOWN1 - Allwinner A64 / Pine A64 - fixed in 5.1
+        // FSL_ERRATUM_A008585 - Freescale LS2080A/LS1043A - fixed in 4.10
+        // HISILICON_ERRATUM_161010101 - Hisilicon 1610 - fixed in 4.11
+        // ARM64_ERRATUM_858921 - Cortex A73 - fixed in 4.12
         if time::Instant::actually_monotonic() {
             return Instant(os_now);
         }
@@ -292,6 +307,7 @@ impl Instant {
     /// let new_now = Instant::now();
     /// println!("{:?}", new_now.duration_since(now));
     /// ```
+    #[must_use]
     #[stable(feature = "time2", since = "1.8.0")]
     pub fn duration_since(&self, earlier: Instant) -> Duration {
         self.0.checked_sub_instant(&earlier.0).expect("supplied instant is later than self")
@@ -312,6 +328,7 @@ impl Instant {
     /// println!("{:?}", new_now.checked_duration_since(now));
     /// println!("{:?}", now.checked_duration_since(new_now)); // None
     /// ```
+    #[must_use]
     #[stable(feature = "checked_duration_since", since = "1.39.0")]
     pub fn checked_duration_since(&self, earlier: Instant) -> Option<Duration> {
         self.0.checked_sub_instant(&earlier.0)
@@ -332,6 +349,7 @@ impl Instant {
     /// println!("{:?}", new_now.saturating_duration_since(now));
     /// println!("{:?}", now.saturating_duration_since(new_now)); // 0ns
     /// ```
+    #[must_use]
     #[stable(feature = "checked_duration_since", since = "1.39.0")]
     pub fn saturating_duration_since(&self, earlier: Instant) -> Duration {
         self.checked_duration_since(earlier).unwrap_or_default()
@@ -356,6 +374,7 @@ impl Instant {
     /// sleep(three_secs);
     /// assert!(instant.elapsed() >= three_secs);
     /// ```
+    #[must_use]
     #[stable(feature = "time2", since = "1.8.0")]
     pub fn elapsed(&self) -> Duration {
         Instant::now() - *self
@@ -462,6 +481,7 @@ impl SystemTime {
     ///
     /// let sys_time = SystemTime::now();
     /// ```
+    #[must_use]
     #[stable(feature = "time2", since = "1.8.0")]
     pub fn now() -> SystemTime {
         SystemTime(time::SystemTime::now())
@@ -630,6 +650,7 @@ impl SystemTimeError {
     ///     Err(e) => println!("SystemTimeError difference: {:?}", e.duration()),
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "time2", since = "1.8.0")]
     pub fn duration(&self) -> Duration {
         self.0

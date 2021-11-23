@@ -9,17 +9,17 @@
 #![feature(control_flow_enum)]
 #![feature(box_syntax)]
 #![feature(in_band_lifetimes)]
+#![feature(let_else)]
 #![feature(nll)]
 #![feature(test)]
 #![feature(crate_visibility_modifier)]
 #![feature(never_type)]
 #![feature(once_cell)]
 #![feature(type_ascription)]
+#![feature(iter_intersperse)]
 #![recursion_limit = "256"]
 #![warn(rustc::internal)]
 
-#[macro_use]
-extern crate lazy_static;
 #[macro_use]
 extern crate tracing;
 
@@ -49,11 +49,13 @@ extern crate rustc_interface;
 extern crate rustc_lexer;
 extern crate rustc_lint;
 extern crate rustc_lint_defs;
+extern crate rustc_macros;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_parse;
 extern crate rustc_passes;
 extern crate rustc_resolve;
+extern crate rustc_serialize;
 extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;
@@ -102,17 +104,13 @@ macro_rules! map {
     }}
 }
 
-#[macro_use]
-mod externalfiles;
-
 mod clean;
 mod config;
 mod core;
 mod docfs;
-mod doctree;
-#[macro_use]
-mod error;
 pub mod doctest;
+mod error;
+mod externalfiles;
 mod fold;
 mod formats;
 // used by the error-index generator, so it needs to be public
@@ -121,7 +119,9 @@ mod json;
 crate mod lint;
 mod markdown;
 mod passes;
+mod scrape_examples;
 mod theme;
+mod visit;
 mod visit_ast;
 mod visit_lib;
 
@@ -620,6 +620,30 @@ fn opts() -> Vec<RustcOptGroup> {
                 "Make the identifiers in the HTML source code pages navigable",
             )
         }),
+        unstable("scrape-examples-output-path", |o| {
+            o.optopt(
+                "",
+                "scrape-examples-output-path",
+                "",
+                "collect function call information and output at the given path",
+            )
+        }),
+        unstable("scrape-examples-target-crate", |o| {
+            o.optmulti(
+                "",
+                "scrape-examples-target-crate",
+                "",
+                "collect function call information for functions from the target crate",
+            )
+        }),
+        unstable("with-examples", |o| {
+            o.optmulti(
+                "",
+                "with-examples",
+                "",
+                "path to function call information (for displaying examples in the documentation)",
+            )
+        }),
     ]
 }
 
@@ -731,8 +755,10 @@ fn main_options(options: config::Options) -> MainResult {
     let default_passes = options.default_passes;
     let output_format = options.output_format;
     // FIXME: fix this clone (especially render_options)
+    let externs = options.externs.clone();
     let manual_passes = options.manual_passes.clone();
     let render_options = options.render_options.clone();
+    let scrape_examples_options = options.scrape_examples_options.clone();
     let config = core::create_config(options);
 
     interface::create_compiler_and_run(config, |compiler| {
@@ -748,9 +774,9 @@ fn main_options(options: config::Options) -> MainResult {
             // We need to hold on to the complete resolver, so we cause everything to be
             // cloned for the analysis passes to use. Suboptimal, but necessary in the
             // current architecture.
-            let resolver = core::create_resolver(queries, &sess);
+            let resolver = core::create_resolver(externs, queries, sess);
 
-            if sess.has_errors() {
+            if sess.diagnostic().has_errors_or_lint_errors() {
                 sess.fatal("Compilation failed, aborting rustdoc");
             }
 
@@ -768,6 +794,10 @@ fn main_options(options: config::Options) -> MainResult {
                     )
                 });
                 info!("finished with rustc");
+
+                if let Some(options) = scrape_examples_options {
+                    return scrape_examples::run(krate, render_opts, cache, tcx, options);
+                }
 
                 cache.crate_version = crate_version;
 

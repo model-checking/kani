@@ -270,9 +270,10 @@ pub struct ArgumentV1<'a> {
 /// of `format_args!(..)` and reduce the scope of the `unsafe` block.
 #[allow(missing_debug_implementations)]
 #[doc(hidden)]
-#[non_exhaustive]
 #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
-pub struct UnsafeArg;
+pub struct UnsafeArg {
+    _private: (),
+}
 
 impl UnsafeArg {
     /// See documentation where `UnsafeArg` is required to know when it is safe to
@@ -281,7 +282,7 @@ impl UnsafeArg {
     #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
     #[inline(always)]
     pub unsafe fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 }
 
@@ -373,7 +374,6 @@ impl<'a> Arguments<'a> {
     ///    valid index of `args`.
     /// 3. Every [`Count::Param`] within `fmt` must contain a valid index of
     ///    `args`.
-    #[cfg(not(bootstrap))]
     #[doc(hidden)]
     #[inline]
     #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
@@ -383,19 +383,6 @@ impl<'a> Arguments<'a> {
         args: &'a [ArgumentV1<'a>],
         fmt: &'a [rt::v1::Argument],
         _unsafe_arg: UnsafeArg,
-    ) -> Arguments<'a> {
-        Arguments { pieces, fmt: Some(fmt), args }
-    }
-
-    #[cfg(bootstrap)]
-    #[doc(hidden)]
-    #[inline]
-    #[unstable(feature = "fmt_internals", reason = "internal to format_args!", issue = "none")]
-    #[rustc_const_unstable(feature = "const_fmt_arguments_new", issue = "none")]
-    pub const unsafe fn new_v1_formatted(
-        pieces: &'a [&'static str],
-        args: &'a [ArgumentV1<'a>],
-        fmt: &'a [rt::v1::Argument],
     ) -> Arguments<'a> {
         Arguments { pieces, fmt: Some(fmt), args }
     }
@@ -490,6 +477,7 @@ impl<'a> Arguments<'a> {
     /// ```
     #[stable(feature = "fmt_as_str", since = "1.52.0")]
     #[rustc_const_unstable(feature = "const_arguments_as_str", issue = "none")]
+    #[must_use]
     #[inline]
     pub const fn as_str(&self) -> Option<&'static str> {
         match (self.pieces, self.args) {
@@ -616,8 +604,8 @@ impl Display for Arguments<'_> {
     label = "`{Self}` cannot be formatted using `{{:?}}` because it doesn't implement `{Debug}`"
 )]
 #[doc(alias = "{:?}")]
-#[rustc_diagnostic_item = "debug_trait"]
-#[cfg_attr(not(bootstrap), rustc_trivial_field_reads)]
+#[rustc_diagnostic_item = "Debug"]
+#[rustc_trivial_field_reads]
 pub trait Debug {
     /// Formats the value using the given formatter.
     ///
@@ -709,7 +697,7 @@ pub use macros::Debug;
     note = "in format strings you may be able to use `{{:?}}` (or {{:#?}} for pretty-print) instead"
 )]
 #[doc(alias = "{}")]
-#[rustc_diagnostic_item = "display_trait"]
+#[rustc_diagnostic_item = "Display"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub trait Display {
     /// Formats the value using the given formatter.
@@ -1002,7 +990,7 @@ pub trait UpperHex {
 /// assert_eq!(&l_ptr[..2], "0x");
 /// ```
 #[stable(feature = "rust1", since = "1.0.0")]
-#[rustc_diagnostic_item = "pointer_trait"]
+#[rustc_diagnostic_item = "Pointer"]
 pub trait Pointer {
     /// Formats the value using the given formatter.
     #[stable(feature = "rust1", since = "1.0.0")]
@@ -1616,6 +1604,7 @@ impl<'a> Formatter<'a> {
     }
 
     /// Flags for formatting
+    #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_deprecated(
         since = "1.24.0",
@@ -1653,6 +1642,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:G>3}", Foo), "GGG");
     /// assert_eq!(&format!("{:t>6}", Foo), "tttttt");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn fill(&self) -> char {
         self.fill
@@ -1689,6 +1679,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:^}", Foo), "center");
     /// assert_eq!(&format!("{}", Foo), "into the void");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags_align", since = "1.28.0")]
     pub fn align(&self) -> Option<Alignment> {
         match self.align {
@@ -1723,6 +1714,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:10}", Foo(23)), "Foo(23)   ");
     /// assert_eq!(&format!("{}", Foo(23)), "Foo(23)");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn width(&self) -> Option<usize> {
         self.width
@@ -1753,6 +1745,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:.4}", Foo(23.2)), "Foo(23.2000)");
     /// assert_eq!(&format!("{}", Foo(23.2)), "Foo(23.20)");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn precision(&self) -> Option<usize> {
         self.precision
@@ -1783,6 +1776,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:+}", Foo(23)), "Foo(+23)");
     /// assert_eq!(&format!("{}", Foo(23)), "Foo(23)");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn sign_plus(&self) -> bool {
         self.flags & (1 << FlagV1::SignPlus as u32) != 0
@@ -1811,6 +1805,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:-}", Foo(23)), "-Foo(23)");
     /// assert_eq!(&format!("{}", Foo(23)), "Foo(23)");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn sign_minus(&self) -> bool {
         self.flags & (1 << FlagV1::SignMinus as u32) != 0
@@ -1838,6 +1833,7 @@ impl<'a> Formatter<'a> {
     /// assert_eq!(&format!("{:#}", Foo(23)), "Foo(23)");
     /// assert_eq!(&format!("{}", Foo(23)), "23");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn alternate(&self) -> bool {
         self.flags & (1 << FlagV1::Alternate as u32) != 0
@@ -1863,6 +1859,7 @@ impl<'a> Formatter<'a> {
     ///
     /// assert_eq!(&format!("{:04}", Foo(23)), "23");
     /// ```
+    #[must_use]
     #[stable(feature = "fmt_flags", since = "1.5.0")]
     pub fn sign_aware_zero_pad(&self) -> bool {
         self.flags & (1 << FlagV1::SignAwareZeroPad as u32) != 0

@@ -28,7 +28,7 @@ fn test2() {
     assert!(inner.inner[1] == 'i' as u8);
 }
 
-pub fn main() {
+fn main() {
     test1();
     test2();
 }

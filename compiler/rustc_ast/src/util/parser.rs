@@ -212,7 +212,8 @@ impl AssocOp {
     /// parentheses while having a high degree of confidence on the correctness of the suggestion.
     pub fn can_continue_expr_unambiguously(&self) -> bool {
         use AssocOp::*;
-        match self {
+        matches!(
+            self,
             BitXor | // `{ 42 } ^ 3`
             Assign | // `{ 42 } = { 42 }`
             Divide | // `{ 42 } / 42`
@@ -225,9 +226,8 @@ impl AssocOp {
             As | // `{ 42 } as usize`
             // Equal | // `{ 42 } == { 42 }`    Accepting these here would regress incorrect
             // NotEqual | // `{ 42 } != { 42 }  struct literals parser recovery.
-            Colon => true, // `{ 42 }: usize`
-            _ => false,
-        }
+            Colon, // `{ 42 }: usize`
+        )
     }
 }
 
@@ -357,13 +357,13 @@ impl ExprPrecedence {
     }
 }
 
-/// In `let p = e`, operators with precedence `<=` this one requires parenthesis in `e`.
+/// In `let p = e`, operators with precedence `<=` this one requires parentheses in `e`.
 pub fn prec_let_scrutinee_needs_par() -> usize {
     AssocOp::LAnd.precedence()
 }
 
 /// Suppose we have `let _ = e` and the `order` of `e`.
-/// Is the `order` such that `e` in `let _ = e` needs parenthesis when it is on the RHS?
+/// Is the `order` such that `e` in `let _ = e` needs parentheses when it is on the RHS?
 ///
 /// Conversely, suppose that we have `(let _ = a) OP b` and `order` is that of `OP`.
 /// Can we print this as `let _ = a OP b`?

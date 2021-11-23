@@ -4,8 +4,6 @@
 // rmc-verify-fail
 // cbmc-flags: --unwind 2 --unwinding-assertions
 
-include!("../../rmc-prelude.rs");
-
 static mut CELL: i32 = 0;
 
 struct Concrete;
@@ -18,7 +16,7 @@ impl Drop for Concrete {
     }
 }
 
-pub fn main() {
+fn main() {
     // Check normal box
     {
         let _x: Box<dyn Send> = Box::new(Concrete {});
@@ -38,6 +36,6 @@ pub fn main() {
         let _nested: Box<dyn Send> = Box::new(x);
     }
     unsafe {
-        __VERIFIER_expect_fail(CELL == 2, "wrong cell value"); // Should fail
+        rmc::expect_fail(CELL == 2, "wrong cell value"); // Should fail
     }
 }

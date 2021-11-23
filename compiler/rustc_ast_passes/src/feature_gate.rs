@@ -1,11 +1,11 @@
 use rustc_ast as ast;
 use rustc_ast::visit::{self, AssocCtxt, FnCtxt, FnKind, Visitor};
 use rustc_ast::{AssocTyConstraint, AssocTyConstraintKind, NodeId};
-use rustc_ast::{PatKind, RangeEnd};
+use rustc_ast::{PatKind, RangeEnd, VariantData};
 use rustc_errors::struct_span_err;
-use rustc_feature::{AttributeGate, BUILTIN_ATTRIBUTE_MAP};
+use rustc_feature::{AttributeGate, BuiltinAttribute, BUILTIN_ATTRIBUTE_MAP};
 use rustc_feature::{Features, GateIssue};
-use rustc_session::parse::feature_err_issue;
+use rustc_session::parse::{feature_err, feature_err_issue};
 use rustc_session::Session;
 use rustc_span::source_map::Spanned;
 use rustc_span::symbol::sym;
@@ -218,6 +218,46 @@ impl<'a> PostExpansionVisitor<'a> {
         }
     }
 
+    fn maybe_report_invalid_custom_discriminants(&self, variants: &[ast::Variant]) {
+        let has_fields = variants.iter().any(|variant| match variant.data {
+            VariantData::Tuple(..) | VariantData::Struct(..) => true,
+            VariantData::Unit(..) => false,
+        });
+
+        let discriminant_spans = variants
+            .iter()
+            .filter(|variant| match variant.data {
+                VariantData::Tuple(..) | VariantData::Struct(..) => false,
+                VariantData::Unit(..) => true,
+            })
+            .filter_map(|variant| variant.disr_expr.as_ref().map(|c| c.value.span))
+            .collect::<Vec<_>>();
+
+        if !discriminant_spans.is_empty() && has_fields {
+            let mut err = feature_err(
+                &self.sess.parse_sess,
+                sym::arbitrary_enum_discriminant,
+                discriminant_spans.clone(),
+                "custom discriminant values are not allowed in enums with tuple or struct variants",
+            );
+            for sp in discriminant_spans {
+                err.span_label(sp, "disallowed custom discriminant");
+            }
+            for variant in variants.iter() {
+                match &variant.data {
+                    VariantData::Struct(..) => {
+                        err.span_label(variant.span, "struct variant defined here");
+                    }
+                    VariantData::Tuple(..) => {
+                        err.span_label(variant.span, "tuple variant defined here");
+                    }
+                    VariantData::Unit(..) => {}
+                }
+            }
+            err.emit();
+        }
+    }
+
     fn check_gat(&self, generics: &ast::Generics, span: Span) {
         if !generics.params.is_empty() {
             gate_feature_post!(
@@ -261,11 +301,14 @@ impl<'a> PostExpansionVisitor<'a> {
 
 impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
     fn visit_attribute(&mut self, attr: &ast::Attribute) {
-        let attr_info =
-            attr.ident().and_then(|ident| BUILTIN_ATTRIBUTE_MAP.get(&ident.name)).map(|a| **a);
+        let attr_info = attr.ident().and_then(|ident| BUILTIN_ATTRIBUTE_MAP.get(&ident.name));
         // Check feature gates for built-in attributes.
-        if let Some((.., AttributeGate::Gated(_, name, descr, has_feature))) = attr_info {
-            gate_feature_fn!(self, has_feature, attr.span, name, descr);
+        if let Some(BuiltinAttribute {
+            gate: AttributeGate::Gated(_, name, descr, has_feature),
+            ..
+        }) = attr_info
+        {
+            gate_feature_fn!(self, has_feature, attr.span, *name, descr);
         }
         // Check unstable flavors of the `#[doc]` attribute.
         if attr.has_name(sym::doc) {
@@ -279,6 +322,7 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
 
                 gate_doc!(
                     cfg => doc_cfg
+                    cfg_hide => doc_cfg_hide
                     masked => doc_masked
                     notable_trait => doc_notable_trait
                     keyword => doc_keyword
@@ -362,9 +406,27 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
                 }
             }
 
-            ast::ItemKind::Impl(box ast::ImplKind {
-                polarity, defaultness, ref of_trait, ..
-            }) => {
+            ast::ItemKind::Enum(ast::EnumDef { ref variants, .. }, ..) => {
+                for variant in variants {
+                    match (&variant.data, &variant.disr_expr) {
+                        (ast::VariantData::Unit(..), _) => {}
+                        (_, Some(disr_expr)) => gate_feature_post!(
+                            &self,
+                            arbitrary_enum_discriminant,
+                            disr_expr.value.span,
+                            "discriminants on non-unit variants are experimental"
+                        ),
+                        _ => {}
+                    }
+                }
+
+                let has_feature = self.features.arbitrary_enum_discriminant;
+                if !has_feature && !i.span.allows_unstable(sym::arbitrary_enum_discriminant) {
+                    self.maybe_report_invalid_custom_discriminants(&variants);
+                }
+            }
+
+            ast::ItemKind::Impl(box ast::Impl { polarity, defaultness, ref of_trait, .. }) => {
                 if let ast::ImplPolarity::Negative(span) = polarity {
                     gate_feature_post!(
                         &self,
@@ -380,7 +442,7 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
                 }
             }
 
-            ast::ItemKind::Trait(box ast::TraitKind(ast::IsAuto::Yes, ..)) => {
+            ast::ItemKind::Trait(box ast::Trait { is_auto: ast::IsAuto::Yes, .. }) => {
                 gate_feature_post!(
                     &self,
                     auto_traits,
@@ -398,7 +460,7 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
                 gate_feature_post!(&self, decl_macro, i.span, msg);
             }
 
-            ast::ItemKind::TyAlias(box ast::TyAliasKind(_, _, _, Some(ref ty))) => {
+            ast::ItemKind::TyAlias(box ast::TyAlias { ty: Some(ref ty), .. }) => {
                 self.check_impl_trait(&ty)
             }
 
@@ -480,15 +542,13 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
             ast::ExprKind::TryBlock(_) => {
                 gate_feature_post!(&self, try_blocks, e.span, "`try` expression is experimental");
             }
-            ast::ExprKind::Block(_, opt_label) => {
-                if let Some(label) = opt_label {
-                    gate_feature_post!(
-                        &self,
-                        label_break_value,
-                        label.ident.span,
-                        "labels on blocks are unstable"
-                    );
-                }
+            ast::ExprKind::Block(_, Some(label)) => {
+                gate_feature_post!(
+                    &self,
+                    label_break_value,
+                    label.ident.span,
+                    "labels on blocks are unstable"
+                );
             }
             _ => {}
         }
@@ -573,7 +633,7 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
     fn visit_assoc_item(&mut self, i: &'a ast::AssocItem, ctxt: AssocCtxt) {
         let is_fn = match i.kind {
             ast::AssocItemKind::Fn(_) => true,
-            ast::AssocItemKind::TyAlias(box ast::TyAliasKind(_, ref generics, _, ref ty)) => {
+            ast::AssocItemKind::TyAlias(box ast::TyAlias { ref generics, ref ty, .. }) => {
                 if let (Some(_), AssocCtxt::Trait) = (ty, ctxt) {
                     gate_feature_post!(
                         &self,

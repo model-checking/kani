@@ -119,6 +119,7 @@ impl OsString {
     /// let os_string = OsString::new();
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     #[inline]
     pub fn new() -> OsString {
         OsString { inner: Buf::from_string(String::new()) }
@@ -136,6 +137,7 @@ impl OsString {
     /// assert_eq!(os_string.as_os_str(), os_str);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     #[inline]
     pub fn as_os_str(&self) -> &OsStr {
         self
@@ -199,6 +201,7 @@ impl OsString {
     /// assert_eq!(capacity, os_string.capacity());
     /// ```
     #[stable(feature = "osstring_simple_functions", since = "1.9.0")]
+    #[must_use]
     #[inline]
     pub fn with_capacity(capacity: usize) -> OsString {
         OsString { inner: Buf::with_capacity(capacity) }
@@ -236,6 +239,7 @@ impl OsString {
     /// assert!(os_string.capacity() >= 10);
     /// ```
     #[stable(feature = "osstring_simple_functions", since = "1.9.0")]
+    #[must_use]
     #[inline]
     pub fn capacity(&self) -> usize {
         self.inner.capacity()
@@ -346,6 +350,7 @@ impl OsString {
     ///
     /// let b: Box<OsStr> = s.into_boxed_os_str();
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "into_boxed_os_str", since = "1.20.0")]
     pub fn into_boxed_os_str(self) -> Box<OsStr> {
         let rw = Box::into_raw(self.inner.into_box()) as *mut OsStr;
@@ -572,6 +577,8 @@ impl OsStr {
     /// assert_eq!(os_str.to_str(), Some("foo"));
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use = "this returns the result of the operation, \
+                  without modifying the original"]
     #[inline]
     pub fn to_str(&self) -> Option<&str> {
         self.inner.to_str()
@@ -623,6 +630,8 @@ impl OsStr {
     /// }
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use = "this returns the result of the operation, \
+                  without modifying the original"]
     #[inline]
     pub fn to_string_lossy(&self) -> Cow<'_, str> {
         self.inner.to_string_lossy()
@@ -640,6 +649,8 @@ impl OsStr {
     /// assert_eq!(os_string, OsString::from("foo"));
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use = "this returns the result of the operation, \
+                  without modifying the original"]
     #[inline]
     pub fn to_os_string(&self) -> OsString {
         OsString { inner: self.inner.to_owned() }
@@ -659,6 +670,7 @@ impl OsStr {
     /// assert!(!os_str.is_empty());
     /// ```
     #[stable(feature = "osstring_simple_functions", since = "1.9.0")]
+    #[must_use]
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.inner.inner.is_empty()
@@ -690,6 +702,7 @@ impl OsStr {
     /// assert_eq!(os_str.len(), 3);
     /// ```
     #[stable(feature = "osstring_simple_functions", since = "1.9.0")]
+    #[must_use]
     #[inline]
     pub fn len(&self) -> usize {
         self.inner.inner.len()
@@ -697,6 +710,7 @@ impl OsStr {
 
     /// Converts a <code>[Box]<[OsStr]></code> into an [`OsString`] without copying or allocating.
     #[stable(feature = "into_boxed_os_str", since = "1.20.0")]
+    #[must_use = "`self` will be dropped if the result is not used"]
     pub fn into_os_string(self: Box<OsStr>) -> OsString {
         let boxed = unsafe { Box::from_raw(Box::into_raw(self) as *mut Slice) };
         OsString { inner: Buf::from_box(boxed) }
@@ -777,6 +791,7 @@ impl OsStr {
     ///
     /// assert_eq!("grüße, jürgen ❤", s.to_ascii_lowercase());
     /// ```
+    #[must_use = "to lowercase the value in-place, use `make_ascii_lowercase`"]
     #[stable(feature = "osstring_ascii", since = "1.53.0")]
     pub fn to_ascii_lowercase(&self) -> OsString {
         OsString::from_inner(self.inner.to_ascii_lowercase())
@@ -798,6 +813,7 @@ impl OsStr {
     ///
     /// assert_eq!("GRüßE, JüRGEN ❤", s.to_ascii_uppercase());
     /// ```
+    #[must_use = "to uppercase the value in-place, use `make_ascii_uppercase`"]
     #[stable(feature = "osstring_ascii", since = "1.53.0")]
     pub fn to_ascii_uppercase(&self) -> OsString {
         OsString::from_inner(self.inner.to_ascii_uppercase())
@@ -817,6 +833,7 @@ impl OsStr {
     /// assert!(!non_ascii.is_ascii());
     /// ```
     #[stable(feature = "osstring_ascii", since = "1.53.0")]
+    #[must_use]
     #[inline]
     pub fn is_ascii(&self) -> bool {
         self.inner.is_ascii()

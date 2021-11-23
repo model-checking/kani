@@ -93,7 +93,7 @@ pre, .rustdoc.source .example-wrap {
 	background-color: #f6fdb0 !important;
 }
 
-.docblock h1, .docblock h2, .docblock h3, .docblock h4, .docblock h5 {
+.docblock h1, .docblock h2, .docblock h3, .docblock h4, .docblock h5, .docblock h6 {
 	border-bottom-color: #ddd;
 }
 
@@ -176,7 +176,7 @@ body.source .example-wrap pre.rust a {
 	background: #eee;
 }
 
-.docblock:not(.type-decl) a:not(.srclink):not(.test-arrow),
+.docblock:not(.item-decl) a:not(.srclink):not(.test-arrow),
 .docblock-short a:not(.srclink):not(.test-arrow), .item-info a,
 #help a {
 	color: #3873AD;
@@ -207,10 +207,6 @@ details.undocumented > summary::before {
 
 .search-input:focus {
 	border-color: #66afe9;
-}
-
-.search-input:disabled {
-	background-color: #e6e6e6;
 }
 
 #crate-search + .search-input:focus {

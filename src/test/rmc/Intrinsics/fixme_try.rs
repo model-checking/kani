@@ -5,7 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::r#try;
 
-pub fn main() {
+fn main() {
     unsafe {
         // Rust will make a best-effort to swallow the panic, and then execute the cleanup function.
         // However, my understanding is that failure is still possible, since its just a best-effort

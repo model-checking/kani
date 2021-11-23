@@ -120,7 +120,7 @@ pub unsafe fn init(argc: isize, argv: *const *const u8) {
 
     unsafe fn reset_sigpipe() {
         #[cfg(not(any(target_os = "emscripten", target_os = "fuchsia")))]
-        assert!(signal(libc::SIGPIPE, libc::SIG_IGN) != libc::SIG_ERR);
+        rtassert!(signal(libc::SIGPIPE, libc::SIG_IGN) != libc::SIG_ERR);
     }
 }
 
@@ -306,6 +306,9 @@ cfg_if::cfg_if! {
     } else if #[cfg(target_os = "fuchsia")] {
         #[link(name = "zircon")]
         #[link(name = "fdio")]
+        extern "C" {}
+    } else if #[cfg(all(target_os = "linux", target_env = "uclibc"))] {
+        #[link(name = "dl")]
         extern "C" {}
     }
 }

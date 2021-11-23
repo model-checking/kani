@@ -268,7 +268,7 @@
 //! not. Normally, this would require a `find` followed by an `insert`,
 //! effectively duplicating the search effort on each insertion.
 //!
-//! When a user calls `map.entry(&key)`, the map will search for the key and
+//! When a user calls `map.entry(key)`, the map will search for the key and
 //! then yield a variant of the `Entry` enum.
 //!
 //! If a `Vacant(entry)` is yielded, then the key *was not* found. In this case
@@ -420,7 +420,7 @@ pub use self::hash_map::HashMap;
 #[stable(feature = "rust1", since = "1.0.0")]
 pub use self::hash_set::HashSet;
 
-#[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+#[stable(feature = "try_reserve", since = "1.57.0")]
 pub use alloc_crate::collections::TryReserveError;
 #[unstable(
     feature = "try_reserve_kind",

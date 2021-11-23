@@ -460,7 +460,7 @@ class RustBuild(object):
             # LLVM more often than necessary.
             #
             # This git command finds that commit SHA, looking for bors-authored
-            # merges that modified src/llvm-project or other relevant version
+            # commits that modified src/llvm-project or other relevant version
             # stamp files.
             #
             # This works even in a repository that has not yet initialized
@@ -470,7 +470,7 @@ class RustBuild(object):
             ]).decode(sys.getdefaultencoding()).strip()
             llvm_sha = subprocess.check_output([
                 "git", "rev-list", "--author=bors@rust-lang.org", "-n1",
-                "--merges", "--first-parent", "HEAD",
+                "--first-parent", "HEAD",
                 "--",
                 "{}/src/llvm-project".format(top_level),
                 "{}/src/bootstrap/download-ci-llvm-stamp".format(top_level),
@@ -492,10 +492,11 @@ class RustBuild(object):
 
     def downloading_llvm(self):
         opt = self.get_toml('download-ci-llvm', 'llvm')
-        # This is currently all tier 1 targets (since others may not have CI
-        # artifacts)
+        # This is currently all tier 1 targets and tier 2 targets with host tools
+        # (since others may not have CI artifacts)
         # https://doc.rust-lang.org/rustc/platform-support.html#tier-1
         supported_platforms = [
+            # tier 1
             "aarch64-unknown-linux-gnu",
             "i686-pc-windows-gnu",
             "i686-pc-windows-msvc",
@@ -504,6 +505,26 @@ class RustBuild(object):
             "x86_64-apple-darwin",
             "x86_64-pc-windows-gnu",
             "x86_64-pc-windows-msvc",
+            # tier 2 with host tools
+            "aarch64-apple-darwin",
+            "aarch64-pc-windows-msvc",
+            "aarch64-unknown-linux-musl",
+            "arm-unknown-linux-gnueabi",
+            "arm-unknown-linux-gnueabihf",
+            "armv7-unknown-linux-gnueabihf",
+            "mips-unknown-linux-gnu",
+            "mips64-unknown-linux-gnuabi64",
+            "mips64el-unknown-linux-gnuabi64",
+            "mipsel-unknown-linux-gnu",
+            "powerpc-unknown-linux-gnu",
+            "powerpc64-unknown-linux-gnu",
+            "powerpc64le-unknown-linux-gnu",
+            "riscv64gc-unknown-linux-gnu",
+            "s390x-unknown-linux-gnu",
+            "x86_64-unknown-freebsd",
+            "x86_64-unknown-illumos",
+            "x86_64-unknown-linux-musl",
+            "x86_64-unknown-netbsd",
         ]
         return opt == "true" \
             or (opt == "if-available" and self.build in supported_platforms)
@@ -540,6 +561,12 @@ class RustBuild(object):
         unpack(tarball, tarball_suffix, self.bin_root(stage0), match=pattern, verbose=self.verbose)
 
     def _download_ci_llvm(self, llvm_sha, llvm_assertions):
+        if not llvm_sha:
+            print("error: could not find commit hash for downloading LLVM")
+            print("help: maybe your repository history is too shallow?")
+            print("help: consider disabling `download-ci-llvm`")
+            print("help: or fetch enough history to include one upstream commit")
+            exit(1)
         cache_prefix = "llvm-{}-{}".format(llvm_sha, llvm_assertions)
         cache_dst = os.path.join(self.build_dir, "cache")
         rustc_cache = os.path.join(cache_dst, cache_prefix)
@@ -594,19 +621,23 @@ class RustBuild(object):
         if ostype != "Linux":
             return
 
-        # Use `/etc/os-release` instead of `/etc/NIXOS`.
-        # The latter one does not exist on NixOS when using tmpfs as root.
-        try:
-            with open("/etc/os-release", "r") as f:
-                if not any(line.strip() == "ID=nixos" for line in f):
-                    return
-        except FileNotFoundError:
-            return
-        if os.path.exists("/lib"):
-            return
+        # If the user has asked binaries to be patched for Nix, then
+        # don't check for NixOS or `/lib`, just continue to the patching.
+        if self.get_toml('patch-binaries-for-nix', 'build') != 'true':
+            # Use `/etc/os-release` instead of `/etc/NIXOS`.
+            # The latter one does not exist on NixOS when using tmpfs as root.
+            try:
+                with open("/etc/os-release", "r") as f:
+                    if not any(line.strip() == "ID=nixos" for line in f):
+                        return
+            except FileNotFoundError:
+                return
+            if os.path.exists("/lib"):
+                return
 
-        # At this point we're pretty sure the user is running NixOS
-        nix_os_msg = "info: you seem to be running NixOS. Attempting to patch"
+        # At this point we're pretty sure the user is running NixOS or
+        # using Nix
+        nix_os_msg = "info: you seem to be using Nix. Attempting to patch"
         print(nix_os_msg, fname)
 
         # Only build `.nix-deps` once.
@@ -681,9 +712,15 @@ class RustBuild(object):
         # Only commits merged by bors will have CI artifacts.
         merge_base = [
             "git", "rev-list", "--author=bors@rust-lang.org", "-n1",
-            "--merges", "--first-parent", "HEAD"
+            "--first-parent", "HEAD"
         ]
         commit = subprocess.check_output(merge_base, universal_newlines=True).strip()
+        if not commit:
+            print("error: could not find commit hash for downloading rustc")
+            print("help: maybe your repository history is too shallow?")
+            print("help: consider disabling `download-rustc`")
+            print("help: or fetch enough history to include one upstream commit")
+            exit(1)
 
         # Warn if there were changes to the compiler or standard library since the ancestor commit.
         status = subprocess.call(["git", "diff-index", "--quiet", commit, "--", compiler, library])
@@ -917,10 +954,9 @@ class RustBuild(object):
         env["LIBRARY_PATH"] = os.path.join(self.bin_root(True), "lib") + \
             (os.pathsep + env["LIBRARY_PATH"]) \
             if "LIBRARY_PATH" in env else ""
+
         # preserve existing RUSTFLAGS
         env.setdefault("RUSTFLAGS", "")
-        env["RUSTFLAGS"] += " -Cdebuginfo=2"
-
         build_section = "target.{}".format(self.build)
         target_features = []
         if self.get_toml("crt-static", build_section) == "true":
@@ -944,7 +980,7 @@ class RustBuild(object):
                 self.cargo()))
         args = [self.cargo(), "build", "--manifest-path",
                 os.path.join(self.rust_root, "src/bootstrap/Cargo.toml")]
-        for _ in range(1, self.verbose):
+        for _ in range(0, self.verbose):
             args.append("--verbose")
         if self.use_locked_deps:
             args.append("--locked")
@@ -986,11 +1022,19 @@ class RustBuild(object):
         run(["git", "submodule", "-q", "sync", module],
             cwd=self.rust_root, verbose=self.verbose)
 
-        update_args = ["git", "submodule", "update", "--init", "--recursive"]
+        update_args = ["git", "submodule", "update", "--init", "--recursive", "--depth=1"]
         if self.git_version >= distutils.version.LooseVersion("2.11.0"):
             update_args.append("--progress")
         update_args.append(module)
-        run(update_args, cwd=self.rust_root, verbose=self.verbose, exception=True)
+        try:
+            run(update_args, cwd=self.rust_root, verbose=self.verbose, exception=True)
+        except RuntimeError:
+            print("Failed updating submodule. This is probably due to uncommitted local changes.")
+            print('Either stash the changes by running "git stash" within the submodule\'s')
+            print('directory, reset them by running "git reset --hard", or commit them.')
+            print("To reset all submodules' changes run", end=" ")
+            print('"git submodule foreach --recursive git reset --hard".')
+            raise SystemExit(1)
 
         run(["git", "reset", "-q", "--hard"],
             cwd=module_path, verbose=self.verbose)

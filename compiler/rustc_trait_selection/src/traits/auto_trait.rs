@@ -187,9 +187,11 @@ impl<'tcx> AutoTraitFinder<'tcx> {
             // an additional sanity check.
             let mut fulfill = FulfillmentContext::new();
             fulfill.register_bound(&infcx, full_env, ty, trait_did, ObligationCause::dummy());
-            fulfill.select_all_or_error(&infcx).unwrap_or_else(|e| {
-                panic!("Unable to fulfill trait {:?} for '{:?}': {:?}", trait_did, ty, e)
-            });
+            let errors = fulfill.select_all_or_error(&infcx);
+
+            if !errors.is_empty() {
+                panic!("Unable to fulfill trait {:?} for '{:?}': {:?}", trait_did, ty, errors);
+            }
 
             let body_id_map: FxHashMap<_, _> = infcx
                 .inner
@@ -286,6 +288,8 @@ impl AutoTraitFinder<'tcx> {
                 substs: infcx.tcx.mk_substs_trait(ty, &[]),
             },
             constness: ty::BoundConstness::NotConst,
+            // Auto traits are positive
+            polarity: ty::ImplPolarity::Positive,
         }));
 
         let computed_preds = param_env.caller_bounds().iter();

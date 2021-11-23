@@ -132,7 +132,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
         }
 
         let kind_ord = param.kind.to_ord(tcx);
-        let arg_ord = arg.to_ord(&tcx.features());
+        let arg_ord = arg.to_ord(tcx.features());
 
         // This note is only true when generic parameters are strictly ordered by their kind.
         if possible_ordering_error && kind_ord.cmp(&arg_ord) != core::cmp::Ordering::Equal {
@@ -344,7 +344,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                                             "reorder the arguments: {}: `<{}>`",
                                             param_types_present
                                                 .into_iter()
-                                                .map(|ord| format!("{}s", ord.to_string()))
+                                                .map(|ord| format!("{}s", ord))
                                                 .collect::<Vec<String>>()
                                                 .join(", then "),
                                             ordered_params
@@ -423,7 +423,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
         is_method_call: IsMethodCall,
     ) -> GenericArgCountResult {
         let empty_args = hir::GenericArgs::none();
-        let suppress_mismatch = Self::check_impl_trait(tcx, seg, &generics);
+        let suppress_mismatch = Self::check_impl_trait(tcx, seg, generics);
 
         let gen_args = seg.args.unwrap_or(&empty_args);
         let gen_pos = if is_method_call == IsMethodCall::Yes {
@@ -600,7 +600,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                     def_id,
                 )
                 .diagnostic()
-                .emit();
+                .emit_unless(gen_args.has_err());
 
                 false
             };
@@ -670,6 +670,17 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
 
             for span in spans {
                 err.span_label(span, "explicit generic argument not allowed");
+            }
+
+            err.note(
+                "see issue #83701 <https://github.com/rust-lang/rust/issues/83701> \
+                 for more information",
+            );
+            if tcx.sess.is_nightly_build() {
+                err.help(
+                    "add `#![feature(explicit_generic_args_with_impl_trait)]` \
+                     to the crate attributes to enable",
+                );
             }
 
             err.emit();

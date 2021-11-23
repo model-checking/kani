@@ -11,8 +11,7 @@ use rustc_middle::mir::{self, Body, Local, Location};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 
 use crate::impls::{
-    DefinitelyInitializedPlaces, MaybeInitializedPlaces, MaybeLiveLocals, MaybeMutBorrowedLocals,
-    MaybeUninitializedPlaces,
+    DefinitelyInitializedPlaces, MaybeInitializedPlaces, MaybeLiveLocals, MaybeUninitializedPlaces,
 };
 use crate::move_paths::{HasMoveData, MoveData};
 use crate::move_paths::{LookupResult, MovePathIndex};
@@ -60,14 +59,6 @@ impl<'tcx> MirPass<'tcx> for SanityCheck {
                 .iterate_to_fixpoint();
 
             sanity_check_via_rustc_peek(tcx, body, &attributes, &flow_def_inits);
-        }
-
-        if has_rustc_mir_with(sess, &attributes, sym::rustc_peek_indirectly_mutable).is_some() {
-            let flow_mut_borrowed = MaybeMutBorrowedLocals::mut_borrows_only(tcx, body, param_env)
-                .into_engine(tcx, body)
-                .iterate_to_fixpoint();
-
-            sanity_check_via_rustc_peek(tcx, body, &attributes, &flow_mut_borrowed);
         }
 
         if has_rustc_mir_with(sess, &attributes, sym::rustc_peek_liveness).is_some() {
@@ -281,28 +272,6 @@ where
     }
 }
 
-impl<'tcx> RustcPeekAt<'tcx> for MaybeMutBorrowedLocals<'_, 'tcx> {
-    fn peek_at(
-        &self,
-        tcx: TyCtxt<'tcx>,
-        place: mir::Place<'tcx>,
-        flow_state: &BitSet<Local>,
-        call: PeekCall,
-    ) {
-        warn!("peek_at: place={:?}", place);
-        let local = if let Some(l) = place.as_local() {
-            l
-        } else {
-            tcx.sess.span_err(call.span, "rustc_peek: argument was not a local");
-            return;
-        };
-
-        if !flow_state.contains(local) {
-            tcx.sess.span_err(call.span, "rustc_peek: bit not set");
-        }
-    }
-}
-
 impl<'tcx> RustcPeekAt<'tcx> for MaybeLiveLocals {
     fn peek_at(
         &self,
@@ -311,10 +280,8 @@ impl<'tcx> RustcPeekAt<'tcx> for MaybeLiveLocals {
         flow_state: &BitSet<Local>,
         call: PeekCall,
     ) {
-        warn!("peek_at: place={:?}", place);
-        let local = if let Some(l) = place.as_local() {
-            l
-        } else {
+        info!(?place, "peek_at");
+        let Some(local) = place.as_local() else {
             tcx.sess.span_err(call.span, "rustc_peek: argument was not a local");
             return;
         };

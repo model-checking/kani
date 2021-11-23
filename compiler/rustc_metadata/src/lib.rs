@@ -2,6 +2,7 @@
 #![feature(crate_visibility_modifier)]
 #![feature(drain_filter)]
 #![feature(in_band_lifetimes)]
+#![feature(let_else)]
 #![feature(nll)]
 #![feature(once_cell)]
 #![feature(proc_macro_internals)]
@@ -30,4 +31,4 @@ pub mod creader;
 pub mod dynamic_lib;
 pub mod locator;
 
-pub use rmeta::METADATA_HEADER;
+pub use rmeta::{encode_metadata, EncodedMetadata, METADATA_HEADER};

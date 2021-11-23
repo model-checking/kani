@@ -101,9 +101,13 @@ impl Feature {
     }
 }
 
+// See https://rustc-dev-guide.rust-lang.org/feature-gates.html#feature-gates for more
+// documentation about handling feature gates.
+//
 // If you change this, please modify `src/doc/unstable-book` as well.
 //
-// Don't ever remove anything from this list; move them to `removed.rs`.
+// Don't ever remove anything from this list; move them to `accepted.rs` if
+// accepted or `removed.rs` if removed.
 //
 // The version numbers here correspond to the version in which the current status
 // was set. This is most important for knowing when a particular feature became
@@ -404,9 +408,6 @@ declare_features! (
     /// Allows inferring `'static` outlives requirements (RFC 2093).
     (active, infer_static_outlives_requirements, "1.26.0", Some(54185), None),
 
-    /// Allows dereferencing raw pointers during const eval.
-    (active, const_raw_ptr_deref, "1.27.0", Some(51911), None),
-
     /// Allows inconsistent bounds in where clauses.
     (active, trivial_bounds, "1.28.0", Some(48214), None),
 
@@ -424,9 +425,6 @@ declare_features! (
 
     /// Allows using the `amdgpu-kernel` ABI.
     (active, abi_amdgpu_kernel, "1.29.0", Some(51575), None),
-
-    /// Allows panicking during const eval (producing compile-time errors).
-    (active, const_panic, "1.30.0", Some(51999), None),
 
     /// Allows `#[marker]` on certain traits allowing overlapping implementations.
     (active, marker_trait_attr, "1.30.0", Some(29864), None),
@@ -466,6 +464,9 @@ declare_features! (
 
     /// Allows #[repr(transparent)] on unions (RFC 2645).
     (active, transparent_unions, "1.37.0", Some(60405), None),
+
+    /// Allows explicit discriminants on non-unit enum variants.
+    (active, arbitrary_enum_discriminant, "1.37.0", Some(60553), None),
 
     /// Allows `async || body` closures.
     (active, async_closure, "1.37.0", Some(62290), None),
@@ -538,9 +539,6 @@ declare_features! (
     /// Be more precise when looking for live drops in a const context.
     (active, const_precise_live_drops, "1.46.0", Some(73255), None),
 
-    /// Allows capturing variables in scope using format_args!
-    (active, format_args_capture, "1.46.0", Some(67984), None),
-
     /// Allows `if let` guard in match arms.
     (active, if_let_guard, "1.47.0", Some(51114), None),
 
@@ -588,9 +586,6 @@ declare_features! (
 
     /// Allows `extern "C-cmse-nonsecure-call" fn()`.
     (active, abi_c_cmse_nonsecure_call, "1.51.0", Some(81391), None),
-
-    /// Lessens the requirements for structs to implement `Unsize`.
-    (active, relaxed_struct_unsize, "1.51.0", Some(81793), None),
 
     /// Allows associated types in inherent impls.
     (incomplete, inherent_associated_types, "1.52.0", Some(8995), None),
@@ -677,6 +672,28 @@ declare_features! (
 
     /// Allows `#[track_caller]` on closures and generators.
     (active, closure_track_caller, "1.57.0", Some(87417), None),
+
+    /// Allows `#[doc(cfg_hide(...))]`.
+    (active, doc_cfg_hide, "1.57.0", Some(43781), None),
+
+    /// Allows using the `non_exhaustive_omitted_patterns` lint.
+    (active, non_exhaustive_omitted_patterns_lint, "1.57.0", Some(89554), None),
+
+    /// Allows creation of instances of a struct by moving fields that have
+    /// not changed from prior instances of the same struct (RFC #2528)
+    (incomplete, type_changing_struct_update, "1.58.0", Some(86555), None),
+
+    /// Tells rustdoc to automatically generate `#[doc(cfg(...))]`.
+    (active, doc_auto_cfg, "1.58.0", Some(43781), None),
+
+    /// Allows using `const` operands in inline assembly.
+    (active, asm_const, "1.58.0", Some(72016), None),
+
+    /// Allows using `sym` operands in inline assembly.
+    (active, asm_sym, "1.58.0", Some(72016), None),
+
+    /// Enables experimental inline assembly support for additional architectures.
+    (active, asm_experimental_arch, "1.58.0", Some(72016), None),
 
     // -------------------------------------------------------------------------
     // feature-group-end: actual feature gates

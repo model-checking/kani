@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // ANCHOR: code
 fn simple_addition(a: u32, b: u32) -> u32 {
@@ -22,19 +23,12 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-fn __nondet<T>() -> T {
-    unimplemented!()
-}
-fn __VERIFIER_assume(cond: bool) {
-    unimplemented!()
-}
-
 // ANCHOR: rmc
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let a: u32 = __nondet();
-    let b: u32 = __nondet();
+    let a: u32 = rmc::nondet();
+    let b: u32 = rmc::nondet();
     simple_addition(a, b);
 }
 // ANCHOR_END: rmc

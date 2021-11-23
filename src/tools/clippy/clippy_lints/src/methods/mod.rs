@@ -264,6 +264,8 @@ declare_clippy_lint! {
     /// The method signature is controlled by the trait and often `&self` is required for all types that implement the trait
     /// (see e.g. the `std::string::ToString` trait).
     ///
+    /// Clippy allows `Pin<&Self>` and `Pin<&mut Self>` if `&self` and `&mut self` is required.
+    ///
     /// Please find more info here:
     /// https://rust-lang.github.io/api-guidelines/naming.html#ad-hoc-conversions-follow-as_-to_-into_-conventions-c-conv
     ///
@@ -1282,8 +1284,9 @@ declare_clippy_lint! {
     ///
     /// ### Why is this bad?
     /// It looks suspicious. Maybe `map` was confused with `filter`.
-    /// If the `map` call is intentional, this should be rewritten. Or, if you intend to
-    /// drive the iterator to completion, you can just use `for_each` instead.
+    /// If the `map` call is intentional, this should be rewritten
+    /// using `inspect`. Or, if you intend to drive the iterator to
+    /// completion, you can just use `for_each` instead.
     ///
     /// ### Example
     /// ```rust
@@ -1774,14 +1777,13 @@ declare_clippy_lint! {
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for usages of `str::splitn(2, _)`
+    /// ### What it does
+    /// Checks for usages of `str::splitn(2, _)`
     ///
-    /// **Why is this bad?** `split_once` is both clearer in intent and slightly more efficient.
+    /// ### Why is this bad?
+    /// `split_once` is both clearer in intent and slightly more efficient.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// ```rust,ignore
     /// // Bad
     ///  let (key, value) = _.splitn(2, '=').next_tuple()?;

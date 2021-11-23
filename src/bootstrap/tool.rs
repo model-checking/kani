@@ -286,7 +286,6 @@ macro_rules! bootstrap_tool {
         $name:ident, $path:expr, $tool_name:expr
         $(,is_external_tool = $external:expr)*
         $(,is_unstable_tool = $unstable:expr)*
-        $(,features = $features:expr)*
         ;
     )+) => {
         #[derive(Copy, PartialEq, Eq, Clone)]
@@ -349,12 +348,7 @@ macro_rules! bootstrap_tool {
                     } else {
                         SourceType::InTree
                     },
-                    extra_features: {
-                        // FIXME(#60643): avoid this lint by using `_`
-                        let mut _tmp = Vec::new();
-                        $(_tmp.extend($features);)*
-                        _tmp
-                    },
+                    extra_features: vec![],
                 }).expect("expected to build -- essential tool")
             }
         }
@@ -718,6 +712,38 @@ impl Step for Cargo {
             "src/tools/cargo/crates/credential/cargo-credential-1password",
         );
         cargo_bin_path
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct LldWrapper {
+    pub compiler: Compiler,
+    pub target: TargetSelection,
+    pub flavor_feature: &'static str,
+}
+
+impl Step for LldWrapper {
+    type Output = PathBuf;
+
+    fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
+        run.never()
+    }
+
+    fn run(self, builder: &Builder<'_>) -> PathBuf {
+        let src_exe = builder
+            .ensure(ToolBuild {
+                compiler: self.compiler,
+                target: self.target,
+                tool: "lld-wrapper",
+                mode: Mode::ToolStd,
+                path: "src/tools/lld-wrapper",
+                is_optional_tool: false,
+                source_type: SourceType::InTree,
+                extra_features: vec![self.flavor_feature.to_owned()],
+            })
+            .expect("expected to build -- essential tool");
+
+        src_exe
     }
 }
 

@@ -10,9 +10,7 @@ use rustc_middle::mir::{
     ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, VarBindingForm,
 };
 use rustc_middle::ty::{self, suggest_constraining_type_param, Ty};
-use rustc_mir_dataflow::drop_flag_effects;
-use rustc_mir_dataflow::move_paths::{MoveOutIndex, MovePathIndex};
-use rustc_span::source_map::DesugaringKind;
+use rustc_mir_dataflow::move_paths::{InitKind, MoveOutIndex, MovePathIndex};
 use rustc_span::symbol::sym;
 use rustc_span::{BytePos, MultiSpan, Span, DUMMY_SP};
 use rustc_trait_selection::infer::InferCtxtExt;
@@ -248,6 +246,36 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
                                         place_name, partially_str, loop_message
                                     ),
                                 );
+                                let sess = self.infcx.tcx.sess;
+                                let ty = used_place.ty(self.body, self.infcx.tcx).ty;
+                                // If we have a `&mut` ref, we need to reborrow.
+                                if let ty::Ref(_, _, hir::Mutability::Mut) = ty.kind() {
+                                    // If we are in a loop this will be suggested later.
+                                    if !is_loop_move {
+                                        err.span_suggestion_verbose(
+                                            move_span.shrink_to_lo(),
+                                            &format!(
+                                                "consider creating a fresh reborrow of {} here",
+                                                self.describe_place(moved_place.as_ref())
+                                                    .map(|n| format!("`{}`", n))
+                                                    .unwrap_or_else(
+                                                        || "the mutable reference".to_string()
+                                                    ),
+                                            ),
+                                            "&mut *".to_string(),
+                                            Applicability::MachineApplicable,
+                                        );
+                                    }
+                                } else if let Ok(snippet) =
+                                    sess.source_map().span_to_snippet(move_span)
+                                {
+                                    err.span_suggestion(
+                                        move_span,
+                                        "consider borrowing to avoid moving into the for loop",
+                                        format!("&{}", snippet),
+                                        Applicability::MaybeIncorrect,
+                                    );
+                                }
                             } else {
                                 err.span_label(
                                     fn_call_span,
@@ -316,35 +344,6 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
                         in_pattern = true;
                     }
                 }
-
-                if let Some(DesugaringKind::ForLoop(_)) = move_span.desugaring_kind() {
-                    let sess = self.infcx.tcx.sess;
-                    let ty = used_place.ty(self.body, self.infcx.tcx).ty;
-                    // If we have a `&mut` ref, we need to reborrow.
-                    if let ty::Ref(_, _, hir::Mutability::Mut) = ty.kind() {
-                        // If we are in a loop this will be suggested later.
-                        if !is_loop_move {
-                            err.span_suggestion_verbose(
-                                move_span.shrink_to_lo(),
-                                &format!(
-                                    "consider creating a fresh reborrow of {} here",
-                                    self.describe_place(moved_place.as_ref())
-                                        .map(|n| format!("`{}`", n))
-                                        .unwrap_or_else(|| "the mutable reference".to_string()),
-                                ),
-                                "&mut *".to_string(),
-                                Applicability::MachineApplicable,
-                            );
-                        }
-                    } else if let Ok(snippet) = sess.source_map().span_to_snippet(move_span) {
-                        err.span_suggestion(
-                            move_span,
-                            "consider borrowing to avoid moving into the for loop",
-                            format!("&{}", snippet),
-                            Applicability::MaybeIncorrect,
-                        );
-                    }
-                }
             }
 
             use_spans.var_span_label_path_only(
@@ -409,7 +408,7 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
                     let param = generics.type_param(&param_ty, tcx);
                     if let Some(generics) = tcx
                         .hir()
-                        .get_generics(tcx.closure_base_def_id(self.mir_def_id().to_def_id()))
+                        .get_generics(tcx.typeck_root_def_id(self.mir_def_id().to_def_id()))
                     {
                         suggest_constraining_type_param(
                             tcx,
@@ -1531,25 +1530,45 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
             }
         }
 
+        let mut mpis = vec![mpi];
+        let move_paths = &self.move_data.move_paths;
+        mpis.extend(move_paths[mpi].parents(move_paths).map(|(mpi, _)| mpi));
+
         let mut stack = Vec::new();
-        stack.extend(predecessor_locations(self.body, location).map(|predecessor| {
-            let is_back_edge = location.dominates(predecessor, &self.dominators);
-            (predecessor, is_back_edge)
-        }));
+        let mut back_edge_stack = Vec::new();
+
+        predecessor_locations(self.body, location).for_each(|predecessor| {
+            if location.dominates(predecessor, &self.dominators) {
+                back_edge_stack.push(predecessor)
+            } else {
+                stack.push(predecessor);
+            }
+        });
+
+        let mut reached_start = false;
+
+        /* Check if the mpi is initialized as an argument */
+        let mut is_argument = false;
+        for arg in self.body.args_iter() {
+            let path = self.move_data.rev_lookup.find_local(arg);
+            if mpis.contains(&path) {
+                is_argument = true;
+            }
+        }
 
         let mut visited = FxHashSet::default();
         let mut move_locations = FxHashSet::default();
         let mut reinits = vec![];
         let mut result = vec![];
 
-        'dfs: while let Some((location, is_back_edge)) = stack.pop() {
+        let mut dfs_iter = |result: &mut Vec<MoveSite>, location: Location, is_back_edge: bool| {
             debug!(
                 "report_use_of_moved_or_uninitialized: (current_location={:?}, back_edge={})",
                 location, is_back_edge
             );
 
             if !visited.insert(location) {
-                continue;
+                return true;
             }
 
             // check for moves
@@ -1568,10 +1587,6 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
                 // worry about the other case: that is, if there is a move of a.b.c, it is already
                 // marked as a move of a.b and a as well, so we will generate the correct errors
                 // there.
-                let mut mpis = vec![mpi];
-                let move_paths = &self.move_data.move_paths;
-                mpis.extend(move_paths[mpi].parents(move_paths).map(|(mpi, _)| mpi));
-
                 for moi in &self.move_data.loc_map[location] {
                     debug!("report_use_of_moved_or_uninitialized: moi={:?}", moi);
                     let path = self.move_data.moves[*moi].path;
@@ -1599,33 +1614,70 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
                         // Because we stop the DFS here, we only highlight `let c = a`,
                         // and not `let b = a`. We will of course also report an error at
                         // `let c = a` which highlights `let b = a` as the move.
-                        continue 'dfs;
+                        return true;
                     }
                 }
             }
 
             // check for inits
             let mut any_match = false;
-            drop_flag_effects::for_location_inits(
-                self.infcx.tcx,
-                &self.body,
-                self.move_data,
-                location,
-                |m| {
-                    if m == mpi {
-                        any_match = true;
+            for ii in &self.move_data.init_loc_map[location] {
+                let init = self.move_data.inits[*ii];
+                match init.kind {
+                    InitKind::Deep | InitKind::NonPanicPathOnly => {
+                        if mpis.contains(&init.path) {
+                            any_match = true;
+                        }
                     }
-                },
-            );
+                    InitKind::Shallow => {
+                        if mpi == init.path {
+                            any_match = true;
+                        }
+                    }
+                }
+            }
             if any_match {
                 reinits.push(location);
-                continue 'dfs;
+                return true;
+            }
+            return false;
+        };
+
+        while let Some(location) = stack.pop() {
+            if dfs_iter(&mut result, location, false) {
+                continue;
             }
 
-            stack.extend(predecessor_locations(self.body, location).map(|predecessor| {
-                let back_edge = location.dominates(predecessor, &self.dominators);
-                (predecessor, is_back_edge || back_edge)
-            }));
+            let mut has_predecessor = false;
+            predecessor_locations(self.body, location).for_each(|predecessor| {
+                if location.dominates(predecessor, &self.dominators) {
+                    back_edge_stack.push(predecessor)
+                } else {
+                    stack.push(predecessor);
+                }
+                has_predecessor = true;
+            });
+
+            if !has_predecessor {
+                reached_start = true;
+            }
+        }
+        if (is_argument || !reached_start) && result.is_empty() {
+            /* Process back edges (moves in future loop iterations) only if
+               the move path is definitely initialized upon loop entry,
+               to avoid spurious "in previous iteration" errors.
+               During DFS, if there's a path from the error back to the start
+               of the function with no intervening init or move, then the
+               move path may be uninitialized at loop entry.
+            */
+            while let Some(location) = back_edge_stack.pop() {
+                if dfs_iter(&mut result, location, true) {
+                    continue;
+                }
+
+                predecessor_locations(self.body, location)
+                    .for_each(|predecessor| back_edge_stack.push(predecessor));
+            }
         }
 
         // Check if we can reach these reinits from a move location.

@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// rmc-verify-fail
 
 // ANCHOR: code
 fn estimate_size(x: u32) -> u32 {
@@ -46,15 +47,11 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-fn __nondet() -> u32 {
-    unimplemented!()
-}
-
 // ANCHOR: rmc
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let x: u32 = __nondet();
+    let x: u32 = rmc::nondet();
     estimate_size(x);
 }
 // ANCHOR_END: rmc

@@ -38,7 +38,7 @@ impl B for S {
 
 impl T for S {}
 
-pub fn main() {
+fn main() {
     let t = S::new_box(1, 2);
     let a = <dyn T as A>::foo(&*t);
     assert!(a == 1);

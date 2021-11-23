@@ -53,9 +53,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             infer::RelateObjectBound(span) => {
                 label_or_note(span, "...so that it can be closed over into an object");
             }
-            infer::CallReturn(span) => {
-                label_or_note(span, "...so that return value is valid for the call");
-            }
             infer::DataBorrowed(ty, span) => {
                 label_or_note(
                     span,
@@ -281,23 +278,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 );
                 err
             }
-            infer::CallReturn(span) => {
-                let mut err = struct_span_err!(
-                    self.tcx.sess,
-                    span,
-                    E0482,
-                    "lifetime of return value does not outlive the function call"
-                );
-                note_and_explain_region(
-                    self.tcx,
-                    &mut err,
-                    "the return value is only valid for ",
-                    sup,
-                    "",
-                    None,
-                );
-                err
-            }
             infer::DataBorrowed(ty, span) => {
                 let mut err = struct_span_err!(
                     self.tcx.sess,
@@ -350,30 +330,21 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 );
                 err
             }
-            infer::CompareImplMethodObligation {
-                span,
-                item_name,
-                impl_item_def_id,
-                trait_item_def_id,
-            } => self.report_extra_impl_obligation(
-                span,
-                item_name,
-                impl_item_def_id,
-                trait_item_def_id,
-                &format!("`{}: {}`", sup, sub),
-            ),
-            infer::CompareImplTypeObligation {
-                span,
-                item_name,
-                impl_item_def_id,
-                trait_item_def_id,
-            } => self.report_extra_impl_obligation(
-                span,
-                item_name,
-                impl_item_def_id,
-                trait_item_def_id,
-                &format!("`{}: {}`", sup, sub),
-            ),
+            infer::CompareImplMethodObligation { span, impl_item_def_id, trait_item_def_id } => {
+                self.report_extra_impl_obligation(
+                    span,
+                    impl_item_def_id,
+                    trait_item_def_id,
+                    &format!("`{}: {}`", sup, sub),
+                )
+            }
+            infer::CompareImplTypeObligation { span, impl_item_def_id, trait_item_def_id } => self
+                .report_extra_impl_obligation(
+                    span,
+                    impl_item_def_id,
+                    trait_item_def_id,
+                    &format!("`{}: {}`", sup, sub),
+                ),
         }
     }
 

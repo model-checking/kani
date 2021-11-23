@@ -1,9 +1,8 @@
-// min-llvm-version: 10.0.1
 // only-aarch64
 // only-linux
 // run-pass
 
-#![feature(asm, thread_local)]
+#![feature(asm, thread_local, asm_sym)]
 
 extern "C" fn f1() -> i32 {
     111
@@ -55,7 +54,7 @@ macro_rules! static_tls_addr {
                 // Add the top 12 bits of the symbol's offset
                 "add {out}, {out}, :tprel_hi12:{sym}",
                 // And the bottom 12 bits
-                "add {out}, {out}, :tprel_lo12:{sym}",
+                "add {out}, {out}, :tprel_lo12_nc:{sym}",
                 out = out(reg) result,
                 sym = sym $s
             );
@@ -76,5 +75,7 @@ fn main() {
     std::thread::spawn(|| {
         assert_eq!(static_addr!(S1), &S1 as *const u32);
         assert_eq!(static_tls_addr!(S2), &S2 as *const u32);
-    }).join().unwrap();
+    })
+    .join()
+    .unwrap();
 }

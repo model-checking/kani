@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_sugg;
 use clippy_utils::sugg::Sugg;
-use clippy_utils::ty::is_type_diagnostic_item;
+use clippy_utils::ty::{implements_trait, is_type_diagnostic_item};
 use if_chain::if_chain;
 use rustc_errors::Applicability;
 use rustc_hir::{Expr, ExprKind, Mutability, Param, Pat, PatKind, Path, PathSegment, QPath};
@@ -168,7 +168,7 @@ fn detect_lint(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<LintTrigger> {
         if let name = name_ident.ident.name.to_ident_string();
         if name == "sort_by" || name == "sort_unstable_by";
         if let [vec, Expr { kind: ExprKind::Closure(_, _, closure_body_id, _, _), .. }] = args;
-        if is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(vec), sym::vec_type);
+        if is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(vec), sym::Vec);
         if let closure_body = cx.tcx.hir().body(*closure_body_id);
         if let &[
             Param { pat: Pat { kind: PatKind::Binding(_, _, left_ident, _), .. }, ..},
@@ -193,10 +193,15 @@ fn detect_lint(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<LintTrigger> {
             let vec_name = Sugg::hir(cx, &args[0], "..").to_string();
             let unstable = name == "sort_unstable_by";
 
+            if_chain! {
             if let ExprKind::Path(QPath::Resolved(_, Path {
                 segments: [PathSegment { ident: left_name, .. }], ..
-            })) = &left_expr.kind {
-                if left_name == left_ident {
+            })) = &left_expr.kind;
+            if left_name == left_ident;
+            if cx.tcx.get_diagnostic_item(sym::Ord).map_or(false, |id| {
+                implements_trait(cx, cx.typeck_results().expr_ty(left_expr), id, &[])
+            });
+                then {
                     return Some(LintTrigger::Sort(SortDetection { vec_name, unstable }));
                 }
             }

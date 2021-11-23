@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub fn main() {
+fn main() {
     // pub fn fetch_or(&self, val: bool, order: Ordering) -> bool
     // Performs a logical "or" operation on the current value and
     // the argument val, and sets the new value to the result.

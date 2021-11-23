@@ -13,11 +13,11 @@ use rustc_expand::base::SyntaxExtension;
 use rustc_hir::def_id::{CrateNum, LocalDefId, StableCrateId, LOCAL_CRATE};
 use rustc_hir::definitions::Definitions;
 use rustc_index::vec::IndexVec;
-use rustc_middle::middle::cstore::{CrateDepKind, CrateSource, ExternCrate};
-use rustc_middle::middle::cstore::{ExternCrateSource, MetadataLoaderDyn};
 use rustc_middle::ty::TyCtxt;
 use rustc_serialize::json::ToJson;
 use rustc_session::config::{self, CrateType, ExternLocation};
+use rustc_session::cstore::{CrateDepKind, CrateSource, ExternCrate};
+use rustc_session::cstore::{ExternCrateSource, MetadataLoaderDyn};
 use rustc_session::lint::{self, BuiltinLintDiagnostics, ExternDepSpec};
 use rustc_session::output::validate_crate_name;
 use rustc_session::search_paths::PathKind;
@@ -29,6 +29,7 @@ use rustc_target::spec::{PanicStrategy, TargetTriple};
 
 use proc_macro::bridge::client::ProcMacro;
 use std::collections::BTreeMap;
+use std::ops::Fn;
 use std::path::Path;
 use std::{cmp, env};
 use tracing::{debug, info};
@@ -878,7 +879,7 @@ impl<'a> CrateLoader<'a> {
                 "no global memory allocator found but one is \
                            required; link to std or \
                            add `#[global_allocator]` to a static item \
-                           that implements the GlobalAlloc trait.",
+                           that implements the GlobalAlloc trait",
             );
         }
         self.cstore.allocator_kind = Some(AllocatorKind::Default);

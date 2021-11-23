@@ -85,7 +85,6 @@
                     <input {# -#}
                         class="search-input" {# -#}
                         name="search" {# -#}
-                        disabled {# -#}
                         autocomplete="off" {# -#}
                         spellcheck="false" {# -#}
                         placeholder="Click or press ‘S’ to search, ‘?’ for more options…" {# -#}
@@ -112,6 +111,9 @@
     {%- for script in page.static_extra_scripts -%}
     <script src="{{static_root_path | safe}}{{script}}.js"></script> {#- -#}
     {% endfor %}
+    {%- if layout.scrape_examples_extension -%}
+    <script src="{{page.root_path | safe}}scrape-examples{{page.resource_suffix}}.js"></script> {#- -#}
+    {%- endif -%}
     {%- for script in page.extra_scripts -%}
     <script src="{{page.root_path | safe}}{{script}}.js"></script> {#- -#}
     {% endfor %}

@@ -2,21 +2,44 @@ use super::LoweringContext;
 
 use rustc_ast::*;
 use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::stable_set::FxHashSet;
 use rustc_errors::struct_span_err;
 use rustc_hir as hir;
-use rustc_span::{Span, Symbol};
+use rustc_session::parse::feature_err;
+use rustc_span::{sym, Span, Symbol};
 use rustc_target::asm;
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 
 impl<'a, 'hir> LoweringContext<'a, 'hir> {
     crate fn lower_inline_asm(&mut self, sp: Span, asm: &InlineAsm) -> &'hir hir::InlineAsm<'hir> {
-        // Rustdoc needs to support asm! from foriegn architectures: don't try
-        // lowering the register contraints in this case.
+        // Rustdoc needs to support asm! from foreign architectures: don't try
+        // lowering the register constraints in this case.
         let asm_arch = if self.sess.opts.actually_rustdoc { None } else { self.sess.asm_arch };
         if asm_arch.is_none() && !self.sess.opts.actually_rustdoc {
             struct_span_err!(self.sess, sp, E0472, "inline assembly is unsupported on this target")
                 .emit();
+        }
+        if let Some(asm_arch) = asm_arch {
+            // Inline assembly is currently only stable for these architectures.
+            let is_stable = matches!(
+                asm_arch,
+                asm::InlineAsmArch::X86
+                    | asm::InlineAsmArch::X86_64
+                    | asm::InlineAsmArch::Arm
+                    | asm::InlineAsmArch::AArch64
+                    | asm::InlineAsmArch::RiscV32
+                    | asm::InlineAsmArch::RiscV64
+            );
+            if !is_stable && !self.sess.features_untracked().asm_experimental_arch {
+                feature_err(
+                    &self.sess.parse_sess,
+                    sym::asm_experimental_arch,
+                    sp,
+                    "inline assembly is not stable yet on this architecture",
+                )
+                .emit();
+            }
         }
         if asm.options.contains(InlineAsmOptions::ATT_SYNTAX)
             && !matches!(asm_arch, Some(asm::InlineAsmArch::X86 | asm::InlineAsmArch::X86_64))
@@ -27,22 +50,47 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 .emit();
         }
 
-        let mut clobber_abi = None;
+        let mut clobber_abis = FxHashMap::default();
         if let Some(asm_arch) = asm_arch {
-            if let Some((abi_name, abi_span)) = asm.clobber_abi {
-                match asm::InlineAsmClobberAbi::parse(asm_arch, &self.sess.target, abi_name) {
-                    Ok(abi) => clobber_abi = Some((abi, abi_span)),
+            for (abi_name, abi_span) in &asm.clobber_abis {
+                match asm::InlineAsmClobberAbi::parse(asm_arch, &self.sess.target, *abi_name) {
+                    Ok(abi) => {
+                        // If the abi was already in the list, emit an error
+                        match clobber_abis.get(&abi) {
+                            Some((prev_name, prev_sp)) => {
+                                let mut err = self.sess.struct_span_err(
+                                    *abi_span,
+                                    &format!("`{}` ABI specified multiple times", prev_name),
+                                );
+                                err.span_label(*prev_sp, "previously specified here");
+
+                                // Multiple different abi names may actually be the same ABI
+                                // If the specified ABIs are not the same name, alert the user that they resolve to the same ABI
+                                let source_map = self.sess.source_map();
+                                if source_map.span_to_snippet(*prev_sp)
+                                    != source_map.span_to_snippet(*abi_span)
+                                {
+                                    err.note("these ABIs are equivalent on the current target");
+                                }
+
+                                err.emit();
+                            }
+                            None => {
+                                clobber_abis.insert(abi, (abi_name, *abi_span));
+                            }
+                        }
+                    }
                     Err(&[]) => {
                         self.sess
                             .struct_span_err(
-                                abi_span,
+                                *abi_span,
                                 "`clobber_abi` is not supported on this target",
                             )
                             .emit();
                     }
                     Err(supported_abis) => {
                         let mut err =
-                            self.sess.struct_span_err(abi_span, "invalid ABI for `clobber_abi`");
+                            self.sess.struct_span_err(*abi_span, "invalid ABI for `clobber_abi`");
                         let mut abis = format!("`{}`", supported_abis[0]);
                         for m in &supported_abis[1..] {
                             let _ = write!(abis, ", `{}`", m);
@@ -121,10 +169,30 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                             out_expr: out_expr.as_ref().map(|expr| self.lower_expr_mut(expr)),
                         }
                     }
-                    InlineAsmOperand::Const { ref anon_const } => hir::InlineAsmOperand::Const {
-                        anon_const: self.lower_anon_const(anon_const),
-                    },
+                    InlineAsmOperand::Const { ref anon_const } => {
+                        if !self.sess.features_untracked().asm_const {
+                            feature_err(
+                                &self.sess.parse_sess,
+                                sym::asm_const,
+                                *op_sp,
+                                "const operands for inline assembly are unstable",
+                            )
+                            .emit();
+                        }
+                        hir::InlineAsmOperand::Const {
+                            anon_const: self.lower_anon_const(anon_const),
+                        }
+                    }
                     InlineAsmOperand::Sym { ref expr } => {
+                        if !self.sess.features_untracked().asm_sym {
+                            feature_err(
+                                &self.sess.parse_sess,
+                                sym::asm_sym,
+                                *op_sp,
+                                "sym operands for inline assembly are unstable",
+                            )
+                            .emit();
+                        }
                         hir::InlineAsmOperand::Sym { expr: self.lower_expr_mut(expr) }
                     }
                 };
@@ -202,40 +270,19 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
 
         let mut used_input_regs = FxHashMap::default();
         let mut used_output_regs = FxHashMap::default();
-        let mut required_features: Vec<&str> = vec![];
+
         for (idx, &(ref op, op_sp)) in operands.iter().enumerate() {
             if let Some(reg) = op.reg() {
-                // Make sure we don't accidentally carry features from the
-                // previous iteration.
-                required_features.clear();
-
                 let reg_class = reg.reg_class();
                 if reg_class == asm::InlineAsmRegClass::Err {
                     continue;
                 }
 
-                // We ignore target feature requirements for clobbers: if the
-                // feature is disabled then the compiler doesn't care what we
-                // do with the registers.
-                //
-                // Note that this is only possible for explicit register
-                // operands, which cannot be used in the asm string.
-                let is_clobber = matches!(
-                    op,
-                    hir::InlineAsmOperand::Out {
-                        reg: asm::InlineAsmRegOrRegClass::Reg(_),
-                        late: _,
-                        expr: None
-                    }
-                );
-
                 // Some register classes can only be used as clobbers. This
                 // means that we disallow passing a value in/out of the asm and
                 // require that the operand name an explicit register, not a
                 // register class.
-                if reg_class.is_clobber_only(asm_arch.unwrap())
-                    && !(is_clobber && matches!(reg, asm::InlineAsmRegOrRegClass::Reg(_)))
-                {
+                if reg_class.is_clobber_only(asm_arch.unwrap()) && !op.is_clobber() {
                     let msg = format!(
                         "register class `{}` can only be used as a clobber, \
                              not as an input or output",
@@ -243,47 +290,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                     );
                     sess.struct_span_err(op_sp, &msg).emit();
                     continue;
-                }
-
-                if !is_clobber {
-                    // Validate register classes against currently enabled target
-                    // features. We check that at least one type is available for
-                    // the current target.
-                    for &(_, feature) in reg_class.supported_types(asm_arch.unwrap()) {
-                        if let Some(feature) = feature {
-                            if self.sess.target_features.contains(&Symbol::intern(feature)) {
-                                required_features.clear();
-                                break;
-                            } else {
-                                required_features.push(feature);
-                            }
-                        } else {
-                            required_features.clear();
-                            break;
-                        }
-                    }
-                    // We are sorting primitive strs here and can use unstable sort here
-                    required_features.sort_unstable();
-                    required_features.dedup();
-                    match &required_features[..] {
-                        [] => {}
-                        [feature] => {
-                            let msg = format!(
-                                "register class `{}` requires the `{}` target feature",
-                                reg_class.name(),
-                                feature
-                            );
-                            sess.struct_span_err(op_sp, &msg).emit();
-                        }
-                        features => {
-                            let msg = format!(
-                                "register class `{}` requires at least one target feature: {}",
-                                reg_class.name(),
-                                features.join(", ")
-                            );
-                            sess.struct_span_err(op_sp, &msg).emit();
-                        }
-                    }
                 }
 
                 // Check for conflicts between explicit register operands.
@@ -368,8 +374,14 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
 
         // If a clobber_abi is specified, add the necessary clobbers to the
         // operands list.
-        if let Some((abi, abi_span)) = clobber_abi {
+        let mut clobbered = FxHashSet::default();
+        for (abi, (_, abi_span)) in clobber_abis {
             for &clobber in abi.clobbered_regs() {
+                // Don't emit a clobber for a register already clobbered
+                if clobbered.contains(&clobber) {
+                    continue;
+                }
+
                 let mut output_used = false;
                 clobber.overlapping_regs(|reg| {
                     if used_output_regs.contains_key(&reg) {
@@ -386,6 +398,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                         },
                         self.lower_span(abi_span),
                     ));
+                    clobbered.insert(clobber);
                 }
             }
         }

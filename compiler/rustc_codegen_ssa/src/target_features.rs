@@ -19,6 +19,8 @@ const ARM_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[
     ("crypto", Some(sym::arm_target_feature)),
     ("aes", Some(sym::arm_target_feature)),
     ("sha2", Some(sym::arm_target_feature)),
+    ("i8mm", Some(sym::arm_target_feature)),
+    ("dotprod", Some(sym::arm_target_feature)),
     ("v5te", Some(sym::arm_target_feature)),
     ("v6", Some(sym::arm_target_feature)),
     ("v6k", Some(sym::arm_target_feature)),
@@ -35,7 +37,6 @@ const ARM_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[
     ("thumb-mode", Some(sym::arm_target_feature)),
 ];
 
-// Commented features are not available in LLVM 10.0, or have since been renamed
 const AARCH64_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[
     // FEAT_AdvSimd
     ("neon", Some(sym::aarch64_target_feature)),
@@ -66,13 +67,13 @@ const AARCH64_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[
     // FEAT_DIT
     ("dit", Some(sym::aarch64_target_feature)),
     // FEAT_FLAGM
-    // ("flagm", Some(sym::aarch64_target_feature)),
+    ("flagm", Some(sym::aarch64_target_feature)),
     // FEAT_SSBS
     ("ssbs", Some(sym::aarch64_target_feature)),
     // FEAT_SB
     ("sb", Some(sym::aarch64_target_feature)),
     // FEAT_PAUTH
-    // ("pauth", Some(sym::aarch64_target_feature)),
+    ("pauth", Some(sym::aarch64_target_feature)),
     // FEAT_DPB
     ("dpb", Some(sym::aarch64_target_feature)),
     // FEAT_DPB2
@@ -90,13 +91,13 @@ const AARCH64_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[
     // FEAT_FRINTTS
     ("frintts", Some(sym::aarch64_target_feature)),
     // FEAT_I8MM
-    // ("i8mm", Some(sym::aarch64_target_feature)),
+    ("i8mm", Some(sym::aarch64_target_feature)),
     // FEAT_F32MM
-    // ("f32mm", Some(sym::aarch64_target_feature)),
+    ("f32mm", Some(sym::aarch64_target_feature)),
     // FEAT_F64MM
-    // ("f64mm", Some(sym::aarch64_target_feature)),
+    ("f64mm", Some(sym::aarch64_target_feature)),
     // FEAT_BF16
-    // ("bf16", Some(sym::aarch64_target_feature)),
+    ("bf16", Some(sym::aarch64_target_feature)),
     // FEAT_RAND
     ("rand", Some(sym::aarch64_target_feature)),
     // FEAT_BTI
@@ -115,13 +116,23 @@ const AARCH64_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[
     ("sha3", Some(sym::aarch64_target_feature)),
     // FEAT_SM3 & FEAT_SM4
     ("sm4", Some(sym::aarch64_target_feature)),
+    // FEAT_PAN
+    ("pan", Some(sym::aarch64_target_feature)),
+    // FEAT_LOR
+    ("lor", Some(sym::aarch64_target_feature)),
+    // FEAT_VHE
+    ("vh", Some(sym::aarch64_target_feature)),
+    // FEAT_PMUv3
+    ("pmuv3", Some(sym::aarch64_target_feature)),
+    // FEAT_SPE
+    ("spe", Some(sym::aarch64_target_feature)),
     ("v8.1a", Some(sym::aarch64_target_feature)),
     ("v8.2a", Some(sym::aarch64_target_feature)),
     ("v8.3a", Some(sym::aarch64_target_feature)),
     ("v8.4a", Some(sym::aarch64_target_feature)),
     ("v8.5a", Some(sym::aarch64_target_feature)),
-    // ("v8.6a", Some(sym::aarch64_target_feature)),
-    // ("v8.7a", Some(sym::aarch64_target_feature)),
+    ("v8.6a", Some(sym::aarch64_target_feature)),
+    ("v8.7a", Some(sym::aarch64_target_feature)),
 ];
 
 const X86_ALLOWED_FEATURES: &[(&str, Option<Symbol>)] = &[

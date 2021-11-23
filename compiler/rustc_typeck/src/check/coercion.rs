@@ -42,7 +42,7 @@ use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_infer::infer::type_variable::{TypeVariableOrigin, TypeVariableOriginKind};
 use rustc_infer::infer::{Coercion, InferOk, InferResult};
-use rustc_infer::traits::Obligation;
+use rustc_infer::traits::{Obligation, TraitEngine, TraitEngineExt};
 use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AllowTwoPhase, AutoBorrow, AutoBorrowMutability, PointerCast,
@@ -54,7 +54,7 @@ use rustc_middle::ty::subst::SubstsRef;
 use rustc_middle::ty::{self, ToPredicate, Ty, TypeAndMut};
 use rustc_session::parse::feature_err;
 use rustc_span::symbol::sym;
-use rustc_span::{self, BytePos, Span};
+use rustc_span::{self, BytePos, DesugaringKind, Span};
 use rustc_target::spec::abi::Abi;
 use rustc_trait_selection::traits::error_reporting::InferCtxtExt;
 use rustc_trait_selection::traits::{self, ObligationCause, ObligationCauseCode};
@@ -146,6 +146,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
             .and_then(|InferOk { value: ty, obligations }| success(f(ty), ty, obligations))
     }
 
+    #[instrument(skip(self))]
     fn coerce(&self, a: Ty<'tcx>, b: Ty<'tcx>) -> CoerceResult<'tcx> {
         // First, remove any resolved type variables (at the top level, at least):
         let a = self.shallow_resolve(a);
@@ -184,9 +185,10 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
                 debug!("coerce: unsize not object safe");
                 return Err(TypeError::ObjectUnsafeCoercion(did));
             }
-            Err(_) => {}
+            Err(error) => {
+                debug!(?error, "coerce: unsize failed");
+            }
         }
-        debug!("coerce: unsize failed");
 
         // Examine the supertype and consider auto-borrowing.
         match *b.kind() {
@@ -520,9 +522,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
 
         let traits =
             (self.tcx.lang_items().unsize_trait(), self.tcx.lang_items().coerce_unsized_trait());
-        let (unsize_did, coerce_unsized_did) = if let (Some(u), Some(cu)) = traits {
-            (u, cu)
-        } else {
+        let (Some(unsize_did), Some(coerce_unsized_did)) = traits else {
             debug!("missing Unsize or CoerceUnsized traits");
             return Err(TypeError::Mismatch);
         };
@@ -933,14 +933,25 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     }
 
     /// Same as `try_coerce()`, but without side-effects.
+    ///
+    /// Returns false if the coercion creates any obligations that result in
+    /// errors.
     pub fn can_coerce(&self, expr_ty: Ty<'tcx>, target: Ty<'tcx>) -> bool {
         let source = self.resolve_vars_with_obligations(expr_ty);
-        debug!("coercion::can({:?} -> {:?})", source, target);
+        debug!("coercion::can_with_predicates({:?} -> {:?})", source, target);
 
         let cause = self.cause(rustc_span::DUMMY_SP, ObligationCauseCode::ExprAssignable);
         // We don't ever need two-phase here since we throw out the result of the coercion
         let coerce = Coerce::new(self, cause, AllowTwoPhase::No);
-        self.probe(|_| coerce.coerce(source, target)).is_ok()
+        self.probe(|_| {
+            let ok = match coerce.coerce(source, target) {
+                Ok(ok) => ok,
+                _ => return false,
+            };
+            let mut fcx = traits::FulfillmentContext::new_in_snapshot();
+            fcx.register_predicate_obligations(self, ok.obligations);
+            fcx.select_where_possible(&self).is_empty()
+        })
     }
 
     /// Given a type and a target type, this function will calculate and return
@@ -1484,21 +1495,7 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                     fcx.emit_coerce_suggestions(&mut err, expr, found, expected, None);
                 }
 
-                // Error possibly reported in `check_assign` so avoid emitting error again.
-                let assign_to_bool = expression
-                    // #67273: Use initial expected type as opposed to `expected`.
-                    // Otherwise we end up using prior coercions in e.g. a `match` expression:
-                    // ```
-                    // match i {
-                    //     0 => true, // Because of this...
-                    //     1 => i = 1, // ...`expected == bool` now, but not when checking `i = 1`.
-                    //     _ => (),
-                    // };
-                    // ```
-                    .filter(|e| fcx.is_assign_to_bool(e, self.expected_ty()))
-                    .is_some();
-
-                err.emit_unless(assign_to_bool || unsized_return);
+                err.emit_unless(unsized_return);
 
                 self.final_ty = Some(fcx.tcx.ty_error());
             }
@@ -1536,8 +1533,10 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                 // If the block is from an external macro or try (`?`) desugaring, then
                 // do not suggest adding a semicolon, because there's nowhere to put it.
                 // See issues #81943 and #87051.
-                if cond_expr.span.desugaring_kind().is_none()
-                    && !in_external_macro(fcx.tcx.sess, cond_expr.span)
+                if matches!(
+                    cond_expr.span.desugaring_kind(),
+                    None | Some(DesugaringKind::WhileLoop)
+                ) && !in_external_macro(fcx.tcx.sess, cond_expr.span)
                     && !matches!(
                         cond_expr.kind,
                         hir::ExprKind::Match(.., hir::MatchSource::TryDesugar)

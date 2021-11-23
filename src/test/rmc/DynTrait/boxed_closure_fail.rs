@@ -3,12 +3,10 @@
 // rmc-verify-fail
 
 // Check that we can codegen a boxed dyn closure and fail an inner assertion
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
+fn main() {
     // Create a boxed once-callable closure
     let f: Box<dyn FnOnce(i32)> = Box::new(|x| {
-        __VERIFIER_expect_fail(x == 2, "Wrong int");
+        rmc::expect_fail(x == 2, "Wrong int");
     });
 
     // Call it

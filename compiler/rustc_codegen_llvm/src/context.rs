@@ -134,9 +134,6 @@ pub unsafe fn create_module(
     let llmod = llvm::LLVMModuleCreateWithNameInContext(mod_name.as_ptr(), llcx);
 
     let mut target_data_layout = sess.target.data_layout.clone();
-    if llvm_util::get_version() < (12, 0, 0) && sess.target.arch == "powerpc64" {
-        target_data_layout = target_data_layout.replace("-v256:256:256-v512:512:512", "");
-    }
     if llvm_util::get_version() < (13, 0, 0) {
         if sess.target.arch == "powerpc64" {
             target_data_layout = target_data_layout.replace("-S128", "");
@@ -195,11 +192,14 @@ pub unsafe fn create_module(
     let llvm_target = SmallCStr::new(&sess.target.llvm_target);
     llvm::LLVMRustSetNormalizedTarget(llmod, llvm_target.as_ptr());
 
-    if sess.relocation_model() == RelocModel::Pic {
+    let reloc_model = sess.relocation_model();
+    if matches!(reloc_model, RelocModel::Pic | RelocModel::Pie) {
         llvm::LLVMRustSetModulePICLevel(llmod);
         // PIE is potentially more effective than PIC, but can only be used in executables.
         // If all our outputs are executables, then we can relax PIC to PIE.
-        if sess.crate_types().iter().all(|ty| *ty == CrateType::Executable) {
+        if reloc_model == RelocModel::Pie
+            || sess.crate_types().iter().all(|ty| *ty == CrateType::Executable)
+        {
             llvm::LLVMRustSetModulePIELevel(llmod);
         }
     }
@@ -216,6 +216,15 @@ pub unsafe fn create_module(
     if !sess.needs_plt() {
         let avoid_plt = "RtLibUseGOT\0".as_ptr().cast();
         llvm::LLVMRustAddModuleFlag(llmod, avoid_plt, 1);
+    }
+
+    if sess.is_sanitizer_cfi_enabled() {
+        // FIXME(rcvalle): Add support for non canonical jump tables.
+        let canonical_jump_tables = "CFI Canonical Jump Tables\0".as_ptr().cast();
+        // FIXME(rcvalle): Add it with Override behavior flag--LLVMRustAddModuleFlag adds it with
+        // Warning behavior flag. Add support for specifying the behavior flag to
+        // LLVMRustAddModuleFlag.
+        llvm::LLVMRustAddModuleFlag(llmod, canonical_jump_tables, 1);
     }
 
     // Control Flow Guard is currently only supported by the MSVC linker on Windows.
@@ -360,7 +369,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
     fn create_used_variable_impl(&self, name: &'static CStr, values: &[&'ll Value]) {
         let section = cstr!("llvm.metadata");
-        let array = self.const_array(&self.type_ptr_to(self.type_i8()), values);
+        let array = self.const_array(self.type_ptr_to(self.type_i8()), values);
 
         unsafe {
             let g = llvm::LLVMAddGlobal(self.llmod, self.val_ty(array), name.as_ptr());
@@ -444,7 +453,7 @@ impl MiscMethods<'tcx> for CodegenCx<'ll, 'tcx> {
     }
 
     fn sess(&self) -> &Session {
-        &self.tcx.sess
+        self.tcx.sess
     }
 
     fn check_overflow(&self) -> bool {
@@ -775,6 +784,8 @@ impl CodegenCx<'b, 'tcx> {
         if self.sess().instrument_coverage() {
             ifn!("llvm.instrprof.increment", fn(i8p, t_i64, t_i32, t_i32) -> void);
         }
+
+        ifn!("llvm.type.test", fn(i8p, self.type_metadata()) -> i1);
 
         if self.sess().opts.debuginfo != DebugInfo::None {
             ifn!("llvm.dbg.declare", fn(self.type_metadata(), self.type_metadata()) -> void);

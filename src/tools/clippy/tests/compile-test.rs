@@ -1,5 +1,4 @@
 #![feature(test)] // compiletest_rs requires this attribute
-#![feature(once_cell)]
 #![cfg_attr(feature = "deny-warnings", deny(warnings))]
 #![warn(rust_2018_idioms, unused_lifetimes)]
 
@@ -46,14 +45,6 @@ extern crate quote;
 #[allow(unused_extern_crates)]
 extern crate syn;
 
-fn host_lib() -> PathBuf {
-    option_env!("HOST_LIBS").map_or(cargo::CARGO_TARGET_DIR.join(env!("PROFILE")), PathBuf::from)
-}
-
-fn clippy_driver_path() -> PathBuf {
-    option_env!("CLIPPY_DRIVER_PATH").map_or(cargo::TARGET_LIB.join("clippy-driver"), PathBuf::from)
-}
-
 /// Produces a string with an `--extern` flag for all UI test crate
 /// dependencies.
 ///
@@ -99,17 +90,24 @@ fn extern_flags() -> String {
         .copied()
         .filter(|n| !crates.contains_key(n))
         .collect();
-    if !not_found.is_empty() {
-        panic!("dependencies not found in depinfo: {:?}", not_found);
-    }
+    assert!(
+        not_found.is_empty(),
+        "dependencies not found in depinfo: {:?}\n\
+        help: Make sure the `-Z binary-dep-depinfo` rust flag is enabled\n\
+        help: Try adding to dev-dependencies in Cargo.toml",
+        not_found
+    );
     crates
         .into_iter()
-        .map(|(name, path)| format!("--extern {}={} ", name, path))
+        .map(|(name, path)| format!(" --extern {}={}", name, path))
         .collect()
 }
 
 fn default_config() -> compiletest::Config {
-    let mut config = compiletest::Config::default();
+    let mut config = compiletest::Config {
+        edition: Some("2021".into()),
+        ..compiletest::Config::default()
+    };
 
     if let Ok(filters) = env::var("TESTNAME") {
         config.filters = filters.split(',').map(std::string::ToString::to_string).collect();
@@ -120,19 +118,29 @@ fn default_config() -> compiletest::Config {
         config.run_lib_path = path.clone();
         config.compile_lib_path = path;
     }
+    let current_exe_path = std::env::current_exe().unwrap();
+    let deps_path = current_exe_path.parent().unwrap();
+    let profile_path = deps_path.parent().unwrap();
 
     // Using `-L dependency={}` enforces that external dependencies are added with `--extern`.
     // This is valuable because a) it allows us to monitor what external dependencies are used
     // and b) it ensures that conflicting rlibs are resolved properly.
+    let host_libs = option_env!("HOST_LIBS")
+        .map(|p| format!(" -L dependency={}", Path::new(p).join("deps").display()))
+        .unwrap_or_default();
     config.target_rustcflags = Some(format!(
-        "--emit=metadata -L dependency={} -L dependency={} -Dwarnings -Zui-testing {}",
-        host_lib().join("deps").display(),
-        cargo::TARGET_LIB.join("deps").display(),
+        "--emit=metadata -Dwarnings -Zui-testing -L dependency={}{}{}",
+        deps_path.display(),
+        host_libs,
         extern_flags(),
     ));
 
-    config.build_base = host_lib().join("test_build_base");
-    config.rustc_path = clippy_driver_path();
+    config.build_base = profile_path.join("test");
+    config.rustc_path = profile_path.join(if cfg!(windows) {
+        "clippy-driver.exe"
+    } else {
+        "clippy-driver"
+    });
     config
 }
 
@@ -142,6 +150,19 @@ fn run_ui(cfg: &mut compiletest::Config) {
     // use tests/clippy.toml
     let _g = VarGuard::set("CARGO_MANIFEST_DIR", std::fs::canonicalize("tests").unwrap());
     compiletest::run_tests(cfg);
+}
+
+fn run_ui_test(cfg: &mut compiletest::Config) {
+    cfg.mode = TestMode::Ui;
+    cfg.src_base = Path::new("tests").join("ui_test");
+    let _g = VarGuard::set("CARGO_MANIFEST_DIR", std::fs::canonicalize("tests").unwrap());
+    let rustcflags = cfg.target_rustcflags.get_or_insert_with(Default::default);
+    let len = rustcflags.len();
+    rustcflags.push_str(" --test");
+    compiletest::run_tests(cfg);
+    if let Some(ref mut flags) = &mut cfg.target_rustcflags {
+        flags.truncate(len);
+    }
 }
 
 fn run_internal_tests(cfg: &mut compiletest::Config) {
@@ -307,6 +328,7 @@ fn compile_test() {
     prepare_env();
     let mut config = default_config();
     run_ui(&mut config);
+    run_ui_test(&mut config);
     run_ui_toml(&mut config);
     run_ui_cargo(&mut config);
     run_internal_tests(&mut config);

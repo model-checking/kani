@@ -106,6 +106,7 @@ mod tests;
 
 use crate::io::prelude::*;
 
+use crate::convert::Infallible;
 use crate::ffi::OsStr;
 use crate::fmt;
 use crate::fs;
@@ -115,7 +116,7 @@ use crate::path::Path;
 use crate::str;
 use crate::sys::pipe::{read2, AnonPipe};
 use crate::sys::process as imp;
-#[unstable(feature = "command_access", issue = "44434")]
+#[stable(feature = "command_access", since = "1.57.0")]
 pub use crate::sys_common::process::CommandEnvs;
 use crate::sys_common::{AsInner, AsInnerMut, FromInner, IntoInner};
 
@@ -943,13 +944,13 @@ impl Command {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(command_access)]
     /// use std::process::Command;
     ///
     /// let cmd = Command::new("echo");
     /// assert_eq!(cmd.get_program(), "echo");
     /// ```
-    #[unstable(feature = "command_access", issue = "44434")]
+    #[must_use]
+    #[stable(feature = "command_access", since = "1.57.0")]
     pub fn get_program(&self) -> &OsStr {
         self.inner.get_program()
     }
@@ -963,7 +964,6 @@ impl Command {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(command_access)]
     /// use std::ffi::OsStr;
     /// use std::process::Command;
     ///
@@ -972,7 +972,7 @@ impl Command {
     /// let args: Vec<&OsStr> = cmd.get_args().collect();
     /// assert_eq!(args, &["first", "second"]);
     /// ```
-    #[unstable(feature = "command_access", issue = "44434")]
+    #[stable(feature = "command_access", since = "1.57.0")]
     pub fn get_args(&self) -> CommandArgs<'_> {
         CommandArgs { inner: self.inner.get_args() }
     }
@@ -992,7 +992,6 @@ impl Command {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(command_access)]
     /// use std::ffi::OsStr;
     /// use std::process::Command;
     ///
@@ -1004,7 +1003,7 @@ impl Command {
     ///     (OsStr::new("TZ"), None)
     /// ]);
     /// ```
-    #[unstable(feature = "command_access", issue = "44434")]
+    #[stable(feature = "command_access", since = "1.57.0")]
     pub fn get_envs(&self) -> CommandEnvs<'_> {
         self.inner.get_envs()
     }
@@ -1016,7 +1015,6 @@ impl Command {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(command_access)]
     /// use std::path::Path;
     /// use std::process::Command;
     ///
@@ -1025,7 +1023,8 @@ impl Command {
     /// cmd.current_dir("/bin");
     /// assert_eq!(cmd.get_current_dir(), Some(Path::new("/bin")));
     /// ```
-    #[unstable(feature = "command_access", issue = "44434")]
+    #[must_use]
+    #[stable(feature = "command_access", since = "1.57.0")]
     pub fn get_current_dir(&self) -> Option<&Path> {
         self.inner.get_current_dir()
     }
@@ -1057,13 +1056,14 @@ impl AsInnerMut<imp::Command> for Command {
 ///
 /// This struct is created by [`Command::get_args`]. See its documentation for
 /// more.
-#[unstable(feature = "command_access", issue = "44434")]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
+#[stable(feature = "command_access", since = "1.57.0")]
 #[derive(Debug)]
 pub struct CommandArgs<'a> {
     inner: imp::CommandArgs<'a>,
 }
 
-#[unstable(feature = "command_access", issue = "44434")]
+#[stable(feature = "command_access", since = "1.57.0")]
 impl<'a> Iterator for CommandArgs<'a> {
     type Item = &'a OsStr;
     fn next(&mut self) -> Option<&'a OsStr> {
@@ -1074,7 +1074,7 @@ impl<'a> Iterator for CommandArgs<'a> {
     }
 }
 
-#[unstable(feature = "command_access", issue = "44434")]
+#[stable(feature = "command_access", since = "1.57.0")]
 impl<'a> ExactSizeIterator for CommandArgs<'a> {
     fn len(&self) -> usize {
         self.inner.len()
@@ -1187,6 +1187,7 @@ impl Stdio {
     /// its entire stdin before writing more than a pipe buffer's worth of output.
     /// The size of a pipe buffer varies on different targets.
     ///
+    #[must_use]
     #[stable(feature = "process", since = "1.0.0")]
     pub fn piped() -> Stdio {
         Stdio(imp::Stdio::MakePipe)
@@ -1226,6 +1227,7 @@ impl Stdio {
     /// print!("You piped in the reverse of: ");
     /// io::stdout().write_all(&output.stdout).unwrap();
     /// ```
+    #[must_use]
     #[stable(feature = "process", since = "1.0.0")]
     pub fn inherit() -> Stdio {
         Stdio(imp::Stdio::Inherit)
@@ -1265,6 +1267,7 @@ impl Stdio {
     /// assert_eq!(String::from_utf8_lossy(&output.stdout), "");
     /// // Ignores any piped-in input
     /// ```
+    #[must_use]
     #[stable(feature = "process", since = "1.0.0")]
     pub fn null() -> Stdio {
         Stdio(imp::Stdio::Null)
@@ -1415,6 +1418,11 @@ impl From<fs::File> for Stdio {
 ///
 /// [`status`]: Command::status
 /// [`wait`]: Child::wait
+//
+// We speak slightly loosely (here and in various other places in the stdlib docs) about `exit`
+// vs `_exit`.  Naming of Unix system calls is not standardised across Unices, so terminology is a
+// matter of convention and tradition.  For clarity we usually speak of `exit`, even when we might
+// mean an underlying system call such as `_exit`.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[stable(feature = "process", since = "1.0.0")]
 pub struct ExitStatus(imp::ExitStatus);
@@ -1466,6 +1474,7 @@ impl ExitStatus {
     ///     println!("failed to create 'projects/' directory: {}", status);
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "process", since = "1.0.0")]
     pub fn success(&self) -> bool {
         self.0.exit_ok().is_ok()
@@ -1497,6 +1506,7 @@ impl ExitStatus {
     ///     None       => println!("Process terminated by signal")
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "process", since = "1.0.0")]
     pub fn code(&self) -> Option<i32> {
         self.0.code()
@@ -1584,6 +1594,7 @@ impl ExitStatusError {
     /// assert_eq!(bad.code(), Some(1));
     /// # } // #[cfg(unix)]
     /// ```
+    #[must_use]
     pub fn code(&self) -> Option<i32> {
         self.code_nonzero().map(Into::into)
     }
@@ -1609,11 +1620,13 @@ impl ExitStatusError {
     /// assert_eq!(bad.code_nonzero().unwrap(), NonZeroI32::try_from(1).unwrap());
     /// # } // cfg!(unix)
     /// ```
+    #[must_use]
     pub fn code_nonzero(&self) -> Option<NonZeroI32> {
         self.0.code()
     }
 
     /// Converts an `ExitStatusError` (back) to an `ExitStatus`.
+    #[must_use]
     pub fn into_status(&self) -> ExitStatus {
         ExitStatus(self.0.into())
     }
@@ -1722,6 +1735,7 @@ impl Child {
     ///     println!("ls command didn't start");
     /// }
     /// ```
+    #[must_use]
     #[stable(feature = "process_id", since = "1.3.0")]
     pub fn id(&self) -> u32 {
         self.handle.id()
@@ -1907,7 +1921,7 @@ impl Child {
 /// [platform-specific behavior]: #platform-specific-behavior
 #[stable(feature = "rust1", since = "1.0.0")]
 pub fn exit(code: i32) -> ! {
-    crate::sys_common::rt::cleanup();
+    crate::rt::cleanup();
     crate::sys::os::exit(code)
 }
 
@@ -1992,6 +2006,7 @@ pub fn abort() -> ! {
 /// ```
 ///
 ///
+#[must_use]
 #[stable(feature = "getpid", since = "1.26.0")]
 pub fn id() -> u32 {
     crate::sys::os::getpid()
@@ -2048,6 +2063,14 @@ impl<E: fmt::Debug> Termination for Result<!, E> {
         let Err(err) = self;
         eprintln!("Error: {:?}", err);
         ExitCode::FAILURE.report()
+    }
+}
+
+#[unstable(feature = "termination_trait_lib", issue = "43301")]
+impl<E: fmt::Debug> Termination for Result<Infallible, E> {
+    fn report(self) -> i32 {
+        let Err(err) = self;
+        Err::<!, _>(err).report()
     }
 }
 

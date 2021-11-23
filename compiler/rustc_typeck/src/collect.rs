@@ -28,7 +28,7 @@ use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexSet};
 use rustc_errors::{struct_span_err, Applicability};
 use rustc_hir as hir;
-use rustc_hir::def::{CtorKind, DefKind, Res};
+use rustc_hir::def::{CtorKind, DefKind};
 use rustc_hir::def_id::{DefId, LocalDefId, LOCAL_CRATE};
 use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
 use rustc_hir::weak_lang_items;
@@ -199,20 +199,16 @@ crate fn placeholder_type_error(
                 let parent_id = tcx.hir().get_parent_node(hir_ty.hir_id);
                 let parent_node = tcx.hir().get(parent_id);
 
-                is_const_or_static = match parent_node {
+                is_const_or_static = matches!(
+                    parent_node,
                     Node::Item(&hir::Item {
                         kind: hir::ItemKind::Const(..) | hir::ItemKind::Static(..),
                         ..
-                    })
-                    | Node::TraitItem(&hir::TraitItem {
+                    }) | Node::TraitItem(&hir::TraitItem {
                         kind: hir::TraitItemKind::Const(..),
                         ..
-                    })
-                    | Node::ImplItem(&hir::ImplItem {
-                        kind: hir::ImplItemKind::Const(..), ..
-                    }) => true,
-                    _ => false,
-                };
+                    }) | Node::ImplItem(&hir::ImplItem { kind: hir::ImplItemKind::Const(..), .. })
+                );
             }
         }
 
@@ -672,6 +668,7 @@ impl ItemCtxt<'tcx> {
             })
             .flat_map(|b| predicates_from_bound(self, ty, b));
 
+        let param_def_id = self.tcx.hir().local_def_id(param_id).to_def_id();
         let from_where_clauses = ast_generics
             .where_clause
             .predicates
@@ -681,10 +678,10 @@ impl ItemCtxt<'tcx> {
                 _ => None,
             })
             .flat_map(|bp| {
-                let bt = if is_param(self.tcx, &bp.bounded_ty, param_id) {
+                let bt = if bp.is_param_bound(param_def_id) {
                     Some(ty)
                 } else if !only_self_bounds.0 {
-                    Some(self.to_ty(&bp.bounded_ty))
+                    Some(self.to_ty(bp.bounded_ty))
                 } else {
                     None
                 };
@@ -715,23 +712,6 @@ impl ItemCtxt<'tcx> {
             }
             _ => false,
         }
-    }
-}
-
-/// Tests whether this is the AST for a reference to the type
-/// parameter with ID `param_id`. We use this so as to avoid running
-/// `ast_ty_to_ty`, because we want to avoid triggering an all-out
-/// conversion of the type to avoid inducing unnecessary cycles.
-fn is_param(tcx: TyCtxt<'_>, ast_ty: &hir::Ty<'_>, param_id: hir::HirId) -> bool {
-    if let hir::TyKind::Path(hir::QPath::Resolved(None, ref path)) = ast_ty.kind {
-        match path.res {
-            Res::SelfTy(Some(def_id), None) | Res::Def(DefKind::TyParam, def_id) => {
-                def_id == tcx.hir().local_def_id(param_id).to_def_id()
-            }
-            _ => false,
-        }
-    } else {
-        false
     }
 }
 
@@ -776,7 +756,7 @@ fn convert_item(tcx: TyCtxt<'_>, item_id: hir::ItemId) {
             tcx.ensure().generics_of(def_id);
             tcx.ensure().type_of(def_id);
             tcx.ensure().predicates_of(def_id);
-            convert_enum_variant_types(tcx, def_id.to_def_id(), &enum_definition.variants);
+            convert_enum_variant_types(tcx, def_id.to_def_id(), enum_definition.variants);
         }
         hir::ItemKind::Impl { .. } => {
             tcx.ensure().generics_of(def_id);
@@ -1153,11 +1133,11 @@ fn super_predicates_that_define_assoc_type(
             <dyn AstConv<'_>>::compute_bounds_that_match_assoc_type(
                 &icx,
                 self_param_ty,
-                &bounds,
+                bounds,
                 assoc_name,
             )
         } else {
-            <dyn AstConv<'_>>::compute_bounds(&icx, self_param_ty, &bounds)
+            <dyn AstConv<'_>>::compute_bounds(&icx, self_param_ty, bounds)
         };
 
         let superbounds1 = superbounds1.predicates(tcx, self_param_ty);
@@ -1334,25 +1314,25 @@ fn has_late_bound_regions<'tcx>(tcx: TyCtxt<'tcx>, node: Node<'tcx>) -> Option<S
     match node {
         Node::TraitItem(item) => match item.kind {
             hir::TraitItemKind::Fn(ref sig, _) => {
-                has_late_bound_regions(tcx, &item.generics, &sig.decl)
+                has_late_bound_regions(tcx, &item.generics, sig.decl)
             }
             _ => None,
         },
         Node::ImplItem(item) => match item.kind {
             hir::ImplItemKind::Fn(ref sig, _) => {
-                has_late_bound_regions(tcx, &item.generics, &sig.decl)
+                has_late_bound_regions(tcx, &item.generics, sig.decl)
             }
             _ => None,
         },
         Node::ForeignItem(item) => match item.kind {
-            hir::ForeignItemKind::Fn(ref fn_decl, _, ref generics) => {
+            hir::ForeignItemKind::Fn(fn_decl, _, ref generics) => {
                 has_late_bound_regions(tcx, generics, fn_decl)
             }
             _ => None,
         },
         Node::Item(item) => match item.kind {
             hir::ItemKind::Fn(ref sig, .., ref generics, _) => {
-                has_late_bound_regions(tcx, generics, &sig.decl)
+                has_late_bound_regions(tcx, generics, sig.decl)
             }
             _ => None,
         },
@@ -1374,7 +1354,7 @@ impl<'v> Visitor<'v> for AnonConstInParamTyDetector {
     }
 
     fn visit_generic_param(&mut self, p: &'v hir::GenericParam<'v>) {
-        if let GenericParamKind::Const { ref ty, default: _ } = p.kind {
+        if let GenericParamKind::Const { ty, default: _ } = p.kind {
             let prev = self.in_param_ty;
             self.in_param_ty = true;
             self.visit_ty(ty);
@@ -1498,13 +1478,15 @@ fn generics_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::Generics {
                     {
                         Some(parent_def_id.to_def_id())
                     }
-
+                    Node::Expr(&Expr { kind: ExprKind::ConstBlock(_), .. }) => {
+                        Some(tcx.typeck_root_def_id(def_id))
+                    }
                     _ => None,
                 }
             }
         }
         Node::Expr(&hir::Expr { kind: hir::ExprKind::Closure(..), .. }) => {
-            Some(tcx.closure_base_def_id(def_id))
+            Some(tcx.typeck_root_def_id(def_id))
         }
         Node::Item(item) => match item.kind {
             ItemKind::OpaqueTy(hir::OpaqueTy { impl_trait_fn, .. }) => {
@@ -1587,7 +1569,7 @@ fn generics_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::Generics {
     let mut own_start = has_self as u32;
     let parent_count = parent_def_id.map_or(0, |def_id| {
         let generics = tcx.generics_of(def_id);
-        assert_eq!(has_self, false);
+        assert!(!has_self);
         parent_has_self = generics.has_self;
         own_start = generics.count() as u32;
         generics.parent_count + generics.params.len()
@@ -1696,6 +1678,24 @@ fn generics_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::Generics {
         }));
     }
 
+    // provide junk type parameter defs for const blocks.
+    if let Node::AnonConst(_) = node {
+        let parent_node = tcx.hir().get(tcx.hir().get_parent_node(hir_id));
+        if let Node::Expr(&Expr { kind: ExprKind::ConstBlock(_), .. }) = parent_node {
+            params.push(ty::GenericParamDef {
+                index: type_start,
+                name: Symbol::intern("<const_ty>"),
+                def_id,
+                pure_wrt_drop: false,
+                kind: ty::GenericParamDefKind::Type {
+                    has_default: false,
+                    object_lifetime_default: rl::Set1::Empty,
+                    synthetic: None,
+                },
+            });
+        }
+    }
+
     let param_def_id_to_index = params.iter().map(|param| (param.def_id, param.index)).collect();
 
     ty::Generics {
@@ -1738,9 +1738,9 @@ fn is_suggestable_infer_ty(ty: &hir::Ty<'_>) -> bool {
 }
 
 pub fn get_infer_ret_ty(output: &'hir hir::FnRetTy<'hir>) -> Option<&'hir hir::Ty<'hir>> {
-    if let hir::FnRetTy::Return(ref ty) = output {
+    if let hir::FnRetTy::Return(ty) = output {
         if is_suggestable_infer_ty(ty) {
-            return Some(&**ty);
+            return Some(&*ty);
         }
     }
     None
@@ -1810,8 +1810,8 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: DefId) -> ty::PolyFnSig<'_> {
                     hir_id,
                     sig.header.unsafety,
                     sig.header.abi,
-                    &sig.decl,
-                    &generics,
+                    sig.decl,
+                    generics,
                     Some(ident.span),
                     None,
                 ),
@@ -1829,15 +1829,13 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: DefId) -> ty::PolyFnSig<'_> {
             header.unsafety,
             header.abi,
             decl,
-            &generics,
+            generics,
             Some(ident.span),
             None,
         ),
 
         ForeignItem(&hir::ForeignItem {
-            kind: ForeignItemKind::Fn(ref fn_decl, _, _),
-            ident,
-            ..
+            kind: ForeignItemKind::Fn(fn_decl, _, _), ident, ..
         }) => {
             let abi = tcx.hir().get_foreign_abi(hir_id);
             compute_sig_of_foreign_fn_decl(tcx, def_id.to_def_id(), fn_decl, abi, ident)
@@ -2042,9 +2040,7 @@ fn gather_explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericP
             match item.kind {
                 ItemKind::Impl(ref impl_) => {
                     if impl_.defaultness.is_default() {
-                        is_default_impl_trait = tcx
-                            .impl_trait_ref(def_id)
-                            .map(|trait_ref| ty::Binder::dummy(trait_ref));
+                        is_default_impl_trait = tcx.impl_trait_ref(def_id).map(ty::Binder::dummy);
                     }
                     &impl_.generics
                 }
@@ -2143,7 +2139,7 @@ fn gather_explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericP
             GenericParamKind::Lifetime { .. } => {
                 param.bounds.iter().for_each(|bound| match bound {
                     hir::GenericBound::Outlives(lt) => {
-                        let bound = <dyn AstConv<'_>>::ast_region_to_region(&icx, &lt, None);
+                        let bound = <dyn AstConv<'_>>::ast_region_to_region(&icx, lt, None);
                         let outlives = ty::Binder::dummy(ty::OutlivesPredicate(region, bound));
                         predicates.insert((outlives.to_predicate(tcx), lt.span));
                     }
@@ -2165,12 +2161,12 @@ fn gather_explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericP
                 let param_ty = ty::ParamTy::new(index, name).to_ty(tcx);
                 index += 1;
 
-                let mut bounds = <dyn AstConv<'_>>::compute_bounds(&icx, param_ty, &param.bounds);
+                let mut bounds = <dyn AstConv<'_>>::compute_bounds(&icx, param_ty, param.bounds);
                 // Params are implicitly sized unless a `?Sized` bound is found
                 <dyn AstConv<'_>>::add_implicitly_sized(
                     &icx,
                     &mut bounds,
-                    &param.bounds,
+                    param.bounds,
                     Some((param.hir_id, ast_generics.where_clause.predicates)),
                     param.span,
                 );
@@ -2189,7 +2185,7 @@ fn gather_explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericP
     for predicate in where_clause.predicates {
         match predicate {
             hir::WherePredicate::BoundPredicate(bound_pred) => {
-                let ty = icx.to_ty(&bound_pred.bounded_ty);
+                let ty = icx.to_ty(bound_pred.bounded_ty);
                 let bound_vars = icx.tcx.late_bound_vars(bound_pred.bounded_ty.hir_id);
 
                 // Keep the type around in a dummy predicate, in case of no bounds.
@@ -2410,7 +2406,7 @@ fn explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericPredicat
     } else {
         if matches!(def_kind, DefKind::AnonConst) && tcx.lazy_normalization() {
             let hir_id = tcx.hir().local_def_id_to_hir_id(def_id.expect_local());
-            if let Some(_) = tcx.hir().opt_const_param_default_param_hir_id(hir_id) {
+            if tcx.hir().opt_const_param_default_param_hir_id(hir_id).is_some() {
                 // In `generics_of` we set the generics' parent to be our parent's parent which means that
                 // we lose out on the predicates of our actual parent if we dont return those predicates here.
                 // (See comment in `generics_of` for more information on why the parent shenanigans is necessary)
@@ -2503,10 +2499,10 @@ fn compute_sig_of_foreign_fn_decl<'tcx>(
             }
         };
         for (input, ty) in iter::zip(decl.inputs, fty.inputs().skip_binder()) {
-            check(&input, ty)
+            check(input, ty)
         }
         if let hir::FnRetTy::Return(ref ty) = decl.output {
-            check(&ty, fty.output().skip_binder())
+            check(ty, fty.output().skip_binder())
         }
     }
 
@@ -2561,7 +2557,7 @@ fn from_target_feature(
         let msg = "malformed `target_feature` attribute input";
         let code = "enable = \"..\"".to_owned();
         tcx.sess
-            .struct_span_err(span, &msg)
+            .struct_span_err(span, msg)
             .span_suggestion(span, "must be of the form", code, Applicability::HasPlaceholders)
             .emit();
     };
@@ -2846,7 +2842,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
                 tcx,
                 id,
                 attr,
-                &supported_target_features,
+                supported_target_features,
                 &mut codegen_fn_attrs.target_features,
             );
         } else if attr.has_name(sym::linkage) {
@@ -2869,6 +2865,14 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
         } else if attr.has_name(sym::link_name) {
             codegen_fn_attrs.link_name = attr.value_str();
         } else if attr.has_name(sym::link_ordinal) {
+            if link_ordinal_span.is_some() {
+                tcx.sess
+                    .struct_span_err(
+                        attr.span,
+                        "multiple `link_ordinal` attributes on a single definition",
+                    )
+                    .emit();
+            }
             link_ordinal_span = Some(attr.span);
             if let ordinal @ Some(_) = check_link_ordinal(tcx, attr) {
                 codegen_fn_attrs.link_ordinal = ordinal;
@@ -2879,6 +2883,8 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
                 for item in list.iter() {
                     if item.has_name(sym::address) {
                         codegen_fn_attrs.no_sanitize |= SanitizerSet::ADDRESS;
+                    } else if item.has_name(sym::cfi) {
+                        codegen_fn_attrs.no_sanitize |= SanitizerSet::CFI;
                     } else if item.has_name(sym::memory) {
                         codegen_fn_attrs.no_sanitize |= SanitizerSet::MEMORY;
                     } else if item.has_name(sym::thread) {
@@ -3113,7 +3119,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
         codegen_fn_attrs.flags |= CodegenFnAttrFlags::RUSTC_STD_INTERNAL_SYMBOL;
     }
     let check_name = |attr: &Attribute, sym| attr.has_name(sym);
-    if let Some(name) = weak_lang_items::link_name(check_name, &attrs) {
+    if let Some(name) = weak_lang_items::link_name(check_name, attrs) {
         codegen_fn_attrs.export_name = Some(name);
         codegen_fn_attrs.link_name = Some(name);
     }
@@ -3164,22 +3170,41 @@ fn should_inherit_track_caller(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     false
 }
 
-fn check_link_ordinal(tcx: TyCtxt<'_>, attr: &ast::Attribute) -> Option<usize> {
+fn check_link_ordinal(tcx: TyCtxt<'_>, attr: &ast::Attribute) -> Option<u16> {
     use rustc_ast::{Lit, LitIntType, LitKind};
     let meta_item_list = attr.meta_item_list();
     let meta_item_list: Option<&[ast::NestedMetaItem]> = meta_item_list.as_ref().map(Vec::as_ref);
     let sole_meta_list = match meta_item_list {
         Some([item]) => item.literal(),
+        Some(_) => {
+            tcx.sess
+                .struct_span_err(attr.span, "incorrect number of arguments to `#[link_ordinal]`")
+                .note("the attribute requires exactly one argument")
+                .emit();
+            return None;
+        }
         _ => None,
     };
     if let Some(Lit { kind: LitKind::Int(ordinal, LitIntType::Unsuffixed), .. }) = sole_meta_list {
-        if *ordinal <= usize::MAX as u128 {
-            Some(*ordinal as usize)
+        // According to the table at https://docs.microsoft.com/en-us/windows/win32/debug/pe-format#import-header,
+        // the ordinal must fit into 16 bits.  Similarly, the Ordinal field in COFFShortExport (defined
+        // in llvm/include/llvm/Object/COFFImportFile.h), which we use to communicate import information
+        // to LLVM for `#[link(kind = "raw-dylib"_])`, is also defined to be uint16_t.
+        //
+        // FIXME: should we allow an ordinal of 0?  The MSVC toolchain has inconsistent support for this:
+        // both LINK.EXE and LIB.EXE signal errors and abort when given a .DEF file that specifies
+        // a zero ordinal.  However, llvm-dlltool is perfectly happy to generate an import library
+        // for such a .DEF file, and MSVC's LINK.EXE is also perfectly happy to consume an import
+        // library produced by LLVM with an ordinal of 0, and it generates an .EXE.  (I don't know yet
+        // if the resulting EXE runs, as I haven't yet built the necessary DLL -- see earlier comment
+        // about LINK.EXE failing.)
+        if *ordinal <= u16::MAX as u128 {
+            Some(*ordinal as u16)
         } else {
             let msg = format!("ordinal value in `link_ordinal` is too large: `{}`", &ordinal);
             tcx.sess
                 .struct_span_err(attr.span, &msg)
-                .note("the value may not exceed `usize::MAX`")
+                .note("the value may not exceed `u16::MAX`")
                 .emit();
             None
         }

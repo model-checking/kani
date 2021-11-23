@@ -32,8 +32,7 @@ use rustc_ast_pretty::pprust::{self, expr_to_string};
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::stack::ensure_sufficient_stack;
 use rustc_errors::{Applicability, DiagnosticBuilder, DiagnosticStyledString};
-use rustc_feature::{deprecated_attributes, AttributeGate, AttributeTemplate, AttributeType};
-use rustc_feature::{GateIssue, Stability};
+use rustc_feature::{deprecated_attributes, AttributeGate, BuiltinAttribute, GateIssue, Stability};
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdSet, CRATE_DEF_ID};
@@ -369,12 +368,12 @@ impl EarlyLintPass for UnsafeCode {
 
     fn check_item(&mut self, cx: &EarlyContext<'_>, it: &ast::Item) {
         match it.kind {
-            ast::ItemKind::Trait(box ast::TraitKind(_, ast::Unsafe::Yes(_), ..)) => self
+            ast::ItemKind::Trait(box ast::Trait { unsafety: ast::Unsafe::Yes(_), .. }) => self
                 .report_unsafe(cx, it.span, |lint| {
                     lint.build("declaration of an `unsafe` trait").emit()
                 }),
 
-            ast::ItemKind::Impl(box ast::ImplKind { unsafety: ast::Unsafe::Yes(_), .. }) => self
+            ast::ItemKind::Impl(box ast::Impl { unsafety: ast::Unsafe::Yes(_), .. }) => self
                 .report_unsafe(cx, it.span, |lint| {
                     lint.build("implementation of an `unsafe` trait").emit()
                 }),
@@ -584,8 +583,14 @@ impl<'tcx> LateLintPass<'tcx> for MissingDoc {
         self.doc_hidden_stack.pop().expect("empty doc_hidden_stack");
     }
 
-    fn check_crate(&mut self, cx: &LateContext<'_>, krate: &hir::Crate<'_>) {
-        self.check_missing_docs_attrs(cx, CRATE_DEF_ID, krate.module().inner, "the", "crate");
+    fn check_crate(&mut self, cx: &LateContext<'_>) {
+        self.check_missing_docs_attrs(
+            cx,
+            CRATE_DEF_ID,
+            cx.tcx.def_span(CRATE_DEF_ID),
+            "the",
+            "crate",
+        );
     }
 
     fn check_item(&mut self, cx: &LateContext<'_>, it: &hir::Item<'_>) {
@@ -649,6 +654,24 @@ impl<'tcx> LateLintPass<'tcx> for MissingDoc {
         // If the method is an impl for a trait, don't doc.
         if method_context(cx, impl_item.hir_id()) == MethodLateContext::TraitImpl {
             return;
+        }
+
+        // If the method is an impl for an item with docs_hidden, don't doc.
+        if method_context(cx, impl_item.hir_id()) == MethodLateContext::PlainImpl {
+            let parent = cx.tcx.hir().get_parent_did(impl_item.hir_id());
+            let impl_ty = cx.tcx.type_of(parent);
+            let outerdef = match impl_ty.kind() {
+                ty::Adt(def, _) => Some(def.did),
+                ty::Foreign(def_id) => Some(*def_id),
+                _ => None,
+            };
+            let is_hidden = match outerdef {
+                Some(id) => cx.tcx.is_doc_hidden(id),
+                None => false,
+            };
+            if is_hidden {
+                return;
+            }
         }
 
         let (article, desc) = cx.tcx.article_and_description(impl_item.def_id.to_def_id());
@@ -806,7 +829,7 @@ impl<'tcx> LateLintPass<'tcx> for MissingDebugImplementations {
             _ => return,
         }
 
-        let debug = match cx.tcx.get_diagnostic_item(sym::debug_trait) {
+        let debug = match cx.tcx.get_diagnostic_item(sym::Debug) {
             Some(debug) => debug,
             None => return,
         };
@@ -897,7 +920,7 @@ impl EarlyLintPass for AnonymousParameters {
             // This is a hard error in future editions; avoid linting and erroring
             return;
         }
-        if let ast::AssocItemKind::Fn(box FnKind(_, ref sig, _, _)) = it.kind {
+        if let ast::AssocItemKind::Fn(box Fn { ref sig, .. }) = it.kind {
             for arg in sig.decl.inputs.iter() {
                 if let ast::PatKind::Ident(_, ident, None) = arg.pat.kind {
                     if ident.name == kw::Empty {
@@ -912,7 +935,7 @@ impl EarlyLintPass for AnonymousParameters {
 
                             lint.build(
                                 "anonymous parameters are deprecated and will be \
-                                     removed in the next edition.",
+                                     removed in the next edition",
                             )
                             .span_suggestion(
                                 arg.pat.span,
@@ -935,7 +958,7 @@ impl EarlyLintPass for AnonymousParameters {
 pub struct DeprecatedAttr {
     // This is not free to compute, so we want to keep it around, rather than
     // compute it for every attribute.
-    depr_attrs: Vec<&'static (Symbol, AttributeType, AttributeTemplate, AttributeGate)>,
+    depr_attrs: Vec<&'static BuiltinAttribute>,
 }
 
 impl_lint_pass!(DeprecatedAttr => []);
@@ -966,14 +989,14 @@ fn lint_deprecated_attr(
 
 impl EarlyLintPass for DeprecatedAttr {
     fn check_attribute(&mut self, cx: &EarlyContext<'_>, attr: &ast::Attribute) {
-        for &&(n, _, _, ref g) in &self.depr_attrs {
-            if attr.ident().map(|ident| ident.name) == Some(n) {
+        for BuiltinAttribute { name, gate, .. } in &self.depr_attrs {
+            if attr.ident().map(|ident| ident.name) == Some(*name) {
                 if let &AttributeGate::Gated(
                     Stability::Deprecated(link, suggestion),
                     name,
                     reason,
                     _,
-                ) = g
+                ) = gate
                 {
                     let msg =
                         format!("use of deprecated attribute `{}`: {}. See {}", name, reason, link);
@@ -1623,9 +1646,9 @@ impl<'tcx> LateLintPass<'tcx> for TrivialConstraints {
             let predicates = cx.tcx.predicates_of(item.def_id);
             for &(predicate, span) in predicates.predicates {
                 let predicate_kind_name = match predicate.kind().skip_binder() {
-                    Trait(..) => "Trait",
+                    Trait(..) => "trait",
                     TypeOutlives(..) |
-                    RegionOutlives(..) => "Lifetime",
+                    RegionOutlives(..) => "lifetime",
 
                     // Ignore projections, as they can only be global
                     // if the trait bound is global
@@ -2472,14 +2495,11 @@ impl<'tcx> LateLintPass<'tcx> for InvalidValue {
                 // Find calls to `mem::{uninitialized,zeroed}` methods.
                 if let hir::ExprKind::Path(ref qpath) = path_expr.kind {
                     let def_id = cx.qpath_res(qpath, path_expr.hir_id).opt_def_id()?;
-
-                    if cx.tcx.is_diagnostic_item(sym::mem_zeroed, def_id) {
-                        return Some(InitKind::Zeroed);
-                    } else if cx.tcx.is_diagnostic_item(sym::mem_uninitialized, def_id) {
-                        return Some(InitKind::Uninit);
-                    } else if cx.tcx.is_diagnostic_item(sym::transmute, def_id) && is_zero(&args[0])
-                    {
-                        return Some(InitKind::Zeroed);
+                    match cx.tcx.get_diagnostic_name(def_id) {
+                        Some(sym::mem_zeroed) => return Some(InitKind::Zeroed),
+                        Some(sym::mem_uninitialized) => return Some(InitKind::Uninit),
+                        Some(sym::transmute) if is_zero(&args[0]) => return Some(InitKind::Zeroed),
+                        _ => {}
                     }
                 }
             } else if let hir::ExprKind::MethodCall(_, _, ref args, _) = expr.kind {
@@ -2491,11 +2511,10 @@ impl<'tcx> LateLintPass<'tcx> for InvalidValue {
                     if let hir::ExprKind::Call(ref path_expr, _) = args[0].kind {
                         if let hir::ExprKind::Path(ref qpath) = path_expr.kind {
                             let def_id = cx.qpath_res(qpath, path_expr.hir_id).opt_def_id()?;
-
-                            if cx.tcx.is_diagnostic_item(sym::maybe_uninit_zeroed, def_id) {
-                                return Some(InitKind::Zeroed);
-                            } else if cx.tcx.is_diagnostic_item(sym::maybe_uninit_uninit, def_id) {
-                                return Some(InitKind::Uninit);
+                            match cx.tcx.get_diagnostic_name(def_id) {
+                                Some(sym::maybe_uninit_zeroed) => return Some(InitKind::Zeroed),
+                                Some(sym::maybe_uninit_uninit) => return Some(InitKind::Uninit),
+                                _ => {}
                             }
                         }
                     }
@@ -3085,8 +3104,10 @@ impl<'tcx> LateLintPass<'tcx> for DerefNullPtr {
                 rustc_hir::ExprKind::Call(ref path, _) => {
                     if let rustc_hir::ExprKind::Path(ref qpath) = path.kind {
                         if let Some(def_id) = cx.qpath_res(qpath, path.hir_id).opt_def_id() {
-                            return cx.tcx.is_diagnostic_item(sym::ptr_null, def_id)
-                                || cx.tcx.is_diagnostic_item(sym::ptr_null_mut, def_id);
+                            return matches!(
+                                cx.tcx.get_diagnostic_name(def_id),
+                                Some(sym::ptr_null | sym::ptr_null_mut)
+                            );
                         }
                     }
                 }
@@ -3108,18 +3129,13 @@ impl<'tcx> LateLintPass<'tcx> for DerefNullPtr {
             false
         }
 
-        if let rustc_hir::ExprKind::Unary(ref un_op, ref expr_deref) = expr.kind {
-            if let rustc_hir::UnOp::Deref = un_op {
-                if is_null_ptr(cx, expr_deref) {
-                    cx.struct_span_lint(DEREF_NULLPTR, expr.span, |lint| {
-                        let mut err = lint.build("dereferencing a null pointer");
-                        err.span_label(
-                            expr.span,
-                            "this code causes undefined behavior when executed",
-                        );
-                        err.emit();
-                    });
-                }
+        if let rustc_hir::ExprKind::Unary(rustc_hir::UnOp::Deref, expr_deref) = expr.kind {
+            if is_null_ptr(cx, expr_deref) {
+                cx.struct_span_lint(DEREF_NULLPTR, expr.span, |lint| {
+                    let mut err = lint.build("dereferencing a null pointer");
+                    err.span_label(expr.span, "this code causes undefined behavior when executed");
+                    err.emit();
+                });
             }
         }
     }
@@ -3174,7 +3190,7 @@ impl<'tcx> LateLintPass<'tcx> for NamedAsmLabels {
                         let snippet = template_snippet.as_str();
                         if let Some(pos) = snippet.find(needle) {
                             let end = pos
-                                + &snippet[pos..]
+                                + snippet[pos..]
                                     .find(|c| c == ':')
                                     .unwrap_or(snippet[pos..].len() - 1);
                             let inner = InnerSpan::new(pos, end);

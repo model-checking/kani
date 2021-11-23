@@ -1,11 +1,12 @@
 [package]
 name = "clippy_dev"
 version = "0.0.1"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bytecount = "0.6"
 clap = "2.33"
+indoc = "1.0"
 itertools = "0.10"
 opener = "0.5"
 regex = "1.5"

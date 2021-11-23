@@ -57,7 +57,7 @@ use core::fmt::Display;
 
 /// The error type for `try_reserve` methods.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+#[stable(feature = "try_reserve", since = "1.57.0")]
 pub struct TryReserveError {
     kind: TryReserveErrorKind,
 }
@@ -65,6 +65,7 @@ pub struct TryReserveError {
 impl TryReserveError {
     /// Details about the allocation that caused the error
     #[inline]
+    #[must_use]
     #[unstable(
         feature = "try_reserve_kind",
         reason = "Uncertain how much info should be exposed",
@@ -126,7 +127,7 @@ impl From<LayoutError> for TryReserveErrorKind {
     }
 }
 
-#[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+#[stable(feature = "try_reserve", since = "1.57.0")]
 impl Display for TryReserveError {
     fn fmt(
         &self,

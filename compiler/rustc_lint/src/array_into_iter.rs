@@ -124,7 +124,7 @@ impl<'tcx> LateLintPass<'tcx> for ArrayIntoIter {
                 let mut diag = lint.build(&format!(
                     "this method call resolves to `<&{} as IntoIterator>::into_iter` \
                     (due to backwards compatibility), \
-                    but will resolve to <{} as IntoIterator>::into_iter in Rust 2021.",
+                    but will resolve to <{} as IntoIterator>::into_iter in Rust 2021",
                     target, target,
                 ));
                 diag.span_suggestion(
@@ -134,9 +134,8 @@ impl<'tcx> LateLintPass<'tcx> for ArrayIntoIter {
                     Applicability::MachineApplicable,
                 );
                 if self.for_expr_span == expr.span {
-                    let expr_span = expr.span.ctxt().outer_expn_data().call_site;
                     diag.span_suggestion(
-                        receiver_arg.span.shrink_to_hi().to(expr_span.shrink_to_hi()),
+                        receiver_arg.span.shrink_to_hi().to(expr.span.shrink_to_hi()),
                         "or remove `.into_iter()` to iterate by value",
                         String::new(),
                         Applicability::MaybeIncorrect,

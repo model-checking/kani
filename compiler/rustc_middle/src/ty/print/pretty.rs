@@ -1,4 +1,3 @@
-use crate::middle::cstore::{ExternCrate, ExternCrateSource};
 use crate::mir::interpret::{AllocRange, ConstValue, GlobalAlloc, Pointer, Provenance, Scalar};
 use crate::ty::subst::{GenericArg, GenericArgKind, Subst};
 use crate::ty::{self, ConstInt, DefIdTree, ParamConst, ScalarInt, Ty, TyCtxt, TypeFoldable};
@@ -11,6 +10,7 @@ use rustc_hir::def_id::{DefId, DefIdSet, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::definitions::{DefPathData, DefPathDataName, DisambiguatedDefPathData};
 use rustc_hir::ItemKind;
 use rustc_session::config::TrimmedDefPaths;
+use rustc_session::cstore::{ExternCrate, ExternCrateSource};
 use rustc_span::symbol::{kw, Ident, Symbol};
 use rustc_target::abi::Size;
 use rustc_target::spec::abi::Abi;
@@ -350,18 +350,26 @@ pub trait PrettyPrinter<'tcx>:
             match self.tcx().extern_crate(def_id) {
                 Some(&ExternCrate { src, dependency_of, span, .. }) => match (src, dependency_of) {
                     (ExternCrateSource::Extern(def_id), LOCAL_CRATE) => {
-                        debug!("try_print_visible_def_path: def_id={:?}", def_id);
-                        return Ok((
-                            if !span.is_dummy() {
-                                self.print_def_path(def_id, &[])?
-                            } else {
-                                self.path_crate(cnum)?
-                            },
-                            true,
-                        ));
+                        // NOTE(eddyb) the only reason `span` might be dummy,
+                        // that we're aware of, is that it's the `std`/`core`
+                        // `extern crate` injected by default.
+                        // FIXME(eddyb) find something better to key this on,
+                        // or avoid ending up with `ExternCrateSource::Extern`,
+                        // for the injected `std`/`core`.
+                        if span.is_dummy() {
+                            return Ok((self.path_crate(cnum)?, true));
+                        }
+
+                        // Disable `try_print_trimmed_def_path` behavior within
+                        // the `print_def_path` call, to avoid infinite recursion
+                        // in cases where the `extern crate foo` has non-trivial
+                        // parents, e.g. it's nested in `impl foo::Trait for Bar`
+                        // (see also issues #55779 and #87932).
+                        self = with_no_visible_paths(|| self.print_def_path(def_id, &[]))?;
+
+                        return Ok((self, true));
                     }
                     (ExternCrateSource::Path, LOCAL_CRATE) => {
-                        debug!("try_print_visible_def_path: def_id={:?}", def_id);
                         return Ok((self.path_crate(cnum)?, true));
                     }
                     _ => {}
@@ -736,6 +744,7 @@ pub trait PrettyPrinter<'tcx>:
                     p!(print_def_path(did, substs));
                     if !substs.as_closure().is_valid() {
                         p!(" closure_substs=(unavailable)");
+                        p!(write(" substs={:?}", substs));
                     } else {
                         p!(" closure_kind_ty=", print(substs.as_closure().kind_ty()));
                         p!(
@@ -2171,9 +2180,25 @@ impl fmt::Debug for TraitRefPrintOnlyTraitPath<'tcx> {
     }
 }
 
+/// Wrapper type for `ty::TraitRef` which opts-in to pretty printing only
+/// the trait name. That is, it will print `Trait` instead of
+/// `<T as Trait<U>>`.
+#[derive(Copy, Clone, TypeFoldable, Lift)]
+pub struct TraitRefPrintOnlyTraitName<'tcx>(ty::TraitRef<'tcx>);
+
+impl fmt::Debug for TraitRefPrintOnlyTraitName<'tcx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 impl ty::TraitRef<'tcx> {
     pub fn print_only_trait_path(self) -> TraitRefPrintOnlyTraitPath<'tcx> {
         TraitRefPrintOnlyTraitPath(self)
+    }
+
+    pub fn print_only_trait_name(self) -> TraitRefPrintOnlyTraitName<'tcx> {
+        TraitRefPrintOnlyTraitName(self)
     }
 }
 
@@ -2192,7 +2217,9 @@ forward_display_to_print! {
     // because `for<'tcx>` isn't possible yet.
     ty::Binder<'tcx, ty::ExistentialPredicate<'tcx>>,
     ty::Binder<'tcx, ty::TraitRef<'tcx>>,
+    ty::Binder<'tcx, ty::ExistentialTraitRef<'tcx>>,
     ty::Binder<'tcx, TraitRefPrintOnlyTraitPath<'tcx>>,
+    ty::Binder<'tcx, TraitRefPrintOnlyTraitName<'tcx>>,
     ty::Binder<'tcx, ty::FnSig<'tcx>>,
     ty::Binder<'tcx, ty::TraitPredicate<'tcx>>,
     ty::Binder<'tcx, ty::SubtypePredicate<'tcx>>,
@@ -2253,6 +2280,10 @@ define_print_and_forward_display! {
 
     TraitRefPrintOnlyTraitPath<'tcx> {
         p!(print_def_path(self.0.def_id, self.0.substs));
+    }
+
+    TraitRefPrintOnlyTraitName<'tcx> {
+        p!(print_def_path(self.0.def_id, &[]));
     }
 
     ty::ParamTy {
@@ -2340,7 +2371,7 @@ define_print_and_forward_display! {
 fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, Namespace, DefId)) {
     // Iterate all local crate items no matter where they are defined.
     let hir = tcx.hir();
-    for item in hir.krate().items() {
+    for item in hir.items() {
         if item.ident.name.as_str().is_empty() || matches!(item.kind, ItemKind::Use(_, _)) {
             continue;
         }
@@ -2373,7 +2404,7 @@ fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, N
     // Iterate external crate defs but be mindful about visibility
     while let Some(def) = queue.pop() {
         for child in tcx.item_children(def).iter() {
-            if child.vis != ty::Visibility::Public {
+            if !child.vis.is_public() {
                 continue;
             }
 
@@ -2408,7 +2439,7 @@ fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, N
 ///
 /// The implementation uses similar import discovery logic to that of 'use' suggestions.
 fn trimmed_def_paths(tcx: TyCtxt<'_>, (): ()) -> FxHashMap<DefId, Symbol> {
-    let mut map = FxHashMap::default();
+    let mut map: FxHashMap<DefId, Symbol> = FxHashMap::default();
 
     if let TrimmedDefPaths::GoodPath = tcx.sess.opts.trimmed_def_paths {
         // For good paths causing this bug, the `rustc_middle::ty::print::with_no_trimmed_paths`
@@ -2446,8 +2477,29 @@ fn trimmed_def_paths(tcx: TyCtxt<'_>, (): ()) -> FxHashMap<DefId, Symbol> {
     });
 
     for ((_, symbol), opt_def_id) in unique_symbols_rev.drain() {
+        use std::collections::hash_map::Entry::{Occupied, Vacant};
+
         if let Some(def_id) = opt_def_id {
-            map.insert(def_id, symbol);
+            match map.entry(def_id) {
+                Occupied(mut v) => {
+                    // A single DefId can be known under multiple names (e.g.,
+                    // with a `pub use ... as ...;`). We need to ensure that the
+                    // name placed in this map is chosen deterministically, so
+                    // if we find multiple names (`symbol`) resolving to the
+                    // same `def_id`, we prefer the lexicographically smallest
+                    // name.
+                    //
+                    // Any stable ordering would be fine here though.
+                    if *v.get() != symbol {
+                        if v.get().as_str() > symbol.as_str() {
+                            v.insert(symbol);
+                        }
+                    }
+                }
+                Vacant(v) => {
+                    v.insert(symbol);
+                }
+            }
         }
     }
 

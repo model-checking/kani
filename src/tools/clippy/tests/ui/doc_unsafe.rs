@@ -34,16 +34,25 @@ mod private_mod {
 
 pub use private_mod::republished;
 
-pub trait UnsafeTrait {
+pub trait SafeTraitUnsafeMethods {
     unsafe fn woefully_underdocumented(self);
 
     /// # Safety
     unsafe fn at_least_somewhat_documented(self);
 }
 
+pub unsafe trait UnsafeTrait {
+    fn method();
+}
+
+/// # Safety
+pub unsafe trait DocumentedUnsafeTrait {
+    fn method2();
+}
+
 pub struct Struct;
 
-impl UnsafeTrait for Struct {
+impl SafeTraitUnsafeMethods for Struct {
     unsafe fn woefully_underdocumented(self) {
         // all is well
     }
@@ -51,6 +60,14 @@ impl UnsafeTrait for Struct {
     unsafe fn at_least_somewhat_documented(self) {
         // all is still well
     }
+}
+
+unsafe impl UnsafeTrait for Struct {
+    fn method() {}
+}
+
+unsafe impl DocumentedUnsafeTrait for Struct {
+    fn method2() {}
 }
 
 impl Struct {
@@ -97,4 +114,19 @@ fn main() {
         private_mod::only_crate_wide_accessible();
         drive();
     }
+}
+
+// do not lint if any parent has `#[doc(hidden)]` attribute
+// see #7347
+#[doc(hidden)]
+pub mod __macro {
+    pub struct T;
+    impl T {
+        pub unsafe fn f() {}
+    }
+}
+
+/// # Implementation safety
+pub unsafe trait DocumentedUnsafeTraitWithImplementationHeader {
+    fn method();
 }

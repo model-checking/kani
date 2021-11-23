@@ -315,8 +315,13 @@ impl<'a> ResolverExpand for Resolver<'a> {
     }
 
     fn check_unused_macros(&mut self) {
-        for (_, &(node_id, span)) in self.unused_macros.iter() {
-            self.lint_buffer.buffer_lint(UNUSED_MACROS, node_id, span, "unused macro definition");
+        for (_, &(node_id, ident)) in self.unused_macros.iter() {
+            self.lint_buffer.buffer_lint(
+                UNUSED_MACROS,
+                node_id,
+                ident.span,
+                &format!("unused macro definition: `{}`", ident.as_str()),
+            );
         }
     }
 
@@ -1137,7 +1142,7 @@ impl<'a> Resolver<'a> {
         }
         if let Some(depr) = &ext.deprecation {
             let path = pprust::path_to_string(&path);
-            let (message, lint) = stability::deprecation_message(depr, "macro", &path);
+            let (message, lint) = stability::deprecation_message_and_lint(depr, "macro", &path);
             stability::early_report_deprecation(
                 &mut self.lint_buffer,
                 &message,

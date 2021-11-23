@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::{span_lint, span_lint_and_then};
 use rustc_ast::ast::{
-    Arm, AssocItem, AssocItemKind, Attribute, Block, FnDecl, FnKind, Item, ItemKind, Local, Pat, PatKind,
+    self, Arm, AssocItem, AssocItemKind, Attribute, Block, FnDecl, Item, ItemKind, Local, Pat, PatKind,
 };
 use rustc_ast::visit::{walk_block, walk_expr, walk_pat, Visitor};
 use rustc_lint::{EarlyContext, EarlyLintPass};
@@ -43,7 +43,7 @@ declare_clippy_lint! {
     /// let (a, b, c, d, e, f, g) = (...);
     /// ```
     pub MANY_SINGLE_CHAR_NAMES,
-    style,
+    pedantic,
     "too many single character bindings"
 }
 
@@ -357,7 +357,7 @@ impl EarlyLintPass for NonExpressiveNames {
             return;
         }
 
-        if let ItemKind::Fn(box FnKind(_, ref sig, _, Some(ref blk))) = item.kind {
+        if let ItemKind::Fn(box ast::Fn { ref sig, body: Some(ref blk), .. }) = item.kind {
             do_check(self, cx, &item.attrs, &sig.decl, blk);
         }
     }
@@ -367,7 +367,7 @@ impl EarlyLintPass for NonExpressiveNames {
             return;
         }
 
-        if let AssocItemKind::Fn(box FnKind(_, ref sig, _, Some(ref blk))) = item.kind {
+        if let AssocItemKind::Fn(box ast::Fn { ref sig, body: Some(ref blk), .. }) = item.kind {
             do_check(self, cx, &item.attrs, &sig.decl, blk);
         }
     }

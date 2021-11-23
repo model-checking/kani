@@ -19,8 +19,8 @@ use rustc_middle::ty::layout::{FnAbiOf, HasTyCtxt, LayoutOf};
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::{bug, span_bug};
 use rustc_span::{sym, symbol::kw, Span, Symbol};
-use rustc_target::abi::{self, HasDataLayout, Primitive};
-use rustc_target::spec::PanicStrategy;
+use rustc_target::abi::{self, Align, HasDataLayout, Primitive};
+use rustc_target::spec::{HasTargetSpec, PanicStrategy};
 
 use std::cmp::Ordering;
 use std::iter;
@@ -71,7 +71,7 @@ fn get_simple_intrinsic(cx: &CodegenCx<'ll, '_>, name: Symbol) -> Option<(&'ll T
         sym::roundf64 => "llvm.round.f64",
         _ => return None,
     };
-    Some(cx.get_intrinsic(&llvm_name))
+    Some(cx.get_intrinsic(llvm_name))
 }
 
 impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx> {
@@ -399,6 +399,14 @@ impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx> {
         if unsafe { llvm::LLVMRustVersionMajor() } < 12 {
             self.call_intrinsic("llvm.sideeffect", &[]);
         }
+    }
+
+    fn type_test(&mut self, pointer: Self::Value, typeid: Self::Value) -> Self::Value {
+        // Test the called operand using llvm.type.test intrinsic. The LowerTypeTests link-time
+        // optimization pass replaces calls to this intrinsic with code to test type membership.
+        let i8p_ty = self.type_i8p();
+        let bitcast = self.bitcast(pointer, i8p_ty);
+        self.call_intrinsic("llvm.type.test", &[bitcast, typeid])
     }
 
     fn va_start(&mut self, va_list: &'ll Value) -> &'ll Value {
@@ -743,7 +751,7 @@ fn gen_fn<'ll, 'tcx>(
 ) -> (&'ll Type, &'ll Value) {
     let fn_abi = cx.fn_abi_of_fn_ptr(rust_fn_sig, ty::List::empty());
     let llty = fn_abi.llvm_type(cx);
-    let llfn = cx.declare_fn(name, &fn_abi);
+    let llfn = cx.declare_fn(name, fn_abi);
     cx.set_frame_pointer_type(llfn);
     cx.apply_target_cpu_attr(llfn);
     // FIXME(eddyb) find a nicer way to do this.
@@ -849,28 +857,39 @@ fn generic_simd_intrinsic(
     let arg_tys = sig.inputs();
 
     if name == sym::simd_select_bitmask {
-        let in_ty = arg_tys[0];
-        let m_len = match in_ty.kind() {
-            // Note that this `.unwrap()` crashes for isize/usize, that's sort
-            // of intentional as there's not currently a use case for that.
-            ty::Int(i) => i.bit_width().unwrap(),
-            ty::Uint(i) => i.bit_width().unwrap(),
-            _ => return_error!("`{}` is not an integral type", in_ty),
-        };
         require_simd!(arg_tys[1], "argument");
-        let (v_len, _) = arg_tys[1].simd_size_and_type(bx.tcx());
-        require!(
-            // Allow masks for vectors with fewer than 8 elements to be
-            // represented with a u8 or i8.
-            m_len == v_len || (m_len == 8 && v_len < 8),
-            "mismatched lengths: mask length `{}` != other vector length `{}`",
-            m_len,
-            v_len
-        );
+        let (len, _) = arg_tys[1].simd_size_and_type(bx.tcx());
+
+        let expected_int_bits = (len.max(8) - 1).next_power_of_two();
+        let expected_bytes = len / 8 + ((len % 8 > 0) as u64);
+
+        let mask_ty = arg_tys[0];
+        let mask = match mask_ty.kind() {
+            ty::Int(i) if i.bit_width() == Some(expected_int_bits) => args[0].immediate(),
+            ty::Uint(i) if i.bit_width() == Some(expected_int_bits) => args[0].immediate(),
+            ty::Array(elem, len)
+                if matches!(elem.kind(), ty::Uint(ty::UintTy::U8))
+                    && len.try_eval_usize(bx.tcx, ty::ParamEnv::reveal_all())
+                        == Some(expected_bytes) =>
+            {
+                let place = PlaceRef::alloca(bx, args[0].layout);
+                args[0].val.store(bx, place);
+                let int_ty = bx.type_ix(expected_bytes * 8);
+                let ptr = bx.pointercast(place.llval, bx.cx.type_ptr_to(int_ty));
+                bx.load(int_ty, ptr, Align::ONE)
+            }
+            _ => return_error!(
+                "invalid bitmask `{}`, expected `u{}` or `[u8; {}]`",
+                mask_ty,
+                expected_int_bits,
+                expected_bytes
+            ),
+        };
+
         let i1 = bx.type_i1();
-        let im = bx.type_ix(v_len);
-        let i1xn = bx.type_vector(i1, v_len);
-        let m_im = bx.trunc(args[0].immediate(), im);
+        let im = bx.type_ix(len);
+        let i1xn = bx.type_vector(i1, len);
+        let m_im = bx.trunc(mask, im);
         let m_i1s = bx.bitcast(m_im, i1xn);
         return Ok(bx.select(m_i1s, args[1].immediate(), args[2].immediate()));
     }
@@ -1048,16 +1067,16 @@ fn generic_simd_intrinsic(
 
     if name == sym::simd_bitmask {
         // The `fn simd_bitmask(vector) -> unsigned integer` intrinsic takes a
-        // vector mask and returns an unsigned integer containing the most
-        // significant bit (MSB) of each lane.
-
-        // If the vector has less than 8 lanes, a u8 is returned with zeroed
-        // trailing bits.
+        // vector mask and returns the most significant bit (MSB) of each lane in the form
+        // of either:
+        // * an unsigned integer
+        // * an array of `u8`
+        // If the vector has less than 8 lanes, a u8 is returned with zeroed trailing bits.
+        //
+        // The bit order of the result depends on the byte endianness, LSB-first for little
+        // endian and MSB-first for big endian.
         let expected_int_bits = in_len.max(8);
-        match ret_ty.kind() {
-            ty::Uint(i) if i.bit_width() == Some(expected_int_bits) => (),
-            _ => return_error!("bitmask `{}`, expected `u{}`", ret_ty, expected_int_bits),
-        }
+        let expected_bytes = expected_int_bits / 8 + ((expected_int_bits % 8 > 0) as u64);
 
         // Integer vector <i{in_bitwidth} x in_len>:
         let (i_xn, in_elem_bitwidth) = match in_elem.kind() {
@@ -1087,8 +1106,34 @@ fn generic_simd_intrinsic(
         let i1xn = bx.trunc(i_xn_msb, bx.type_vector(bx.type_i1(), in_len));
         // Bitcast <i1 x N> to iN:
         let i_ = bx.bitcast(i1xn, bx.type_ix(in_len));
-        // Zero-extend iN to the bitmask type:
-        return Ok(bx.zext(i_, bx.type_ix(expected_int_bits)));
+
+        match ret_ty.kind() {
+            ty::Uint(i) if i.bit_width() == Some(expected_int_bits) => {
+                // Zero-extend iN to the bitmask type:
+                return Ok(bx.zext(i_, bx.type_ix(expected_int_bits)));
+            }
+            ty::Array(elem, len)
+                if matches!(elem.kind(), ty::Uint(ty::UintTy::U8))
+                    && len.try_eval_usize(bx.tcx, ty::ParamEnv::reveal_all())
+                        == Some(expected_bytes) =>
+            {
+                // Zero-extend iN to the array lengh:
+                let ze = bx.zext(i_, bx.type_ix(expected_bytes * 8));
+
+                // Convert the integer to a byte array
+                let ptr = bx.alloca(bx.type_ix(expected_bytes * 8), Align::ONE);
+                bx.store(ze, ptr, Align::ONE);
+                let array_ty = bx.type_array(bx.type_i8(), expected_bytes);
+                let ptr = bx.pointercast(ptr, bx.cx.type_ptr_to(array_ty));
+                return Ok(bx.load(array_ty, ptr, Align::ONE));
+            }
+            _ => return_error!(
+                "cannot return `{}`, expected `u{}` or `[u8; {}]`",
+                ret_ty,
+                expected_int_bits,
+                expected_bytes
+            ),
+        }
     }
 
     fn simd_simple_float_intrinsic(
@@ -1159,7 +1204,7 @@ fn generic_simd_intrinsic(
             _ => return_error!("unrecognized intrinsic `{}`", name),
         };
         let llvm_name = &format!("llvm.{0}.v{1}{2}", intr_name, in_len, elem_ty_str);
-        let f = bx.declare_cfn(&llvm_name, llvm::UnnamedAddr::No, fn_ty);
+        let f = bx.declare_cfn(llvm_name, llvm::UnnamedAddr::No, fn_ty);
         let c =
             bx.call(fn_ty, f, &args.iter().map(|arg| arg.immediate()).collect::<Vec<_>>(), None);
         Ok(c)
@@ -1190,11 +1235,28 @@ fn generic_simd_intrinsic(
     // FIXME: use:
     //  https://github.com/llvm-mirror/llvm/blob/master/include/llvm/IR/Function.h#L182
     //  https://github.com/llvm-mirror/llvm/blob/master/include/llvm/IR/Intrinsics.h#L81
-    fn llvm_vector_str(elem_ty: Ty<'_>, vec_len: u64, no_pointers: usize) -> String {
+    fn llvm_vector_str(
+        elem_ty: Ty<'_>,
+        vec_len: u64,
+        no_pointers: usize,
+        bx: &Builder<'a, 'll, 'tcx>,
+    ) -> String {
         let p0s: String = "p0".repeat(no_pointers);
         match *elem_ty.kind() {
-            ty::Int(v) => format!("v{}{}i{}", vec_len, p0s, v.bit_width().unwrap()),
-            ty::Uint(v) => format!("v{}{}i{}", vec_len, p0s, v.bit_width().unwrap()),
+            ty::Int(v) => format!(
+                "v{}{}i{}",
+                vec_len,
+                p0s,
+                // Normalize to prevent crash if v: IntTy::Isize
+                v.normalize(bx.target_spec().pointer_width).bit_width().unwrap()
+            ),
+            ty::Uint(v) => format!(
+                "v{}{}i{}",
+                vec_len,
+                p0s,
+                // Normalize to prevent crash if v: UIntTy::Usize
+                v.normalize(bx.target_spec().pointer_width).bit_width().unwrap()
+            ),
             ty::Float(v) => format!("v{}{}f{}", vec_len, p0s, v.bit_width()),
             _ => unreachable!(),
         }
@@ -1330,11 +1392,11 @@ fn generic_simd_intrinsic(
 
         // Type of the vector of pointers:
         let llvm_pointer_vec_ty = llvm_vector_ty(bx, underlying_ty, in_len, pointer_count);
-        let llvm_pointer_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count);
+        let llvm_pointer_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count, bx);
 
         // Type of the vector of elements:
         let llvm_elem_vec_ty = llvm_vector_ty(bx, underlying_ty, in_len, pointer_count - 1);
-        let llvm_elem_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count - 1);
+        let llvm_elem_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count - 1, bx);
 
         let llvm_intrinsic =
             format!("llvm.masked.gather.{}.{}", llvm_elem_vec_str, llvm_pointer_vec_str);
@@ -1458,11 +1520,11 @@ fn generic_simd_intrinsic(
 
         // Type of the vector of pointers:
         let llvm_pointer_vec_ty = llvm_vector_ty(bx, underlying_ty, in_len, pointer_count);
-        let llvm_pointer_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count);
+        let llvm_pointer_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count, bx);
 
         // Type of the vector of elements:
         let llvm_elem_vec_ty = llvm_vector_ty(bx, underlying_ty, in_len, pointer_count - 1);
-        let llvm_elem_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count - 1);
+        let llvm_elem_vec_str = llvm_vector_str(underlying_ty, in_len, pointer_count - 1, bx);
 
         let llvm_intrinsic =
             format!("llvm.masked.scatter.{}.{}", llvm_elem_vec_str, llvm_pointer_vec_str);
@@ -1793,7 +1855,7 @@ unsupported {} from `{}` with element `{}` of size `{}` to `{}`"#,
         let vec_ty = bx.cx.type_vector(elem_ty, in_len as u64);
 
         let fn_ty = bx.type_func(&[vec_ty, vec_ty], vec_ty);
-        let f = bx.declare_cfn(&llvm_intrinsic, llvm::UnnamedAddr::No, fn_ty);
+        let f = bx.declare_cfn(llvm_intrinsic, llvm::UnnamedAddr::No, fn_ty);
         let v = bx.call(fn_ty, f, &[lhs, rhs], None);
         return Ok(v);
     }

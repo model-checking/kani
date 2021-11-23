@@ -124,6 +124,7 @@ impl<'a, T> Iter<'a, T> {
     /// // Now `as_slice` returns "[2, 3]":
     /// println!("{:?}", iter.as_slice());
     /// ```
+    #[must_use]
     #[stable(feature = "iter_to_slice", since = "1.4.0")]
     pub fn as_slice(&self) -> &'a [T] {
         self.make_slice()
@@ -267,6 +268,7 @@ impl<'a, T> IterMut<'a, T> {
     /// // Now slice is "[2, 2, 3]":
     /// println!("{:?}", slice);
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "iter_to_slice", since = "1.4.0")]
     pub fn into_slice(self) -> &'a mut [T] {
         // SAFETY: the iterator was created from a mutable slice with pointer
@@ -297,6 +299,7 @@ impl<'a, T> IterMut<'a, T> {
     /// // Now `as_slice` returns "[2, 3]":
     /// assert_eq!(iter.as_slice(), &[2, 3]);
     /// ```
+    #[must_use]
     #[stable(feature = "slice_iter_mut_as_slice", since = "1.53.0")]
     pub fn as_slice(&self) -> &[T] {
         self.make_slice()
@@ -836,7 +839,6 @@ impl<T, P> FusedIterator for SplitInclusiveMut<'_, T, P> where P: FnMut(&T) -> b
 /// [`rsplit`]: slice::rsplit
 /// [slices]: slice
 #[stable(feature = "slice_rsplit", since = "1.27.0")]
-#[derive(Clone)] // Is this correct, or does it incorrectly require `T: Clone`?
 pub struct RSplit<'a, T: 'a, P>
 where
     P: FnMut(&T) -> bool,
@@ -861,6 +863,17 @@ where
             .field("v", &self.inner.v)
             .field("finished", &self.inner.finished)
             .finish()
+    }
+}
+
+// FIXME(#26925) Remove in favor of `#[derive(Clone)]`
+#[stable(feature = "slice_rsplit", since = "1.27.0")]
+impl<T, P> Clone for RSplit<'_, T, P>
+where
+    P: Clone + FnMut(&T) -> bool,
+{
+    fn clone(&self) -> Self {
+        RSplit { inner: self.inner.clone() }
     }
 }
 
@@ -1711,6 +1724,7 @@ impl<'a, T> ChunksExact<'a, T> {
     /// Returns the remainder of the original slice that is not going to be
     /// returned by the iterator. The returned slice has at most `chunk_size-1`
     /// elements.
+    #[must_use]
     #[stable(feature = "chunks_exact", since = "1.31.0")]
     pub fn remainder(&self) -> &'a [T] {
         self.rem
@@ -1869,6 +1883,7 @@ impl<'a, T> ChunksExactMut<'a, T> {
     /// Returns the remainder of the original slice that is not going to be
     /// returned by the iterator. The returned slice has at most `chunk_size-1`
     /// elements.
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "chunks_exact", since = "1.31.0")]
     pub fn into_remainder(self) -> &'a mut [T] {
         self.rem
@@ -2139,6 +2154,7 @@ impl<'a, T, const N: usize> ArrayChunks<'a, T, N> {
     /// Returns the remainder of the original slice that is not going to be
     /// returned by the iterator. The returned slice has at most `N-1`
     /// elements.
+    #[must_use]
     #[unstable(feature = "array_chunks", issue = "74985")]
     pub fn remainder(&self) -> &'a [T] {
         self.rem
@@ -2264,6 +2280,7 @@ impl<'a, T, const N: usize> ArrayChunksMut<'a, T, N> {
     /// Returns the remainder of the original slice that is not going to be
     /// returned by the iterator. The returned slice has at most `N-1`
     /// elements.
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[unstable(feature = "array_chunks", issue = "74985")]
     pub fn into_remainder(self) -> &'a mut [T] {
         self.rem
@@ -2713,6 +2730,7 @@ impl<'a, T> RChunksExact<'a, T> {
     /// Returns the remainder of the original slice that is not going to be
     /// returned by the iterator. The returned slice has at most `chunk_size-1`
     /// elements.
+    #[must_use]
     #[stable(feature = "rchunks", since = "1.31.0")]
     pub fn remainder(&self) -> &'a [T] {
         self.rem
@@ -2875,6 +2893,7 @@ impl<'a, T> RChunksExactMut<'a, T> {
     /// Returns the remainder of the original slice that is not going to be
     /// returned by the iterator. The returned slice has at most `chunk_size-1`
     /// elements.
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "rchunks", since = "1.31.0")]
     pub fn into_remainder(self) -> &'a mut [T] {
         self.rem

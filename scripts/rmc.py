@@ -9,6 +9,7 @@ import sys
 import re
 import pathlib
 
+import rmc_flags
 
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
@@ -30,16 +31,17 @@ OVERFLOW_CHECKS = ["--conversion-check",
                    "--unsigned-overflow-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
+
 # A Scanner is intended to match a pattern with an output
 # and edit the output based on an edit function
 class Scanner:
     def __init__(self, pattern, edit_fun):
-        self.pattern  = re.compile(pattern)
+        self.pattern = re.compile(pattern)
         self.edit_fun = edit_fun
 
     # Returns whether the scanner's pattern matches some text
     def match(self, text):
-        return self.pattern.search(text) != None
+        return self.pattern.search(text) is not None
 
     # Returns an edited output based on the scanner's edit function
     def edit_output(self, text):
@@ -78,8 +80,8 @@ def add_set_cbmc_flags(args, flags):
         else:
             args.cbmc_args.append(arg)
 
-# Add sets of selected default CBMC flags
-def add_selected_default_cbmc_flags(args):
+# Add sets of selected default CBMC checks
+def add_selected_default_cbmc_checks(args):
     if args.memory_safety_checks:
         add_set_cbmc_flags(args, MEMORY_SAFETY_CHECKS)
     if args.overflow_checks:
@@ -87,9 +89,56 @@ def add_selected_default_cbmc_flags(args):
     if args.unwinding_checks:
         add_set_cbmc_flags(args, UNWINDING_CHECKS)
 
+# Add a common CBMC flag to `cbmc_args`
+def add_common_cbmc_flag(args, flag_info):
+    (cbmc_arg, rmc_arg, _) = flag_info
+    rmc_value = getattr(args, rmc_arg)
+    if rmc_value is not None:
+        args.cbmc_args.extend([cbmc_arg, rmc_value])
+
+# Set a common CBMC flag by examining both RMC & CBMC flags
+def set_common_cbmc_flag(args, flag_info):
+    (cbmc_arg, rmc_arg, default_value) = flag_info
+    if getattr(args, rmc_arg) is not None:
+        if cbmc_arg in args.cbmc_args:
+            # Case #1: The flag is specified twice - Result: Raise an exception
+            raise Exception(f"Conflicting flags: `{cbmc_arg}` was specified twice.")
+        # Case #2: Flag specified via `args.rmc_arg` only - Result: Use `args.rmc_arg`
+        return
+    if cbmc_arg in args.cbmc_args:
+        # Case #3: Flag specified via `cbmc_arg` only - Result: Use `cbmc_arg`
+        # Note: `args.rmc_arg` is `None` so nothing will be added later
+        return
+    # Case #4: The flag has not been specified - Result: Assign default value
+    setattr(args, rmc_arg, default_value)
+
+def process_object_bits_flag(args):
+    flag_info = ("--object-bits", "object_bits", rmc_flags.DEFAULT_OBJECT_BITS_VALUE)
+    set_common_cbmc_flag(args, flag_info)
+    add_common_cbmc_flag(args, flag_info)
+
+def process_unwind_flag(args):
+    # We raise an exception if `--auto-unwind` is being used in
+    # addition to other `--unwind` flags in RMC or CBMC
+    if args.auto_unwind:
+        if args.unwind is not None or "--unwind" in args.cbmc_args:
+            raise Exception("Conflicting flags: `--auto-unwind` is not"
+                            " compatible with other `--unwind` flags.")
+        return
+    flag_info = ("--unwind", "unwind", rmc_flags.DEFAULT_UNWIND_VALUE)
+    set_common_cbmc_flag(args, flag_info)
+    add_common_cbmc_flag(args, flag_info)
+
+# Process common CBMC flags
+def process_common_cbmc_flags(args):
+    # For each CBMC flag we set the RMC flag if needed, then
+    # we add the associated CBMC flag if RMC flag has been set
+    process_object_bits_flag(args)
+    process_unwind_flag(args)
+
 # Updates environment to use gotoc backend debugging
 def add_rmc_rustc_debug_to_env(env):
-    env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_llvm::gotoc")
+    env["RUSTC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_rmc")
 
 # Prints info about the RMC process
 def print_rmc_step_status(step_name, completed_process, verbose=False):
@@ -101,7 +150,17 @@ def print_rmc_step_status(step_name, completed_process, verbose=False):
         print(f"[RMC] cmd: {' '.join(completed_process.args)}")
 
 # Handler for running arbitrary command-line commands
-def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, verbose=False, debug=False, scanners=[], dry_run=False):
+def run_cmd(
+        cmd,
+        label=None,
+        cwd=None,
+        env=None,
+        output_to=None,
+        quiet=False,
+        verbose=False,
+        debug=False,
+        scanners=[],
+        dry_run=False):
     # If this a dry run, we emulate running a successful process whose output is the command itself
     # We set `output_to` to `stdout` so that the output is not omitted below
     if dry_run:
@@ -118,7 +177,7 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
             env=env, cwd=cwd)
 
     # Print status
-    if label != None:
+    if label is not None:
         print_rmc_step_status(label, process, verbose)
 
     stdout = process.stdout
@@ -131,35 +190,47 @@ def run_cmd(cmd, label=None, cwd=None, env=None, output_to=None, quiet=False, ve
         print(stdout)
 
     # Write to file if given
-    if output_to != None and output_to != "stdout":
+    if output_to is not None and output_to != "stdout":
         with open(output_to, "w") as f:
             f.write(stdout)
 
     return process.returncode
 
+def rustc_flags(mangler, symbol_table_passes):
+    flags = [
+        "-Z", f"symbol-mangling-version={mangler}",
+        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
+    ]
+    if "RUSTFLAGS" in os.environ:
+        flags += os.environ["RUSTFLAGS"].split(" ")
+    return flags
+
 # Generates a symbol table from a rust file
-def compile_single_rust_file(input_filename, output_filename, verbose=False, debug=False, keep_temps=False, mangler="v0", dry_run=False, use_abs=False, abs_type="std", symbol_table_passes=[]):
+def compile_single_rust_file(
+        input_filename,
+        base,
+        output_filename,
+        verbose=False,
+        debug=False,
+        keep_temps=False,
+        mangler="v0",
+        dry_run=False,
+        use_abs=False,
+        abs_type="std",
+        symbol_table_passes=[]):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
+        atexit.register(delete_file, base + ".type_map.json")
 
-    build_cmd = [RMC_RUSTC_EXE,
-            "-Z", "codegen-backend=gotoc",
-            "-Z", "trim-diagnostic-paths=no",
-            "-Z", f"symbol-mangling-version={mangler}",
-            "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-            "--crate-type=lib",
-            "-Z", "human_readable_cgu_names",
-            f"--cfg={RMC_CFG}"]
+    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes)
 
     if use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
-                "--cfg=use_abs",
-                "--cfg", f'abs_type="{abs_type}"']
+                      "--cfg=use_abs",
+                      "--cfg", f'abs_type="{abs_type}"']
 
-    build_cmd += ["-o", output_filename, input_filename]
+    build_cmd += ["-o", base + ".o", input_filename]
 
-    if "RUSTFLAGS" in os.environ:
-        build_cmd += os.environ["RUSTFLAGS"].split(" ")
     build_env = os.environ
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
@@ -167,27 +238,46 @@ def compile_single_rust_file(input_filename, output_filename, verbose=False, deb
     return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
-def cargo_build(crate, target_dir, verbose=False, debug=False, mangler="v0", dry_run=False, symbol_table_passes=[]):
+def cargo_build(
+        crate,
+        target_dir,
+        build_target=None,
+        verbose=False,
+        debug=False,
+        mangler="v0",
+        dry_run=False,
+        symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
-    rustflags = [
-        "-Z", "codegen-backend=gotoc",
-        "-Z", "trim-diagnostic-paths=no",
-        "-Z", f"symbol-mangling-version={mangler}",
-        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-        "-Z", "human_readable_cgu_names",
-        f"--cfg={RMC_CFG}"]
-    rustflags = " ".join(rustflags)
-    if "RUSTFLAGS" in os.environ:
-        rustflags = os.environ["RUSTFLAGS"] + " " + rustflags
+    def get_config(option):
+        process = subprocess.run(
+            [RMC_RUSTC_EXE, option],
+            universal_newlines=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=os.environ,
+            cwd=crate)
+        if process.returncode != EXIT_CODE_SUCCESS:
+            raise Exception("[Error] Fail to extract rmc configuration.\n{}".format(
+                process.stdout))
+        return process.stdout
 
-    build_cmd = ["cargo", "build", "--lib", "--target-dir", str(target_dir)]
-    build_env = {"RUSTFLAGS": rustflags,
-                 "RUSTC": RMC_RUSTC_EXE,
-                 "PATH": os.environ["PATH"],
-                 }
+    rustflags = rustc_flags(mangler, symbol_table_passes) + get_config("--rmc-flags").split()
+    rustc_path = get_config("--rmc-path").strip()
+    build_cmd = ["cargo", "build", "--target-dir", str(target_dir)]
+    if build_target:
+        build_cmd += ["--target", str(build_target)]
+    build_env = os.environ
+    build_env.update({"RUSTFLAGS": " ".join(rustflags),
+                      "RUSTC": rustc_path
+                      })
     if debug:
         add_rmc_rustc_debug_to_env(build_env)
+    if verbose:
+        build_cmd.append("-v")
+    if dry_run:
+        print("{}".format(build_env))
+
     return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
 
 # Adds information about unwinding to the RMC output
@@ -197,16 +287,27 @@ def append_unwind_tip(text):
     return text + unwind_tip
 
 # Generates a goto program from a symbol table
-def symbol_table_to_gotoc(json_filename, cbmc_filename, verbose=False, keep_temps=False, dry_run=False):
-    if not keep_temps:
-        atexit.register(delete_file, cbmc_filename)
-    cmd = ["symtab2gb", json_filename, "--out", cbmc_filename]
-    return run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run)
+def symbol_table_to_gotoc(json_files, verbose=False, keep_temps=False, dry_run=False):
+    out_files = []
+    for json in json_files:
+        out_file = json + ".out"
+        out_files.append(out_file)
+        if not keep_temps:
+            atexit.register(delete_file, out_file)
+
+        cmd = ["symtab2gb", json, "--out", out_file]
+        if run_cmd(cmd, label="to-gotoc", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS:
+            raise Exception("Failed to run command: {}".format(" ".join(cmd)))
+
+    return out_files
 
 # Links in external C programs into a goto program
-def link_c_lib(src, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False):
-    cmd = ["goto-cc"] + ["--function", function] + [src] + c_lib + ["-o", dst]
-    return run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run)
+def link_c_lib(srcs, dst, c_lib, verbose=False, quiet=False, function="main", dry_run=False, keep_temps=False):
+    cmd = ["goto-cc"] + ["--function", function] + srcs + c_lib + ["-o", dst]
+    if not keep_temps:
+        atexit.register(delete_file, dst)
+    if run_cmd(cmd, label="goto-cc", verbose=verbose, quiet=quiet, dry_run=dry_run) != EXIT_CODE_SUCCESS:
+        raise Exception("Failed to run command: {}".format(" ".join(cmd)))
 
 # Runs CBMC on a goto program
 def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False):
@@ -217,10 +318,28 @@ def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False
         unwind_asserts_pattern = ".*unwinding assertion.*: FAILURE"
         unwind_asserts_scanner = Scanner(unwind_asserts_pattern, append_unwind_tip)
         scanners.append(unwind_asserts_scanner)
-    return run_cmd(cbmc_cmd, label="cbmc", output_to="stdout", verbose=verbose, quiet=quiet, scanners=scanners, dry_run=dry_run)
+    return run_cmd(
+        cbmc_cmd,
+        label="cbmc",
+        output_to="stdout",
+        verbose=verbose,
+        quiet=quiet,
+        scanners=scanners,
+        dry_run=dry_run)
 
 # Generates a viewer report from a goto program
-def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=False, keep_temps=False, function="main", srcdir=".", wkdir=".", outdir=".", dry_run=False):
+def run_visualize(
+        cbmc_filename,
+        prop_args,
+        cover_args,
+        verbose=False,
+        quiet=False,
+        keep_temps=False,
+        function="main",
+        srcdir=".",
+        wkdir=".",
+        outdir=".",
+        dry_run=False):
     results_filename = os.path.join(outdir, "results.xml")
     coverage_filename = os.path.join(outdir, "coverage.xml")
     property_filename = os.path.join(outdir, "property.xml")
@@ -231,7 +350,9 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
     # 1) cbmc --xml-ui --trace ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > results.xml
     # 2) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > coverage.xml
     # 3) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > property.xml
-    # 4) cbmc-viewer --result results.xml --coverage coverage.xml --property property.xml --srcdir . --goto <cbmc_filename> --reportdir report
+    # 4) cbmc-viewer --result results.xml --coverage coverage.xml
+    #                --property property.xml --srcdir .
+    #                --goto <cbmc_filename> --reportdir report
 
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
         cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
@@ -250,7 +371,17 @@ def run_visualize(cbmc_filename, prop_args, cover_args, verbose=False, quiet=Fal
     return retcode
 
 # Handler for calling cbmc-viewer
-def run_cbmc_viewer(goto_filename, results_filename, coverage_filename, property_filename, verbose=False, quiet=False, srcdir=".", wkdir=".", reportdir="report", dry_run=False):
+def run_cbmc_viewer(
+        goto_filename,
+        results_filename,
+        coverage_filename,
+        property_filename,
+        verbose=False,
+        quiet=False,
+        srcdir=".",
+        wkdir=".",
+        reportdir="report",
+        dry_run=False):
     cmd = ["cbmc-viewer"] + \
           ["--result", results_filename] + \
           ["--coverage", coverage_filename] + \

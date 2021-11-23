@@ -78,7 +78,8 @@ impl<'a, 'tcx> BlanketImplFinder<'a, 'tcx> {
                             );
                             match infcx.evaluate_obligation(&obligation) {
                                 Ok(eval_result) if eval_result.may_apply() => {}
-                                Err(traits::OverflowError) => {}
+                                Err(traits::OverflowError::Canonical) => {}
+                                Err(traits::OverflowError::ErrorReporting) => {}
                                 _ => {
                                     return false;
                                 }
@@ -105,7 +106,6 @@ impl<'a, 'tcx> BlanketImplFinder<'a, 'tcx> {
                     visibility: Inherited,
                     def_id: ItemId::Blanket { impl_id: impl_def_id, for_: item_def_id },
                     kind: box ImplItem(Impl {
-                        span: Span::new(self.cx.tcx.def_span(impl_def_id)),
                         unsafety: hir::Unsafety::Normal,
                         generics: (
                             self.cx.tcx.generics_of(impl_def_id),
@@ -114,18 +114,17 @@ impl<'a, 'tcx> BlanketImplFinder<'a, 'tcx> {
                             .clean(self.cx),
                         // FIXME(eddyb) compute both `trait_` and `for_` from
                         // the post-inference `trait_ref`, as it's more accurate.
-                        trait_: Some(trait_ref.clean(self.cx).get_trait_type().unwrap()),
+                        trait_: Some(trait_ref.clean(self.cx)),
                         for_: ty.clean(self.cx),
                         items: self
                             .cx
                             .tcx
                             .associated_items(impl_def_id)
                             .in_definition_order()
-                            .collect::<Vec<_>>()
-                            .clean(self.cx),
-                        negative_polarity: false,
-                        synthetic: false,
-                        blanket_impl: Some(box trait_ref.self_ty().clean(self.cx)),
+                            .map(|x| x.clean(self.cx))
+                            .collect::<Vec<_>>(),
+                        polarity: ty::ImplPolarity::Positive,
+                        kind: ImplKind::Blanket(box trait_ref.self_ty().clean(self.cx)),
                     }),
                     cfg: None,
                 });

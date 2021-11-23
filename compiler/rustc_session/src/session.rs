@@ -2,10 +2,9 @@ use crate::cgu_reuse_tracker::CguReuseTracker;
 use crate::code_stats::CodeStats;
 pub use crate::code_stats::{DataTypeKind, FieldInfo, SizeKind, VariantInfo};
 use crate::config::{self, CrateType, OutputType, SwitchWithOptPath};
-use crate::filesearch;
-use crate::lint::{self, LintId};
 use crate::parse::ParseSess;
 use crate::search_paths::{PathKind, SearchPath};
+use crate::{filesearch, lint};
 
 pub use rustc_ast::attr::MarkedAttrs;
 pub use rustc_ast::Attribute;
@@ -40,10 +39,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-
-pub trait SessionLintStore: sync::Send + sync::Sync {
-    fn name_to_lint(&self, lint_name: &str) -> LintId;
-}
 
 pub struct OptimizationFuel {
     /// If `-zfuel=crate=n` is specified, initially set to `n`, otherwise `0`.
@@ -153,8 +148,6 @@ pub struct Session {
 
     features: OnceCell<rustc_feature::Features>,
 
-    lint_store: OnceCell<Lrc<dyn SessionLintStore>>,
-
     incr_comp_session: OneThread<RefCell<IncrCompSession>>,
     /// Used for incremental compilation tests. Will only be populated if
     /// `-Zquery-dep-graph` is specified.
@@ -168,9 +161,6 @@ pub struct Session {
 
     /// Data about code being compiled, gathered during compilation.
     pub code_stats: CodeStats,
-
-    /// If `-zfuel=crate=n` is specified, `Some(crate)`.
-    optimization_fuel_crate: Option<String>,
 
     /// Tracks fuel info if `-zfuel=crate=n` is specified.
     optimization_fuel: Lock<OptimizationFuel>,
@@ -421,7 +411,7 @@ impl Session {
         self.diagnostic().abort_if_errors();
     }
     pub fn compile_status(&self) -> Result<(), ErrorReported> {
-        if self.has_errors() {
+        if self.diagnostic().has_errors_or_lint_errors() {
             self.diagnostic().emit_stashed_diagnostics();
             Err(ErrorReported)
         } else {
@@ -591,13 +581,6 @@ impl Session {
         }
     }
 
-    pub fn init_lint_store(&self, lint_store: Lrc<dyn SessionLintStore>) {
-        self.lint_store
-            .set(lint_store)
-            .map_err(|_| ())
-            .expect("`lint_store` was initialized twice");
-    }
-
     /// Calculates the flavor of LTO to use for this compilation.
     pub fn lto(&self) -> config::Lto {
         // If our target has codegen requirements ignore the command line
@@ -688,6 +671,9 @@ impl Session {
     }
     pub fn is_nightly_build(&self) -> bool {
         self.opts.unstable_features.is_nightly_build()
+    }
+    pub fn is_sanitizer_cfi_enabled(&self) -> bool {
+        self.opts.debugging_opts.sanitizer.contains(SanitizerSet::CFI)
     }
     pub fn overflow_checks(&self) -> bool {
         self.opts
@@ -896,7 +882,7 @@ impl Session {
     /// This expends fuel if applicable, and records fuel if applicable.
     pub fn consider_optimizing<T: Fn() -> String>(&self, crate_name: &str, msg: T) -> bool {
         let mut ret = true;
-        if let Some(ref c) = self.optimization_fuel_crate {
+        if let Some((ref c, _)) = self.opts.debugging_opts.fuel {
             if c == crate_name {
                 assert_eq!(self.threads(), 1);
                 let mut fuel = self.optimization_fuel.lock();
@@ -1274,7 +1260,6 @@ pub fn build_session(
     let local_crate_source_file =
         local_crate_source_file.map(|path| file_path_mapping.map_prefix(path).0);
 
-    let optimization_fuel_crate = sopts.debugging_opts.fuel.as_ref().map(|i| i.0.clone());
     let optimization_fuel = Lock::new(OptimizationFuel {
         remaining: sopts.debugging_opts.fuel.as_ref().map_or(0, |i| i.1),
         out_of_fuel: false,
@@ -1315,7 +1300,6 @@ pub fn build_session(
         crate_types: OnceCell::new(),
         stable_crate_id: OnceCell::new(),
         features: OnceCell::new(),
-        lint_store: OnceCell::new(),
         incr_comp_session: OneThread::new(RefCell::new(IncrCompSession::NotInitialized)),
         cgu_reuse_tracker,
         prof,
@@ -1326,7 +1310,6 @@ pub fn build_session(
             normalize_projection_ty: AtomicUsize::new(0),
         },
         code_stats: Default::default(),
-        optimization_fuel_crate,
         optimization_fuel,
         print_fuel,
         jobserver: jobserver::client(),
@@ -1373,6 +1356,16 @@ fn validate_commandline_args_with_session_available(sess: &Session) {
         }
     }
 
+    // Do the same for sample profile data.
+    if let Some(ref path) = sess.opts.debugging_opts.profile_sample_use {
+        if !path.exists() {
+            sess.err(&format!(
+                "File `{}` passed to `-C profile-sample-use` does not exist.",
+                path.display()
+            ));
+        }
+    }
+
     // Unwind tables cannot be disabled if the target requires them.
     if let Some(include_uwtables) = sess.opts.cg.force_unwind_tables {
         if sess.target.requires_uwtable && !include_uwtables {
@@ -1404,9 +1397,19 @@ fn validate_commandline_args_with_session_available(sess: &Session) {
     // Cannot enable crt-static with sanitizers on Linux
     if sess.crt_static(None) && !sess.opts.debugging_opts.sanitizer.is_empty() {
         sess.err(
-            "Sanitizer is incompatible with statically linked libc, \
+            "sanitizer is incompatible with statically linked libc, \
                                 disable it using `-C target-feature=-crt-static`",
         );
+    }
+
+    // LLVM CFI requires LTO.
+    if sess.is_sanitizer_cfi_enabled() {
+        if sess.opts.cg.lto == config::LtoCli::Unspecified
+            || sess.opts.cg.lto == config::LtoCli::No
+            || sess.opts.cg.lto == config::LtoCli::Thin
+        {
+            sess.err("`-Zsanitizer=cfi` requires `-Clto`");
+        }
     }
 }
 

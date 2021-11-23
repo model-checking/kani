@@ -2,19 +2,68 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# Usage:
+# rmc-rustc (--rmc-flags | --rmc-path)
+#   - This will print the configurations used to run rmc version of rustc.
+# rmc-rustc RUSTC_OPTIONS
+#   - This will run RUSTC with RMC flags + the given RUSTC_OPTIONS
 set -eu
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 REPO_DIR="$(dirname $SCRIPT_DIR)"
 
+RMC_PATH=${RMC_PATH:-""}
+RMC_LIB_PATH=${RMC_LIB_PATH:-""}
+
 shopt -s nullglob
-RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
+set_rmc_path() {
+    local RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
 
-if [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]; then
-    echo "ERROR: Could not find RMC binary."
-    echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
-    echo "Was RMC successfully built first?"
-    exit 1
+    if [ -z "${RMC_PATH}" ]
+    then
+        if [[ -z ${RMC_CANDIDATES:-""} ]] || [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]
+        then
+            echo "ERROR: Could not find RMC binary."
+            echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
+            echo "Was RMC successfully built first?"
+            exit 1
+        fi
+        RMC_PATH=${RMC_CANDIDATES[0]}
+    fi
+}
+
+set_rmc_lib_path() {
+    if [ -z "${RMC_LIB_PATH}" ]
+    then
+        local RMC_LIB_CANDIDATES=("$REPO_DIR"/target/*/librmc.rlib)
+        if [[ -z ${RMC_LIB_CANDIDATES:-""} ]] || [[ ${#RMC_LIB_CANDIDATES[@]} -ne 1 ]]
+        then
+            echo "ERROR: Could not find RMC library."
+            echo "Looked for: \"$REPO_DIR/target/*/librmc.rlib\""
+            echo "Was RMC library successfully built first?"
+            exit 1
+        fi
+        RMC_LIB_PATH=$(dirname ${RMC_LIB_CANDIDATES[0]})
+    fi
+}
+
+set_rmc_path
+if [ "${1:-''}" == "--rmc-path" ]
+then
+    echo ${RMC_PATH}
+else
+    set_rmc_lib_path
+    RMC_FLAGS="-Z codegen-backend=gotoc \
+            -Z trim-diagnostic-paths=no \
+            -Z human_readable_cgu_names \
+            --cfg=rmc \
+            -L ${RMC_LIB_PATH} \
+            --extern rmc"
+    if [ "${1:-''}" == "--rmc-flags" ]
+    then
+        echo ${RMC_FLAGS}
+    else
+        # Execute rmc
+       "${RMC_PATH}" ${RMC_FLAGS} "$@"
+    fi
 fi
-
-"${RMC_CANDIDATES[0]}" "$@"

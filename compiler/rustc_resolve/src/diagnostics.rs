@@ -11,7 +11,7 @@ use rustc_hir::def::{self, CtorKind, CtorOf, DefKind, NonMacroAttrKind};
 use rustc_hir::def_id::{DefId, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::PrimTy;
 use rustc_middle::bug;
-use rustc_middle::ty::{self, DefIdTree};
+use rustc_middle::ty::DefIdTree;
 use rustc_session::Session;
 use rustc_span::hygiene::MacroKind;
 use rustc_span::lev_distance::find_best_match_for_name;
@@ -66,6 +66,8 @@ crate struct ImportSuggestion {
     pub descr: &'static str,
     pub path: Path,
     pub accessible: bool,
+    /// An extra note that should be issued if this item is suggested
+    pub note: Option<String>,
 }
 
 /// Adjust the impl span so that just the `impl` keyword is taken by removing
@@ -198,7 +200,7 @@ impl<'a> Resolver<'a> {
                 err.span_label(first_use_span, format!("first use of `{}`", name));
                 err
             }
-            ResolutionError::MethodNotMemberOfTrait(method, trait_) => {
+            ResolutionError::MethodNotMemberOfTrait(method, trait_, candidate) => {
                 let mut err = struct_span_err!(
                     self.session,
                     span,
@@ -208,9 +210,17 @@ impl<'a> Resolver<'a> {
                     trait_
                 );
                 err.span_label(span, format!("not a member of trait `{}`", trait_));
+                if let Some(candidate) = candidate {
+                    err.span_suggestion(
+                        method.span,
+                        "there is an associated function with a similar name",
+                        candidate.to_ident_string(),
+                        Applicability::MaybeIncorrect,
+                    );
+                }
                 err
             }
-            ResolutionError::TypeNotMemberOfTrait(type_, trait_) => {
+            ResolutionError::TypeNotMemberOfTrait(type_, trait_, candidate) => {
                 let mut err = struct_span_err!(
                     self.session,
                     span,
@@ -220,9 +230,17 @@ impl<'a> Resolver<'a> {
                     trait_
                 );
                 err.span_label(span, format!("not a member of trait `{}`", trait_));
+                if let Some(candidate) = candidate {
+                    err.span_suggestion(
+                        type_.span,
+                        "there is an associated type with a similar name",
+                        candidate.to_ident_string(),
+                        Applicability::MaybeIncorrect,
+                    );
+                }
                 err
             }
-            ResolutionError::ConstNotMemberOfTrait(const_, trait_) => {
+            ResolutionError::ConstNotMemberOfTrait(const_, trait_, candidate) => {
                 let mut err = struct_span_err!(
                     self.session,
                     span,
@@ -232,6 +250,14 @@ impl<'a> Resolver<'a> {
                     trait_
                 );
                 err.span_label(span, format!("not a member of trait `{}`", trait_));
+                if let Some(candidate) = candidate {
+                    err.span_suggestion(
+                        const_.span,
+                        "there is an associated constant with a similar name",
+                        candidate.to_ident_string(),
+                        Applicability::MaybeIncorrect,
+                    );
+                }
                 err
             }
             ResolutionError::VariableNotBoundInPattern(binding_error) => {
@@ -394,6 +420,10 @@ impl<'a> Resolver<'a> {
                 err.span_label(span, label);
 
                 if let Some((suggestions, msg, applicability)) = suggestion {
+                    if suggestions.is_empty() {
+                        err.help(&msg);
+                        return err;
+                    }
                     err.multipart_suggestion(&msg, suggestions, applicability);
                 }
 
@@ -701,7 +731,7 @@ impl<'a> Resolver<'a> {
                         suggestions.extend(
                             BUILTIN_ATTRIBUTES
                                 .iter()
-                                .map(|(name, ..)| TypoSuggestion::typo_from_res(*name, res)),
+                                .map(|attr| TypoSuggestion::typo_from_res(attr.name, res)),
                         );
                     }
                 }
@@ -777,7 +807,7 @@ impl<'a> Resolver<'a> {
             None => worklist_via_import.pop(),
             Some(x) => Some(x),
         } {
-            let in_module_is_extern = !in_module.def_id().unwrap().is_local();
+            let in_module_is_extern = !in_module.def_id().is_local();
             // We have to visit module children in deterministic order to avoid
             // instabilities in reported imports (#43552).
             in_module.for_each_child(self, |this, ident, ns, name_binding| {
@@ -805,11 +835,22 @@ impl<'a> Resolver<'a> {
                     return;
                 }
 
+                // #90113: Do not count an inaccessible reexported item as a candidate.
+                if let NameBindingKind::Import { binding, .. } = name_binding.kind {
+                    if this.is_accessible_from(binding.vis, parent_scope.module)
+                        && !this.is_accessible_from(name_binding.vis, parent_scope.module)
+                    {
+                        return;
+                    }
+                }
+
                 // collect results based on the filter function
                 // avoid suggesting anything from the same module in which we are resolving
+                // avoid suggesting anything with a hygienic name
                 if ident.name == lookup_ident.name
                     && ns == namespace
                     && !ptr::eq(in_module, parent_scope.module)
+                    && !ident.span.normalize_to_macros_2_0().from_expansion()
                 {
                     let res = name_binding.res();
                     if filter_fn(res) {
@@ -839,11 +880,38 @@ impl<'a> Resolver<'a> {
                         }
 
                         if candidates.iter().all(|v: &ImportSuggestion| v.did != did) {
+                            // See if we're recommending TryFrom, TryInto, or FromIterator and add
+                            // a note about editions
+                            let note = if let Some(did) = did {
+                                let requires_note = !did.is_local()
+                                    && this.cstore().item_attrs(did, this.session).iter().any(
+                                        |attr| {
+                                            if attr.has_name(sym::rustc_diagnostic_item) {
+                                                [sym::TryInto, sym::TryFrom, sym::FromIterator]
+                                                    .map(|x| Some(x))
+                                                    .contains(&attr.value_str())
+                                            } else {
+                                                false
+                                            }
+                                        },
+                                    );
+
+                                requires_note.then(|| {
+                                    format!(
+                                        "'{}' is included in the prelude starting in Edition 2021",
+                                        path_names_to_string(&path)
+                                    )
+                                })
+                            } else {
+                                None
+                            };
+
                             candidates.push(ImportSuggestion {
                                 did,
                                 descr: res.descr(),
                                 path,
                                 accessible: child_accessible,
+                                note,
                             });
                         }
                     }
@@ -860,7 +928,7 @@ impl<'a> Resolver<'a> {
 
                     if !is_extern_crate_that_also_appears_in_prelude {
                         // add the module to the lookup
-                        if seen_modules.insert(module.def_id().unwrap()) {
+                        if seen_modules.insert(module.def_id()) {
                             if via_import { &mut worklist_via_import } else { &mut worklist }
                                 .push((module, path_segments, child_accessible));
                         }
@@ -949,7 +1017,15 @@ impl<'a> Resolver<'a> {
 
         let import_suggestions =
             self.lookup_import_candidates(ident, Namespace::MacroNS, parent_scope, is_expected);
-        show_candidates(err, None, &import_suggestions, false, true);
+        show_candidates(
+            &self.definitions,
+            self.session,
+            err,
+            None,
+            &import_suggestions,
+            false,
+            true,
+        );
 
         if macro_kind == MacroKind::Derive && (ident.name == sym::Send || ident.name == sym::Sync) {
             let msg = format!("unsafe traits like `{}` should be implemented explicitly", ident);
@@ -1124,14 +1200,9 @@ impl<'a> Resolver<'a> {
             (b1, b2, misc1, misc2, false)
         };
 
-        let mut err = struct_span_err!(
-            self.session,
-            ident.span,
-            E0659,
-            "`{ident}` is ambiguous ({why})",
-            why = kind.descr()
-        );
+        let mut err = struct_span_err!(self.session, ident.span, E0659, "`{ident}` is ambiguous");
         err.span_label(ident.span, "ambiguous name");
+        err.note(&format!("ambiguous because of {}", kind.descr()));
 
         let mut could_refer_to = |b: &NameBinding<'_>, misc: AmbiguityErrorMisc, also: &str| {
             let what = self.binding_description(b, ident, misc == AmbiguityErrorMisc::FromPrelude);
@@ -1237,13 +1308,41 @@ impl<'a> Resolver<'a> {
             );
             let def_span = self.session.source_map().guess_head_span(binding.span);
             let mut note_span = MultiSpan::from_span(def_span);
-            if !first && binding.vis == ty::Visibility::Public {
+            if !first && binding.vis.is_public() {
                 note_span.push_span_label(def_span, "consider importing it directly".into());
             }
             err.span_note(note_span, &msg);
         }
 
         err.emit();
+    }
+
+    crate fn find_similarly_named_module_or_crate(
+        &mut self,
+        ident: Symbol,
+        current_module: &Module<'a>,
+    ) -> Option<Symbol> {
+        let mut candidates = self
+            .extern_prelude
+            .iter()
+            .map(|(ident, _)| ident.name)
+            .chain(
+                self.module_map
+                    .iter()
+                    .filter(|(_, module)| {
+                        current_module.is_ancestor_of(module) && !ptr::eq(current_module, *module)
+                    })
+                    .map(|(_, module)| module.kind.name())
+                    .flatten(),
+            )
+            .filter(|c| !c.to_string().is_empty())
+            .collect::<Vec<_>>();
+        candidates.sort();
+        candidates.dedup();
+        match find_best_match_for_name(&candidates, ident, None) {
+            Some(sugg) if sugg == ident => None,
+            sugg => sugg,
+        }
     }
 }
 
@@ -1267,7 +1366,7 @@ impl<'a, 'b> ImportResolver<'a, 'b> {
                 if fst.ident.span.rust_2018() && !fst.ident.is_path_segment_keyword() =>
             {
                 // Insert a placeholder that's later replaced by `self`/`super`/etc.
-                path.insert(0, Segment::from_ident(Ident::invalid()));
+                path.insert(0, Segment::from_ident(Ident::empty()));
             }
             _ => return None,
         }
@@ -1411,9 +1510,7 @@ impl<'a, 'b> ImportResolver<'a, 'b> {
         module: ModuleOrUniformRoot<'b>,
         ident: Ident,
     ) -> Option<(Option<Suggestion>, Vec<String>)> {
-        let mut crate_module = if let ModuleOrUniformRoot::Module(module) = module {
-            module
-        } else {
+        let ModuleOrUniformRoot::Module(mut crate_module) = module else {
             return None;
         };
 
@@ -1689,6 +1786,8 @@ fn find_span_immediately_after_crate_name(
 /// entities with that name in all crates. This method allows outputting the
 /// results of this search in a programmer-friendly way
 crate fn show_candidates(
+    definitions: &rustc_hir::definitions::Definitions,
+    session: &Session,
     err: &mut DiagnosticBuilder<'_>,
     // This is `None` if all placement locations are inside expansions
     use_placement_span: Option<Span>,
@@ -1700,43 +1799,124 @@ crate fn show_candidates(
         return;
     }
 
+    let mut accessible_path_strings: Vec<(String, &str, Option<DefId>, &Option<String>)> =
+        Vec::new();
+    let mut inaccessible_path_strings: Vec<(String, &str, Option<DefId>, &Option<String>)> =
+        Vec::new();
+
+    candidates.iter().for_each(|c| {
+        (if c.accessible { &mut accessible_path_strings } else { &mut inaccessible_path_strings })
+            .push((path_names_to_string(&c.path), c.descr, c.did, &c.note))
+    });
+
     // we want consistent results across executions, but candidates are produced
     // by iterating through a hash map, so make sure they are ordered:
-    let mut path_strings: Vec<_> =
-        candidates.iter().map(|c| path_names_to_string(&c.path)).collect();
+    for path_strings in [&mut accessible_path_strings, &mut inaccessible_path_strings] {
+        path_strings.sort_by(|a, b| a.0.cmp(&b.0));
+        let core_path_strings =
+            path_strings.drain_filter(|p| p.0.starts_with("core::")).collect::<Vec<_>>();
+        path_strings.extend(core_path_strings);
+        path_strings.dedup_by(|a, b| a.0 == b.0);
+    }
 
-    path_strings.sort();
-    let core_path_strings =
-        path_strings.drain_filter(|p| p.starts_with("core::")).collect::<Vec<String>>();
-    path_strings.extend(core_path_strings);
-    path_strings.dedup();
+    if !accessible_path_strings.is_empty() {
+        let (determiner, kind) = if accessible_path_strings.len() == 1 {
+            ("this", accessible_path_strings[0].1)
+        } else {
+            ("one of these", "items")
+        };
 
-    let (determiner, kind) = if candidates.len() == 1 {
-        ("this", candidates[0].descr)
-    } else {
-        ("one of these", "items")
-    };
+        let instead = if instead { " instead" } else { "" };
+        let mut msg = format!("consider importing {} {}{}", determiner, kind, instead);
 
-    let instead = if instead { " instead" } else { "" };
-    let mut msg = format!("consider importing {} {}{}", determiner, kind, instead);
-
-    if let Some(span) = use_placement_span {
-        for candidate in &mut path_strings {
-            // produce an additional newline to separate the new use statement
-            // from the directly following item.
-            let additional_newline = if found_use { "" } else { "\n" };
-            *candidate = format!("use {};\n{}", candidate, additional_newline);
+        for note in accessible_path_strings.iter().map(|cand| cand.3.as_ref()).flatten() {
+            err.note(note);
         }
 
-        err.span_suggestions(span, &msg, path_strings.into_iter(), Applicability::Unspecified);
-    } else {
-        msg.push(':');
+        if let Some(span) = use_placement_span {
+            for candidate in &mut accessible_path_strings {
+                // produce an additional newline to separate the new use statement
+                // from the directly following item.
+                let additional_newline = if found_use { "" } else { "\n" };
+                candidate.0 = format!("use {};\n{}", &candidate.0, additional_newline);
+            }
 
-        for candidate in path_strings {
-            msg.push('\n');
-            msg.push_str(&candidate);
+            err.span_suggestions(
+                span,
+                &msg,
+                accessible_path_strings.into_iter().map(|a| a.0),
+                Applicability::Unspecified,
+            );
+        } else {
+            msg.push(':');
+
+            for candidate in accessible_path_strings {
+                msg.push('\n');
+                msg.push_str(&candidate.0);
+            }
+
+            err.note(&msg);
         }
+    } else {
+        assert!(!inaccessible_path_strings.is_empty());
 
-        err.note(&msg);
+        if inaccessible_path_strings.len() == 1 {
+            let (name, descr, def_id, note) = &inaccessible_path_strings[0];
+            let msg = format!("{} `{}` exists but is inaccessible", descr, name);
+
+            if let Some(local_def_id) = def_id.and_then(|did| did.as_local()) {
+                let span = definitions.def_span(local_def_id);
+                let span = session.source_map().guess_head_span(span);
+                let mut multi_span = MultiSpan::from_span(span);
+                multi_span.push_span_label(span, "not accessible".to_string());
+                err.span_note(multi_span, &msg);
+            } else {
+                err.note(&msg);
+            }
+            if let Some(note) = (*note).as_deref() {
+                err.note(note);
+            }
+        } else {
+            let (_, descr_first, _, _) = &inaccessible_path_strings[0];
+            let descr = if inaccessible_path_strings
+                .iter()
+                .skip(1)
+                .all(|(_, descr, _, _)| descr == descr_first)
+            {
+                descr_first.to_string()
+            } else {
+                "item".to_string()
+            };
+
+            let mut msg = format!("these {}s exist but are inaccessible", descr);
+            let mut has_colon = false;
+
+            let mut spans = Vec::new();
+            for (name, _, def_id, _) in &inaccessible_path_strings {
+                if let Some(local_def_id) = def_id.and_then(|did| did.as_local()) {
+                    let span = definitions.def_span(local_def_id);
+                    let span = session.source_map().guess_head_span(span);
+                    spans.push((name, span));
+                } else {
+                    if !has_colon {
+                        msg.push(':');
+                        has_colon = true;
+                    }
+                    msg.push('\n');
+                    msg.push_str(name);
+                }
+            }
+
+            let mut multi_span = MultiSpan::from_spans(spans.iter().map(|(_, sp)| *sp).collect());
+            for (name, span) in spans {
+                multi_span.push_span_label(span, format!("`{}`: not accessible", name));
+            }
+
+            for note in inaccessible_path_strings.iter().map(|cand| cand.3.as_ref()).flatten() {
+                err.note(note);
+            }
+
+            err.span_note(multi_span, &msg);
+        }
     }
 }

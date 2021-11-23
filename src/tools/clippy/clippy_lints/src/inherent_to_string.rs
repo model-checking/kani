@@ -111,7 +111,7 @@ impl<'tcx> LateLintPass<'tcx> for InherentToString {
             if impl_item.generics.params.is_empty();
 
             // Check if return type is String
-            if is_type_diagnostic_item(cx, return_ty(cx, impl_item.hir_id()), sym::string_type);
+            if is_type_diagnostic_item(cx, return_ty(cx, impl_item.hir_id()), sym::String);
 
             // Filters instances of to_string which are required by a trait
             if trait_ref_of_method(cx, impl_item.hir_id()).is_none();
@@ -138,10 +138,10 @@ fn show_lint(cx: &LateContext<'_>, item: &ImplItem<'_>) {
             item.span,
             &format!(
                 "type `{}` implements inherent method `to_string(&self) -> String` which shadows the implementation of `Display`",
-                self_type.to_string()
+                self_type
             ),
             None,
-            &format!("remove the inherent method from type `{}`", self_type.to_string()),
+            &format!("remove the inherent method from type `{}`", self_type),
         );
     } else {
         span_lint_and_help(
@@ -150,10 +150,10 @@ fn show_lint(cx: &LateContext<'_>, item: &ImplItem<'_>) {
             item.span,
             &format!(
                 "implementation of inherent method `to_string(&self) -> String` for type `{}`",
-                self_type.to_string()
+                self_type
             ),
             None,
-            &format!("implement trait `Display` for type `{}` instead", self_type.to_string()),
+            &format!("implement trait `Display` for type `{}` instead", self_type),
         );
     }
 }

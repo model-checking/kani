@@ -15,7 +15,7 @@ fn get_some<'a>(a: &'a i8) -> T<'a> {
     Option2::Some((*a, a))
 }
 
-pub fn main() {
+fn main() {
     let x = get_opt();
     match x {
         Option2::None => {}

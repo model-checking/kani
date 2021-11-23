@@ -4,6 +4,7 @@ use super::super::codegen::TypeExt;
 use crate::GotocCtx;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
+use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -33,6 +34,9 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         url: &str,
     ) -> Expr {
+        // We should possibly upgrade this to a warning in the future, but for now emit at least something
+        debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
+
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
             Stmt::assert_false(
@@ -146,7 +150,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let components = self.symbol_table.lookup_components_in_type(t).unwrap();
         assert_eq!(components.len(), 2);
         for c in components {
-            match c.name() {
+            match c.name().to_string().as_str() {
                 "0" => self.assert_is_rust_unique_pointer_like(&c.typ()),
                 "1" => self.assert_is_rust_global_alloc_like(&c.typ()),
                 _ => panic!("Unexpected component {} in {:?}", c.name(), t),
@@ -167,7 +171,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let components = self.symbol_table.lookup_components_in_type(t).unwrap();
         assert_eq!(components.len(), 2);
         for c in components {
-            match c.name() {
+            match c.name().to_string().as_str() {
                 "_marker" => self.assert_is_rust_phantom_data_like(&c.typ()),
                 "pointer" => {
                     assert!(c.typ().is_pointer() || c.typ().is_rust_fat_ptr(&self.symbol_table))

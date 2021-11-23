@@ -497,7 +497,7 @@ impl<'tcx> RegionInferenceContext<'tcx> {
     }
 
     /// Returns an iterator over all the region indices.
-    pub fn regions(&self) -> impl Iterator<Item = RegionVid> {
+    pub fn regions(&self) -> impl Iterator<Item = RegionVid> + '_ {
         self.definitions.indices()
     }
 
@@ -569,7 +569,7 @@ impl<'tcx> RegionInferenceContext<'tcx> {
         // to store those. Otherwise, we'll pass in `None` to the
         // functions below, which will trigger them to report errors
         // eagerly.
-        let mut outlives_requirements = infcx.tcx.is_closure(mir_def_id).then(Vec::new);
+        let mut outlives_requirements = infcx.tcx.is_typeck_child(mir_def_id).then(Vec::new);
 
         self.check_type_tests(infcx, body, outlives_requirements.as_mut(), &mut errors_buffer);
 
@@ -688,6 +688,16 @@ impl<'tcx> RegionInferenceContext<'tcx> {
         // Create a mutable vector of the options. We'll try to winnow
         // them down.
         let mut choice_regions: Vec<ty::RegionVid> = choice_regions.to_vec();
+
+        // Convert to the SCC representative: sometimes we have inference
+        // variables in the member constraint that wind up equated with
+        // universal regions. The scc representative is the minimal numbered
+        // one from the corresponding scc so it will be the universal region
+        // if one exists.
+        for c_r in &mut choice_regions {
+            let scc = self.constraint_sccs.scc(*c_r);
+            *c_r = self.scc_representatives[scc];
+        }
 
         // The 'member region' in a member constraint is part of the
         // hidden type, which must be in the root universe. Therefore,
@@ -2100,14 +2110,14 @@ impl<'tcx> RegionInferenceContext<'tcx> {
                     _ => constraint_sup_scc != target_scc,
                 }
             } else {
-                match categorized_path[*i].category {
+                !matches!(
+                    categorized_path[*i].category,
                     ConstraintCategory::OpaqueType
-                    | ConstraintCategory::Boring
-                    | ConstraintCategory::BoringNoLocation
-                    | ConstraintCategory::Internal
-                    | ConstraintCategory::Predicate(_) => false,
-                    _ => true,
-                }
+                        | ConstraintCategory::Boring
+                        | ConstraintCategory::BoringNoLocation
+                        | ConstraintCategory::Internal
+                        | ConstraintCategory::Predicate(_)
+                )
             }
         };
 
@@ -2154,7 +2164,7 @@ impl<'tcx> RegionInferenceContext<'tcx> {
         // appears to be the most interesting point to report to the
         // user via an even more ad-hoc guess.
         categorized_path.sort_by(|p0, p1| p0.category.cmp(&p1.category));
-        debug!("`: sorted_path={:#?}", categorized_path);
+        debug!("best_blame_constraint: sorted_path={:#?}", categorized_path);
 
         categorized_path.remove(0)
     }
@@ -2219,7 +2229,7 @@ impl<'tcx> ClosureRegionRequirementsExt<'tcx> for ClosureRegionRequirements<'tcx
             tcx,
             closure_substs,
             self.num_external_vids,
-            tcx.closure_base_def_id(closure_def_id),
+            tcx.typeck_root_def_id(closure_def_id),
         );
         debug!("apply_requirements: closure_mapping={:?}", closure_mapping);
 

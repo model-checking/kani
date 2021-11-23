@@ -3,10 +3,8 @@
 
 // cbmc-flags: --unwind 11
 
-include!("../../rmc-prelude.rs");
-
-pub fn main() {
-    let mut a: u32 = __nondet();
+fn main() {
+    let mut a: u32 = rmc::nondet();
 
     if a < 1024 {
         while a > 0 {
