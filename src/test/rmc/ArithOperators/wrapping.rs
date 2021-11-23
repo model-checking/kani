@@ -4,7 +4,7 @@
 // Check that none of these operations trigger spurious overflow checks.
 #![feature(core_intrinsics)]
 
-pub fn main() {
+fn main() {
     let a: u8 = rmc::nondet();
     let b: u8 = rmc::nondet();
     let sum0 = core::intrinsics::wrapping_add(a, b);

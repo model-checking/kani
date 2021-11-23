@@ -15,7 +15,7 @@ macro_rules! verify_no_overflow {
     }};
 }
 
-pub fn main() {
+fn main() {
     verify_no_overflow!(checked_add, unchecked_add);
     verify_no_overflow!(checked_sub, unchecked_sub);
     verify_no_overflow!(checked_mul, unchecked_mul);

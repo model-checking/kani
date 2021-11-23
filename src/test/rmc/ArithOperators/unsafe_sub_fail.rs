@@ -4,6 +4,7 @@
 // Check that regular arithmetic operations in unsafe blocks still trigger overflow checks.
 // rmc-verify-fail
 // rmc-flags: --function check_sub
+// compile-flags: --crate-type lib
 
 pub fn check_sub(a: u8, b: u8) {
     unsafe {

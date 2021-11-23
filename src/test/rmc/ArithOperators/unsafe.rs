@@ -14,7 +14,7 @@ macro_rules! verify_no_overflow {
     }};
 }
 
-pub fn main() {
+fn main() {
     verify_no_overflow!(checked_add, +);
     verify_no_overflow!(checked_sub, -);
     verify_no_overflow!(checked_mul, *);

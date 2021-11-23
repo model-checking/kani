@@ -6,7 +6,7 @@
 
 #![feature(unchecked_math)]
 
-pub fn main() {
+fn main() {
     let a: u8 = rmc::nondet();
     let b: u8 = rmc::nondet();
     unsafe { a.unchecked_sub(b) };
