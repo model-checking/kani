@@ -10,6 +10,7 @@ SCRIPTS_DIR="$(dirname $SCRIPT_DIR)"
 REPO_DIR="$(dirname $SCRIPTS_DIR)"
 
 export RUSTC=$(${SCRIPTS_DIR}/rmc-rustc --rmc-path)
+export RUSTFLAGS="--cfg rmc"
 cargo clean --manifest-path "${REPO_DIR}/library/rmc/Cargo.toml" $@
 cargo build --manifest-path "${REPO_DIR}/library/rmc/Cargo.toml" $@
 

@@ -3,8 +3,8 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
+use crate::context::metadata::RmcMetadata;
 use crate::GotocCtx;
-
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
@@ -27,9 +27,10 @@ use tracing::{debug, warn};
 
 // #[derive(RustcEncodable, RustcDecodable)]
 pub struct GotocCodegenResult {
-    pub type_map: BTreeMap<String, String>,
-    pub symtab: SymbolTable,
     pub crate_name: rustc_span::Symbol,
+    pub metadata: RmcMetadata,
+    pub symtab: SymbolTable,
+    pub type_map: BTreeMap<String, String>,
 }
 
 #[derive(Clone)]
@@ -125,17 +126,20 @@ impl CodegenBackend for GotocCodegenBackend {
         }
 
         // perform post-processing symbol table passes
-        let symbol_table = symtab_transformer::do_passes(
+        let symtab = symtab_transformer::do_passes(
             c.symbol_table,
             &tcx.sess.opts.debugging_opts.symbol_table_passes,
         );
 
         let type_map = BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string())));
 
+        let metadata = RmcMetadata { proof_harnesses: c.proof_harnesses };
+
         Box::new(GotocCodegenResult {
-            type_map,
-            symtab: symbol_table,
             crate_name: tcx.crate_name(LOCAL_CRATE) as rustc_span::Symbol,
+            metadata,
+            symtab,
+            type_map,
         })
     }
 
@@ -163,6 +167,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filename = outputs.path(OutputType::Object);
             write_file(&base_filename, "symtab.json", &result.symtab);
             write_file(&base_filename, "type_map.json", &result.type_map);
+            write_file(&base_filename, "rmc-metadata.json", &result.metadata);
         }
 
         Ok(())

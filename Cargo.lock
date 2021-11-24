@@ -3341,6 +3341,13 @@ dependencies = [
 [[package]]
 name = "rmc"
 version = "0.1.0"
+dependencies = [
+ "rmc-annotations",
+]
+
+[[package]]
+name = "rmc-annotations"
+version = "0.1.0"
 
 [[package]]
 name = "rust-demangler"

@@ -32,6 +32,13 @@ impl Location {
         }
     }
 
+    pub fn filename(&self) -> Option<String> {
+        match self {
+            Location::Loc { file, .. } => Some(file.to_string()),
+            _ => None,
+        }
+    }
+
     /// Convert a location to a short string suitable for (e.g.) logging.
     /// Goal is to return just "file:line" as clearly as possible.
     pub fn short_string(&self) -> String {

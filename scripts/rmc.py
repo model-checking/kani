@@ -224,6 +224,7 @@ def compile_single_rust_file(
     if not keep_temps:
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
+        atexit.register(delete_file, base + ".rmc-metadata.json")
 
     build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes)
 

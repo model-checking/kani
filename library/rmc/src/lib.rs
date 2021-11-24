@@ -51,3 +51,6 @@ pub fn nondet<T>() -> T {
 #[inline(never)]
 #[rustc_diagnostic_item = "RmcExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &str) {}
+
+/// RMC proc macros must be in a separate crate
+pub use rmc_annotations::*;

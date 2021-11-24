@@ -8,5 +8,6 @@
 
 mod current_fn;
 mod goto_ctx;
+pub mod metadata;
 
 pub use goto_ctx::GotocCtx;
