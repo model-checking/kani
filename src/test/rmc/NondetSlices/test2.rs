@@ -7,6 +7,6 @@ fn check(s: &[u8]) {
 }
 
 fn main() {
-    let slice = rmc::NonDetSlice::<u8, 5>::new();
+    let slice: rmc::slice::NonDetSlice<u8, 5> = rmc::slice::nondet_slice();
     check(&slice);
 }

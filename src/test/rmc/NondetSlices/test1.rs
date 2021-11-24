@@ -3,7 +3,7 @@
 
 fn check(slice: &[u8]) {
     let len = slice.len();
-    assert!(len == 0 || len == 1 || len == 2 || len == 3);
+    assert!(len >= 0 && len <= 3);
     if len > 0 {
         let elem = slice[0];
         assert!(elem == 1 || elem == 2 || elem == 3);
@@ -13,6 +13,6 @@ fn check(slice: &[u8]) {
 #[no_mangle]
 fn main() {
     let arr = [1, 2, 3];
-    let slice = rmc::nondet_slice(&arr);
+    let slice = rmc::slice::nondet_slice_of_array(&arr);
     check(slice);
 }
