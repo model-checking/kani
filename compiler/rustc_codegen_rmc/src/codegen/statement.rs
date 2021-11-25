@@ -41,8 +41,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => match targets {
-                SwitchTargets { values, targets } => {
-                    self.codegen_switch_int(discr, switch_ty, values, targets)
+                SwitchTargets { values, .. } => {
+                    let all_targets = targets.all_targets();
+                    self.codegen_switch_int(discr, switch_ty, values, all_targets)
                 }
             },
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
@@ -197,7 +198,7 @@ impl<'tcx> GotocCtx<'tcx> {
         discr: &Operand<'tcx>,
         switch_ty: Ty<'tcx>,
         values: &SmallVec<[u128; 1]>,
-        targets: &SmallVec<[BasicBlock; 2]>,
+        targets: &[BasicBlock],
     ) -> Stmt {
         assert_eq!(targets.len(), values.len() + 1);
 
