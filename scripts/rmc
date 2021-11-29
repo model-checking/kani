@@ -116,7 +116,7 @@ def main():
     if "newOutput" in args:
         # if oldOutput flag is passed, then prevent output from going into the json parser
         # else then by default and for terse output, display the result through the json parser       
-        if not args.oldOutput:
+        if args.newOutput or args.terse:
             # This gives us the json output from CBMC which is passed into the parser
             if "--json-ui" not in args.cbmc_args:
                 args.cbmc_args.extend(["--json-ui"])
@@ -124,8 +124,10 @@ def main():
                 output_style = '1'
             else:
                 output_style = '0'
-        else:
+        elif args.oldOutput:
             output_style = '2'
+        else:
+            raise Exception('Contradrictory Flag outputs passed')
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
