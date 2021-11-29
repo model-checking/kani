@@ -183,7 +183,7 @@ def add_visualizer_flags(make_group, add_flag, config):
 def add_output_flags(make_group, add_flag, config):
     group = make_group("Output flags", "Toggle between different styles of output")
     add_flag(group, "--newOutput", default=False, action=BooleanOptionalAction,
-             help="Turn on new output")    
+             help="Turn on new output")
     add_flag(group, "--oldOutput", default=True, action=BooleanOptionalAction,
              help="Turn on old output")
     add_flag(group, "--terse", default=False, action=BooleanOptionalAction,
