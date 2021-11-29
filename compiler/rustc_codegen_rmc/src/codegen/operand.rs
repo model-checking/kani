@@ -10,9 +10,7 @@ use rustc_middle::mir::interpret::{
 };
 use rustc_middle::mir::{Constant, ConstantKind, Operand};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{
-    self, Const, ConstKind, FloatTy, Instance, IntTy, ScalarInt, Ty, Uint, UintTy,
-};
+use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
@@ -78,6 +76,56 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    fn codegen_slice_value(
+        &mut self,
+        v: ConstValue<'tcx>,
+        lit_ty: Ty<'tcx>,
+        span: Option<&Span>,
+        data: &Allocation,
+        start: usize,
+        end: usize,
+    ) -> Expr {
+        if let ty::Ref(_, ref_ty, _) = lit_ty.kind() {
+            match ref_ty.kind() {
+                ty::Str => {
+                    let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
+                    let s = ::std::str::from_utf8(slice).expect("non utf8 str from miri");
+                    return Expr::struct_expr_from_values(
+                        self.codegen_ty(lit_ty),
+                        vec![Expr::string_constant(s), Expr::int_constant(s.len(), Type::size_t())],
+                        &self.symbol_table,
+                    );
+                }
+                ty::Slice(slice_ty) => {
+                    if let Uint(UintTy::U8) = slice_ty.kind() {
+                        // The case where we have a slice of u8 is easy enough: make an array of u8
+                        // TODO: Handle cases with larger int types by making an array of bytes,
+                        // then using byte-extract on it.
+                        let slice =
+                            data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
+                        let vec_of_bytes: Vec<Expr> = slice
+                            .iter()
+                            .map(|b| Expr::int_constant(*b, Type::unsigned_int(8)))
+                            .collect();
+                        let len = vec_of_bytes.len();
+                        let array_expr =
+                            Expr::array_expr(Type::unsigned_int(8).array_of(len), vec_of_bytes);
+                        let data_expr = array_expr.array_to_ptr();
+                        let len_expr = Expr::int_constant(len, Type::size_t());
+                        return slice_fat_ptr(
+                            self.codegen_ty(lit_ty),
+                            data_expr,
+                            len_expr,
+                            &self.symbol_table,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty, span);
+    }
+
     pub fn codegen_const_value(
         &mut self,
         v: ConstValue<'tcx>,
@@ -86,38 +134,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         match v {
             ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
-            ConstValue::Slice { data, start, end } => match lit_ty.kind() {
-                ty::Ref(_, ty::TyS { kind: ty::Str, .. }, _) => {
-                    let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
-                    let s = ::std::str::from_utf8(slice).expect("non utf8 str from miri");
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(lit_ty),
-                        vec![Expr::string_constant(s), Expr::int_constant(s.len(), Type::size_t())],
-                        &self.symbol_table,
-                    )
-                }
-                ty::Ref(
-                    _,
-                    ty::TyS { kind: ty::Slice(ty::TyS { kind: Uint(UintTy::U8), .. }), .. },
-                    _,
-                ) => {
-                    // The case where we have a slice of u8 is easy enough: make an array of u8
-                    // TODO: Handle cases with larger int types by making an array of bytes,
-                    // then using byte-extract on it.
-                    let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
-                    let vec_of_bytes: Vec<Expr> = slice
-                        .iter()
-                        .map(|b| Expr::int_constant(*b, Type::unsigned_int(8)))
-                        .collect();
-                    let len = vec_of_bytes.len();
-                    let array_expr =
-                        Expr::array_expr(Type::unsigned_int(8).array_of(len), vec_of_bytes);
-                    let data_expr = array_expr.array_to_ptr();
-                    let len_expr = Expr::int_constant(len, Type::size_t());
-                    slice_fat_ptr(self.codegen_ty(lit_ty), data_expr, len_expr, &self.symbol_table)
-                }
-                _ => unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty, span),
-            },
+            ConstValue::Slice { data, start, end } => {
+                self.codegen_slice_value(v, lit_ty, span, &data, start, end)
+            }
             ConstValue::ByRef { alloc, offset } => {
                 debug!("ConstValue by ref {:?} {:?}", alloc, offset);
                 let mem_var =
@@ -132,31 +151,35 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
-        debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind};
+        debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind()};
         match (s, &ty.kind()) {
-            (Scalar::Int(ScalarInt { data, .. }), ty::Int(it)) => match it {
-                IntTy::I8 => Expr::int_constant(data, Type::signed_int(8)),
-                IntTy::I16 => Expr::int_constant(data, Type::signed_int(16)),
-                IntTy::I32 => Expr::int_constant(data, Type::signed_int(32)),
-                IntTy::I64 => Expr::int_constant(data, Type::signed_int(64)),
-                IntTy::I128 => Expr::int_constant(data, Type::signed_int(128)),
-                IntTy::Isize => Expr::int_constant(data, Type::ssize_t()),
+            (Scalar::Int(_), ty::Int(it)) => match it {
+                // We treat the data as bit vector. Thus, we extract the value as unsigned and set
+                // the type to signed int.
+                IntTy::I8 => Expr::int_constant(s.to_u8().unwrap(), Type::signed_int(8)),
+                IntTy::I16 => Expr::int_constant(s.to_u16().unwrap(), Type::signed_int(16)),
+                IntTy::I32 => Expr::int_constant(s.to_u32().unwrap(), Type::signed_int(32)),
+                IntTy::I64 => Expr::int_constant(s.to_u64().unwrap(), Type::signed_int(64)),
+                IntTy::I128 => Expr::int_constant(s.to_u128().unwrap(), Type::signed_int(128)),
+                IntTy::Isize => {
+                    Expr::int_constant(s.to_machine_usize(self).unwrap(), Type::ssize_t())
+                }
             },
-            (Scalar::Int(ScalarInt { data, .. }), ty::Uint(it)) => match it {
-                UintTy::U8 => Expr::int_constant(data, Type::unsigned_int(8)),
-                UintTy::U16 => Expr::int_constant(data, Type::unsigned_int(16)),
-                UintTy::U32 => Expr::int_constant(data, Type::unsigned_int(32)),
-                UintTy::U64 => Expr::int_constant(data, Type::unsigned_int(64)),
-                UintTy::U128 => Expr::int_constant(data, Type::unsigned_int(128)),
-                UintTy::Usize => Expr::int_constant(data, Type::size_t()),
+            (Scalar::Int(_), ty::Uint(it)) => match it {
+                UintTy::U8 => Expr::int_constant(s.to_u8().unwrap(), Type::unsigned_int(8)),
+                UintTy::U16 => Expr::int_constant(s.to_u16().unwrap(), Type::unsigned_int(16)),
+                UintTy::U32 => Expr::int_constant(s.to_u32().unwrap(), Type::unsigned_int(32)),
+                UintTy::U64 => Expr::int_constant(s.to_u64().unwrap(), Type::unsigned_int(64)),
+                UintTy::U128 => Expr::int_constant(s.to_u128().unwrap(), Type::unsigned_int(128)),
+                UintTy::Usize => {
+                    Expr::int_constant(s.to_machine_usize(self).unwrap(), Type::size_t())
+                }
             },
-            (Scalar::Int(ScalarInt { .. }), ty::Bool) => {
-                Expr::c_bool_constant(s.to_bool().unwrap())
-            }
-            (Scalar::Int(ScalarInt { .. }), ty::Char) => {
+            (Scalar::Int(_), ty::Bool) => Expr::c_bool_constant(s.to_bool().unwrap()),
+            (Scalar::Int(_), ty::Char) => {
                 Expr::int_constant(s.to_i32().unwrap(), Type::signed_int(32))
             }
-            (Scalar::Int(ScalarInt { .. }), ty::Float(k)) =>
+            (Scalar::Int(_), ty::Float(k)) =>
             // rustc uses a sophisticated format for floating points that is hard to get f32/f64 from.
             // Instead, we use integers with the right width to represent the bit pattern.
             {
@@ -165,18 +188,23 @@ impl<'tcx> GotocCtx<'tcx> {
                     FloatTy::F64 => Expr::double_constant_from_bitpattern(s.to_u64().unwrap()),
                 }
             }
-            (Scalar::Int(ScalarInt { size: 0, .. }), ty::FnDef(d, substs)) => {
+            (Scalar::Int(int), ty::FnDef(d, substs)) => {
+                assert_eq!(int.size(), Size::ZERO);
                 self.codegen_fndef(*d, substs, span)
             }
-            (Scalar::Int(ScalarInt { .. }), ty::RawPtr(tm)) => {
+            (Scalar::Int(_), ty::RawPtr(tm)) => {
                 Expr::pointer_constant(s.to_u64().unwrap(), self.codegen_ty(tm.ty).to_pointer())
             }
             // TODO: Removing this doesn't cause any regressions to fail.
             // We need a regression for this case.
-            (Scalar::Int(ScalarInt { data: 0, .. }), ty::Ref(_, ty, _)) => {
-                self.codegen_ty(ty).to_pointer().null()
+            (Scalar::Int(int), ty::Ref(_, ty, _)) => {
+                if int.is_null() {
+                    self.codegen_ty(ty).to_pointer().null()
+                } else {
+                    unreachable!()
+                }
             }
-            (Scalar::Int(ScalarInt { .. }), ty::Adt(adt, subst)) => {
+            (Scalar::Int(_), ty::Adt(adt, subst)) => {
                 if adt.is_struct() || adt.is_union() {
                     // in this case, we must have a one variant ADT. there are two cases
                     let variant = &adt.variants.raw[0];

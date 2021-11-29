@@ -48,9 +48,11 @@ class Scanner:
     def edit_output(self, text):
         return self.edit_fun(text)
 
+
 def is_exe(name):
     from shutil import which
     return which(name) is not None
+
 
 def ensure_dependencies_in_path():
     for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
@@ -199,13 +201,20 @@ def run_cmd(
 
     return process.returncode
 
-def rustc_flags(mangler, symbol_table_passes):
+
+def rustc_flags(mangler, symbol_table_passes, restrict_vtable):
     flags = [
         "-Z", f"symbol-mangling-version={mangler}",
         "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-    ]
+        "-Z", "human_readable_cgu_names",
+        f"--cfg={RMC_CFG}"]
+
     if "RUSTFLAGS" in os.environ:
         flags += os.environ["RUSTFLAGS"].split(" ")
+
+    if restrict_vtable:
+        flags += ["-Z", "restrict_vtable_fn_ptrs"]
+
     return flags
 
 # Generates a symbol table from a rust file
@@ -220,13 +229,14 @@ def compile_single_rust_file(
         dry_run=False,
         use_abs=False,
         abs_type="std",
-        symbol_table_passes=[]):
+        symbol_table_passes=[],
+        restrict_vtable=False):
     if not keep_temps:
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
         atexit.register(delete_file, base + ".rmc-metadata.json")
 
-    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes)
+    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes, restrict_vtable)
 
     if use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
@@ -250,7 +260,9 @@ def cargo_build(
         debug=False,
         mangler="v0",
         dry_run=False,
-        symbol_table_passes=[]):
+        symbol_table_passes=[],
+        restrict_vtable=False):
+
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     def get_config(option):
@@ -266,7 +278,7 @@ def cargo_build(
                 process.stdout))
         return process.stdout
 
-    rustflags = rustc_flags(mangler, symbol_table_passes) + get_config("--rmc-flags").split()
+    rustflags = rustc_flags(mangler, symbol_table_passes, restrict_vtable) + get_config("--rmc-flags").split()
     rustc_path = get_config("--rmc-path").strip()
     build_cmd = ["cargo", "build", "--target-dir", str(target_dir)]
     if build_target:
@@ -357,7 +369,6 @@ def run_visualize(
     # 4) cbmc-viewer --result results.xml --coverage coverage.xml
     #                --property property.xml --srcdir .
     #                --goto <cbmc_filename> --reportdir report
-
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
         cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
         return run_cmd(cbmc_cmd, label="cbmc", output_to=output_to, verbose=verbose, quiet=quiet, dry_run=dry_run)
@@ -397,13 +408,39 @@ def run_cbmc_viewer(
     return run_cmd(cmd, label="cbmc-viewer", verbose=verbose, quiet=quiet, dry_run=dry_run)
 
 # Handler for calling goto-instrument
-def run_goto_instrument(input_filename, output_filename, args, verbose=False, dry_run=False):
+def run_goto_instrument(
+        input_filename,
+        output_filename,
+        args,
+        verbose=False,
+        dry_run=False,
+        restrictions_filename=None):
     cmd = ["goto-instrument"] + args + [input_filename, output_filename]
+    if restrictions_filename:
+        processed = process_vtable_restrictions(restrictions_filename, verbose=verbose, dry_run=dry_run)
+        cmd += ["--function-pointer-restrictions-file", processed]
     return run_cmd(cmd, label="goto-instrument", verbose=verbose, dry_run=dry_run)
 
+# Processes vtable restrictions to the format CBMC expects
+# TODO: once restrictions are on by default, we should build release ahead of time
+def process_vtable_restrictions(restrictions_filename, verbose=False, dry_run=False):
+    cmd = ["cargo", "run", "--release", "--manifest-path", "src/tools/rmc-link-restrictions/Cargo.toml"]
+    outname = os.path.join(os.path.dirname(os.path.abspath(restrictions_filename)), "linked-restrictions.json")
+    cmd += ["--", restrictions_filename, outname]
+    if (run_cmd(cmd, label="rmc-link-restrictions", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS):
+        raise Exception("Failed to run command: {}".format(" ".join(cmd)))
+    return outname
+
 # Generates a C program from a goto program
-def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
-    return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
+def goto_to_c(goto_filename, c_filename, restrictions_filename, verbose=False, dry_run=False):
+    args = ["--dump-c"]
+    return run_goto_instrument(
+        goto_filename,
+        c_filename,
+        args,
+        verbose,
+        dry_run=dry_run,
+        restrictions_filename=restrictions_filename)
 
 # Fix remaining issues with output of --gen-c-runnable
 def gen_c_postprocess(c_filename, dry_run=False):

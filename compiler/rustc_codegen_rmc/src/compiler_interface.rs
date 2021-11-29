@@ -8,6 +8,8 @@ use crate::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
+use cbmc::InternedString;
+use rmc_restrictions::VtableCtxResults;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;
@@ -30,7 +32,8 @@ pub struct GotocCodegenResult {
     pub crate_name: rustc_span::Symbol,
     pub metadata: RmcMetadata,
     pub symtab: SymbolTable,
-    pub type_map: BTreeMap<String, String>,
+    pub type_map: BTreeMap<InternedString, InternedString>,
+    pub vtable_restrictions: Option<VtableCtxResults>,
 }
 
 #[derive(Clone)]
@@ -131,7 +134,16 @@ impl CodegenBackend for GotocCodegenBackend {
             &tcx.sess.opts.debugging_opts.symbol_table_passes,
         );
 
-        let type_map = BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string())));
+        // Map MIR types to GotoC types
+        let type_map =
+            BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
+
+        // Get the vtable function pointer restrictions if requested
+        let vtable_restrictions = if c.vtable_ctx.emit_vtable_restrictions {
+            Some(c.vtable_ctx.get_virtual_function_restrictions())
+        } else {
+            None
+        };
 
         let metadata = RmcMetadata { proof_harnesses: c.proof_harnesses };
 
@@ -140,6 +152,7 @@ impl CodegenBackend for GotocCodegenBackend {
             metadata,
             symtab,
             type_map,
+            vtable_restrictions,
         })
     }
 
@@ -168,6 +181,10 @@ impl CodegenBackend for GotocCodegenBackend {
             write_file(&base_filename, "symtab.json", &result.symtab);
             write_file(&base_filename, "type_map.json", &result.type_map);
             write_file(&base_filename, "rmc-metadata.json", &result.metadata);
+            // If they exist, write out vtable virtual call function pointer restrictions
+            if let Some(restrictions) = result.vtable_restrictions {
+                write_file(&base_filename, "restrictions.json", &restrictions);
+            }
         }
 
         Ok(())

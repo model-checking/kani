@@ -8,10 +8,9 @@ use cbmc::NO_PRETTY_NAME;
 use rustc_middle::mir::interpret::{ConstValue, Scalar};
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::ScalarInt;
 use rustc_middle::ty::Ty;
 use rustc_middle::ty::{IntTy, UintTy};
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Primitive, Size, TagEncoding, Variants};
 
 fn fold_invariants_gen<F: Fn(Expr, Expr) -> Expr>(mut iv: Vec<Expr>, dfl: Expr, comb: F) -> Expr {
     let mut res: Option<Expr> = None;
@@ -179,7 +178,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.find_function(fname)
                 }
             }
-            ty::Dynamic(_, _) => unimplemented!(),
+            ty::Dynamic(_, _) => None,
             ty::Projection(_) | ty::Opaque(_, _) => {
                 let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), t);
                 self.codegen_assumption_ref_ptr(fname, t, normalized, is_ref)
@@ -446,8 +445,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
                 for (_, discr) in def.discriminants(tcx.tcx) {
                     let val = (discr.val << (128 - 8 * sz)) >> (128 - 8 * sz);
+                    let scalar = Scalar::from_uint(val, Size::from_bytes(sz));
                     cases.push(case.clone().eq(tcx.codegen_const_value(
-                        ConstValue::Scalar(Scalar::Int(ScalarInt { data: val, size: sz })),
+                        ConstValue::Scalar(scalar),
                         discr_t,
                         None,
                     )));
