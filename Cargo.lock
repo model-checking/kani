@@ -994,6 +994,7 @@ dependencies = [
  "rustdoc",
  "serde",
  "serde_json",
+ "toml",
  "walkdir",
 ]
 
