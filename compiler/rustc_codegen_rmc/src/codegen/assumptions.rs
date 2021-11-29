@@ -178,7 +178,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.find_function(fname)
                 }
             }
-            ty::Dynamic(_, _) => unimplemented!(),
+            ty::Dynamic(_, _) => None,
             ty::Projection(_) | ty::Opaque(_, _) => {
                 let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), t);
                 self.codegen_assumption_ref_ptr(fname, t, normalized, is_ref)

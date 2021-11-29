@@ -21,3 +21,4 @@ mod utils;
 
 pub use compiler_interface::GotocCodegenBackend;
 pub use context::GotocCtx;
+pub use context::VtableCtx;

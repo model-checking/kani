@@ -14,6 +14,7 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
+use super::vtable_ctx::VtableCtx;
 use crate::overrides::{fn_hooks, GotocHooks};
 use crate::utils::full_crate_name;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
@@ -48,8 +49,10 @@ pub struct GotocCtx<'tcx> {
     pub global_var_count: u64,
     /// map a global allocation to a name in the symbol table
     pub alloc_map: FxHashMap<&'tcx Allocation, String>,
+    /// map (trait, method) pairs to possible implementations
+    pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
-    pub type_map: FxHashMap<String, Ty<'tcx>>,
+    pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
 }
 
 /// Constructor
@@ -58,6 +61,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
+        let emit_vtable_restrictions = tcx.sess.opts.debugging_opts.emit_vtable_restrictions;
         GotocCtx {
             tcx,
             symbol_table,
@@ -65,6 +69,7 @@ impl<'tcx> GotocCtx<'tcx> {
             full_crate_name: full_crate_name(tcx),
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
+            vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
             current_fn: None,
             type_map: FxHashMap::default(),
         }

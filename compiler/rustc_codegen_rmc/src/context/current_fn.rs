@@ -9,6 +9,7 @@ use rustc_middle::ty::Instance;
 use rustc_middle::ty::PolyFnSig;
 
 /// This structure represents useful data about the function we are currently compiling.
+#[derive(Debug)]
 pub struct CurrentFnCtx<'tcx> {
     /// The GOTO block we are compiling into
     block: Vec<Stmt>,
