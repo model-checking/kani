@@ -43,7 +43,7 @@ struct SummaryData {
     summary_start: String,
 }
 
-// Data needed for parsing book without a `SUMMARY.md` file
+// Data needed for parsing book without a summary file
 struct DirectoryData {
     // Directory to be processed, starting from root of the book
     src: PathBuf,
@@ -260,6 +260,8 @@ fn setup_nomicon_book() -> Book {
     }
 }
 
+/// Set up the
+/// [Rust Unstable Book](https://doc.rust-lang.org/beta/unstable-book/).
 fn setup_unstable_book() -> Book {
     let directory_data = DirectoryData {
         src: ["src", "doc", "unstable-book", "src"].iter().collect(),
