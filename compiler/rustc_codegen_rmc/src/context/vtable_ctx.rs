@@ -86,8 +86,7 @@ impl VtableCtx {
         self.call_site_global_idx
     }
 
-    /// Add a given call site for a virtual function, incremementing the call
-    /// site index.
+    /// Add a given call site for a virtual function
     fn add_call_site(
         &mut self,
         trait_name: InternedString,
