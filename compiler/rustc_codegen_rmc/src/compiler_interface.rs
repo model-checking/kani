@@ -61,6 +61,10 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
+        if !tcx.sess.overflow_checks() {
+            tcx.sess.err("RMC requires overflow checks in order to provide a sound analysis.")
+        }
+
         super::utils::init();
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;

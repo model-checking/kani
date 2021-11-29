@@ -130,6 +130,60 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
+        // Intrinsics which encode a simple arithmetic operation with overflow check
+        macro_rules! codegen_op_with_overflow_check {
+            ($f:ident) => {{
+                let a = fargs.remove(0);
+                let b = fargs.remove(0);
+                let res = a.$f(b);
+                let check = Stmt::assert(
+                    res.overflowed.not(),
+                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+                    loc,
+                );
+                let expr_place = self.codegen_expr_to_place(p, res.result);
+                Stmt::block(vec![expr_place, check], loc)
+            }};
+        }
+
+        // Intrinsics which encode a SIMD arithmetic operation with overflow check.
+        // We expand the overflow check because CBMC overflow operations don't accept array as
+        // argument.
+        macro_rules! codegen_simd_with_overflow_check {
+            ($op:ident, $overflow:ident) => {{
+                let a = fargs.remove(0);
+                let b = fargs.remove(0);
+                let mut check = Expr::bool_false();
+                if let Type::Vector { size, .. } = a.typ() {
+                    let a_size = size;
+                    if let Type::Vector { size, .. } = b.typ() {
+                        let b_size = size;
+                        assert_eq!(a_size, b_size, "Expected same length vectors",);
+                        for i in 0..*a_size {
+                            // create expression
+                            let index = Expr::int_constant(i, Type::ssize_t());
+                            let v_a = a.clone().index_array(index.clone());
+                            let v_b = b.clone().index_array(index);
+                            check = check.or(v_a.$overflow(v_b));
+                        }
+                    }
+                }
+                let check_stmt = Stmt::assert(
+                    check.not(),
+                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+                    loc,
+                );
+                let res = a.$op(b);
+                let expr_place = self.codegen_expr_to_place(p, res);
+                Stmt::block(vec![expr_place, check_stmt], loc)
+            }};
+        }
+
+        // Intrinsics which encode a simple wrapping arithmetic operation
+        macro_rules! codegen_wrapping_op {
+            ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
+        }
+
         // Intrinsics which encode a simple binary operation
         macro_rules! codegen_intrinsic_boolean_binop {
             ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
@@ -203,6 +257,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // *var1 = op(*var1, var2);
         // var = tmp;
         // -------------------------
+        // Note: Atomic arithmetic operations wrap around on overflow.
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
                 warn!("RMC does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
@@ -227,7 +282,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match intrinsic {
             "abort" => Stmt::assert_false("abort intrinsic", loc),
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
-            "arith_offset" => codegen_intrinsic_binop!(plus),
+            "arith_offset" => codegen_wrapping_op!(plus),
             "assert_inhabited" => {
                 let ty = instance.substs.type_at(0);
                 let layout = self.layout_of(ty);
@@ -356,7 +411,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
             "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => codegen_intrinsic_binop!(plus),
+            "offset" => codegen_op_with_overflow_check!(add_overflow),
             "powf32" => codegen_simple_intrinsic!(Powf),
             "powf64" => codegen_simple_intrinsic!(Pow),
             "powif32" => codegen_simple_intrinsic!(Powif),
@@ -376,7 +431,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
             "sinf64" => codegen_simple_intrinsic!(Sin),
-            "simd_add" => codegen_intrinsic_binop!(plus),
+            "simd_add" => codegen_simd_with_overflow_check!(plus, add_overflow_p),
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => codegen_intrinsic_binop!(div),
             "simd_eq" => codegen_intrinsic_binop!(eq),
@@ -390,7 +445,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_insert" => self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc),
             "simd_le" => codegen_intrinsic_binop!(le),
             "simd_lt" => codegen_intrinsic_binop!(lt),
-            "simd_mul" => codegen_intrinsic_binop!(mul),
+            "simd_mul" => codegen_simd_with_overflow_check!(mul, mul_overflow_p),
             "simd_ne" => codegen_intrinsic_binop!(neq),
             "simd_or" => codegen_intrinsic_binop!(bitor),
             "simd_rem" => codegen_intrinsic_binop!(rem),
@@ -404,7 +459,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => codegen_intrinsic_binop!(sub),
+            "simd_sub" => codegen_simd_with_overflow_check!(sub, sub_overflow_p),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
@@ -422,9 +477,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "unaligned_volatile_load" => {
                 self.codegen_expr_to_place(p, fargs.remove(0).dereference())
             }
-            "unchecked_add" => codegen_intrinsic_binop!(plus),
+            "unchecked_add" => codegen_op_with_overflow_check!(add_overflow),
             "unchecked_div" => codegen_intrinsic_binop!(div),
-            "unchecked_mul" => codegen_intrinsic_binop!(mul),
+            "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow),
             "unchecked_rem" => codegen_intrinsic_binop!(rem),
             "unchecked_shl" => codegen_intrinsic_binop!(shl),
             "unchecked_shr" => {
@@ -434,15 +489,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     codegen_intrinsic_binop!(lshr)
                 }
             }
-            "unchecked_sub" => codegen_intrinsic_binop!(sub),
+            "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "unreachable" => Stmt::assert_false("unreachable", loc),
             "volatile_copy_memory" => codegen_intrinsic_copy!(Memmove),
             "volatile_copy_nonoverlapping_memory" => codegen_intrinsic_copy!(Memcpy),
             "volatile_load" => self.codegen_expr_to_place(p, fargs.remove(0).dereference()),
-            "wrapping_add" => codegen_intrinsic_binop!(plus),
-            "wrapping_mul" => codegen_intrinsic_binop!(mul),
-            "wrapping_sub" => codegen_intrinsic_binop!(sub),
+            "wrapping_add" => codegen_wrapping_op!(plus),
+            "wrapping_mul" => codegen_wrapping_op!(mul),
+            "wrapping_sub" => codegen_wrapping_op!(sub),
             "write_bytes" => {
                 let dst = fargs.remove(0).cast_to(Type::void_pointer());
                 let val = fargs.remove(0).cast_to(Type::c_int());

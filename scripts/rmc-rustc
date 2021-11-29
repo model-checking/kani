@@ -54,6 +54,7 @@ then
 else
     set_rmc_lib_path
     RMC_FLAGS="-Z codegen-backend=gotoc \
+            -C overflow-checks=on \
             -Z trim-diagnostic-paths=no \
             -Z human_readable_cgu_names \
             --cfg=rmc \
