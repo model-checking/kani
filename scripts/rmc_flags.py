@@ -4,6 +4,8 @@
 
 import argparse
 import pathlib as pl
+from enum import Enum
+from random import choices
 
 # The default object bits value in CBMC is 8, which is not enough to handle most
 # medium-sized Rust programs. Increasing it to 16 should have no impact in
@@ -90,6 +92,48 @@ class ExtendAction(argparse.Action):
         items = getattr(namespace, self.dest, [])
         items.extend(values)
         setattr(namespace, self.dest, items)
+
+class EnumAction(argparse.Action):
+    """
+    Argparse action for handling Enums
+    """
+
+    def __init__(self, **kwargs):
+        # Pop off the type value
+        enum_type = kwargs.pop("type", None)
+
+        # Ensure an Enum subclass is provided
+        if enum_type is None:
+            raise ValueError("type must be assigned an Enum when using EnumAction")
+        if not issubclass(enum_type, Enum):
+            raise TypeError("type must be an Enum when using EnumAction")
+
+        # Generate choices from the Enum
+        kwargs.setdefault("choices", tuple(e.value for e in enum_type))
+
+        super(EnumAction, self).__init__(**kwargs)
+
+        self._enum = enum_type
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # Convert value back into an Enum
+        value = self._enum(values)
+        setattr(namespace, self.dest, value)
+
+
+class OutputStyle(str, Enum):
+    """
+    Index for the various display and output styles
+
+    Allowes user to pass flags and for rmc to change the UI based on the
+    flag that is passed. Ex - rmc test.rs --output-format new
+    """
+    DEFAULT = 'regular'
+    TERSE = 'terse'
+    OLD = 'old'
+
+    def __str__(self) -> str:
+        return self.value
 
 # Add flags related to debugging output.
 def add_loudness_flags(make_group, add_flag, config):
@@ -181,13 +225,10 @@ def add_visualizer_flags(make_group, add_flag, config):
 
 # Add flags needed for toggling and switching between outputs.
 def add_output_flags(make_group, add_flag, config):
+
     group = make_group("Output flags", "Toggle between different styles of output")
-    add_flag(group, "--newOutput", default=False, action=BooleanOptionalAction,
-             help="Turn on new output")    
-    add_flag(group, "--oldOutput", default=True, action=BooleanOptionalAction,
-             help="Turn on old output")
-    add_flag(group, "--terse", default=False, action=BooleanOptionalAction,
-             help="Gives a Summary of the original output")
+    add_flag(group, "--output-format", default=OutputStyle.OLD, type=OutputStyle, action=EnumAction,
+            choices=list(OutputStyle),help="Select the format for output")
 
 # Add flags for ad-hoc features.
 def add_other_flags(make_group, add_flag, config):

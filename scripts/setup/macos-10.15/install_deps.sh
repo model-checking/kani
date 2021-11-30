@@ -16,6 +16,7 @@ brew install ctags wget
 PYTHON_DEPS=(
   autopep8
   toml # Used for parsing `cargo-rmc` config toml
+  colorama # used for printing colorized output
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"
