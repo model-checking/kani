@@ -17,19 +17,19 @@ use std::process::{Child, Command};
 /// extend it if advanced features are used (e.g., pools)
 #[derive(Debug, Deserialize)]
 pub struct LitaniRun {
-    aux: Option<HashMap<String, String>>,
-    project: String,
-    version: String,
-    version_major: u32,
-    version_minor: u32,
-    version_patch: u32,
-    release_candidate: bool,
-    run_id: String,
-    start_time: String,
-    parallelism: LitaniParalellism,
-    latest_symlink: Option<String>,
-    end_time: String,
-    pipelines: Vec<LitaniPipeline>,
+    pub aux: Option<HashMap<String, String>>,
+    pub project: String,
+    pub version: String,
+    pub version_major: u32,
+    pub version_minor: u32,
+    pub version_patch: u32,
+    pub release_candidate: bool,
+    pub run_id: String,
+    pub start_time: String,
+    pub parallelism: LitaniParalellism,
+    pub latest_symlink: Option<String>,
+    pub end_time: String,
+    pub pipelines: Vec<LitaniPipeline>,
 }
 
 impl LitaniRun {
@@ -39,26 +39,26 @@ impl LitaniRun {
 }
 
 #[derive(Debug, Deserialize)]
-struct LitaniParalellism {
-    trace: Vec<LitaniTrace>,
-    max_paralellism: Option<u32>,
-    n_proc: u32,
+pub struct LitaniParalellism {
+    pub trace: Vec<LitaniTrace>,
+    pub max_paralellism: Option<u32>,
+    pub n_proc: u32,
 }
 
 #[derive(Debug, Deserialize)]
-struct LitaniTrace {
-    running: u32,
-    finished: u32,
-    total: u32,
-    time: String,
+pub struct LitaniTrace {
+    pub running: u32,
+    pub finished: u32,
+    pub total: u32,
+    pub time: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LitaniPipeline {
-    name: String,
-    ci_stages: Vec<LitaniStage>,
-    url: String,
-    status: String,
+    pub name: String,
+    pub ci_stages: Vec<LitaniStage>,
+    pub url: String,
+    pub status: String,
 }
 
 impl LitaniPipeline {
@@ -76,65 +76,65 @@ impl LitaniPipeline {
 }
 
 #[derive(Debug, Deserialize)]
-struct LitaniStage {
-    jobs: Vec<LitaniJob>,
-    progress: u32,
-    complete: bool,
-    status: String,
-    url: String,
-    name: String,
+pub struct LitaniStage {
+    pub jobs: Vec<LitaniJob>,
+    pub progress: u32,
+    pub complete: bool,
+    pub status: String,
+    pub url: String,
+    pub name: String,
 }
 
 // Some attributes in litani's `jobs` are not always included
 // or they are null, so we use `Option<...>` to deserialize them
 #[derive(Debug, Deserialize)]
-struct LitaniJob {
-    wrapper_arguments: LitaniWrapperArguments,
-    complete: bool,
-    start_time: Option<String>,
-    timeout_reached: Option<bool>,
-    command_return_code: Option<i32>,
-    memory_trace: Option<HashMap<String, String>>,
-    loaded_outcome_dict: Option<HashMap<String, String>>,
-    outcome: Option<String>,
-    wrapper_return_code: Option<i32>,
-    stdout: Option<Vec<String>>,
-    stderr: Option<Vec<String>>,
-    end_time: Option<String>,
-    duration_str: Option<String>,
-    duration: Option<u32>,
+pub struct LitaniJob {
+    pub wrapper_arguments: LitaniWrapperArguments,
+    pub complete: bool,
+    pub start_time: Option<String>,
+    pub timeout_reached: Option<bool>,
+    pub command_return_code: Option<i32>,
+    pub memory_trace: Option<HashMap<String, String>>,
+    pub loaded_outcome_dict: Option<HashMap<String, String>>,
+    pub outcome: Option<String>,
+    pub wrapper_return_code: Option<i32>,
+    pub stdout: Option<Vec<String>>,
+    pub stderr: Option<Vec<String>>,
+    pub end_time: Option<String>,
+    pub duration_str: Option<String>,
+    pub duration: Option<u32>,
 }
 
 // Some attributes in litani's `wrapper_arguments` are not always included
 // or they are null, so we use `Option<...>` to deserialize them
 #[derive(Debug, Deserialize)]
-struct LitaniWrapperArguments {
-    subcommand: String,
-    verbose: bool,
-    very_verbose: bool,
-    inputs: Vec<String>,
-    command: String,
-    outputs: Option<Vec<String>>,
-    pipeline_name: String,
-    ci_stage: String,
-    cwd: Option<String>,
-    timeout: Option<u32>,
-    timeout_ok: Option<bool>,
-    timeout_ignore: Option<bool>,
-    ignore_returns: Option<bool>,
-    ok_returns: Vec<String>,
-    outcome_table: Option<HashMap<String, String>>,
-    interleave_stdout_stderr: bool,
-    stdout_file: Option<String>,
-    stderr_file: Option<String>,
-    pool: Option<u32>,
-    description: String,
-    profile_memory: bool,
-    profile_memory_interval: u32,
-    phony_outputs: Option<Vec<String>>,
-    tags: Option<String>,
-    status_file: String,
-    job_id: String,
+pub struct LitaniWrapperArguments {
+    pub subcommand: String,
+    pub verbose: bool,
+    pub very_verbose: bool,
+    pub inputs: Vec<String>,
+    pub command: String,
+    pub outputs: Option<Vec<String>>,
+    pub pipeline_name: String,
+    pub ci_stage: String,
+    pub cwd: Option<String>,
+    pub timeout: Option<u32>,
+    pub timeout_ok: Option<bool>,
+    pub timeout_ignore: Option<bool>,
+    pub ignore_returns: Option<bool>,
+    pub ok_returns: Vec<String>,
+    pub outcome_table: Option<HashMap<String, String>>,
+    pub interleave_stdout_stderr: bool,
+    pub stdout_file: Option<String>,
+    pub stderr_file: Option<String>,
+    pub pool: Option<u32>,
+    pub description: String,
+    pub profile_memory: bool,
+    pub profile_memory_interval: u32,
+    pub phony_outputs: Option<Vec<String>>,
+    pub tags: Option<String>,
+    pub status_file: String,
+    pub job_id: String,
 }
 
 /// Data structure representing a `Litani` build.
