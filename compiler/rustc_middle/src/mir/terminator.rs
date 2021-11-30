@@ -35,7 +35,7 @@ pub struct SwitchTargets {
     //
     // However we’ve decided to keep this as-is until we figure a case
     // where some other approach seems to be strictly better than other.
-    pub targets: SmallVec<[BasicBlock; 2]>,
+    targets: SmallVec<[BasicBlock; 2]>,
 }
 
 impl SwitchTargets {

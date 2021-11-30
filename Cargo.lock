@@ -994,6 +994,7 @@ dependencies = [
  "rustdoc",
  "serde",
  "serde_json",
+ "toml",
  "walkdir",
 ]
 
@@ -3343,6 +3344,25 @@ name = "rmc"
 version = "0.1.0"
 
 [[package]]
+name = "rmc-link-restrictions"
+version = "0.1.0"
+dependencies = [
+ "rmc_restrictions",
+ "rustc_data_structures",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rmc_restrictions"
+version = "0.1.0"
+dependencies = [
+ "cbmc",
+ "rustc_data_structures",
+ "serde",
+]
+
+[[package]]
 name = "rust-demangler"
 version = "0.0.1"
 dependencies = [
@@ -3884,6 +3904,7 @@ dependencies = [
  "libc",
  "measureme 9.1.2",
  "num",
+ "rmc_restrictions",
  "rustc-demangle",
  "rustc_arena",
  "rustc_ast",
