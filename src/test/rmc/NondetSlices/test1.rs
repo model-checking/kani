@@ -10,7 +10,6 @@ fn check(slice: &[u8]) {
     }
 }
 
-#[no_mangle]
 fn main() {
     let arr = [1, 2, 3];
     let slice = rmc::slice::nondet_slice_of_array(&arr);
