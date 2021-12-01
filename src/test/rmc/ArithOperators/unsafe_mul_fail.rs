@@ -6,7 +6,7 @@
 // rmc-flags: --function check_mul
 // compile-flags: --crate-type lib
 
-pub fn check_add(a: u8, b: u8) {
+pub fn check_mul(a: u8, b: u8) {
     unsafe {
         a * b;
     }

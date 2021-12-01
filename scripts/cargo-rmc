@@ -24,8 +24,7 @@ def main():
     rmc.ensure_dependencies_in_path()
 
     if args.gen_c_runnable:
-        rmc.cargo_build(args.crate, args.target_dir, args.build_target,
-                        args.verbose, args.debug, args.mangler, args.dry_run, ["gen-c"], args.restrict_vtable)
+        rmc.cargo_build(args.crate, args.target_dir, args, ["gen-c"])
 
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
         symbol_table_jsons = glob.glob(pattern)
@@ -51,8 +50,7 @@ def main():
 
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    rmc.cargo_build(args.crate, args.target_dir, args.build_target,
-                    args.verbose, args.debug, args.mangler, args.dry_run, [], args.restrict_vtable)
+    rmc.cargo_build(args.crate, args.target_dir, args)
 
     if args.build_target:
         pattern = os.path.join(args.target_dir, args.build_target, "debug", "deps", "*.symtab.json")
