@@ -33,6 +33,8 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
     result.extend("#[rmctool::proof]".parse::<TokenStream>().unwrap());
+    // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
+    result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
     result.extend(item);
     result
     // quote!(
