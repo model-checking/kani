@@ -278,7 +278,7 @@ def cargo_build(
     rustflags = rustc_flags(extra_args.mangler, symbol_table_passes,
                             extra_args.restrict_vtable) + get_config("--rmc-flags").split()
     rustc_path = get_config("--rmc-path").strip()
-    cargo_cmd = ["cargo", "test", "--no-run"] if extra_args.tests else ["cargo", "build"]
+    cargo_cmd = ["cargo", "build"] if not extra_args.tests else ["cargo", "test", "--no-run"]
     build_cmd = cargo_cmd + ["--target-dir", str(target_dir)]
     if extra_args.build_target:
         build_cmd += ["--target", str(extra_args.build_target)]
