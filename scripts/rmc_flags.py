@@ -112,6 +112,8 @@ def add_linking_flags(make_group, add_flag, config):
              help="Link external C files referenced by Rust code")
     add_flag(group, "--function", default="main",
              help="Entry point for verification")
+    add_flag(group, "--tests", default=False, action=BooleanOptionalAction,
+             help="Enable test function verification. Only use this option when the entry point is a test function.")
 
 # Add flags that produce extra artifacts.
 def add_artifact_flags(make_group, add_flag, config):
