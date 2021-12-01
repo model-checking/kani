@@ -208,7 +208,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// attributes.
     ///
     /// Currently, this is only proof harness annotations.
-    /// i.e. `#[rmc::proof]` (which rmc-annotations translates to `#[rmctool::proof]` for us to handle here)
+    /// i.e. `#[rmc::proof]` (which rmc_macros translates to `#[rmctool::proof]` for us to handle here)
     fn codegen_rmctool_attributes(&mut self) {
         let instance = self.current_fn().instance();
 

@@ -8,4 +8,4 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rmc-annotations = { path = "../rmc-annotations" }
+rmc_macros = { path = "../rmc_macros" }

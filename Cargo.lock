@@ -3342,12 +3342,8 @@ dependencies = [
 name = "rmc"
 version = "0.1.0"
 dependencies = [
- "rmc-annotations",
+ "rmc_macros",
 ]
-
-[[package]]
-name = "rmc-annotations"
-version = "0.1.0"
 
 [[package]]
 name = "rmc-link-restrictions"
@@ -3358,6 +3354,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "rmc_macros"
+version = "0.1.0"
 
 [[package]]
 name = "rmc_restrictions"
