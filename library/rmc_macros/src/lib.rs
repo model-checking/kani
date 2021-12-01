@@ -11,7 +11,14 @@
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
 
-#[cfg(not(rmc))]
+#[cfg(all(not(rmc), not(test)))]
+#[proc_macro_attribute]
+pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Not-RMC, Not-Test means this code shouldn't exist, return nothing.
+    TokenStream::new()
+}
+
+#[cfg(all(not(rmc), test))]
 #[proc_macro_attribute]
 pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Leave the code intact, so it can be easily be edited in an IDE,
