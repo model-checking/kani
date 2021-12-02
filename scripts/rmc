@@ -133,7 +133,13 @@ def main():
                                     args.verbose, args.quiet, args.keep_temps,
                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
-        retcode = rmc.run_cbmc(goto_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run, args.output_format)
+        retcode = rmc.run_cbmc(
+            goto_filename,
+            args.cbmc_args,
+            args.verbose,
+            args.quiet,
+            args.dry_run,
+            args.output_format)
 
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
         retcode = EXIT_CODE_SUCCESS

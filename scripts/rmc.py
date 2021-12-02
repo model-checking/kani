@@ -319,7 +319,13 @@ def link_c_lib(srcs, dst, c_lib, verbose=False, quiet=False, function="main", dr
         raise Exception("Failed to run command: {}".format(" ".join(cmd)))
 
 # Runs CBMC on a goto program
-def run_cbmc(cbmc_filename, cbmc_args, verbose=False, quiet=False, dry_run=False, output_style=rmc_flags.OutputStyle.DEFAULT):
+def run_cbmc(
+        cbmc_filename,
+        cbmc_args,
+        verbose=False,
+        quiet=False,
+        dry_run=False,
+        output_style=rmc_flags.OutputStyle.DEFAULT):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
     scanners = []
     if "--unwinding-assertions" in cbmc_args:

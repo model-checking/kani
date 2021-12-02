@@ -109,7 +109,7 @@ class EnumAction(argparse.Action):
             raise TypeError("type must be an Enum when using EnumAction")
 
         # Generate choices from the Enum
-        kwargs.setdefault("choices", tuple(e.value for e in enum_type))
+        kwargs.setdefault("choices", list(e.value for e in enum_type))
 
         super(EnumAction, self).__init__(**kwargs)
 
@@ -227,8 +227,13 @@ def add_visualizer_flags(make_group, add_flag, config):
 def add_output_flags(make_group, add_flag, config):
 
     group = make_group("Output flags", "Toggle between different styles of output")
-    add_flag(group, "--output-format", default=OutputStyle.OLD, type=OutputStyle, action=EnumAction,
-            choices=list(OutputStyle),help="Select the format for output")
+    add_flag(
+        group,
+        "--output-format",
+        default=OutputStyle.OLD,
+        type=OutputStyle,
+        action=EnumAction,
+        help="Select the format for output")
 
 # Add flags for ad-hoc features.
 def add_other_flags(make_group, add_flag, config):
