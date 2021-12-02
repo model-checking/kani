@@ -15,6 +15,8 @@ pub struct HarnessMetadata {
     pub mangled_name: String,
     /// The (currently full-) path to the file this proof harness was declared within
     pub original_file: String,
+    /// The line in that file where the proof harness begins
+    pub original_line: String,
 }
 
 /// The structure of `.rmc-metadata.json` files, which are emitted for each crate

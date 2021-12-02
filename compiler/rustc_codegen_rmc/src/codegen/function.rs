@@ -227,8 +227,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let mangled_name = current_fn.name();
         let loc = self.codegen_span(&current_fn.mir().span);
 
-        let harness =
-            HarnessMetadata { pretty_name, mangled_name, original_file: loc.filename().unwrap() };
+        let harness = HarnessMetadata {
+            pretty_name,
+            mangled_name,
+            original_file: loc.filename().unwrap(),
+            original_line: loc.line().unwrap().to_string(),
+        };
 
         self.proof_harnesses.push(harness);
     }
