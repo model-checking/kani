@@ -39,10 +39,6 @@ if [ -d "$RMC_DIR/firecracker/build" ]; then
   rm -rf "$RMC_DIR/firecracker/build"
 fi
 
-if [ -d "$RMC_DIR/scripts/temp_json" ]; then
-  rm -rf "$RMC_DIR"/scripts/temp_json/*.json
-fi
-
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
 

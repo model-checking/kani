@@ -1,7 +1,0 @@
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0 OR MIT
-
-# Cannot add temporary json files to remote repositories - Ignore everything in this directory 
-* 
-# Except this file 
-!.gitignore
