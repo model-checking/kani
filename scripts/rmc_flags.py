@@ -230,14 +230,6 @@ def add_visualizer_flags(make_group, add_flag, config):
 def add_output_flags(make_group, add_flag, config):
 
     group = make_group("Output flags", "Toggle between different styles of output")
-<<<<<<< HEAD
-    add_flag(group, "--newOutput", default=False, action=BooleanOptionalAction,
-             help="Turn on new output")
-    add_flag(group, "--oldOutput", default=True, action=BooleanOptionalAction,
-             help="Turn on old output")
-    add_flag(group, "--terse", default=False, action=BooleanOptionalAction,
-             help="Gives a Summary of the original output")
-=======
     add_flag(
         group,
         "--output-format",
@@ -245,7 +237,6 @@ def add_output_flags(make_group, add_flag, config):
         type=OutputStyle,
         action=EnumAction,
         help="Select the format for output")
->>>>>>> code-review-nov-30
 
 # Add flags for ad-hoc features.
 def add_other_flags(make_group, add_flag, config):
