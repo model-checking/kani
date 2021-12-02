@@ -34,7 +34,6 @@ use rustc_target::spec::abi::Abi;
 use crate::clean::cfg::Cfg;
 use crate::clean::external_path;
 use crate::clean::inline::{self, print_inlined_const};
-use crate::clean::types::Type::{QPath, ResolvedPath};
 use crate::clean::utils::{is_literal_expr, print_const_expr, print_evaluated_const};
 use crate::clean::Clean;
 use crate::core::DocContext;
@@ -43,10 +42,14 @@ use crate::formats::item_type::ItemType;
 use crate::html::render::cache::ExternalLocation;
 use crate::html::render::Context;
 
-use self::FnRetTy::*;
-use self::ItemKind::*;
-use self::SelfTy::*;
-use self::Type::*;
+crate use self::FnRetTy::*;
+crate use self::ItemKind::*;
+crate use self::SelfTy::*;
+crate use self::Type::{
+    Array, BareFunction, BorrowedRef, DynTrait, Generic, ImplTrait, Infer, Primitive, QPath,
+    RawPointer, Slice, Tuple,
+};
+crate use self::Visibility::{Inherited, Public};
 
 crate type ItemIdSet = FxHashSet<ItemId>;
 
@@ -117,7 +120,6 @@ impl From<DefId> for ItemId {
 #[derive(Clone, Debug)]
 crate struct Crate {
     crate module: Item,
-    crate externs: Vec<ExternalCrate>,
     crate primitives: ThinVec<(DefId, PrimitiveType)>,
     /// Only here so that they can be filtered through the rustdoc passes.
     crate external_traits: Rc<RefCell<FxHashMap<DefId, TraitWithExtraInfo>>>,
@@ -126,7 +128,7 @@ crate struct Crate {
 
 // `Crate` is frequently moved by-value. Make sure it doesn't unintentionally get bigger.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Crate, 104);
+rustc_data_structures::static_assert_size!(Crate, 80);
 
 impl Crate {
     crate fn name(&self, tcx: TyCtxt<'_>) -> Symbol {
@@ -906,7 +908,6 @@ impl<I: Iterator<Item = ast::NestedMetaItem> + IntoIterator<Item = ast::NestedMe
 /// kept separate because of issue #42760.
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate struct DocFragment {
-    crate line: usize,
     crate span: rustc_span::Span,
     /// The module this doc-comment came from.
     ///
@@ -918,6 +919,10 @@ crate struct DocFragment {
     crate need_backline: bool,
     crate indent: usize,
 }
+
+// `DocFragment` is used a lot. Make sure it doesn't unintentionally get bigger.
+#[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
+rustc_data_structures::static_assert_size!(DocFragment, 32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 crate enum DocFragmentKind {
@@ -1027,7 +1032,6 @@ impl Attributes {
         additional_attrs: Option<(&[ast::Attribute], DefId)>,
     ) -> Attributes {
         let mut doc_strings: Vec<DocFragment> = vec![];
-        let mut doc_line = 0;
 
         fn update_need_backline(doc_strings: &mut Vec<DocFragment>) {
             if let Some(prev) = doc_strings.last_mut() {
@@ -1045,10 +1049,7 @@ impl Attributes {
                     DocFragmentKind::RawDoc
                 };
 
-                let line = doc_line;
-                doc_line += value.as_str().lines().count();
                 let frag = DocFragment {
-                    line,
                     span: attr.span,
                     doc: value,
                     kind,
@@ -1115,7 +1116,7 @@ impl Attributes {
         if self.doc_strings.is_empty() { None } else { Some(self.doc_strings.iter().collect()) }
     }
 
-    crate fn get_doc_aliases(&self) -> Box<[String]> {
+    crate fn get_doc_aliases(&self) -> Box<[Symbol]> {
         let mut aliases = FxHashSet::default();
 
         for attr in self.other_attrs.lists(sym::doc).filter(|a| a.has_name(sym::alias)) {
@@ -1123,16 +1124,16 @@ impl Attributes {
                 for l in values {
                     match l.literal().unwrap().kind {
                         ast::LitKind::Str(s, _) => {
-                            aliases.insert(s.as_str().to_string());
+                            aliases.insert(s);
                         }
                         _ => unreachable!(),
                     }
                 }
             } else {
-                aliases.insert(attr.value_str().map(|s| s.to_string()).unwrap());
+                aliases.insert(attr.value_str().unwrap());
             }
         }
-        aliases.into_iter().collect::<Vec<String>>().into()
+        aliases.into_iter().collect::<Vec<_>>().into()
     }
 }
 
@@ -1238,20 +1239,9 @@ impl WherePredicate {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate enum GenericParamDefKind {
-    Lifetime {
-        outlives: Vec<Lifetime>,
-    },
-    Type {
-        did: DefId,
-        bounds: Vec<GenericBound>,
-        default: Option<Box<Type>>,
-        synthetic: Option<hir::SyntheticTyParamKind>,
-    },
-    Const {
-        did: DefId,
-        ty: Box<Type>,
-        default: Option<Box<String>>,
-    },
+    Lifetime { outlives: Vec<Lifetime> },
+    Type { did: DefId, bounds: Vec<GenericBound>, default: Option<Box<Type>>, synthetic: bool },
+    Const { did: DefId, ty: Box<Type>, default: Option<Box<String>> },
 }
 
 impl GenericParamDefKind {
@@ -1285,7 +1275,7 @@ impl GenericParamDef {
     crate fn is_synthetic_type_param(&self) -> bool {
         match self.kind {
             GenericParamDefKind::Lifetime { .. } | GenericParamDefKind::Const { .. } => false,
-            GenericParamDefKind::Type { ref synthetic, .. } => synthetic.is_some(),
+            GenericParamDefKind::Type { synthetic, .. } => synthetic,
         }
     }
 
@@ -1431,8 +1421,9 @@ crate struct PolyTrait {
 crate enum Type {
     /// A named type, which could be a trait.
     ///
-    /// This is mostly Rustdoc's version of [`hir::Path`]. It has to be different because Rustdoc's [`PathSegment`] can contain cleaned generics.
-    ResolvedPath { path: Path, did: DefId },
+    /// This is mostly Rustdoc's version of [`hir::Path`].
+    /// It has to be different because Rustdoc's [`PathSegment`] can contain cleaned generics.
+    Path { path: Path },
     /// A `dyn Trait` object: `dyn for<'a> Trait<'a> + Send + 'static`
     DynTrait(Vec<PolyTrait>, Option<Lifetime>),
     /// A type parameter.
@@ -1477,6 +1468,45 @@ crate enum Type {
 rustc_data_structures::static_assert_size!(Type, 72);
 
 impl Type {
+    /// When comparing types for equality, it can help to ignore `&` wrapping.
+    crate fn without_borrowed_ref(&self) -> &Type {
+        let mut result = self;
+        while let Type::BorrowedRef { type_, .. } = result {
+            result = &*type_;
+        }
+        result
+    }
+
+    /// Check if two types are "potentially the same".
+    /// This is different from `Eq`, because it knows that things like
+    /// `Placeholder` are possible matches for everything.
+    crate fn is_same(&self, other: &Self, cache: &Cache) -> bool {
+        match (self, other) {
+            // Recursive cases.
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.is_same(&b, cache))
+            }
+            (Type::Slice(a), Type::Slice(b)) => a.is_same(&b, cache),
+            (Type::Array(a, al), Type::Array(b, bl)) => al == bl && a.is_same(&b, cache),
+            (Type::RawPointer(mutability, type_), Type::RawPointer(b_mutability, b_type_)) => {
+                mutability == b_mutability && type_.is_same(&b_type_, cache)
+            }
+            (
+                Type::BorrowedRef { mutability, type_, .. },
+                Type::BorrowedRef { mutability: b_mutability, type_: b_type_, .. },
+            ) => mutability == b_mutability && type_.is_same(&b_type_, cache),
+            // Placeholders and generics are equal to all other types.
+            (Type::Infer, _) | (_, Type::Infer) => true,
+            (Type::Generic(_), _) | (_, Type::Generic(_)) => true,
+            // Other cases, such as primitives, just use recursion.
+            (a, b) => a
+                .def_id(cache)
+                .and_then(|a| Some((a, b.def_id(cache)?)))
+                .map(|(a, b)| a == b)
+                .unwrap_or(false),
+        }
+    }
+
     crate fn primitive_type(&self) -> Option<PrimitiveType> {
         match *self {
             Primitive(p) | BorrowedRef { type_: box Primitive(p), .. } => Some(p),
@@ -1498,7 +1528,7 @@ impl Type {
     /// Checks if this is a `T::Name` path for an associated type.
     crate fn is_assoc_ty(&self) -> bool {
         match self {
-            ResolvedPath { path, .. } => path.is_assoc_ty(),
+            Type::Path { path, .. } => path.is_assoc_ty(),
             _ => false,
         }
     }
@@ -1512,7 +1542,7 @@ impl Type {
 
     crate fn generics(&self) -> Option<Vec<&Type>> {
         match self {
-            ResolvedPath { path, .. } => path.generics(),
+            Type::Path { path, .. } => path.generics(),
             _ => None,
         }
     }
@@ -1535,7 +1565,7 @@ impl Type {
 
     fn inner_def_id(&self, cache: Option<&Cache>) -> Option<DefId> {
         let t: PrimitiveType = match *self {
-            ResolvedPath { did, .. } => return Some(did),
+            Type::Path { ref path } => return Some(path.def_id()),
             DynTrait(ref bounds, _) => return Some(bounds[0].trait_.def_id()),
             Primitive(p) => return cache.and_then(|c| c.primitive_locations.get(&p).cloned()),
             BorrowedRef { type_: box Generic(..), .. } => PrimitiveType::Reference,

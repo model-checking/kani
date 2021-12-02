@@ -586,38 +586,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
-    /// Given a fully substituted set of bounds (`generic_bounds`), and the values with which each
-    /// type/region parameter was instantiated (`substs`), creates and registers suitable
-    /// trait/region obligations.
-    ///
-    /// For example, if there is a function:
-    ///
-    /// ```
-    /// fn foo<'a,T:'a>(...)
-    /// ```
-    ///
-    /// and a reference:
-    ///
-    /// ```
-    /// let f = foo;
-    /// ```
-    ///
-    /// Then we will create a fresh region variable `'$0` and a fresh type variable `$1` for `'a`
-    /// and `T`. This routine will add a region obligation `$1:'$0` and register it locally.
-    pub fn add_obligations_for_parameters(
-        &self,
-        cause: traits::ObligationCause<'tcx>,
-        predicates: ty::InstantiatedPredicates<'tcx>,
-    ) {
-        assert!(!predicates.has_escaping_bound_vars());
-
-        debug!("add_obligations_for_parameters(predicates={:?})", predicates);
-
-        for obligation in traits::predicates_for_generics(cause, self.param_env, predicates) {
-            self.register_predicate(obligation);
-        }
-    }
-
     // FIXME(arielb1): use this instead of field.ty everywhere
     // Only for fields! Returns <none> for methods>
     // Indifferent to privacy flags
@@ -1129,12 +1097,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         (_, _) => return None,
                     };
 
-                let last_hir_id = self.tcx.hir().local_def_id_to_hir_id(last_local_id);
-                let exp_hir_id = self.tcx.hir().local_def_id_to_hir_id(exp_local_id);
-
                 match (
-                    &self.tcx.hir().expect_item(last_hir_id).kind,
-                    &self.tcx.hir().expect_item(exp_hir_id).kind,
+                    &self.tcx.hir().expect_item(last_local_id).kind,
+                    &self.tcx.hir().expect_item(exp_local_id).kind,
                 ) {
                     (
                         hir::ItemKind::OpaqueTy(hir::OpaqueTy { bounds: last_bounds, .. }),
@@ -1522,20 +1487,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     /// Add all the obligations that are required, substituting and normalized appropriately.
     #[tracing::instrument(level = "debug", skip(self, span, def_id, substs))]
-    fn add_required_obligations(&self, span: Span, def_id: DefId, substs: &SubstsRef<'tcx>) {
-        let (bounds, spans) = self.instantiate_bounds(span, def_id, &substs);
+    crate fn add_required_obligations(&self, span: Span, def_id: DefId, substs: &SubstsRef<'tcx>) {
+        let (bounds, _) = self.instantiate_bounds(span, def_id, &substs);
 
-        for (i, mut obligation) in traits::predicates_for_generics(
+        for obligation in traits::predicates_for_generics(
             traits::ObligationCause::new(span, self.body_id, traits::ItemObligation(def_id)),
             self.param_env,
             bounds,
-        )
-        .enumerate()
-        {
-            // This makes the error point at the bound, but we want to point at the argument
-            if let Some(span) = spans.get(i) {
-                obligation.cause.make_mut().code = traits::BindingObligation(def_id, *span);
-            }
+        ) {
             self.register_predicate(obligation);
         }
     }

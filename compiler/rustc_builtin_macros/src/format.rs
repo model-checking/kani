@@ -88,8 +88,8 @@ struct Context<'a, 'b> {
     /// * Implicit argument resolution: `"{1:.0$} {2:.foo$} {1:.3$} {4:.0$}"`
     /// * Name resolution: `"{1:.0$} {2:.5$} {1:.3$} {4:.0$}"`
     /// * `count_positions` (in JSON): `{0: 0, 5: 1, 3: 2}`
-    /// * `count_args`: `vec![Exact(0), Exact(5), Exact(3)]`
-    count_args: Vec<Position>,
+    /// * `count_args`: `vec![0, 5, 3]`
+    count_args: Vec<usize>,
     /// Relative slot numbers for count arguments.
     count_positions: FxHashMap<usize, usize>,
     /// Number of count slots assigned.
@@ -513,7 +513,7 @@ impl<'a, 'b> Context<'a, 'b> {
                         if let Entry::Vacant(e) = self.count_positions.entry(arg) {
                             let i = self.count_positions_count;
                             e.insert(i);
-                            self.count_args.push(Exact(arg));
+                            self.count_args.push(arg);
                             self.count_positions_count += 1;
                         }
                     }
@@ -769,13 +769,12 @@ impl<'a, 'b> Context<'a, 'b> {
             for arg_ty in self.arg_unique_types[i].iter() {
                 args.push(Context::format_arg(self.ecx, self.macsp, e.span, arg_ty, i));
             }
-            heads.push(self.ecx.expr_addr_of(e.span, e));
+            // use the arg span for `&arg` so that borrowck errors
+            // point to the specific expression passed to the macro
+            // (the span is otherwise unavailable in MIR)
+            heads.push(self.ecx.expr_addr_of(e.span.with_ctxt(self.macsp.ctxt()), e));
         }
-        for pos in self.count_args {
-            let index = match pos {
-                Exact(i) => i,
-                _ => panic!("should never happen"),
-            };
+        for index in self.count_args {
             let span = spans_pos[index];
             args.push(Context::format_arg(self.ecx, self.macsp, span, &Count, index));
         }
