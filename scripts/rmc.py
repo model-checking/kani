@@ -194,7 +194,7 @@ def run_cmd(
 
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
-        # '2' represents the old default output and '0' and '1' are for the transformed output styles
+        # By Default, the flag passed is the old output style
         if (output_style != rmc_flags.OutputStyle.OLD):
             try:
                 cbmc_json_parser.transform_cbmc_output(stdout, output_style)

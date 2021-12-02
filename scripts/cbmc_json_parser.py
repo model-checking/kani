@@ -21,19 +21,31 @@ functions:
 
 import json
 from json.decoder import JSONDecodeError
-from subprocess import run
 from os import remove
 from os.path import exists
-from colorama import Fore, Back, Style
+from colorama import Fore, Style
 import tempfile
 import sys
+from enum import Enum
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
-    'default': 'regular',
+    'default': 'old',
+    'regular': 'regular',
     'terse': 'terse',
     'old': 'old'
 }
+
+class GlobalMessages(str, Enum):
+    """
+    Enum class to store all the global messages
+    """
+    CONST_TRACE_MESSAGE = 'Building error trace',
+    PROGRAM = 'program'
+    RESULT = 'result'
+    MESSAGE_TEXT = 'messageText'
+    SUCCESS = 'SUCCESS'
+    FAILED = 'FAILED'
 
 def main():
 
@@ -47,7 +59,7 @@ def main():
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["default"])
+    transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["old"])
     return
 
 def transform_cbmc_output(log_file, output_style):
@@ -84,7 +96,7 @@ def transform_cbmc_output(log_file, output_style):
 
         # Using Case Switching to Toggle between various output styles
         # For now, the two options provided are default and terse
-        if output_style == output_style_switcher["default"]:
+        if output_style == output_style_switcher["regular"]:
 
             # Extract Solver Information from the json file and construct message
             output_message += construct_solver_information_message(solver_information)
@@ -170,7 +182,7 @@ def restructure_json_file(log_file):
         return {}
     except JSONDecodeError:
         # print out specific information about the extra data (like the lines before it)
-        print("JSON File not being parsed", )
+        print("JSON File not being parsed")
         return {}
 
     # TODO: Check if passing dictionaries around is optimal or if there are alternate ways to
@@ -193,9 +205,9 @@ def extract_solver_information(json_object):
 
     # Check for the objects which are not related to the result object
     for response_object in responses:
-        if "result" not in response_object.keys():
+        if GlobalMessages.RESULT not in response_object.keys():
             solver_information.append(response_object)
-        elif "result" in response_object.keys():
+        elif GlobalMessages.RESULT in response_object.keys():
             properties = response_object["result"]
         else:
             return properties, solver_information
@@ -217,11 +229,11 @@ def construct_solver_information_message(solver_information):
     for message_object in solver_information:
         # 'Program' and 'messageText' fields give us the information about the solver
         try:
-            if "program" in message_object.keys():
+            if GlobalMessages.PROGRAM in message_object.keys():
                 solver_information_message += message_object['program']
             # Check message texts for valuable information and append only relevant messages
-            elif "messageText" in message_object.keys():
-                if message_object['messageText'] != 'Building error trace':
+            elif GlobalMessages.MESSAGE_TEXT in message_object.keys():
+                if message_object['messageText'] != GlobalMessages.CONST_TRACE_MESSAGE:
                     solver_information_message += message_object['messageText']
                 else:
                     pass
@@ -255,7 +267,7 @@ def construct_terse_property_message(properties):
     output_message = ""
     failed_tests = []
     index = 0
-    verification_status = "FAILED"
+    verification_status = GlobalMessages.FAILED
 
     # Parse each property instance in properties
     for index, property_instance in enumerate(properties):
@@ -319,7 +331,7 @@ def construct_property_message(properties):
     output_message = ""
     failed_tests = []
     index = 0
-    verification_status = "FAILED"
+    verification_status = GlobalMessages.FAILED
 
     output_message = "RESULT:\n"
 
@@ -376,7 +388,7 @@ def construct_property_message(properties):
 # with DynTrait tests
 def non_json_cbmc_output_handler(logfile):
     # Basic handling is just printing the output provided by CBMC
-    print(logfile)
+    raise Exception("CBMC Crashed - Unable to present Result")
 
 # Method provides an Interface to printing, can be expanded upon
 def print_to_terminal(output_message):

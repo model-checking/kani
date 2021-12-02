@@ -129,7 +129,8 @@ class OutputStyle(str, Enum):
     Allowes user to pass flags and for rmc to change the UI based on the
     flag that is passed. Ex - rmc test.rs --output-format new
     """
-    DEFAULT = 'regular'
+    DEFAULT = 'old'
+    REGULAR = 'regular'
     TERSE = 'terse'
     OLD = 'old'
 

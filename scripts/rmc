@@ -112,7 +112,7 @@ def main():
 
     # if oldOutput flag is passed, then prevent output from going into the json parser
     # else then by default and for terse output, display the result through the json parser
-    if(args.output_format == rmc_flags.OutputStyle.DEFAULT) or (args.output_format == rmc_flags.OutputStyle.TERSE):
+    if(args.output_format == rmc_flags.OutputStyle.REGULAR) or (args.output_format == rmc_flags.OutputStyle.TERSE):
         # This gives us the json output from CBMC which is passed into the parser
         if "--json-ui" not in args.cbmc_args:
             args.cbmc_args.extend(["--json-ui"])

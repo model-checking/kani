@@ -3,6 +3,7 @@
 
 // rmc-verify-fail
 // cbmc-flags: --unwind 2 --unwinding-assertions
+// rmc-flags: --output-format old
 
 static mut CELL: i32 = 0;
 
