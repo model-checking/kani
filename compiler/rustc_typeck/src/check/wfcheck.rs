@@ -84,8 +84,7 @@ impl<'tcx> CheckWfFcxBuilder<'tcx> {
 /// the types first.
 #[instrument(skip(tcx), level = "debug")]
 pub fn check_item_well_formed(tcx: TyCtxt<'_>, def_id: LocalDefId) {
-    let hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
-    let item = tcx.hir().expect_item(hir_id);
+    let item = tcx.hir().expect_item(def_id);
 
     debug!(
         ?item.def_id,
@@ -197,7 +196,7 @@ pub fn check_item_well_formed(tcx: TyCtxt<'_>, def_id: LocalDefId) {
 
 pub fn check_trait_item(tcx: TyCtxt<'_>, def_id: LocalDefId) {
     let hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
-    let trait_item = tcx.hir().expect_trait_item(hir_id);
+    let trait_item = tcx.hir().expect_trait_item(def_id);
 
     let (method_sig, span) = match trait_item.kind {
         hir::TraitItemKind::Fn(ref sig, _) => (Some(sig), trait_item.span),
@@ -207,8 +206,8 @@ pub fn check_trait_item(tcx: TyCtxt<'_>, def_id: LocalDefId) {
     check_object_unsafe_self_trait_by_name(tcx, trait_item);
     check_associated_item(tcx, trait_item.def_id, span, method_sig);
 
-    let encl_trait_hir_id = tcx.hir().get_parent_item(hir_id);
-    let encl_trait = tcx.hir().expect_item(encl_trait_hir_id);
+    let encl_trait_def_id = tcx.hir().get_parent_did(hir_id);
+    let encl_trait = tcx.hir().expect_item(encl_trait_def_id);
     let encl_trait_def_id = encl_trait.def_id.to_def_id();
     let fn_lang_item_name = if Some(encl_trait_def_id) == tcx.lang_items().fn_trait() {
         Some("fn")
@@ -680,8 +679,7 @@ fn check_object_unsafe_self_trait_by_name(tcx: TyCtxt<'_>, item: &hir::TraitItem
 }
 
 pub fn check_impl_item(tcx: TyCtxt<'_>, def_id: LocalDefId) {
-    let hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
-    let impl_item = tcx.hir().expect_impl_item(hir_id);
+    let impl_item = tcx.hir().expect_impl_item(def_id);
 
     let (method_sig, span) = match impl_item.kind {
         hir::ImplItemKind::Fn(ref sig, _) => (Some(sig), impl_item.span),
@@ -1060,6 +1058,20 @@ fn check_item_type(tcx: TyCtxt<'_>, item_id: LocalDefId, ty_span: Span, allow_fo
             );
         }
 
+        // Ensure that the end result is `Sync` in a non-thread local `static`.
+        let should_check_for_sync = tcx.static_mutability(item_id.to_def_id())
+            == Some(hir::Mutability::Not)
+            && !tcx.is_foreign_item(item_id.to_def_id())
+            && !tcx.is_thread_local_static(item_id.to_def_id());
+
+        if should_check_for_sync {
+            fcx.register_bound(
+                item_ty,
+                tcx.require_lang_item(LangItem::Sync, Some(ty_span)),
+                traits::ObligationCause::new(ty_span, fcx.body_id, traits::SharedStatic),
+            );
+        }
+
         // No implied bounds in a const, etc.
         FxHashSet::default()
     });
@@ -1321,11 +1333,6 @@ fn check_fn_or_method<'fcx, 'tcx>(
     implied_bounds: &mut FxHashSet<Ty<'tcx>>,
 ) {
     let sig = fcx.tcx.liberate_late_bound_regions(def_id, sig);
-
-    // Unnormalized types in signature are WF too
-    implied_bounds.extend(sig.inputs());
-    // FIXME(#27579) return types should not be implied bounds
-    implied_bounds.insert(sig.output());
 
     // Normalize the input and output types one at a time, using a different
     // `WellFormedLoc` for each. We cannot call `normalize_associated_types`
@@ -1641,19 +1648,38 @@ fn report_bivariance(tcx: TyCtxt<'_>, param: &rustc_hir::GenericParam<'_>) {
 
 /// Feature gates RFC 2056 -- trivial bounds, checking for global bounds that
 /// aren't true.
-fn check_false_global_bounds(fcx: &FnCtxt<'_, '_>, span: Span, id: hir::HirId) {
+fn check_false_global_bounds(fcx: &FnCtxt<'_, '_>, mut span: Span, id: hir::HirId) {
     let empty_env = ty::ParamEnv::empty();
 
     let def_id = fcx.tcx.hir().local_def_id(id);
-    let predicates = fcx.tcx.predicates_of(def_id).predicates.iter().map(|(p, _)| *p);
+    let predicates_with_span =
+        fcx.tcx.predicates_of(def_id).predicates.iter().map(|(p, span)| (*p, *span));
     // Check elaborated bounds.
-    let implied_obligations = traits::elaborate_predicates(fcx.tcx, predicates);
+    let implied_obligations = traits::elaborate_predicates_with_span(fcx.tcx, predicates_with_span);
 
     for obligation in implied_obligations {
         let pred = obligation.predicate;
         // Match the existing behavior.
         if pred.is_global(fcx.tcx) && !pred.has_late_bound_regions() {
             let pred = fcx.normalize_associated_types_in(span, pred);
+            let hir_node = fcx.tcx.hir().find(id);
+
+            // only use the span of the predicate clause (#90869)
+
+            if let Some(hir::Generics { where_clause, .. }) =
+                hir_node.and_then(|node| node.generics())
+            {
+                let obligation_span = obligation.cause.span(fcx.tcx);
+
+                span = where_clause
+                    .predicates
+                    .iter()
+                    // There seems to be no better way to find out which predicate we are in
+                    .find(|pred| pred.span().contains(obligation_span))
+                    .map(|pred| pred.span())
+                    .unwrap_or(obligation_span);
+            }
+
             let obligation = traits::Obligation::new(
                 traits::ObligationCause::new(span, id, traits::TrivialBound),
                 empty_env,

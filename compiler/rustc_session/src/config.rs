@@ -165,6 +165,18 @@ pub enum LinkerPluginLto {
     Disabled,
 }
 
+/// Used with `-Z assert-incr-state`.
+#[derive(Clone, Copy, PartialEq, Hash, Debug)]
+pub enum IncrementalStateAssertion {
+    /// Found and loaded an existing session directory.
+    ///
+    /// Note that this says nothing about whether any particular query
+    /// will be found to be red or green.
+    Loaded,
+    /// Did not load an existing session directory.
+    NotLoaded,
+}
+
 impl LinkerPluginLto {
     pub fn enabled(&self) -> bool {
         match *self {
@@ -323,20 +335,15 @@ impl Default for ErrorOutputType {
 }
 
 /// Parameter to control path trimming.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum TrimmedDefPaths {
     /// `try_print_trimmed_def_path` never prints a trimmed path and never calls the expensive query
+    #[default]
     Never,
     /// `try_print_trimmed_def_path` calls the expensive query, the query doesn't call `delay_good_path_bug`
     Always,
     /// `try_print_trimmed_def_path` calls the expensive query, the query calls `delay_good_path_bug`
     GoodPath,
-}
-
-impl Default for TrimmedDefPaths {
-    fn default() -> Self {
-        Self::Never
-    }
 }
 
 /// Use tree-based collections to cheaply get a deterministic `Hash` implementation.
@@ -526,6 +533,7 @@ pub enum PrintRequest {
     TlsModels,
     TargetSpec,
     NativeStaticLibs,
+    StackProtectorStrategies,
 }
 
 #[derive(Copy, Clone)]
@@ -704,6 +712,7 @@ pub fn host_triple() -> &'static str {
 impl Default for Options {
     fn default() -> Options {
         Options {
+            assert_incr_state: None,
             crate_types: Vec::new(),
             optimize: OptLevel::No,
             debuginfo: DebugInfo::None,
@@ -822,6 +831,13 @@ impl Passes {
         match *self {
             Passes::Some(ref v) => v.is_empty(),
             Passes::All => false,
+        }
+    }
+
+    pub fn extend(&mut self, passes: impl IntoIterator<Item = String>) {
+        match *self {
+            Passes::Some(ref mut v) => v.extend(passes),
+            Passes::All => {}
         }
     }
 }
@@ -1097,8 +1113,8 @@ pub fn rustc_short_optgroups() -> Vec<RustcOptGroup> {
             "print",
             "Compiler information to print on stdout",
             "[crate-name|file-names|sysroot|target-libdir|cfg|target-list|\
-             target-cpus|target-features|relocation-models|\
-             code-models|tls-models|target-spec-json|native-static-libs]",
+             target-cpus|target-features|relocation-models|code-models|\
+             tls-models|target-spec-json|native-static-libs|stack-protector-strategies]",
         ),
         opt::flagmulti_s("g", "", "Equivalent to -C debuginfo=2"),
         opt::flagmulti_s("O", "", "Equivalent to -C opt-level=2"),
@@ -1514,6 +1530,7 @@ fn collect_print_requests(
         "code-models" => PrintRequest::CodeModels,
         "tls-models" => PrintRequest::TlsModels,
         "native-static-libs" => PrintRequest::NativeStaticLibs,
+        "stack-protector-strategies" => PrintRequest::StackProtectorStrategies,
         "target-spec-json" => {
             if dopts.unstable_options {
                 PrintRequest::TargetSpec
@@ -1623,6 +1640,21 @@ fn select_debuginfo(
                 );
             }
         }
+    }
+}
+
+crate fn parse_assert_incr_state(
+    opt_assertion: &Option<String>,
+    error_format: ErrorOutputType,
+) -> Option<IncrementalStateAssertion> {
+    match opt_assertion {
+        Some(s) if s.as_str() == "loaded" => Some(IncrementalStateAssertion::Loaded),
+        Some(s) if s.as_str() == "not-loaded" => Some(IncrementalStateAssertion::NotLoaded),
+        Some(s) => early_error(
+            error_format,
+            &format!("unexpected incremental state assertion value: {}", s),
+        ),
+        None => None,
     }
 }
 
@@ -2015,6 +2047,9 @@ pub fn build_session_options(matches: &getopts::Matches) -> Options {
 
     let incremental = cg.incremental.as_ref().map(PathBuf::from);
 
+    let assert_incr_state =
+        parse_assert_incr_state(&debugging_opts.assert_incr_state, error_format);
+
     if debugging_opts.profile && incremental.is_some() {
         early_error(
             error_format,
@@ -2179,6 +2214,7 @@ pub fn build_session_options(matches: &getopts::Matches) -> Options {
     };
 
     Options {
+        assert_incr_state,
         crate_types,
         optimize: opt_level,
         debuginfo,
@@ -2462,7 +2498,9 @@ crate mod dep_tracking {
     use rustc_span::edition::Edition;
     use rustc_span::RealFileName;
     use rustc_target::spec::{CodeModel, MergeFunctions, PanicStrategy, RelocModel};
-    use rustc_target::spec::{RelroLevel, SanitizerSet, SplitDebuginfo, TargetTriple, TlsModel};
+    use rustc_target::spec::{
+        RelroLevel, SanitizerSet, SplitDebuginfo, StackProtector, TargetTriple, TlsModel,
+    };
     use std::collections::hash_map::DefaultHasher;
     use std::collections::BTreeMap;
     use std::hash::Hash;
@@ -2536,6 +2574,7 @@ crate mod dep_tracking {
         Edition,
         LinkerPluginLto,
         SplitDebuginfo,
+        StackProtector,
         SwitchWithOptPath,
         SymbolManglingVersion,
         SourceFileHashAlgorithm,
