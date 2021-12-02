@@ -509,10 +509,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             self.write_user_type_annotation_from_substs(hir_id, did, substs, None);
 
             // Check bounds on type arguments used in the path.
-            let (bounds, _) = self.instantiate_bounds(path_span, did, substs);
-            let cause =
-                traits::ObligationCause::new(path_span, self.body_id, traits::ItemObligation(did));
-            self.add_obligations_for_parameters(cause, bounds);
+            self.add_required_obligations(path_span, did, substs);
 
             Some((variant, ty))
         } else {
@@ -740,6 +737,24 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         &mut |err| {
                             if let Some(expected_ty) = expected.only_has_type(self) {
                                 self.consider_hint_about_removing_semicolon(blk, expected_ty, err);
+                                if expected_ty == self.tcx.types.bool {
+                                    // If this is caused by a missing `let` in a `while let`,
+                                    // silence this redundant error, as we already emit E0070.
+                                    let parent = self.tcx.hir().get_parent_node(blk.hir_id);
+                                    let parent = self.tcx.hir().get_parent_node(parent);
+                                    let parent = self.tcx.hir().get_parent_node(parent);
+                                    let parent = self.tcx.hir().get_parent_node(parent);
+                                    let parent = self.tcx.hir().get_parent_node(parent);
+                                    match self.tcx.hir().find(parent) {
+                                        Some(hir::Node::Expr(hir::Expr {
+                                            kind: hir::ExprKind::Loop(_, _, hir::LoopSource::While, _),
+                                            ..
+                                        })) => {
+                                            err.delay_as_bug();
+                                        }
+                                        _ => {}
+                                    }
+                                }
                             }
                             if let Some(fn_span) = fn_span {
                                 err.span_label(

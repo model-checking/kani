@@ -64,7 +64,6 @@ use serde::ser::SerializeSeq;
 use serde::{Serialize, Serializer};
 
 use crate::clean::{self, ItemId, RenderedLink, SelfTy};
-use crate::docfs::PathError;
 use crate::error::Error;
 use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
@@ -103,7 +102,7 @@ crate struct IndexItem {
     crate parent: Option<DefId>,
     crate parent_idx: Option<usize>,
     crate search_type: Option<IndexItemFunctionType>,
-    crate aliases: Box<[String]>,
+    crate aliases: Box<[Symbol]>,
 }
 
 /// A type used for the search index.
@@ -173,8 +172,12 @@ impl Serialize for TypeWithKind {
 crate struct StylePath {
     /// The path to the theme
     crate path: PathBuf,
-    /// What the `disabled` attribute should be set to in the HTML tag
-    crate disabled: bool,
+}
+
+impl StylePath {
+    pub fn basename(&self) -> Result<String, Error> {
+        Ok(try_none!(try_none!(self.path.file_stem(), &self.path).to_str(), &self.path).to_string())
+    }
 }
 
 fn write_srclink(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer) {
@@ -353,7 +356,7 @@ enum Setting {
         js_data_name: &'static str,
         description: &'static str,
         default_value: &'static str,
-        options: Vec<(String, String)>,
+        options: Vec<String>,
     },
 }
 
@@ -393,10 +396,9 @@ impl Setting {
                 options
                     .iter()
                     .map(|opt| format!(
-                        "<option value=\"{}\" {}>{}</option>",
-                        opt.0,
-                        if opt.0 == default_value { "selected" } else { "" },
-                        opt.1,
+                        "<option value=\"{name}\" {}>{name}</option>",
+                        if opt == default_value { "selected" } else { "" },
+                        name = opt,
                     ))
                     .collect::<String>(),
                 root_path,
@@ -421,18 +423,7 @@ impl<T: Into<Setting>> From<(&'static str, Vec<T>)> for Setting {
     }
 }
 
-fn settings(root_path: &str, suffix: &str, themes: &[StylePath]) -> Result<String, Error> {
-    let theme_names: Vec<(String, String)> = themes
-        .iter()
-        .map(|entry| {
-            let theme =
-                try_none!(try_none!(entry.path.file_stem(), &entry.path).to_str(), &entry.path)
-                    .to_string();
-
-            Ok((theme.clone(), theme))
-        })
-        .collect::<Result<_, Error>>()?;
-
+fn settings(root_path: &str, suffix: &str, theme_names: Vec<String>) -> Result<String, Error> {
     // (id, explanation, default value)
     let settings: &[Setting] = &[
         (
@@ -469,10 +460,11 @@ fn settings(root_path: &str, suffix: &str, themes: &[StylePath]) -> Result<Strin
             <span class=\"in-band\">Rustdoc settings</span>\
         </h1>\
         <div class=\"settings\">{}</div>\
-        <script src=\"{}settings{}.js\"></script>",
+        <link rel=\"stylesheet\" href=\"{root_path}settings{suffix}.css\">\
+        <script src=\"{root_path}settings{suffix}.js\"></script>",
         settings.iter().map(|s| s.display(root_path, suffix)).collect::<String>(),
-        root_path,
-        suffix
+        root_path = root_path,
+        suffix = suffix
     ))
 }
 
@@ -682,7 +674,7 @@ fn short_item_info(
 
     // Render unstable items. But don't render "rustc_private" crates (internal compiler crates).
     // Those crates are permanently unstable so it makes no sense to render "unstable" everywhere.
-    if let Some((StabilityLevel::Unstable { reason, issue, .. }, feature)) = item
+    if let Some((StabilityLevel::Unstable { reason: _, issue, .. }, feature)) = item
         .stability(cx.tcx())
         .as_ref()
         .filter(|stab| stab.feature != sym::rustc_private)
@@ -701,22 +693,6 @@ fn short_item_info(
         }
 
         message.push_str(&format!(" ({})", feature));
-
-        if let Some(unstable_reason) = reason {
-            let mut ids = cx.id_map.borrow_mut();
-            message = format!(
-                "<details><summary>{}</summary>{}</details>",
-                message,
-                MarkdownHtml(
-                    &unstable_reason.as_str(),
-                    &mut ids,
-                    error_codes,
-                    cx.shared.edition(),
-                    &cx.shared.playground,
-                )
-                .into_string()
-            );
-        }
 
         extra_info.push(format!("<div class=\"stab unstable\">{}</div>", message));
     }
@@ -1243,8 +1219,8 @@ fn should_render_item(item: &clean::Item, deref_mut_: bool, tcx: TyCtxt<'_>) -> 
             | SelfTy::SelfExplicit(clean::BorrowedRef { mutability, .. }) => {
                 (mutability == Mutability::Mut, false, false)
             }
-            SelfTy::SelfExplicit(clean::ResolvedPath { did, .. }) => {
-                (false, Some(did) == tcx.lang_items().owned_box(), false)
+            SelfTy::SelfExplicit(clean::Type::Path { path }) => {
+                (false, Some(path.def_id()) == tcx.lang_items().owned_box(), false)
             }
             SelfTy::SelfValue => (false, false, true),
             _ => (false, false, false),
@@ -1259,10 +1235,17 @@ fn should_render_item(item: &clean::Item, deref_mut_: bool, tcx: TyCtxt<'_>) -> 
 fn notable_traits_decl(decl: &clean::FnDecl, cx: &Context<'_>) -> String {
     let mut out = Buffer::html();
 
-    if let Some(did) = decl.output.as_return().and_then(|t| t.def_id(cx.cache())) {
+    if let Some((did, ty)) = decl.output.as_return().and_then(|t| Some((t.def_id(cx.cache())?, t)))
+    {
         if let Some(impls) = cx.cache().impls.get(&did) {
             for i in impls {
                 let impl_ = i.inner_impl();
+                if !impl_.for_.without_borrowed_ref().is_same(ty.without_borrowed_ref(), cx.cache())
+                {
+                    // Two different types might have the same did,
+                    // without actually being the same.
+                    continue;
+                }
                 if let Some(trait_) = &impl_.trait_ {
                     let trait_did = trait_.def_id();
 
@@ -2536,7 +2519,7 @@ fn collect_paths_for_type(first_ty: clean::Type, cache: &Cache) -> Vec<String> {
         }
 
         match ty {
-            clean::Type::ResolvedPath { did, .. } => process_path(did),
+            clean::Type::Path { path } => process_path(path.def_id()),
             clean::Type::Tuple(tys) => {
                 work.extend(tys.into_iter());
             }

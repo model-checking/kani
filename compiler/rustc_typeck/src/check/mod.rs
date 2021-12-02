@@ -391,7 +391,6 @@ fn typeck_with_fallback<'tcx>(
             let mut wf_tys = FxHashSet::default();
             // Compute the fty from point of view of inside the fn.
             let fn_sig = tcx.liberate_late_bound_regions(def_id.to_def_id(), fn_sig);
-            wf_tys.extend(fn_sig.inputs_and_output.iter());
             let fn_sig = inh.normalize_associated_types_in(
                 body.value.span,
                 body_id.hir_id,
@@ -536,8 +535,8 @@ fn fn_maybe_err(tcx: TyCtxt<'_>, sp: Span, abi: Abi) {
 }
 
 fn maybe_check_static_with_link_section(tcx: TyCtxt<'_>, id: LocalDefId, span: Span) {
-    // Only restricted on wasm32 target for now
-    if !tcx.sess.opts.target_triple.triple().starts_with("wasm32") {
+    // Only restricted on wasm target for now
+    if !tcx.sess.target.is_like_wasm {
         return;
     }
 

@@ -890,7 +890,7 @@ impl<'tcx> List<ty::Binder<'tcx, ExistentialPredicate<'tcx>>> {
 ///
 /// Trait references also appear in object types like `Foo<U>`, but in
 /// that case the `Self` parameter is absent from the substitutions.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, TyEncodable, TyDecodable)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, TyEncodable, TyDecodable)]
 #[derive(HashStable, TypeFoldable)]
 pub struct TraitRef<'tcx> {
     pub def_id: DefId,
@@ -1099,6 +1099,18 @@ impl<'tcx, T> Binder<'tcx, T> {
             value.visit_with(&mut validator);
         }
         Binder(value, self.1)
+    }
+
+    pub fn try_map_bound<F, U: TypeFoldable<'tcx>, E>(self, f: F) -> Result<Binder<'tcx, U>, E>
+    where
+        F: FnOnce(T) -> Result<U, E>,
+    {
+        let value = f(self.0)?;
+        if cfg!(debug_assertions) {
+            let mut validator = ValidateBoundVars::new(self.1);
+            value.visit_with(&mut validator);
+        }
+        Ok(Binder(value, self.1))
     }
 
     /// Wraps a `value` in a binder, using the same bound variables as the
@@ -1805,10 +1817,13 @@ impl<'tcx> TyS<'tcx> {
     pub fn simd_size_and_type(&self, tcx: TyCtxt<'tcx>) -> (u64, Ty<'tcx>) {
         match self.kind() {
             Adt(def, substs) => {
+                assert!(def.repr.simd(), "`simd_size_and_type` called on non-SIMD type");
                 let variant = def.non_enum_variant();
                 let f0_ty = variant.fields[0].ty(tcx, substs);
 
                 match f0_ty.kind() {
+                    // If the first field is an array, we assume it is the only field and its
+                    // elements are the SIMD components.
                     Array(f0_elem_ty, f0_len) => {
                         // FIXME(repr_simd): https://github.com/rust-lang/rust/pull/78863#discussion_r522784112
                         // The way we evaluate the `N` in `[T; N]` here only works since we use
@@ -1816,6 +1831,8 @@ impl<'tcx> TyS<'tcx> {
                         // if we use it in generic code. See the `simd-array-trait` ui test.
                         (f0_len.eval_usize(tcx, ParamEnv::empty()) as u64, f0_elem_ty)
                     }
+                    // Otherwise, the fields of this Adt are the SIMD components (and we assume they
+                    // all have the same type).
                     _ => (variant.fields.len() as u64, f0_ty),
                 }
             }
@@ -2258,10 +2275,11 @@ impl<'tcx> TyS<'tcx> {
 /// a miscompilation or unsoundness.
 ///
 /// When in doubt, use `VarianceDiagInfo::default()`
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VarianceDiagInfo<'tcx> {
     /// No additional information - this is the default.
     /// We will not add any additional information to error messages.
+    #[default]
     None,
     /// We switched our variance because a type occurs inside
     /// the generic argument of a mutable reference or pointer
@@ -2294,11 +2312,5 @@ impl<'tcx> VarianceDiagInfo<'tcx> {
             VarianceDiagInfo::None => other,
             VarianceDiagInfo::Mut { .. } => self,
         }
-    }
-}
-
-impl<'tcx> Default for VarianceDiagInfo<'tcx> {
-    fn default() -> Self {
-        Self::None
     }
 }

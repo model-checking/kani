@@ -222,47 +222,45 @@ def compile_single_rust_file(
         input_filename,
         base,
         output_filename,
-        verbose=False,
-        debug=False,
-        keep_temps=False,
-        mangler="v0",
-        dry_run=False,
-        use_abs=False,
-        abs_type="std",
-        symbol_table_passes=[],
-        restrict_vtable=False):
-    if not keep_temps:
+
+        extra_args,
+        symbol_table_passes=[]):
+    if not extra_args.keep_temps:
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
         atexit.register(delete_file, base + ".rmc-metadata.json")
 
-    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes, restrict_vtable)
+    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(extra_args.mangler, symbol_table_passes,
+                                              extra_args.restrict_vtable)
 
-    if use_abs:
+    if extra_args.use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
                       "--cfg=use_abs",
-                      "--cfg", f'abs_type="{abs_type}"']
+                      "--cfg", f'abs_type="{extra_args.abs_type}"']
+
+    if extra_args.tests and "--test" not in build_cmd:
+        build_cmd += ["--test"]
 
     build_cmd += ["-o", base + ".o", input_filename]
 
     build_env = os.environ
-    if debug:
+    if extra_args.debug:
         add_rmc_rustc_debug_to_env(build_env)
 
-    return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
+    return run_cmd(
+        build_cmd,
+        env=build_env,
+        label="compile",
+        verbose=extra_args.verbose,
+        debug=extra_args.debug,
+        dry_run=extra_args.dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
 def cargo_build(
         crate,
         target_dir,
-        build_target=None,
-        verbose=False,
-        debug=False,
-        mangler="v0",
-        dry_run=False,
-        symbol_table_passes=[],
-        restrict_vtable=False):
-
+        extra_args,
+        symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     def get_config(option):
@@ -278,23 +276,28 @@ def cargo_build(
                 process.stdout))
         return process.stdout
 
-    rustflags = rustc_flags(mangler, symbol_table_passes, restrict_vtable) + get_config("--rmc-flags").split()
+    rustflags = rustc_flags(extra_args.mangler, symbol_table_passes,
+                            extra_args.restrict_vtable) + get_config("--rmc-flags").split()
     rustc_path = get_config("--rmc-path").strip()
-    build_cmd = ["cargo", "build", "--target-dir", str(target_dir)]
-    if build_target:
-        build_cmd += ["--target", str(build_target)]
+    cargo_cmd = ["cargo", "build"] if not extra_args.tests else ["cargo", "test", "--no-run"]
+    build_cmd = cargo_cmd + ["--target-dir", str(target_dir)]
+    if extra_args.build_target:
+        build_cmd += ["--target", str(extra_args.build_target)]
     build_env = os.environ
     build_env.update({"RUSTFLAGS": " ".join(rustflags),
                       "RUSTC": rustc_path
                       })
-    if debug:
+    if extra_args.debug:
         add_rmc_rustc_debug_to_env(build_env)
-    if verbose:
+    if extra_args.verbose:
         build_cmd.append("-v")
-    if dry_run:
+    if extra_args.dry_run:
         print("{}".format(build_env))
 
-    return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
+    if run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=extra_args.verbose, debug=extra_args.debug,
+               dry_run=extra_args.dry_run) != EXIT_CODE_SUCCESS:
+        raise Exception("Failed to run command: {}".format(" ".join(build_cmd)))
+
 
 # Adds information about unwinding to the RMC output
 def append_unwind_tip(text):

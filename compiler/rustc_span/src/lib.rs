@@ -41,7 +41,7 @@ pub mod edition;
 use edition::Edition;
 pub mod hygiene;
 use hygiene::Transparency;
-pub use hygiene::{DesugaringKind, ExpnKind, ForLoopLoc, MacroKind};
+pub use hygiene::{DesugaringKind, ExpnKind, MacroKind};
 pub use hygiene::{ExpnData, ExpnHash, ExpnId, LocalExpnId, SyntaxContext};
 pub mod def_id;
 use def_id::{CrateNum, DefId, DefPathHash, LocalDefId, LOCAL_CRATE};
@@ -1935,6 +1935,7 @@ pub struct Loc {
 #[derive(Debug)]
 pub struct SourceFileAndLine {
     pub sf: Lrc<SourceFile>,
+    /// Index of line, starting from 0.
     pub line: usize,
 }
 #[derive(Debug)]

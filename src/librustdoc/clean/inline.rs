@@ -229,6 +229,7 @@ fn build_external_function(cx: &mut DocContext<'_>, did: DefId) -> clean::Functi
     let asyncness = cx.tcx.asyncness(did);
     let predicates = cx.tcx.predicates_of(did);
     let (generics, decl) = clean::enter_impl_trait(cx, |cx| {
+        // NOTE: generics need to be cleaned before the decl!
         ((cx.tcx.generics_of(did), predicates).clean(cx), (did, sig).clean(cx))
     });
     clean::Function {
@@ -358,13 +359,10 @@ crate fn build_impl(
     }
 
     let impl_item = match did.as_local() {
-        Some(did) => {
-            let hir_id = tcx.hir().local_def_id_to_hir_id(did);
-            match &tcx.hir().expect_item(hir_id).kind {
-                hir::ItemKind::Impl(impl_) => Some(impl_),
-                _ => panic!("`DefID` passed to `build_impl` is not an `impl"),
-            }
-        }
+        Some(did) => match &tcx.hir().expect_item(did).kind {
+            hir::ItemKind::Impl(impl_) => Some(impl_),
+            _ => panic!("`DefID` passed to `build_impl` is not an `impl"),
+        },
         None => None,
     };
 
@@ -592,14 +590,9 @@ fn build_macro(
     match CStore::from_tcx(cx.tcx).load_macro_untracked(def_id, cx.sess()) {
         LoadedMacro::MacroDef(item_def, _) => {
             if let ast::ItemKind::MacroDef(ref def) = item_def.kind {
+                let vis = cx.tcx.visibility(import_def_id.unwrap_or(def_id)).clean(cx);
                 clean::MacroItem(clean::Macro {
-                    source: utils::display_macro_source(
-                        cx,
-                        name,
-                        def,
-                        def_id,
-                        cx.tcx.visibility(import_def_id.unwrap_or(def_id)),
-                    ),
+                    source: utils::display_macro_source(cx, name, def, def_id, vis),
                 })
             } else {
                 unreachable!()

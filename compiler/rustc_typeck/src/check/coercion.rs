@@ -1458,7 +1458,7 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                             cause,
                             expected,
                             found,
-                            coercion_error,
+                            coercion_error.clone(),
                             fcx,
                             parent_id,
                             expression.map(|expr| (expr, blk_id)),
@@ -1472,7 +1472,7 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                             cause,
                             expected,
                             found,
-                            coercion_error,
+                            coercion_error.clone(),
                             fcx,
                             id,
                             None,
@@ -1483,7 +1483,12 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                         }
                     }
                     _ => {
-                        err = fcx.report_mismatched_types(cause, expected, found, coercion_error);
+                        err = fcx.report_mismatched_types(
+                            cause,
+                            expected,
+                            found,
+                            coercion_error.clone(),
+                        );
                     }
                 }
 
@@ -1492,7 +1497,14 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                 }
 
                 if let Some(expr) = expression {
-                    fcx.emit_coerce_suggestions(&mut err, expr, found, expected, None);
+                    fcx.emit_coerce_suggestions(
+                        &mut err,
+                        expr,
+                        found,
+                        expected,
+                        None,
+                        coercion_error,
+                    );
                 }
 
                 err.emit_unless(unsized_return);
@@ -1625,11 +1637,10 @@ impl<'tcx, 'exprs, E: AsCoercionSite> CoerceMany<'tcx, 'exprs, E> {
                 let ty = <dyn AstConv<'_>>::ast_ty_to_ty(fcx, ty);
                 // Get the `impl Trait`'s `DefId`.
                 if let ty::Opaque(def_id, _) = ty.kind() {
-                    let hir_id = fcx.tcx.hir().local_def_id_to_hir_id(def_id.expect_local());
                     // Get the `impl Trait`'s `Item` so that we can get its trait bounds and
                     // get the `Trait`'s `DefId`.
                     if let hir::ItemKind::OpaqueTy(hir::OpaqueTy { bounds, .. }) =
-                        fcx.tcx.hir().expect_item(hir_id).kind
+                        fcx.tcx.hir().expect_item(def_id.expect_local()).kind
                     {
                         // Are of this `impl Trait`'s traits object safe?
                         is_object_safe = bounds.iter().all(|bound| {

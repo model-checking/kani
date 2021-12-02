@@ -450,12 +450,24 @@ impl<'a> Resolver<'a> {
                 // let foo =...
                 //     ^^^ given this Span
                 // ------- get this Span to have an applicable suggestion
+
+                // edit:
+                // only do this if the const and usage of the non-constant value are on the same line
+                // the further the two are apart, the higher the chance of the suggestion being wrong
+                // also make sure that the pos for the suggestion is not 0 (ICE #90878)
+
                 let sp =
                     self.session.source_map().span_extend_to_prev_str(ident.span, current, true);
-                if sp.lo().0 == 0 {
+
+                let pos_for_suggestion = sp.lo().0.saturating_sub(current.len() as u32);
+
+                if sp.lo().0 == 0
+                    || pos_for_suggestion == 0
+                    || self.session.source_map().is_multiline(sp)
+                {
                     err.span_label(ident.span, &format!("this would need to be a `{}`", sugg));
                 } else {
-                    let sp = sp.with_lo(BytePos(sp.lo().0 - current.len() as u32));
+                    let sp = sp.with_lo(BytePos(pos_for_suggestion));
                     err.span_suggestion(
                         sp,
                         &format!("consider using `{}` instead of `{}`", sugg, current),
@@ -1166,7 +1178,7 @@ impl<'a> Resolver<'a> {
 
     fn binding_description(&self, b: &NameBinding<'_>, ident: Ident, from_prelude: bool) -> String {
         let res = b.res();
-        if b.span.is_dummy() {
+        if b.span.is_dummy() || self.session.source_map().span_to_snippet(b.span).is_err() {
             // These already contain the "built-in" prefix or look bad with it.
             let add_built_in =
                 !matches!(b.res(), Res::NonMacroAttr(..) | Res::PrimTy(..) | Res::ToolMod);
