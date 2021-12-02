@@ -1079,6 +1079,10 @@ impl EarlyLintPass for UnusedDocComment {
     fn check_expr(&mut self, cx: &EarlyContext<'_>, expr: &ast::Expr) {
         warn_if_doc(cx, expr.span, "expressions", &expr.attrs);
     }
+
+    fn check_generic_param(&mut self, cx: &EarlyContext<'_>, param: &ast::GenericParam) {
+        warn_if_doc(cx, param.ident.span, "generic parameters", &param.attrs);
+    }
 }
 
 declare_lint! {
@@ -3011,7 +3015,7 @@ impl<'tcx> LateLintPass<'tcx> for ClashingExternDeclarations {
                     this_decl_ty,
                     CItemKind::Declaration,
                 ) {
-                    let orig_fi = tcx.hir().expect_foreign_item(existing_hid);
+                    let orig_fi = tcx.hir().expect_foreign_item(existing_hid.expect_owner());
                     let orig = Self::name_of_extern_decl(tcx, orig_fi);
 
                     // We want to ensure that we use spans for both decls that include where the

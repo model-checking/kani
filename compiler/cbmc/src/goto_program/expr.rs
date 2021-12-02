@@ -225,7 +225,7 @@ pub enum UnaryOperand {
     UnaryMinus,
 }
 
-/// The return type for `__builtin_op_overflow` operations
+/// The return type for `__CPROVER_overflow_op` operations
 pub struct ArithmeticOverflowResult {
     /// If overflow did not occur, the result of the operation. Otherwise undefined.
     pub result: Expr,
@@ -849,8 +849,13 @@ impl Expr {
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
-            OverflowMinus | OverflowMult | OverflowPlus => {
-                lhs.typ == rhs.typ && lhs.typ.is_integer()
+            OverflowMinus => {
+                (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
+                    || (lhs.typ.is_pointer() && rhs.typ.is_integer())
+            }
+            OverflowMult | OverflowPlus => {
+                (lhs.typ == rhs.typ && lhs.typ.is_integer())
+                    || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
         }
     }

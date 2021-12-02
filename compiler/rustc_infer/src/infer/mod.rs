@@ -95,9 +95,10 @@ pub(crate) type UnificationTable<'a, 'tcx, T> = ut::UnificationTable<
 /// This is used so that the region values inferred by HIR region solving are
 /// not exposed, and so that we can avoid doing work in HIR typeck that MIR
 /// typeck will also do.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub enum RegionckMode {
     /// The default mode: report region errors, don't erase regions.
+    #[default]
     Solve,
     /// Erase the results of region after solving.
     Erase {
@@ -106,12 +107,6 @@ pub enum RegionckMode {
         /// be set to true.
         suppress_errors: bool,
     },
-}
-
-impl Default for RegionckMode {
-    fn default() -> Self {
-        RegionckMode::Solve
-    }
 }
 
 impl RegionckMode {
@@ -686,7 +681,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     pub fn freshen<T: TypeFoldable<'tcx>>(&self, t: T) -> T {
-        t.fold_with(&mut self.freshener())
+        t.fold_with(&mut self.freshener()).into_ok()
     }
 
     /// Returns the origin of the type variable identified by `vid`, or `None`
@@ -1386,7 +1381,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     where
         T: TypeFoldable<'tcx>,
     {
-        value.fold_with(&mut ShallowResolver { infcx: self })
+        value.fold_with(&mut ShallowResolver { infcx: self }).into_ok()
     }
 
     pub fn root_var(&self, var: ty::TyVid) -> ty::TyVid {
@@ -1407,7 +1402,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             return value; // Avoid duplicated subst-folding.
         }
         let mut r = resolve::OpportunisticVarResolver::new(self);
-        value.fold_with(&mut r)
+        value.fold_with(&mut r).into_ok()
     }
 
     /// Returns the first unresolved variable contained in `T`. In the
@@ -1750,12 +1745,15 @@ impl<'a, 'tcx> TypeFolder<'tcx> for ShallowResolver<'a, 'tcx> {
         self.infcx.tcx
     }
 
-    fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
-        self.infcx.shallow_resolve_ty(ty)
+    fn fold_ty(&mut self, ty: Ty<'tcx>) -> Result<Ty<'tcx>, Self::Error> {
+        Ok(self.infcx.shallow_resolve_ty(ty))
     }
 
-    fn fold_const(&mut self, ct: &'tcx ty::Const<'tcx>) -> &'tcx ty::Const<'tcx> {
-        if let ty::Const { val: ty::ConstKind::Infer(InferConst::Var(vid)), .. } = ct {
+    fn fold_const(
+        &mut self,
+        ct: &'tcx ty::Const<'tcx>,
+    ) -> Result<&'tcx ty::Const<'tcx>, Self::Error> {
+        Ok(if let ty::Const { val: ty::ConstKind::Infer(InferConst::Var(vid)), .. } = ct {
             self.infcx
                 .inner
                 .borrow_mut()
@@ -1766,7 +1764,7 @@ impl<'a, 'tcx> TypeFolder<'tcx> for ShallowResolver<'a, 'tcx> {
                 .unwrap_or(ct)
         } else {
             ct
-        }
+        })
     }
 }
 

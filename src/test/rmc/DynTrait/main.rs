@@ -9,6 +9,11 @@ trait Animal {
     fn noise(&self) -> i32;
 }
 
+trait Other {
+    // Instance method signature
+    fn noise(&self) -> i32;
+}
+
 // Implement the `Animal` trait for `Sheep`.
 impl Animal for Sheep {
     fn noise(&self) -> i32 {
@@ -32,7 +37,7 @@ fn main() {
     let random_number = rmc::nondet();
     let animal = random_animal(random_number);
     let s = animal.noise();
-    if (random_number < 5) {
+    if random_number < 5 {
         assert!(s == 1);
     } else {
         assert!(s == 2);

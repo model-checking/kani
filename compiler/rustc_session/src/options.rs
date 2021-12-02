@@ -4,9 +4,10 @@ use crate::early_error;
 use crate::lint;
 use crate::search_paths::SearchPath;
 use crate::utils::NativeLib;
-
 use rustc_target::spec::{CodeModel, LinkerFlavor, MergeFunctions, PanicStrategy, SanitizerSet};
-use rustc_target::spec::{RelocModel, RelroLevel, SplitDebuginfo, TargetTriple, TlsModel};
+use rustc_target::spec::{
+    RelocModel, RelroLevel, SplitDebuginfo, StackProtector, TargetTriple, TlsModel,
+};
 
 use rustc_feature::UnstableFeatures;
 use rustc_span::edition::Edition;
@@ -150,6 +151,7 @@ top_level_options!(
         /// If `Some`, enable incremental compilation, using the given
         /// directory to store intermediate results.
         incremental: Option<PathBuf> [UNTRACKED],
+        assert_incr_state: Option<IncrementalStateAssertion> [UNTRACKED],
 
         debugging_opts: DebuggingOptions [SUBSTRUCT],
         prints: Vec<PrintRequest> [UNTRACKED],
@@ -385,6 +387,8 @@ mod desc {
     pub const parse_split_debuginfo: &str =
         "one of supported split-debuginfo modes (`off`, `packed`, or `unpacked`)";
     pub const parse_gcc_ld: &str = "one of: no value, `lld`";
+    pub const parse_stack_protector: &str =
+        "one of (`none` (default), `basic`, `strong`, or `all`)";
 }
 
 mod parse {
@@ -563,7 +567,7 @@ mod parse {
             v => {
                 let mut passes = vec![];
                 if parse_list(&mut passes, v) {
-                    *slot = Passes::Some(passes);
+                    slot.extend(passes);
                     true
                 } else {
                     false
@@ -917,6 +921,14 @@ mod parse {
         }
         true
     }
+
+    crate fn parse_stack_protector(slot: &mut StackProtector, v: Option<&str>) -> bool {
+        match v.and_then(|s| StackProtector::from_str(s).ok()) {
+            Some(ssp) => *slot = ssp,
+            _ => return false,
+        }
+        true
+    }
 }
 
 options! {
@@ -1046,6 +1058,9 @@ options! {
         "make cfg(version) treat the current version as incomplete (default: no)"),
     asm_comments: bool = (false, parse_bool, [TRACKED],
         "generate comments into the assembly (may change behavior) (default: no)"),
+    assert_incr_state: Option<String> = (None, parse_opt_string, [UNTRACKED],
+        "assert that the incremental cache is in given state: \
+         either `loaded` or `not-loaded`."),
     ast_json: bool = (false, parse_bool, [UNTRACKED],
         "print the AST as JSON and halt (default: no)"),
     ast_json_noexpand: bool = (false, parse_bool, [UNTRACKED],
@@ -1116,8 +1131,6 @@ options! {
     fewer_names: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "reduce memory use by retaining fewer names within compilation artifacts (LLVM-IR) \
         (default: no)"),
-    force_overflow_checks: Option<bool> = (None, parse_opt_bool, [TRACKED],
-        "force overflow checks on or off"),
     force_unstable_if_unmarked: bool = (false, parse_bool, [TRACKED],
         "force all crates to be `rustc_private` unstable (default: no)"),
     fuel: Option<(String, u64)> = (None, parse_optimization_fuel, [TRACKED],
@@ -1237,6 +1250,8 @@ options! {
         and set the maximum total size of a const allocation for which this is allowed (default: never)"),
     perf_stats: bool = (false, parse_bool, [UNTRACKED],
         "print some performance-related statistics (default: no)"),
+    pick_stable_methods_before_any_unstable: bool = (true, parse_bool, [TRACKED],
+        "try to pick stable methods first before picking any unstable methods (default: yes)"),
     plt: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "whether to use the PLT when calling into shared libraries;
         only has effect for PIC code on systems with ELF binaries
@@ -1288,6 +1303,8 @@ options! {
         "choose which RELRO level to use"),
     remap_cwd_prefix: Option<PathBuf> = (None, parse_opt_pathbuf, [TRACKED],
         "remap paths under the current working directory to this path prefix"),
+    emit_vtable_restrictions: bool = (false, parse_bool, [TRACKED],
+        "restrict the targets of virtual table function pointer calls"),
     simulate_remapped_rust_src_base: Option<PathBuf> = (None, parse_opt_pathbuf, [TRACKED],
         "simulate the effect of remap-debuginfo = true at bootstrapping by remapping path \
         to rust's source base directory. only meant for testing purposes"),
@@ -1325,6 +1342,8 @@ options! {
         "exclude spans when debug-printing compiler state (default: no)"),
     src_hash_algorithm: Option<SourceFileHashAlgorithm> = (None, parse_src_file_hash, [TRACKED],
         "hash algorithm of source files in debug info (`md5`, `sha1`, or `sha256`)"),
+    stack_protector: StackProtector = (StackProtector::None, parse_stack_protector, [TRACKED],
+        "control stack smash protection strategy (`rustc --print stack-protector-strategies` for details)"),
     strip: Strip = (Strip::None, parse_strip, [UNTRACKED],
         "tell the linker which information to strip (`none` (default), `debuginfo` or `symbols`)"),
     split_dwarf_inlining: bool = (true, parse_bool, [UNTRACKED],

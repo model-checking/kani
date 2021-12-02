@@ -21,14 +21,15 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 MEMORY_SAFETY_CHECKS = ["--bounds-check",
                         "--pointer-check",
                         "--pointer-primitive-check"]
+
+# We no longer use --(un)signed-overflow-check" by default since rust already add assertions for places where wrapping
+# is an error.
 OVERFLOW_CHECKS = ["--conversion-check",
                    "--div-by-zero-check",
                    "--float-overflow-check",
                    "--nan-check",
                    "--pointer-overflow-check",
-                   "--signed-overflow-check",
-                   "--undefined-shift-check",
-                   "--unsigned-overflow-check"]
+                   "--undefined-shift-check"]
 UNWINDING_CHECKS = ["--unwinding-assertions"]
 
 
@@ -47,9 +48,11 @@ class Scanner:
     def edit_output(self, text):
         return self.edit_fun(text)
 
+
 def is_exe(name):
     from shutil import which
     return which(name) is not None
+
 
 def ensure_dependencies_in_path():
     for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
@@ -174,6 +177,8 @@ def run_cmd(
 
         process = subprocess.CompletedProcess(None, EXIT_CODE_SUCCESS, stdout=cmd_line)
     else:
+        if verbose:
+            print(' '.join(cmd))
         process = subprocess.run(
             cmd, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             env=env, cwd=cwd)
@@ -205,13 +210,20 @@ def run_cmd(
 
     return process.returncode
 
-def rustc_flags(mangler, symbol_table_passes):
+
+def rustc_flags(mangler, symbol_table_passes, restrict_vtable):
     flags = [
         "-Z", f"symbol-mangling-version={mangler}",
         "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
-    ]
+        "-Z", "human_readable_cgu_names",
+        f"--cfg={RMC_CFG}"]
+
     if "RUSTFLAGS" in os.environ:
         flags += os.environ["RUSTFLAGS"].split(" ")
+
+    if restrict_vtable:
+        flags += ["-Z", "restrict_vtable_fn_ptrs"]
+
     return flags
 
 # Generates a symbol table from a rust file
@@ -219,42 +231,43 @@ def compile_single_rust_file(
         input_filename,
         base,
         output_filename,
-        verbose=False,
-        debug=False,
-        keep_temps=False,
-        mangler="v0",
-        dry_run=False,
-        use_abs=False,
-        abs_type="std",
+
+        extra_args,
         symbol_table_passes=[]):
-    if not keep_temps:
+    if not extra_args.keep_temps:
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
 
-    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(mangler, symbol_table_passes)
+    build_cmd = [RMC_RUSTC_EXE] + rustc_flags(extra_args.mangler, symbol_table_passes,
+                                              extra_args.restrict_vtable)
 
-    if use_abs:
+    if extra_args.use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
                       "--cfg=use_abs",
-                      "--cfg", f'abs_type="{abs_type}"']
+                      "--cfg", f'abs_type="{extra_args.abs_type}"']
+
+    if extra_args.tests and "--test" not in build_cmd:
+        build_cmd += ["--test"]
 
     build_cmd += ["-o", base + ".o", input_filename]
 
     build_env = os.environ
-    if debug:
+    if extra_args.debug:
         add_rmc_rustc_debug_to_env(build_env)
 
-    return run_cmd(build_cmd, env=build_env, label="compile", verbose=verbose, debug=debug, dry_run=dry_run)
+    return run_cmd(
+        build_cmd,
+        env=build_env,
+        label="compile",
+        verbose=extra_args.verbose,
+        debug=extra_args.debug,
+        dry_run=extra_args.dry_run)
 
 # Generates a symbol table (and some other artifacts) from a rust crate
 def cargo_build(
         crate,
         target_dir,
-        build_target=None,
-        verbose=False,
-        debug=False,
-        mangler="v0",
-        dry_run=False,
+        extra_args,
         symbol_table_passes=[]):
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
@@ -271,23 +284,28 @@ def cargo_build(
                 process.stdout))
         return process.stdout
 
-    rustflags = rustc_flags(mangler, symbol_table_passes) + get_config("--rmc-flags").split()
+    rustflags = rustc_flags(extra_args.mangler, symbol_table_passes,
+                            extra_args.restrict_vtable) + get_config("--rmc-flags").split()
     rustc_path = get_config("--rmc-path").strip()
-    build_cmd = ["cargo", "build", "--target-dir", str(target_dir)]
-    if build_target:
-        build_cmd += ["--target", str(build_target)]
+    cargo_cmd = ["cargo", "build"] if not extra_args.tests else ["cargo", "test", "--no-run"]
+    build_cmd = cargo_cmd + ["--target-dir", str(target_dir)]
+    if extra_args.build_target:
+        build_cmd += ["--target", str(extra_args.build_target)]
     build_env = os.environ
     build_env.update({"RUSTFLAGS": " ".join(rustflags),
                       "RUSTC": rustc_path
                       })
-    if debug:
+    if extra_args.debug:
         add_rmc_rustc_debug_to_env(build_env)
-    if verbose:
+    if extra_args.verbose:
         build_cmd.append("-v")
-    if dry_run:
+    if extra_args.dry_run:
         print("{}".format(build_env))
 
-    return run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=verbose, debug=debug, dry_run=dry_run)
+    if run_cmd(build_cmd, env=build_env, cwd=crate, label="build", verbose=extra_args.verbose, debug=extra_args.debug,
+               dry_run=extra_args.dry_run) != EXIT_CODE_SUCCESS:
+        raise Exception("Failed to run command: {}".format(" ".join(build_cmd)))
+
 
 # Adds information about unwinding to the RMC output
 def append_unwind_tip(text):
@@ -364,7 +382,6 @@ def run_visualize(
     # 4) cbmc-viewer --result results.xml --coverage coverage.xml
     #                --property property.xml --srcdir .
     #                --goto <cbmc_filename> --reportdir report
-
     def run_cbmc_local(cbmc_args, output_to, dry_run=False):
         cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
         return run_cmd(cbmc_cmd, label="cbmc", output_to=output_to, verbose=verbose, quiet=quiet, dry_run=dry_run)
@@ -404,13 +421,39 @@ def run_cbmc_viewer(
     return run_cmd(cmd, label="cbmc-viewer", verbose=verbose, quiet=quiet, dry_run=dry_run)
 
 # Handler for calling goto-instrument
-def run_goto_instrument(input_filename, output_filename, args, verbose=False, dry_run=False):
+def run_goto_instrument(
+        input_filename,
+        output_filename,
+        args,
+        verbose=False,
+        dry_run=False,
+        restrictions_filename=None):
     cmd = ["goto-instrument"] + args + [input_filename, output_filename]
+    if restrictions_filename:
+        processed = process_vtable_restrictions(restrictions_filename, verbose=verbose, dry_run=dry_run)
+        cmd += ["--function-pointer-restrictions-file", processed]
     return run_cmd(cmd, label="goto-instrument", verbose=verbose, dry_run=dry_run)
 
+# Processes vtable restrictions to the format CBMC expects
+# TODO: once restrictions are on by default, we should build release ahead of time
+def process_vtable_restrictions(restrictions_filename, verbose=False, dry_run=False):
+    cmd = ["cargo", "run", "--release", "--manifest-path", "src/tools/rmc-link-restrictions/Cargo.toml"]
+    outname = os.path.join(os.path.dirname(os.path.abspath(restrictions_filename)), "linked-restrictions.json")
+    cmd += ["--", restrictions_filename, outname]
+    if (run_cmd(cmd, label="rmc-link-restrictions", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS):
+        raise Exception("Failed to run command: {}".format(" ".join(cmd)))
+    return outname
+
 # Generates a C program from a goto program
-def goto_to_c(goto_filename, c_filename, verbose=False, dry_run=False):
-    return run_goto_instrument(goto_filename, c_filename, ["--dump-c"], verbose, dry_run=dry_run)
+def goto_to_c(goto_filename, c_filename, restrictions_filename, verbose=False, dry_run=False):
+    args = ["--dump-c"]
+    return run_goto_instrument(
+        goto_filename,
+        c_filename,
+        args,
+        verbose,
+        dry_run=dry_run,
+        restrictions_filename=restrictions_filename)
 
 # Fix remaining issues with output of --gen-c-runnable
 def gen_c_postprocess(c_filename, dry_run=False):

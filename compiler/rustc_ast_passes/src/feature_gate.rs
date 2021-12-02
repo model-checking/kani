@@ -325,8 +325,12 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
                     cfg_hide => doc_cfg_hide
                     masked => doc_masked
                     notable_trait => doc_notable_trait
-                    keyword => doc_keyword
                 );
+
+                if nested_meta.has_name(sym::keyword) {
+                    let msg = "`#[doc(keyword)]` is meant for internal use only";
+                    gate_feature_post!(self, rustdoc_internals, attr.span, msg);
+                }
             }
         }
 
@@ -719,6 +723,7 @@ pub fn check_crate(krate: &ast::Crate, sess: &Session) {
     gate_all!(const_trait_impl, "const trait impls are experimental");
     gate_all!(half_open_range_patterns, "half-open range patterns are unstable");
     gate_all!(inline_const, "inline-const is experimental");
+    gate_all!(inline_const_pat, "inline-const in pattern position is experimental");
     gate_all!(
         const_generics_defaults,
         "default values for const generic parameters are experimental"

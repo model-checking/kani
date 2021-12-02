@@ -84,7 +84,7 @@ mod item;
 mod pat;
 mod path;
 
-rustc_hir::arena_types!(rustc_arena::declare_arena, 'tcx);
+rustc_hir::arena_types!(rustc_arena::declare_arena);
 
 struct LoweringContext<'a, 'hir: 'a> {
     /// Used to assign IDs to HIR nodes that do not directly correspond to AST nodes.
@@ -1338,10 +1338,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                             pure_wrt_drop: false,
                             bounds: hir_bounds,
                             span: self.lower_span(span),
-                            kind: hir::GenericParamKind::Type {
-                                default: None,
-                                synthetic: Some(hir::SyntheticTyParamKind::ImplTrait),
-                            },
+                            kind: hir::GenericParamKind::Type { default: None, synthetic: true },
                         });
 
                         hir::TyKind::Path(hir::QPath::Resolved(
@@ -1954,12 +1951,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                     default: default.as_ref().map(|x| {
                         self.lower_ty(x, ImplTraitContext::Disallowed(ImplTraitPosition::Other))
                     }),
-                    synthetic: param
-                        .attrs
-                        .iter()
-                        .filter(|attr| attr.has_name(sym::rustc_synthetic))
-                        .map(|_| hir::SyntheticTyParamKind::FromAttr)
-                        .next(),
+                    synthetic: false,
                 };
 
                 (hir::ParamName::Plain(self.lower_ident(param.ident)), kind)

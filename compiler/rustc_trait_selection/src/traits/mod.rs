@@ -65,7 +65,8 @@ pub use self::specialize::{specialization_graph, translate_substs, OverlapError}
 pub use self::structural_match::search_for_structural_match_violation;
 pub use self::structural_match::NonStructuralMatchTy;
 pub use self::util::{
-    elaborate_obligations, elaborate_predicates, elaborate_trait_ref, elaborate_trait_refs,
+    elaborate_obligations, elaborate_predicates, elaborate_predicates_with_span,
+    elaborate_trait_ref, elaborate_trait_refs,
 };
 pub use self::util::{expand_trait_aliases, TraitAliasExpander};
 pub use self::util::{
@@ -81,24 +82,20 @@ pub use self::chalk_fulfill::FulfillmentContext as ChalkFulfillmentContext;
 pub use rustc_infer::traits::*;
 
 /// Whether to skip the leak check, as part of a future compatibility warning step.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+///
+/// The "default" for skip-leak-check corresponds to the current
+/// behavior (do not skip the leak check) -- not the behavior we are
+/// transitioning into.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum SkipLeakCheck {
     Yes,
+    #[default]
     No,
 }
 
 impl SkipLeakCheck {
     fn is_yes(self) -> bool {
         self == SkipLeakCheck::Yes
-    }
-}
-
-/// The "default" for skip-leak-check corresponds to the current
-/// behavior (do not skip the leak check) -- not the behavior we are
-/// transitioning into.
-impl Default for SkipLeakCheck {
-    fn default() -> Self {
-        SkipLeakCheck::No
     }
 }
 
