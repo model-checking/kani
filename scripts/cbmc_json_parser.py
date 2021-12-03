@@ -110,7 +110,7 @@ def transform_cbmc_output(log_file, output_style):
             # Construct only summarized result and display output
             output_message = construct_terse_property_message(properties)
 
-        # Print using an Interfact function
+        # Print using an Interface function
         print_to_terminal(output_message)
 
         # Delete temp Json file after displaying result
