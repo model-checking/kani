@@ -210,7 +210,7 @@ def extract_solver_information(json_object):
         elif GlobalMessages.RESULT in response_object.keys():
             properties = response_object["result"]
         else:
-            return properties, solver_information
+            raise KeyError
 
     return properties, solver_information
 
@@ -236,7 +236,8 @@ def construct_solver_information_message(solver_information):
                 if message_object['messageText'] != GlobalMessages.CONST_TRACE_MESSAGE:
                     solver_information_message += message_object['messageText']
                 else:
-                    pass
+                    solver_information_message += '\n'
+                    break
             else:
                 solver_information_message += ''
         except KeyError as e:

@@ -5,7 +5,6 @@
 import argparse
 import pathlib as pl
 from enum import Enum
-from random import choices
 
 # The default object bits value in CBMC is 8, which is not enough to handle most
 # medium-sized Rust programs. Increasing it to 16 should have no impact in
