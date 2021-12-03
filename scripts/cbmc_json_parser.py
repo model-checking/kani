@@ -9,7 +9,7 @@ after CBMC gives the response JSON object.
 
 This script accepts JSON files.
 
-This script requires that `coloroma` be installed within the Python
+This script requires that `colorama` be installed within the Python
 environment you are running this script in.
 
 This file can also be imported as a module and contains the following
