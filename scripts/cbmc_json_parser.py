@@ -65,7 +65,7 @@ def main():
 def transform_cbmc_output(log_file, output_style):
     """
     Take Unstructured CBMC Response object, parse the blob and gives structured
-    and formatted output depending on User Inputted Output Style
+    and formatted output depending on User Provided Output Style
 
     Parameters -
         log_file : str
