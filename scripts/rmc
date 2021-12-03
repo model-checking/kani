@@ -119,7 +119,7 @@ def main():
     elif args.output_format == rmc_flags.OutputStyle.OLD:
         pass
     else:
-        raise Exception('Contradrictory Flag outputs passed')
+        raise Exception('Contradictory Flag outputs passed')
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])

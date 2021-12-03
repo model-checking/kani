@@ -125,7 +125,7 @@ class OutputStyle(str, Enum):
     """
     Index for the various display and output styles
 
-    Allowes user to pass flags and for rmc to change the UI based on the
+    Allows user to pass flags and for rmc to change the UI based on the
     flag that is passed. Ex - rmc test.rs --output-format new
     """
     DEFAULT = 'old'

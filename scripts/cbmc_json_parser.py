@@ -9,7 +9,7 @@ after CBMC gives the response JSON object.
 
 This script accepts JSON files.
 
-This script requires that `coloroma` be installed within the Python
+This script requires that `colorama` be installed within the Python
 environment you are running this script in.
 
 This file can also be imported as a module and contains the following
@@ -52,7 +52,7 @@ def main():
     # Check only one json file as input
     if len(sys.argv) < 2:
         print("Json File Input Missing")
-        sys.exit()
+        sys.exit(1)
 
     # parse the input json file
     with open(sys.argv[1]) as f:
@@ -65,7 +65,7 @@ def main():
 def transform_cbmc_output(log_file, output_style):
     """
     Take Unstructured CBMC Response object, parse the blob and gives structured
-    and formatted output depending on User Inputted Output Style
+    and formatted output depending on User Provided Output Style
 
     Parameters -
         log_file : str
@@ -110,7 +110,7 @@ def transform_cbmc_output(log_file, output_style):
             # Construct only summarized result and display output
             output_message = construct_terse_property_message(properties)
 
-        # Print using an Interfact function
+        # Print using an Interface function
         print_to_terminal(output_message)
 
         # Delete temp Json file after displaying result
