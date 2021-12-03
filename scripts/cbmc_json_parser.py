@@ -52,7 +52,7 @@ def main():
     # Check only one json file as input
     if len(sys.argv) < 2:
         print("Json File Input Missing")
-        sys.exit()
+        sys.exit(1)
 
     # parse the input json file
     with open(sys.argv[1]) as f:
