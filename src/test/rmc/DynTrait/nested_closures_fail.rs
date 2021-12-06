@@ -5,7 +5,6 @@
 // pointer to closures. Conditions negated for negative test.
 
 // rmc-verify-fail
-// rmc-flags: --output-format old
 
 fn main() {
     // Create a nested boxed once-callable closure

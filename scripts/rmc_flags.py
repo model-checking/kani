@@ -95,7 +95,16 @@ class ExtendAction(argparse.Action):
 
 class EnumAction(argparse.Action):
     """
-    Argparse action for handling Enums
+    Argparase Actions dictate the behaviour of the flags to which the Actions are passed.
+    In this case, the flag is ```output-format```.
+
+    By specifying the behaviour of the flag in this Action , we can pass our
+    Custom Enum ```OutputStyle``` directly as the expected Input Type for the flag
+    and that lets us control the actions of the user such as restricting the user to specifying the choices
+    to the Enum's values etc.
+
+    Reference to the StackOverflow Dicussion -
+    "https://stackoverflow.com/a/60750535"
     """
 
     def __init__(self, **kwargs):
