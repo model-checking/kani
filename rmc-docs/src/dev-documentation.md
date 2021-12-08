@@ -20,6 +20,10 @@
 ./scripts/rmc-regression.sh
 ```
 ```bash
+# Delete regression test caches
+rm -r build/x86_64-unknown-linux-gnu/test/
+```
+```bash
 # Test suite run (to run a specific suite from src/test/, just remove the others)
 ./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs
 ```
@@ -31,7 +35,7 @@
 ```bash
 # Documentation build
 cd rmc-docs
-./build-docs.sh 
+./build-docs.sh
 ```
 
 ### Resolving development issues
