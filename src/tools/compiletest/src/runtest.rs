@@ -5,8 +5,8 @@ use crate::common::{
 };
 use crate::common::{incremental_dir, output_base_dir, output_base_name, output_testname_unique};
 use crate::common::{
-    Assembly, CargoRMC, Expected, Incremental, JsDocTest, MirOpt, RunMake, RustdocJson, Stub, Ui,
-    RMC,
+    Assembly, CargoRMC, Expected, Incremental, JsDocTest, MirOpt, RmcFixme, RunMake, RustdocJson,
+    Stub, Ui, RMC,
 };
 use crate::common::{Codegen, CodegenUnits, DebugInfo, Debugger, Rustdoc};
 use crate::common::{CompareMode, FailMode, PassMode};
@@ -255,6 +255,7 @@ impl<'test> TestCx<'test> {
             Assembly => self.run_assembly_test(),
             JsDocTest => self.run_js_doc_test(),
             RMC => self.run_rmc_test(),
+            RmcFixme => self.run_rmc_test(),
             CargoRMC => self.run_cargo_rmc_test(),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
@@ -1843,7 +1844,7 @@ impl<'test> TestCx<'test> {
                 rustc.arg(dir_opt);
             }
             RunPassValgrind | Pretty | DebugInfo | Codegen | Rustdoc | RustdocJson | RunMake
-            | CodegenUnits | JsDocTest | Assembly | RMC | CargoRMC | Expected | Stub => {
+            | CodegenUnits | JsDocTest | Assembly | RMC | RmcFixme | CargoRMC | Expected | Stub => {
                 // do not use JSON output
             }
         }

@@ -953,6 +953,21 @@ pub fn make_test_description<R: Read>(
         ignore |= file_path.contains("fixme") || file_path.contains("ignore");
     }
 
+    // The `RmcFixme` mode runs tests that are ignored in the `rmc` suite
+    if config.mode == Mode::RmcFixme {
+        let file_path = path.to_str().unwrap();
+
+        // `file_path` is going to be `src/test/rmc-fixme/...` so we
+        // need to extract the base name if we want to ignore it
+        let test_name: Vec<&str> = file_path.rsplit('/').collect();
+        let base_name = test_name[0];
+
+        // If the base name does NOT contain "fixme" or "ignore", we skip it.
+        // All "fixme" tests are expected to fail
+        ignore |= !(base_name.contains("fixme") || base_name.contains("ignore"));
+        should_fail = true;
+    }
+
     iter_header(path, src, &mut |revision, ln| {
         if revision.is_some() && revision != cfg {
             return;
