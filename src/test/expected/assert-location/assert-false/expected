@@ -1,4 +1,4 @@
 line 12 assertion failed: false: FAILURE
-line 17 This is a placeholder assertion message; the rust message requires dynamic string formatting, which is not supported by CBMC: FAILURE
+line 17 This is a placeholder message; RMC doesn't support message formatted at runtime: FAILURE
 line 21 Fail with custom static message: FAILURE
 

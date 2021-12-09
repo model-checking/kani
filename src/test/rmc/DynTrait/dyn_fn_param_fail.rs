@@ -10,14 +10,18 @@
 include!("../Helpers/vtable_utils_ignore.rs");
 fn takes_dyn_fun(fun: &dyn Fn() -> u32) {
     let x = fun();
-    rmc::expect_fail(x != 5, "Wrong return");
+    if rmc::nondet::<bool>() {
+        rmc::expect_fail(x != 5, "Wrong return");
+    }
 
     /* The function dynamic object has no associated data */
     rmc::expect_fail(size_from_vtable(vtable!(fun)) != 0, "Wrong size");
 }
 
 pub fn unit_to_u32() -> u32 {
-    assert!(false);
+    if rmc::nondet::<bool>() {
+        assert!(false);
+    }
     5 as u32
 }
 

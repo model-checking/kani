@@ -6,15 +6,17 @@ fn main() {
         f -= 1.0;
     }
 
-    // at this point, f == 0.0
-    // should succeed
-    assert!(1.0 / f != 0.0 / f);
-    // should succeed
-    assert!(!(1.0 / f == 0.0 / f));
-    // should fail
-    assert!(1.0 / f == 0.0 / f);
-    // should fail
-    assert!(0.0 / f == 0.0 / f);
-    // should suceed
-    assert!(0.0 / f != 0.0 / f);
+    match rmc::nondet::<u8>() {
+        // at this point, f == 0.0
+        // should succeed
+        0 => assert!(1.0 / f != 0.0 / f),
+        // should succeed
+        1 => assert!(!(1.0 / f == 0.0 / f)),
+        // should fail
+        2 => assert!(1.0 / f == 0.0 / f),
+        // should fail
+        3 => assert!(0.0 / f == 0.0 / f),
+        // should suceed
+        _ => assert!(0.0 / f != 0.0 / f),
+    }
 }

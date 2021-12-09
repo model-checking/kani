@@ -9,12 +9,12 @@ pub fn main() {
     for i in 0..4 {
         if i == 1 {
             // This comes first and it should be reachable.
-			process::abort();
+            process::abort();
         }
         if i == 2 {
             // This should never happen.
-			process::abort();
+            process::abort();
         }
     }
-	assert!(false, "This is unreachable");
+    assert!(false, "This is unreachable");
 }
