@@ -103,11 +103,6 @@ def transform_cbmc_output(cbmc_response_string, output_style):
         # Print using an Interface function
         print(output_message)
 
-        # # Delete temp Json file after displaying result
-        # clear_json_file(temp_json_file_path)
-
-        # # Check that temp files have been cleared
-        # assert exists(temp_json_file_path) == False, "Temp Files not cleared"
     else:
         # DynTrait tests generate a non json output due to "Invariant check failed" error
         # For these cases, we just produce the cbmc output unparsed
