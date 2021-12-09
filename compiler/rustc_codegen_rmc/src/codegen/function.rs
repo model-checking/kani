@@ -6,9 +6,12 @@
 use crate::context::metadata::HarnessMetadata;
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
+use cbmc::InternString;
 use rustc_ast::ast;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
+use std::collections::BTreeMap;
+use std::iter::FromIterator;
 use tracing::{debug, warn};
 
 /// Utility to skip functions that can't currently be successfully codgenned.
@@ -131,19 +134,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let spread_data = &mir.local_decls()[spread_arg];
         let loc = self.codegen_span(&spread_data.source_info.span);
 
-        // When we codegen the function signature elsewhere, we will codegen the
-        // untupled version. So, the tuple argument itself needs to have a
-        // symbol declared for it outside of the function signature, we do that
-        // here.
-        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
-        let tup_sym = Symbol::variable(
-            self.codegen_var_name(&spread_arg),
-            self.codegen_var_base_name(&spread_arg),
-            tup_typ.clone(),
-            loc.clone(),
-        );
-        self.symbol_table.insert(tup_sym.clone());
-
         // Get the function signature from MIR, _before_ we untuple
         let fntyp = self.current_fn().instance().ty(self.tcx, ty::ParamEnv::reveal_all());
         let sig = match fntyp.kind() {
@@ -162,30 +152,54 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
         };
 
-        // Now that we have the tuple, write the individual component locals
-        // back to it as a GotoC struct.
+        // When we codegen the function signature elsewhere, we will codegen the untupled version.
+        // We then marshall the arguments into a local variable holding the expected tuple.
+        // For a function with args f(a: t1, b: t2, c: t3), the tuple type will look like
+        // ```
+        //    struct T {
+        //        0: t1,
+        //        1: t2,
+        //        2: t3,
+        // }
+        // ```
+        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
+
+        // We need to marshall the arguments into the tuple
         let tupe = sig.inputs().last().unwrap();
         let args: Vec<&TyS<'tcx>> = match tupe.kind() {
             ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()).collect(),
             _ => unreachable!("a function's spread argument must be a tuple"),
         };
-
-        // Convert each arg to a GotoC expression.
-        let mut arg_exprs = Vec::new();
         let starting_idx = sig.inputs().len();
-        for (arg_i, arg_t) in args.iter().enumerate() {
-            // The components come at the end, so offset by the untupled length.
-            let lc = Local::from_usize(arg_i + starting_idx);
-            let (name, base_name) = self.codegen_spread_arg_name(&lc);
-            let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
-            self.symbol_table.insert(sym.clone());
-            arg_exprs.push(sym.to_expr());
-        }
+        let marshalled_tuple_fields =
+            BTreeMap::from_iter(args.iter().enumerate().map(|(arg_i, arg_t)| {
+                // The components come at the end, so offset by the untupled length.
+                let lc = Local::from_usize(arg_i + starting_idx);
+                let (name, base_name) = self.codegen_spread_arg_name(&lc);
+                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
+                // TODO, I'm concerned that these are never declared inside the function?
+                self.symbol_table.insert(sym.clone());
+                // As discussed above, fields are named like `0: t1`.
+                // Follow that pattern for the marshalled data
+                (arg_i.to_string().intern(), sym.to_expr())
+            }));
+        let marshalled_tuple_value =
+            Expr::struct_expr(tup_typ.clone(), marshalled_tuple_fields, &self.symbol_table)
+                .with_location(loc.clone());
 
-        // Finally, combine the expression into a struct.
-        let tuple_expr = Expr::struct_expr_from_values(tup_typ, arg_exprs, &self.symbol_table)
-            .with_location(loc.clone());
-        self.current_fn_mut().push_onto_block(Stmt::decl(tup_sym.to_expr(), Some(tuple_expr), loc));
+        // Build the tuple symbol, insert into the symbol table, and declare it in the fn.
+        let tup_sym = Symbol::variable(
+            self.codegen_var_name(&spread_arg),
+            self.codegen_var_base_name(&spread_arg),
+            tup_typ,
+            loc.clone(),
+        );
+        self.symbol_table.insert(tup_sym.clone());
+        self.current_fn_mut().push_onto_block(Stmt::decl(
+            tup_sym.to_expr(),
+            Some(marshalled_tuple_value),
+            loc,
+        ));
     }
 
     pub fn declare_function(&mut self, instance: Instance<'tcx>) {
