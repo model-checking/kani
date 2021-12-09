@@ -137,26 +137,19 @@ def extract_solver_information(cbmc_response_json_array):
             Input Example -
                 [{'program': 'CBMC 5.44.0 (cbmc-5.44.0)'},
                 {'messageText': 'CBMC version 5.44.0 (cbmc-5.44.0) 64-bit x86_64 linux', 'messageType': 'STATUS-MESSAGE'},
-                {'messageText': 'Reading GOTO program from file', 'messageType': 'STATUS-MESSAGE'},..]
-
-    Returns -
-        properties : List
-            Contains the list of properties that is obtained from the "result" object from CBMC
-
-            Example -
+                {'messageText': 'Reading GOTO program from file', 'messageType': 'STATUS-MESSAGE'},
+                ...
                 {'result': [{'description': 'assertion failed: 2 == 4', 'property': 'main.assertion.1', 'status': 'FAILURE', '
                 trace': [{'function': {'displayName': '__CPROVER_initialize', 'identifier': '__CPROVER_initialize',
                 'sourceLocation': {'file': '<built-in-additions>', 'line': '40', 'workingDirectory': '/home/ubuntu'}},
                 ...'thread': 0}]}
 
+    Returns -
+        properties : List
+            Contains the list of properties that is obtained from the "result" object from CBMC.
+
         solver_information : List
             Contains the list of message texts which collectively contain information about the solver.
-
-            Example -
-                [{'program': 'CBMC 5.44.0 (cbmc-5.44.0)'},
-                {'messageText': 'CBMC version 5.44.0 (cbmc-5.44.0) 64-bit x86_64 linux', 'messageType': 'STATUS-MESSAGE'},
-                {'messageText': 'Reading GOTO program from file', 'messageType': 'STATUS-MESSAGE'},
-                {'messageText': 'Reading: test.goto', 'messageType': 'STATUS-MESSAGE'}..]
 
     """
 
