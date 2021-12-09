@@ -8,7 +8,7 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use crate::utils::{instance_name_is, instance_name_starts_with};
+use crate::utils::instance_name_starts_with;
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
@@ -197,9 +197,10 @@ struct Panic;
 
 impl<'tcx> GotocHook<'tcx> for Panic {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        output_of_instance_is_never(tcx, instance)
-            && (instance_name_is(tcx, instance, "begin_panic")
-                || instance_name_is(tcx, instance, "panic"))
+        let def_id = instance.def.def_id();
+        Some(def_id) == tcx.lang_items().panic_fn()
+            || Some(def_id) == tcx.lang_items().panic_display()
+            || Some(def_id) == tcx.lang_items().begin_panic_fn()
     }
 
     fn handle(
@@ -231,15 +232,11 @@ impl<'tcx> GotocHook<'tcx> for Nevers {
         _target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        // _target must be None due to how rust compiler considers it
-        Stmt::assert_false(
-            &format!(
-                "a panicking function {} is invoked",
-                with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()))
-            ),
-            loc,
-        )
+        let msg = format!(
+            "a panicking function {} is invoked",
+            with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()))
+        );
+        tcx.codegen_fatal_error(&msg, span)
     }
 }
 

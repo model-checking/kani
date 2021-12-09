@@ -27,6 +27,16 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
+    // Get the location of the caller. This will attempt to reach the macro caller.
+    pub fn codegen_caller_span(&self, sp: &Option<Span>) -> Location {
+        if let Some(span) = sp {
+            let topmost = span.ctxt().outer_expn().expansion_cause().unwrap_or(*span);
+            self.codegen_span(&topmost)
+        } else {
+            Location::none()
+        }
+    }
+
     pub fn codegen_span_option(&self, sp: Option<Span>) -> Location {
         sp.map_or(Location::none(), |x| self.codegen_span(&x))
     }
