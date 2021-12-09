@@ -231,7 +231,6 @@ def compile_single_rust_file(
         input_filename,
         base,
         output_filename,
-
         extra_args,
         symbol_table_passes=[]):
     if not extra_args.keep_temps:

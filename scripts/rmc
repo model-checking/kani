@@ -28,6 +28,8 @@ def main():
         json_runnable_filename = base + "_runnable.json"
         goto_runnable_filename = base + "_runnable.goto"
         c_runnable_filename = base + "_runnable.c"
+        restrictions_runnable_filename = os.path.join(
+            args.target_dir, "debug", "deps") if args.restrict_vtable else None
         if EXIT_CODE_SUCCESS != rmc.compile_single_rust_file(args.input, base, json_runnable_filename, args, ["gen-c"]):
             return 1
 
@@ -78,8 +80,7 @@ def main():
                 c_filename,
                 restrictions_filename,
                 args.verbose,
-                args.dry_run,
-                args.restrict_vtable):
+                args.dry_run):
             return 1
 
     if args.gen_symbols:

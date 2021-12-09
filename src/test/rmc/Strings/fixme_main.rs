@@ -6,7 +6,6 @@ fn test2() {
     assert!(s.chars().nth(1) == Some('o'));
 }
 
-/// Runs forever
 fn test3() {
     let s: &str = &("f".to_string() + "o");
     assert!(s.len() == 2);
@@ -20,7 +19,7 @@ fn test4() {
 
     unsafe {
         assert!(!ptr.is_null());
-        //assert!(*ptr.offset(1) as char == '2'); // u8 to char not handled yet
+        assert!(*ptr.offset(1) as char == '2'); // u8 to char not handled yet
     }
 }
 fn main() {

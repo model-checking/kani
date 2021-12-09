@@ -474,6 +474,7 @@ impl<'a> Builder<'a> {
                 test::Dashboard,
                 test::Stub,
                 test::RmcDocs,
+                test::RmcFixme,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),
