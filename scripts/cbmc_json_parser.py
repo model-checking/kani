@@ -20,11 +20,7 @@ functions:
 """
 
 import json
-from json.decoder import JSONDecodeError
-from os import remove
-from os.path import exists
 from colorama import Fore, Style
-import tempfile
 import sys
 from enum import Enum
 
@@ -62,13 +58,13 @@ def main():
     transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["old"])
     return
 
-def transform_cbmc_output(log_file, output_style):
+def transform_cbmc_output(cbmc_response_string, output_style):
     """
     Take Unstructured CBMC Response object, parse the blob and gives structured
     and formatted output depending on User Provided Output Style
 
     Parameters -
-        log_file : str
+        cbmc_response_string : str
             A response blob that is given to the function from CBMC
         output_style : int
             An index to tell the script which style of output is requested by the User.
@@ -82,17 +78,11 @@ def transform_cbmc_output(log_file, output_style):
     output_message = ""
 
     # Check if the output given by CBMC is in Json format or not
-    is_json_bool, json_file = is_json(log_file)
+    is_json_bool, cbmc_json_array = is_json(cbmc_response_string)
     if is_json_bool:
 
-        # Write cbmc output to a json file in scripts/temp_json for parallel I/O
-        json_file = save_json_file(json_file)
-
-        # Read from the saved json file and restructure it to make it parseable
-        parseable_json_dictionary = restructure_json_file(json_file)
-
         # Extract property information from the restructured JSON file
-        properties, solver_information = extract_solver_information(parseable_json_dictionary)
+        properties, solver_information = extract_solver_information(cbmc_json_array)
 
         # Using Case Switching to Toggle between various output styles
         # For now, the two options provided are default and terse
@@ -111,106 +101,79 @@ def transform_cbmc_output(log_file, output_style):
             output_message = construct_terse_property_message(properties)
 
         # Print using an Interface function
-        print_to_terminal(output_message)
+        print(output_message)
 
-        # Delete temp Json file after displaying result
-        clear_json_file(json_file)
+        # # Delete temp Json file after displaying result
+        # clear_json_file(temp_json_file_path)
 
-        # Check that temp files have been cleared
-        assert exists(json_file) == False, "Temp Files not cleared"
+        # # Check that temp files have been cleared
+        # assert exists(temp_json_file_path) == False, "Temp Files not cleared"
     else:
         # DynTrait tests generate a non json output due to "Invariant check failed" error
         # For these cases, we just produce the cbmc output unparsed
         # TODO: Parse these non json outputs from CBMC
-        non_json_cbmc_output_handler(log_file)
+        raise Exception("CBMC Crashed - Unable to present Result")
+
     return
-
-def save_json_file(log_file):
-    """
-    Write the json file to disk for easy parsing
-    """
-
-    # TODO : Change to use the source file name as the temp file name too
-    # Create a temp json file for every source file as testing can be parallelized
-    tfile = tempfile.NamedTemporaryFile(prefix='cbmcparser_', suffix='.json').name
-    try:
-        with open(tfile, "w", encoding='utf-8') as outfile:
-            json.dump(log_file, outfile)
-    except FileNotFoundError as e:
-        print("Error in writing JSON file", e)
-    return tfile
 
 # Check if the blob is in json format for parsing
-def is_json(myjson):
+def is_json(cbmc_output_string):
     try:
-        json_file = json.loads(myjson)
+        cbmc_json_array = json.loads(cbmc_output_string)
     except ValueError:
         return False, None
-    return True, json_file
+    return True, cbmc_json_array
 
-def print_json_file(input_json_file):
+def extract_solver_information(cbmc_response_json_array):
     """
-    Function for printing temporary json objects for debugging purposes
-    """
-    with open(input_json_file) as infile:
-        data = json.load(infile)
-        print(data)
-    return
-
-def restructure_json_file(log_file):
-    """
-    CBMC's response blob is difficult to parse by itself, so it needs to be re-fit into
-    another temporary dictionary structure and
+    Takes the CBMC Response, now in JSON Array format and extracts solver and property information
+    and splits them into two seperate lists.
 
     Parameters -
-        log_file - log_file is the initial cbmc blob object which even in JSON format,
-                    is difficult to parse and in some cases, is not in JSON format.
+        cbmc_response_json_array : JSON Array
+            A response JSON Array that contains the Result Object from CBMC and
+            Solver Information
+
+            Input Example -
+                [{'program': 'CBMC 5.44.0 (cbmc-5.44.0)'},
+                {'messageText': 'CBMC version 5.44.0 (cbmc-5.44.0) 64-bit x86_64 linux', 'messageType': 'STATUS-MESSAGE'},
+                {'messageText': 'Reading GOTO program from file', 'messageType': 'STATUS-MESSAGE'},..]
 
     Returns -
-        temp_dict - The restructured dictionary which is easy to parse
+        properties : List
+            Contains the list of properties that is obtained from the "result" object from CBMC
 
-    """
+            Example -
+                {'result': [{'description': 'assertion failed: 2 == 4', 'property': 'main.assertion.1', 'status': 'FAILURE', '
+                trace': [{'function': {'displayName': '__CPROVER_initialize', 'identifier': '__CPROVER_initialize',
+                'sourceLocation': {'file': '<built-in-additions>', 'line': '40', 'workingDirectory': '/home/ubuntu'}},
+                ...'thread': 0}]}
 
-    # The restructured dictionary which is easy to parse
-    temp_dict = {}
-    try:
-        with open(log_file) as infile:
-            data = json.load(infile)
-            temp_dict["response"] = data
-    except FileNotFoundError:
-        print("CBMC File not found")
-        return {}
-    except JSONDecodeError:
-        # print out specific information about the extra data (like the lines before it)
-        print("JSON File not being parsed")
-        return {}
+        solver_information : List
+            Contains the list of message texts which collectively contain information about the solver.
 
-    # TODO: Check if passing dictionaries around is optimal or if there are alternate ways to
-    # restructure and parse cbmc blob.
-    return temp_dict
+            Example -
+                [{'program': 'CBMC 5.44.0 (cbmc-5.44.0)'},
+                {'messageText': 'CBMC version 5.44.0 (cbmc-5.44.0) 64-bit x86_64 linux', 'messageType': 'STATUS-MESSAGE'},
+                {'messageText': 'Reading GOTO program from file', 'messageType': 'STATUS-MESSAGE'},
+                {'messageText': 'Reading: test.goto', 'messageType': 'STATUS-MESSAGE'}..]
 
-def extract_solver_information(json_object):
-    """
-    Get Information about the Solver from the Json file written
     """
 
     # Solver information is all the fields in the json object which are not related to the results
     solver_information = []
-    properties = []
+    properties = None
 
-    try:
-        responses = json_object["response"]
-    except BaseException:
-        raise Exception("No Response Object from CBMC")
-
-    # Check for the objects which are not related to the result object
-    for response_object in responses:
-        if GlobalMessages.RESULT not in response_object.keys():
-            solver_information.append(response_object)
-        elif GlobalMessages.RESULT in response_object.keys():
+    # Parse each object and extract out the "result" object to be returned seperately
+    for response_object in cbmc_response_json_array:
+        """Example response object -
+        1)  {'program': 'CBMC 5.44.0 (cbmc-5.44.0)'},
+        2)  {'result': [{'description': 'assertion failed: 2 == 4',..}
+        """
+        if GlobalMessages.RESULT in response_object.keys():
             properties = response_object["result"]
         else:
-            raise KeyError
+            solver_information.append(response_object)
 
     return properties, solver_information
 
@@ -229,17 +192,23 @@ def construct_solver_information_message(solver_information):
     for message_object in solver_information:
         # 'Program' and 'messageText' fields give us the information about the solver
         try:
+            # Objects with the key "program" give information about CBMC's version
+            # Example - {'program': 'CBMC 5.44.0 (cbmc-5.44.0)'}
             if GlobalMessages.PROGRAM in message_object.keys():
                 solver_information_message += message_object['program']
-            # Check message texts for valuable information and append only relevant messages
+
+            # Check message texts - objects with the key 'messageText'
+            # Example - {'messageText': 'CBMC version 5.44.0 (cbmc-5.44.0) 64-bit x86_64 linux', 'messageType': 'STATUS-MESSAGE'},
+            # {'messageText': 'Reading GOTO program from file', 'messageType': 'STATUS-MESSAGE'}
             elif GlobalMessages.MESSAGE_TEXT in message_object.keys():
+                # Remove certain messageTexts which do not contain important information, like "Building error trace"
                 if message_object['messageText'] != GlobalMessages.CONST_TRACE_MESSAGE:
                     solver_information_message += message_object['messageText']
                 else:
                     solver_information_message += '\n'
                     break
             else:
-                solver_information_message += ''
+                pass
         except KeyError as e:
             print("Key Error, Missing Properties in reading Solver Information from JSON")
         solver_information_message += '\n'
@@ -279,8 +248,8 @@ def construct_terse_property_message(properties):
         else:
             pass
 
-    # Ex - SUMMARY: ** 1 of 54 failed
-    output_message += f"SUMMARY: \n ** {number_tests_failed} of {index+1} failed\n"
+    # Ex - OUTPUT: ** 1 of 54 failed
+    output_message += f"VERIFICATION RESULT: \n ** {number_tests_failed} of {index+1} failed\n"
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
@@ -355,8 +324,8 @@ def construct_property_message(properties):
         """ Ex - Property 54: calloc.assertion.1
          - Status: SUCCESS
          - Description: "assertion false" """
-        output_message += f"Property {index+1}: {name}\n\t - Status: " + \
-            message + f"\n\t - Description: \"{description}\"\n"
+        output_message += f"Check {index+1}: {name}\n\t - Status: " + \
+            message + f"\n\t - Description: \"{description}\"\n" + "\n"
 
     output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed\n"
 
@@ -384,25 +353,6 @@ def construct_property_message(properties):
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
     return output_message
-
-# Method provides a handler for non json cbmc outputs, for example
-# with DynTrait tests
-def non_json_cbmc_output_handler(logfile):
-    # Basic handling is just printing the output provided by CBMC
-    raise Exception("CBMC Crashed - Unable to present Result")
-
-# Method provides an Interface to printing, can be expanded upon
-def print_to_terminal(output_message):
-    print(output_message)
-    return
-
-# Deleting Temp JSON files created for parsing
-def clear_json_file(saved_file):
-    try:
-        remove(saved_file)
-    except BaseException:
-        pass
-    return
 
 
 if __name__ == "__main__":
