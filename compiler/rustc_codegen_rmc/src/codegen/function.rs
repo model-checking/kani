@@ -178,6 +178,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
                 // TODO, I'm concerned that these are never declared inside the function?
+                // However, declaring it seems to break the assertions.
+                // https://github.com/model-checking/rmc/issues/686
                 self.symbol_table.insert(sym.clone());
                 // As discussed above, fields are named like `0: t1`.
                 // Follow that pattern for the marshalled data
@@ -186,20 +188,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let marshalled_tuple_value =
             Expr::struct_expr(tup_typ.clone(), marshalled_tuple_fields, &self.symbol_table)
                 .with_location(loc.clone());
-
-        // Build the tuple symbol, insert into the symbol table, and declare it in the fn.
-        let tup_sym = Symbol::variable(
+        self.declare_variable(
             self.codegen_var_name(&spread_arg),
             self.codegen_var_base_name(&spread_arg),
             tup_typ,
-            loc.clone(),
-        );
-        self.symbol_table.insert(tup_sym.clone());
-        self.current_fn_mut().push_onto_block(Stmt::decl(
-            tup_sym.to_expr(),
             Some(marshalled_tuple_value),
             loc,
-        ));
+        );
     }
 
     pub fn declare_function(&mut self, instance: Instance<'tcx>) {
