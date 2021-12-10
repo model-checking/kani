@@ -2,10 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "rmc"
+name = "simple-proof-annotation"
 version = "0.1.0"
-edition = "2018"
-license = "MIT OR Apache-2.0"
+edition = "2021"
 
 [dependencies]
-rmc_macros = { path = "../rmc_macros" }
