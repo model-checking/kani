@@ -27,7 +27,10 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    // Get the location of the caller. This will attempt to reach the macro caller.
+    /// Get the location of the caller. This will attempt to reach the macro caller.
+    /// This function uses rustc_span methods designed to returns span for the macro which
+    /// originally caused the expansion to happen.
+    /// Note: The API stops backtracing at include! boundary.
     pub fn codegen_caller_span(&self, sp: &Option<Span>) -> Location {
         if let Some(span) = sp {
             let topmost = span.ctxt().outer_expn().expansion_cause().unwrap_or(*span);

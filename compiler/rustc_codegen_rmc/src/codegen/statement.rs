@@ -482,25 +482,13 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_panic(&mut self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
+    pub fn codegen_panic(&self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
-        let mut msg = String::from(
+        assert!(!fargs.is_empty(), "Panic requires a string message");
+        let msg = extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; RMC doesn't support message formatted at runtime",
-        );
-        if let Some(values) = fargs[0].struct_expr_values() {
-            if !values.is_empty() {
-                if let ExprValue::AddressOf(msg_value) = values[0].value() {
-                    if let ExprValue::Index { array, .. } = msg_value.value() {
-                        if let ExprValue::StringConstant { s } = array.value() {
-                            msg = s.to_string();
-                        }
-                    }
-                } else {
-                    tracing::error!(?values, "Oh no");
-                }
-            }
-        };
+        ));
 
         self.codegen_fatal_error(&msg, span)
     }
@@ -510,7 +498,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_fatal_error(&self, msg: &str, span: Option<Span>) -> Stmt {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
-            vec![Stmt::assert_false(msg, loc.clone()), Stmt::assume_false(loc.clone())],
+            vec![
+                Stmt::assert_false(msg, loc.clone()),
+                BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
+            ],
             loc,
         )
     }
@@ -642,5 +633,24 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
+    }
+}
+
+/// Tries to extract a string message from an `Expr`.
+/// If the expression represents a pointer to a string constant, this will return the string
+/// constant. Otherwise, return `None`.
+fn extract_const_message(arg: &Expr) -> Option<String> {
+    match arg.value() {
+        ExprValue::Struct { values } => match &values[0].value() {
+            ExprValue::AddressOf(address) => match address.value() {
+                ExprValue::Index { array, .. } => match array.value() {
+                    ExprValue::StringConstant { s } => Some(s.to_string()),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
     }
 }

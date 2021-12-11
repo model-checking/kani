@@ -200,6 +200,7 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         let def_id = instance.def.def_id();
         Some(def_id) == tcx.lang_items().panic_fn()
             || Some(def_id) == tcx.lang_items().panic_display()
+            || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
     }
 

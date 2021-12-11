@@ -188,12 +188,17 @@ impl CodegenBackend for GotocCodegenBackend {
 
 fn check_options(session: &Session) {
     if !session.overflow_checks() {
-        session.err("RMC requires overflow checks in order to provide a sound analysis.")
+        session.err("RMC requires overflow checks in order to provide a sound analysis.");
     }
 
     if session.panic_strategy() != PanicStrategy::Abort {
-        session.err("RMC can only handle abort panic strategy (-C panic=abort).")
+        session.err(
+            "RMC can only handle abort panic strategy (-C panic=abort). See for more details \
+        https://github.com/model-checking/rmc/issues/692",
+        );
     }
+
+    session.abort_if_errors();
 }
 
 fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T)

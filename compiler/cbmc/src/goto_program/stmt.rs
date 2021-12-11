@@ -207,10 +207,6 @@ impl Stmt {
         )
     }
 
-    pub fn assume_false(loc: Location) -> Self {
-        Stmt::assume(Expr::bool_false(), loc)
-    }
-
     /// `__CPROVER_assume(cond);`
     pub fn assume(cond: Expr, loc: Location) -> Self {
         assert!(cond.typ().is_bool(), "Assume expected bool, got {:?}", cond);
