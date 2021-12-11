@@ -51,6 +51,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --ye
 PYTHON_DEPS=(
   autopep8
   toml # Used for parsing `cargo-rmc` config toml
+  colorama # Used for introducing colors into terminal output
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"

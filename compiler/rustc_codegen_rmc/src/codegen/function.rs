@@ -3,8 +3,10 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
+use crate::context::metadata::HarnessMetadata;
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
+use rustc_ast::ast;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
 use tracing::{debug, warn};
@@ -98,6 +100,8 @@ impl<'tcx> GotocCtx<'tcx> {
             let stmts = self.current_fn_mut().extract_block();
             let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
+
+            self.handle_rmctool_attributes();
         }
         self.reset_current_fn();
     }
@@ -198,5 +202,50 @@ impl<'tcx> GotocCtx<'tcx> {
             )
         });
         self.reset_current_fn();
+    }
+
+    /// This updates the goto context with any information that should be accumulated from a function's
+    /// attributes.
+    ///
+    /// Currently, this is only proof harness annotations.
+    /// i.e. `#[rmc::proof]` (which rmc_macros translates to `#[rmctool::proof]` for us to handle here)
+    fn handle_rmctool_attributes(&mut self) {
+        let instance = self.current_fn().instance();
+
+        for attr in self.tcx.get_attrs(instance.def_id()) {
+            match rmctool_attr_name(attr).as_deref() {
+                Some("proof") => self.handle_rmctool_proof(),
+                _ => {}
+            }
+        }
+    }
+
+    /// Update `self` (the goto context) to add the current function as a listed proof harness
+    fn handle_rmctool_proof(&mut self) {
+        let current_fn = self.current_fn();
+        let pretty_name = current_fn.readable_name().to_owned();
+        let mangled_name = current_fn.name();
+        let loc = self.codegen_span(&current_fn.mir().span);
+
+        let harness = HarnessMetadata {
+            pretty_name,
+            mangled_name,
+            original_file: loc.filename().unwrap(),
+            original_line: loc.line().unwrap().to_string(),
+        };
+
+        self.proof_harnesses.push(harness);
+    }
+}
+
+/// If the attribute is named `rmctool::name`, this extracts `name`
+fn rmctool_attr_name(attr: &ast::Attribute) -> Option<String> {
+    match &attr.kind {
+        ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
+            if segments.len() == 2 && segments[0].ident.as_str() == "rmctool" =>
+        {
+            Some(segments[1].ident.as_str().to_string())
+        }
+        _ => None,
     }
 }
