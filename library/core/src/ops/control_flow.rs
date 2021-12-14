@@ -123,6 +123,11 @@ impl<B, C> ops::FromResidual for ControlFlow<B, C> {
     }
 }
 
+#[unstable(feature = "try_trait_v2_residual", issue = "91285")]
+impl<B, C> ops::Residual<C> for ControlFlow<B, convert::Infallible> {
+    type TryType = ControlFlow<B, C>;
+}
+
 impl<B, C> ControlFlow<B, C> {
     /// Returns `true` if this is a `Break` variant.
     ///
@@ -136,7 +141,7 @@ impl<B, C> ControlFlow<B, C> {
     /// assert!(!ControlFlow::<String, i32>::Continue(3).is_break());
     /// ```
     #[inline]
-    #[unstable(feature = "control_flow_enum", reason = "new API", issue = "75744")]
+    #[stable(feature = "control_flow_enum_is", since = "1.59.0")]
     pub fn is_break(&self) -> bool {
         matches!(*self, ControlFlow::Break(_))
     }
@@ -153,7 +158,7 @@ impl<B, C> ControlFlow<B, C> {
     /// assert!(ControlFlow::<String, i32>::Continue(3).is_continue());
     /// ```
     #[inline]
-    #[unstable(feature = "control_flow_enum", reason = "new API", issue = "75744")]
+    #[stable(feature = "control_flow_enum_is", since = "1.59.0")]
     pub fn is_continue(&self) -> bool {
         matches!(*self, ControlFlow::Continue(_))
     }

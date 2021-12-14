@@ -12,11 +12,11 @@
 #![feature(const_convert)]
 #![feature(const_maybe_uninit_as_mut_ptr)]
 #![feature(const_maybe_uninit_assume_init)]
+#![feature(const_num_from_num)]
 #![feature(const_ptr_read)]
 #![feature(const_ptr_write)]
 #![feature(const_ptr_offset)]
 #![feature(const_trait_impl)]
-#![feature(const_num_from_num)]
 #![feature(core_intrinsics)]
 #![feature(core_private_bignum)]
 #![feature(core_private_diy_float)]
@@ -29,6 +29,8 @@
 #![feature(flt2dec)]
 #![feature(fmt_internals)]
 #![feature(float_minimum_maximum)]
+#![feature(future_join)]
+#![feature(future_poll_fn)]
 #![feature(array_from_fn)]
 #![feature(hashmap_internals)]
 #![feature(try_find)]
@@ -36,6 +38,7 @@
 #![feature(pattern)]
 #![feature(sort_internals)]
 #![feature(slice_partition_at_index)]
+#![feature(slice_take)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(maybe_uninit_array_assume_init)]
 #![feature(maybe_uninit_extra)]
@@ -46,6 +49,7 @@
 #![feature(str_internals)]
 #![feature(test)]
 #![feature(trusted_len)]
+#![feature(try_blocks)]
 #![feature(try_trait_v2)]
 #![feature(slice_internals)]
 #![feature(slice_partition_dedup)]
@@ -55,14 +59,14 @@
 #![feature(iter_intersperse)]
 #![feature(iter_is_partitioned)]
 #![feature(iter_order_by)]
+#![feature(iterator_try_reduce)]
 #![feature(const_mut_refs)]
 #![feature(const_pin)]
 #![feature(const_slice_from_raw_parts)]
-#![cfg_attr(bootstrap, feature(const_raw_ptr_deref))]
 #![feature(never_type)]
 #![feature(unwrap_infallible)]
 #![feature(result_into_ok_or_err)]
-#![cfg_attr(not(bootstrap), feature(portable_simd))]
+#![feature(portable_simd)]
 #![feature(ptr_metadata)]
 #![feature(once_cell)]
 #![feature(unsized_tuple_coercion)]
@@ -92,7 +96,9 @@ mod char;
 mod clone;
 mod cmp;
 mod const_ptr;
+mod convert;
 mod fmt;
+mod future;
 mod hash;
 mod intrinsics;
 mod iter;
@@ -108,7 +114,6 @@ mod pattern;
 mod pin;
 mod ptr;
 mod result;
-#[cfg(not(bootstrap))]
 mod simd;
 mod slice;
 mod str;

@@ -172,7 +172,7 @@ pub(super) fn opt_const_param_of(tcx: TyCtxt<'_>, def_id: LocalDefId) -> Option<
                 // We've encountered an `AnonConst` in some path, so we need to
                 // figure out which generic parameter it corresponds to and return
                 // the relevant type.
-                let (arg_index, segment) = path
+                let filtered = path
                     .segments
                     .iter()
                     .filter_map(|seg| seg.args.map(|args| (args.args, seg)))
@@ -181,10 +181,17 @@ pub(super) fn opt_const_param_of(tcx: TyCtxt<'_>, def_id: LocalDefId) -> Option<
                             .filter(|arg| arg.is_const())
                             .position(|arg| arg.id() == hir_id)
                             .map(|index| (index, seg))
-                    })
-                    .unwrap_or_else(|| {
-                        bug!("no arg matching AnonConst in path");
                     });
+                let (arg_index, segment) = match filtered {
+                    None => {
+                        tcx.sess.delay_span_bug(
+                            tcx.def_span(def_id),
+                            "no arg matching AnonConst in path",
+                        );
+                        return None;
+                    }
+                    Some(inner) => inner,
+                };
 
                 // Try to use the segment resolution if it is valid, otherwise we
                 // default to the path resolution.
@@ -387,13 +394,13 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                     let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
                     tcx.mk_adt(def, substs)
                 }
-                ItemKind::OpaqueTy(OpaqueTy { impl_trait_fn: None, .. }) => {
+                ItemKind::OpaqueTy(OpaqueTy { origin: hir::OpaqueTyOrigin::TyAlias, .. }) => {
                     find_opaque_ty_constraints(tcx, def_id)
                 }
                 // Opaque types desugared from `impl Trait`.
-                ItemKind::OpaqueTy(OpaqueTy { impl_trait_fn: Some(owner), .. }) => {
+                ItemKind::OpaqueTy(OpaqueTy { origin: hir::OpaqueTyOrigin::FnReturn(owner) | hir::OpaqueTyOrigin::AsyncFn(owner), .. }) => {
                     let concrete_ty = tcx
-                        .mir_borrowck(owner.expect_local())
+                        .mir_borrowck(owner)
                         .concrete_opaque_types
                         .get_value_matching(|(key, _)| key.def_id == def_id.to_def_id())
                         .copied()
@@ -406,7 +413,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
                                 ),
                             );
                             if let Some(ErrorReported) =
-                                tcx.typeck(owner.expect_local()).tainted_by_errors
+                                tcx.typeck(owner).tainted_by_errors
                             {
                                 // Some error in the
                                 // owner fn prevented us from populating
@@ -729,17 +736,17 @@ fn infer_placeholder_type<'a>(
             self.tcx
         }
 
-        fn fold_ty(&mut self, ty: Ty<'tcx>) -> Result<Ty<'tcx>, Self::Error> {
+        fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
             if !self.success {
-                return Ok(ty);
+                return ty;
             }
 
             match ty.kind() {
-                ty::FnDef(def_id, _) => Ok(self.tcx.mk_fn_ptr(self.tcx.fn_sig(*def_id))),
+                ty::FnDef(def_id, _) => self.tcx.mk_fn_ptr(self.tcx.fn_sig(*def_id)),
                 // FIXME: non-capturing closures should also suggest a function pointer
                 ty::Closure(..) | ty::Generator(..) => {
                     self.success = false;
-                    Ok(ty)
+                    ty
                 }
                 _ => ty.super_fold_with(self),
             }
@@ -761,7 +768,7 @@ fn infer_placeholder_type<'a>(
 
                 // Suggesting unnameable types won't help.
                 let mut mk_nameable = MakeNameable::new(tcx);
-                let ty = mk_nameable.fold_ty(ty).into_ok();
+                let ty = mk_nameable.fold_ty(ty);
                 let sugg_ty = if mk_nameable.success { Some(ty) } else { None };
                 if let Some(sugg_ty) = sugg_ty {
                     err.span_suggestion(
@@ -785,7 +792,7 @@ fn infer_placeholder_type<'a>(
 
             if !ty.references_error() {
                 let mut mk_nameable = MakeNameable::new(tcx);
-                let ty = mk_nameable.fold_ty(ty).into_ok();
+                let ty = mk_nameable.fold_ty(ty);
                 let sugg_ty = if mk_nameable.success { Some(ty) } else { None };
                 if let Some(sugg_ty) = sugg_ty {
                     diag.span_suggestion(

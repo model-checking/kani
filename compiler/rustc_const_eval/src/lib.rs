@@ -11,7 +11,6 @@ Rust MIR: a lowered representation of Rust.
 #![feature(crate_visibility_modifier)]
 #![feature(decl_macro)]
 #![feature(exact_size_is_empty)]
-#![feature(in_band_lifetimes)]
 #![feature(iter_zip)]
 #![feature(let_else)]
 #![feature(map_try_insert)]
@@ -23,7 +22,6 @@ Rust MIR: a lowered representation of Rust.
 #![feature(trusted_len)]
 #![feature(trusted_step)]
 #![feature(try_blocks)]
-#![feature(unwrap_infallible)]
 #![recursion_limit = "256"]
 
 #[macro_use]

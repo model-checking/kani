@@ -5,7 +5,7 @@ use rustc_ast::{
     self as ast, Attribute, GenericBounds, GenericParam, GenericParamKind, WhereClause,
 };
 use rustc_errors::PResult;
-use rustc_span::symbol::{kw, sym};
+use rustc_span::symbol::kw;
 
 impl<'a> Parser<'a> {
     /// Parses bounds of a lifetime parameter `BOUND + BOUND + BOUND`, possibly with trailing `+`.
@@ -59,19 +59,8 @@ impl<'a> Parser<'a> {
         self.expect(&token::Colon)?;
         let ty = self.parse_ty()?;
 
-        // Parse optional const generics default value, taking care of feature gating the spans
-        // with the unstable syntax mechanism.
-        let default = if self.eat(&token::Eq) {
-            // The gated span goes from the `=` to the end of the const argument that follows (and
-            // which could be a block expression).
-            let start = self.prev_token.span;
-            let const_arg = self.parse_const_arg()?;
-            let span = start.to(const_arg.value.span);
-            self.sess.gated_spans.gate(sym::const_generics_defaults, span);
-            Some(const_arg)
-        } else {
-            None
-        };
+        // Parse optional const generics default value.
+        let default = if self.eat(&token::Eq) { Some(self.parse_const_arg()?) } else { None };
 
         Ok(GenericParam {
             ident,
@@ -92,6 +81,19 @@ impl<'a> Parser<'a> {
             let attrs = self.parse_outer_attributes()?;
             let param =
                 self.collect_tokens_trailing_token(attrs, ForceCollect::No, |this, attrs| {
+                    if this.eat_keyword_noexpect(kw::SelfUpper) {
+                        // `Self` as a generic param is invalid. Here we emit the diagnostic and continue parsing
+                        // as if `Self` never existed.
+                        this.struct_span_err(
+                            this.prev_token.span,
+                            "unexpected keyword `Self` in generic parameters",
+                        )
+                        .note("you cannot use `Self` as a generic parameter because it is reserved for associated items")
+                        .emit();
+
+                        this.eat(&token::Comma);
+                    }
+
                     let param = if this.check_lifetime() {
                         let lifetime = this.expect_lifetime();
                         // Parse lifetime parameter.

@@ -346,7 +346,7 @@ crate fn print_where_clause<'a, 'tcx: 'a>(
 
 impl clean::Lifetime {
     crate fn print(&self) -> impl fmt::Display + '_ {
-        self.get_ref()
+        self.0.as_str()
     }
 }
 
@@ -1177,6 +1177,10 @@ impl clean::FnDecl {
                     args.push_str(" <br>");
                     args_plain.push(' ');
                 }
+                if input.is_const {
+                    args.push_str("const ");
+                    args_plain.push_str("const ");
+                }
                 if !input.name.is_empty() {
                     args.push_str(&format!("{}: ", input.name));
                     args_plain.push_str(&format!("{}: ", input.name));
@@ -1349,10 +1353,7 @@ impl PrintWithSpace for hir::Mutability {
     }
 }
 
-crate fn print_constness_with_space(
-    c: &hir::Constness,
-    s: Option<&ConstStability>,
-) -> &'static str {
+crate fn print_constness_with_space(c: &hir::Constness, s: Option<ConstStability>) -> &'static str {
     match (c, s) {
         // const stable or when feature(staged_api) is not set
         (

@@ -32,6 +32,7 @@ Inline assembly is currently supported on the following architectures:
 - wasm32
 - BPF
 - SPIR-V
+- AVR
 
 ## Basic usage
 
@@ -454,7 +455,7 @@ operand_expr := expr / "_" / expr "=>" expr / expr "=>" "_"
 reg_operand := dir_spec "(" reg_spec ")" operand_expr
 operand := reg_operand / "const" const_expr / "sym" path
 clobber_abi := "clobber_abi(" <abi> *["," <abi>] [","] ")"
-option := "pure" / "nomem" / "readonly" / "preserves_flags" / "noreturn" / "nostack" / "att_syntax" / "raw"
+option := "pure" / "nomem" / "readonly" / "preserves_flags" / "noreturn" / "nostack" / "att_syntax" / "raw" / "may_unwind"
 options := "options(" option *["," option] [","] ")"
 asm := "asm!(" format_string *("," format_string) *("," [ident "="] operand) *("," clobber_abi) *("," options) [","] ")"
 ```
@@ -471,6 +472,7 @@ Inline assembly is currently supported on the following architectures:
 - wasm32
 - BPF
 - SPIR-V
+- AVR
 
 Support for more targets may be added in the future. The compiler will emit an error if `asm!` is used on an unsupported target.
 
@@ -562,12 +564,8 @@ Here is the list of currently supported register classes:
 | AArch64 | `vreg` | `v[0-31]` | `w` |
 | AArch64 | `vreg_low16` | `v[0-15]` | `x` |
 | AArch64 | `preg` | `p[0-15]`, `ffr` | Only clobbers |
-| ARM (ARM) | `reg` | `r[0-12]`, `r14` | `r` |
-| ARM (Thumb2) | `reg` | `r[0-12]`, `r14` | `r` |
+| ARM (ARM/Thumb2) | `reg` | `r[0-12]`, `r14` | `r` |
 | ARM (Thumb1) | `reg` | `r[0-7]` | `r` |
-| ARM (ARM) | `reg_thumb` | `r[0-r12]`, `r14` | `l` |
-| ARM (Thumb2) | `reg_thumb` | `r[0-7]` | `l` |
-| ARM (Thumb1) | `reg_thumb` | `r[0-7]` | `l` |
 | ARM | `sreg` | `s[0-31]` | `t` |
 | ARM | `sreg_low16` | `s[0-15]` | `x` |
 | ARM | `dreg` | `d[0-31]` | `w` |
@@ -593,6 +591,11 @@ Here is the list of currently supported register classes:
 | wasm32 | `local` | None\* | `r` |
 | BPF | `reg` | `r[0-10]` | `r` |
 | BPF | `wreg` | `w[0-10]` | `w` |
+| AVR | `reg` | `r[2-25]`, `XH`, `XL`, `ZH`, `ZL` | `r` |
+| AVR | `reg_upper` | `r[16-25]`, `XH`, `XL`, `ZH`, `ZL` | `d` |
+| AVR | `reg_pair` | `r3r2` .. `r25r24`, `X`, `Z` | `r` |
+| AVR | `reg_iw` | `r25r24`, `X`, `Z` | `w` |
+| AVR | `reg_ptr` | `X`, `Z` | `e` |
 
 > **Note**: On x86 we treat `reg_byte` differently from `reg` because the compiler can allocate `al` and `ah` separately whereas `reg` reserves the whole register.
 >
@@ -648,6 +651,8 @@ Each register class has constraints on which value types they can be used with. 
 | wasm32 | `local` | None | `i8` `i16` `i32` `i64` `f32` `f64` |
 | BPF | `reg` | None | `i8` `i16` `i32` `i64` |
 | BPF | `wreg` | `alu32` | `i8` `i16` `i32` |
+| AVR | `reg`, `reg_upper` | None | `i8` |
+| AVR | `reg_pair`, `reg_iw`, `reg_ptr` | None | `i16` |
 
 > **Note**: For the purposes of the above table pointers, function pointers and `isize`/`usize` are treated as the equivalent integer type (`i16`/`i32`/`i64` depending on the target).
 
@@ -708,13 +713,17 @@ Some registers have multiple names. These are all treated by the compiler as ide
 | Hexagon | `r30` | `fr` |
 | Hexagon | `r31` | `lr` |
 | BPF | `r[0-10]` | `w[0-10]` |
+| AVR | `XH` | `r27` |
+| AVR | `XL` | `r26` |
+| AVR | `ZH` | `r31` |
+| AVR | `ZL` | `r30` |
 
 Some registers cannot be used for input or output operands:
 
 | Architecture | Unsupported register | Reason |
 | ------------ | -------------------- | ------ |
 | All | `sp` | The stack pointer must be restored to its original value at the end of an asm code block. |
-| All | `bp` (x86), `x29` (AArch64), `x8` (RISC-V), `fr` (Hexagon), `$fp` (MIPS) | The frame pointer cannot be used as an input or output. |
+| All | `bp` (x86), `x29` (AArch64), `x8` (RISC-V), `fr` (Hexagon), `$fp` (MIPS), `Y` (AVR) | The frame pointer cannot be used as an input or output. |
 | ARM | `r7` or `r11` | On ARM the frame pointer can be either `r7` or `r11` depending on the target. The frame pointer cannot be used as an input or output. |
 | All | `si` (x86-32), `bx` (x86-64), `r6` (ARM), `x19` (AArch64), `r19` (Hexagon), `x9` (RISC-V) | This is used internally by LLVM as a "base pointer" for functions with complex stack frames. |
 | x86 | `k0` | This is a constant zero register which can't be modified. |
@@ -732,11 +741,13 @@ Some registers cannot be used for input or output operands:
 | RISC-V | `x0` | This is a constant zero register which can't be modified. |
 | RISC-V | `gp`, `tp` | These registers are reserved and cannot be used as inputs or outputs. |
 | Hexagon | `lr` | This is the link register which cannot be used as an input or output. |
+| AVR | `r0`, `r1`, `r1r0` | Due to an issue in LLVM, the `r0` and `r1` registers cannot be used as inputs or outputs.  If modified, they must be restored to their original values before the end of the block. |
 
 In some cases LLVM will allocate a "reserved register" for `reg` operands even though this register cannot be explicitly specified. Assembly code making use of reserved registers should be careful since `reg` operands may alias with those registers. Reserved registers are the frame pointer and base pointer
 - The frame pointer and LLVM base pointer on all architectures.
 - `r9` on ARM.
 - `x18` on AArch64.
+- `r0` and `r1` on AVR.
 
 ## Template modifiers
 
@@ -829,6 +840,7 @@ Currently the following options are defined:
 - `noreturn`: The `asm` block never returns, and its return type is defined as `!` (never). Behavior is undefined if execution falls through past the end of the asm code. A `noreturn` asm block behaves just like a function which doesn't return; notably, local variables in scope are not dropped before it is invoked.
 - `nostack`: The `asm` block does not push data to the stack, or write to the stack red-zone (if supported by the target). If this option is *not* used then the stack pointer is guaranteed to be suitably aligned (according to the target ABI) for a function call.
 - `att_syntax`: This option is only valid on x86, and causes the assembler to use the `.att_syntax prefix` mode of the GNU assembler. Register operands are substituted in with a leading `%`.
+- `may_unwind`: The `asm` block may unwind the stack and be part of the stack unwinding process (This option is only supported by the LLVM backend right now).
 - `raw`: This causes the template string to be parsed as a raw assembly string, with no special handling for `{` and `}`. This is primarily useful when including raw assembly code from an external file using `include_str!`.
 
 The compiler performs some additional checks on options:
@@ -881,6 +893,8 @@ The compiler performs some additional checks on options:
   - RISC-V
     - Floating-point exception flags in `fcsr` (`fflags`).
     - Vector extension state (`vtype`, `vl`, `vcsr`).
+  - AVR
+    - The status register `SREG`.
 - On x86, the direction flag (DF in `EFLAGS`) is clear on entry to an asm block and must be clear on exit.
   - Behavior is undefined if the direction flag is set on exiting an asm block.
 - The requirement of restoring the stack pointer and non-output registers to their original value only applies when exiting an `asm!` block.

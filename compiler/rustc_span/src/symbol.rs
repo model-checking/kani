@@ -196,6 +196,7 @@ symbols! {
         Implied,
         Input,
         Into,
+        IntoFuture,
         IntoIterator,
         IoRead,
         IoWrite,
@@ -331,6 +332,7 @@ symbols! {
         asm_const,
         asm_experimental_arch,
         asm_sym,
+        asm_unwind,
         assert,
         assert_inhabited,
         assert_macro,
@@ -437,6 +439,7 @@ symbols! {
         compiler_builtins,
         compiler_fence,
         concat,
+        concat_bytes,
         concat_idents,
         conservative_impl_trait,
         console,
@@ -497,6 +500,7 @@ symbols! {
         core_panic_macro,
         cosf32,
         cosf64,
+        count,
         cr,
         crate_id,
         crate_in_paths,
@@ -627,6 +631,7 @@ symbols! {
         fdiv_fast,
         feature,
         fence,
+        ferris: "🦀",
         fetch_update,
         ffi,
         ffi_const,
@@ -737,6 +742,7 @@ symbols! {
         inout,
         instruction_set,
         intel,
+        into_future,
         into_iter,
         intra_doc_pointers,
         intrinsics,
@@ -815,6 +821,7 @@ symbols! {
         maxnumf32,
         maxnumf64,
         may_dangle,
+        may_unwind,
         maybe_uninit,
         maybe_uninit_uninit,
         maybe_uninit_zeroed,
@@ -1048,8 +1055,11 @@ symbols! {
         reg64,
         reg_abcd,
         reg_byte,
+        reg_iw,
         reg_nonzero,
-        reg_thumb,
+        reg_pair,
+        reg_ptr,
+        reg_upper,
         register_attr,
         register_tool,
         relaxed_adts,
@@ -1716,8 +1726,9 @@ pub(crate) struct Interner(Lock<InternerInner>);
 // found that to regress performance up to 2% in some cases. This might be
 // revisited after further improvements to `indexmap`.
 //
-// This type is private to prevent accidentally constructing more than one `Interner` on the same
-// thread, which makes it easy to mixup `Symbol`s between `Interner`s.
+// This type is private to prevent accidentally constructing more than one
+// `Interner` on the same thread, which makes it easy to mixup `Symbol`s
+// between `Interner`s.
 #[derive(Default)]
 struct InternerInner {
     arena: DroplessArena,
@@ -1743,14 +1754,20 @@ impl Interner {
 
         let name = Symbol::new(inner.strings.len() as u32);
 
-        // `from_utf8_unchecked` is safe since we just allocated a `&str` which is known to be
-        // UTF-8.
+        // SAFETY: we convert from `&str` to `&[u8]`, clone it into the arena,
+        // and immediately convert the clone back to `&[u8], all because there
+        // is no `inner.arena.alloc_str()` method. This is clearly safe.
         let string: &str =
             unsafe { str::from_utf8_unchecked(inner.arena.alloc_slice(string.as_bytes())) };
-        // It is safe to extend the arena allocation to `'static` because we only access
-        // these while the arena is still alive.
+
+        // SAFETY: we can extend the arena allocation to `'static` because we
+        // only access these while the arena is still alive.
         let string: &'static str = unsafe { &*(string as *const str) };
         inner.strings.push(string);
+
+        // This second hash table lookup can be avoided by using `RawEntryMut`,
+        // but this code path isn't hot enough for it to be worth it. See
+        // #91445 for details.
         inner.names.insert(string, name);
         name
     }
