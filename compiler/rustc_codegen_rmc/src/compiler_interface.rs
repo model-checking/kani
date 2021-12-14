@@ -21,6 +21,7 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
+use rustc_target::spec::PanicStrategy;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
 use std::iter::FromIterator;
@@ -62,11 +63,9 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         use rustc_hir::def_id::LOCAL_CRATE;
 
-        if !tcx.sess.overflow_checks() {
-            tcx.sess.err("RMC requires overflow checks in order to provide a sound analysis.")
-        }
-
         super::utils::init();
+
+        check_options(&tcx.sess);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mut c = GotocCtx::new(tcx);
@@ -189,6 +188,21 @@ impl CodegenBackend for GotocCodegenBackend {
 
         Ok(())
     }
+}
+
+fn check_options(session: &Session) {
+    if !session.overflow_checks() {
+        session.err("RMC requires overflow checks in order to provide a sound analysis.");
+    }
+
+    if session.panic_strategy() != PanicStrategy::Abort {
+        session.err(
+            "RMC can only handle abort panic strategy (-C panic=abort). See for more details \
+        https://github.com/model-checking/rmc/issues/692",
+        );
+    }
+
+    session.abort_if_errors();
 }
 
 fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T)

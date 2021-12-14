@@ -144,16 +144,3 @@ pub fn instance_name_starts_with(
     }
     false
 }
-
-/// Helper function to determine if the function is exactly `expected`
-// TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
-pub fn instance_name_is(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, expected: &str) -> bool {
-    let def_path = tcx.def_path(instance.def.def_id());
-    if let Some(data) = def_path.data.last() {
-        match data.data.name() {
-            DefPathDataName::Named(name) => return name.to_string() == expected,
-            DefPathDataName::Anon { .. } => (),
-        }
-    }
-    false
-}

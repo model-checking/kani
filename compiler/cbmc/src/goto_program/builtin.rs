@@ -6,6 +6,7 @@ use super::{Expr, Location, Symbol, Type};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinFn {
+    Abort,
     CProverAssert,
     CProverAssume,
     Calloc,
@@ -63,6 +64,7 @@ pub enum BuiltinFn {
 impl ToString for BuiltinFn {
     fn to_string(&self) -> String {
         match self {
+            Abort => "abort",
             CProverAssert => "__CPROVER_assert",
             CProverAssume => "__CPROVER_assume",
             Calloc => "calloc",
@@ -124,6 +126,7 @@ impl ToString for BuiltinFn {
 impl BuiltinFn {
     pub fn param_types(&self) -> Vec<Type> {
         match self {
+            Abort => vec![],
             CProverAssert => vec![Type::bool(), Type::c_char().to_pointer()],
             CProverAssume => vec![Type::bool()],
             Calloc => vec![Type::size_t(), Type::size_t()],
@@ -178,6 +181,7 @@ impl BuiltinFn {
 
     pub fn return_type(&self) -> Type {
         match self {
+            Abort => Type::empty(),
             CProverAssert => Type::empty(),
             CProverAssume => Type::empty(),
             Calloc => Type::void_pointer(),
@@ -235,6 +239,7 @@ impl BuiltinFn {
 
     pub fn list_all() -> Vec<BuiltinFn> {
         vec![
+            Abort,
             CProverAssert,
             CProverAssume,
             Calloc,

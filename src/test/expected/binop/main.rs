@@ -56,19 +56,22 @@ fn ibxor_test(a: i32, b: i32, correct: i32, wrong: i32) {
 }
 
 fn main() {
-    iadd_test(1, 2, 3, 4);
-    isub_test(3, 4, -1, 0);
-    imul_test(5, 6, 30, 60);
-    idiv_test(8, 2, 4, 5);
-    idiv_test(9, 2, 4, 5);
-    imod_test(9, 3, 0, 1);
-    imod_test(10, 3, 1, 2);
-    ishl_test(2, 3, 16, 8);
-    ishr_test(8, 3, 1, 2);
-    ishr_test(-1, 2, -1, 1073741823);
-    ushr_test(4294967292, 2, 1073741823, 2);
-    iband_test(0, 2389034, 0, 2389034);
-    iband_test(3, 10, 2, 3);
-    ibor_test(0, 2389034, 2389034, 0);
-    ibxor_test(0, 2389034, 2389034, 0);
+    match rmc::nondet::<u8>() {
+        0 => iadd_test(1, 2, 3, 4),
+        1 => isub_test(3, 4, -1, 0),
+        2 => imul_test(5, 6, 30, 60),
+        3 => idiv_test(8, 2, 4, 5),
+        4 => idiv_test(9, 2, 4, 5),
+        5 => imod_test(9, 3, 0, 1),
+        6 => imod_test(10, 3, 1, 2),
+        7 => ishl_test(2, 3, 16, 8),
+        8 => ishr_test(8, 3, 1, 2),
+        9 => ishr_test(-1, 2, -1, 1073741823),
+        10 => ushr_test(4294967292, 2, 1073741823, 2),
+        11 => iband_test(0, 2389034, 0, 2389034),
+        12 => iband_test(3, 10, 2, 3),
+        13 => ibor_test(0, 2389034, 2389034, 0),
+        14 => ibxor_test(0, 2389034, 2389034, 0),
+        _ => {}
+    }
 }

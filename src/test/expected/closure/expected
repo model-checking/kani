@@ -1,4 +1,3 @@
-resume instruction: SUCCESS
 line 18 attempt to compute `move _8 + move _9`, which would overflow: SUCCESS
 line 18 attempt to compute `move _5 + move _6`, which would overflow: SUCCESS
 line 18 attempt to compute `(*((*_1).0: &mut i32)) + move _4`, which would overflow: SUCCESS
