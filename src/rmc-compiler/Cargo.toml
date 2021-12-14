@@ -1,0 +1,16 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "rmc-compiler"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rustc_driver = { path = "../../compiler/rustc_driver" }
+rustc_errors = { path = "../../compiler/rustc_errors" }
+rustc_interface = { path = "../../compiler/rustc_interface" }
+rustc_session = { path = "../../compiler/rustc_session" }
+rustc_span = { path = "../../compiler/rustc_span" }
+gsgdt = "=0.1.2"
