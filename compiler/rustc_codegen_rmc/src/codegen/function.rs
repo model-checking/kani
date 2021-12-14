@@ -162,9 +162,35 @@ impl<'tcx> GotocCtx<'tcx> {
         //        2: t3,
         // }
         // ```
+        // For e.g., in the test `tupled_closure.rs`, the tuple type looks like:
+        // ```
+        // struct _8098103865751214180
+        // {
+        //    unsigned long int 1;
+        //    unsigned char 0;
+        //    struct _3159196586427472662 2;
+        // };
+        // ```
+        // Note how the compiler has reordered the fields to improve packing.
         let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
 
         // We need to marshall the arguments into the tuple
+        // The arguments themselves have been tacked onto the explicit function paramaters by
+        // the code in `pub fn fn_typ(&mut self) -> Type {` in `typ.rs`.
+        // By convention, they are given the names `spread<i>`.
+        // For e.g., in the test `tupled_closure.rs`, the actual function looks like
+        // ```
+        // unsigned long int _RNvYNvCscgV8bIzQQb7_14tupled_closure1hINtNtNtCsaGHNm3cehi1_4core3ops8function2FnThjINtNtBH_6option6OptionNtNtNtBH_3num7nonzero12NonZeroUsizeEEE4callB4_(
+        //        unsigned long int (*var_1)(unsigned char, unsigned long int, struct _3159196586427472662),
+        //        unsigned char spread_2,
+        //        unsigned long int spread_3,
+        //        struct _3159196586427472662 spread_4) {
+        //  struct _8098103865751214180 var_2={ .1=spread_3, .0=spread_2, .2=spread_4 };
+        //  unsigned long int var_0=(_RNvCscgV8bIzQQb7_14tupled_closure1h)(var_2.0, var_2.1, var_2.2);
+        //  return var_0;
+        // }
+        // ```
+
         let tupe = sig.inputs().last().unwrap();
         let args: Vec<&TyS<'tcx>> = match tupe.kind() {
             ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()).collect(),
@@ -174,15 +200,18 @@ impl<'tcx> GotocCtx<'tcx> {
         let marshalled_tuple_fields =
             BTreeMap::from_iter(args.iter().enumerate().map(|(arg_i, arg_t)| {
                 // The components come at the end, so offset by the untupled length.
+                // This follows the naming convention defined in `typ.rs`.
                 let lc = Local::from_usize(arg_i + starting_idx);
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
-                // TODO, I'm concerned that these are never declared inside the function?
-                // However, declaring it seems to break the assertions.
-                // https://github.com/model-checking/rmc/issues/686
+                // The spread arguments are additional function paramaters that are patched in
+                // They are to the function signature added in the `fn_typ` function.
+                // But they were never added to the symbol table, which we currently do here.
+                // https://github.com/model-checking/rmc/issues/686 to track a better solution.
                 self.symbol_table.insert(sym.clone());
                 // As discussed above, fields are named like `0: t1`.
-                // Follow that pattern for the marshalled data
+                // Follow that pattern for the marshalled data.
+                // name:value map is resilliant to rustc reordering fields (see above)
                 (arg_i.to_string().intern(), sym.to_expr())
             }));
         let marshalled_tuple_value =

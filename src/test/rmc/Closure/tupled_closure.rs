@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Tests that we cover closures with tuples correctly
+//! When a closure is put inside a `Fn` trait, the Rustc backend injects a shim that converts
+//! between calling conventions.  This test ensures that the shim works correctly.
 //! https://github.com/model-checking/rmc/issues/678
 
 fn h(x: u8, y: usize, o: Option<std::num::NonZeroUsize>) -> usize {
