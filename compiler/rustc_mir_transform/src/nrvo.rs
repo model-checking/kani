@@ -33,11 +33,11 @@ use crate::MirPass;
 pub struct RenameReturnPlace;
 
 impl<'tcx> MirPass<'tcx> for RenameReturnPlace {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut mir::Body<'tcx>) {
-        if tcx.sess.mir_opt_level() == 0 {
-            return;
-        }
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
+        sess.mir_opt_level() > 0
+    }
 
+    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut mir::Body<'tcx>) {
         let def_id = body.source.def_id();
         let returned_local = match local_eligible_for_nrvo(body) {
             Some(l) => l,
@@ -165,7 +165,7 @@ struct RenameToReturnPlace<'tcx> {
 }
 
 /// Replaces all uses of `self.to_rename` with `_0`.
-impl MutVisitor<'tcx> for RenameToReturnPlace<'tcx> {
+impl<'tcx> MutVisitor<'tcx> for RenameToReturnPlace<'tcx> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
@@ -221,7 +221,7 @@ impl IsReturnPlaceRead {
     }
 }
 
-impl Visitor<'tcx> for IsReturnPlaceRead {
+impl<'tcx> Visitor<'tcx> for IsReturnPlaceRead {
     fn visit_local(&mut self, &l: &Local, ctxt: PlaceContext, _: Location) {
         if l == mir::RETURN_PLACE && ctxt.is_use() && !ctxt.is_place_assignment() {
             self.0 = true;

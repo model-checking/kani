@@ -49,6 +49,10 @@ impl Error {
 pub struct InstrumentCoverage;
 
 impl<'tcx> MirPass<'tcx> for InstrumentCoverage {
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
+        sess.instrument_coverage()
+    }
+
     fn run_pass(&self, tcx: TyCtxt<'tcx>, mir_body: &mut mir::Body<'tcx>) {
         let mir_source = mir_body.source;
 
@@ -439,7 +443,7 @@ impl<'a, 'tcx> Instrumentor<'a, 'tcx> {
 }
 
 fn inject_edge_counter_basic_block(
-    mir_body: &mut mir::Body<'tcx>,
+    mir_body: &mut mir::Body<'_>,
     from_bb: BasicBlock,
     to_bb: BasicBlock,
 ) -> BasicBlock {
@@ -462,7 +466,7 @@ fn inject_edge_counter_basic_block(
 }
 
 fn inject_statement(
-    mir_body: &mut mir::Body<'tcx>,
+    mir_body: &mut mir::Body<'_>,
     counter_kind: CoverageKind,
     bb: BasicBlock,
     some_code_region: Option<CodeRegion>,
@@ -484,7 +488,7 @@ fn inject_statement(
 }
 
 // Non-code expressions are injected into the coverage map, without generating executable code.
-fn inject_intermediate_expression(mir_body: &mut mir::Body<'tcx>, expression: CoverageKind) {
+fn inject_intermediate_expression(mir_body: &mut mir::Body<'_>, expression: CoverageKind) {
     debug_assert!(matches!(expression, CoverageKind::Expression { .. }));
     debug!("  injecting non-code expression {:?}", expression);
     let inject_in_bb = mir::START_BLOCK;

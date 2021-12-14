@@ -3,7 +3,7 @@ use rustc_hir as hir;
 use rustc_infer::infer::{InferOk, TyCtxtInferExt};
 use rustc_infer::traits;
 use rustc_middle::ty::subst::Subst;
-use rustc_middle::ty::{ToPredicate, WithConstness};
+use rustc_middle::ty::ToPredicate;
 use rustc_span::DUMMY_SP;
 
 use super::*;
@@ -66,7 +66,8 @@ impl<'a, 'tcx> BlanketImplFinder<'a, 'tcx> {
                             .into_iter()
                             .chain(Some(
                                 ty::Binder::dummy(trait_ref)
-                                    .without_const()
+                                    .to_poly_trait_predicate()
+                                    .map_bound(ty::PredicateKind::Trait)
                                     .to_predicate(infcx.tcx),
                             ));
                         for predicate in predicates {
@@ -107,11 +108,11 @@ impl<'a, 'tcx> BlanketImplFinder<'a, 'tcx> {
                     def_id: ItemId::Blanket { impl_id: impl_def_id, for_: item_def_id },
                     kind: box ImplItem(Impl {
                         unsafety: hir::Unsafety::Normal,
-                        generics: (
+                        generics: clean_ty_generics(
+                            self.cx,
                             self.cx.tcx.generics_of(impl_def_id),
                             self.cx.tcx.explicit_predicates_of(impl_def_id),
-                        )
-                            .clean(self.cx),
+                        ),
                         // FIXME(eddyb) compute both `trait_` and `for_` from
                         // the post-inference `trait_ref`, as it's more accurate.
                         trait_: Some(trait_ref.clean(self.cx)),

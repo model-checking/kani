@@ -7,7 +7,7 @@ use rustc_session::lint::builtin::UNALIGNED_REFERENCES;
 use rustc_span::symbol::sym;
 
 use crate::util;
-use crate::MirPass;
+use crate::MirLint;
 
 pub(crate) fn provide(providers: &mut Providers) {
     *providers = Providers { unsafe_derive_on_repr_packed, ..*providers };
@@ -15,8 +15,8 @@ pub(crate) fn provide(providers: &mut Providers) {
 
 pub struct CheckPackedRef;
 
-impl<'tcx> MirPass<'tcx> for CheckPackedRef {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+impl<'tcx> MirLint<'tcx> for CheckPackedRef {
+    fn run_lint(&self, tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
         let param_env = tcx.param_env(body.source.def_id());
         let source_info = SourceInfo::outermost(body.span);
         let mut checker = PackedRefChecker { body, tcx, param_env, source_info };
@@ -66,7 +66,7 @@ fn builtin_derive_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> Option<DefId> {
     }
 }
 
-impl<'a, 'tcx> Visitor<'tcx> for PackedRefChecker<'a, 'tcx> {
+impl<'tcx> Visitor<'tcx> for PackedRefChecker<'_, 'tcx> {
     fn visit_terminator(&mut self, terminator: &Terminator<'tcx>, location: Location) {
         // Make sure we know where in the MIR we are.
         self.source_info = terminator.source_info;
@@ -104,6 +104,11 @@ impl<'a, 'tcx> Visitor<'tcx> for PackedRefChecker<'a, 'tcx> {
                                     "fields of packed structs are not properly aligned, and creating \
                                     a misaligned reference is undefined behavior (even if that \
                                     reference is never dereferenced)",
+                                )
+                                .help(
+                                    "copy the field contents to a local variable, or replace the \
+                                    reference with a raw pointer and use `read_unaligned`/`write_unaligned` \
+                                    (loads and stores via `*p` must be properly aligned even when using raw pointers)"
                                 )
                                 .emit()
                         },

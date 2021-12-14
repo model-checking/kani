@@ -34,7 +34,7 @@ fn is_stable(place: PlaceRef<'_>) -> bool {
 }
 
 /// Determine whether this type may be a reference (or box), and thus needs retagging.
-fn may_be_reference(ty: Ty<'tcx>) -> bool {
+fn may_be_reference(ty: Ty<'_>) -> bool {
     match ty.kind() {
         // Primitive types that are not references
         ty::Bool
@@ -58,11 +58,11 @@ fn may_be_reference(ty: Ty<'tcx>) -> bool {
 }
 
 impl<'tcx> MirPass<'tcx> for AddRetag {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        if !tcx.sess.opts.debugging_opts.mir_emit_retag {
-            return;
-        }
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
+        sess.opts.debugging_opts.mir_emit_retag
+    }
 
+    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         // We need an `AllCallEdges` pass before we can do any work.
         super::add_call_guards::AllCallEdges.run_pass(tcx, body);
 

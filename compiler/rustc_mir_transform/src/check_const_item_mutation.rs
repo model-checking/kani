@@ -6,12 +6,12 @@ use rustc_middle::ty::TyCtxt;
 use rustc_session::lint::builtin::CONST_ITEM_MUTATION;
 use rustc_span::def_id::DefId;
 
-use crate::MirPass;
+use crate::MirLint;
 
 pub struct CheckConstItemMutation;
 
-impl<'tcx> MirPass<'tcx> for CheckConstItemMutation {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+impl<'tcx> MirLint<'tcx> for CheckConstItemMutation {
+    fn run_lint(&self, tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
         let mut checker = ConstMutationChecker { body, tcx, target_local: None };
         checker.visit_body(&body);
     }
@@ -23,7 +23,7 @@ struct ConstMutationChecker<'a, 'tcx> {
     target_local: Option<Local>,
 }
 
-impl<'a, 'tcx> ConstMutationChecker<'a, 'tcx> {
+impl<'tcx> ConstMutationChecker<'_, 'tcx> {
     fn is_const_item(&self, local: Local) -> Option<DefId> {
         if let Some(box LocalInfo::ConstRef { def_id }) = self.body.local_decls[local].local_info {
             Some(def_id)
@@ -95,7 +95,7 @@ impl<'a, 'tcx> ConstMutationChecker<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> Visitor<'tcx> for ConstMutationChecker<'a, 'tcx> {
+impl<'tcx> Visitor<'tcx> for ConstMutationChecker<'_, 'tcx> {
     fn visit_statement(&mut self, stmt: &Statement<'tcx>, loc: Location) {
         if let StatementKind::Assign(box (lhs, _)) = &stmt.kind {
             // Check for assignment to fields of a constant

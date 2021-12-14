@@ -1111,7 +1111,11 @@ impl<'tcx> TyCtxt<'tcx> {
             };
             debug!("layout_scalar_valid_range: attr={:?}", attr);
             if let Some(
-                &[ast::NestedMetaItem::Literal(ast::Lit { kind: ast::LitKind::Int(a, _), .. })],
+                &[
+                    ast::NestedMetaItem::Literal(ast::Lit {
+                        kind: ast::LitKind::Int(a, _), ..
+                    }),
+                ],
             ) = attr.meta_item_list().as_deref()
             {
                 Bound::Included(a)
@@ -1477,40 +1481,8 @@ impl<'tcx> TyCtxt<'tcx> {
         scope_def_id: LocalDefId,
     ) -> Vec<&'tcx hir::Ty<'tcx>> {
         let hir_id = self.hir().local_def_id_to_hir_id(scope_def_id);
-        let hir_output = match self.hir().get(hir_id) {
-            Node::Item(hir::Item {
-                kind:
-                    ItemKind::Fn(
-                        hir::FnSig {
-                            decl: hir::FnDecl { output: hir::FnRetTy::Return(ty), .. },
-                            ..
-                        },
-                        ..,
-                    ),
-                ..
-            })
-            | Node::ImplItem(hir::ImplItem {
-                kind:
-                    hir::ImplItemKind::Fn(
-                        hir::FnSig {
-                            decl: hir::FnDecl { output: hir::FnRetTy::Return(ty), .. },
-                            ..
-                        },
-                        _,
-                    ),
-                ..
-            })
-            | Node::TraitItem(hir::TraitItem {
-                kind:
-                    hir::TraitItemKind::Fn(
-                        hir::FnSig {
-                            decl: hir::FnDecl { output: hir::FnRetTy::Return(ty), .. },
-                            ..
-                        },
-                        _,
-                    ),
-                ..
-            }) => ty,
+        let hir_output = match self.hir().fn_decl_by_hir_id(hir_id) {
+            Some(hir::FnDecl { output: hir::FnRetTy::Return(ty), .. }) => ty,
             _ => return vec![],
         };
 

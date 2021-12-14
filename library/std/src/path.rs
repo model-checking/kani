@@ -12,6 +12,13 @@
 //! [`PathBuf`]; note that the paths may differ syntactically by the
 //! normalization described in the documentation for the [`components`] method.
 //!
+//! ## Case sensitivity
+//!
+//! Unless otherwise indicated path methods that do not access the filesystem,
+//! such as [`Path::starts_with`] and [`Path::ends_with`], are case sensitive no
+//! matter the platform or filesystem. An exception to this is made for Windows
+//! drive letters.
+//!
 //! ## Simple usage
 //!
 //! Path manipulation includes both parsing components from slices and building
@@ -2810,7 +2817,7 @@ impl Path {
     /// check errors, call [`fs::symlink_metadata`] and handle its [`Result`]. Then call
     /// [`fs::Metadata::is_symlink`] if it was [`Ok`].
     #[must_use]
-    #[stable(feature = "is_symlink", since = "1.57.0")]
+    #[stable(feature = "is_symlink", since = "1.58.0")]
     pub fn is_symlink(&self) -> bool {
         fs::symlink_metadata(self).map(|m| m.is_symlink()).unwrap_or(false)
     }

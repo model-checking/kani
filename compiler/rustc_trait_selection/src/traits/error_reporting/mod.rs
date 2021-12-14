@@ -24,7 +24,7 @@ use rustc_middle::ty::error::ExpectedFound;
 use rustc_middle::ty::fold::TypeFolder;
 use rustc_middle::ty::{
     self, fast_reject, AdtKind, SubtypePredicate, ToPolyTraitRef, ToPredicate, Ty, TyCtxt,
-    TypeFoldable, WithConstness,
+    TypeFoldable,
 };
 use rustc_session::DiagnosticMessageId;
 use rustc_span::symbol::{kw, sym};
@@ -1338,7 +1338,46 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
                     "type mismatch resolving `{}`",
                     predicate
                 );
-                self.note_type_err(&mut diag, &obligation.cause, None, values, err);
+                let secondary_span = match predicate.kind().skip_binder() {
+                    ty::PredicateKind::Projection(proj) => self
+                        .tcx
+                        .opt_associated_item(proj.projection_ty.item_def_id)
+                        .and_then(|trait_assoc_item| {
+                            self.tcx
+                                .trait_of_item(proj.projection_ty.item_def_id)
+                                .map(|id| (trait_assoc_item, id))
+                        })
+                        .and_then(|(trait_assoc_item, id)| {
+                            self.tcx.find_map_relevant_impl(
+                                id,
+                                proj.projection_ty.self_ty(),
+                                |did| {
+                                    self.tcx
+                                        .associated_items(did)
+                                        .in_definition_order()
+                                        .filter(|assoc| assoc.ident == trait_assoc_item.ident)
+                                        .next()
+                                },
+                            )
+                        })
+                        .and_then(|item| match self.tcx.hir().get_if_local(item.def_id) {
+                            Some(
+                                hir::Node::TraitItem(hir::TraitItem {
+                                    kind: hir::TraitItemKind::Type(_, Some(ty)),
+                                    ..
+                                })
+                                | hir::Node::ImplItem(hir::ImplItem {
+                                    kind: hir::ImplItemKind::TyAlias(ty),
+                                    ..
+                                }),
+                            ) => {
+                                Some((ty.span, format!("type mismatch resolving `{}`", predicate)))
+                            }
+                            _ => None,
+                        }),
+                    _ => None,
+                };
+                self.note_type_err(&mut diag, &obligation.cause, secondary_span, values, err, true);
                 self.note_obligation_cause(&mut diag, obligation);
                 diag.emit();
             }
@@ -1898,15 +1937,15 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
                 self.infcx.tcx
             }
 
-            fn fold_ty(&mut self, ty: Ty<'tcx>) -> Result<Ty<'tcx>, Self::Error> {
+            fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
                 if let ty::Param(ty::ParamTy { name, .. }) = *ty.kind() {
                     let infcx = self.infcx;
-                    Ok(self.var_map.entry(ty).or_insert_with(|| {
+                    self.var_map.entry(ty).or_insert_with(|| {
                         infcx.next_ty_var(TypeVariableOrigin {
                             kind: TypeVariableOriginKind::TypeParameterDefinition(name, None),
                             span: DUMMY_SP,
                         })
-                    }))
+                    })
                 } else {
                     ty.super_fold_with(self)
                 }
@@ -1916,9 +1955,8 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         self.probe(|_| {
             let mut selcx = SelectionContext::new(self);
 
-            let cleaned_pred = pred
-                .fold_with(&mut ParamToVarFolder { infcx: self, var_map: Default::default() })
-                .into_ok();
+            let cleaned_pred =
+                pred.fold_with(&mut ParamToVarFolder { infcx: self, var_map: Default::default() });
 
             let cleaned_pred = super::project::normalize(
                 &mut selcx,
@@ -2026,9 +2064,7 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         debug!("maybe_suggest_unsized_generics: param={:?}", param);
         match node {
             hir::Node::Item(
-                item
-                @
-                hir::Item {
+                item @ hir::Item {
                     // Only suggest indirection for uses of type parameters in ADTs.
                     kind:
                         hir::ItemKind::Enum(..) | hir::ItemKind::Struct(..) | hir::ItemKind::Union(..),
@@ -2098,9 +2134,20 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
     ) -> bool {
         if let ObligationCauseCode::BuiltinDerivedObligation(ref data) = cause_code {
             let parent_trait_ref = self.resolve_vars_if_possible(data.parent_trait_ref);
-
-            if obligated_types.iter().any(|ot| ot == &parent_trait_ref.skip_binder().self_ty()) {
+            let self_ty = parent_trait_ref.skip_binder().self_ty();
+            if obligated_types.iter().any(|ot| ot == &self_ty) {
                 return true;
+            }
+            if let ty::Adt(def, substs) = self_ty.kind() {
+                if let [arg] = &substs[..] {
+                    if let ty::subst::GenericArgKind::Type(ty) = arg.unpack() {
+                        if let ty::Adt(inner_def, _) = ty.kind() {
+                            if inner_def == def {
+                                return true;
+                            }
+                        }
+                    }
+                }
             }
         }
         false

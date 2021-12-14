@@ -1812,6 +1812,7 @@ impl<'test> TestCx<'test> {
                 // patterns still match the raw compiler output.
                 if self.props.error_patterns.is_empty() {
                     rustc.args(&["--error-format", "json"]);
+                    rustc.args(&["--json", "future-incompat"]);
                 }
                 rustc.arg("-Zui-testing");
                 rustc.arg("-Zdeduplicate-diagnostics=no");
@@ -1819,11 +1820,11 @@ impl<'test> TestCx<'test> {
             Ui => {
                 if !self.props.compile_flags.iter().any(|s| s.starts_with("--error-format")) {
                     rustc.args(&["--error-format", "json"]);
+                    rustc.args(&["--json", "future-incompat"]);
                 }
                 rustc.arg("-Ccodegen-units=1");
                 rustc.arg("-Zui-testing");
                 rustc.arg("-Zdeduplicate-diagnostics=no");
-                rustc.arg("-Zemit-future-incompat-report");
             }
             MirOpt => {
                 rustc.args(&[
@@ -2467,12 +2468,12 @@ impl<'test> TestCx<'test> {
             self.check_rustdoc_test_option(proc_res);
         } else {
             let root = self.config.find_rust_src_root().unwrap();
-            let res = self.cmd2procres(
-                Command::new(&self.config.docck_python)
-                    .arg(root.join("src/etc/htmldocck.py"))
-                    .arg(&out_dir)
-                    .arg(&self.testpaths.file),
-            );
+            let mut cmd = Command::new(&self.config.docck_python);
+            cmd.arg(root.join("src/etc/htmldocck.py")).arg(&out_dir).arg(&self.testpaths.file);
+            if self.config.bless {
+                cmd.arg("--bless");
+            }
+            let res = self.cmd2procres(&mut cmd);
             if !res.status.success() {
                 self.fatal_proc_rec_with_ctx("htmldocck failed!", &res, |mut this| {
                     this.compare_to_default_rustdoc(&out_dir)

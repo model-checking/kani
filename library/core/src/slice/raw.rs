@@ -131,7 +131,7 @@ pub const unsafe fn from_raw_parts_mut<'a, T>(data: *mut T, len: usize) -> &'a m
 }
 
 // In debug builds checks that `data` pointer is aligned and non-null and that slice with given `len` would cover less than half the address space
-#[cfg(all(not(bootstrap), debug_assertions))]
+#[cfg(debug_assertions)]
 #[unstable(feature = "const_slice_from_raw_parts", issue = "67456")]
 #[rustc_const_unstable(feature = "const_slice_from_raw_parts", issue = "67456")]
 const fn debug_check_data_len<T>(data: *const T, len: usize) {
@@ -149,8 +149,8 @@ const fn debug_check_data_len<T>(data: *const T, len: usize) {
     // it is not required for safety (the safety must be guatanteed by
     // the `from_raw_parts[_mut]` caller).
     //
-    // Since the checks are not required, we ignore them in CTFE as they can't
-    // be done there (alignment does not make much sense there).
+    // As per our safety precondition, we may assume that assertion above never fails.
+    // Therefore, noop and rt_check are observably equivalent.
     unsafe {
         crate::intrinsics::const_eval_select((data,), noop, rt_check);
     }
@@ -161,7 +161,7 @@ const fn debug_check_data_len<T>(data: *const T, len: usize) {
     );
 }
 
-#[cfg(not(all(not(bootstrap), debug_assertions)))]
+#[cfg(not(debug_assertions))]
 const fn debug_check_data_len<T>(_data: *const T, _len: usize) {}
 
 /// Converts a reference to T into a slice of length 1 (without copying).

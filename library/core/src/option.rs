@@ -703,7 +703,8 @@ impl<T> Option<T> {
     #[inline]
     #[track_caller]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn expect(self, msg: &str) -> T {
+    #[rustc_const_unstable(feature = "const_option", issue = "67441")]
+    pub const fn expect(self, msg: &str) -> T {
         match self {
             Some(val) => val,
             None => expect_failed(msg),
@@ -1522,8 +1523,15 @@ impl<T: Clone> Option<&T> {
     /// ```
     #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn cloned(self) -> Option<T> {
-        self.map(|t| t.clone())
+    #[rustc_const_unstable(feature = "const_option_cloned", issue = "91582")]
+    pub const fn cloned(self) -> Option<T>
+    where
+        T: ~const Clone,
+    {
+        match self {
+            Some(t) => Some(t.clone()),
+            None => None,
+        }
     }
 }
 
@@ -1540,9 +1548,17 @@ impl<T: Clone> Option<&mut T> {
     /// let cloned = opt_x.cloned();
     /// assert_eq!(cloned, Some(12));
     /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
     #[stable(since = "1.26.0", feature = "option_ref_mut_cloned")]
-    pub fn cloned(self) -> Option<T> {
-        self.map(|t| t.clone())
+    #[rustc_const_unstable(feature = "const_option_cloned", issue = "91582")]
+    pub const fn cloned(self) -> Option<T>
+    where
+        T: ~const Clone,
+    {
+        match self {
+            Some(t) => Some(t.clone()),
+            None => None,
+        }
     }
 }
 
@@ -1655,10 +1671,11 @@ impl<T, E> Option<Result<T, E>> {
 }
 
 // This is a separate function to reduce the code size of .expect() itself.
-#[inline(never)]
+#[cfg_attr(not(feature = "panic_immediate_abort"), inline(never))]
+#[cfg_attr(feature = "panic_immediate_abort", inline)]
 #[cold]
 #[track_caller]
-fn expect_failed(msg: &str) -> ! {
+const fn expect_failed(msg: &str) -> ! {
     panic!("{}", msg)
 }
 
@@ -2060,7 +2077,8 @@ impl<A, V: FromIterator<A>> FromIterator<Option<A>> for Option<V> {
 }
 
 #[unstable(feature = "try_trait_v2", issue = "84277")]
-impl<T> ops::Try for Option<T> {
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
+impl<T> const ops::Try for Option<T> {
     type Output = T;
     type Residual = Option<convert::Infallible>;
 
@@ -2079,6 +2097,7 @@ impl<T> ops::Try for Option<T> {
 }
 
 #[unstable(feature = "try_trait_v2", issue = "84277")]
+#[rustc_const_unstable(feature = "const_convert", issue = "88674")]
 impl<T> const ops::FromResidual for Option<T> {
     #[inline]
     fn from_residual(residual: Option<convert::Infallible>) -> Self {
@@ -2086,6 +2105,11 @@ impl<T> const ops::FromResidual for Option<T> {
             None => None,
         }
     }
+}
+
+#[unstable(feature = "try_trait_v2_residual", issue = "91285")]
+impl<T> ops::Residual<T> for Option<convert::Infallible> {
+    type TryType = Option<T>;
 }
 
 impl<T> Option<Option<T>> {

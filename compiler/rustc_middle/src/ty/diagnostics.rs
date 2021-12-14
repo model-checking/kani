@@ -6,6 +6,7 @@ use rustc_errors::{Applicability, DiagnosticBuilder};
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_hir::{QPath, TyKind, WhereBoundPredicate, WherePredicate};
+use rustc_span::Span;
 
 impl<'tcx> TyS<'tcx> {
     /// Similar to `TyS::is_primitive`, but also considers inferred numeric values to be primitive.
@@ -270,7 +271,7 @@ pub fn suggest_constraining_type_param(
         // `where` clause instead of `trait Base<T: Copy = String>: Super<T>`.
         && !matches!(param.kind, hir::GenericParamKind::Type { default: Some(_), .. })
     {
-        if let Some(bounds_span) = param.bounds_span() {
+        if let Some(span) = param.bounds_span_for_suggestions() {
             // If user has provided some bounds, suggest restricting them:
             //
             //   fn foo<T: Foo>(t: T) { ... }
@@ -284,7 +285,7 @@ pub fn suggest_constraining_type_param(
             //          --
             //          |
             //          replace with: `T: Bar +`
-            suggest_restrict(bounds_span.shrink_to_hi());
+            suggest_restrict(span);
         } else {
             // If user hasn't provided any bounds, suggest adding a new one:
             //
@@ -430,5 +431,24 @@ impl<'v> hir::intravisit::Visitor<'v> for TraitObjectVisitor<'v> {
             _ => {}
         }
         hir::intravisit::walk_ty(self, ty);
+    }
+}
+
+/// Collect al types that have an implicit `'static` obligation that we could suggest `'_` for.
+pub struct StaticLifetimeVisitor<'tcx>(pub Vec<Span>, pub crate::hir::map::Map<'tcx>);
+
+impl<'v> hir::intravisit::Visitor<'v> for StaticLifetimeVisitor<'v> {
+    type Map = rustc_hir::intravisit::ErasedMap<'v>;
+
+    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
+        hir::intravisit::NestedVisitorMap::None
+    }
+
+    fn visit_lifetime(&mut self, lt: &'v hir::Lifetime) {
+        if let hir::LifetimeName::ImplicitObjectLifetimeDefault | hir::LifetimeName::Static =
+            lt.name
+        {
+            self.0.push(lt.span);
+        }
     }
 }

@@ -21,7 +21,7 @@ use rustc_hir::lang_items::LangItem;
 use rustc_hir::{AsyncGeneratorKind, GeneratorKind, Node};
 use rustc_middle::ty::{
     self, suggest_arbitrary_trait_bound, suggest_constraining_type_param, AdtKind, DefIdTree,
-    Infer, InferTy, ToPredicate, Ty, TyCtxt, TypeFoldable, WithConstness,
+    Infer, InferTy, ToPredicate, Ty, TyCtxt, TypeFoldable,
 };
 use rustc_middle::ty::{TypeAndMut, TypeckResults};
 use rustc_session::Limit;
@@ -262,8 +262,8 @@ fn suggest_restriction(
             match generics
                 .params
                 .iter()
-                .map(|p| p.bounds_span().unwrap_or(p.span))
-                .filter(|&span| generics.span.contains(span) && span.desugaring_kind().is_none())
+                .map(|p| p.bounds_span_for_suggestions().unwrap_or(p.span.shrink_to_hi()))
+                .filter(|&span| generics.span.contains(span) && span.can_be_used_for_suggestions())
                 .max_by_key(|span| span.hi())
             {
                 // `fn foo(t: impl Trait)`
@@ -271,7 +271,7 @@ fn suggest_restriction(
                 None => (generics.span, format!("<{}>", type_param)),
                 // `fn foo<A>(t: impl Trait)`
                 //        ^^^ suggest `<A, T: Trait>` here
-                Some(span) => (span.shrink_to_hi(), format!(", {}", type_param)),
+                Some(span) => (span, format!(", {}", type_param)),
             },
             // `fn foo(t: impl Trait)`
             //                       ^ suggest `where <T as Trait>::A: Bound`
@@ -804,7 +804,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         } else if let ObligationCauseCode::BindingObligation(_, _)
         | ObligationCauseCode::ItemObligation(_) = &*code
         {
-            try_borrowing(*poly_trait_ref, &never_suggest_borrow[..])
+            try_borrowing(*poly_trait_ref, &never_suggest_borrow)
         } else {
             false
         }
@@ -1132,7 +1132,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             <https://doc.rust-lang.org/book/ch17-02-trait-objects.html\
             #using-trait-objects-that-allow-for-values-of-different-types>";
         let has_dyn = snippet.split_whitespace().next().map_or(false, |s| s == "dyn");
-        let trait_obj = if has_dyn { &snippet[4..] } else { &snippet[..] };
+        let trait_obj = if has_dyn { &snippet[4..] } else { &snippet };
         if only_never_return {
             // No return paths, probably using `panic!()` or similar.
             // Suggest `-> T`, `-> impl Trait`, and if `Trait` is object safe, `-> Box<dyn Trait>`.
@@ -2182,6 +2182,16 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                             err,
                             &parent_predicate,
                             &data.parent_code,
+                            obligated_types,
+                            seen_requirements,
+                        )
+                    });
+                } else {
+                    ensure_sufficient_stack(|| {
+                        self.note_obligation_cause_code(
+                            err,
+                            &parent_predicate,
+                            &cause_code.peel_derives(),
                             obligated_types,
                             seen_requirements,
                         )

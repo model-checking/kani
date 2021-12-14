@@ -11,12 +11,12 @@ use rustc_session::lint::builtin::FUNCTION_ITEM_REFERENCES;
 use rustc_span::{symbol::sym, Span};
 use rustc_target::spec::abi::Abi;
 
-use crate::MirPass;
+use crate::MirLint;
 
 pub struct FunctionItemReferences;
 
-impl<'tcx> MirPass<'tcx> for FunctionItemReferences {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+impl<'tcx> MirLint<'tcx> for FunctionItemReferences {
+    fn run_lint(&self, tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
         let mut checker = FunctionItemRefChecker { tcx, body };
         checker.visit_body(&body);
     }
@@ -27,7 +27,7 @@ struct FunctionItemRefChecker<'a, 'tcx> {
     body: &'a Body<'tcx>,
 }
 
-impl<'a, 'tcx> Visitor<'tcx> for FunctionItemRefChecker<'a, 'tcx> {
+impl<'tcx> Visitor<'tcx> for FunctionItemRefChecker<'_, 'tcx> {
     /// Emits a lint for function reference arguments bound by `fmt::Pointer` or passed to
     /// `transmute`. This only handles arguments in calls outside macro expansions to avoid double
     /// counting function references formatted as pointers by macros.
@@ -92,7 +92,7 @@ impl<'a, 'tcx> Visitor<'tcx> for FunctionItemRefChecker<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> FunctionItemRefChecker<'a, 'tcx> {
+impl<'tcx> FunctionItemRefChecker<'_, 'tcx> {
     /// Emits a lint for function reference arguments bound by `fmt::Pointer` in calls to the
     /// function defined by `def_id` with the substitutions `substs_ref`.
     fn check_bound_args(
