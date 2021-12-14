@@ -10,7 +10,7 @@
 include!("../Helpers/vtable_utils_ignore.rs");
 fn takes_dyn_fun(fun: &dyn Fn() -> u32) {
     let x = fun();
-    if rmc::nondet::<bool>() {
+    if rmc::nondet() {
         rmc::expect_fail(x != 5, "Wrong return");
     }
 
@@ -19,7 +19,7 @@ fn takes_dyn_fun(fun: &dyn Fn() -> u32) {
 }
 
 pub fn unit_to_u32() -> u32 {
-    if rmc::nondet::<bool>() {
+    if rmc::nondet() {
         assert!(false);
     }
     5 as u32

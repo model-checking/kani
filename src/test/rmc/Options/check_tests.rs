@@ -4,7 +4,7 @@
 // Check that we can verify test harnesses using the --tests argument.
 // Note: We need to provide the compile-flags because compile test runs rustc directly and via rmc.
 
-// compile-flags: --test --C panic=abort
+// compile-flags: --test
 // rmc-flags: --tests --function test_harness
 
 pub mod my_mod {
