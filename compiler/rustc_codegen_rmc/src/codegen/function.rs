@@ -6,9 +6,12 @@
 use crate::context::metadata::HarnessMetadata;
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
+use cbmc::InternString;
 use rustc_ast::ast;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
+use std::collections::BTreeMap;
+use std::iter::FromIterator;
 use tracing::{debug, warn};
 
 /// Utility to skip functions that can't currently be successfully codgenned.
@@ -131,19 +134,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let spread_data = &mir.local_decls()[spread_arg];
         let loc = self.codegen_span(&spread_data.source_info.span);
 
-        // When we codegen the function signature elsewhere, we will codegen the
-        // untupled version. So, the tuple argument itself needs to have a
-        // symbol declared for it outside of the function signature, we do that
-        // here.
-        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
-        let tup_sym = Symbol::variable(
-            self.codegen_var_name(&spread_arg),
-            self.codegen_var_base_name(&spread_arg),
-            tup_typ.clone(),
-            loc.clone(),
-        );
-        self.symbol_table.insert(tup_sym.clone());
-
         // Get the function signature from MIR, _before_ we untuple
         let fntyp = self.current_fn().instance().ty(self.tcx, ty::ParamEnv::reveal_all());
         let sig = match fntyp.kind() {
@@ -162,30 +152,78 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
         };
 
-        // Now that we have the tuple, write the individual component locals
-        // back to it as a GotoC struct.
+        // When we codegen the function signature elsewhere, we will codegen the untupled version.
+        // We then marshall the arguments into a local variable holding the expected tuple.
+        // For a function with args f(a: t1, b: t2, c: t3), the tuple type will look like
+        // ```
+        //    struct T {
+        //        0: t1,
+        //        1: t2,
+        //        2: t3,
+        // }
+        // ```
+        // For e.g., in the test `tupled_closure.rs`, the tuple type looks like:
+        // ```
+        // struct _8098103865751214180
+        // {
+        //    unsigned long int 1;
+        //    unsigned char 0;
+        //    struct _3159196586427472662 2;
+        // };
+        // ```
+        // Note how the compiler has reordered the fields to improve packing.
+        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
+
+        // We need to marshall the arguments into the tuple
+        // The arguments themselves have been tacked onto the explicit function paramaters by
+        // the code in `pub fn fn_typ(&mut self) -> Type {` in `typ.rs`.
+        // By convention, they are given the names `spread<i>`.
+        // For e.g., in the test `tupled_closure.rs`, the actual function looks like
+        // ```
+        // unsigned long int _RNvYNvCscgV8bIzQQb7_14tupled_closure1hINtNtNtCsaGHNm3cehi1_4core3ops8function2FnThjINtNtBH_6option6OptionNtNtNtBH_3num7nonzero12NonZeroUsizeEEE4callB4_(
+        //        unsigned long int (*var_1)(unsigned char, unsigned long int, struct _3159196586427472662),
+        //        unsigned char spread_2,
+        //        unsigned long int spread_3,
+        //        struct _3159196586427472662 spread_4) {
+        //  struct _8098103865751214180 var_2={ .1=spread_3, .0=spread_2, .2=spread_4 };
+        //  unsigned long int var_0=(_RNvCscgV8bIzQQb7_14tupled_closure1h)(var_2.0, var_2.1, var_2.2);
+        //  return var_0;
+        // }
+        // ```
+
         let tupe = sig.inputs().last().unwrap();
         let args: Vec<&TyS<'tcx>> = match tupe.kind() {
             ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()).collect(),
             _ => unreachable!("a function's spread argument must be a tuple"),
         };
-
-        // Convert each arg to a GotoC expression.
-        let mut arg_exprs = Vec::new();
         let starting_idx = sig.inputs().len();
-        for (arg_i, arg_t) in args.iter().enumerate() {
-            // The components come at the end, so offset by the untupled length.
-            let lc = Local::from_usize(arg_i + starting_idx);
-            let (name, base_name) = self.codegen_spread_arg_name(&lc);
-            let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
-            self.symbol_table.insert(sym.clone());
-            arg_exprs.push(sym.to_expr());
-        }
-
-        // Finally, combine the expression into a struct.
-        let tuple_expr = Expr::struct_expr_from_values(tup_typ, arg_exprs, &self.symbol_table)
-            .with_location(loc.clone());
-        self.current_fn_mut().push_onto_block(Stmt::decl(tup_sym.to_expr(), Some(tuple_expr), loc));
+        let marshalled_tuple_fields =
+            BTreeMap::from_iter(args.iter().enumerate().map(|(arg_i, arg_t)| {
+                // The components come at the end, so offset by the untupled length.
+                // This follows the naming convention defined in `typ.rs`.
+                let lc = Local::from_usize(arg_i + starting_idx);
+                let (name, base_name) = self.codegen_spread_arg_name(&lc);
+                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
+                // The spread arguments are additional function paramaters that are patched in
+                // They are to the function signature added in the `fn_typ` function.
+                // But they were never added to the symbol table, which we currently do here.
+                // https://github.com/model-checking/rmc/issues/686 to track a better solution.
+                self.symbol_table.insert(sym.clone());
+                // As discussed above, fields are named like `0: t1`.
+                // Follow that pattern for the marshalled data.
+                // name:value map is resilliant to rustc reordering fields (see above)
+                (arg_i.to_string().intern(), sym.to_expr())
+            }));
+        let marshalled_tuple_value =
+            Expr::struct_expr(tup_typ.clone(), marshalled_tuple_fields, &self.symbol_table)
+                .with_location(loc.clone());
+        self.declare_variable(
+            self.codegen_var_name(&spread_arg),
+            self.codegen_var_base_name(&spread_arg),
+            tup_typ,
+            Some(marshalled_tuple_value),
+            loc,
+        );
     }
 
     pub fn declare_function(&mut self, instance: Instance<'tcx>) {
