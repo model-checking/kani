@@ -304,20 +304,26 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     // is a valid NeverToAny adjustment, because it can't
                     // be reached.
                     (&[Adjustment { kind: Adjust::NeverToAny, .. }], _) => return,
-                    (&[
-                        Adjustment { kind: Adjust::Deref(_), .. },
-                        Adjustment { kind: Adjust::Borrow(AutoBorrow::Ref(..)), .. },
-                    ], &[
-                        Adjustment { kind: Adjust::Deref(_), .. },
-                        .. // Any following adjustments are allowed.
-                    ]) => {
+                    (
+                        &[
+                            Adjustment { kind: Adjust::Deref(_), .. },
+                            Adjustment { kind: Adjust::Borrow(AutoBorrow::Ref(..)), .. },
+                        ],
+                        &[
+                            Adjustment { kind: Adjust::Deref(_), .. },
+                            .., // Any following adjustments are allowed.
+                        ],
+                    ) => {
                         // A reborrow has no effect before a dereference.
                     }
                     // FIXME: currently we never try to compose autoderefs
                     // and ReifyFnPointer/UnsafeFnPointer, but we could.
-                    _ =>
-                        bug!("while adjusting {:?}, can't compose {:?} and {:?}",
-                             expr, entry.get(), adj)
+                    _ => bug!(
+                        "while adjusting {:?}, can't compose {:?} and {:?}",
+                        expr,
+                        entry.get(),
+                        adj
+                    ),
                 };
                 *entry.get_mut() = adj;
             }
@@ -610,10 +616,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     #[instrument(skip(self), level = "debug")]
     pub(in super::super) fn select_all_obligations_or_error(&self) {
-        let errors = self
-            .fulfillment_cx
-            .borrow_mut()
-            .select_all_with_constness_or_error(&self, self.inh.constness);
+        let errors = self.fulfillment_cx.borrow_mut().select_all_or_error(&self);
 
         if !errors.is_empty() {
             self.report_fulfillment_errors(&errors, self.inh.body_id, false);
@@ -626,10 +629,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         fallback_has_occurred: bool,
         mutate_fulfillment_errors: impl Fn(&mut Vec<traits::FulfillmentError<'tcx>>),
     ) {
-        let mut result = self
-            .fulfillment_cx
-            .borrow_mut()
-            .select_with_constness_where_possible(self, self.inh.constness);
+        let mut result = self.fulfillment_cx.borrow_mut().select_where_possible(self);
         if !result.is_empty() {
             mutate_fulfillment_errors(&mut result);
             self.report_fulfillment_errors(&result, self.inh.body_id, fallback_has_occurred);
@@ -1430,7 +1430,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             <dyn AstConv<'_>>::create_substs_for_generic_args(
                 tcx,
                 def_id,
-                &[][..],
+                &[],
                 has_self,
                 self_ty,
                 &arg_count,

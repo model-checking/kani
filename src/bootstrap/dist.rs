@@ -1564,7 +1564,9 @@ impl Step for Extended {
             builder.install(&etc.join("gfx/rust-logo.ico"), &exe, 0o644);
 
             // Generate msi installer
-            let wix = PathBuf::from(env::var_os("WIX").unwrap());
+            let wix_path = env::var_os("WIX")
+                .expect("`WIX` environment variable must be set for generating MSI installer(s).");
+            let wix = PathBuf::from(wix_path);
             let heat = wix.join("bin/heat.exe");
             let candle = wix.join("bin/candle.exe");
             let light = wix.join("bin/light.exe");
@@ -2085,6 +2087,13 @@ impl Step for RustDev {
         ] {
             tarball.add_file(src_bindir.join(exe(bin, target)), "bin", 0o755);
         }
+
+        // We don't build LLD on some platforms, so only add it if it exists
+        let lld_path = builder.lld_out(target).join("bin").join(exe("lld", target));
+        if lld_path.exists() {
+            tarball.add_file(lld_path, "bin", 0o755);
+        }
+
         tarball.add_file(&builder.llvm_filecheck(target), "bin", 0o755);
 
         // Copy the include directory as well; needed mostly to build

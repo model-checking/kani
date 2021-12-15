@@ -376,8 +376,8 @@ impl Item {
         self.def_id.as_def_id().and_then(|did| tcx.lookup_stability(did))
     }
 
-    crate fn const_stability<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Option<&'tcx ConstStability> {
-        self.def_id.as_def_id().and_then(|did| tcx.lookup_const_stability(did))
+    crate fn const_stability<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Option<ConstStability> {
+        self.def_id.as_def_id().and_then(|did| tcx.lookup_const_stability(did)).map(|cs| *cs)
     }
 
     crate fn deprecation(&self, tcx: TyCtxt<'_>) -> Option<Deprecation> {
@@ -602,16 +602,16 @@ impl Item {
         })
     }
 
-    crate fn stable_since(&self, tcx: TyCtxt<'_>) -> Option<SymbolStr> {
+    crate fn stable_since(&self, tcx: TyCtxt<'_>) -> Option<Symbol> {
         match self.stability(tcx)?.level {
-            StabilityLevel::Stable { since, .. } => Some(since.as_str()),
+            StabilityLevel::Stable { since, .. } => Some(since),
             StabilityLevel::Unstable { .. } => None,
         }
     }
 
-    crate fn const_stable_since(&self, tcx: TyCtxt<'_>) -> Option<SymbolStr> {
+    crate fn const_stable_since(&self, tcx: TyCtxt<'_>) -> Option<Symbol> {
         match self.const_stability(tcx)?.level {
-            StabilityLevel::Stable { since, .. } => Some(since.as_str()),
+            StabilityLevel::Stable { since, .. } => Some(since),
             StabilityLevel::Unstable { .. } => None,
         }
     }
@@ -1207,10 +1207,6 @@ impl GenericBound {
 crate struct Lifetime(pub Symbol);
 
 impl Lifetime {
-    crate fn get_ref(&self) -> SymbolStr {
-        self.0.as_str()
-    }
-
     crate fn statik() -> Lifetime {
         Lifetime(kw::StaticLifetime)
     }
@@ -1248,17 +1244,6 @@ impl GenericParamDefKind {
     crate fn is_type(&self) -> bool {
         matches!(self, GenericParamDefKind::Type { .. })
     }
-
-    // FIXME(eddyb) this either returns the default of a type parameter, or the
-    // type of a `const` parameter. It seems that the intention is to *visit*
-    // any embedded types, but `get_type` seems to be the wrong name for that.
-    crate fn get_type(&self) -> Option<Type> {
-        match self {
-            GenericParamDefKind::Type { default, .. } => default.as_deref().cloned(),
-            GenericParamDefKind::Const { ty, .. } => Some((&**ty).clone()),
-            GenericParamDefKind::Lifetime { .. } => None,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -1281,10 +1266,6 @@ impl GenericParamDef {
 
     crate fn is_type(&self) -> bool {
         self.kind.is_type()
-    }
-
-    crate fn get_type(&self) -> Option<Type> {
-        self.kind.get_type()
     }
 
     crate fn get_bounds(&self) -> Option<&[GenericBound]> {
@@ -1353,6 +1334,9 @@ crate struct Arguments {
 crate struct Argument {
     crate type_: Type,
     crate name: Symbol,
+    /// This field is used to represent "const" arguments from the `rustc_legacy_const_generics`
+    /// feature. More information in <https://github.com/rust-lang/rust/issues/83167>.
+    crate is_const: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]

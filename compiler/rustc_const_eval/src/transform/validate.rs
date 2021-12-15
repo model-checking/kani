@@ -66,7 +66,7 @@ impl<'tcx> MirPass<'tcx> for Validator {
 ///
 /// The point of this function is to approximate "equal up to subtyping".  However,
 /// the approximation is incorrect as variance is ignored.
-pub fn equal_up_to_regions(
+pub fn equal_up_to_regions<'tcx>(
     tcx: TyCtxt<'tcx>,
     param_env: ParamEnv<'tcx>,
     src: Ty<'tcx>,
@@ -94,8 +94,7 @@ pub fn equal_up_to_regions(
                 // Leave consts and types unchanged.
                 ct_op: |ct| ct,
                 ty_op: |ty| ty,
-            })
-            .into_ok(),
+            }),
         )
     };
     tcx.infer_ctxt().enter(|infcx| infcx.can_eq(param_env, normalize(src), normalize(dest)).is_ok())
@@ -496,9 +495,12 @@ impl<'a, 'tcx> Visitor<'tcx> for TypeChecker<'a, 'tcx> {
                     self.check_edge(location, *unwind, EdgeKind::Unwind);
                 }
             }
-            TerminatorKind::InlineAsm { destination, .. } => {
+            TerminatorKind::InlineAsm { destination, cleanup, .. } => {
                 if let Some(destination) = destination {
                     self.check_edge(location, *destination, EdgeKind::Normal);
+                }
+                if let Some(cleanup) = cleanup {
+                    self.check_edge(location, *cleanup, EdgeKind::Unwind);
                 }
             }
             // Nothing to validate for these.

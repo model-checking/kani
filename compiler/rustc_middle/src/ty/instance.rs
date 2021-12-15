@@ -7,6 +7,7 @@ use rustc_hir::def::Namespace;
 use rustc_hir::def_id::{CrateNum, DefId};
 use rustc_hir::lang_items::LangItem;
 use rustc_macros::HashStable;
+use rustc_middle::ty::normalize_erasing_regions::NormalizationError;
 
 use std::fmt;
 
@@ -575,6 +576,23 @@ impl<'tcx> Instance<'tcx> {
         }
     }
 
+    #[inline(always)]
+    pub fn try_subst_mir_and_normalize_erasing_regions<T>(
+        &self,
+        tcx: TyCtxt<'tcx>,
+        param_env: ty::ParamEnv<'tcx>,
+        v: T,
+    ) -> Result<T, NormalizationError<'tcx>>
+    where
+        T: TypeFoldable<'tcx> + Clone,
+    {
+        if let Some(substs) = self.substs_for_mir_body() {
+            tcx.try_subst_and_normalize_erasing_regions(substs, param_env, v)
+        } else {
+            tcx.try_normalize_erasing_regions(param_env, v)
+        }
+    }
+
     /// Returns a new `Instance` where generic parameters in `instance.substs` are replaced by
     /// identity parameters if they are determined to be unused in `instance.def`.
     pub fn polymorphize(self, tcx: TyCtxt<'tcx>) -> Self {
@@ -622,7 +640,7 @@ fn polymorphize<'tcx>(
             self.tcx
         }
 
-        fn fold_ty(&mut self, ty: Ty<'tcx>) -> Result<Ty<'tcx>, Self::Error> {
+        fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
             debug!("fold_ty: ty={:?}", ty);
             match ty.kind {
                 ty::Closure(def_id, substs) => {
@@ -631,11 +649,11 @@ fn polymorphize<'tcx>(
                         ty::InstanceDef::Item(ty::WithOptConstParam::unknown(def_id)),
                         substs,
                     );
-                    Ok(if substs == polymorphized_substs {
+                    if substs == polymorphized_substs {
                         ty
                     } else {
                         self.tcx.mk_closure(def_id, polymorphized_substs)
-                    })
+                    }
                 }
                 ty::Generator(def_id, substs, movability) => {
                     let polymorphized_substs = polymorphize(
@@ -643,11 +661,11 @@ fn polymorphize<'tcx>(
                         ty::InstanceDef::Item(ty::WithOptConstParam::unknown(def_id)),
                         substs,
                     );
-                    Ok(if substs == polymorphized_substs {
+                    if substs == polymorphized_substs {
                         ty
                     } else {
                         self.tcx.mk_generator(def_id, polymorphized_substs, movability)
-                    })
+                    }
                 }
                 _ => ty.super_fold_with(self),
             }
@@ -669,7 +687,7 @@ fn polymorphize<'tcx>(
                     // ..and polymorphize any closures/generators captured as upvars.
                     let upvars_ty = upvars_ty.unwrap();
                     let polymorphized_upvars_ty = upvars_ty.fold_with(
-                        &mut PolymorphizationFolder { tcx }).into_ok();
+                        &mut PolymorphizationFolder { tcx });
                     debug!("polymorphize: polymorphized_upvars_ty={:?}", polymorphized_upvars_ty);
                     ty::GenericArg::from(polymorphized_upvars_ty)
                 },

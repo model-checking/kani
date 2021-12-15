@@ -420,6 +420,8 @@ fn parse_options<'a>(
             try_set_option(p, args, sym::att_syntax, ast::InlineAsmOptions::ATT_SYNTAX);
         } else if p.eat_keyword(kw::Raw) {
             try_set_option(p, args, kw::Raw, ast::InlineAsmOptions::RAW);
+        } else if p.eat_keyword(sym::may_unwind) {
+            try_set_option(p, args, kw::Raw, ast::InlineAsmOptions::MAY_UNWIND);
         } else {
             return p.unexpected();
         }
@@ -710,7 +712,7 @@ fn expand_preparsed_asm(ecx: &mut ExtCtxt<'_>, args: AsmArgs) -> Option<ast::Inl
                             Some(&idx) => Some(idx),
                             None => {
                                 let msg = format!("there is no argument named `{}`", name);
-                                ecx.struct_span_err(span, &msg[..]).emit();
+                                ecx.struct_span_err(span, &msg).emit();
                                 None
                             }
                         },

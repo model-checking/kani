@@ -139,7 +139,7 @@ pub trait Map<'hir> {
 }
 
 // Used when no map is actually available, forcing manual implementation of nested visitors.
-impl Map<'hir> for ! {
+impl<'hir> Map<'hir> for ! {
     fn find(&self, _: HirId) -> Option<Node<'hir>> {
         unreachable!()
     }
@@ -545,7 +545,7 @@ pub fn walk_lifetime<'v, V: Visitor<'v>>(visitor: &mut V, lifetime: &'v Lifetime
         | LifetimeName::Param(ParamName::Error)
         | LifetimeName::Static
         | LifetimeName::Error
-        | LifetimeName::Implicit
+        | LifetimeName::Implicit(_)
         | LifetimeName::ImplicitObjectLifetimeDefault
         | LifetimeName::Underscore => {}
     }

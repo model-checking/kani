@@ -25,16 +25,14 @@ use super::simplify::simplify_cfg;
 pub struct EarlyOtherwiseBranch;
 
 impl<'tcx> MirPass<'tcx> for EarlyOtherwiseBranch {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
         //  FIXME(#78496)
-        if !tcx.sess.opts.debugging_opts.unsound_mir_opts {
-            return;
-        }
+        sess.opts.debugging_opts.unsound_mir_opts && sess.mir_opt_level() >= 3
+    }
 
-        if tcx.sess.mir_opt_level() < 3 {
-            return;
-        }
+    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         trace!("running EarlyOtherwiseBranch on {:?}", body.source);
+
         // we are only interested in this bb if the terminator is a switchInt
         let bbs_with_switch =
             body.basic_blocks().iter_enumerated().filter(|(_, bb)| is_switch(bb.terminator()));
@@ -169,7 +167,7 @@ impl<'tcx> MirPass<'tcx> for EarlyOtherwiseBranch {
     }
 }
 
-fn is_switch<'tcx>(terminator: &Terminator<'tcx>) -> bool {
+fn is_switch(terminator: &Terminator<'_>) -> bool {
     matches!(terminator.kind, TerminatorKind::SwitchInt { .. })
 }
 
@@ -210,7 +208,7 @@ struct OptimizationInfo<'tcx> {
     second_switch_info: SwitchDiscriminantInfo<'tcx>,
 }
 
-impl<'a, 'tcx> Helper<'a, 'tcx> {
+impl<'tcx> Helper<'_, 'tcx> {
     pub fn go(
         &self,
         bb: &BasicBlockData<'tcx>,

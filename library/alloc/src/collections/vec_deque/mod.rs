@@ -720,9 +720,9 @@ impl<T, A: Allocator> VecDeque<T, A> {
     ///
     /// Note that the allocator may give the collection more space than it
     /// requests. Therefore, capacity can not be relied upon to be precisely
-    /// minimal. Prefer [`reserve`] if future insertions are expected.
+    /// minimal. Prefer [`try_reserve`] if future insertions are expected.
     ///
-    /// [`reserve`]: VecDeque::reserve
+    /// [`try_reserve`]: VecDeque::try_reserve
     ///
     /// # Errors
     ///
@@ -1020,7 +1020,7 @@ impl<T, A: Allocator> VecDeque<T, A> {
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         // SAFETY: The internal `IterMut` safety invariant is established because the
-        // `ring` we create is a dereferencable slice for lifetime '_.
+        // `ring` we create is a dereferenceable slice for lifetime '_.
         let ring = ptr::slice_from_raw_parts_mut(self.ptr(), self.cap());
 
         unsafe { IterMut::new(ring, self.tail, self.head, PhantomData) }
@@ -1209,7 +1209,7 @@ impl<T, A: Allocator> VecDeque<T, A> {
         let (tail, head) = self.range_tail_head(range);
 
         // SAFETY: The internal `IterMut` safety invariant is established because the
-        // `ring` we create is a dereferencable slice for lifetime '_.
+        // `ring` we create is a dereferenceable slice for lifetime '_.
         let ring = ptr::slice_from_raw_parts_mut(self.ptr(), self.cap());
 
         unsafe { IterMut::new(ring, tail, head, PhantomData) }
@@ -2149,13 +2149,44 @@ impl<T, A: Allocator> VecDeque<T, A> {
     where
         F: FnMut(&T) -> bool,
     {
+        self.retain_mut(|elem| f(elem));
+    }
+
+    /// Retains only the elements specified by the predicate.
+    ///
+    /// In other words, remove all elements `e` such that `f(&e)` returns false.
+    /// This method operates in place, visiting each element exactly once in the
+    /// original order, and preserves the order of the retained elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(vec_retain_mut)]
+    ///
+    /// use std::collections::VecDeque;
+    ///
+    /// let mut buf = VecDeque::new();
+    /// buf.extend(1..5);
+    /// buf.retain_mut(|x| if *x % 2 == 0 {
+    ///     *x += 1;
+    ///     true
+    /// } else {
+    ///     false
+    /// });
+    /// assert_eq!(buf, [3, 5]);
+    /// ```
+    #[unstable(feature = "vec_retain_mut", issue = "90829")]
+    pub fn retain_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut T) -> bool,
+    {
         let len = self.len();
         let mut idx = 0;
         let mut cur = 0;
 
         // Stage 1: All values are retained.
         while cur < len {
-            if !f(&self[cur]) {
+            if !f(&mut self[cur]) {
                 cur += 1;
                 break;
             }
@@ -2164,7 +2195,7 @@ impl<T, A: Allocator> VecDeque<T, A> {
         }
         // Stage 2: Swap retained value into current idx.
         while cur < len {
-            if !f(&self[cur]) {
+            if !f(&mut self[cur]) {
                 cur += 1;
                 continue;
             }
@@ -2173,25 +2204,27 @@ impl<T, A: Allocator> VecDeque<T, A> {
             cur += 1;
             idx += 1;
         }
-        // Stage 3: Trancate all values after idx.
+        // Stage 3: Truncate all values after idx.
         if cur != idx {
             self.truncate(idx);
         }
     }
 
+    // Double the buffer size. This method is inline(never), so we expect it to only
+    // be called in cold paths.
     // This may panic or abort
     #[inline(never)]
     fn grow(&mut self) {
-        if self.is_full() {
-            let old_cap = self.cap();
-            // Double the buffer size.
-            self.buf.reserve_exact(old_cap, old_cap);
-            assert!(self.cap() == old_cap * 2);
-            unsafe {
-                self.handle_capacity_increase(old_cap);
-            }
-            debug_assert!(!self.is_full());
+        // Extend or possibly remove this assertion when valid use-cases for growing the
+        // buffer without it being full emerge
+        debug_assert!(self.is_full());
+        let old_cap = self.cap();
+        self.buf.reserve_exact(old_cap, old_cap);
+        assert!(self.cap() == old_cap * 2);
+        unsafe {
+            self.handle_capacity_increase(old_cap);
         }
+        debug_assert!(!self.is_full());
     }
 
     /// Modifies the `VecDeque` in-place so that `len()` is equal to `new_len`,

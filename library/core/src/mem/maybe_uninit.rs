@@ -394,10 +394,11 @@ impl<T> MaybeUninit<T> {
     /// // This is undefined behavior. ⚠️
     /// ```
     #[stable(feature = "maybe_uninit", since = "1.36.0")]
+    #[rustc_const_unstable(feature = "const_maybe_uninit_zeroed", issue = "91850")]
     #[must_use]
     #[inline]
     #[rustc_diagnostic_item = "maybe_uninit_zeroed"]
-    pub fn zeroed() -> MaybeUninit<T> {
+    pub const fn zeroed() -> MaybeUninit<T> {
         let mut u = MaybeUninit::<T>::uninit();
         // SAFETY: `u.as_mut_ptr()` points to allocated memory.
         unsafe {
@@ -789,7 +790,6 @@ impl<T> MaybeUninit<T> {
     /// ```
     #[stable(feature = "maybe_uninit_ref", since = "1.55.0")]
     #[rustc_const_stable(feature = "const_maybe_uninit_assume_init", since = "1.59.0")]
-    #[cfg_attr(bootstrap, rustc_allow_const_fn_unstable(const_raw_ptr_deref))]
     #[inline(always)]
     pub const unsafe fn assume_init_ref(&self) -> &T {
         // SAFETY: the caller must guarantee that `self` is initialized.
