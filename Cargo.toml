@@ -41,13 +41,13 @@ members = [
   "src/tools/html-checker",
   "src/tools/bump-stage0",
   "src/tools/lld-wrapper",
+  "src/rmc-compiler",
 ]
 
 exclude = [
   "build",
   "compiler/rustc_codegen_cranelift",
   "compiler/rustc_codegen_gcc",
-  "src/rmc-compiler",
   "src/test/rustdoc-gui",
   # HACK(eddyb) This hardcodes the fact that our CI uses `/checkout/obj`.
   "obj",

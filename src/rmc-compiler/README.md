@@ -2,11 +2,24 @@ This is a temporary wrapper that can be used to compiler rust into gotoc. This
 binary should not be used on its own and it should be used via `rmc` or
 `cargo-rmc` commands.
 
-To build:
+### Notes for developers:
+
+To build / install:
 
 ```
-RUSTC_INSTALL_BINDIR="<bin_folder>" RUST_CHECK=1 CFG_RELEASE=<number> CFG_RELEASE_CHANNEL=nightly cargo +nightly-<same-version> build
+cargo build
+cargo install --path <project_path> --root <install_path>
 ```
 
-TODO: Figure out how to use the libraries compiled by ./x.py
+To run:
+
+```
+cargo run
+```
+
+or 
+
+```
+LD_LIBRARY_PATH=<path_to_rustc_lib> <install_path>/rmc_compiler
+```
 
