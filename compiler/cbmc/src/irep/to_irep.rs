@@ -228,6 +228,11 @@ impl ToIrep for ExprValue {
                 ],
             },
             ExprValue::Nondet => side_effect_irep(IrepId::Nondet, vec![]),
+            ExprValue::PointerConstant(0) => Irep {
+                id: IrepId::Constant,
+                sub: vec![],
+                named_sub: vector_map![(IrepId::Value, Irep::just_id(IrepId::NULL))],
+            },
             ExprValue::PointerConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
