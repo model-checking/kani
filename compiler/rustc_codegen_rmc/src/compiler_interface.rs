@@ -11,6 +11,7 @@ use cbmc::goto_program::SymbolTable;
 use cbmc::InternedString;
 use rmc_restrictions::VtableCtxResults;
 use rustc_codegen_ssa::traits::CodegenBackend;
+use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorReported;
 use rustc_metadata::EncodedMetadata;
@@ -27,15 +28,6 @@ use std::io::BufWriter;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use tracing::{debug, warn};
-
-// #[derive(RustcEncodable, RustcDecodable)]
-pub struct GotocCodegenResult {
-    pub crate_name: rustc_span::Symbol,
-    pub metadata: RmcMetadata,
-    pub symtab: SymbolTable,
-    pub type_map: BTreeMap<InternedString, InternedString>,
-    pub vtable_restrictions: Option<VtableCtxResults>,
-}
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend();
@@ -58,14 +50,12 @@ impl CodegenBackend for GotocCodegenBackend {
     fn codegen_crate<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
-        _metadata: EncodedMetadata,
-        _need_metadata_module: bool,
+        rustc_metadata: EncodedMetadata,
+        need_metadata_module: bool,
     ) -> Box<dyn Any> {
-        use rustc_hir::def_id::LOCAL_CRATE;
-
         super::utils::init();
 
-        check_options(&tcx.sess);
+        check_options(&tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mut c = GotocCtx::new(tcx);
@@ -134,7 +124,7 @@ impl CodegenBackend for GotocCodegenBackend {
         );
 
         // Map MIR types to GotoC types
-        let type_map =
+        let type_map: BTreeMap<InternedString, InternedString> =
             BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
 
         // Get the vtable function pointer restrictions if requested
@@ -146,51 +136,53 @@ impl CodegenBackend for GotocCodegenBackend {
 
         let metadata = RmcMetadata { proof_harnesses: c.proof_harnesses };
 
-        Box::new(GotocCodegenResult {
-            crate_name: tcx.crate_name(LOCAL_CRATE) as rustc_span::Symbol,
-            metadata,
-            symtab,
-            type_map,
-            vtable_restrictions,
-        })
+        // No output should be generated if user selected no_codegen.
+        if !tcx.sess.opts.debugging_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
+            let outputs = tcx.output_filenames(());
+            let base_filename = outputs.output_path(OutputType::Object);
+            write_file(&base_filename, "symtab.json", &symtab);
+            write_file(&base_filename, "type_map.json", &type_map);
+            write_file(&base_filename, "rmc-metadata.json", &metadata);
+            // If they exist, write out vtable virtual call function pointer restrictions
+            if let Some(restrictions) = vtable_restrictions {
+                write_file(&base_filename, "restrictions.json", &restrictions);
+            }
+        }
+
+        let work_products = FxHashMap::<WorkProductId, WorkProduct>::default();
+        Box::new((
+            CodegenResults {
+                modules: vec![],
+                allocator_module: None,
+                metadata_module: None,
+                metadata: rustc_metadata,
+                crate_info: CrateInfo::new(tcx, symtab.machine_model().architecture().to_string()),
+            },
+            work_products,
+        ))
     }
 
     fn join_codegen(
         &self,
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
-    ) -> Result<(Box<dyn Any>, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
-        Ok((ongoing_codegen, FxHashMap::default()))
+    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
+        Ok(*ongoing_codegen
+            .downcast::<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>)>()
+            .unwrap())
     }
 
     fn link(
         &self,
-        sess: &Session,
-        codegen_results: Box<dyn Any>,
-        outputs: &OutputFilenames,
+        _sess: &Session,
+        _codegen_results: CodegenResults,
+        _outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
-        let result = codegen_results
-            .downcast::<GotocCodegenResult>()
-            .expect("in link: codegen_results is not a GotocCodegenResult");
-
-        // No output should be generated if user selected no_codegen.
-        if !sess.opts.debugging_opts.no_codegen && sess.opts.output_types.should_codegen() {
-            // "path.o"
-            let base_filename = outputs.path(OutputType::Object);
-            write_file(&base_filename, "symtab.json", &result.symtab);
-            write_file(&base_filename, "type_map.json", &result.type_map);
-            write_file(&base_filename, "rmc-metadata.json", &result.metadata);
-            // If they exist, write out vtable virtual call function pointer restrictions
-            if let Some(restrictions) = result.vtable_restrictions {
-                write_file(&base_filename, "restrictions.json", &restrictions);
-            }
-        }
-
         Ok(())
     }
 }
 
-fn check_options(session: &Session) {
+fn check_options(session: &Session, need_metadata_module: bool) {
     if !session.overflow_checks() {
         session.err("RMC requires overflow checks in order to provide a sound analysis.");
     }
@@ -200,6 +192,10 @@ fn check_options(session: &Session) {
             "RMC can only handle abort panic strategy (-C panic=abort). See for more details \
         https://github.com/model-checking/rmc/issues/692",
         );
+    }
+
+    if need_metadata_module {
+        session.err("RMC cannot generate metadata module.")
     }
 
     session.abort_if_errors();
