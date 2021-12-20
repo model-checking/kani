@@ -2,6 +2,14 @@
 
 ## Rust feature support
 
+The table below tries to summarize the current support in RMC for
+the Rust language features according to the [Rust Reference](https://doc.rust-lang.org/stable/reference/).
+We use three values to indicate the level of support:
+ * *Yes*: The feature is fully supported. There may
+ * *Partial*: The feature is at least partially supported. This means we are aware of some issue
+ with the feature.
+ * *No*:
+
 *Define Yes, No and Partial*
 
 Reference | Feature | Support | Observations |
@@ -90,7 +98,7 @@ Reference | Feature | Support | Observations |
 15.3 | Behavior considered undefined | Partial | |
 | | Data races | No | [Concurrency](#concurrency) |
 | | Dereferencing dangling raw pointers | Yes | |
-| | Dereferencing unaligned  raw pointers | No | |
+| | Dereferencing unaligned raw pointers | No | |
 | | Breaking pointer aliasing rules | No | |
 | | Mutating immutable data | No | |
 | | Invoking undefined behavior via compiler intrinsics | Partial | [Intrinsics](#intrinsics) |
