@@ -376,7 +376,7 @@ impl Type {
         }
     }
 
-    pub fn is_c_ssizet(&self) -> bool {
+    pub fn is_c_ssize_t(&self) -> bool {
         match self {
             Type::CInteger(CIntType::SSizeT) => true,
             _ => false,
