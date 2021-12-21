@@ -369,6 +369,20 @@ impl Type {
         }
     }
 
+    pub fn is_c_sizet(&self) -> bool {
+        match self {
+            Type::CInteger(CIntType::SizeT) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_c_ssizet(&self) -> bool {
+        match self {
+            Type::CInteger(CIntType::SSizeT) => true,
+            _ => false,
+        }
+    }
+
     pub fn is_code(&self) -> bool {
         match self {
             Code { .. } => true,
@@ -618,6 +632,14 @@ impl Type {
 
     pub fn c_int() -> Self {
         CInteger(CIntType::Int)
+    }
+
+    pub fn c_size_t() -> Self {
+        CInteger(CIntType::SizeT)
+    }
+
+    pub fn c_ssize_t() -> Self {
+        CInteger(CIntType::SSizeT)
     }
 
     /// corresponds to [code_typet] in CBMC, representing a function type
