@@ -40,12 +40,9 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Goto { target } => {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
-            TerminatorKind::SwitchInt { discr, switch_ty, targets } => match targets {
-                SwitchTargets { values, .. } => {
-                    let all_targets = targets.all_targets();
-                    self.codegen_switch_int(discr, switch_ty, values, all_targets)
-                }
-            },
+            TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
+                self.codegen_switch_int(discr, switch_ty, targets)
+            }
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
             TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
             TerminatorKind::Return => {
@@ -206,62 +203,48 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         discr: &Operand<'tcx>,
         switch_ty: Ty<'tcx>,
-        values: &SmallVec<[u128; 1]>,
-        targets: &[BasicBlock],
+        targets: &SwitchTargets,
     ) -> Stmt {
-        assert_eq!(targets.len(), values.len() + 1);
-
         let v = self.codegen_operand(discr);
         let switch_ty = self.monomorphize(switch_ty);
-        match switch_ty.kind() {
-            //TODO, can replace with guarded goto
-            ty::Bool => {
-                let jmp: usize = values[0].try_into().unwrap();
-                let jmp2 = if jmp == 0 { 1 } else { 0 };
-                Stmt::block(
-                    vec![
-                        v.cast_to(Type::bool()).if_then_else(
+        if targets.all_targets().len() == 1 {
+            // Translate to a guarded goto
+            let first_target = targets.iter().next().unwrap();
+            Stmt::block(
+                vec![
+                    v.eq(Expr::int_constant(first_target.0, self.codegen_ty(switch_ty)))
+                        .if_then_else(
                             Stmt::goto(
-                                self.current_fn().labels()[targets[jmp2].index()].clone(),
+                                self.current_fn().labels()[first_target.1.index()].clone(),
                                 Location::none(),
                             ),
                             None,
                             Location::none(),
                         ),
-                        Stmt::goto(
-                            self.current_fn().labels()[targets[jmp].index()].clone(),
-                            Location::none(),
-                        ),
-                    ],
-                    Location::none(),
-                )
-            }
-            ty::Char | ty::Int(_) | ty::Uint(_) => {
-                let cases = values
-                    .iter()
-                    .enumerate()
-                    .map(|(i, idx)| {
-                        let bb = &targets[i];
-                        Expr::int_constant(*idx, self.codegen_ty(switch_ty)).switch_case(
-                            Stmt::goto(
-                                self.current_fn().labels()[bb.index()].clone(),
-                                Location::none(),
-                            ),
-                        )
-                    })
-                    .collect();
-                let default = Stmt::goto(
-                    self.current_fn().labels()[targets[values.len()].index()].clone(),
-                    Location::none(),
-                );
-                v.switch(cases, Some(default), Location::none())
-            }
-            x => {
-                unreachable!(
-                    "Unexpected switch_ty {:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
-                    discr, switch_ty, values, targets, v, x
-                )
-            }
+                    Stmt::goto(
+                        self.current_fn().labels()[targets.otherwise().index()].clone(),
+                        Location::none(),
+                    ),
+                ],
+                Location::none(),
+            )
+        } else {
+            // Switches with empty targets should've been eliminated already.
+            assert!(targets.all_targets().len() > 1);
+            let cases = targets
+                .iter()
+                .map(|(c, bb)| {
+                    Expr::int_constant(c, self.codegen_ty(switch_ty)).switch_case(Stmt::goto(
+                        self.current_fn().labels()[bb.index()].clone(),
+                        Location::none(),
+                    ))
+                })
+                .collect();
+            let default = Stmt::goto(
+                self.current_fn().labels()[targets.otherwise().index()].clone(),
+                Location::none(),
+            );
+            v.switch(cases, Some(default), Location::none())
         }
     }
 

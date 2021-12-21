@@ -21,7 +21,7 @@ pub use super::query::*;
 pub struct SwitchTargets {
     /// Possible values. The locations to branch to in each case
     /// are found in the corresponding indices from the `targets` vector.
-    pub values: SmallVec<[u128; 1]>,
+    values: SmallVec<[u128; 1]>,
 
     /// Possible branch sites. The last element of this vector is used
     /// for the otherwise branch, so targets.len() == values.len() + 1
