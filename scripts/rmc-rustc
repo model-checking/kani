@@ -41,6 +41,7 @@ set_rmc_lib_path() {
             echo "ERROR: Could not find RMC library."
             echo "Looked for: \"$REPO_DIR/target/*/librmc.rlib\""
             echo "Was RMC library successfully built first?"
+            echo "Try running <RMC_ROOT>/scripts/setup/build_rmc_lib.sh"
             exit 1
         fi
         RMC_LIB_PATH=$(dirname ${RMC_LIB_CANDIDATES[0]})
@@ -52,6 +53,7 @@ set_rmc_lib_path() {
         echo "ERROR: Could not find RMC library."
         echo "Looked for: \"${RMC_LIB_PATH}/deps/librmc_macros-*\""
         echo "Was RMC library successfully built first?"
+        echo "Try running <RMC_ROOT>/scripts/setup/build_rmc_lib.sh"
         exit 1
     fi
     RMC_MACRO_LIB_PATH="${MACRO_LIB_CANDIDATE[0]}"
