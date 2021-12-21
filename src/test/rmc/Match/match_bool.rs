@@ -4,7 +4,8 @@
 // rmc-flags: --function match_bool
 
 #[rmc::proof]
-pub fn match_bool(arg: bool) {
+pub fn match_bool() {
+    let arg: bool = rmc::nondet();
     let var = match arg {
         true => !arg,
         _ => arg,
