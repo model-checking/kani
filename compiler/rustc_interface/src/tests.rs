@@ -764,7 +764,6 @@ fn test_debugging_options_tracking_hash() {
     tracked!(relax_elf_relocations, Some(true));
     tracked!(relro_level, Some(RelroLevel::Full));
     tracked!(remap_cwd_prefix, Some(PathBuf::from("abc")));
-    tracked!(emit_vtable_restrictions, true);
     tracked!(report_delayed_bugs, true);
     tracked!(sanitizer, SanitizerSet::ADDRESS);
     tracked!(sanitizer_memory_track_origins, 2);
@@ -776,7 +775,6 @@ fn test_debugging_options_tracking_hash() {
     tracked!(src_hash_algorithm, Some(SourceFileHashAlgorithm::Sha1));
     tracked!(stack_protector, StackProtector::All);
     tracked!(symbol_mangling_version, Some(SymbolManglingVersion::V0));
-    tracked!(symbol_table_passes, vec![String::from("identity")]);
     tracked!(teach, true);
     tracked!(thinlto, Some(true));
     tracked!(thir_unsafeck, true);

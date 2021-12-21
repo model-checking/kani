@@ -1329,8 +1329,6 @@ options! {
         "choose which RELRO level to use"),
     remap_cwd_prefix: Option<PathBuf> = (None, parse_opt_pathbuf, [TRACKED],
         "remap paths under the current working directory to this path prefix"),
-    emit_vtable_restrictions: bool = (false, parse_bool, [TRACKED],
-        "restrict the targets of virtual table function pointer calls"),
     simulate_remapped_rust_src_base: Option<PathBuf> = (None, parse_opt_pathbuf, [TRACKED],
         "simulate the effect of remap-debuginfo = true at bootstrapping by remapping path \
         to rust's source base directory. only meant for testing purposes"),
@@ -1378,9 +1376,6 @@ options! {
     symbol_mangling_version: Option<SymbolManglingVersion> = (None,
         parse_symbol_mangling_version, [TRACKED],
         "which mangling version to use for symbol names ('legacy' (default) or 'v0')"),
-    symbol_table_passes: Vec<String> = (Vec::new(), parse_list, [TRACKED],
-        "transformations to perform to the symbol table after it has been generated. \
-        space separated"),
     teach: bool = (false, parse_bool, [TRACKED],
         "show extended diagnostic help (default: no)"),
     temps_dir: Option<String> = (None, parse_opt_string, [UNTRACKED],

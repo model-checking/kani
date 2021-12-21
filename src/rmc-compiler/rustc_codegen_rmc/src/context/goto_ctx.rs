@@ -63,7 +63,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
-        let emit_vtable_restrictions = tcx.sess.opts.debugging_opts.emit_vtable_restrictions;
+        let emit_vtable_restrictions = true; // TODO tcx.sess.opts.debugging_opts
+        // .emit_vtable_restrictions;
         GotocCtx {
             tcx,
             symbol_table,

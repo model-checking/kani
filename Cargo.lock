@@ -4180,7 +4180,6 @@ dependencies = [
  "rustc_borrowck",
  "rustc_builtin_macros",
  "rustc_codegen_llvm",
- "rustc_codegen_rmc",
  "rustc_codegen_ssa",
  "rustc_const_eval",
  "rustc_data_structures",

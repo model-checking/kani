@@ -118,10 +118,9 @@ impl CodegenBackend for GotocCodegenBackend {
         }
 
         // perform post-processing symbol table passes
-        let symtab = symtab_transformer::do_passes(
-            c.symbol_table,
-            &tcx.sess.opts.debugging_opts.symbol_table_passes,
-        );
+        // TODO &tcx.sess.opts.debugging_opts.symbol_table_passes,
+        let passes = vec![String::from("identity")];
+        let symtab = symtab_transformer::do_passes(c.symbol_table, &passes);
 
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
