@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
+
 #![crate_name = "compiletest"]
 // The `test` crate is the only unstable feature
 // allowed here, just to share similar code.

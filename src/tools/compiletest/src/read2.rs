@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
+
 // FIXME: This is a complete copy of `cargo/src/cargo/util/read2.rs`
 // Consider unify the read2() in libstd, cargo and this to prevent further code duplication.
 

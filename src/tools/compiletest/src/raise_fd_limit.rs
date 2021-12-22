@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
+
 /// darwin_fd_limit exists to work around an issue where launchctl on macOS
 /// defaults the rlimit maxfiles to 256/unlimited. The default soft limit of 256
 /// ends up being far too low for our multithreaded scheduler testing, depending

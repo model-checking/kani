@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
+
 //! These structs are a subset of the ones found in `rustc_errors::json`.
 //! They are only used for deserialization of JSON output provided by libtest.
 
