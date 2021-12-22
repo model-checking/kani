@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
+
 // FIXME: This is a complete copy of `cargo/src/cargo/util/read2.rs`
 // Consider unify the read2() in libstd, cargo and this to prevent further code duplication.
 
@@ -165,108 +170,5 @@ mod imp {
             data(true, &mut out, out_done);
         }
         Ok(())
-    }
-}
-
-#[cfg(windows)]
-mod imp {
-    use std::io;
-    use std::os::windows::prelude::*;
-    use std::process::{ChildStderr, ChildStdout};
-    use std::slice;
-
-    use miow::iocp::{CompletionPort, CompletionStatus};
-    use miow::pipe::NamedPipe;
-    use miow::Overlapped;
-    use winapi::shared::winerror::ERROR_BROKEN_PIPE;
-
-    struct Pipe<'a> {
-        dst: &'a mut Vec<u8>,
-        overlapped: Overlapped,
-        pipe: NamedPipe,
-        done: bool,
-    }
-
-    pub fn read2(
-        out_pipe: ChildStdout,
-        err_pipe: ChildStderr,
-        data: &mut dyn FnMut(bool, &mut Vec<u8>, bool),
-    ) -> io::Result<()> {
-        let mut out = Vec::new();
-        let mut err = Vec::new();
-
-        let port = CompletionPort::new(1)?;
-        port.add_handle(0, &out_pipe)?;
-        port.add_handle(1, &err_pipe)?;
-
-        unsafe {
-            let mut out_pipe = Pipe::new(out_pipe, &mut out);
-            let mut err_pipe = Pipe::new(err_pipe, &mut err);
-
-            out_pipe.read()?;
-            err_pipe.read()?;
-
-            let mut status = [CompletionStatus::zero(), CompletionStatus::zero()];
-
-            while !out_pipe.done || !err_pipe.done {
-                for status in port.get_many(&mut status, None)? {
-                    if status.token() == 0 {
-                        out_pipe.complete(status);
-                        data(true, out_pipe.dst, out_pipe.done);
-                        out_pipe.read()?;
-                    } else {
-                        err_pipe.complete(status);
-                        data(false, err_pipe.dst, err_pipe.done);
-                        err_pipe.read()?;
-                    }
-                }
-            }
-
-            Ok(())
-        }
-    }
-
-    impl<'a> Pipe<'a> {
-        unsafe fn new<P: IntoRawHandle>(p: P, dst: &'a mut Vec<u8>) -> Pipe<'a> {
-            Pipe {
-                dst: dst,
-                pipe: NamedPipe::from_raw_handle(p.into_raw_handle()),
-                overlapped: Overlapped::zero(),
-                done: false,
-            }
-        }
-
-        unsafe fn read(&mut self) -> io::Result<()> {
-            let dst = slice_to_end(self.dst);
-            match self.pipe.read_overlapped(dst, self.overlapped.raw()) {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    if e.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) {
-                        self.done = true;
-                        Ok(())
-                    } else {
-                        Err(e)
-                    }
-                }
-            }
-        }
-
-        unsafe fn complete(&mut self, status: &CompletionStatus) {
-            let prev = self.dst.len();
-            self.dst.set_len(prev + status.bytes_transferred() as usize);
-            if status.bytes_transferred() == 0 {
-                self.done = true;
-            }
-        }
-    }
-
-    unsafe fn slice_to_end(v: &mut Vec<u8>) -> &mut [u8] {
-        if v.capacity() == 0 {
-            v.reserve(16);
-        }
-        if v.capacity() == v.len() {
-            v.reserve(1);
-        }
-        slice::from_raw_parts_mut(v.as_mut_ptr().offset(v.len() as isize), v.capacity() - v.len())
     }
 }
