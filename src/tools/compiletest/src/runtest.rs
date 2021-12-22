@@ -35,19 +35,6 @@ pub fn dylib_env_var() -> &'static str {
     if cfg!(target_os = "macos") { "DYLD_LIBRARY_PATH" } else { "LD_LIBRARY_PATH" }
 }
 
-/// The platform-specific library name
-pub fn get_lib_name(lib: &str, dylib: bool) -> String {
-    // In some casess (e.g. MUSL), we build a static
-    // library, rather than a dynamic library.
-    // In this case, the only path we can pass
-    // with '--extern-meta' is the '.lib' file
-    if !dylib {
-        return format!("lib{}.rlib", lib);
-    }
-
-    if cfg!(target_os = "macos") { format!("lib{}.dylib", lib) } else { format!("lib{}.so", lib) }
-}
-
 pub fn run(config: Config, testpaths: &TestPaths, revision: Option<&str>) {
     if config.verbose {
         // We're going to be dumping a lot of info. Start on a new line.
