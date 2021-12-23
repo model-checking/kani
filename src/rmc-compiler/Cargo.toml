@@ -2,15 +2,19 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "rmc_compiler"
+name = "rmc-compiler"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
 clap = "2.33.0"
-tracing = "0.1"
+tracing = {version = "0.1", feature = ["max_level_debug", "release_max_level_info"]}
 rustc_codegen_rmc = {path = "rustc_codegen_rmc"}
+
+[build-dependencies]
+rmc = {path = "../../library/rmc"}
+rmc_macros = {path = "../../library/rmc_macros"}
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

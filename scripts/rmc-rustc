@@ -16,72 +16,26 @@ RMC_PATH=${RMC_PATH:-""}
 RMC_LIB_PATH=${RMC_LIB_PATH:-""}
 
 shopt -s nullglob
-set_rmc_path() {
-    local RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
+set_paths() {
+    local RMC_CANDIDATES=("$REPO_DIR"/target/*/rmc-compiler)
 
     if [ -z "${RMC_PATH}" ]
     then
         if [[ -z ${RMC_CANDIDATES:-""} ]] || [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]
         then
             echo "ERROR: Could not find RMC binary."
-            echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
+            echo "Looked for: '$REPO_DIR/target/*/rmc-compiler'"
             echo "Was RMC successfully built first?"
             exit 1
         fi
         RMC_PATH=${RMC_CANDIDATES[0]}
     fi
-}
 
-set_rmc_lib_path() {
     if [ -z "${RMC_LIB_PATH}" ]
     then
-        local RMC_LIB_CANDIDATES=("$REPO_DIR"/target/*/librmc.rlib)
-        if [[ -z ${RMC_LIB_CANDIDATES:-""} ]] || [[ ${#RMC_LIB_CANDIDATES[@]} -ne 1 ]]
-        then
-            echo "ERROR: Could not find RMC library."
-            echo "Looked for: \"$REPO_DIR/target/*/librmc.rlib\""
-            echo "Try running <RMC_ROOT>/scripts/setup/build_rmc_lib.sh"
-            exit 1
-        fi
-        RMC_LIB_PATH=$(dirname ${RMC_LIB_CANDIDATES[0]})
+        RMC_LIB_PATH=$(dirname ${RMC_PATH})/deps
     fi
-    # Having set RMC_LIB_PATH, find RMC_MACRO_LIB_PATH
-    local MACRO_LIB_CANDIDATE=(${RMC_LIB_PATH}/deps/librmc_macros-*)
-    if [[ ${#MACRO_LIB_CANDIDATE[@]} -ne 1 ]]
-    then
-        echo "ERROR: Could not find RMC library."
-        echo "Looked for: \"${RMC_LIB_PATH}/deps/librmc_macros-*\""
-        echo "Try running <RMC_ROOT>/scripts/setup/build_rmc_lib.sh"
-        exit 1
-    fi
-    RMC_MACRO_LIB_PATH="${MACRO_LIB_CANDIDATE[0]}"
 }
 
-set_rmc_path
-if [ "${1:-''}" == "--rmc-path" ]
-then
-    echo ${RMC_PATH}
-else
-    set_rmc_lib_path
-    RMC_FLAGS="-Z codegen-backend=gotoc \
-            -C overflow-checks=on \
-            -C panic=abort \
-            -Z panic_abort_tests=yes \
-            -Z trim-diagnostic-paths=no \
-            -Z human_readable_cgu_names \
-            --cfg=rmc \
-            -Zcrate-attr=feature(register_tool) \
-            -Zcrate-attr=register_tool(rmctool) \
-            -L ${RMC_LIB_PATH} \
-            --extern rmc \
-            -L ${RMC_LIB_PATH}/deps \
-            --extern librmc_macros=${RMC_MACRO_LIB_PATH} \
-            "
-    if [ "${1:-''}" == "--rmc-flags" ]
-    then
-        echo ${RMC_FLAGS}
-    else
-        # Execute rmc
-       "${RMC_PATH}" ${RMC_FLAGS} "$@"
-    fi
-fi
+set_paths
+"${RMC_PATH}" "--rmc-lib" "${RMC_LIB_PATH}" "$@"

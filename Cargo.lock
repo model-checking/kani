@@ -3326,6 +3326,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmc-compiler"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rmc",
+ "rmc_macros",
+ "rustc_codegen_rmc",
+ "tracing",
+]
+
+[[package]]
 name = "rmc-link-restrictions"
 version = "0.1.0"
 dependencies = [
@@ -3333,15 +3344,6 @@ dependencies = [
  "rustc_data_structures",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "rmc_compiler"
-version = "0.1.0"
-dependencies = [
- "clap",
- "rustc_codegen_rmc",
- "tracing",
 ]
 
 [[package]]

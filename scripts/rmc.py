@@ -213,8 +213,8 @@ def run_cmd(
 
 def rustc_flags(mangler, symbol_table_passes, restrict_vtable):
     flags = [
+        "--symbol-table-passes={','.join(symbol_table_passes)}",
         "-Z", f"symbol-mangling-version={mangler}",
-        "-Z", f"symbol_table_passes={' '.join(symbol_table_passes)}",
         "-Z", "human_readable_cgu_names",
         f"--cfg={RMC_CFG}"]
 
@@ -222,7 +222,7 @@ def rustc_flags(mangler, symbol_table_passes, restrict_vtable):
         flags += os.environ["RUSTFLAGS"].split(" ")
 
     if restrict_vtable:
-        flags += ["-Z", "restrict_vtable_fn_ptrs"]
+        flags.insert(0, "--restrict-vtable-fn-ptrs")
 
     return flags
 

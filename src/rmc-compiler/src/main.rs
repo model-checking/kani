@@ -16,10 +16,8 @@ use std::lazy::SyncOnceCell;
 use std::path::PathBuf;
 use std::process::Command;
 
-fn rustc_default_flags() -> Vec<String> {
-    let rmc_lib = rmc_lib_path();
-    let rmc_deps = rmc_lib.clone() + "/deps";
-    let rmc_macros_lib = rmc_macros_path();
+fn rustc_default_flags(lib_path: &str) -> Vec<String> {
+    let rmc_deps = lib_path.clone().to_owned() + "/deps";
     let args = vec![
         "-Z",
         "codegen-backend=gotoc",
@@ -37,30 +35,17 @@ fn rustc_default_flags() -> Vec<String> {
         "-Z",
         "crate-attr=register_tool(rmctool)",
         "-L",
-        rmc_lib.as_str(),
+        lib_path,
         "--extern",
         "rmc",
         "-L",
         rmc_deps.as_str(),
-        "--extern",
-        "librmc_macros",
-        "-L",
-        rmc_macros_lib.as_str(),
     ];
     args.iter().map(|s| s.to_string()).collect()
 }
 
-fn rmc_lib_path() -> String {
-    String::from("lib")
-}
-
-fn rmc_macros_path() -> String {
-    String::from("lib-macro")
-}
-
 fn main() -> Result<(), &'static str> {
     println!("RMC Compiler");
-    std::env::vars().for_each(|(var, value)| println!("{} = {}", var, value));
     let args = app_from_crate!()
         .setting(AppSettings::TrailingVarArg) // This allow us to fwd commands to rustc.
         .setting(clap::AppSettings::AllowLeadingHyphen)
@@ -70,9 +55,26 @@ fn main() -> Result<(), &'static str> {
                 .help("Print the arguments that would be used to call rustc."),
         )
         .arg(
-            Arg::with_name("rmc-path")
-                .long("--rmc-path")
-                .help("Print the arguments that would be used to call rustc."),
+            Arg::with_name("rmc-lib")
+                .long("--rmc-lib")
+                .value_name("FOLDER_PATH")
+                .help("Sets the path to locate the rmc library.")
+                .takes_value(true)
+                .required(true)
+        )
+        .arg(
+            Arg::with_name("symbol-table-passes")
+                .long("--symbol-table-passes")
+                .value_name("PASS")
+                .help("Transformations to perform to the symbol table after it has been generated.")
+                .takes_value(true)
+                .use_delimiter(true)
+                .multiple(true)
+        )
+        .arg(
+            Arg::with_name("restrict-vtable-fn-ptrs")
+                .long("--restrict-vtable-fn-ptrs")
+                .help("Restrict the targets of virtual table function pointer calls."),
         )
         .arg(
             Arg::with_name("sysroot")
@@ -94,12 +96,13 @@ fn main() -> Result<(), &'static str> {
     use std::env;
 
     // Prints each argument on a separate line
+    let mut default_args = rustc_default_flags(&args.value_of("rmc-lib").unwrap());
     if args.is_present("rmc-flags") {
-        println!("{}", rustc_default_flags().join(" "));
+        println!("{}", default_args.join(" "));
         Ok(())
     } else {
         let mut rustc_args = vec![String::from("rustc")];
-        rustc_args.append(&mut rustc_default_flags());
+        rustc_args.append(&mut default_args);
         rustc_args.append(
             &mut args
                 .values_of("rustc-options")
@@ -110,6 +113,8 @@ fn main() -> Result<(), &'static str> {
         let sysroot= sysroot_path(args.value_of("sysroot")).unwrap();
         rustc_args.push(String::from("--sysroot"));
         rustc_args.push(sysroot.to_string_lossy().to_string());
+        tracing::info!(?rustc_args, "Compile");
+        println!("Compile {:?}", rustc_args);
         compile(rustc_args)
     }
 }
@@ -129,7 +134,6 @@ pub fn get_codegen_backend(_config: &config::Options) -> Box<dyn CodegenBackend>
 }
 
 fn compile(args: Vec<String>) -> Result<(), &'static str> {
-    println!("{:?}", args.join(" "));
     init_env_logger("RMC_LOG");
     let mut callbacks = RmcCallbacks {};
     install_ice_hook();
@@ -149,29 +153,20 @@ fn toolchain_path(home: Option<String>, toolchain: Option<String>) -> Option<Pat
 
 /// Get the sysroot, following the order bellow:
 /// - "--sysroot" command line argument
+/// - compile-time environment
+///    - $SYSROOT
+///    - $RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN
+///
+/// We currently don't support:
 /// - runtime environment
 ///    - $SYSROOT
 ///    - $RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN
 /// - rustc --sysroot
-/// - compile-time environment
-///    - $SYSROOT
-///    - $RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN
-/// This is similar to the behavior of other tools such as clippy and miri.
+///
+/// since we rely on specific nightly version of rustc which may not be compatible with the workspace rustc.
 fn sysroot_path(sysroot_arg: Option<&str>) -> Option<PathBuf> {
     let path = sysroot_arg
         .map(PathBuf::from)
-        .or_else(|| std::env::var("SYSROOT").ok().map(PathBuf::from))
-        .or_else(|| toolchain_path(std::env::var("RUSTUP_HOME").ok(), std::env::var
-            ("RUSTUP_TOOLCHAIN").ok()))
-        .or_else(|| {
-            Command::new("rustc")
-                .arg("--print")
-                .arg("sysroot")
-                .output()
-                .ok()
-                .and_then(|out| String::from_utf8(out.stdout).ok())
-                .map(|s| PathBuf::from(s.trim()))
-        })
         .or_else(|| std::option_env!("SYSROOT").map(PathBuf::from))
         .or_else(|| {
             let home = std::option_env!("RUSTUP_HOME");
