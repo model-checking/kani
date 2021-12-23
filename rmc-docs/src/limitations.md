@@ -138,6 +138,19 @@ concurrent programs continues to be an open research problem. In particular,
 support for concurrent verification in CBMC is limited and RMC emits a warning
 whenever it encounters concurrent code.
 
+### Not inlined standard library functions
+
+At present, RMC is able to link in functions from the standard library but the
+generated code will not contain them unless they are inlined. This results in
+verification failures if the code under verification, for example, includes a
+`println!` statement.
+
+We have done some experiments to embed the standard library into the generated
+code, but this causes verification times to increase significantly. As of now,
+we have not been able to find a simple solution for [this
+issue](https://github.com/model-checking/rmc/issues/581), but we have some ideas
+for future work in this direction.
+
 ### Advanced features
 
 Advanced features (traits, types, etc.) from Rust have proven to particularly
