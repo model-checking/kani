@@ -26,6 +26,8 @@ fn rustc_default_flags(lib_path: &str) -> Vec<String> {
         "-C",
         "panic=abort",
         "-Z",
+        "panic_abort_tests=yes",
+        "-Z",
         "trim-diagnostic-paths=no",
         "-Z",
         "human_readable_cgu_names",
@@ -60,7 +62,7 @@ fn main() -> Result<(), &'static str> {
                 .value_name("FOLDER_PATH")
                 .help("Sets the path to locate the rmc library.")
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("symbol-table-passes")
@@ -69,7 +71,7 @@ fn main() -> Result<(), &'static str> {
                 .help("Transformations to perform to the symbol table after it has been generated.")
                 .takes_value(true)
                 .use_delimiter(true)
-                .multiple(true)
+                .multiple(true),
         )
         .arg(
             Arg::with_name("restrict-vtable-fn-ptrs")
@@ -110,7 +112,7 @@ fn main() -> Result<(), &'static str> {
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(),
         );
-        let sysroot= sysroot_path(args.value_of("sysroot")).unwrap();
+        let sysroot = sysroot_path(args.value_of("sysroot")).unwrap();
         rustc_args.push(String::from("--sysroot"));
         rustc_args.push(sysroot.to_string_lossy().to_string());
         tracing::info!(?rustc_args, "Compile");
@@ -144,9 +146,10 @@ fn compile(args: Vec<String>) -> Result<(), &'static str> {
 
 /// Try to generate the rustup toolchain path.
 fn toolchain_path(home: Option<String>, toolchain: Option<String>) -> Option<PathBuf> {
-    match(home, toolchain) {
-        (Some(home), Some(toolchain)) =>
-            Some([home, String::from("toolchains"), toolchain].iter().collect::<PathBuf>()),
+    match (home, toolchain) {
+        (Some(home), Some(toolchain)) => {
+            Some([home, String::from("toolchains"), toolchain].iter().collect::<PathBuf>())
+        }
         _ => None,
     }
 }
@@ -172,8 +175,7 @@ fn sysroot_path(sysroot_arg: Option<&str>) -> Option<PathBuf> {
             let home = std::option_env!("RUSTUP_HOME");
             let toolchain = std::option_env!("RUSTUP_TOOLCHAIN");
             toolchain_path(home.map(String::from), toolchain.map(String::from))
-        }
-        );
+        });
     tracing::debug!(?path, "Sysroot path.");
     path
 }

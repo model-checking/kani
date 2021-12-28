@@ -20,9 +20,11 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Formatting check
 ./x.py fmt --check
 
-# Build RMC and RMC library
+# We still need this because it will build the tools we use
 ./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-./scripts/setup/build_rmc_lib.sh
+
+# Build RMC compiler and RMC library
+(cd "${RMC_DIR}/src/rmc-compiler"; cargo clean; cargo build)
 
 # Standalone rmc tests, expected tests, and cargo tests
 ./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs rmc-fixme

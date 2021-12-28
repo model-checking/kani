@@ -3331,7 +3331,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rmc",
- "rmc_macros",
  "rustc_codegen_rmc",
  "tracing",
 ]
