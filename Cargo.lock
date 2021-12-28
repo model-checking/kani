@@ -187,6 +187,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bookrunner"
+version = "0.1.0"
+dependencies = [
+ "Inflector",
+ "pulldown-cmark",
+ "rustdoc",
+ "serde",
+ "serde_json",
+ "toml",
+ "walkdir",
+]
+
+[[package]]
 name = "bootstrap"
 version = "0.0.0"
 dependencies = [
@@ -985,19 +998,6 @@ dependencies = [
  "pkg-config",
  "vcpkg",
  "winapi",
-]
-
-[[package]]
-name = "dashboard"
-version = "0.1.0"
-dependencies = [
- "Inflector",
- "pulldown-cmark",
- "rustdoc",
- "serde",
- "serde_json",
- "toml",
- "walkdir",
 ]
 
 [[package]]

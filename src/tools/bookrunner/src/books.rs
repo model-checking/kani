@@ -6,7 +6,7 @@
 extern crate rustc_span;
 
 use crate::{
-    dashboard,
+    bookrunner,
     litani::{Litani, LitaniPipeline, LitaniRun},
     util::{self, FailStep, TestProps},
 };
@@ -99,7 +99,7 @@ impl Book {
         let parser = Parser::new(&summary).skip(n);
         // Set `self.name` as the root of the hierarchical path.
         let mut hierarchy_path: PathBuf =
-            ["src", "test", "dashboard", "books", self.name.as_str()].iter().collect();
+            ["src", "test", "bookrunner", "books", self.name.as_str()].iter().collect();
         let mut prev_event_is_text_or_code = false;
         for event in parser {
             match event {
@@ -231,7 +231,7 @@ fn setup_reference_book() -> Book {
         toml_path: ["src", "doc", "reference", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
             ["src", "doc", "reference", "src", "introduction.md"].iter().collect(),
-            ["src", "test", "dashboard", "books", "The Rust Reference", "Introduction"]
+            ["src", "test", "bookrunner", "books", "The Rust Reference", "Introduction"]
                 .iter()
                 .collect(),
         )]),
@@ -252,7 +252,7 @@ fn setup_nomicon_book() -> Book {
         toml_path: ["src", "doc", "nomicon", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
             ["src", "doc", "nomicon", "src", "intro.md"].iter().collect(),
-            ["src", "test", "dashboard", "books", "The Rustonomicon", "Introduction"]
+            ["src", "test", "bookrunner", "books", "The Rustonomicon", "Introduction"]
                 .iter()
                 .collect(),
         )]),
@@ -265,7 +265,7 @@ fn setup_nomicon_book() -> Book {
 fn setup_unstable_book() -> Book {
     let directory_data = DirectoryData {
         src: ["src", "doc", "unstable-book", "src"].iter().collect(),
-        dest: ["src", "test", "dashboard", "books", "The Unstable Book"].iter().collect(),
+        dest: ["src", "test", "bookrunner", "books", "The Unstable Book"].iter().collect(),
     };
     Book {
         name: "The Rust Unstable Book".to_string(),
@@ -291,7 +291,7 @@ fn setup_rust_by_example_book() -> Book {
         toml_path: ["src", "doc", "rust-by-example", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
             ["src", "doc", "rust-by-example", "src", "index.md"].iter().collect(),
-            ["src", "test", "dashboard", "books", "Rust by Example", "Introduction"]
+            ["src", "test", "bookrunner", "books", "Rust by Example", "Introduction"]
                 .iter()
                 .collect(),
         )]),
@@ -323,13 +323,13 @@ impl Tester for Examples {
 
 /// Applies the diff corresponding to `example` with parent `path` (if it exists).
 fn apply_diff(path: &Path, example: &mut Example, config_paths: &mut HashSet<PathBuf>) {
-    let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
-    let test_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
+    let config_dir: PathBuf = ["src", "tools", "bookrunner", "configs"].iter().collect();
+    let test_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
     // `path` has the following form:
-    // `src/test/dashboard/books/<hierarchy>
+    // `src/test/bookrunner/books/<hierarchy>
     // If `example` has a custom diff file, the path to the diff file will have
     // the following form:
-    // `src/tools/dashboard/configs/books/<hierarchy>/<example.line>.diff`
+    // `src/tools/bookrunner/configs/books/<hierarchy>/<example.line>.diff`
     // where <hierarchy> is the same for both paths.
     let mut diff_path = config_dir.join(path.strip_prefix(&test_dir).unwrap());
     diff_path.extend_one(format!("{}.diff", example.line));
@@ -359,13 +359,13 @@ fn apply_diff(path: &Path, example: &mut Example, config_paths: &mut HashSet<Pat
 
 /// Prepends example properties in `example.config` to the code in `example.code`.
 fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<PathBuf>) {
-    let config_dir: PathBuf = ["src", "tools", "dashboard", "configs"].iter().collect();
-    let test_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
+    let config_dir: PathBuf = ["src", "tools", "bookrunner", "configs"].iter().collect();
+    let test_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
     // `path` has the following form:
-    // `src/test/dashboard/books/<hierarchy>
+    // `src/test/bookrunner/books/<hierarchy>
     // If `example` has a custom props file, the path to the props file will
     // have the following form:
-    // `src/tools/dashboard/configs/books/<hierarchy>/<example.line>.props`
+    // `src/tools/bookrunner/configs/books/<hierarchy>/<example.line>.props`
     // where <hierarchy> is the same for both paths.
     let mut props_path = config_dir.join(path.strip_prefix(&test_dir).unwrap());
     props_path.extend_one(format!("{}.props", example.line));
@@ -428,7 +428,7 @@ fn extract(
 /// Returns a set of paths to the config files for examples in the Rust books.
 fn get_config_paths(book_name: &str) -> HashSet<PathBuf> {
     let config_dir: PathBuf =
-        ["src", "tools", "dashboard", "configs", "books", book_name].iter().collect();
+        ["src", "tools", "bookrunner", "configs", "books", book_name].iter().collect();
     let mut config_paths = HashSet::new();
     if config_dir.exists() {
         for entry in WalkDir::new(config_dir) {
@@ -451,10 +451,10 @@ fn paths_to_string(paths: HashSet<PathBuf>) -> String {
 }
 
 /// Creates a new [`Tree`] from `path`, and a test `result`.
-fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
+fn tree_from_path(mut path: Vec<String>, result: bool) -> bookrunner::Tree {
     assert!(path.len() > 0, "Error: `path` must contain at least 1 element.");
-    let mut tree = dashboard::Tree::new(
-        dashboard::Node::new(
+    let mut tree = bookrunner::Tree::new(
+        bookrunner::Node::new(
             path.pop().unwrap(),
             if result { 1 } else { 0 },
             if result { 0 } else { 1 },
@@ -462,25 +462,25 @@ fn tree_from_path(mut path: Vec<String>, result: bool) -> dashboard::Tree {
         vec![],
     );
     for _ in 0..path.len() {
-        tree = dashboard::Tree::new(
-            dashboard::Node::new(path.pop().unwrap(), tree.data.num_pass, tree.data.num_fail),
+        tree = bookrunner::Tree::new(
+            bookrunner::Node::new(path.pop().unwrap(), tree.data.num_pass, tree.data.num_fail),
             vec![tree],
         );
     }
     tree
 }
 
-/// Parses a `litani` run and generates a dashboard tree from it
-fn parse_litani_output(path: &Path) -> dashboard::Tree {
+/// Parses a `litani` run and generates a bookrunner tree from it
+fn parse_litani_output(path: &Path) -> bookrunner::Tree {
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
     let run: LitaniRun = serde_json::from_reader(reader).unwrap();
     let mut tests =
-        dashboard::Tree::new(dashboard::Node::new(String::from("dashboard"), 0, 0), vec![]);
+        bookrunner::Tree::new(bookrunner::Node::new(String::from("bookrunner"), 0, 0), vec![]);
     let pipelines = run.get_pipelines();
     for pipeline in pipelines {
         let (ns, l) = parse_log_line(&pipeline);
-        tests = dashboard::Tree::merge(tests, tree_from_path(ns, l)).unwrap();
+        tests = bookrunner::Tree::merge(tests, tree_from_path(ns, l)).unwrap();
     }
     tests
 }
@@ -491,38 +491,38 @@ fn parse_log_line(pipeline: &LitaniPipeline) -> (Vec<String>, bool) {
     let l = pipeline.get_status();
     let name = pipeline.get_name();
     let mut ns: Vec<String> = name.split(&['/', '.'][..]).map(String::from).collect();
-    // Remove unnecessary items from the path until "dashboard"
-    let dash_index = ns.iter().position(|item| item == "dashboard").unwrap();
+    // Remove unnecessary items from the path until "bookrunner"
+    let dash_index = ns.iter().position(|item| item == "bookrunner").unwrap();
     ns.drain(..dash_index);
     // Remove unnecessary "rs" suffix.
     ns.pop();
     (ns, l)
 }
 
-/// Format and write a text version of the dashboard
-fn generate_text_dashboard(dashboard: dashboard::Tree, path: &Path) {
-    let dashboard_str = format!(
+/// Format and write a text version of the bookrunner report
+fn generate_text_bookrunner(bookrunner: bookrunner::Tree, path: &Path) {
+    let bookrunner_str = format!(
         "# of tests: {}\t✔️ {}\t❌ {}\n{}",
-        dashboard.data.num_pass + dashboard.data.num_fail,
-        dashboard.data.num_pass,
-        dashboard.data.num_fail,
-        dashboard
+        bookrunner.data.num_pass + bookrunner.data.num_fail,
+        bookrunner.data.num_pass,
+        bookrunner.data.num_fail,
+        bookrunner
     );
-    fs::write(&path, dashboard_str).expect("Error: Unable to write dashboard results");
+    fs::write(&path, bookrunner_str).expect("Error: Unable to write bookrunner results");
 }
 
 /// Runs examples using Litani build.
 fn litani_run_tests() {
     let output_prefix: PathBuf = ["build", "output"].iter().collect();
     let output_symlink: PathBuf = output_prefix.join("latest");
-    let dashboard_dir: PathBuf = ["src", "test", "dashboard"].iter().collect();
+    let bookrunner_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
     let stage_names = ["check", "codegen", "verification"];
 
     util::add_rmc_and_litani_to_path();
-    let mut litani = Litani::init("RMC", &stage_names, &output_prefix, &output_symlink);
+    let mut litani = Litani::init("Book Runner", &stage_names, &output_prefix, &output_symlink);
 
-    // Run all tests under the `src/test/dashboard` directory.
-    for entry in WalkDir::new(dashboard_dir) {
+    // Run all tests under the `src/test/bookrunner` directory.
+    for entry in WalkDir::new(bookrunner_dir) {
         let entry = entry.unwrap().into_path();
         if entry.is_file() {
             // Ensure that we parse only Rust files by checking their extension
@@ -537,11 +537,11 @@ fn litani_run_tests() {
 }
 
 /// Extracts examples from the Rust books, run them through RMC, and displays
-/// their results in a terminal dashboard.
-pub fn generate_dashboard() {
+/// their results in a HTML webpage.
+pub fn generate_run() {
     let litani_log: PathBuf = ["build", "output", "latest", "run.json"].iter().collect();
     let text_dash: PathBuf =
-        ["build", "output", "latest", "html", "dashboard.txt"].iter().collect();
+        ["build", "output", "latest", "html", "bookrunner.txt"].iter().collect();
     // Set up books
     let mut books: Vec<Book> = vec![
         setup_reference_book(),
@@ -556,10 +556,10 @@ pub fn generate_dashboard() {
         // parsed hierarchy
         book.extract_examples();
     }
-    // Generate Litani's HTML dashboard
+    // Generate Litani's HTML bookrunner
     litani_run_tests();
     // Parse Litani's output
-    let dashboard = parse_litani_output(&litani_log);
-    // Generate text dashboard
-    generate_text_dashboard(dashboard, &text_dash);
+    let bookrunner = parse_litani_output(&litani_log);
+    // Generate text version
+    generate_text_bookrunner(bookrunner, &text_dash);
 }
