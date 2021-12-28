@@ -32,7 +32,7 @@ if [ -d $HTML_DIR ]; then
     python $RMC_DIR/scripts/ci/update_dashboard.py src/bookrunner/index.html new_index.html
     mv new_index.html src/bookrunner/index.html
 
-    rm src/bookrunner/run.json
+    # rm src/bookrunner/run.json
 else
     echo "WARNING: Could not find the latest bookrunner run."
 fi
