@@ -8,4 +8,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rmc_macros = { path = "../rmc_macros" }
+rmc_macros = { path = "../rmc_macros"}
+
+[features]
+rmc = ["rmc_macros/rmc"]
