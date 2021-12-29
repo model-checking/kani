@@ -25,6 +25,7 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Unit tests
 (cd src/rmc-compiler/cbmc; cargo test)
+(cd src/rmc-compiler; cargo test)
 
 # Standalone rmc tests, expected tests, and cargo tests
 ./x.py build -i src/tools/compiletest --stage 0

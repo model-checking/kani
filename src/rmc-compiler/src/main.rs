@@ -13,8 +13,8 @@ extern crate rustc_driver;
 extern crate rustc_session;
 
 use clap::{
-    app_from_crate, crate_authors, crate_description, crate_name, crate_version, AppSettings, Arg,
-    ArgMatches,
+    app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, AppSettings,
+    Arg, ArgMatches,
 };
 use rmc_queries::{QueryDb, UserInput};
 use rustc_driver::{init_env_logger, install_ice_hook, Callbacks, RunCompiler};
@@ -50,7 +50,7 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     args.iter().map(|s| s.to_string()).collect()
 }
 
-fn parse_args() -> ArgMatches {
+fn parser<'a, 'b>() -> App<'a, 'b> {
     app_from_crate!()
         .setting(AppSettings::TrailingVarArg) // This allow us to fwd commands to rustc.
         .setting(clap::AppSettings::AllowLeadingHyphen)
@@ -60,12 +60,12 @@ fn parse_args() -> ArgMatches {
                 .long("--rmc-lib")
                 .value_name("FOLDER_PATH")
                 .help("Sets the path to locate the rmc library.")
-                .takes_value(true)
-                .required(true),
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("goto-c")
                 .long("--goto-c")
+                .requires("rmc-lib")
                 .help("Enables compilation to goto-c intermediate representation."),
         )
         .arg(
@@ -104,29 +104,29 @@ fn parse_args() -> ArgMatches {
                 .multiple(true)
                 .takes_value(true),
         )
-        .get_matches()
 }
 
 /// Main function. Configure arguments and run the compiler.
 fn main() -> Result<(), &'static str> {
-    let args = parse_args();
+    let matches = parser().get_matches();
 
     // Initialize the logger.
     init_env_logger("RMC_LOG");
 
     // Generate rustc args.
-    let rustc_args = generate_rustc_args(&args);
+    let rustc_args = generate_rustc_args(&matches);
 
     // Configure queries.
     let mut queries = QueryDb::default();
-    queries.set_symbol_table_passes(args.values_of_lossy("symbol-table-passes").unwrap_or(vec![]));
-    queries.set_emit_vtable_restrictions(args.is_present("restrict-vtable-fn-ptrs"));
+    queries
+        .set_symbol_table_passes(matches.values_of_lossy("symbol-table-passes").unwrap_or(vec![]));
+    queries.set_emit_vtable_restrictions(matches.is_present("restrict-vtable-fn-ptrs"));
 
     // Configure and run compiler.
     let mut callbacks = RmcCallbacks {};
     install_ice_hook();
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
-    if args.is_present("goto-c") {
+    if matches.is_present("goto-c") {
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
             rustc_codegen_rmc::GotocCodegenBackend::new(&Rc::new(queries))
         })));
@@ -145,7 +145,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     let mut gotoc_args = rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap());
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present("goto-c") {
-        rustc_args.append(gotoc_args);
+        rustc_args.append(&mut gotoc_args);
     }
 
     if args.is_present("rustc-version") {
@@ -200,4 +200,28 @@ fn sysroot_path(sysroot_arg: Option<&str>) -> Option<PathBuf> {
         });
     tracing::debug!(?path, "Sysroot path.");
     path
+}
+
+#[cfg(test)]
+mod parser_test {
+    use super::*;
+
+    #[test]
+    fn test_rustc_version() {
+        let args = vec!["rmc-compiler", "-V"];
+        let matches = parser().get_matches_from(args);
+        assert!(matches.is_present("rustc-version"));
+    }
+
+    #[test]
+    fn test_rmc_lib_required() {
+        let args = vec!["rmc-compiler", "--goto-c"];
+        let result = parser().get_matches_from_safe(args);
+        assert!(result.is_err());
+
+        let args = vec!["rmc-compiler", "--goto-c", "--rmc-lib", "some/path"];
+        let matches = parser().get_matches_from(args);
+        assert!(matches.is_present("goto-c"));
+        assert_eq!(matches.value_of("rmc-lib"), Some("some/path"));
+    }
 }
