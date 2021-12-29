@@ -9,7 +9,7 @@ Please report security concerns to us on the
 -->
 
 <!--
-Thank you for requesting an RMC improvment!
+Thank you for requesting an RMC improvement!
 Please include the following information if it applies to your case:
 -->
 **Requested improvement:**
