@@ -11,14 +11,14 @@ def update_path(run, path):
 
     By default, the path to an example follows this pattern:
 
-    `src/test/dashboard/books/<book>/<chapter>/<section>/<subsection>/<line>.rs`
+    `src/test/bookrunner/books/<book>/<chapter>/<section>/<subsection>/<line>.rs`
 
     However, only the first part is shown since these paths are enclosed
     in paragraph markers (`<p>` and `</p>`). So they are often rendered as:
 
-    `src/test/dashboard/books/<book>/<chapter>/...
+    `src/test/bookrunner/books/<book>/<chapter>/...
 
-    This update removes `src/test/dashboard/books/` from the path (common to
+    This update removes `src/test/bookrunner/books/` from the path (common to
     all examples) and transforms them into anchor elements with a link to
     the example, so the path to the example is shown as:
 
@@ -34,7 +34,7 @@ def update_path(run, path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Produces an updated HTML dashboard file from the '
+        description='Produces an updated HTML report file from the '
                     'contents of an HTML file generated with `litani`')
     parser.add_argument('input')
     parser.add_argument('output')

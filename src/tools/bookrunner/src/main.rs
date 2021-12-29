@@ -3,11 +3,11 @@
 #![feature(extend_one)]
 #![feature(rustc_private)]
 
+mod bookrunner;
 mod books;
-mod dashboard;
 mod litani;
 mod util;
 
 fn main() {
-    books::generate_dashboard();
+    books::generate_run();
 }

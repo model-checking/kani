@@ -381,7 +381,7 @@ impl<'a> Builder<'a> {
                 tool::Linkchecker,
                 tool::CargoTest,
                 tool::Compiletest,
-                tool::Dashboard,
+                tool::BookRunner,
                 tool::RemoteTestServer,
                 tool::RemoteTestClient,
                 tool::RustInstaller,
@@ -471,7 +471,7 @@ impl<'a> Builder<'a> {
                 test::SMACK,
                 test::CargoRMC,
                 test::Expected,
-                test::Dashboard,
+                test::BookRunner,
                 test::Stub,
                 test::RmcDocs,
                 test::RmcFixme,
@@ -538,7 +538,7 @@ impl<'a> Builder<'a> {
                 install::Rustc
             ),
             Kind::Run => describe!(
-                run::Dashboard,
+                run::BookRunner,
                 run::ExpandYamlAnchors,
                 run::BuildManifest,
                 run::BumpStage0
