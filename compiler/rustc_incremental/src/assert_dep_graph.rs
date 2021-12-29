@@ -103,7 +103,7 @@ struct IfThisChanged<'tcx> {
     then_this_would_need: Targets,
 }
 
-impl IfThisChanged<'tcx> {
+impl<'tcx> IfThisChanged<'tcx> {
     fn argument(&self, attr: &ast::Attribute) -> Option<Symbol> {
         let mut value = None;
         for list_item in attr.meta_item_list().unwrap_or_default() {
@@ -131,7 +131,7 @@ impl IfThisChanged<'tcx> {
                         DepNode::from_def_path_hash(self.tcx, def_path_hash, DepKind::hir_owner)
                     }
                     Some(n) => {
-                        match DepNode::from_label_string(self.tcx, &n.as_str(), def_path_hash) {
+                        match DepNode::from_label_string(self.tcx, n.as_str(), def_path_hash) {
                             Ok(n) => n,
                             Err(()) => {
                                 self.tcx.sess.span_fatal(
@@ -147,7 +147,7 @@ impl IfThisChanged<'tcx> {
                 let dep_node_interned = self.argument(attr);
                 let dep_node = match dep_node_interned {
                     Some(n) => {
-                        match DepNode::from_label_string(self.tcx, &n.as_str(), def_path_hash) {
+                        match DepNode::from_label_string(self.tcx, n.as_str(), def_path_hash) {
                             Ok(n) => n,
                             Err(()) => {
                                 self.tcx.sess.span_fatal(
@@ -172,7 +172,7 @@ impl IfThisChanged<'tcx> {
     }
 }
 
-impl Visitor<'tcx> for IfThisChanged<'tcx> {
+impl<'tcx> Visitor<'tcx> for IfThisChanged<'tcx> {
     type Map = Map<'tcx>;
 
     fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {

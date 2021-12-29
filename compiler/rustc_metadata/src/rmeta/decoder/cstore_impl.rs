@@ -17,7 +17,7 @@ use rustc_session::utils::NativeLibKind;
 use rustc_session::{Session, StableCrateId};
 use rustc_span::hygiene::{ExpnHash, ExpnId};
 use rustc_span::source_map::{Span, Spanned};
-use rustc_span::symbol::Symbol;
+use rustc_span::symbol::{kw, Symbol};
 
 use rustc_data_structures::sync::Lrc;
 use smallvec::SmallVec;
@@ -83,7 +83,7 @@ impl IntoArgs for (CrateNum, DefId) {
     }
 }
 
-impl IntoArgs for ty::InstanceDef<'tcx> {
+impl<'tcx> IntoArgs for ty::InstanceDef<'tcx> {
     fn into_args(self) -> (DefId, DefId) {
         (self.def_id(), self.def_id())
     }
@@ -295,6 +295,10 @@ pub fn provide(providers: &mut Providers) {
             use std::collections::vec_deque::VecDeque;
 
             let mut visible_parent_map: DefIdMap<DefId> = Default::default();
+            // This is a secondary visible_parent_map, storing the DefId of parents that re-export
+            // the child as `_`. Since we prefer parents that don't do this, merge this map at the
+            // end, only if we're missing any keys from the former.
+            let mut fallback_map: DefIdMap<DefId> = Default::default();
 
             // Issue 46112: We want the map to prefer the shortest
             // paths when reporting the path to an item. Therefore we
@@ -317,12 +321,17 @@ pub fn provide(providers: &mut Providers) {
                 bfs_queue.push_back(DefId { krate: cnum, index: CRATE_DEF_INDEX });
             }
 
-            let mut add_child = |bfs_queue: &mut VecDeque<_>, child: &Export, parent: DefId| {
-                if !child.vis.is_public() {
+            let mut add_child = |bfs_queue: &mut VecDeque<_>, export: &Export, parent: DefId| {
+                if !export.vis.is_public() {
                     return;
                 }
 
-                if let Some(child) = child.res.opt_def_id() {
+                if let Some(child) = export.res.opt_def_id() {
+                    if export.ident.name == kw::Underscore {
+                        fallback_map.insert(child, parent);
+                        return;
+                    }
+
                     match visible_parent_map.entry(child) {
                         Entry::Occupied(mut entry) => {
                             // If `child` is defined in crate `cnum`, ensure
@@ -345,6 +354,12 @@ pub fn provide(providers: &mut Providers) {
                 }
             }
 
+            // Fill in any missing entries with the (less preferable) path ending in `::_`.
+            // We still use this path in a diagnostic that suggests importing `::*`.
+            for (child, parent) in fallback_map {
+                visible_parent_map.entry(child).or_insert(parent);
+            }
+
             visible_parent_map
         },
 
@@ -357,7 +372,7 @@ pub fn provide(providers: &mut Providers) {
             tcx.arena
                 .alloc_slice(&CStore::from_tcx(tcx).crate_dependencies_in_postorder(LOCAL_CRATE))
         },
-        crates: |tcx, ()| tcx.arena.alloc_slice(&CStore::from_tcx(tcx).crates_untracked()),
+        crates: |tcx, ()| tcx.arena.alloc_from_iter(CStore::from_tcx(tcx).crates_untracked()),
 
         ..*providers
     };
@@ -373,9 +388,7 @@ impl CStore {
     }
 
     pub fn ctor_def_id_and_kind_untracked(&self, def: DefId) -> Option<(DefId, CtorKind)> {
-        self.get_crate_data(def.krate).get_ctor_def_id(def.index).map(|ctor_def_id| {
-            (ctor_def_id, self.get_crate_data(def.krate).get_ctor_kind(def.index))
-        })
+        self.get_crate_data(def.krate).get_ctor_def_id_and_kind(def.index)
     }
 
     pub fn visibility_untracked(&self, def: DefId) -> Visibility {
@@ -402,16 +415,12 @@ impl CStore {
 
         let span = data.get_span(id.index, sess);
 
-        let attrs = data.get_item_attrs(id.index, sess).collect();
-
-        let ident = data.item_ident(id.index, sess);
-
         LoadedMacro::MacroDef(
             ast::Item {
-                ident,
+                ident: data.item_ident(id.index, sess),
                 id: ast::DUMMY_NODE_ID,
                 span,
-                attrs,
+                attrs: data.get_item_attrs(id.index, sess).collect(),
                 kind: ast::ItemKind::MacroDef(data.get_macro(id.index, sess)),
                 vis: ast::Visibility {
                     span: span.shrink_to_lo(),
@@ -424,8 +433,8 @@ impl CStore {
         )
     }
 
-    pub fn associated_item_cloned_untracked(&self, def: DefId, sess: &Session) -> ty::AssocItem {
-        self.get_crate_data(def.krate).get_associated_item(def.index, sess)
+    pub fn fn_has_self_parameter_untracked(&self, def: DefId) -> bool {
+        self.get_crate_data(def.krate).get_fn_has_self_parameter(def.index)
     }
 
     pub fn crate_source_untracked(&self, cnum: CrateNum) -> CrateSource {
@@ -440,10 +449,8 @@ impl CStore {
         self.get_crate_data(def.krate).def_kind(def.index)
     }
 
-    pub fn crates_untracked(&self) -> Vec<CrateNum> {
-        let mut result = vec![];
-        self.iter_crate_data(|cnum, _| result.push(cnum));
-        result
+    pub fn crates_untracked(&self) -> impl Iterator<Item = CrateNum> + '_ {
+        self.iter_crate_data().map(|(cnum, _)| cnum)
     }
 
     pub fn item_generics_num_lifetimes(&self, def_id: DefId, sess: &Session) -> usize {

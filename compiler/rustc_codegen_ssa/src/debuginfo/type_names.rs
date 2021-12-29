@@ -376,7 +376,7 @@ fn push_debuginfo_type_name<'tcx>(
     // format (natvis) is able to understand enums and render the active variant correctly in the
     // debugger. For more information, look in `src/etc/natvis/intrinsic.natvis` and
     // `EnumMemberDescriptionFactor::create_member_descriptions`.
-    fn msvc_enum_fallback(
+    fn msvc_enum_fallback<'tcx>(
         tcx: TyCtxt<'tcx>,
         ty: Ty<'tcx>,
         def: &AdtDef,
@@ -496,7 +496,7 @@ pub fn compute_debuginfo_vtable_name<'tcx>(
     vtable_name
 }
 
-pub fn push_item_name(tcx: TyCtxt<'tcx>, def_id: DefId, qualified: bool, output: &mut String) {
+pub fn push_item_name(tcx: TyCtxt<'_>, def_id: DefId, qualified: bool, output: &mut String) {
     let def_key = tcx.def_key(def_id);
     if qualified {
         if let Some(parent) = def_key.parent {
@@ -509,14 +509,14 @@ pub fn push_item_name(tcx: TyCtxt<'tcx>, def_id: DefId, qualified: bool, output:
 }
 
 fn push_unqualified_item_name(
-    tcx: TyCtxt<'tcx>,
+    tcx: TyCtxt<'_>,
     def_id: DefId,
     disambiguated_data: DisambiguatedDefPathData,
     output: &mut String,
 ) {
     match disambiguated_data.data {
         DefPathData::CrateRoot => {
-            output.push_str(&tcx.crate_name(def_id.krate).as_str());
+            output.push_str(tcx.crate_name(def_id.krate).as_str());
         }
         DefPathData::ClosureExpr if tcx.generator_kind(def_id).is_some() => {
             // Generators look like closures, but we want to treat them differently
@@ -529,7 +529,7 @@ fn push_unqualified_item_name(
         }
         _ => match disambiguated_data.data.name() {
             DefPathDataName::Named(name) => {
-                output.push_str(&name.as_str());
+                output.push_str(name.as_str());
             }
             DefPathDataName::Anon { namespace } => {
                 if cpp_like_names(tcx) {

@@ -260,7 +260,7 @@ impl<'a, 'tcx> PrintVisitor<'a, 'tcx> {
     }
 
     fn qpath(&self, qpath: &Binding<&QPath<'_>>) {
-        if let QPath::LangItem(lang_item, _) = *qpath.value {
+        if let QPath::LangItem(lang_item, ..) = *qpath.value {
             out!("if matches!({qpath}, QPath::LangItem(LangItem::{lang_item:?}, _));");
         } else {
             out!("if match_qpath({qpath}, &[{}]);", path_to_string(qpath.value));
@@ -373,11 +373,18 @@ impl<'a, 'tcx> PrintVisitor<'a, 'tcx> {
         }
 
         match expr.value.kind {
-            ExprKind::Let(pat, expr, _) => {
-                bind!(self, pat, expr);
-                kind!("Let({pat}, {expr}, _)");
-                self.pat(pat);
-                self.expr(expr);
+            ExprKind::Let(let_expr) => {
+                bind!(self, let_expr);
+                kind!("Let({let_expr})");
+                self.pat(field!(let_expr.pat));
+                // Does what ExprKind::Cast does, only adds a clause for the type
+                // if it's a path
+                if let Some(TyKind::Path(ref qpath)) = let_expr.value.ty.as_ref().map(|ty| &ty.kind) {
+                    bind!(self, qpath);
+                    out!("if let TyKind::Path(ref {qpath}) = {let_expr}.ty.kind;");
+                    self.qpath(qpath);
+                }
+                self.expr(field!(let_expr.init));
             },
             ExprKind::Box(inner) => {
                 bind!(self, inner);

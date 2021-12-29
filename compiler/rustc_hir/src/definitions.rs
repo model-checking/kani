@@ -101,7 +101,11 @@ impl DefPathTable {
 pub struct Definitions {
     table: DefPathTable,
 
-    // FIXME(eddyb) ideally all `LocalDefId`s would be HIR owners.
+    /// Only [`LocalDefId`]s for items and item-like are HIR owners.
+    /// The associated `HirId` has a `local_id` of `0`.
+    /// Generic parameters and closures are also assigned a `LocalDefId` but are not HIR owners.
+    /// Their `HirId`s are defined by their position while lowering the enclosing owner.
+    // FIXME(cjgillot) Some `LocalDefId`s from `use` items are dropped during lowering and lack a `HirId`.
     pub(super) def_id_to_hir_id: IndexVec<LocalDefId, Option<hir::HirId>>,
     /// The reverse mapping of `def_id_to_hir_id`.
     pub(super) hir_id_to_def_id: FxHashMap<hir::HirId, LocalDefId>,
@@ -173,7 +177,7 @@ impl DisambiguatedDefPathData {
                 if verbose && self.disambiguator != 0 {
                     write!(writer, "{}#{}", name, self.disambiguator)
                 } else {
-                    writer.write_str(&name.as_str())
+                    writer.write_str(name.as_str())
                 }
             }
             DefPathDataName::Anon { namespace } => {
@@ -267,6 +271,8 @@ pub enum DefPathData {
     // Different kinds of items and item-like things:
     /// An impl.
     Impl,
+    /// An `extern` block.
+    ForeignMod,
     /// Something in the type namespace.
     TypeNs(Symbol),
     /// Something in the value namespace.
@@ -469,7 +475,9 @@ impl DefPathData {
         match *self {
             TypeNs(name) | ValueNs(name) | MacroNs(name) | LifetimeNs(name) => Some(name),
 
-            Impl | CrateRoot | Misc | ClosureExpr | Ctor | AnonConst | ImplTrait => None,
+            Impl | ForeignMod | CrateRoot | Misc | ClosureExpr | Ctor | AnonConst | ImplTrait => {
+                None
+            }
         }
     }
 
@@ -482,6 +490,7 @@ impl DefPathData {
             // Note that this does not show up in user print-outs.
             CrateRoot => DefPathDataName::Anon { namespace: kw::Crate },
             Impl => DefPathDataName::Anon { namespace: kw::Impl },
+            ForeignMod => DefPathDataName::Anon { namespace: kw::Extern },
             Misc => DefPathDataName::Anon { namespace: sym::misc },
             ClosureExpr => DefPathDataName::Anon { namespace: sym::closure },
             Ctor => DefPathDataName::Anon { namespace: sym::constructor },
@@ -494,7 +503,7 @@ impl DefPathData {
 impl fmt::Display for DefPathData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.name() {
-            DefPathDataName::Named(name) => f.write_str(&name.as_str()),
+            DefPathDataName::Named(name) => f.write_str(name.as_str()),
             // FIXME(#70334): this will generate legacy {{closure}}, {{impl}}, etc
             DefPathDataName::Anon { namespace } => write!(f, "{{{{{}}}}}", namespace),
         }

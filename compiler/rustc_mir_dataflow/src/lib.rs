@@ -3,8 +3,6 @@
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(exact_size_is_empty)]
-#![feature(in_band_lifetimes)]
-#![feature(iter_zip)]
 #![feature(let_else)]
 #![feature(min_specialization)]
 #![feature(once_cell)]

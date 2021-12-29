@@ -83,7 +83,7 @@ pub use need_type_info::TypeAnnotationNeeded;
 
 pub mod nice_region_error;
 
-pub(super) fn note_and_explain_region(
+pub(super) fn note_and_explain_region<'tcx>(
     tcx: TyCtxt<'tcx>,
     err: &mut DiagnosticBuilder<'_>,
     prefix: &str,
@@ -116,7 +116,7 @@ pub(super) fn note_and_explain_region(
     emit_msg_span(err, prefix, description, span, suffix);
 }
 
-fn explain_free_region(
+fn explain_free_region<'tcx>(
     tcx: TyCtxt<'tcx>,
     err: &mut DiagnosticBuilder<'_>,
     prefix: &str,
@@ -128,7 +128,7 @@ fn explain_free_region(
     label_msg_span(err, prefix, description, span, suffix);
 }
 
-fn msg_span_from_free_region(
+fn msg_span_from_free_region<'tcx>(
     tcx: TyCtxt<'tcx>,
     region: ty::Region<'tcx>,
     alt_span: Option<Span>,
@@ -145,7 +145,7 @@ fn msg_span_from_free_region(
     }
 }
 
-fn msg_span_from_early_bound_and_free_regions(
+fn msg_span_from_early_bound_and_free_regions<'tcx>(
     tcx: TyCtxt<'tcx>,
     region: ty::Region<'tcx>,
 ) -> (String, Span) {
@@ -226,7 +226,7 @@ fn label_msg_span(
     }
 }
 
-pub fn unexpected_hidden_region_diagnostic(
+pub fn unexpected_hidden_region_diagnostic<'tcx>(
     tcx: TyCtxt<'tcx>,
     span: Span,
     hidden_ty: Ty<'tcx>,
@@ -275,7 +275,7 @@ pub fn unexpected_hidden_region_diagnostic(
                     fn_returns,
                     hidden_region.to_string(),
                     None,
-                    format!("captures {}", hidden_region),
+                    format!("captures `{}`", hidden_region),
                     None,
                 )
             }
@@ -316,7 +316,7 @@ pub fn unexpected_hidden_region_diagnostic(
 /// with the other type. A TyVar inference type is compatible with any type, and an IntVar or
 /// FloatVar inference type are compatible with themselves or their concrete types (Int and
 /// Float types, respectively). When comparing two ADTs, these rules apply recursively.
-pub fn same_type_modulo_infer(a: Ty<'tcx>, b: Ty<'ctx>) -> bool {
+pub fn same_type_modulo_infer<'tcx>(a: Ty<'tcx>, b: Ty<'tcx>) -> bool {
     match (&a.kind(), &b.kind()) {
         (&ty::Adt(did_a, substs_a), &ty::Adt(did_b, substs_b)) => {
             if did_a != did_b {
@@ -604,7 +604,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         exp_found: Option<ty::error::ExpectedFound<Ty<'tcx>>>,
         terr: &TypeError<'tcx>,
     ) {
-        match cause.code {
+        match *cause.code() {
             ObligationCauseCode::Pattern { origin_expr: true, span: Some(span), root_ty } => {
                 let ty = self.resolve_vars_if_possible(root_ty);
                 if ty.is_suggestable() {
@@ -781,7 +781,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             }
             _ => {
                 if let ObligationCauseCode::BindingObligation(_, binding_span) =
-                    cause.code.peel_derives()
+                    cause.code().peel_derives()
                 {
                     if matches!(terr, TypeError::RegionsPlaceholderMismatch) {
                         err.span_note(*binding_span, "the lifetime requirement is introduced here");
@@ -1729,10 +1729,10 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             }
             _ => exp_found,
         };
-        debug!("exp_found {:?} terr {:?} cause.code {:?}", exp_found, terr, cause.code);
+        debug!("exp_found {:?} terr {:?} cause.code {:?}", exp_found, terr, cause.code());
         if let Some(exp_found) = exp_found {
             let should_suggest_fixes = if let ObligationCauseCode::Pattern { root_ty, .. } =
-                &cause.code
+                cause.code()
             {
                 // Skip if the root_ty of the pattern is not the same as the expected_ty.
                 // If these types aren't equal then we've probably peeled off a layer of arrays.
@@ -1827,7 +1827,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             exp_span, exp_found.expected, exp_found.found,
         );
 
-        if let ObligationCauseCode::CompareImplMethodObligation { .. } = &cause.code {
+        if let ObligationCauseCode::CompareImplMethodObligation { .. } = cause.code() {
             return;
         }
 
@@ -1835,7 +1835,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             self.get_impl_future_output_ty(exp_found.expected),
             self.get_impl_future_output_ty(exp_found.found),
         ) {
-            (Some(exp), Some(found)) if same_type_modulo_infer(exp, found) => match &cause.code {
+            (Some(exp), Some(found)) if same_type_modulo_infer(exp, found) => match cause.code() {
                 ObligationCauseCode::IfExpression(box IfExpressionCause { then, .. }) => {
                     diag.multipart_suggestion(
                         "consider `await`ing on both `Future`s",
@@ -1875,7 +1875,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                     Applicability::MaybeIncorrect,
                 );
             }
-            (Some(ty), _) if same_type_modulo_infer(ty, exp_found.found) => match cause.code {
+            (Some(ty), _) if same_type_modulo_infer(ty, exp_found.found) => match cause.code() {
                 ObligationCauseCode::Pattern { span: Some(span), .. }
                 | ObligationCauseCode::IfExpression(box IfExpressionCause { then: span, .. }) => {
                     diag.span_suggestion_verbose(
@@ -1927,7 +1927,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 .map(|field| (field.ident.name, field.ty(self.tcx, expected_substs)))
                 .find(|(_, ty)| same_type_modulo_infer(ty, exp_found.found))
             {
-                if let ObligationCauseCode::Pattern { span: Some(span), .. } = cause.code {
+                if let ObligationCauseCode::Pattern { span: Some(span), .. } = *cause.code() {
                     if let Ok(snippet) = self.tcx.sess.source_map().span_to_snippet(span) {
                         let suggestion = if expected_def.is_struct() {
                             format!("{}.{}", snippet, name)
@@ -2064,7 +2064,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                     }
                 }
                 if let MatchExpressionArm(box MatchExpressionArmCause { source, .. }) =
-                    trace.cause.code
+                    *trace.cause.code()
                 {
                     if let hir::MatchSource::TryDesugar = source {
                         if let Some((expected_ty, found_ty)) = self.values_str(trace.values) {
@@ -2252,8 +2252,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                             .map(|p| p.name.as_str()),
                     );
                 }
-                let lts = lts_names.iter().map(|s| -> &str { &*s }).collect::<Vec<_>>();
-                possible.find(|candidate| !lts.contains(&candidate.as_str()))
+                possible.find(|candidate| !lts_names.contains(&&candidate[..]))
             })
             .unwrap_or("'lt".to_string());
         let add_lt_sugg = generics
@@ -2660,7 +2659,7 @@ impl<'tcx> ObligationCauseExt<'tcx> for ObligationCause<'tcx> {
     fn as_failure_code(&self, terr: &TypeError<'tcx>) -> FailureCode {
         use self::FailureCode::*;
         use crate::traits::ObligationCauseCode::*;
-        match self.code {
+        match self.code() {
             CompareImplMethodObligation { .. } => Error0308("method not compatible with trait"),
             CompareImplTypeObligation { .. } => Error0308("type not compatible with trait"),
             MatchExpressionArm(box MatchExpressionArmCause { source, .. }) => {
@@ -2695,7 +2694,7 @@ impl<'tcx> ObligationCauseExt<'tcx> for ObligationCause<'tcx> {
 
     fn as_requirement_str(&self) -> &'static str {
         use crate::traits::ObligationCauseCode::*;
-        match self.code {
+        match self.code() {
             CompareImplMethodObligation { .. } => "method type is compatible with trait",
             CompareImplTypeObligation { .. } => "associated type is compatible with trait",
             ExprAssignable => "expression is assignable",

@@ -169,7 +169,9 @@ impl<'tcx> LateLintPass<'tcx> for UnusedResults {
         }
 
         if !(type_permits_lack_of_use || fn_warned || op_warned) {
-            cx.struct_span_lint(UNUSED_RESULTS, s.span, |lint| lint.build("unused result").emit());
+            cx.struct_span_lint(UNUSED_RESULTS, s.span, |lint| {
+                lint.build(&format!("unused result of type `{}`", ty)).emit()
+            });
         }
 
         // Returns whether an error has been emitted (and thus another does not need to be later).
@@ -313,7 +315,7 @@ impl<'tcx> LateLintPass<'tcx> for UnusedResults {
                         let mut err = lint.build(&msg);
                         // check for #[must_use = "..."]
                         if let Some(note) = attr.value_str() {
-                            err.note(&note.as_str());
+                            err.note(note.as_str());
                         }
                         err.emit();
                     });
@@ -476,8 +478,11 @@ trait UnusedDelimLint {
 
         lhs_needs_parens
             || (followed_by_block
-                && match inner.kind {
+                && match &inner.kind {
                     ExprKind::Ret(_) | ExprKind::Break(..) | ExprKind::Yield(..) => true,
+                    ExprKind::Range(_lhs, Some(rhs), _limits) => {
+                        matches!(rhs.kind, ExprKind::Block(..))
+                    }
                     _ => parser::contains_exterior_struct_lit(&inner),
                 })
     }

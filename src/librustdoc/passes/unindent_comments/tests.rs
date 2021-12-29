@@ -1,4 +1,7 @@
 use super::*;
+
+use crate::clean::collapse_doc_fragments;
+
 use rustc_span::create_default_session_globals_then;
 use rustc_span::source_map::DUMMY_SP;
 use rustc_span::symbol::Symbol;
@@ -9,7 +12,6 @@ fn create_doc_fragment(s: &str) -> Vec<DocFragment> {
         parent_module: None,
         doc: Symbol::intern(s),
         kind: DocFragmentKind::SugaredDoc,
-        need_backline: false,
         indent: 0,
     }]
 }
@@ -19,7 +21,7 @@ fn run_test(input: &str, expected: &str) {
     create_default_session_globals_then(|| {
         let mut s = create_doc_fragment(input);
         unindent_fragments(&mut s);
-        assert_eq!(&s.iter().collect::<String>(), expected);
+        assert_eq!(collapse_doc_fragments(&s), expected);
     });
 }
 

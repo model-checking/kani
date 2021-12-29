@@ -6,7 +6,6 @@
 #![feature(bool_to_option)]
 #![feature(crate_visibility_modifier)]
 #![feature(decl_macro)]
-#![feature(iter_zip)]
 #![feature(nll)]
 #![feature(proc_macro_internals)]
 #![feature(proc_macro_quote)]
@@ -20,7 +19,6 @@ use rustc_expand::base::{MacroExpanderFn, ResolverExpand, SyntaxExtensionKind};
 use rustc_expand::proc_macro::BangProcMacro;
 use rustc_span::symbol::sym;
 
-mod asm;
 mod assert;
 mod cfg;
 mod cfg_accessible;
@@ -43,6 +41,7 @@ mod test;
 mod trace_macros;
 mod util;
 
+pub mod asm;
 pub mod cmdline_attrs;
 pub mod proc_macro_harness;
 pub mod standard_library_imports;

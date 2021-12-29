@@ -9,6 +9,7 @@ use rustc_middle::ty::layout::IntegerExt;
 use rustc_middle::ty::print::{Print, Printer};
 use rustc_middle::ty::subst::{GenericArg, GenericArgKind, Subst};
 use rustc_middle::ty::{self, FloatTy, Instance, IntTy, Ty, TyCtxt, TypeFoldable, UintTy};
+use rustc_span::symbol::kw;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::Integer;
 use rustc_target::spec::abi::Abi;
@@ -17,7 +18,7 @@ use std::fmt::Write;
 use std::iter;
 use std::ops::Range;
 
-pub(super) fn mangle(
+pub(super) fn mangle<'tcx>(
     tcx: TyCtxt<'tcx>,
     instance: Instance<'tcx>,
     instantiating_crate: Option<CrateNum>,
@@ -56,7 +57,7 @@ pub(super) fn mangle(
     std::mem::take(&mut cx.out)
 }
 
-pub(super) fn mangle_typeid_for_fnabi(
+pub(super) fn mangle_typeid_for_fnabi<'tcx>(
     _tcx: TyCtxt<'tcx>,
     fn_abi: &FnAbi<'tcx, Ty<'tcx>>,
 ) -> String {
@@ -118,7 +119,7 @@ struct SymbolMangler<'tcx> {
     consts: FxHashMap<&'tcx ty::Const<'tcx>, usize>,
 }
 
-impl SymbolMangler<'tcx> {
+impl<'tcx> SymbolMangler<'tcx> {
     fn push(&mut self, s: &str) {
         self.out.push_str(s);
     }
@@ -250,7 +251,7 @@ impl SymbolMangler<'tcx> {
     }
 }
 
-impl Printer<'tcx> for &mut SymbolMangler<'tcx> {
+impl<'tcx> Printer<'tcx> for &mut SymbolMangler<'tcx> {
     type Error = !;
 
     type Path = Self;
@@ -559,7 +560,7 @@ impl Printer<'tcx> for &mut SymbolMangler<'tcx> {
                     ty::ExistentialPredicate::Projection(projection) => {
                         let name = cx.tcx.associated_item(projection.item_def_id).ident;
                         cx.push("p");
-                        cx.push_ident(&name.as_str());
+                        cx.push_ident(name.as_str());
                         cx = projection.ty.print(cx)?;
                     }
                     ty::ExistentialPredicate::AutoTrait(def_id) => {
@@ -702,12 +703,11 @@ impl Printer<'tcx> for &mut SymbolMangler<'tcx> {
                                     // just to be able to handle disambiguators.
                                     let disambiguated_field =
                                         self.tcx.def_key(field_def.did).disambiguated_data;
-                                    let field_name =
-                                        disambiguated_field.data.get_opt_name().map(|s| s.as_str());
+                                    let field_name = disambiguated_field.data.get_opt_name();
                                     self.push_disambiguator(
                                         disambiguated_field.disambiguator as u64,
                                     );
-                                    self.push_ident(&field_name.as_ref().map_or("", |s| &s[..]));
+                                    self.push_ident(field_name.unwrap_or(kw::Empty).as_str());
 
                                     self = field.print(self)?;
                                 }
@@ -736,8 +736,8 @@ impl Printer<'tcx> for &mut SymbolMangler<'tcx> {
         self.push("C");
         let stable_crate_id = self.tcx.def_path_hash(cnum.as_def_id()).stable_crate_id();
         self.push_disambiguator(stable_crate_id.to_u64());
-        let name = self.tcx.crate_name(cnum).as_str();
-        self.push_ident(&name);
+        let name = self.tcx.crate_name(cnum);
+        self.push_ident(name.as_str());
         Ok(self)
     }
 
@@ -771,6 +771,10 @@ impl Printer<'tcx> for &mut SymbolMangler<'tcx> {
         disambiguated_data: &DisambiguatedDefPathData,
     ) -> Result<Self::Path, Self::Error> {
         let ns = match disambiguated_data.data {
+            // FIXME: It shouldn't be necessary to add anything for extern block segments,
+            // but we add 't' for backward compatibility.
+            DefPathData::ForeignMod => 't',
+
             // Uppercase categories are more stable than lowercase ones.
             DefPathData::TypeNs(_) => 't',
             DefPathData::ValueNs(_) => 'v',
@@ -789,13 +793,13 @@ impl Printer<'tcx> for &mut SymbolMangler<'tcx> {
             }
         };
 
-        let name = disambiguated_data.data.get_opt_name().map(|s| s.as_str());
+        let name = disambiguated_data.data.get_opt_name();
 
         self.path_append_ns(
             print_prefix,
             ns,
             disambiguated_data.disambiguator as u64,
-            name.as_ref().map_or("", |s| &s[..]),
+            name.unwrap_or(kw::Empty).as_str(),
         )
     }
 

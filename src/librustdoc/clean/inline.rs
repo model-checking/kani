@@ -8,6 +8,7 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
+use rustc_hir::definitions::DefPathData;
 use rustc_hir::Mutability;
 use rustc_metadata::creader::{CStore, LoadedMacro};
 use rustc_middle::ty::{self, TyCtxt};
@@ -16,7 +17,7 @@ use rustc_span::symbol::{kw, sym, Symbol};
 
 use crate::clean::{
     self, clean_fn_decl_from_did_and_sig, clean_ty_generics, utils, Attributes, AttributesExt,
-    Clean, ImplKind, ItemId, NestedAttributesExt, Type, Visibility,
+    Clean, ImplKind, ItemId, Type, Visibility,
 };
 use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
@@ -165,9 +166,8 @@ crate fn record_extern_fqn(cx: &mut DocContext<'_>, did: DefId, kind: ItemType) 
     let crate_name = cx.tcx.crate_name(did.krate).to_string();
 
     let relative = cx.tcx.def_path(did).data.into_iter().filter_map(|elem| {
-        // extern blocks have an empty name
-        let s = elem.data.to_string();
-        if !s.is_empty() { Some(s) } else { None }
+        // Filter out extern blocks
+        (elem.data != DefPathData::ForeignMod).then(|| elem.data.to_string())
     });
     let fqn = if let ItemType::Macro = kind {
         // Check to see if it is a macro 2.0 or built-in macro
@@ -421,7 +421,7 @@ crate fn build_impl(
                                 associated_trait.def_id,
                             )
                             .unwrap(); // SAFETY: For all impl items there exists trait item that has the same name.
-                        !tcx.get_attrs(trait_item.def_id).lists(sym::doc).has_word(sym::hidden)
+                        !tcx.is_doc_hidden(trait_item.def_id)
                     } else {
                         true
                     }
@@ -456,7 +456,7 @@ crate fn build_impl(
     let mut stack: Vec<&Type> = vec![&for_];
 
     if let Some(did) = trait_.as_ref().map(|t| t.def_id()) {
-        if tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
+        if tcx.is_doc_hidden(did) {
             return;
         }
     }
@@ -466,7 +466,7 @@ crate fn build_impl(
 
     while let Some(ty) = stack.pop() {
         if let Some(did) = ty.def_id(&cx.cache) {
-            if tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
+            if tcx.is_doc_hidden(did) {
                 return;
             }
         }

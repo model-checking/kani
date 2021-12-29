@@ -219,7 +219,9 @@ fn from_clean_item(item: clean::Item, tcx: TyCtxt<'_>) -> ItemEnum {
         MacroItem(m) => ItemEnum::Macro(m.source),
         ProcMacroItem(m) => ItemEnum::ProcMacro(m.into_tcx(tcx)),
         PrimitiveItem(p) => ItemEnum::PrimitiveType(p.as_sym().to_string()),
-        AssocConstItem(t, s) => ItemEnum::AssocConst { type_: t.into_tcx(tcx), default: s },
+        AssocConstItem(ty, default) => {
+            ItemEnum::AssocConst { type_: ty.into_tcx(tcx), default: default.map(|c| c.expr(tcx)) }
+        }
         AssocTypeItem(g, t) => ItemEnum::AssocType {
             bounds: g.into_iter().map(|x| x.into_tcx(tcx)).collect(),
             default: t.map(|x| x.into_tcx(tcx)),
@@ -607,7 +609,7 @@ impl FromWithTcx<clean::Import> for Import {
             },
             Glob => Import {
                 source: import.source.path.whole_name(),
-                name: import.source.path.last_name().to_string(),
+                name: import.source.path.last().to_string(),
                 id: import.source.did.map(ItemId::from).map(from_item_id),
                 glob: true,
             },

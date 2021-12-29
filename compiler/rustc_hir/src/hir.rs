@@ -255,23 +255,9 @@ pub struct ConstArg {
     pub span: Span,
 }
 
-#[derive(Copy, Clone, Encodable, Debug, HashStable_Generic)]
-pub enum InferKind {
-    Const,
-    Type,
-}
-
-impl InferKind {
-    #[inline]
-    pub fn is_type(self) -> bool {
-        matches!(self, InferKind::Type)
-    }
-}
-
 #[derive(Encodable, Debug, HashStable_Generic)]
 pub struct InferArg {
     pub hir_id: HirId,
-    pub kind: InferKind,
     pub span: Span,
 }
 
@@ -1174,10 +1160,24 @@ pub struct Arm<'hir> {
     pub body: &'hir Expr<'hir>,
 }
 
+/// Represents a `let <pat>[: <ty>] = <expr>` expression (not a Local), occurring in an `if-let` or
+/// `let-else`, evaluating to a boolean. Typically the pattern is refutable.
+///
+/// In an if-let, imagine it as `if (let <pat> = <expr>) { ... }`; in a let-else, it is part of the
+/// desugaring to if-let. Only let-else supports the type annotation at present.
+#[derive(Debug, HashStable_Generic)]
+pub struct Let<'hir> {
+    pub hir_id: HirId,
+    pub span: Span,
+    pub pat: &'hir Pat<'hir>,
+    pub ty: Option<&'hir Ty<'hir>>,
+    pub init: &'hir Expr<'hir>,
+}
+
 #[derive(Debug, HashStable_Generic)]
 pub enum Guard<'hir> {
     If(&'hir Expr<'hir>),
-    // FIXME use ExprKind::Let for this.
+    // FIXME use hir::Let for this.
     IfLet(&'hir Pat<'hir>, &'hir Expr<'hir>),
 }
 
@@ -1203,7 +1203,7 @@ pub enum UnsafeSource {
     UserProvided,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Encodable, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Encodable, Hash, Debug)]
 pub struct BodyId {
     pub hir_id: HirId,
 }
@@ -1627,13 +1627,13 @@ pub fn is_range_literal(expr: &Expr<'_>) -> bool {
                     | LangItem::RangeFrom
                     | LangItem::RangeFull
                     | LangItem::RangeToInclusive,
-                _,
+                ..
             )
         ),
 
         // `..=` desugars into `::std::ops::RangeInclusive::new(...)`.
         ExprKind::Call(ref func, _) => {
-            matches!(func.kind, ExprKind::Path(QPath::LangItem(LangItem::RangeInclusiveNew, _)))
+            matches!(func.kind, ExprKind::Path(QPath::LangItem(LangItem::RangeInclusiveNew, ..)))
         }
 
         _ => false,
@@ -1694,7 +1694,7 @@ pub enum ExprKind<'hir> {
     ///
     /// These are not `Local` and only occur as expressions.
     /// The `let Some(x) = foo()` in `if let Some(x) = foo()` is an example of `Let(..)`.
-    Let(&'hir Pat<'hir>, &'hir Expr<'hir>, Span),
+    Let(&'hir Let<'hir>),
     /// An `if` block, with an optional else block.
     ///
     /// I.e., `if <expr> { <expr> } else { <expr> }`.
@@ -1788,8 +1788,8 @@ pub enum QPath<'hir> {
     /// the `X` and `Y` nodes each being a `TyKind::Path(QPath::TypeRelative(..))`.
     TypeRelative(&'hir Ty<'hir>, &'hir PathSegment<'hir>),
 
-    /// Reference to a `#[lang = "foo"]` item.
-    LangItem(LangItem, Span),
+    /// Reference to a `#[lang = "foo"]` item. `HirId` of the inner expr.
+    LangItem(LangItem, Span, Option<HirId>),
 }
 
 impl<'hir> QPath<'hir> {
@@ -1798,7 +1798,7 @@ impl<'hir> QPath<'hir> {
         match *self {
             QPath::Resolved(_, path) => path.span,
             QPath::TypeRelative(qself, ps) => qself.span.to(ps.ident.span),
-            QPath::LangItem(_, span) => span,
+            QPath::LangItem(_, span, _) => span,
         }
     }
 
@@ -1808,7 +1808,7 @@ impl<'hir> QPath<'hir> {
         match *self {
             QPath::Resolved(_, path) => path.span,
             QPath::TypeRelative(qself, _) => qself.span,
-            QPath::LangItem(_, span) => span,
+            QPath::LangItem(_, span, _) => span,
         }
     }
 
@@ -1818,7 +1818,7 @@ impl<'hir> QPath<'hir> {
         match *self {
             QPath::Resolved(_, path) => path.segments.last().unwrap().ident.span,
             QPath::TypeRelative(_, segment) => segment.ident.span,
-            QPath::LangItem(_, span) => span,
+            QPath::LangItem(_, span, _) => span,
         }
     }
 }
@@ -1980,7 +1980,7 @@ pub struct FnSig<'hir> {
 // The bodies for items are stored "out of line", in a separate
 // hashmap in the `Crate`. Here we just record the hir-id of the item
 // so it can fetched later.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Encodable, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Encodable, Debug)]
 pub struct TraitItemId {
     pub def_id: LocalDefId,
 }
@@ -2043,7 +2043,7 @@ pub enum TraitItemKind<'hir> {
 // The bodies for items are stored "out of line", in a separate
 // hashmap in the `Crate`. Here we just record the hir-id of the item
 // so it can fetched later.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Encodable, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Encodable, Debug)]
 pub struct ImplItemId {
     pub def_id: LocalDefId,
 }
@@ -2644,7 +2644,7 @@ impl<'hir> VariantData<'hir> {
 // The bodies for items are stored "out of line", in a separate
 // hashmap in the `Crate`. Here we just record the hir-id of the item
 // so it can fetched later.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Encodable, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Encodable, Debug, Hash)]
 pub struct ItemId {
     pub def_id: LocalDefId,
 }
@@ -2883,7 +2883,7 @@ pub enum AssocItemKind {
 // The bodies for items are stored "out of line", in a separate
 // hashmap in the `Crate`. Here we just record the hir-id of the item
 // so it can fetched later.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Encodable, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Encodable, Debug)]
 pub struct ForeignItemId {
     pub def_id: LocalDefId,
 }

@@ -522,6 +522,7 @@ rustc_queries! {
     }
     query adt_def(key: DefId) -> &'tcx ty::AdtDef {
         desc { |tcx| "computing ADT definition for `{}`", tcx.def_path_str(key) }
+        cache_on_disk_if { key.is_local() }
         separate_provide_extern
     }
     query adt_destructor(key: DefId) -> Option<ty::Destructor> {
@@ -771,11 +772,24 @@ rustc_queries! {
         desc { |tcx| "type-checking `{}`", tcx.def_path_str(key.to_def_id()) }
         cache_on_disk_if { true }
         load_cached(tcx, id) {
-            let typeck_results: Option<ty::TypeckResults<'tcx>> = tcx
-                .on_disk_cache().as_ref()
-                .and_then(|c| c.try_load_query_result(*tcx, id));
+            #[cfg(bootstrap)]
+            {
+                match match tcx.on_disk_cache().as_ref() {
+                    Some(c) => c.try_load_query_result(*tcx, id),
+                    None => None,
+                } {
+                    Some(x) => Some(&*tcx.arena.alloc(x)),
+                    None => None,
+                }
+            }
+            #[cfg(not(bootstrap))]
+            {
+                let typeck_results: Option<ty::TypeckResults<'tcx>> = tcx
+                    .on_disk_cache().as_ref()
+                    .and_then(|c| c.try_load_query_result(*tcx, id));
 
-            typeck_results.map(|x| &*tcx.arena.alloc(x))
+                typeck_results.map(|x| &*tcx.arena.alloc(x))
+            }
         }
     }
 
@@ -1655,27 +1669,6 @@ rustc_queries! {
         NoSolution,
     > {
         desc { "normalizing `{:?}`", goal }
-        remap_env_constness
-    }
-
-    // FIXME: Implement `normalize_generic_arg_after_erasing_regions` and
-    // `normalize_mir_const_after_erasing_regions` in terms of
-    // `try_normalize_generic_arg_after_erasing_regions` and
-    // `try_normalize_mir_const_after_erasing_regions`, respectively.
-
-    /// Do not call this query directly: invoke `normalize_erasing_regions` instead.
-    query normalize_generic_arg_after_erasing_regions(
-        goal: ParamEnvAnd<'tcx, GenericArg<'tcx>>
-    ) -> GenericArg<'tcx> {
-        desc { "normalizing `{}`", goal.value }
-        remap_env_constness
-    }
-
-    /// Do not call this query directly: invoke `normalize_erasing_regions` instead.
-    query normalize_mir_const_after_erasing_regions(
-        goal: ParamEnvAnd<'tcx, mir::ConstantKind<'tcx>>
-    ) -> mir::ConstantKind<'tcx> {
-        desc { "normalizing `{}`", goal.value }
         remap_env_constness
     }
 
