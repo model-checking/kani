@@ -28,9 +28,9 @@ rm -r build/x86_64-unknown-linux-gnu/test/
 ./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs
 ```
 ```bash
-# Dashboard run
-./scripts/setup/install_dashboard_deps.sh
-./x.py run -i --stage 1 dashboard
+# Book runner run
+./scripts/setup/install_bookrunner_deps.sh
+./x.py run -i --stage 1 bookrunner
 ```
 ```bash
 # Documentation build

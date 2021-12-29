@@ -4,7 +4,7 @@
 
 set -eu
 
-# The RMC Dashboard is generated using [Litani](https://github.com/awslabs/aws-build-accumulator)
+# The book runner report is generated using [Litani](https://github.com/awslabs/aws-build-accumulator)
 
 # Litani's dependencies:
 DEPS=(
@@ -15,7 +15,7 @@ DEPS=(
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}"
 
 PYTHON_DEPS=(
-  bs4 # Used for dashboard updates
+  bs4 # Used for report updates
   jinja2
 )
 

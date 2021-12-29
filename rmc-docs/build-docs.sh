@@ -29,7 +29,7 @@ if [ -d $HTML_DIR ]; then
     rm -r src/bookrunner/artifacts
     cp -r $BOOKS_DIR src/bookrunner/artifacts
     # Update paths in HTML report
-    python $RMC_DIR/scripts/ci/update_dashboard.py src/bookrunner/index.html new_index.html
+    python $RMC_DIR/scripts/ci/update_bookrunner_report.py src/bookrunner/index.html new_index.html
     mv new_index.html src/bookrunner/index.html
 
     # rm src/bookrunner/run.json
