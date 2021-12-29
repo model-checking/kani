@@ -63,11 +63,11 @@ jobs:
 
       - name: Generate RMC dashboard
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./x.py run -i --stage 1 dashboard
+        run: ./x.py run -i --stage 1 bookrunner
 
       - name: Print RMC dashboard results
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: cat build/output/latest/html/dashboard.txt
+        run: cat build/output/latest/html/bookrunner.txt
 
       # On one OS only, build the documentation, too.
       - name: Build Documentation
