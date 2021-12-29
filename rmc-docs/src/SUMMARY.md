@@ -17,5 +17,4 @@
 
 - [RMC developer documentation](./dev-documentation.md)
   - [Testing](./rmc-testing.md)
-
-- [RMC dashboard](./dashboard.md)
+  - [Book runner](./bookrunner.md)

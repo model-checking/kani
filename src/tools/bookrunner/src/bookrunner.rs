@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Data structures representing the dashboard and their utilities.
+//! Data structures representing the book report and their utilities.
 
 use std::fmt::{Display, Formatter, Result, Write};
 
@@ -19,7 +19,7 @@ impl Node {
     }
 }
 
-/// Tree data structure representing a confidence dashboard. `children`
+/// Tree data structure representing a book report. `children`
 /// represent sub-tests and sub-suites of the current test suite. This tree
 /// structure allows us to collect and display a summary for test results in an
 /// organized manner.
@@ -30,7 +30,7 @@ pub struct Tree {
 }
 
 impl Tree {
-    /// Creates a new [`Tree`] representing a dashboard or a part of it.
+    /// Creates a new [`Tree`] representing a book report or a part of it.
     pub fn new(data: Node, children: Vec<Tree>) -> Tree {
         Tree { data, children }
     }
