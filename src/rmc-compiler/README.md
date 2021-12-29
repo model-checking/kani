@@ -4,22 +4,5 @@ binary should not be used on its own and it should be used via `rmc` or
 
 ### Notes for developers:
 
-To build / install:
-
-```
-cargo build
-cargo install --path <project_path> --root <install_path>
-```
-
-To run:
-
-```
-cargo run
-```
-
-or 
-
-```
-LD_LIBRARY_PATH=<path_to_rustc_lib> <install_path>/rmc_compiler
-```
-
+This binary can be build like a regular cargo package. There is no need to
+bootstrap it anymore.

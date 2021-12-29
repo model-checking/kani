@@ -1,6 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This is the main entry point to our compiler driver. This code accepts a few options that
+//! can be used to configure goto-c compilation as well as all other flags supported by rustc.
+//!
+//! Like miri, clippy, and other tools developed on the top of rustc, we rely on the
+//! rustc_private feature and a specific version of rustc.
+
 #![feature(rustc_private, once_cell)]
 extern crate rustc_codegen_ssa;
 extern crate rustc_driver;
@@ -15,6 +21,7 @@ use rustc_driver::{init_env_logger, install_ice_hook, Callbacks, RunCompiler};
 use std::path::PathBuf;
 use std::rc::Rc;
 
+/// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     let rmc_deps = lib_path.clone().to_owned() + "/deps";
     let args = vec![
@@ -43,8 +50,8 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     args.iter().map(|s| s.to_string()).collect()
 }
 
-fn main() -> Result<(), &'static str> {
-    let args = app_from_crate!()
+fn parse_args() -> ArgMatches {
+    app_from_crate!()
         .setting(AppSettings::TrailingVarArg) // This allow us to fwd commands to rustc.
         .setting(clap::AppSettings::AllowLeadingHyphen)
         .version_short("?")
@@ -97,16 +104,25 @@ fn main() -> Result<(), &'static str> {
                 .multiple(true)
                 .takes_value(true),
         )
-        .get_matches();
+        .get_matches()
+}
 
+/// Main function. Configure arguments and run the compiler.
+fn main() -> Result<(), &'static str> {
+    let args = parse_args();
+
+    // Initialize the logger.
     init_env_logger("RMC_LOG");
 
-    let mut gotoc_args = rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap());
-    let rustc_args = generate_rustc_args(&args, &mut gotoc_args);
+    // Generate rustc args.
+    let rustc_args = generate_rustc_args(&args);
+
+    // Configure queries.
     let mut queries = QueryDb::default();
     queries.set_symbol_table_passes(args.values_of_lossy("symbol-table-passes").unwrap_or(vec![]));
     queries.set_emit_vtable_restrictions(args.is_present("restrict-vtable-fn-ptrs"));
 
+    // Configure and run compiler.
     let mut callbacks = RmcCallbacks {};
     install_ice_hook();
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
@@ -118,11 +134,15 @@ fn main() -> Result<(), &'static str> {
     compiler.run().or(Err("Failed to compile crate."))
 }
 
+/// Empty struct since we don't support any callbacks yet.
 struct RmcCallbacks {}
 
+/// Use default function implementations.
 impl Callbacks for RmcCallbacks {}
 
-fn generate_rustc_args(args: &ArgMatches, gotoc_args: &mut Vec<String>) -> Vec<String> {
+/// Generate the arguments to pass to rustc_driver.
+fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
+    let mut gotoc_args = rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap());
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present("goto-c") {
         rustc_args.append(gotoc_args);
