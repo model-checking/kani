@@ -10,7 +10,6 @@ use super::PredicateObligation;
 use super::Selection;
 use super::SelectionContext;
 use super::SelectionError;
-use super::TraitQueryMode;
 use super::{
     ImplSourceClosureData, ImplSourceDiscriminantKindData, ImplSourceFnPointerData,
     ImplSourceGeneratorData, ImplSourcePointeeData, ImplSourceUserDefinedData,
@@ -570,7 +569,7 @@ impl<'me, 'tcx> BoundVarReplacer<'me, 'tcx> {
     }
 }
 
-impl TypeFolder<'tcx> for BoundVarReplacer<'_, 'tcx> {
+impl<'tcx> TypeFolder<'tcx> for BoundVarReplacer<'_, 'tcx> {
     fn tcx<'b>(&'b self) -> TyCtxt<'tcx> {
         self.infcx.tcx
     }
@@ -678,7 +677,7 @@ impl<'me, 'tcx> PlaceholderReplacer<'me, 'tcx> {
     }
 }
 
-impl TypeFolder<'tcx> for PlaceholderReplacer<'_, 'tcx> {
+impl<'tcx> TypeFolder<'tcx> for PlaceholderReplacer<'_, 'tcx> {
     fn tcx<'b>(&'b self) -> TyCtxt<'tcx> {
         self.infcx.tcx
     }
@@ -889,7 +888,7 @@ fn opt_normalize_projection_type<'a, 'b, 'tcx>(
             debug!("recur cache");
             return Err(InProgress);
         }
-        Err(ProjectionCacheEntry::NormalizedTy(ty)) => {
+        Err(ProjectionCacheEntry::NormalizedTy { ty, complete: _ }) => {
             // This is the hottest path in this function.
             //
             // If we find the value in the cache, then return it along
@@ -946,27 +945,11 @@ fn opt_normalize_projection_type<'a, 'b, 'tcx>(
             };
 
             let mut deduped: SsoHashSet<_> = Default::default();
-            let mut canonical =
-                SelectionContext::with_query_mode(selcx.infcx(), TraitQueryMode::Canonical);
-
             result.obligations.drain_filter(|projected_obligation| {
                 if !deduped.insert(projected_obligation.clone()) {
                     return true;
                 }
-                // If any global obligations always apply, considering regions, then we don't
-                // need to include them. The `is_global` check rules out inference variables,
-                // so there's no need for the caller of `opt_normalize_projection_type`
-                // to evaluate them.
-                // Note that we do *not* discard obligations that evaluate to
-                // `EvaluatedtoOkModuloRegions`. Evaluating these obligations
-                // inside of a query (e.g. `evaluate_obligation`) can change
-                // the result to `EvaluatedToOkModuloRegions`, while an
-                // `EvaluatedToOk` obligation will never change the result.
-                // See #85360 for more details
-                projected_obligation.is_global(canonical.tcx())
-                    && canonical
-                        .evaluate_root_obligation(projected_obligation)
-                        .map_or(false, |res| res.must_apply_considering_regions())
+                false
             });
 
             if use_cache {
@@ -1937,14 +1920,14 @@ fn assoc_ty_def(
     }
 }
 
-crate trait ProjectionCacheKeyExt<'tcx>: Sized {
+crate trait ProjectionCacheKeyExt<'cx, 'tcx>: Sized {
     fn from_poly_projection_predicate(
         selcx: &mut SelectionContext<'cx, 'tcx>,
         predicate: ty::PolyProjectionPredicate<'tcx>,
     ) -> Option<Self>;
 }
 
-impl<'tcx> ProjectionCacheKeyExt<'tcx> for ProjectionCacheKey<'tcx> {
+impl<'cx, 'tcx> ProjectionCacheKeyExt<'cx, 'tcx> for ProjectionCacheKey<'tcx> {
     fn from_poly_projection_predicate(
         selcx: &mut SelectionContext<'cx, 'tcx>,
         predicate: ty::PolyProjectionPredicate<'tcx>,

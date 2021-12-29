@@ -61,8 +61,8 @@ impl<'p, 'c, 'tcx> QueryKeyStringBuilder<'p, 'c, 'tcx> {
 
         match def_key.disambiguated_data.data {
             DefPathData::CrateRoot => {
-                crate_name = self.tcx.crate_name(def_id.krate).as_str();
-                name = &*crate_name;
+                crate_name = self.tcx.crate_name(def_id.krate);
+                name = crate_name.as_str();
                 dis = "";
                 end_index = 3;
             }
@@ -295,7 +295,7 @@ fn alloc_self_profile_query_strings_for_query_cache<'tcx, C>(
 /// If we are recording only summary data, the ids will point to
 /// just the query names. If we are recording query keys too, we
 /// allocate the corresponding strings here.
-pub fn alloc_self_profile_query_strings(tcx: TyCtxt<'tcx>) {
+pub fn alloc_self_profile_query_strings(tcx: TyCtxt<'_>) {
     if !tcx.prof.enabled() {
         return;
     }

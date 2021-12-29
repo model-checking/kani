@@ -36,8 +36,8 @@ use rustc_infer::infer;
 use rustc_infer::infer::type_variable::{TypeVariableOrigin, TypeVariableOriginKind};
 use rustc_infer::infer::InferOk;
 use rustc_middle::ty::adjustment::{Adjust, Adjustment, AllowTwoPhase};
+use rustc_middle::ty::error::ExpectedFound;
 use rustc_middle::ty::error::TypeError::{FieldMisMatch, Sorts};
-use rustc_middle::ty::relate::expected_found_bool;
 use rustc_middle::ty::subst::SubstsRef;
 use rustc_middle::ty::{self, AdtKind, Ty, TypeFoldable};
 use rustc_session::parse::feature_err;
@@ -277,8 +277,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             ExprKind::AddrOf(kind, mutbl, oprnd) => {
                 self.check_expr_addr_of(kind, mutbl, oprnd, expected, expr)
             }
-            ExprKind::Path(QPath::LangItem(lang_item, _)) => {
-                self.check_lang_item_path(lang_item, expr)
+            ExprKind::Path(QPath::LangItem(lang_item, _, hir_id)) => {
+                self.check_lang_item_path(lang_item, expr, hir_id)
             }
             ExprKind::Path(ref qpath) => self.check_expr_path(qpath, expr, &[]),
             ExprKind::InlineAsm(asm) => self.check_expr_asm(asm),
@@ -300,7 +300,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 }
             }
             ExprKind::Ret(ref expr_opt) => self.check_expr_return(expr_opt.as_deref(), expr),
-            ExprKind::Let(pat, let_expr, _) => self.check_expr_let(let_expr, pat),
+            ExprKind::Let(let_expr) => self.check_expr_let(let_expr),
             ExprKind::Loop(body, _, source, _) => {
                 self.check_expr_loop(body, source, expected, expr)
             }
@@ -498,8 +498,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         &self,
         lang_item: hir::LangItem,
         expr: &'tcx hir::Expr<'tcx>,
+        hir_id: Option<hir::HirId>,
     ) -> Ty<'tcx> {
-        self.resolve_lang_item_path(lang_item, expr.span, expr.hir_id).1
+        self.resolve_lang_item_path(lang_item, expr.span, expr.hir_id, hir_id).1
     }
 
     pub(crate) fn check_expr_path(
@@ -877,11 +878,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         "let ".to_string(),
                         Applicability::MachineApplicable,
                     );
-                    if !self.sess().features_untracked().destructuring_assignment {
-                        // We already emit an E0658 with a suggestion for `while let`, this is
-                        // redundant output.
-                        err.delay_as_bug();
-                    }
                     break;
                 }
                 hir::Node::Item(_)
@@ -1048,10 +1044,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
-    fn check_expr_let(&self, expr: &'tcx hir::Expr<'tcx>, pat: &'tcx hir::Pat<'tcx>) -> Ty<'tcx> {
-        self.warn_if_unreachable(expr.hir_id, expr.span, "block in `let` expression");
-        let expr_ty = self.demand_scrutinee_type(expr, pat.contains_explicit_ref_binding(), false);
-        self.check_pat_top(pat, expr_ty, Some(expr.span), true);
+    fn check_expr_let(&self, let_expr: &'tcx hir::Let<'tcx>) -> Ty<'tcx> {
+        // for let statements, this is done in check_stmt
+        let init = let_expr.init;
+        self.warn_if_unreachable(init.hir_id, init.span, "block in `let` expression");
+        // otherwise check exactly as a let statement
+        self.check_decl(let_expr.into());
+        // but return a bool, for this is a boolean expression
         self.tcx.types.bool
     }
 
@@ -1494,7 +1493,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                         &self.misc(base_expr.span),
                                         adt_ty,
                                         base_ty,
-                                        Sorts(expected_found_bool(true, adt_ty, base_ty)),
+                                        Sorts(ExpectedFound::new(true, adt_ty, base_ty)),
                                     )
                                     .emit();
                             }
@@ -1509,7 +1508,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 }
             } else {
                 self.check_expr_has_type_or_error(base_expr, adt_ty, |_| {
-                    let base_ty = self.check_expr(base_expr);
+                    let base_ty = self.typeck_results.borrow().node_type(base_expr.hir_id);
                     let same_adt = match (adt_ty.kind(), base_ty.kind()) {
                         (ty::Adt(adt, _), ty::Adt(base_adt, _)) if adt == base_adt => true,
                         _ => false,

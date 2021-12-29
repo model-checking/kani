@@ -198,7 +198,7 @@ pub enum TyKind<'tcx> {
     Error(DelaySpanBugEmitted),
 }
 
-impl TyKind<'tcx> {
+impl<'tcx> TyKind<'tcx> {
     #[inline]
     pub fn is_primitive(&self) -> bool {
         matches!(self, Bool | Char | Int(_) | Uint(_) | Float(_))
@@ -787,7 +787,7 @@ impl<'tcx> ExistentialPredicate<'tcx> {
                 tcx.def_path_hash(a.item_def_id).cmp(&tcx.def_path_hash(b.item_def_id))
             }
             (AutoTrait(ref a), AutoTrait(ref b)) => {
-                tcx.trait_def(*a).def_path_hash.cmp(&tcx.trait_def(*b).def_path_hash)
+                tcx.def_path_hash(*a).cmp(&tcx.def_path_hash(*b))
             }
             (Trait(_), _) => Ordering::Less,
             (Projection(_), Trait(_)) => Ordering::Greater,

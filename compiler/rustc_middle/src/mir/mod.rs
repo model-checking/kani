@@ -2033,7 +2033,7 @@ impl SourceScope {
     /// Finds the original HirId this MIR item came from.
     /// This is necessary after MIR optimizations, as otherwise we get a HirId
     /// from the function that was inlined instead of the function call site.
-    pub fn lint_root(
+    pub fn lint_root<'tcx>(
         self,
         source_scopes: &IndexVec<SourceScope, SourceScopeData<'tcx>>,
     ) -> Option<HirId> {
@@ -2268,7 +2268,7 @@ pub enum AggregateKind<'tcx> {
     /// active field number and is present only for union expressions
     /// -- e.g., for a union expression `SomeUnion { c: .. }`, the
     /// active field index would identity the field `c`
-    Adt(&'tcx AdtDef, VariantIdx, SubstsRef<'tcx>, Option<UserTypeAnnotationIndex>, Option<usize>),
+    Adt(DefId, VariantIdx, SubstsRef<'tcx>, Option<UserTypeAnnotationIndex>, Option<usize>),
 
     Closure(DefId, SubstsRef<'tcx>),
     Generator(DefId, SubstsRef<'tcx>, hir::Movability),
@@ -2427,28 +2427,26 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                         }
                     }
 
-                    AggregateKind::Adt(adt_def, variant, substs, _user_ty, _) => {
-                        let variant_def = &adt_def.variants[variant];
-
-                        let name = ty::tls::with(|tcx| {
+                    AggregateKind::Adt(adt_did, variant, substs, _user_ty, _) => {
+                        ty::tls::with(|tcx| {
                             let mut name = String::new();
+                            let variant_def = &tcx.adt_def(adt_did).variants[variant];
                             let substs = tcx.lift(substs).expect("could not lift for printing");
                             FmtPrinter::new(tcx, &mut name, Namespace::ValueNS)
                                 .print_def_path(variant_def.def_id, substs)?;
-                            Ok(name)
-                        })?;
 
-                        match variant_def.ctor_kind {
-                            CtorKind::Const => fmt.write_str(&name),
-                            CtorKind::Fn => fmt_tuple(fmt, &name),
-                            CtorKind::Fictive => {
-                                let mut struct_fmt = fmt.debug_struct(&name);
-                                for (field, place) in iter::zip(&variant_def.fields, places) {
-                                    struct_fmt.field(&field.ident.as_str(), place);
+                            match variant_def.ctor_kind {
+                                CtorKind::Const => fmt.write_str(&name),
+                                CtorKind::Fn => fmt_tuple(fmt, &name),
+                                CtorKind::Fictive => {
+                                    let mut struct_fmt = fmt.debug_struct(&name);
+                                    for (field, place) in iter::zip(&variant_def.fields, places) {
+                                        struct_fmt.field(field.ident.as_str(), place);
+                                    }
+                                    struct_fmt.finish()
                                 }
-                                struct_fmt.finish()
                             }
-                        }
+                        })
                     }
 
                     AggregateKind::Closure(def_id, substs) => ty::tls::with(|tcx| {
@@ -2473,7 +2471,7 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                             if let Some(upvars) = tcx.upvars_mentioned(def_id) {
                                 for (&var_id, place) in iter::zip(upvars.keys(), places) {
                                     let var_name = tcx.hir().name(var_id);
-                                    struct_fmt.field(&var_name.as_str(), place);
+                                    struct_fmt.field(var_name.as_str(), place);
                                 }
                             }
 
@@ -2493,7 +2491,7 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                             if let Some(upvars) = tcx.upvars_mentioned(def_id) {
                                 for (&var_id, place) in iter::zip(upvars.keys(), places) {
                                     let var_name = tcx.hir().name(var_id);
-                                    struct_fmt.field(&var_name.as_str(), place);
+                                    struct_fmt.field(var_name.as_str(), place);
                                 }
                             }
 
@@ -2543,7 +2541,7 @@ pub enum ConstantKind<'tcx> {
     Val(interpret::ConstValue<'tcx>, Ty<'tcx>),
 }
 
-impl Constant<'tcx> {
+impl<'tcx> Constant<'tcx> {
     pub fn check_static_ptr(&self, tcx: TyCtxt<'_>) -> Option<DefId> {
         match self.literal.const_for_ty()?.val.try_to_scalar() {
             Some(Scalar::Ptr(ptr, _size)) => match tcx.global_alloc(ptr.provenance) {
@@ -2562,14 +2560,14 @@ impl Constant<'tcx> {
     }
 }
 
-impl From<&'tcx ty::Const<'tcx>> for ConstantKind<'tcx> {
+impl<'tcx> From<&'tcx ty::Const<'tcx>> for ConstantKind<'tcx> {
     #[inline]
     fn from(ct: &'tcx ty::Const<'tcx>) -> Self {
         Self::Ty(ct)
     }
 }
 
-impl ConstantKind<'tcx> {
+impl<'tcx> ConstantKind<'tcx> {
     /// Returns `None` if the constant is not trivially safe for use in the type system.
     pub fn const_for_ty(&self) -> Option<&'tcx ty::Const<'tcx>> {
         match self {
@@ -2851,7 +2849,7 @@ impl<'tcx> Display for ConstantKind<'tcx> {
     }
 }
 
-fn pretty_print_const(
+fn pretty_print_const<'tcx>(
     c: &ty::Const<'tcx>,
     fmt: &mut Formatter<'_>,
     print_types: bool,
@@ -2866,7 +2864,7 @@ fn pretty_print_const(
     })
 }
 
-fn pretty_print_const_value(
+fn pretty_print_const_value<'tcx>(
     val: interpret::ConstValue<'tcx>,
     ty: Ty<'tcx>,
     fmt: &mut Formatter<'_>,
@@ -2913,12 +2911,12 @@ impl<'a, 'b> graph::GraphSuccessors<'b> for Body<'a> {
     type Iter = iter::Cloned<Successors<'b>>;
 }
 
-impl graph::GraphPredecessors<'graph> for Body<'tcx> {
+impl<'tcx, 'graph> graph::GraphPredecessors<'graph> for Body<'tcx> {
     type Item = BasicBlock;
     type Iter = std::iter::Copied<std::slice::Iter<'graph, BasicBlock>>;
 }
 
-impl graph::WithPredecessors for Body<'tcx> {
+impl<'tcx> graph::WithPredecessors for Body<'tcx> {
     #[inline]
     fn predecessors(&self, node: Self::Node) -> <Self as graph::GraphPredecessors<'_>>::Iter {
         self.predecessors()[node].iter().copied()

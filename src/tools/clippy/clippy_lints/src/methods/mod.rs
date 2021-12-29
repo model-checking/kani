@@ -56,7 +56,9 @@ mod suspicious_splitn;
 mod uninit_assumed_init;
 mod unnecessary_filter_map;
 mod unnecessary_fold;
+mod unnecessary_iter_cloned;
 mod unnecessary_lazy_eval;
+mod unnecessary_to_owned;
 mod unwrap_or_else_default;
 mod unwrap_used;
 mod useless_asref;
@@ -78,7 +80,7 @@ use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty::{self, TraitRef, Ty, TyS};
 use rustc_semver::RustcVersion;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
-use rustc_span::symbol::SymbolStr;
+use rustc_span::symbol::Symbol;
 use rustc_span::{sym, Span};
 use rustc_typeck::hir_ty_to_ty;
 
@@ -1885,6 +1887,32 @@ declare_clippy_lint! {
     "usages of `str::splitn` that can be replaced with `str::split`"
 }
 
+declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for unnecessary calls to [`ToOwned::to_owned`](https://doc.rust-lang.org/std/borrow/trait.ToOwned.html#tymethod.to_owned)
+    /// and other `to_owned`-like functions.
+    ///
+    /// ### Why is this bad?
+    /// The unnecessary calls result in useless allocations.
+    ///
+    /// ### Example
+    /// ```rust
+    /// let path = std::path::Path::new("x");
+    /// foo(&path.to_string_lossy().to_string());
+    /// fn foo(s: &str) {}
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// let path = std::path::Path::new("x");
+    /// foo(&path.to_string_lossy());
+    /// fn foo(s: &str) {}
+    /// ```
+    #[clippy::version = "1.58.0"]
+    pub UNNECESSARY_TO_OWNED,
+    perf,
+    "unnecessary calls to `to_owned`-like functions"
+}
+
 pub struct Methods {
     avoid_breaking_exported_api: bool,
     msrv: Option<RustcVersion>,
@@ -1964,25 +1992,26 @@ impl_lint_pass!(Methods => [
     MANUAL_STR_REPEAT,
     EXTEND_WITH_DRAIN,
     MANUAL_SPLIT_ONCE,
-    NEEDLESS_SPLITN
+    NEEDLESS_SPLITN,
+    UNNECESSARY_TO_OWNED,
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
-fn method_call<'tcx>(recv: &'tcx hir::Expr<'tcx>) -> Option<(SymbolStr, &'tcx [hir::Expr<'tcx>], Span)> {
+fn method_call<'tcx>(recv: &'tcx hir::Expr<'tcx>) -> Option<(Symbol, &'tcx [hir::Expr<'tcx>], Span)> {
     if let ExprKind::MethodCall(path, span, args, _) = recv.kind {
         if !args.iter().any(|e| e.span.from_expansion()) {
-            return Some((path.ident.name.as_str(), args, span));
+            return Some((path.ident.name, args, span));
         }
     }
     None
 }
 
-/// Same as `method_call` but the `SymbolStr` is dereferenced into a temporary `&str`
+/// Same as `method_call` but the `Symbol` is dereferenced into a temporary `&str`
 macro_rules! method_call {
     ($expr:expr) => {
         method_call($expr)
             .as_ref()
-            .map(|&(ref name, args, span)| (&**name, args, span))
+            .map(|&(ref name, args, span)| (name.as_str(), args, span))
     };
 }
 
@@ -1999,14 +2028,15 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
                 from_iter_instead_of_collect::check(cx, expr, args, func);
             },
             hir::ExprKind::MethodCall(method_call, ref method_span, args, _) => {
-                or_fun_call::check(cx, expr, *method_span, &method_call.ident.as_str(), args);
-                expect_fun_call::check(cx, expr, *method_span, &method_call.ident.as_str(), args);
+                or_fun_call::check(cx, expr, *method_span, method_call.ident.as_str(), args);
+                expect_fun_call::check(cx, expr, *method_span, method_call.ident.as_str(), args);
                 clone_on_copy::check(cx, expr, method_call.ident.name, args);
                 clone_on_ref_ptr::check(cx, expr, method_call.ident.name, args);
                 inefficient_to_string::check(cx, expr, method_call.ident.name, args);
                 single_char_add_str::check(cx, expr, args);
                 into_iter_on_ref::check(cx, expr, *method_span, method_call.ident.name, args);
                 single_char_pattern::check(cx, expr, method_call.ident.name, args);
+                unnecessary_to_owned::check(cx, expr, method_call.ident.name, args);
             },
             hir::ExprKind::Binary(op, lhs, rhs) if op.node == hir::BinOpKind::Eq || op.node == hir::BinOpKind::Ne => {
                 let mut info = BinaryExprInfo {
@@ -2154,7 +2184,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
                 let self_ty = TraitRef::identity(cx.tcx, item.def_id.to_def_id()).self_ty().skip_binder();
                 wrong_self_convention::check(
                     cx,
-                    &item.ident.name.as_str(),
+                    item.ident.name.as_str(),
                     self_ty,
                     first_arg_ty,
                     first_arg_span,

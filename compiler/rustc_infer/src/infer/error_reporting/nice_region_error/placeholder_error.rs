@@ -13,7 +13,7 @@ use rustc_middle::ty::{self, TyCtxt};
 
 use std::fmt::{self, Write};
 
-impl NiceRegionError<'me, 'tcx> {
+impl<'tcx> NiceRegionError<'_, 'tcx> {
     /// When given a `ConcreteFailure` for a function with arguments containing a named region and
     /// an anonymous region, emit a descriptive diagnostic error.
     pub(super) fn try_report_placeholder_conflict(&self) -> Option<DiagnosticBuilder<'tcx>> {
@@ -208,7 +208,7 @@ impl NiceRegionError<'me, 'tcx> {
         );
         let mut err = self.tcx().sess.struct_span_err(span, &msg);
 
-        let leading_ellipsis = if let ObligationCauseCode::ItemObligation(def_id) = cause.code {
+        let leading_ellipsis = if let ObligationCauseCode::ItemObligation(def_id) = *cause.code() {
             err.span_label(span, "doesn't satisfy where-clause");
             err.span_label(
                 self.tcx().def_span(def_id),

@@ -212,7 +212,7 @@ pub fn struct_lint_level<'s, 'd>(
 ) {
     // Avoid codegen bloat from monomorphization by immediately doing dyn dispatch of `decorate` to
     // the "real" work.
-    fn struct_lint_level_impl(
+    fn struct_lint_level_impl<'s, 'd>(
         sess: &'s Session,
         lint: &'static Lint,
         level: Level,
@@ -295,7 +295,7 @@ pub fn struct_lint_level<'s, 'd>(
                     Level::Allow => "-A",
                     Level::ForceWarn => "--force-warn",
                 };
-                let hyphen_case_lint_name = name.replace("_", "-");
+                let hyphen_case_lint_name = name.replace('_', "-");
                 if lint_flag_val.as_str() == name {
                     sess.diag_note_once(
                         &mut err,
@@ -306,7 +306,7 @@ pub fn struct_lint_level<'s, 'd>(
                         ),
                     );
                 } else {
-                    let hyphen_case_flag_val = lint_flag_val.as_str().replace("_", "-");
+                    let hyphen_case_flag_val = lint_flag_val.as_str().replace('_', "-");
                     sess.diag_note_once(
                         &mut err,
                         DiagnosticMessageId::from(lint),
@@ -319,7 +319,7 @@ pub fn struct_lint_level<'s, 'd>(
             }
             LintLevelSource::Node(lint_attr_name, src, reason) => {
                 if let Some(rationale) = reason {
-                    err.note(&rationale.as_str());
+                    err.note(rationale.as_str());
                 }
                 sess.diag_span_note_once(
                     &mut err,

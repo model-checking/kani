@@ -40,7 +40,6 @@ impl<A: Iterator, B: Iterator> Zip<A, B> {
 /// # Examples
 ///
 /// ```
-/// #![feature(iter_zip)]
 /// use std::iter::zip;
 ///
 /// let xs = [1, 2, 3];
@@ -63,7 +62,7 @@ impl<A: Iterator, B: Iterator> Zip<A, B> {
 /// assert_eq!(iter.next().unwrap(), ((3, 6), 9));
 /// assert!(iter.next().is_none());
 /// ```
-#[unstable(feature = "iter_zip", issue = "83574")]
+#[stable(feature = "iter_zip", since = "1.59.0")]
 pub fn zip<A, B>(a: A, b: B) -> Zip<A::IntoIter, B::IntoIter>
 where
     A: IntoIterator,
@@ -517,7 +516,7 @@ impl<A: Debug + TrustedRandomAccessNoCoerce, B: Debug + TrustedRandomAccessNoCoe
 /// * It must also be safe to drop `self` after calling `self.__iterator_get_unchecked(idx)`.
 /// * If `T` is a subtype of `Self`, then it must be safe to coerce `self` to `T`.
 //
-// FIXME: Clarify interaction with SourceIter/InPlaceIterable. Calling `SouceIter::as_inner`
+// FIXME: Clarify interaction with SourceIter/InPlaceIterable. Calling `SourceIter::as_inner`
 // after `__iterator_get_unchecked` is supposed to be allowed.
 #[doc(hidden)]
 #[unstable(feature = "trusted_random_access", issue = "none")]

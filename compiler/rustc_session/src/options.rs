@@ -335,7 +335,7 @@ fn build_options<O: Default>(
             Some((k, v)) => (k.to_string(), Some(v)),
         };
 
-        let option_to_lookup = key.replace("-", "_");
+        let option_to_lookup = key.replace('-', "_");
         match descrs.iter().find(|(name, ..)| *name == option_to_lookup) {
             Some((_, setter, type_desc, _)) => {
                 if !setter(&mut op, value) {
@@ -1321,6 +1321,8 @@ options! {
         "print some statistics about the query system (default: no)"),
     randomize_layout: bool = (false, parse_bool, [TRACKED],
         "randomize the layout of types (default: no)"),
+    layout_seed: Option<u64> = (None, parse_opt_number, [TRACKED],
+        "seed layout randomization"),
     relax_elf_relocations: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "whether ELF relocations can be relaxed"),
     relro_level: Option<RelroLevel> = (None, parse_relro_level, [TRACKED],

@@ -8,7 +8,10 @@ use rustc_index::vec::IndexVec;
 use rustc_macros::HashStable;
 use rustc_middle::mir;
 use rustc_middle::mir::interpret::{InterpError, InvalidProgramInfo};
-use rustc_middle::ty::layout::{self, LayoutError, LayoutOf, LayoutOfHelpers, TyAndLayout};
+use rustc_middle::ty::layout::{
+    self, FnAbiError, FnAbiOfHelpers, FnAbiRequest, LayoutError, LayoutOf, LayoutOfHelpers,
+    TyAndLayout,
+};
 use rustc_middle::ty::{
     self, query::TyCtxtAt, subst::SubstsRef, ParamEnv, Ty, TyCtxt, TypeFoldable,
 };
@@ -16,7 +19,7 @@ use rustc_mir_dataflow::storage::AlwaysLiveLocals;
 use rustc_query_system::ich::StableHashingContext;
 use rustc_session::Limit;
 use rustc_span::{Pos, Span};
-use rustc_target::abi::{Align, HasDataLayout, Size, TargetDataLayout};
+use rustc_target::abi::{call::FnAbi, Align, HasDataLayout, Size, TargetDataLayout};
 
 use super::{
     AllocId, GlobalId, Immediate, InterpErrorInfo, InterpResult, MPlaceTy, Machine, MemPlace,
@@ -333,6 +336,24 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> LayoutOfHelpers<'tcx> for InterpC
     }
 }
 
+impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> FnAbiOfHelpers<'tcx> for InterpCx<'mir, 'tcx, M> {
+    type FnAbiOfResult = InterpResult<'tcx, &'tcx FnAbi<'tcx, Ty<'tcx>>>;
+
+    fn handle_fn_abi_err(
+        &self,
+        err: FnAbiError<'tcx>,
+        _span: Span,
+        _fn_abi_request: FnAbiRequest<'tcx>,
+    ) -> InterpErrorInfo<'tcx> {
+        match err {
+            FnAbiError::Layout(err) => err_inval!(Layout(err)).into(),
+            FnAbiError::AdjustForForeignAbi(err) => {
+                err_inval!(FnAbiAdjustForForeignAbi(err)).into()
+            }
+        }
+    }
+}
+
 /// Test if it is valid for a MIR assignment to assign `src`-typed place to `dest`-typed value.
 /// This test should be symmetric, as it is primarily about layout compatibility.
 pub(super) fn mir_assign_valid_types<'tcx>(
@@ -616,19 +637,9 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                     match self.size_and_align_of(metadata, &field)? {
                         Some(size_and_align) => size_and_align,
                         None => {
-                            // A field with extern type.  If this field is at offset 0, we behave
-                            // like the underlying extern type.
-                            // FIXME: Once we have made decisions for how to handle size and alignment
-                            // of `extern type`, this should be adapted.  It is just a temporary hack
-                            // to get some code to work that probably ought to work.
-                            if sized_size == Size::ZERO {
-                                return Ok(None);
-                            } else {
-                                span_bug!(
-                                    self.cur_span(),
-                                    "Fields cannot be extern types, unless they are at offset 0"
-                                )
-                            }
+                            // A field with an extern type. We don't know the actual dynamic size
+                            // or the alignment.
+                            return Ok(None);
                         }
                     };
 

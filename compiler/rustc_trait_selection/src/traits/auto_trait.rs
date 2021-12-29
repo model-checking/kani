@@ -219,7 +219,7 @@ impl<'tcx> AutoTraitFinder<'tcx> {
     }
 }
 
-impl AutoTraitFinder<'tcx> {
+impl<'tcx> AutoTraitFinder<'tcx> {
     /// The core logic responsible for computing the bounds for our synthesized impl.
     ///
     /// To calculate the bounds, we call `SelectionContext.select` in a loop. Like
@@ -839,7 +839,17 @@ impl AutoTraitFinder<'tcx> {
                         _ => return false,
                     }
                 }
-                _ => panic!("Unexpected predicate {:?} {:?}", ty, predicate),
+                // There's not really much we can do with these predicates -
+                // we start out with a `ParamEnv` with no inference variables,
+                // and these don't correspond to adding any new bounds to
+                // the `ParamEnv`.
+                ty::PredicateKind::WellFormed(..)
+                | ty::PredicateKind::ObjectSafe(..)
+                | ty::PredicateKind::ClosureKind(..)
+                | ty::PredicateKind::Subtype(..)
+                | ty::PredicateKind::ConstEvaluatable(..)
+                | ty::PredicateKind::Coerce(..)
+                | ty::PredicateKind::TypeWellFormedFromEnv(..) => {}
             };
         }
         true

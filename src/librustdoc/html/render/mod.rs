@@ -567,7 +567,7 @@ fn document_full_inner(
     is_collapsible: bool,
     heading_offset: HeadingOffset,
 ) {
-    if let Some(s) = cx.shared.maybe_collapsed_doc_value(item) {
+    if let Some(s) = item.collapsed_doc_value() {
         debug!("Doc block: =====\n{}\n=====", s);
         if is_collapsible {
             w.write_str(
@@ -640,9 +640,9 @@ fn short_item_info(
         // We display deprecation messages for #[deprecated] and #[rustc_deprecated]
         // but only display the future-deprecation messages for #[rustc_deprecated].
         let mut message = if let Some(since) = since {
-            let since = &since.as_str();
+            let since = since.as_str();
             if !stability::deprecation_in_effect(&depr) {
-                if *since == "TBD" {
+                if since == "TBD" {
                     String::from("Deprecating in a future Rust version")
                 } else {
                     format!("Deprecating in {}", Escape(since))
@@ -658,7 +658,7 @@ fn short_item_info(
             let note = note.as_str();
             let mut ids = cx.id_map.borrow_mut();
             let html = MarkdownHtml(
-                &note,
+                note,
                 &mut ids,
                 error_codes,
                 cx.shared.edition(),
@@ -683,7 +683,7 @@ fn short_item_info(
         let mut message =
             "<span class=\"emoji\">🔬</span> This is a nightly-only experimental API.".to_owned();
 
-        let mut feature = format!("<code>{}</code>", Escape(&feature.as_str()));
+        let mut feature = format!("<code>{}</code>", Escape(feature.as_str()));
         if let (Some(url), Some(issue)) = (&cx.shared.issue_tracker_base_url, issue) {
             feature.push_str(&format!(
                 "&nbsp;<a href=\"{url}{issue}\">#{issue}</a>",
@@ -762,7 +762,6 @@ fn assoc_const(
     w: &mut Buffer,
     it: &clean::Item,
     ty: &clean::Type,
-    _default: Option<&String>,
     link: AssocItemLink<'_>,
     extra: &str,
     cx: &Context<'_>,
@@ -958,15 +957,9 @@ fn render_assoc_item(
         clean::MethodItem(ref m, _) => {
             method(w, item, m.header, &m.generics, &m.decl, link, parent, cx, render_mode)
         }
-        clean::AssocConstItem(ref ty, ref default) => assoc_const(
-            w,
-            item,
-            ty,
-            default.as_ref(),
-            link,
-            if parent == ItemType::Trait { "    " } else { "" },
-            cx,
-        ),
+        clean::AssocConstItem(ref ty, _) => {
+            assoc_const(w, item, ty, link, if parent == ItemType::Trait { "    " } else { "" }, cx)
+        }
         clean::AssocTypeItem(ref bounds, ref default) => assoc_type(
             w,
             item,
@@ -989,7 +982,7 @@ fn attributes(it: &clean::Item) -> Vec<String> {
         .iter()
         .filter_map(|attr| {
             if ALLOWED_ATTRIBUTES.contains(&attr.name_or_empty()) {
-                Some(pprust::attribute_to_string(attr).replace("\n", "").replace("  ", " "))
+                Some(pprust::attribute_to_string(attr).replace('\n', "").replace("  ", " "))
             } else {
                 None
             }
@@ -1421,7 +1414,7 @@ fn render_impl(
                     let source_id = trait_
                         .and_then(|trait_| {
                             trait_.items.iter().find(|item| {
-                                item.name.map(|n| n.as_str().eq(&name.as_str())).unwrap_or(false)
+                                item.name.map(|n| n.as_str().eq(name.as_str())).unwrap_or(false)
                             })
                         })
                         .map(|item| format!("{}.{}", item.type_(), name));
@@ -1467,7 +1460,7 @@ fn render_impl(
                 w.write_str("</h4>");
                 w.write_str("</div>");
             }
-            clean::AssocConstItem(ref ty, ref default) => {
+            clean::AssocConstItem(ref ty, _) => {
                 let source_id = format!("{}.{}", item_type, name);
                 let id = cx.derive_id(source_id.clone());
                 write!(
@@ -1482,7 +1475,6 @@ fn render_impl(
                     w,
                     item,
                     ty,
-                    default.as_ref(),
                     link.anchor(if trait_.is_some() { &source_id } else { &id }),
                     "",
                     cx,
@@ -1620,7 +1612,7 @@ fn render_impl(
             write!(w, "</summary>")
         }
 
-        if let Some(ref dox) = cx.shared.maybe_collapsed_doc_value(&i.impl_item) {
+        if let Some(ref dox) = i.impl_item.collapsed_doc_value() {
             let mut ids = cx.id_map.borrow_mut();
             write!(
                 w,

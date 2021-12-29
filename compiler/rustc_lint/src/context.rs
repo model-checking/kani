@@ -381,10 +381,10 @@ impl LintStore {
             lint_name,
             self.lint_groups.keys().collect::<Vec<_>>()
         );
-        let lint_name_str = &*lint_name.as_str();
-        self.lint_groups.contains_key(&lint_name_str) || {
+        let lint_name_str = lint_name.as_str();
+        self.lint_groups.contains_key(lint_name_str) || {
             let warnings_name_str = crate::WARNINGS.name_lower();
-            lint_name_str == &*warnings_name_str
+            lint_name_str == warnings_name_str
         }
     }
 
@@ -633,16 +633,6 @@ pub trait LintContext: Sized {
                     }
                 },
                 BuiltinLintDiagnostics::Normal => (),
-                BuiltinLintDiagnostics::BareTraitObject(span, is_global) => {
-                    let (sugg, app) = match sess.source_map().span_to_snippet(span) {
-                        Ok(s) if is_global => {
-                            (format!("dyn ({})", s), Applicability::MachineApplicable)
-                        }
-                        Ok(s) => (format!("dyn {}", s), Applicability::MachineApplicable),
-                        Err(_) => ("dyn <type>".to_string(), Applicability::HasPlaceholders),
-                    };
-                    db.span_suggestion(span, "use `dyn`", sugg, app);
-                }
                 BuiltinLintDiagnostics::AbsPathWithModule(span) => {
                     let (sugg, app) = match sess.source_map().span_to_snippet(span) {
                         Ok(ref s) => {
@@ -671,12 +661,20 @@ pub trait LintContext: Sized {
                 BuiltinLintDiagnostics::UnknownCrateTypes(span, note, sugg) => {
                     db.span_suggestion(span, &note, sugg, Applicability::MaybeIncorrect);
                 }
-                BuiltinLintDiagnostics::UnusedImports(message, replaces) => {
+                BuiltinLintDiagnostics::UnusedImports(message, replaces, in_test_module) => {
                     if !replaces.is_empty() {
                         db.tool_only_multipart_suggestion(
                             &message,
                             replaces,
                             Applicability::MachineApplicable,
+                        );
+                    }
+
+                    if let Some(span) = in_test_module {
+                        let def_span = self.sess().source_map().guess_head_span(span);
+                        db.span_help(
+                            span.shrink_to_lo().to(def_span),
+                            "consider adding a `#[cfg(test)]` to the containing module",
                         );
                     }
                 }
@@ -772,7 +770,6 @@ pub trait LintContext: Sized {
                 }
                 BuiltinLintDiagnostics::NamedAsmLabel(help) => {
                     db.help(&help);
-                    db.note("see the asm section of the unstable book <https://doc.rust-lang.org/nightly/unstable-book/library-features/asm.html#labels> for more information");
                 }
             }
             // Rewrap `db`, and pass control to the user.
@@ -1041,8 +1038,8 @@ impl<'tcx> LateContext<'tcx> {
             ) -> Result<Self::Path, Self::Error> {
                 let mut path = print_prefix(self)?;
 
-                // Skip `::{{constructor}}` on tuple/unit structs.
-                if let DefPathData::Ctor = disambiguated_data.data {
+                // Skip `::{{extern}}` blocks and `::{{constructor}}` on tuple/unit structs.
+                if let DefPathData::ForeignMod | DefPathData::Ctor = disambiguated_data.data {
                     return Ok(path);
                 }
 

@@ -39,7 +39,7 @@ pub struct ValueIter<'ll> {
     step: unsafe extern "C" fn(&'ll Value) -> Option<&'ll Value>,
 }
 
-impl Iterator for ValueIter<'ll> {
+impl<'ll> Iterator for ValueIter<'ll> {
     type Item = &'ll Value;
 
     fn next(&mut self) -> Option<&'ll Value> {
@@ -51,14 +51,11 @@ impl Iterator for ValueIter<'ll> {
     }
 }
 
-pub fn iter_globals(llmod: &'ll llvm::Module) -> ValueIter<'ll> {
+pub fn iter_globals(llmod: &llvm::Module) -> ValueIter<'_> {
     unsafe { ValueIter { cur: llvm::LLVMGetFirstGlobal(llmod), step: llvm::LLVMGetNextGlobal } }
 }
 
-pub fn compile_codegen_unit(
-    tcx: TyCtxt<'tcx>,
-    cgu_name: Symbol,
-) -> (ModuleCodegen<ModuleLlvm>, u64) {
+pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen<ModuleLlvm>, u64) {
     let start_time = Instant::now();
 
     let dep_node = tcx.codegen_unit(cgu_name).codegen_dep_node(tcx);
@@ -82,7 +79,7 @@ pub fn compile_codegen_unit(
             &[cgu_name.to_string(), cgu.size_estimate().to_string()],
         );
         // Instantiate monomorphizations without filling out definitions yet...
-        let llvm_module = ModuleLlvm::new(tcx, &cgu_name.as_str());
+        let llvm_module = ModuleLlvm::new(tcx, cgu_name.as_str());
         {
             let cx = CodegenCx::new(tcx, cgu, &llvm_module);
             let mono_items = cx.codegen_unit.items_in_deterministic_order(cx.tcx);
@@ -146,7 +143,7 @@ pub fn set_link_section(llval: &Value, attrs: &CodegenFnAttrs) {
         None => return,
     };
     unsafe {
-        let buf = SmallCStr::new(&sect.as_str());
+        let buf = SmallCStr::new(sect.as_str());
         llvm::LLVMSetSection(llval, buf.as_ptr());
     }
 }

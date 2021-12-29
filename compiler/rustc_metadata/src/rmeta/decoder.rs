@@ -628,7 +628,7 @@ where
 
 implement_ty_decoder!(DecodeContext<'a, 'tcx>);
 
-impl MetadataBlob {
+impl<'tcx> MetadataBlob {
     crate fn new(metadata_ref: MetadataRef) -> MetadataBlob {
         MetadataBlob(Lrc::new(metadata_ref))
     }
@@ -697,7 +697,7 @@ impl CrateRoot<'_> {
         &self.triple
     }
 
-    crate fn decode_crate_deps(
+    crate fn decode_crate_deps<'a>(
         &self,
         metadata: &'a MetadataBlob,
     ) -> impl ExactSizeIterator<Item = CrateDep> + Captures<'a> {
@@ -1104,42 +1104,11 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
             let children = self.root.tables.children.get(self, id).unwrap_or_else(Lazy::empty);
 
             for child_index in children.decode((self, sess)) {
-                // Get the item.
-                let child_kind = match self.maybe_kind(child_index) {
-                    Some(child_kind) => child_kind,
-                    None => continue,
-                };
-
-                // Hand off the item to the callback.
-                match child_kind {
-                    // FIXME(eddyb) Don't encode these in children.
-                    EntryKind::ForeignMod => {
-                        let child_children = self
-                            .root
-                            .tables
-                            .children
-                            .get(self, child_index)
-                            .unwrap_or_else(Lazy::empty);
-                        for child_index in child_children.decode((self, sess)) {
-                            let kind = self.def_kind(child_index);
-                            callback(Export {
-                                res: Res::Def(kind, self.local_def_id(child_index)),
-                                ident: self.item_ident(child_index, sess),
-                                vis: self.get_visibility(child_index),
-                                span: self
-                                    .root
-                                    .tables
-                                    .span
-                                    .get(self, child_index)
-                                    .unwrap()
-                                    .decode((self, sess)),
-                            });
-                        }
-                        continue;
-                    }
-                    EntryKind::Impl(_) => continue,
-
-                    _ => {}
+                // FIXME: Merge with the logic below.
+                if let None | Some(EntryKind::ForeignMod | EntryKind::Impl(_)) =
+                    self.maybe_kind(child_index)
+                {
+                    continue;
                 }
 
                 let def_key = self.def_key(child_index);
@@ -1161,8 +1130,9 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
                     // Re-export lists automatically contain constructors when necessary.
                     match kind {
                         DefKind::Struct => {
-                            if let Some(ctor_def_id) = self.get_ctor_def_id(child_index) {
-                                let ctor_kind = self.get_ctor_kind(child_index);
+                            if let Some((ctor_def_id, ctor_kind)) =
+                                self.get_ctor_def_id_and_kind(child_index)
+                            {
                                 let ctor_res =
                                     Res::Def(DefKind::Ctor(CtorOf::Struct, ctor_kind), ctor_def_id);
                                 let vis = self.get_visibility(ctor_def_id.index);
@@ -1174,8 +1144,9 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
                             // value namespace, they are reserved for possible future use.
                             // It's ok to use the variant's id as a ctor id since an
                             // error will be reported on any use of such resolution anyway.
-                            let ctor_def_id = self.get_ctor_def_id(child_index).unwrap_or(def_id);
-                            let ctor_kind = self.get_ctor_kind(child_index);
+                            let (ctor_def_id, ctor_kind) = self
+                                .get_ctor_def_id_and_kind(child_index)
+                                .unwrap_or((def_id, CtorKind::Fictive));
                             let ctor_res =
                                 Res::Def(DefKind::Ctor(CtorOf::Variant, ctor_kind), ctor_def_id);
                             let mut vis = self.get_visibility(ctor_def_id.index);
@@ -1296,6 +1267,13 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
         }
     }
 
+    fn get_fn_has_self_parameter(&self, id: DefIndex) -> bool {
+        match self.kind(id) {
+            EntryKind::AssocFn(data) => data.decode(self).has_self,
+            _ => false,
+        }
+    }
+
     fn get_associated_item(&self, id: DefIndex, sess: &Session) -> ty::AssocItem {
         let def_key = self.def_key(id);
         let parent = self.local_def_id(def_key.parent.unwrap());
@@ -1326,22 +1304,11 @@ impl<'a, 'tcx> CrateMetadataRef<'a> {
         self.root.tables.variances.get(self, id).unwrap_or_else(Lazy::empty).decode(self)
     }
 
-    fn get_ctor_kind(&self, node_id: DefIndex) -> CtorKind {
+    fn get_ctor_def_id_and_kind(&self, node_id: DefIndex) -> Option<(DefId, CtorKind)> {
         match self.kind(node_id) {
-            EntryKind::Struct(data, _) | EntryKind::Union(data, _) | EntryKind::Variant(data) => {
-                data.decode(self).ctor_kind
-            }
-            _ => CtorKind::Fictive,
-        }
-    }
-
-    fn get_ctor_def_id(&self, node_id: DefIndex) -> Option<DefId> {
-        match self.kind(node_id) {
-            EntryKind::Struct(data, _) => {
-                data.decode(self).ctor.map(|index| self.local_def_id(index))
-            }
-            EntryKind::Variant(data) => {
-                data.decode(self).ctor.map(|index| self.local_def_id(index))
+            EntryKind::Struct(data, _) | EntryKind::Variant(data) => {
+                let vdata = data.decode(self);
+                vdata.ctor.map(|index| (self.local_def_id(index), vdata.ctor_kind))
             }
             _ => None,
         }
