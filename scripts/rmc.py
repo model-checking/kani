@@ -219,10 +219,7 @@ def compiler_flags(mangler, symbol_table_passes, restrict_vtable):
     if restrict_vtable:
         rmc_flags.append("--restrict-vtable-fn-ptrs")
 
-    rustc_flags = [
-        "-Z", f"symbol-mangling-version={mangler}",
-        "-Z", "human_readable_cgu_names",
-        f"--cfg={RMC_CFG}"]
+    rustc_flags = ["-Z", f"symbol-mangling-version={mangler}"]
 
     if "RUSTFLAGS" in os.environ:
         rustc_flags += os.environ["RUSTFLAGS"].split(" ")

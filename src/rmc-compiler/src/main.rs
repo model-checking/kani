@@ -18,8 +18,6 @@ use std::rc::Rc;
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     let rmc_deps = lib_path.clone().to_owned() + "/deps";
     let args = vec![
-        "-Z",
-        "codegen-backend=gotoc",
         "-C",
         "overflow-checks=on",
         "-C",
