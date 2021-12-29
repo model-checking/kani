@@ -9,8 +9,9 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 clap = "2.33.0"
-tracing = {version = "0.1", features = ["max_level_debug", "release_max_level_info"]}
+rmc_queries = {path = "rmc_queries"}
 rustc_codegen_rmc = {path = "rustc_codegen_rmc"}
+tracing = {version = "0.1", features = ["max_level_debug", "release_max_level_info"]}
 
 [build-dependencies]
 rmc = {path = "../../library/rmc", features = ["rmc"]}

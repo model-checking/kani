@@ -8,15 +8,14 @@ extern crate rustc_session;
 
 use clap::{
     app_from_crate, crate_authors, crate_description, crate_name, crate_version, AppSettings, Arg,
+    ArgMatches,
 };
-use rustc_codegen_ssa::traits::CodegenBackend;
+use rmc_queries::{QueryDb, UserInput};
 use rustc_driver::{init_env_logger, install_ice_hook, Callbacks, RunCompiler};
-use rustc_session::config;
-use std::lazy::SyncOnceCell;
 use std::path::PathBuf;
-use std::process::Command;
+use std::rc::Rc;
 
-fn rustc_default_flags(lib_path: &str) -> Vec<String> {
+fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     let rmc_deps = lib_path.clone().to_owned() + "/deps";
     let args = vec![
         "-Z",
@@ -47,15 +46,10 @@ fn rustc_default_flags(lib_path: &str) -> Vec<String> {
 }
 
 fn main() -> Result<(), &'static str> {
-    println!("RMC Compiler");
     let args = app_from_crate!()
         .setting(AppSettings::TrailingVarArg) // This allow us to fwd commands to rustc.
         .setting(clap::AppSettings::AllowLeadingHyphen)
-        .arg(
-            Arg::with_name("rmc-flags")
-                .long("--rmc-flags")
-                .help("Print the arguments that would be used to call rustc."),
-        )
+        .version_short("?")
         .arg(
             Arg::with_name("rmc-lib")
                 .long("--rmc-lib")
@@ -63,6 +57,11 @@ fn main() -> Result<(), &'static str> {
                 .help("Sets the path to locate the rmc library.")
                 .takes_value(true)
                 .required(true),
+        )
+        .arg(
+            Arg::with_name("goto-c")
+                .long("--goto-c")
+                .help("Enables compilation to goto-c intermediate representation."),
         )
         .arg(
             Arg::with_name("symbol-table-passes")
@@ -88,6 +87,13 @@ fn main() -> Result<(), &'static str> {
                 ),
         )
         .arg(
+            // TODO: Move this to a cargo wrapper. This should return rmc version.
+            Arg::with_name("rustc-version")
+                .short("V")
+                .long("--version")
+                .help("Gets underlying rustc version."),
+        )
+        .arg(
             Arg::with_name("rustc-options")
                 .help("Arguments to be passed down to rustc.")
                 .multiple(true)
@@ -95,53 +101,51 @@ fn main() -> Result<(), &'static str> {
         )
         .get_matches();
 
-    use std::env;
+    init_env_logger("RMC_LOG");
 
-    // Prints each argument on a separate line
-    let mut default_args = rustc_default_flags(&args.value_of("rmc-lib").unwrap());
-    if args.is_present("rmc-flags") {
-        println!("{}", default_args.join(" "));
-        Ok(())
-    } else {
-        let mut rustc_args = vec![String::from("rustc")];
-        rustc_args.append(&mut default_args);
-        rustc_args.append(
-            &mut args
-                .values_of("rustc-options")
-                .unwrap_or(clap::Values::default())
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>(),
-        );
-        let sysroot = sysroot_path(args.value_of("sysroot")).unwrap();
-        rustc_args.push(String::from("--sysroot"));
-        rustc_args.push(sysroot.to_string_lossy().to_string());
-        tracing::info!(?rustc_args, "Compile");
-        println!("Compile {:?}", rustc_args);
-        compile(rustc_args)
+    let mut gotoc_args = rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap());
+    let rustc_args = generate_rustc_args(&args, &mut gotoc_args);
+    let mut queries = QueryDb::default();
+    queries.set_symbol_table_passes(args.values_of_lossy("symbol-table-passes").unwrap_or(vec![]));
+    queries.set_emit_vtable_restrictions(args.is_present("restrict-vtable-fn-ptrs"));
+
+    let mut callbacks = RmcCallbacks {};
+    install_ice_hook();
+    let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
+    if args.is_present("goto-c") {
+        compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
+            rustc_codegen_rmc::GotocCodegenBackend::new(&Rc::new(queries))
+        })));
     }
+    compiler.run().or(Err("Failed to compile crate."))
 }
 
 struct RmcCallbacks {}
 
 impl Callbacks for RmcCallbacks {}
 
-/// Get the codegen backend based on the name and specified sysroot.
-///
-/// A name of `None` indicates that the default backend should be used.
-pub fn get_codegen_backend(_config: &config::Options) -> Box<dyn CodegenBackend> {
-    static LOAD: SyncOnceCell<fn() -> Box<dyn CodegenBackend>> = SyncOnceCell::new();
+fn generate_rustc_args(args: &ArgMatches, gotoc_args: &mut Vec<String>) -> Vec<String> {
+    let mut rustc_args = vec![String::from("rustc")];
+    if args.is_present("goto-c") {
+        rustc_args.append(gotoc_args);
+    }
 
-    let load = LOAD.get_or_init(|| rustc_codegen_rmc::GotocCodegenBackend::new);
-    load()
-}
+    if args.is_present("rustc-version") {
+        rustc_args.push(String::from("--version"))
+    }
 
-fn compile(args: Vec<String>) -> Result<(), &'static str> {
-    init_env_logger("RMC_LOG");
-    let mut callbacks = RmcCallbacks {};
-    install_ice_hook();
-    let mut compiler = RunCompiler::new(&args, &mut callbacks);
-    compiler.set_make_codegen_backend(Some(Box::new(get_codegen_backend)));
-    compiler.run().or(Err("Failed to compile crate."))
+    rustc_args.append(
+        &mut args
+            .values_of("rustc-options")
+            .unwrap_or(clap::Values::default())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+    );
+    let sysroot = sysroot_path(args.value_of("sysroot")).unwrap();
+    rustc_args.push(String::from("--sysroot"));
+    rustc_args.push(sysroot.to_string_lossy().to_string());
+    tracing::info!(?rustc_args, "Compile");
+    rustc_args
 }
 
 /// Try to generate the rustup toolchain path.

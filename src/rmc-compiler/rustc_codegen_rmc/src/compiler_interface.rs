@@ -9,6 +9,7 @@ use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::goto_program::SymbolTable;
 use cbmc::InternedString;
+use rmc_queries::{QueryDb, UserInput};
 use rmc_restrictions::VtableCtxResults;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
@@ -27,14 +28,17 @@ use std::collections::BTreeMap;
 use std::io::BufWriter;
 use std::iter::FromIterator;
 use std::path::PathBuf;
+use std::rc::Rc;
 use tracing::{debug, warn};
 
 #[derive(Clone)]
-pub struct GotocCodegenBackend();
+pub struct GotocCodegenBackend {
+    queries: Rc<QueryDb>,
+}
 
 impl GotocCodegenBackend {
-    pub fn new() -> Box<dyn CodegenBackend> {
-        Box::new(GotocCodegenBackend())
+    pub fn new(queries: &Rc<QueryDb>) -> Box<dyn CodegenBackend> {
+        Box::new(GotocCodegenBackend { queries: Rc::clone(&queries) })
     }
 }
 
@@ -58,7 +62,7 @@ impl CodegenBackend for GotocCodegenBackend {
         check_options(&tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
-        let mut c = GotocCtx::new(tcx);
+        let mut c = GotocCtx::new(tcx, self.queries.get_emit_vtable_restrictions());
 
         // we first declare all functions
         for cgu in codegen_units {
@@ -118,8 +122,7 @@ impl CodegenBackend for GotocCodegenBackend {
         }
 
         // perform post-processing symbol table passes
-        // TODO &tcx.sess.opts.debugging_opts.symbol_table_passes,
-        let passes = vec![String::from("identity")];
+        let passes = self.queries.get_symbol_table_passes();
         let symtab = symtab_transformer::do_passes(c.symbol_table, &passes);
 
         // Map MIR types to GotoC types

@@ -3331,6 +3331,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rmc",
+ "rmc_queries",
  "rustc_codegen_rmc",
  "tracing",
 ]
@@ -3348,6 +3349,13 @@ dependencies = [
 [[package]]
 name = "rmc_macros"
 version = "0.1.0"
+
+[[package]]
+name = "rmc_queries"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "rmc_restrictions"
@@ -3901,6 +3909,7 @@ dependencies = [
  "libc",
  "measureme 9.1.2",
  "num",
+ "rmc_queries",
  "rmc_restrictions",
  "rustc-demangle",
  "serde",
