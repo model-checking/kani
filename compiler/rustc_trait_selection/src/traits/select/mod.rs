@@ -25,9 +25,10 @@ use super::{ObligationCause, PredicateObligation, TraitObligation};
 
 use crate::infer::{InferCtxt, InferOk, TypeFreshener};
 use crate::traits::error_reporting::InferCtxtExt;
+use crate::traits::project::ProjectionCacheKeyExt;
+use crate::traits::ProjectionCacheKey;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::stack::ensure_sufficient_stack;
-use rustc_data_structures::sync::Lrc;
 use rustc_errors::ErrorReported;
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
@@ -35,7 +36,7 @@ use rustc_infer::infer::LateBoundRegionConversionTime;
 use rustc_middle::dep_graph::{DepKind, DepNodeIndex};
 use rustc_middle::mir::interpret::ErrorHandled;
 use rustc_middle::thir::abstract_const::NotConstEvaluatable;
-use rustc_middle::ty::fast_reject;
+use rustc_middle::ty::fast_reject::{self, SimplifyParams, StripReferences};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::relate::TypeRelation;
 use rustc_middle::ty::subst::{GenericArgKind, Subst, SubstsRef};
@@ -550,8 +551,54 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     let project_obligation = obligation.with(data);
                     match project::poly_project_and_unify_type(self, &project_obligation) {
                         Ok(Ok(Some(mut subobligations))) => {
-                            self.add_depth(subobligations.iter_mut(), obligation.recursion_depth);
-                            self.evaluate_predicates_recursively(previous_stack, subobligations)
+                            'compute_res: {
+                                // If we've previously marked this projection as 'complete', thne
+                                // use the final cached result (either `EvaluatedToOk` or
+                                // `EvaluatedToOkModuloRegions`), and skip re-evaluating the
+                                // sub-obligations.
+                                if let Some(key) =
+                                    ProjectionCacheKey::from_poly_projection_predicate(self, data)
+                                {
+                                    if let Some(cached_res) = self
+                                        .infcx
+                                        .inner
+                                        .borrow_mut()
+                                        .projection_cache()
+                                        .is_complete(key)
+                                    {
+                                        break 'compute_res Ok(cached_res);
+                                    }
+                                }
+
+                                self.add_depth(
+                                    subobligations.iter_mut(),
+                                    obligation.recursion_depth,
+                                );
+                                let res = self.evaluate_predicates_recursively(
+                                    previous_stack,
+                                    subobligations,
+                                );
+                                if let Ok(res) = res {
+                                    if res == EvaluatedToOk || res == EvaluatedToOkModuloRegions {
+                                        if let Some(key) =
+                                            ProjectionCacheKey::from_poly_projection_predicate(
+                                                self, data,
+                                            )
+                                        {
+                                            // If the result is something that we can cache, then mark this
+                                            // entry as 'complete'. This will allow us to skip evaluating the
+                                            // suboligations at all the next time we evaluate the projection
+                                            // predicate.
+                                            self.infcx
+                                                .inner
+                                                .borrow_mut()
+                                                .projection_cache()
+                                                .complete(key, res);
+                                        }
+                                    }
+                                }
+                                res
+                            }
                         }
                         Ok(Ok(None)) => Ok(EvaluatedToAmbig),
                         Ok(Err(project::InProgress)) => Ok(EvaluatedToRecur),
@@ -683,7 +730,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         let mut param_env = obligation.param_env;
 
         fresh_trait_pred = fresh_trait_pred.map_bound(|mut pred| {
-            param_env = param_env.with_constness(pred.constness.and(param_env.constness()));
+            pred.remap_constness(self.tcx(), &mut param_env);
             pred
         });
 
@@ -1222,7 +1269,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         }
         let tcx = self.tcx();
         let mut pred = cache_fresh_trait_pred.skip_binder();
-        param_env = param_env.with_constness(pred.constness.and(param_env.constness()));
+        pred.remap_constness(tcx, &mut param_env);
 
         if self.can_use_global_caches(param_env) {
             if let Some(res) = tcx.selection_cache.get(&param_env.and(pred), tcx) {
@@ -1275,7 +1322,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         let tcx = self.tcx();
         let mut pred = cache_fresh_trait_pred.skip_binder();
 
-        param_env = param_env.with_constness(pred.constness.and(param_env.constness()));
+        pred.remap_constness(tcx, &mut param_env);
 
         if !self.can_cache_candidate(&candidate) {
             debug!(?pred, ?candidate, "insert_candidate_cache - candidate is not cacheable");
@@ -2089,10 +2136,21 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             |(obligation_arg, impl_arg)| {
                 match (obligation_arg.unpack(), impl_arg.unpack()) {
                     (GenericArgKind::Type(obligation_ty), GenericArgKind::Type(impl_ty)) => {
-                        let simplified_obligation_ty =
-                            fast_reject::simplify_type(self.tcx(), obligation_ty, true);
-                        let simplified_impl_ty =
-                            fast_reject::simplify_type(self.tcx(), impl_ty, false);
+                        // Note, we simplify parameters for the obligation but not the
+                        // impl so that we do not reject a blanket impl but do reject
+                        // more concrete impls if we're searching for `T: Trait`.
+                        let simplified_obligation_ty = fast_reject::simplify_type(
+                            self.tcx(),
+                            obligation_ty,
+                            SimplifyParams::Yes,
+                            StripReferences::No,
+                        );
+                        let simplified_impl_ty = fast_reject::simplify_type(
+                            self.tcx(),
+                            impl_ty,
+                            SimplifyParams::No,
+                            StripReferences::No,
+                        );
 
                         simplified_obligation_ty.is_some()
                             && simplified_impl_ty.is_some()
@@ -2325,7 +2383,7 @@ impl<'tcx> TraitObligationExt<'tcx> for TraitObligation<'tcx> {
         // by using -Z verbose or just a CLI argument.
         let derived_cause = DerivedObligationCause {
             parent_trait_ref: obligation.predicate.to_poly_trait_ref(),
-            parent_code: Lrc::new(obligation.cause.code.clone()),
+            parent_code: obligation.cause.clone_code(),
         };
         let derived_code = variant(derived_cause);
         ObligationCause::new(obligation.cause.span, obligation.cause.body_id, derived_code)

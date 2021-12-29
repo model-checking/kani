@@ -825,7 +825,7 @@ impl<'tcx> SaveContext<'tcx> {
         for attr in attrs {
             if let Some(val) = attr.doc_str() {
                 // FIXME: Should save-analysis beautify doc strings itself or leave it to users?
-                result.push_str(&beautify_doc_string(val).as_str());
+                result.push_str(beautify_doc_string(val).as_str());
                 result.push('\n');
             }
         }
@@ -1036,7 +1036,7 @@ fn find_config(supplied: Option<Config>) -> Config {
 
 // Helper function to escape quotes in a string
 fn escape(s: String) -> String {
-    s.replace("\"", "\"\"")
+    s.replace('\"', "\"\"")
 }
 
 // Helper function to determine if a span came from a

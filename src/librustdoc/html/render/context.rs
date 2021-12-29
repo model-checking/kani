@@ -88,8 +88,6 @@ crate struct SharedContext<'tcx> {
     crate local_sources: FxHashMap<PathBuf, String>,
     /// Show the memory layout of types in the docs.
     pub(super) show_type_layout: bool,
-    /// Whether the collapsed pass ran
-    collapsed: bool,
     /// The base-URL of the issue tracker for when an item has been tagged with
     /// an issue number.
     pub(super) issue_tracker_base_url: Option<String>,
@@ -142,12 +140,6 @@ impl SharedContext<'_> {
         Ok(())
     }
 
-    /// Returns the `collapsed_doc_value` of the given item if this is the main crate, otherwise
-    /// returns the `doc_value`.
-    crate fn maybe_collapsed_doc_value<'a>(&self, item: &'a clean::Item) -> Option<String> {
-        if self.collapsed { item.collapsed_doc_value() } else { item.doc_value() }
-    }
-
     crate fn edition(&self) -> Edition {
         self.tcx.sess.edition()
     }
@@ -180,7 +172,7 @@ impl<'tcx> Context<'tcx> {
     fn render_item(&self, it: &clean::Item, is_module: bool) -> String {
         let mut title = String::new();
         if !is_module {
-            title.push_str(&it.name.unwrap().as_str());
+            title.push_str(it.name.unwrap().as_str());
         }
         if !it.is_primitive() && !it.is_keyword() {
             if !is_module {
@@ -315,7 +307,7 @@ impl<'tcx> Context<'tcx> {
         };
         let file = &file;
 
-        let symbol;
+        let krate_sym;
         let (krate, path) = if cnum == LOCAL_CRATE {
             if let Some(path) = self.shared.local_sources.get(file) {
                 (self.shared.layout.krate.as_str(), path)
@@ -343,8 +335,8 @@ impl<'tcx> Context<'tcx> {
             let mut fname = file.file_name().expect("source has no filename").to_os_string();
             fname.push(".html");
             path.push_str(&fname.to_string_lossy());
-            symbol = krate.as_str();
-            (&*symbol, &path)
+            krate_sym = krate;
+            (krate_sym.as_str(), &path)
         };
 
         let anchor = if with_lines {
@@ -405,6 +397,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             show_type_layout,
             generate_link_to_definition,
             call_locations,
+            no_emit_shared,
             ..
         } = options;
 
@@ -472,7 +465,6 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
         let (sender, receiver) = channel();
         let mut scx = SharedContext {
             tcx,
-            collapsed: krate.collapsed,
             src_root,
             local_sources,
             issue_tracker_base_url,
@@ -525,13 +517,16 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             sources::render(&mut cx, &krate)?;
         }
 
-        // Build our search index
-        let index = build_index(&krate, &mut Rc::get_mut(&mut cx.shared).unwrap().cache, tcx);
+        if !no_emit_shared {
+            // Build our search index
+            let index = build_index(&krate, &mut Rc::get_mut(&mut cx.shared).unwrap().cache, tcx);
 
-        // Write shared runs within a flock; disable thread dispatching of IO temporarily.
-        Rc::get_mut(&mut cx.shared).unwrap().fs.set_sync_only(true);
-        write_shared(&cx, &krate, index, &md_opts)?;
-        Rc::get_mut(&mut cx.shared).unwrap().fs.set_sync_only(false);
+            // Write shared runs within a flock; disable thread dispatching of IO temporarily.
+            Rc::get_mut(&mut cx.shared).unwrap().fs.set_sync_only(true);
+            write_shared(&cx, &krate, index, &md_opts)?;
+            Rc::get_mut(&mut cx.shared).unwrap().fs.set_sync_only(false);
+        }
+
         Ok((cx, krate))
     }
 
@@ -549,7 +544,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
     fn after_krate(&mut self) -> Result<(), Error> {
         let crate_name = self.tcx().crate_name(LOCAL_CRATE);
-        let final_file = self.dst.join(&*crate_name.as_str()).join("all.html");
+        let final_file = self.dst.join(crate_name.as_str()).join("all.html");
         let settings_file = self.dst.join("settings.html");
 
         let mut root_path = self.dst.to_str().expect("invalid path").to_owned();
@@ -619,9 +614,9 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
         if let Some(ref redirections) = self.shared.redirections {
             if !redirections.borrow().is_empty() {
                 let redirect_map_path =
-                    self.dst.join(&*crate_name.as_str()).join("redirect-map.json");
+                    self.dst.join(crate_name.as_str()).join("redirect-map.json");
                 let paths = serde_json::to_string(&*redirections.borrow()).unwrap();
-                self.shared.ensure_dir(&self.dst.join(&*crate_name.as_str()))?;
+                self.shared.ensure_dir(&self.dst.join(crate_name.as_str()))?;
                 self.shared.fs.write(redirect_map_path, paths)?;
             }
         }
@@ -703,7 +698,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
         if !buf.is_empty() {
             let name = item.name.as_ref().unwrap();
             let item_type = item.type_();
-            let file_name = &item_path(item_type, &name.as_str());
+            let file_name = &item_path(item_type, name.as_str());
             self.shared.ensure_dir(&self.dst)?;
             let joint_dst = self.dst.join(file_name);
             self.shared.fs.write(joint_dst, buf)?;

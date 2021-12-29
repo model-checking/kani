@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::default::Default;
-use std::hash::{Hash, Hasher};
-use std::iter::FromIterator;
+use std::fmt::Write;
+use std::hash::Hash;
 use std::lazy::SyncOnceCell as OnceCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -26,7 +26,7 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::Session;
 use rustc_span::hygiene::MacroKind;
 use rustc_span::source_map::DUMMY_SP;
-use rustc_span::symbol::{kw, sym, Ident, Symbol, SymbolStr};
+use rustc_span::symbol::{kw, sym, Ident, Symbol};
 use rustc_span::{self, FileName, Loc};
 use rustc_target::abi::VariantIdx;
 use rustc_target::spec::abi::Abi;
@@ -41,6 +41,7 @@ use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
 use crate::html::render::cache::ExternalLocation;
 use crate::html::render::Context;
+use crate::passes::collect_intra_doc_links::UrlFragment;
 
 crate use self::FnRetTy::*;
 crate use self::ItemKind::*;
@@ -123,12 +124,11 @@ crate struct Crate {
     crate primitives: ThinVec<(DefId, PrimitiveType)>,
     /// Only here so that they can be filtered through the rustdoc passes.
     crate external_traits: Rc<RefCell<FxHashMap<DefId, TraitWithExtraInfo>>>,
-    crate collapsed: bool,
 }
 
 // `Crate` is frequently moved by-value. Make sure it doesn't unintentionally get bigger.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Crate, 80);
+rustc_data_structures::static_assert_size!(Crate, 72);
 
 impl Crate {
     crate fn name(&self, tcx: TyCtxt<'_>) -> Symbol {
@@ -201,7 +201,7 @@ impl ExternalCrate {
         // See if there's documentation generated into the local directory
         // WARNING: since rustdoc creates these directories as it generates documentation, this check is only accurate before rendering starts.
         // Make sure to call `location()` by that time.
-        let local_location = dst.join(&*self.name(tcx).as_str());
+        let local_location = dst.join(self.name(tcx).as_str());
         if local_location.is_dir() {
             return Local;
         }
@@ -487,8 +487,7 @@ impl Item {
                 if let Ok((mut href, ..)) = href(*did, cx) {
                     debug!(?href);
                     if let Some(ref fragment) = *fragment {
-                        href.push('#');
-                        href.push_str(fragment);
+                        write!(href, "{}", fragment).unwrap()
                     }
                     Some(RenderedLink {
                         original_text: s.clone(),
@@ -670,7 +669,7 @@ crate enum ItemKind {
     MacroItem(Macro),
     ProcMacroItem(ProcMacro),
     PrimitiveItem(PrimitiveType),
-    AssocConstItem(Type, Option<String>),
+    AssocConstItem(Type, Option<ConstantKind>),
     /// An associated item in a trait or trait impl.
     ///
     /// The bounds may be non-empty if there is a `where` clause.
@@ -906,7 +905,7 @@ impl<I: Iterator<Item = ast::NestedMetaItem> + IntoIterator<Item = ast::NestedMe
 /// Included files are kept separate from inline doc comments so that proper line-number
 /// information can be given when a doctest fails. Sugared doc comments and "raw" doc comments are
 /// kept separate because of issue #42760.
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 crate struct DocFragment {
     crate span: rustc_span::Span,
     /// The module this doc-comment came from.
@@ -916,7 +915,6 @@ crate struct DocFragment {
     crate parent_module: Option<DefId>,
     crate doc: Symbol,
     crate kind: DocFragmentKind,
-    crate need_backline: bool,
     crate indent: usize,
 }
 
@@ -932,16 +930,18 @@ crate enum DocFragmentKind {
     RawDoc,
 }
 
-// The goal of this function is to apply the `DocFragment` transformations that are required when
-// transforming into the final markdown. So the transformations in here are:
-//
-// * Applying the computed indent to each lines in each doc fragment (a `DocFragment` can contain
-//   multiple lines in case of `#[doc = ""]`).
-// * Adding backlines between `DocFragment`s and adding an extra one if required (stored in the
-//   `need_backline` field).
+/// The goal of this function is to apply the `DocFragment` transformation that is required when
+/// transforming into the final Markdown, which is applying the computed indent to each line in
+/// each doc fragment (a `DocFragment` can contain multiple lines in case of `#[doc = ""]`).
+///
+/// Note: remove the trailing newline where appropriate
 fn add_doc_fragment(out: &mut String, frag: &DocFragment) {
     let s = frag.doc.as_str();
-    let mut iter = s.lines().peekable();
+    let mut iter = s.lines();
+    if s == "" {
+        out.push('\n');
+        return;
+    }
     while let Some(line) = iter.next() {
         if line.chars().any(|c| !c.is_whitespace()) {
             assert!(line.len() >= frag.indent);
@@ -949,25 +949,19 @@ fn add_doc_fragment(out: &mut String, frag: &DocFragment) {
         } else {
             out.push_str(line);
         }
-        if iter.peek().is_some() {
-            out.push('\n');
-        }
-    }
-    if frag.need_backline {
         out.push('\n');
     }
 }
 
-impl<'a> FromIterator<&'a DocFragment> for String {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = &'a DocFragment>,
-    {
-        iter.into_iter().fold(String::new(), |mut acc, frag| {
-            add_doc_fragment(&mut acc, frag);
-            acc
-        })
+/// Collapse a collection of [`DocFragment`]s into one string,
+/// handling indentation and newlines as needed.
+crate fn collapse_doc_fragments(doc_strings: &[DocFragment]) -> String {
+    let mut acc = String::new();
+    for frag in doc_strings {
+        add_doc_fragment(&mut acc, frag);
     }
+    acc.pop();
+    acc
 }
 
 /// A link that has not yet been rendered.
@@ -984,7 +978,7 @@ crate struct ItemLink {
     pub(crate) link_text: String,
     pub(crate) did: DefId,
     /// The url fragment to append to the link
-    pub(crate) fragment: Option<String>,
+    pub(crate) fragment: Option<UrlFragment>,
 }
 
 pub struct RenderedLink {
@@ -1032,13 +1026,6 @@ impl Attributes {
         additional_attrs: Option<(&[ast::Attribute], DefId)>,
     ) -> Attributes {
         let mut doc_strings: Vec<DocFragment> = vec![];
-
-        fn update_need_backline(doc_strings: &mut Vec<DocFragment>) {
-            if let Some(prev) = doc_strings.last_mut() {
-                prev.need_backline = true;
-            }
-        }
-
         let clean_attr = |(attr, parent_module): (&ast::Attribute, Option<DefId>)| {
             if let Some(value) = attr.doc_str() {
                 trace!("got doc_str={:?}", value);
@@ -1049,16 +1036,8 @@ impl Attributes {
                     DocFragmentKind::RawDoc
                 };
 
-                let frag = DocFragment {
-                    span: attr.span,
-                    doc: value,
-                    kind,
-                    parent_module,
-                    need_backline: false,
-                    indent: 0,
-                };
-
-                update_need_backline(&mut doc_strings);
+                let frag =
+                    DocFragment { span: attr.span, doc: value, kind, parent_module, indent: 0 };
 
                 doc_strings.push(frag);
 
@@ -1094,6 +1073,7 @@ impl Attributes {
             }
             add_doc_fragment(&mut out, new_frag);
         }
+        out.pop();
         if out.is_empty() { None } else { Some(out) }
     }
 
@@ -1102,10 +1082,17 @@ impl Attributes {
     /// The module can be different if this is a re-export with added documentation.
     crate fn collapsed_doc_value_by_module_level(&self) -> FxHashMap<Option<DefId>, String> {
         let mut ret = FxHashMap::default();
+        if self.doc_strings.len() == 0 {
+            return ret;
+        }
+        let last_index = self.doc_strings.len() - 1;
 
-        for new_frag in self.doc_strings.iter() {
+        for (i, new_frag) in self.doc_strings.iter().enumerate() {
             let out = ret.entry(new_frag.parent_module).or_default();
             add_doc_fragment(out, new_frag);
+            if i == last_index {
+                out.pop();
+            }
         }
         ret
     }
@@ -1113,7 +1100,11 @@ impl Attributes {
     /// Finds all `doc` attributes as NameValues and returns their corresponding values, joined
     /// with newlines.
     crate fn collapsed_doc_value(&self) -> Option<String> {
-        if self.doc_strings.is_empty() { None } else { Some(self.doc_strings.iter().collect()) }
+        if self.doc_strings.is_empty() {
+            None
+        } else {
+            Some(collapse_doc_fragments(&self.doc_strings))
+        }
     }
 
     crate fn get_doc_aliases(&self) -> Box<[Symbol]> {
@@ -1149,15 +1140,6 @@ impl PartialEq for Attributes {
 }
 
 impl Eq for Attributes {}
-
-impl Hash for Attributes {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.doc_strings.hash(hasher);
-        for attr in &self.other_attrs {
-            attr.id.hash(hasher);
-        }
-    }
-}
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate enum GenericBound {
@@ -2008,10 +1990,6 @@ impl Path {
         self.segments.last().expect("segments were empty").name
     }
 
-    crate fn last_name(&self) -> SymbolStr {
-        self.segments.last().expect("segments were empty").name.as_str()
-    }
-
     crate fn whole_name(&self) -> String {
         self.segments
             .iter()
@@ -2153,7 +2131,21 @@ crate enum ConstantKind {
 
 impl Constant {
     crate fn expr(&self, tcx: TyCtxt<'_>) -> String {
-        match self.kind {
+        self.kind.expr(tcx)
+    }
+
+    crate fn value(&self, tcx: TyCtxt<'_>) -> Option<String> {
+        self.kind.value(tcx)
+    }
+
+    crate fn is_literal(&self, tcx: TyCtxt<'_>) -> bool {
+        self.kind.is_literal(tcx)
+    }
+}
+
+impl ConstantKind {
+    crate fn expr(&self, tcx: TyCtxt<'_>) -> String {
+        match *self {
             ConstantKind::TyConst { ref expr } => expr.clone(),
             ConstantKind::Extern { def_id } => print_inlined_const(tcx, def_id),
             ConstantKind::Local { body, .. } | ConstantKind::Anonymous { body } => {
@@ -2163,7 +2155,7 @@ impl Constant {
     }
 
     crate fn value(&self, tcx: TyCtxt<'_>) -> Option<String> {
-        match self.kind {
+        match *self {
             ConstantKind::TyConst { .. } | ConstantKind::Anonymous { .. } => None,
             ConstantKind::Extern { def_id } | ConstantKind::Local { def_id, .. } => {
                 print_evaluated_const(tcx, def_id)
@@ -2172,7 +2164,7 @@ impl Constant {
     }
 
     crate fn is_literal(&self, tcx: TyCtxt<'_>) -> bool {
-        match self.kind {
+        match *self {
             ConstantKind::TyConst { .. } => false,
             ConstantKind::Extern { def_id } => def_id.as_local().map_or(false, |def_id| {
                 is_literal_expr(tcx, tcx.hir().local_def_id_to_hir_id(def_id))

@@ -734,6 +734,15 @@ pub struct TraitPredicate<'tcx> {
 pub type PolyTraitPredicate<'tcx> = ty::Binder<'tcx, TraitPredicate<'tcx>>;
 
 impl<'tcx> TraitPredicate<'tcx> {
+    pub fn remap_constness(&mut self, tcx: TyCtxt<'tcx>, param_env: &mut ParamEnv<'tcx>) {
+        if unlikely!(Some(self.trait_ref.def_id) == tcx.lang_items().drop_trait()) {
+            // remap without changing constness of this predicate.
+            // this is because `T: ~const Drop` has a different meaning to `T: Drop`
+            param_env.remap_constness_with(self.constness)
+        } else {
+            *param_env = param_env.with_constness(self.constness.and(param_env.constness()))
+        }
+    }
     pub fn def_id(self) -> DefId {
         self.trait_ref.def_id
     }
@@ -852,7 +861,7 @@ pub trait ToPredicate<'tcx> {
     fn to_predicate(self, tcx: TyCtxt<'tcx>) -> Predicate<'tcx>;
 }
 
-impl ToPredicate<'tcx> for Binder<'tcx, PredicateKind<'tcx>> {
+impl<'tcx> ToPredicate<'tcx> for Binder<'tcx, PredicateKind<'tcx>> {
     #[inline(always)]
     fn to_predicate(self, tcx: TyCtxt<'tcx>) -> Predicate<'tcx> {
         tcx.mk_predicate(self)
@@ -1418,7 +1427,7 @@ impl<'tcx> ParamEnv<'tcx> {
 
 // FIXME(ecstaticmorse): Audit all occurrences of `without_const().to_predicate(tcx)` to ensure that
 // the constness of trait bounds is being propagated correctly.
-impl PolyTraitRef<'tcx> {
+impl<'tcx> PolyTraitRef<'tcx> {
     #[inline]
     pub fn with_constness(self, constness: BoundConstness) -> PolyTraitPredicate<'tcx> {
         self.map_bound(|trait_ref| ty::TraitPredicate {
@@ -1472,7 +1481,7 @@ pub struct Destructor {
 }
 
 bitflags! {
-    #[derive(HashStable)]
+    #[derive(HashStable, TyEncodable, TyDecodable)]
     pub struct VariantFlags: u32 {
         const NO_VARIANT_FLAGS        = 0;
         /// Indicates whether the field list of this variant is `#[non_exhaustive]`.
@@ -1484,7 +1493,7 @@ bitflags! {
 }
 
 /// Definition of a variant -- a struct's fields or an enum variant.
-#[derive(Debug, HashStable)]
+#[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 pub struct VariantDef {
     /// `DefId` that identifies the variant itself.
     /// If this variant belongs to a struct or union, then this is a copy of its `DefId`.
@@ -1586,7 +1595,7 @@ pub enum VariantDiscr {
     Relative(u32),
 }
 
-#[derive(Debug, HashStable)]
+#[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 pub struct FieldDef {
     pub did: DefId,
     #[stable_hasher(project(name))]
@@ -1608,9 +1617,9 @@ bitflags! {
         // the seed stored in `ReprOptions.layout_seed`
         const RANDOMIZE_LAYOUT   = 1 << 5;
         // Any of these flags being set prevent field reordering optimisation.
-        const IS_UNOPTIMISABLE   = ReprFlags::IS_C.bits |
-                                   ReprFlags::IS_SIMD.bits |
-                                   ReprFlags::IS_LINEAR.bits;
+        const IS_UNOPTIMISABLE   = ReprFlags::IS_C.bits
+                                 | ReprFlags::IS_SIMD.bits
+                                 | ReprFlags::IS_LINEAR.bits;
     }
 }
 
@@ -1640,7 +1649,14 @@ impl ReprOptions {
 
         // Generate a deterministically-derived seed from the item's path hash
         // to allow for cross-crate compilation to actually work
-        let field_shuffle_seed = tcx.def_path_hash(did).0.to_smaller_hash();
+        let mut field_shuffle_seed = tcx.def_path_hash(did).0.to_smaller_hash();
+
+        // If the user defined a custom seed for layout randomization, xor the item's
+        // path hash with the user defined seed, this will allowing determinism while
+        // still allowing users to further randomize layout generation for e.g. fuzzing
+        if let Some(user_seed) = tcx.sess.opts.debugging_opts.layout_seed {
+            field_shuffle_seed ^= user_seed;
+        }
 
         for attr in tcx.get_attrs(did).iter() {
             for r in attr::find_repr_attrs(&tcx.sess, attr) {

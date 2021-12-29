@@ -162,7 +162,7 @@ fn test_join_for_different_lengths_with_long_separator() {
 }
 
 #[test]
-fn test_join_isue_80335() {
+fn test_join_issue_80335() {
     use core::{borrow::Borrow, cell::Cell};
 
     struct WeirdBorrow {
@@ -1175,6 +1175,37 @@ fn test_rev_iterator() {
 
     let mut pos = 0;
     let it = s.chars().rev();
+
+    for c in it {
+        assert_eq!(c, v[pos]);
+        pos += 1;
+    }
+    assert_eq!(pos, v.len());
+}
+
+#[test]
+fn test_to_lowercase_rev_iterator() {
+    let s = "AÖßÜ💩ΣΤΙΓΜΑΣǅﬁİ";
+    let v = ['\u{307}', 'i', 'ﬁ', 'ǆ', 'σ', 'α', 'μ', 'γ', 'ι', 'τ', 'σ', '💩', 'ü', 'ß', 'ö', 'a'];
+
+    let mut pos = 0;
+    let it = s.chars().flat_map(|c| c.to_lowercase()).rev();
+
+    for c in it {
+        assert_eq!(c, v[pos]);
+        pos += 1;
+    }
+    assert_eq!(pos, v.len());
+}
+
+#[test]
+fn test_to_uppercase_rev_iterator() {
+    let s = "aößü💩στιγμαςǅﬁᾀ";
+    let v =
+        ['Ι', 'Ἀ', 'I', 'F', 'Ǆ', 'Σ', 'Α', 'Μ', 'Γ', 'Ι', 'Τ', 'Σ', '💩', 'Ü', 'S', 'S', 'Ö', 'A'];
+
+    let mut pos = 0;
+    let it = s.chars().flat_map(|c| c.to_uppercase()).rev();
 
     for c in it {
         assert_eq!(c, v[pos]);

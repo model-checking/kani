@@ -108,7 +108,7 @@ impl<'a> Resolver<'a> {
     /// Reachable macros with block module parents exist due to `#[macro_export] macro_rules!`,
     /// but they cannot use def-site hygiene, so the assumption holds
     /// (<https://github.com/rust-lang/rust/pull/77984#issuecomment-712445508>).
-    fn get_nearest_non_block_module(&mut self, mut def_id: DefId) -> Module<'a> {
+    crate fn get_nearest_non_block_module(&mut self, mut def_id: DefId) -> Module<'a> {
         loop {
             match self.get_module(def_id) {
                 Some(module) => return module,
@@ -1016,10 +1016,7 @@ impl<'a, 'b> BuildReducedGraphVisitor<'a, 'b> {
                 self.insert_field_names(def_id, field_names);
             }
             Res::Def(DefKind::AssocFn, def_id) => {
-                if cstore
-                    .associated_item_cloned_untracked(def_id, self.r.session)
-                    .fn_has_self_parameter
-                {
+                if cstore.fn_has_self_parameter_untracked(def_id) {
                     self.r.has_self.insert(def_id);
                 }
             }

@@ -168,7 +168,7 @@ impl PrimitiveExt for Primitive {
     /// Return an *integer* type matching this primitive.
     /// Useful in particular when dealing with enum discriminants.
     #[inline]
-    fn to_int_ty(&self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
+    fn to_int_ty<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
         match *self {
             Int(i, signed) => i.to_ty(tcx, signed),
             Pointer => tcx.types.usize,
@@ -347,10 +347,6 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
 
         let mut inverse_memory_index: Vec<u32> = (0..fields.len() as u32).collect();
 
-        // `ReprOptions.layout_seed` is a deterministic seed that we can use to
-        // randomize field ordering with
-        let mut rng = Xoshiro128StarStar::seed_from_u64(repr.field_shuffle_seed);
-
         let optimize = !repr.inhibit_struct_field_reordering_opt();
         if optimize {
             let end =
@@ -364,6 +360,10 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             // the field ordering to try and catch some code making assumptions about layouts
             // we don't guarantee
             if repr.can_randomize_type_layout() {
+                // `ReprOptions.layout_seed` is a deterministic seed that we can use to
+                // randomize field ordering with
+                let mut rng = Xoshiro128StarStar::seed_from_u64(repr.field_shuffle_seed);
+
                 // Shuffle the ordering of the fields
                 optimizing.shuffle(&mut rng);
 
@@ -2195,9 +2195,9 @@ pub trait LayoutOf<'tcx>: LayoutOfHelpers<'tcx> {
     }
 }
 
-impl<C: LayoutOfHelpers<'tcx>> LayoutOf<'tcx> for C {}
+impl<'tcx, C: LayoutOfHelpers<'tcx>> LayoutOf<'tcx> for C {}
 
-impl LayoutOfHelpers<'tcx> for LayoutCx<'tcx, TyCtxt<'tcx>> {
+impl<'tcx> LayoutOfHelpers<'tcx> for LayoutCx<'tcx, TyCtxt<'tcx>> {
     type LayoutOfResult = Result<TyAndLayout<'tcx>, LayoutError<'tcx>>;
 
     #[inline]
@@ -2206,7 +2206,7 @@ impl LayoutOfHelpers<'tcx> for LayoutCx<'tcx, TyCtxt<'tcx>> {
     }
 }
 
-impl LayoutOfHelpers<'tcx> for LayoutCx<'tcx, ty::query::TyCtxtAt<'tcx>> {
+impl<'tcx> LayoutOfHelpers<'tcx> for LayoutCx<'tcx, ty::query::TyCtxtAt<'tcx>> {
     type LayoutOfResult = Result<TyAndLayout<'tcx>, LayoutError<'tcx>>;
 
     #[inline]
@@ -2282,7 +2282,7 @@ where
             TyAndLayout(TyAndLayout<'tcx>),
         }
 
-        fn field_ty_or_layout(
+        fn field_ty_or_layout<'tcx>(
             this: TyAndLayout<'tcx>,
             cx: &(impl HasTyCtxt<'tcx> + HasParamEnv<'tcx>),
             i: usize,
@@ -2581,9 +2581,12 @@ impl<'tcx> ty::Instance<'tcx> {
     // for `Instance` (e.g. typeck would use `Ty::fn_sig` instead),
     // or should go through `FnAbi` instead, to avoid losing any
     // adjustments `fn_abi_of_instance` might be performing.
-    fn fn_sig_for_fn_abi(&self, tcx: TyCtxt<'tcx>) -> ty::PolyFnSig<'tcx> {
-        // FIXME(davidtwco,eddyb): A `ParamEnv` should be passed through to this function.
-        let ty = self.ty(tcx, ty::ParamEnv::reveal_all());
+    fn fn_sig_for_fn_abi(
+        &self,
+        tcx: TyCtxt<'tcx>,
+        param_env: ty::ParamEnv<'tcx>,
+    ) -> ty::PolyFnSig<'tcx> {
+        let ty = self.ty(tcx, param_env);
         match *ty.kind() {
             ty::FnDef(..) => {
                 // HACK(davidtwco,eddyb): This is a workaround for polymorphization considering
@@ -2724,7 +2727,7 @@ impl<'tcx> ty::Instance<'tcx> {
 /// with `-Cpanic=abort` will look like they can't unwind when in fact they
 /// might (from a foreign exception or similar).
 #[inline]
-pub fn fn_can_unwind(
+pub fn fn_can_unwind<'tcx>(
     tcx: TyCtxt<'tcx>,
     codegen_fn_attr_flags: CodegenFnAttrFlags,
     abi: SpecAbi,
@@ -2842,7 +2845,7 @@ pub enum FnAbiError<'tcx> {
     AdjustForForeignAbi(call::AdjustForForeignAbiError),
 }
 
-impl From<LayoutError<'tcx>> for FnAbiError<'tcx> {
+impl<'tcx> From<LayoutError<'tcx>> for FnAbiError<'tcx> {
     fn from(err: LayoutError<'tcx>) -> Self {
         Self::Layout(err)
     }
@@ -2942,7 +2945,7 @@ pub trait FnAbiOf<'tcx>: FnAbiOfHelpers<'tcx> {
     }
 }
 
-impl<C: FnAbiOfHelpers<'tcx>> FnAbiOf<'tcx> for C {}
+impl<'tcx, C: FnAbiOfHelpers<'tcx>> FnAbiOf<'tcx> for C {}
 
 fn fn_abi_of_fn_ptr<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -2965,7 +2968,7 @@ fn fn_abi_of_instance<'tcx>(
 ) -> Result<&'tcx FnAbi<'tcx, Ty<'tcx>>, FnAbiError<'tcx>> {
     let (param_env, (instance, extra_args)) = query.into_parts();
 
-    let sig = instance.fn_sig_for_fn_abi(tcx);
+    let sig = instance.fn_sig_for_fn_abi(tcx, param_env);
 
     let caller_location = if instance.def.requires_caller_location(tcx) {
         Some(tcx.caller_location_ty())

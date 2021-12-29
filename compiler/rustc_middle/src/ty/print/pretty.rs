@@ -303,7 +303,7 @@ pub trait PrettyPrinter<'tcx>:
         match self.tcx().trimmed_def_paths(()).get(&def_id) {
             None => Ok((self, false)),
             Some(symbol) => {
-                self.write_str(&symbol.as_str())?;
+                self.write_str(symbol.as_str())?;
                 Ok((self, true))
             }
         }
@@ -319,6 +319,9 @@ pub trait PrettyPrinter<'tcx>:
     ///
     /// `callers` is a chain of visible_parent's leading to `def_id`,
     /// to support cycle detection during recursion.
+    ///
+    /// This method returns false if we can't print the visible path, so
+    /// `print_def_path` can fall back on the item's real definition path.
     fn try_print_visible_def_path_recur(
         mut self,
         def_id: DefId,
@@ -405,19 +408,7 @@ pub trait PrettyPrinter<'tcx>:
             Some(parent) => parent,
             None => return Ok((self, false)),
         };
-        if callers.contains(&visible_parent) {
-            return Ok((self, false));
-        }
-        callers.push(visible_parent);
-        // HACK(eddyb) this bypasses `path_append`'s prefix printing to avoid
-        // knowing ahead of time whether the entire path will succeed or not.
-        // To support printers that do not implement `PrettyPrinter`, a `Vec` or
-        // linked list on the stack would need to be built, before any printing.
-        match self.try_print_visible_def_path_recur(visible_parent, callers)? {
-            (cx, false) => return Ok((cx, false)),
-            (cx, true) => self = cx,
-        }
-        callers.pop();
+
         let actual_parent = self.tcx().parent(def_id);
         debug!(
             "try_print_visible_def_path: visible_parent={:?} actual_parent={:?}",
@@ -463,14 +454,21 @@ pub trait PrettyPrinter<'tcx>:
             // `visible_parent_map`), looking for the specific child we currently have and then
             // have access to the re-exported name.
             DefPathData::TypeNs(ref mut name) if Some(visible_parent) != actual_parent => {
+                // Item might be re-exported several times, but filter for the one
+                // that's public and whose identifier isn't `_`.
                 let reexport = self
                     .tcx()
                     .item_children(visible_parent)
                     .iter()
-                    .find(|child| child.res.opt_def_id() == Some(def_id))
+                    .filter(|child| child.res.opt_def_id() == Some(def_id))
+                    .find(|child| child.vis.is_public() && child.ident.name != kw::Underscore)
                     .map(|child| child.ident.name);
-                if let Some(reexport) = reexport {
-                    *name = reexport;
+
+                if let Some(new_name) = reexport {
+                    *name = new_name;
+                } else {
+                    // There is no name that is public and isn't `_`, so bail.
+                    return Ok((self, false));
                 }
             }
             // Re-exported `extern crate` (#43189).
@@ -480,6 +478,20 @@ pub trait PrettyPrinter<'tcx>:
             _ => {}
         }
         debug!("try_print_visible_def_path: data={:?}", data);
+
+        if callers.contains(&visible_parent) {
+            return Ok((self, false));
+        }
+        callers.push(visible_parent);
+        // HACK(eddyb) this bypasses `path_append`'s prefix printing to avoid
+        // knowing ahead of time whether the entire path will succeed or not.
+        // To support printers that do not implement `PrettyPrinter`, a `Vec` or
+        // linked list on the stack would need to be built, before any printing.
+        match self.try_print_visible_def_path_recur(visible_parent, callers)? {
+            (cx, false) => return Ok((cx, false)),
+            (cx, true) => self = cx,
+        }
+        callers.pop();
 
         Ok((self.path_append(Ok, &DisambiguatedDefPathData { data, disambiguator: 0 })?, true))
     }
@@ -1513,7 +1525,7 @@ pub struct FmtPrinterData<'a, 'tcx, F> {
     pub name_resolver: Option<Box<&'a dyn Fn(ty::TyVid) -> Option<String>>>,
 }
 
-impl<F> Deref for FmtPrinter<'a, 'tcx, F> {
+impl<'a, 'tcx, F> Deref for FmtPrinter<'a, 'tcx, F> {
     type Target = FmtPrinterData<'a, 'tcx, F>;
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -1526,7 +1538,7 @@ impl<F> DerefMut for FmtPrinter<'_, '_, F> {
     }
 }
 
-impl<F> FmtPrinter<'a, 'tcx, F> {
+impl<'a, 'tcx, F> FmtPrinter<'a, 'tcx, F> {
     pub fn new(tcx: TyCtxt<'tcx>, fmt: F, ns: Namespace) -> Self {
         FmtPrinter(Box::new(FmtPrinterData {
             tcx,
@@ -1563,7 +1575,7 @@ fn guess_def_namespace(tcx: TyCtxt<'_>, def_id: DefId) -> Namespace {
     }
 }
 
-impl TyCtxt<'t> {
+impl<'t> TyCtxt<'t> {
     /// Returns a string identifying this `DefId`. This string is
     /// suitable for user output.
     pub fn def_path_str(self, def_id: DefId) -> String {
@@ -1585,7 +1597,7 @@ impl<F: fmt::Write> fmt::Write for FmtPrinter<'_, '_, F> {
     }
 }
 
-impl<F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
+impl<'tcx, F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
     type Error = fmt::Error;
 
     type Path = Self;
@@ -1594,7 +1606,7 @@ impl<F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
     type DynExistential = Self;
     type Const = Self;
 
-    fn tcx(&'a self) -> TyCtxt<'tcx> {
+    fn tcx<'a>(&'a self) -> TyCtxt<'tcx> {
         self.tcx
     }
 
@@ -1740,30 +1752,26 @@ impl<F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
     ) -> Result<Self::Path, Self::Error> {
         self = print_prefix(self)?;
 
-        // Skip `::{{constructor}}` on tuple/unit structs.
-        if let DefPathData::Ctor = disambiguated_data.data {
+        // Skip `::{{extern}}` blocks and `::{{constructor}}` on tuple/unit structs.
+        if let DefPathData::ForeignMod | DefPathData::Ctor = disambiguated_data.data {
             return Ok(self);
         }
 
-        // FIXME(eddyb) `name` should never be empty, but it
-        // currently is for `extern { ... }` "foreign modules".
         let name = disambiguated_data.data.name();
-        if name != DefPathDataName::Named(kw::Empty) {
-            if !self.empty_path {
-                write!(self, "::")?;
-            }
-
-            if let DefPathDataName::Named(name) = name {
-                if Ident::with_dummy_span(name).is_raw_guess() {
-                    write!(self, "r#")?;
-                }
-            }
-
-            let verbose = self.tcx.sess.verbose();
-            disambiguated_data.fmt_maybe_verbose(&mut self, verbose)?;
-
-            self.empty_path = false;
+        if !self.empty_path {
+            write!(self, "::")?;
         }
+
+        if let DefPathDataName::Named(name) = name {
+            if Ident::with_dummy_span(name).is_raw_guess() {
+                write!(self, "r#")?;
+            }
+        }
+
+        let verbose = self.tcx.sess.verbose();
+        disambiguated_data.fmt_maybe_verbose(&mut self, verbose)?;
+
+        self.empty_path = false;
 
         Ok(self)
     }
@@ -1796,7 +1804,7 @@ impl<F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
     }
 }
 
-impl<F: fmt::Write> PrettyPrinter<'tcx> for FmtPrinter<'_, 'tcx, F> {
+impl<'tcx, F: fmt::Write> PrettyPrinter<'tcx> for FmtPrinter<'_, 'tcx, F> {
     fn infer_ty_name(&self, id: ty::TyVid) -> Option<String> {
         self.0.name_resolver.as_ref().and_then(|func| func(id))
     }
@@ -2062,7 +2070,7 @@ impl<'a, 'tcx> ty::TypeFolder<'tcx> for RegionFolder<'a, 'tcx> {
 
 // HACK(eddyb) limited to `FmtPrinter` because of `binder_depth`,
 // `region_index` and `used_region_names`.
-impl<F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
+impl<'tcx, F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
     pub fn name_all_regions<T>(
         mut self,
         value: &ty::Binder<'tcx, T>,
@@ -2316,7 +2324,8 @@ where
 
 macro_rules! forward_display_to_print {
     ($($ty:ty),+) => {
-        $(impl fmt::Display for $ty {
+        // Some of the $ty arguments may not actually use 'tcx
+        $(#[allow(unused_lifetimes)] impl<'tcx> fmt::Display for $ty {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 ty::tls::with(|tcx| {
                     tcx.lift(*self)
@@ -2364,7 +2373,7 @@ impl fmt::Display for ty::RegionKind {
 #[derive(Copy, Clone, TypeFoldable, Lift)]
 pub struct TraitRefPrintOnlyTraitPath<'tcx>(ty::TraitRef<'tcx>);
 
-impl fmt::Debug for TraitRefPrintOnlyTraitPath<'tcx> {
+impl<'tcx> fmt::Debug for TraitRefPrintOnlyTraitPath<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
@@ -2376,13 +2385,13 @@ impl fmt::Debug for TraitRefPrintOnlyTraitPath<'tcx> {
 #[derive(Copy, Clone, TypeFoldable, Lift)]
 pub struct TraitRefPrintOnlyTraitName<'tcx>(ty::TraitRef<'tcx>);
 
-impl fmt::Debug for TraitRefPrintOnlyTraitName<'tcx> {
+impl<'tcx> fmt::Debug for TraitRefPrintOnlyTraitName<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
 
-impl ty::TraitRef<'tcx> {
+impl<'tcx> ty::TraitRef<'tcx> {
     pub fn print_only_trait_path(self) -> TraitRefPrintOnlyTraitPath<'tcx> {
         TraitRefPrintOnlyTraitPath(self)
     }
@@ -2392,7 +2401,7 @@ impl ty::TraitRef<'tcx> {
     }
 }
 
-impl ty::Binder<'tcx, ty::TraitRef<'tcx>> {
+impl<'tcx> ty::Binder<'tcx, ty::TraitRef<'tcx>> {
     pub fn print_only_trait_path(self) -> ty::Binder<'tcx, TraitRefPrintOnlyTraitPath<'tcx>> {
         self.map_bound(|tr| tr.print_only_trait_path())
     }

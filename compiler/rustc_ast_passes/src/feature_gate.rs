@@ -61,7 +61,7 @@ impl<'a> PostExpansionVisitor<'a> {
     fn check_abi(&self, abi: ast::StrLit) {
         let ast::StrLit { symbol_unescaped, span, .. } = abi;
 
-        match &*symbol_unescaped.as_str() {
+        match symbol_unescaped.as_str() {
             // Stable
             "Rust" | "C" | "cdecl" | "stdcall" | "fastcall" | "aapcs" | "win64" | "sysv64"
             | "system" => {}
@@ -724,11 +724,6 @@ pub fn check_crate(krate: &ast::Crate, sess: &Session) {
     gate_all!(half_open_range_patterns, "half-open range patterns are unstable");
     gate_all!(inline_const, "inline-const is experimental");
     gate_all!(inline_const_pat, "inline-const in pattern position is experimental");
-    if sess.parse_sess.span_diagnostic.err_count() == 0 {
-        // Errors for `destructuring_assignment` can get quite noisy, especially where `_` is
-        // involved, so we only emit errors where there are no other parsing errors.
-        gate_all!(destructuring_assignment, "destructuring assignments are unstable");
-    }
 
     // All uses of `gate_all!` below this point were added in #65742,
     // and subsequently disabled (with the non-early gating readded).

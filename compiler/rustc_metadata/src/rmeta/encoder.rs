@@ -26,6 +26,7 @@ use rustc_middle::mir::interpret;
 use rustc_middle::thir;
 use rustc_middle::traits::specialization_graph;
 use rustc_middle::ty::codec::TyEncoder;
+use rustc_middle::ty::fast_reject::{self, SimplifyParams, StripReferences};
 use rustc_middle::ty::{self, SymbolName, Ty, TyCtxt};
 use rustc_serialize::{opaque, Encodable, Encoder};
 use rustc_session::config::CrateType;
@@ -869,8 +870,9 @@ fn should_encode_mir(tcx: TyCtxt<'_>, def_id: LocalDefId) -> (bool, bool) {
             let needs_inline = (generics.requires_monomorphization(tcx)
                 || tcx.codegen_fn_attrs(def_id).requests_inline())
                 && tcx.sess.opts.output_types.should_codegen();
-            // Only check the presence of the `const` modifier.
-            let is_const_fn = tcx.is_const_fn_raw(def_id.to_def_id());
+            // The function has a `const` modifier or is annotated with `default_method_body_is_const`.
+            let is_const_fn = tcx.is_const_fn_raw(def_id.to_def_id())
+                || tcx.has_attr(def_id.to_def_id(), sym::default_method_body_is_const);
             let always_encode_mir = tcx.sess.opts.debugging_opts.always_encode_mir;
             (is_const_fn, needs_inline || always_encode_mir)
         }
@@ -962,7 +964,7 @@ fn should_encode_generics(def_kind: DefKind) -> bool {
     }
 }
 
-impl EncodeContext<'a, 'tcx> {
+impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
     fn encode_def_ids(&mut self) {
         if self.is_proc_macro {
             return;
@@ -1098,9 +1100,21 @@ impl EncodeContext<'a, 'tcx> {
             // Encode this here because we don't do it in encode_def_ids.
             record!(self.tables.expn_that_defined[def_id] <- tcx.expn_that_defined(local_def_id));
         } else {
-            record!(self.tables.children[def_id] <- md.item_ids.iter().map(|item_id| {
-                item_id.def_id.local_def_index
-            }));
+            let direct_children = md.item_ids.iter().map(|item_id| item_id.def_id.local_def_index);
+            // Foreign items are planted into their parent modules from name resolution point of view.
+            let tcx = self.tcx;
+            let foreign_item_children = md
+                .item_ids
+                .iter()
+                .filter_map(|item_id| match tcx.hir().item(*item_id).kind {
+                    hir::ItemKind::ForeignMod { items, .. } => {
+                        Some(items.iter().map(|fi_ref| fi_ref.id.def_id.local_def_index))
+                    }
+                    _ => None,
+                })
+                .flatten();
+
+            record!(self.tables.children[def_id] <- direct_children.chain(foreign_item_children));
         }
     }
 
@@ -1304,7 +1318,7 @@ impl EncodeContext<'a, 'tcx> {
             })
             .collect::<Vec<_>>();
         // Sort everything to ensure a stable order for diagnotics.
-        keys_and_jobs.sort_by_key(|&(def_id, _, _)| def_id);
+        keys_and_jobs.sort_by_key(|&(def_id, _, _)| def_id.index());
         for (def_id, encode_const, encode_opt) in keys_and_jobs.into_iter() {
             debug_assert!(encode_const || encode_opt);
 
@@ -1501,11 +1515,6 @@ impl EncodeContext<'a, 'tcx> {
         record!(self.tables.kind[def_id] <- entry_kind);
         // FIXME(eddyb) there should be a nicer way to do this.
         match item.kind {
-            hir::ItemKind::ForeignMod { items, .. } => record!(self.tables.children[def_id] <-
-                items
-                    .iter()
-                    .map(|foreign_item| foreign_item.id.def_id.local_def_index)
-            ),
             hir::ItemKind::Enum(..) => record!(self.tables.children[def_id] <-
                 self.tcx.adt_def(def_id).variants.iter().map(|v| {
                     assert!(v.def_id.is_local());
@@ -1892,7 +1901,7 @@ impl EncodeContext<'a, 'tcx> {
 }
 
 // FIXME(eddyb) make metadata encoding walk over all definitions, instead of HIR.
-impl Visitor<'tcx> for EncodeContext<'a, 'tcx> {
+impl<'a, 'tcx> Visitor<'tcx> for EncodeContext<'a, 'tcx> {
     type Map = Map<'tcx>;
 
     fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
@@ -1925,7 +1934,7 @@ impl Visitor<'tcx> for EncodeContext<'a, 'tcx> {
     }
 }
 
-impl EncodeContext<'a, 'tcx> {
+impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
     fn encode_fields(&mut self, adt_def: &ty::AdtDef) {
         for (variant_index, variant) in adt_def.variants.iter_enumerated() {
             for (field_index, _field) in variant.fields.iter().enumerate() {
@@ -2033,15 +2042,19 @@ impl EncodeContext<'a, 'tcx> {
 
 struct ImplVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
-    impls: FxHashMap<DefId, Vec<(DefIndex, Option<ty::fast_reject::SimplifiedType>)>>,
+    impls: FxHashMap<DefId, Vec<(DefIndex, Option<fast_reject::SimplifiedType>)>>,
 }
 
 impl<'tcx, 'v> ItemLikeVisitor<'v> for ImplVisitor<'tcx> {
     fn visit_item(&mut self, item: &hir::Item<'_>) {
         if let hir::ItemKind::Impl { .. } = item.kind {
             if let Some(trait_ref) = self.tcx.impl_trait_ref(item.def_id.to_def_id()) {
-                let simplified_self_ty =
-                    ty::fast_reject::simplify_type(self.tcx, trait_ref.self_ty(), false);
+                let simplified_self_ty = fast_reject::simplify_type(
+                    self.tcx,
+                    trait_ref.self_ty(),
+                    SimplifyParams::No,
+                    StripReferences::No,
+                );
 
                 self.impls
                     .entry(trait_ref.def_id)

@@ -56,7 +56,7 @@ struct AssertModuleSource<'tcx> {
     available_cgus: BTreeSet<String>,
 }
 
-impl AssertModuleSource<'tcx> {
+impl<'tcx> AssertModuleSource<'tcx> {
     fn check_attr(&self, attr: &ast::Attribute) {
         let (expected_reuse, comp_kind) = if attr.has_name(sym::rustc_partition_reused) {
             (CguReuse::PreLto, ComparisonKind::AtLeast)
@@ -124,7 +124,7 @@ impl AssertModuleSource<'tcx> {
 
         debug!("mapping '{}' to cgu name '{}'", self.field(attr, sym::module), cgu_name);
 
-        if !self.available_cgus.contains(&*cgu_name.as_str()) {
+        if !self.available_cgus.contains(cgu_name.as_str()) {
             self.tcx.sess.span_err(
                 attr.span,
                 &format!(

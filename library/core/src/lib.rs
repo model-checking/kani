@@ -103,6 +103,7 @@
 #![feature(const_arguments_as_str)]
 #![feature(const_array_into_iter_constructors)]
 #![feature(const_bigint_helper_methods)]
+#![feature(const_black_box)]
 #![feature(const_caller_location)]
 #![feature(const_cell_into_inner)]
 #![feature(const_char_convert)]
@@ -123,6 +124,7 @@
 #![feature(const_num_from_num)]
 #![feature(const_ops)]
 #![feature(const_option)]
+#![feature(const_option_ext)]
 #![feature(const_pin)]
 #![feature(const_replace)]
 #![feature(const_ptr_is_null)]
@@ -140,6 +142,7 @@
 #![feature(const_type_id)]
 #![feature(const_type_name)]
 #![feature(const_default_impls)]
+#![feature(core_panic)]
 #![feature(duration_consts_float)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(ptr_metadata)]
@@ -153,7 +156,6 @@
 #![feature(abi_unadjusted)]
 #![feature(allow_internal_unsafe)]
 #![feature(allow_internal_unstable)]
-#![feature(asm)]
 #![feature(associated_type_bounds)]
 #![feature(auto_traits)]
 #![feature(cfg_target_has_atomic)]
@@ -373,26 +375,14 @@ pub mod arch {
     pub use crate::core_arch::arch::*;
 
     /// Inline assembly.
-    ///
-    /// Read the [unstable book] for the usage.
-    ///
-    /// [unstable book]: ../../unstable-book/library-features/asm.html
-    #[unstable(
-        feature = "asm",
-        issue = "72016",
-        reason = "inline assembly is not stable enough for use and is subject to change"
-    )]
+    #[stable(feature = "asm", since = "1.59.0")]
     #[rustc_builtin_macro]
     pub macro asm("assembly template", $(operands,)* $(options($(option),*))?) {
         /* compiler built-in */
     }
 
     /// Module-level inline assembly.
-    #[unstable(
-        feature = "global_asm",
-        issue = "35119",
-        reason = "`global_asm!` is not stable enough for use and is subject to change"
-    )]
+    #[stable(feature = "global_asm", since = "1.59.0")]
     #[rustc_builtin_macro]
     pub macro global_asm("assembly template", $(operands,)* $(options($(option),*))?) {
         /* compiler built-in */
