@@ -142,9 +142,8 @@ was sequential code.
 ### Standard library functions
 
 At present, RMC is able to link in functions from the standard library but the
-generated code will not contain them unless they are inlined. This results in
-verification failures if the code under verification, for example, includes a
-`println!` statement.
+generated code will not contain them. This results in verification failures if
+the code under verification, for example, includes a `println!` statement.
 
 We have done some experiments to embed the standard library into the generated
 code, but this causes verification times to increase significantly. As of now,
@@ -154,11 +153,10 @@ for future work in this direction.
 
 ### Advanced features
 
-Advanced features (traits, types, etc.) from Rust have proven to particularly
-difficult to model. Even though the code handling these features has been
-reviewed in multiple occasions, we often find new corner cases that are not
-covered by RMC. We are especially interested in bug reports concerning these
-features, so please [file a bug
+The semantics around some advanced features (traits, types, etc.) from Rust are
+not formally defined which makes it harder to ensure that we can properly model
+all their use cases. We are particularly interested in bug reports concerning
+these features, so please [file a bug
 report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md)
 if you are aware of one.
 
