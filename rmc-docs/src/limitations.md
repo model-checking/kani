@@ -123,8 +123,8 @@ unsupported features.
 
 ### Assembly
 
-CBMC support for assembly code is quite limited. It may be extended in the
-future but at present there are no plans to do so.
+RMC does not support assembly code for now. We may add it in the future but at
+present there are no plans to do so.
 
 Check out the tracking issues for [inline assembly (`asm!`
 macro)](https://github.com/model-checking/rmc/issues/2) and [global assembly
@@ -134,11 +134,12 @@ more about the current status.
 ### Concurrency
 
 Concurrent features are out of scope for RMC. In general, the verification of
-concurrent programs continues to be an open research problem. In particular,
-support for concurrent verification in CBMC is limited and RMC emits a warning
-whenever it encounters concurrent code.
+concurrent programs continues to be an open research problem where most tools
+that analyze concurrent code lack support for other features. Because of this,
+RMC emits a warning whenever it encounters concurrent code and compiles as if it
+was sequential code.
 
-### Not inlined standard library functions
+### Standard library functions
 
 At present, RMC is able to link in functions from the standard library but the
 generated code will not contain them unless they are inlined. This results in
