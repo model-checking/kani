@@ -14,7 +14,7 @@ Please include the following information if it applies to your case:
 -->
 **Requested improvement:**
 
-**Use case:**
+**Related features:**
 
 **Is this a breaking change?**
 
