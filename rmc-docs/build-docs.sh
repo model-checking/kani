@@ -17,24 +17,24 @@ if [ ! -x mdbook ]; then
     tar zxf $FILE
 fi
 
-# Publish dashboard into our documentation
+# Publish bookrunner report into our documentation
 RMC_DIR=$SCRIPT_DIR/..
 HTML_DIR=$RMC_DIR/build/output/latest/html/
 
 if [ -d $HTML_DIR ]; then
     # Litani run is copied into `src` to avoid deletion by `mdbook`
-    cp -r $HTML_DIR src/dashboard/
+    cp -r $HTML_DIR src/bookrunner/
     # Replace artifacts by examples under test
-    BOOKS_DIR=$RMC_DIR/src/test/dashboard/books
-    rm -r src/dashboard/artifacts
-    cp -r $BOOKS_DIR src/dashboard/artifacts
-    # Update paths in HTML dashboard
-    python $RMC_DIR/scripts/ci/update_dashboard.py src/dashboard/index.html new_index.html
-    mv new_index.html src/dashboard/index.html
+    BOOKS_DIR=$RMC_DIR/src/test/bookrunner/books
+    rm -r src/bookrunner/artifacts
+    cp -r $BOOKS_DIR src/bookrunner/artifacts
+    # Update paths in HTML report
+    python $RMC_DIR/scripts/ci/update_bookrunner_report.py src/bookrunner/index.html new_index.html
+    mv new_index.html src/bookrunner/index.html
 
-    rm src/dashboard/run.json
+    # rm src/bookrunner/run.json
 else
-    echo "WARNING: Could not find the latest dashboard run."
+    echo "WARNING: Could not find the latest bookrunner run."
 fi
 
 # Build the book into ./book/

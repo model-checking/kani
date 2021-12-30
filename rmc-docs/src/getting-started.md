@@ -9,7 +9,7 @@ But RMC is also useful for finding panics in safe Rust, and it can check user-de
 
 RMC is currently in the initial development phase, and has not yet made an official release.
 It is under active development, but it does not yet support all Rust language features.
-(The [RMC dashboard](./dashboard.md) can help you understand our current progress.)
+(The [Book runner](./bookrunner.md) can help you understand our current progress.)
 If you encounter issues when using RMC we encourage you to [report them to us](https://github.com/model-checking/rmc/issues/new/choose).
 
 RMC usually syncs with the main branch of Rust every week, and so is generally up-to-date with the latest Rust language features.

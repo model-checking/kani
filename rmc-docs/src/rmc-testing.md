@@ -15,7 +15,7 @@ two very good reasons to do it:
 
 We recommend reading our section on [Regression Testing](#regression-testing)
 if you are interested in RMC development. At present, we obtain metrics based
-on the [RMC dashboard](./dashboard.md).
+on the [book runner](./bookrunner.md).
 
 # Regression testing
 

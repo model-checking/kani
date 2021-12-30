@@ -580,28 +580,28 @@ impl Step for Rustdoc {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
-pub struct Dashboard {
+pub struct BookRunner {
     pub compiler: Compiler,
 }
 
-impl Step for Dashboard {
+impl Step for BookRunner {
     type Output = PathBuf;
     const DEFAULT: bool = true;
     const ONLY_HOSTS: bool = true;
 
     fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-        run.path("src/tools/dashboard")
+        run.path("src/tools/bookrunner")
     }
 
     fn make_run(run: RunConfig<'_>) {
         // Use the same compiler used to compile rustdoc.
-        run.builder.ensure(Dashboard {
+        run.builder.ensure(BookRunner {
             compiler: run.builder.compiler(run.builder.top_stage, run.target),
         });
     }
 
     fn run(self, builder: &Builder<'_>) -> PathBuf {
-        // Since the dashboard depends on rustdoc, we follow the same steps used
+        // Since `bookrunner` depends on rustdoc, we follow the same steps used
         // above to compile rustdoc.
         let target_compiler = self.compiler;
         let target = target_compiler.host;
@@ -614,25 +614,25 @@ impl Step for Dashboard {
             Mode::ToolRustc,
             target,
             "build",
-            "src/tools/dashboard",
+            "src/tools/bookrunner",
             SourceType::InTree,
             &Vec::new(),
         );
         builder.info(&format!(
-            "Building dashboard for stage{} ({})",
+            "Building bookrunner for stage{} ({})",
             target_compiler.stage, target_compiler.host
         ));
         builder.run(&mut cargo.into());
-        let tool_dashboard = builder
+        let tool_book_runner = builder
             .cargo_out(build_compiler, Mode::ToolRustc, target)
-            .join(exe("dashboard", target_compiler.host));
+            .join(exe("bookrunner", target_compiler.host));
         let sysroot = builder.sysroot(target_compiler);
         let bindir = sysroot.join("bin");
         t!(fs::create_dir_all(&bindir));
-        let bin_dashboard = bindir.join(exe("dashboard", target_compiler.host));
-        let _ = fs::remove_file(&bin_dashboard);
-        builder.copy(&tool_dashboard, &bin_dashboard);
-        bin_dashboard
+        let bin_book_runner = bindir.join(exe("bookrunner", target_compiler.host));
+        let _ = fs::remove_file(&bin_book_runner);
+        builder.copy(&tool_book_runner, &bin_book_runner);
+        bin_book_runner
     }
 }
 

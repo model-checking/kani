@@ -57,17 +57,17 @@ jobs:
       - name: Execute RMC regression
         run: ./scripts/rmc-regression.sh
 
-      - name: Install dashboard dependencies
+      - name: Install book runner dependencies
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./scripts/setup/install_dashboard_deps.sh
+        run: ./scripts/setup/install_bookrunner_deps.sh
 
-      - name: Generate RMC dashboard
+      - name: Generate book runner report
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./x.py run -i --stage 1 dashboard
+        run: ./x.py run -i --stage 1 bookrunner
 
-      - name: Print RMC dashboard results
+      - name: Print book runner text results
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: cat build/output/latest/html/dashboard.txt
+        run: cat build/output/latest/html/bookrunner.txt
 
       # On one OS only, build the documentation, too.
       - name: Build Documentation
