@@ -160,6 +160,19 @@ these features, so please [file a bug
 report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md)
 if you are aware of one.
 
+### Panic strategies
+
+Rust has two different strategies when a panic occurs:
+ 1. Stack unwinding (default): Walks back the stack cleaning up the data from
+    each function it encounters.
+ 2. Abortion: Immediately ends the program without cleaning up.
+
+Currently, RMC does not support stack unwinding. This has some implications
+regarding memory safety since programs sometimes rely on the unwinding logic to
+ensure there is no resource leak or persistent data inconsistency. Check out
+[this issue](https://github.com/model-checking/rmc/issues/692) for updates on
+stack unwinding support.
+
 ### Destructors
 
 At present, we are aware of some issues with destructors, in particular those
