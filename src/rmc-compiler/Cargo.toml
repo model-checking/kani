@@ -13,9 +13,6 @@ rmc_queries = {path = "rmc_queries"}
 rustc_codegen_rmc = {path = "rustc_codegen_rmc"}
 tracing = {version = "0.1", features = ["max_level_debug", "release_max_level_info"]}
 
-[build-dependencies]
-rmc = {path = "../../library/rmc", features = ["rmc"]}
-
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
 rustc_private=true

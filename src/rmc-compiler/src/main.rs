@@ -65,7 +65,6 @@ fn parser<'a, 'b>() -> App<'a, 'b> {
         .arg(
             Arg::with_name("goto-c")
                 .long("--goto-c")
-                .requires("rmc-lib")
                 .help("Enables compilation to goto-c intermediate representation."),
         )
         .arg(
@@ -142,7 +141,8 @@ impl Callbacks for RmcCallbacks {}
 
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    let mut gotoc_args = rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap());
+    let mut gotoc_args =
+        rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap_or(std::env!("RMC_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present("goto-c") {
         rustc_args.append(&mut gotoc_args);
@@ -214,11 +214,7 @@ mod parser_test {
     }
 
     #[test]
-    fn test_rmc_lib_required() {
-        let args = vec!["rmc-compiler", "--goto-c"];
-        let result = parser().get_matches_from_safe(args);
-        assert!(result.is_err());
-
+    fn test_rmc_flags() {
         let args = vec!["rmc-compiler", "--goto-c", "--rmc-lib", "some/path"];
         let matches = parser().get_matches_from(args);
         assert!(matches.is_present("goto-c"));

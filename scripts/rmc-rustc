@@ -43,9 +43,9 @@ set_paths
 args="${*#--rmc-flags}"
 if [ "$args" != "$*" ]
 then
-    FLAGS=("--rmc-lib ${RMC_LIB_PATH} ${RMCFLAGS} $args")
+    FLAGS=("${RMCFLAGS} $args")
 else
-    FLAGS=("--rmc-lib ${RMC_LIB_PATH} $args")
+    FLAGS=("$args")
 fi
 
 "${RMC_PATH}" ${FLAGS}
