@@ -16,7 +16,7 @@ pub use invariant::Invariant;
 /// The code snippet below should never panic.
 ///
 /// ```rust
-/// let i : i32 = unsafe { rmc::nondet() };
+/// let i : i32 = rmc::any();
 /// rmc::assume(i > 10);
 /// if i < 0 {
 ///   panic!("This will never panic");
@@ -26,7 +26,7 @@ pub use invariant::Invariant;
 /// The following code may panic though:
 ///
 /// ```rust
-/// let i : i32 = unsafe { rmc::nondet() };
+/// let i : i32 = rmc::any();
 /// assert!(i < 0, "This may panic and verification should fail.");
 /// rmc::assume(i > 10);
 /// ```

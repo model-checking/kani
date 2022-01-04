@@ -28,8 +28,7 @@ macro_rules! check_enum {
     ( $fn_name:ident, $repr:ty, $enum_type:ident, $v1:literal, $v2:literal, $v3:literal ) => {
         unsafe impl rmc::Invariant for $enum_type {
             fn is_valid(&self) -> bool {
-                let val = *self as $repr;
-                val == $v1 || val == $v2 || val == $v3
+                matches!(*self, $enum_type::Variant1 | $enum_type::Variant2 | $enum_type::Variant3)
             }
         }
 

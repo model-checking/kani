@@ -97,6 +97,24 @@ unsafe impl Invariant for i128 {
     }
 }
 
+/// We do not constraint floating points values per type spec. Users must add assumptions to their
+/// verification code if they want to eliminate NaN, infinite, or subnormal.
+unsafe impl Invariant for f32 {
+    #[inline(always)]
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
+/// We do not constraint floating points values per type spec. Users must add assumptions to their
+/// verification code if they want to eliminate NaN, infinite, or subnormal.
+unsafe impl Invariant for f64 {
+    #[inline(always)]
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
 unsafe impl Invariant for isize {
     #[inline(always)]
     fn is_valid(&self) -> bool {
@@ -110,7 +128,8 @@ unsafe impl Invariant for isize {
 unsafe impl Invariant for char {
     #[inline(always)]
     fn is_valid(&self) -> bool {
-        let val = *self as u32;
+        // RMC translates char into i32.
+        let val = *self as i32;
         val <= 0xD7FF || (val >= 0xE000 && val <= 0x10FFFF)
     }
 }
@@ -121,10 +140,7 @@ where
 {
     #[inline(always)]
     fn is_valid(&self) -> bool {
-        match self {
-            None => true,
-            Some(value) => value.is_valid(),
-        }
+        if let Some(v) = self { v.is_valid() } else { matches!(*self, None) }
     }
 }
 
@@ -135,9 +151,12 @@ where
 {
     #[inline(always)]
     fn is_valid(&self) -> bool {
-        match self {
-            Ok(v) => v.is_valid(),
-            Err(e) => e.is_valid(),
+        if let Ok(v) = self {
+            v.is_valid()
+        } else if let Err(e) = self {
+            e.is_valid()
+        } else {
+            false
         }
     }
 }
