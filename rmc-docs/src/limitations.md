@@ -144,11 +144,11 @@ compiles as if it was sequential code.
 ### Standard library functions
 
 At present, RMC is able to link in functions from the standard library but the
-generated code will not contain them unless they generic, intrinsics, inlined or
-macros. Missing functions are treated in a similar way to unsupported features
-(i.e., replacing the function body with an `assert(false)` statement). This
-results in verification failures if the code under verification, for example,
-includes a reachable `println!` statement.
+generated code will not contain them unless they are generic, intrinsics,
+inlined or macros. Missing functions are treated in a similar way to unsupported
+features (i.e., replacing the function body with an `assert(false)` statement).
+This results in verification failures if the code under verification, for
+example, includes a reachable `println!` statement.
 
 We have done some experiments to embed the standard library into the generated
 code, but this causes verification times to increase significantly. As of now,
@@ -420,10 +420,10 @@ write_bytes | Yes | |
 #### Atomics
 
 All atomic intrinsics are compiled as an atomic block where the operation is
-performed. But as noted in [Notes - Concurrency](#concurrency), CBMC
-support for concurrent verification is limited and not used by default.
-Verification on code containing atomic intrinsics should not be trusted given
-that CBMC assumes the code to be sequential.
+performed. But as noted in [Notes - Concurrency](#concurrency), RMC support for
+concurrent verification is limited and not used by default. Verification on code
+containing atomic intrinsics should not be trusted given that RMC assumes the
+code to be sequential.
 
 #### SIMD instructions
 
