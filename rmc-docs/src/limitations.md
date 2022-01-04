@@ -13,7 +13,7 @@ We use the following values to indicate the level of support:
 As with all software, bugs may be found anywhere regardless of the level of support. In such cases, we
 would greatly appreciate that you [filed a bug report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md).
 
-Reference | Feature | Support | Observations |
+Reference | Feature | Support | Notes |
 --- | --- | --- | --- |
 3.1 | Macros By Example | Yes | |
 3.2 | Procedural Macros | Yes | |
@@ -53,7 +53,7 @@ Reference | Feature | Support | Observations |
 8.2.15 | If and if let expressions | Yes | |
 8.2.16 | Match expressions | Yes | |
 8.2.17 | Return expressions | Yes | |
-8.2.18 | Await expressions | No | See [Observations - Concurrency](#concurrency) |
+8.2.18 | Await expressions | No | See [Notes - Concurrency](#concurrency) |
 9 | Patterns | Partial | Needs more testing |
 10.1.1 | Boolean type | Yes | |
 10.1.2 | Numeric types | Yes | |
@@ -66,19 +66,19 @@ Reference | Feature | Support | Observations |
 10.1.9 | Enumerated types | Yes | |
 10.1.10 | Union types | Yes | |
 10.1.11 | Function item types | Yes | |
-10.1.12 | Closure types | Partial | See [Observations - Advanced features](#advanced-features) |
-10.1.13 | Pointer types | Partial | See [Observations - Advanced features](#advanced-features) |
-10.1.14 | Function pointer types | Partial | See [Observations - Advanced features](#advanced-features) |
-10.1.15 | Trait object types | Partial | See [Observations - Advanced features](#advanced-features) |
-10.1.16 | Impl trait type | Partial | See [Observations - Advanced features](#advanced-features) |
-10.1.17 | Type parameters | Partial | See [Observations - Advanced features](#advanced-features) |
-10.1.18 | Inferred type | Partial | See [Observations - Advanced features](#advanced-features) |
-10.2 | Dynamically Sized Types | Partial | See [Observations - Advanced features](#advanced-features) |
+10.1.12 | Closure types | Partial | See [Notes - Advanced features](#advanced-features) |
+10.1.13 | Pointer types | Partial | See [Notes - Advanced features](#advanced-features) |
+10.1.14 | Function pointer types | Partial | See [Notes - Advanced features](#advanced-features) |
+10.1.15 | Trait object types | Partial | See [Notes - Advanced features](#advanced-features) |
+10.1.16 | Impl trait type | Partial | See [Notes - Advanced features](#advanced-features) |
+10.1.17 | Type parameters | Partial | See [Notes - Advanced features](#advanced-features) |
+10.1.18 | Inferred type | Partial | See [Notes - Advanced features](#advanced-features) |
+10.2 | Dynamically Sized Types | Partial | See [Notes - Advanced features](#advanced-features) |
 10.3 | Type layout | Yes | |
 10.4 | Interior mutability | Yes | |
 10.5 | Subtyping and Variance | Yes | |
 10.6 | Trait and lifetime bounds | Yes | |
-10.7 | Type coercions | Partial | See [Observations - Advanced features](#advanced-features) |
+10.7 | Type coercions | Partial | See [Notes - Advanced features](#advanced-features) |
 10.8 | Destructors | Partial | |
 10.9 | Lifetime elision | Yes | |
 11 | Special types and traits | Partial | |
@@ -97,29 +97,31 @@ Reference | Feature | Support | Observations |
 15.1 | Unsafe functions | Yes | |
 15.2 | Unsafe blocks | Yes | |
 15.3 | Behavior considered undefined | Partial | |
-| | Data races | No | See [Observations - Concurrency](#concurrency) |
+| | Data races | No | See [Notes - Concurrency](#concurrency) |
 | | Dereferencing dangling raw pointers | Yes | |
 | | Dereferencing unaligned raw pointers | No | |
 | | Breaking pointer aliasing rules | No | |
 | | Mutating immutable data | No | |
-| | Invoking undefined behavior via compiler intrinsics | Partial | See [Observations - Intrinsics](#intrinsics) |
+| | Invoking undefined behavior via compiler intrinsics | Partial | See [Notes - Intrinsics](#intrinsics) |
 | | Executing code compiled with platform features that the current platform does not support | No | |
 | | Producing an invalid value, even in private fields and locals | No | |
 
-## Observations on partially or unsupported features
+## Notes on partially or unsupported features
 
 ### Code generation for unsupported features
 
-RMC aims to be a industrial verification tool. Most industrial crates may
+RMC aims to be an industrial verification tool. Most industrial crates may
 include unsupported features in parts of their code that do not need to be
-verified. In general, this should not prevent users from verifying their code.
+verified. In general, this should not prevent users using RMC to verify their code.
 
 Because of that, the general rule is that RMC generates an `assert(false)`
-statement when compiling any unsupported feature. This will cause proofs to fail
-if the statement is reachable during the verification stage. However, the
-analysis will not affected if the statement is not reachable from the code under
-verification, so users can still verify components of their code not using
-unsupported features.
+statement followed by an `assume(false)` statement when compiling any
+unsupported feature. `assert(false)` will cause verification to fail if the
+statement is reachable during the verification stage, while `assume(false)` will
+block any further exploration of the path. However, the analysis will not be
+affected if the statement is not reachable from the code under verification, so
+users can still verify components of their code that do not use unsupported
+features.
 
 ### Assembly
 
@@ -133,17 +135,20 @@ more about the current status.
 
 ### Concurrency
 
-Concurrent features are out of scope for RMC. In general, the verification of
-concurrent programs continues to be an open research problem where most tools
-that analyze concurrent code lack support for other features. Because of this,
-RMC emits a warning whenever it encounters concurrent code and compiles as if it
-was sequential code.
+Concurrent features are currently out of scope for RMC. In general, the
+verification of concurrent programs continues to be an open research problem
+where most tools that analyze concurrent code lack support for other features.
+Because of this, RMC emits a warning whenever it encounters concurrent code and
+compiles as if it was sequential code.
 
 ### Standard library functions
 
 At present, RMC is able to link in functions from the standard library but the
-generated code will not contain them. This results in verification failures if
-the code under verification, for example, includes a `println!` statement.
+generated code will not contain them unless they generic, intrinsics, inlined or
+macros. Missing functions are treated in a similar way to unsupported features
+(i.e., replacing the function body with an `assert(false)` statement). This
+results in verification failures if the code under verification, for example,
+includes a reachable `println!` statement.
 
 We have done some experiments to embed the standard library into the generated
 code, but this causes verification times to increase significantly. As of now,
@@ -155,7 +160,21 @@ for future work in this direction.
 
 The semantics around some advanced features (traits, types, etc.) from Rust are
 not formally defined which makes it harder to ensure that we can properly model
-all their use cases. We are particularly interested in bug reports concerning
+all their use cases.
+
+In particular, there are some outstanding issues to note here:
+ * Unimplemented `PointerCast::ClosureFnPointer` in
+   [#274](https://github.com/model-checking/rmc/issues/274) and `Variant` case
+   in projections type in
+   [#448](https://github.com/model-checking/rmc/issues/448).
+ * Unexpected fat pointer results in
+   [#82](https://github.com/model-checking/rmc/issues/82),
+   [#277](https://github.com/model-checking/rmc/issues/277),
+   [#327](https://github.com/model-checking/rmc/issues/327),
+   [#378](https://github.com/model-checking/rmc/issues/378) and
+   [#676](https://github.com/model-checking/rmc/issues/676).
+
+We are particularly interested in bug reports concerning
 these features, so please [file a bug
 report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md)
 if you are aware of one.
@@ -187,7 +206,7 @@ In general, code generation for unsupported intrinsics follows the rule
 described in [Code generation for unsupported
 features](#code-generation-for-unsupported-features).
 
-Name | Support | Observations |
+Name | Support | Notes |
 --- | --- | --- |
 abort | Yes | |
 add_with_overflow | Yes | |
@@ -376,8 +395,8 @@ truncf64 | Yes | |
 try | No | |
 type_id | Yes | |
 type_name | Yes | |
-unaligned_volatile_load | Partial | See [Observations - Concurrency](#concurrency) |
-unaligned_volatile_store | No | See [Observations - Concurrency](#concurrency) |
+unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |
 unchecked_div | Yes | |
 unchecked_mul | Yes | |
@@ -388,11 +407,11 @@ unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
 variant_count | No | |
-volatile_copy_memory | Partial | See [Observations - Concurrency](#concurrency) |
-volatile_copy_nonoverlapping_memory | Partial | See [Observations - Concurrency](#concurrency) |
-volatile_load | Partial | See [Observations - Concurrency](#concurrency) |
-volatile_set_memory | No | See [Observations - Concurrency](#concurrency) |
-volatile_store | No | See [Observations - Concurrency](#concurrency) |
+volatile_copy_memory | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_copy_nonoverlapping_memory | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_store | No | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
 wrapping_mul | Yes | |
 wrapping_sub | Yes | |
@@ -401,13 +420,13 @@ write_bytes | Yes | |
 #### Atomics
 
 All atomic intrinsics are compiled as an atomic block where the operation is
-performed. But as noted in [Observations - Concurrency](#concurrency), CBMC
+performed. But as noted in [Notes - Concurrency](#concurrency), CBMC
 support for concurrent verification is limited and not used by default.
 Verification on code containing atomic intrinsics should not be trusted given
 that CBMC assumes the code to be sequential.
 
 #### SIMD instructions
 
-While RMC is capable of generating code for SIMD instructions. Unfortunately,
-CBMC does not provide support for some operations like vector comparison (e.g.,
-`simd_eq`) or shuffling (e.g., `simd_shuffle8`).
+While RMC is capable of generating code for SIMD instructions, unfortunately, it
+does not provide support for the verification of some operations like vector
+comparison (e.g., `simd_eq`).
