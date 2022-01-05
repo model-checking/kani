@@ -6,4 +6,3 @@ pub fn main() {
     let c: char = rmc::any();
     assert!(c <= char::MAX);
 }
-

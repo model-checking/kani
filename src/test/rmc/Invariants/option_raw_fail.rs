@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// rmc-verify-fail
 // Ensure that rmc::any_raw will generate unsconstrainted values for Option<T,E>.
 
 extern crate rmc;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 macro_rules! test_floats {
     ($ty:ty) => {
-        let a: $ty = unsafe { rmc::any_raw() };
+        let a: $ty = rmc::any();
         let b = a / 2.0;
 
         if a < 0.0 {

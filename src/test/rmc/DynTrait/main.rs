@@ -32,7 +32,7 @@ fn main() {
     let random_number = rmc::any();
     let animal = random_animal(random_number);
     let s = animal.noise();
-    if (random_number < 5) {
+    if random_number < 5 {
         assert!(s == 1);
     } else {
         assert!(s == 2);
