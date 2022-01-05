@@ -10,7 +10,7 @@ use crate::goto_program::{
 };
 use crate::InternedString;
 use num::bigint::BigInt;
-use rustc_data_structures::fx::FxHashMap;
+use std::collections::HashMap;
 
 /// Create an expr from an int constant using only values <= u64::MAX;
 /// this is needed because gcc allows 128 bit int variables, but not 128 bit constants
@@ -68,20 +68,20 @@ pub struct ExprTransformer {
     /// when such a symbol is encountered, we add it to this map;
     /// in postprocessing, we initialize each of these variables
     /// with a default value to emphasize that these are externally defined.
-    empty_statics: FxHashMap<InternedString, Expr>,
+    empty_statics: HashMap<InternedString, Expr>,
 }
 
 impl ExprTransformer {
     /// Replace expressions which lead to invalid C with alternatives.
     pub fn transform(original_symbol_table: &SymbolTable) -> SymbolTable {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
-        ExprTransformer { new_symbol_table, empty_statics: FxHashMap::default() }
+        ExprTransformer { new_symbol_table, empty_statics: HashMap::default() }
             .transform_symbol_table(original_symbol_table)
     }
 
     /// Extract `empty_statics` map for final processing.
-    fn empty_statics_owned(&mut self) -> FxHashMap<InternedString, Expr> {
-        std::mem::replace(&mut self.empty_statics, FxHashMap::default())
+    fn empty_statics_owned(&mut self) -> HashMap<InternedString, Expr> {
+        std::mem::replace(&mut self.empty_statics, HashMap::default())
     }
 
     /// Add identifier to a transformed parameter if it's missing;
