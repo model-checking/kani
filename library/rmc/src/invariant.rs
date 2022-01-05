@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /// This module introduces the Invariant trait as well as implementation for commonly used types.
+use std::num::*;
 
 /// Types that implement a check to ensure its value is valid and safe to be used. See
 /// https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html for examples of valid values.
@@ -95,3 +96,28 @@ where
         }
     }
 }
+
+macro_rules! nonzero_invariant {
+    ( $type: ty ) => {
+        unsafe impl Invariant for $type {
+            #[inline(always)]
+            fn is_valid(&self) -> bool {
+                self.get() != 0
+            }
+        }
+    };
+}
+
+nonzero_invariant!(NonZeroU8);
+nonzero_invariant!(NonZeroU16);
+nonzero_invariant!(NonZeroU32);
+nonzero_invariant!(NonZeroU64);
+nonzero_invariant!(NonZeroU128);
+nonzero_invariant!(NonZeroUsize);
+
+nonzero_invariant!(NonZeroI8);
+nonzero_invariant!(NonZeroI16);
+nonzero_invariant!(NonZeroI32);
+nonzero_invariant!(NonZeroI64);
+nonzero_invariant!(NonZeroI128);
+nonzero_invariant!(NonZeroIsize);

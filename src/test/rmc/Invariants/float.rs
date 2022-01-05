@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// rmc-verify-fail
 // Ensure that rmc::any and rmc::any_raw can be used with integers.
 
 macro_rules! test {
