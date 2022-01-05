@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-/// This module introduces the Invariant trait and as well as implementation for commonly used types.
+/// This module introduces the Invariant trait as well as implementation for commonly used types.
 
 /// Types that implement a check to ensure its value is valid and safe to be used. See
 /// https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html for examples of valid values.
@@ -122,8 +122,7 @@ unsafe impl Invariant for isize {
     }
 }
 
-/// Verifies that:
-/// - a char is not outside the ranges [0x0, 0xD7FF] and [0xE000, 0x10FFFF]
+/// Validate that a char is not outside the ranges [0x0, 0xD7FF] and [0xE000, 0x10FFFF]
 /// Ref: https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html
 unsafe impl Invariant for char {
     #[inline(always)]

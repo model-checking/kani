@@ -48,7 +48,7 @@ pub fn assume(_cond: bool) {}
 /// ```
 ///
 /// Note: This is a safe construct and can only be used with types that implement the `Invariant`
-/// trait. The invariant trait is used to constraint the result to ensure the value is valid.
+/// trait. The invariant trait is used to constrain the result to ensure the value is valid.
 #[inline(always)]
 pub fn any<T: Invariant>() -> T {
     let value = unsafe { any_raw::<T>() };
