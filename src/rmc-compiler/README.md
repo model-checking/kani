@@ -4,5 +4,5 @@ binary should not be used on its own and it should be used via `rmc` or
 
 ### Notes for developers:
 
-This binary can be build like a regular cargo package. There is no need to
+This binary can be built like a regular cargo package. There is no need to
 bootstrap it anymore.

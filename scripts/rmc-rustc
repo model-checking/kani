@@ -40,6 +40,13 @@ set_paths() {
 set_paths
 
 # Hack to enable cargo rmc
+#
+# The rmc-compiler requires the flags related to the rmc libraries to be
+# in front of the ones that control rustc.
+#
+# For cargo rmc, cargo sometimes adds flags before the custom RUSTFLAGS, hence,
+# we use a special environment variable to set RMC specific flags. These flags
+# should only be enabled if --rmc-flags is present.
 args="${*#--rmc-flags}"
 if [ "$args" != "$*" ]
 then

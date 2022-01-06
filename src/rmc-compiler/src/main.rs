@@ -18,6 +18,7 @@ use clap::{
 };
 use rmc_queries::{QueryDb, UserInput};
 use rustc_driver::{init_env_logger, install_ice_hook, Callbacks, RunCompiler};
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -117,8 +118,9 @@ fn main() -> Result<(), &'static str> {
 
     // Configure queries.
     let mut queries = QueryDb::default();
-    queries
-        .set_symbol_table_passes(matches.values_of_lossy("symbol-table-passes").unwrap_or(vec![]));
+    if let Some(symbol_table_passes) = matches.values_of_os("symbol-table-passes") {
+        queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
+    }
     queries.set_emit_vtable_restrictions(matches.is_present("restrict-vtable-fn-ptrs"));
 
     // Configure and run compiler.
@@ -152,16 +154,12 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
         rustc_args.push(String::from("--version"))
     }
 
-    rustc_args.append(
-        &mut args
-            .values_of("rustc-options")
-            .unwrap_or(clap::Values::default())
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>(),
-    );
-    let sysroot = sysroot_path(args.value_of("sysroot")).unwrap();
+    if let Some(extra_flags) = args.values_of_os("rustc-options") {
+        extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
+    }
+    let sysroot = sysroot_path(args.value_of("sysroot")).expect("[Error] Invalid sysroot. Rebuild RMC or provide the path to rust sysroot using --sysroot option");
     rustc_args.push(String::from("--sysroot"));
-    rustc_args.push(sysroot.to_string_lossy().to_string());
+    rustc_args.push(convert_arg(sysroot.as_os_str()));
     tracing::info!(?rustc_args, "Compile");
     rustc_args
 }
@@ -174,6 +172,14 @@ fn toolchain_path(home: Option<String>, toolchain: Option<String>) -> Option<Pat
         }
         _ => None,
     }
+}
+
+/// Convert an argument from OsStr to String.
+/// If conversion fails, panic with a custom message.
+fn convert_arg(arg: &OsStr) -> String {
+    arg.to_str()
+        .expect(format!("[Error] Cannot parse argument \"{:?}\".", arg).as_str())
+        .to_string()
 }
 
 /// Get the sysroot, following the order bellow:
@@ -219,5 +225,25 @@ mod parser_test {
         let matches = parser().get_matches_from(args);
         assert!(matches.is_present("goto-c"));
         assert_eq!(matches.value_of("rmc-lib"), Some("some/path"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[should_panic]
+    fn test_invalid_arg_fails() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStrExt;
+
+        // The value 0x80 is an invalid character.
+        let source = [0x68, 0x65, 0x6C, 0x6C, 0x80];
+        let os_str = OsStr::from_bytes(&source[..]);
+        assert_eq!(os_str.to_str(), None);
+
+        let matches = parser().get_matches_from(vec![
+            OsString::from("--sysroot").as_os_str(),
+            OsString::from("any").as_os_str(),
+            os_str,
+        ]);
+        generate_rustc_args(&matches);
     }
 }
