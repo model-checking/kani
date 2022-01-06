@@ -7,15 +7,17 @@ use crate::mir::interpret::{Allocation, ConstValue, GlobalAlloc, Scalar};
 use crate::mir::visit::MirVisitable;
 use crate::ty::adjustment::PointerCast;
 use crate::ty::codec::{TyDecoder, TyEncoder};
-use crate::ty::fold::{TypeFoldable, TypeFolder, TypeVisitor};
+use crate::ty::fold::{FallibleTypeFolder, TypeFoldable, TypeVisitor};
 use crate::ty::print::{FmtPrinter, Printer};
 use crate::ty::subst::{Subst, SubstsRef};
 use crate::ty::{self, List, Ty, TyCtxt};
 use crate::ty::{AdtDef, InstanceDef, Region, ScalarInt, UserTypeAnnotationIndex};
+
 use rustc_hir::def::{CtorKind, Namespace};
 use rustc_hir::def_id::{DefId, CRATE_DEF_INDEX};
 use rustc_hir::{self, GeneratorKind};
 use rustc_hir::{self as hir, HirId};
+use rustc_session::Session;
 use rustc_target::abi::{Size, VariantIdx};
 
 use polonius_engine::Atom;
@@ -29,6 +31,9 @@ use rustc_serialize::{Decodable, Encodable};
 use rustc_span::symbol::Symbol;
 use rustc_span::{Span, DUMMY_SP};
 use rustc_target::asm::InlineAsmRegOrRegClass;
+
+use either::Either;
+
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Display, Formatter, Write};
@@ -99,7 +104,21 @@ pub trait MirPass<'tcx> {
         }
     }
 
+    /// Returns `true` if this pass is enabled with the current combination of compiler flags.
+    fn is_enabled(&self, _sess: &Session) -> bool {
+        true
+    }
+
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>);
+
+    /// If this pass causes the MIR to enter a new phase, return that phase.
+    fn phase_change(&self) -> Option<MirPhase> {
+        None
+    }
+
+    fn is_mir_dump_enabled(&self) -> bool {
+        true
+    }
 }
 
 /// The various "big phases" that MIR goes through.
@@ -486,6 +505,16 @@ impl<'tcx> Body<'tcx> {
     #[inline]
     pub fn terminator_loc(&self, bb: BasicBlock) -> Location {
         Location { block: bb, statement_index: self[bb].statements.len() }
+    }
+
+    pub fn stmt_at(&self, location: Location) -> Either<&Statement<'tcx>, &Terminator<'tcx>> {
+        let Location { block, statement_index } = location;
+        let block_data = &self.basic_blocks[block];
+        block_data
+            .statements
+            .get(statement_index)
+            .map(Either::Left)
+            .unwrap_or_else(|| Either::Right(block_data.terminator()))
     }
 
     #[inline]
@@ -1504,6 +1533,7 @@ impl Statement<'_> {
     }
 
     /// Changes a statement to a nop and returns the original statement.
+    #[must_use = "If you don't need the statement, use `make_nop` instead"]
     pub fn replace_nop(&mut self) -> Self {
         Statement {
             source_info: self.source_info,
@@ -1803,6 +1833,16 @@ impl<V, T> ProjectionElem<V, T> {
             | Self::Downcast(_, _) => false,
         }
     }
+
+    /// Returns `true` if this is a `Downcast` projection with the given `VariantIdx`.
+    pub fn is_downcast_to(&self, v: VariantIdx) -> bool {
+        matches!(*self, Self::Downcast(_, x) if x == v)
+    }
+
+    /// Returns `true` if this is a `Field` projection with the given index.
+    pub fn is_field_to(&self, f: Field) -> bool {
+        matches!(*self, Self::Field(x, _) if x == f)
+    }
 }
 
 /// Alias for projections as they appear in places, where the base is a place
@@ -1993,7 +2033,7 @@ impl SourceScope {
     /// Finds the original HirId this MIR item came from.
     /// This is necessary after MIR optimizations, as otherwise we get a HirId
     /// from the function that was inlined instead of the function call site.
-    pub fn lint_root(
+    pub fn lint_root<'tcx>(
         self,
         source_scopes: &IndexVec<SourceScope, SourceScopeData<'tcx>>,
     ) -> Option<HirId> {
@@ -2228,7 +2268,7 @@ pub enum AggregateKind<'tcx> {
     /// active field number and is present only for union expressions
     /// -- e.g., for a union expression `SomeUnion { c: .. }`, the
     /// active field index would identity the field `c`
-    Adt(&'tcx AdtDef, VariantIdx, SubstsRef<'tcx>, Option<UserTypeAnnotationIndex>, Option<usize>),
+    Adt(DefId, VariantIdx, SubstsRef<'tcx>, Option<UserTypeAnnotationIndex>, Option<usize>),
 
     Closure(DefId, SubstsRef<'tcx>),
     Generator(DefId, SubstsRef<'tcx>, hir::Movability),
@@ -2387,28 +2427,26 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                         }
                     }
 
-                    AggregateKind::Adt(adt_def, variant, substs, _user_ty, _) => {
-                        let variant_def = &adt_def.variants[variant];
-
-                        let name = ty::tls::with(|tcx| {
+                    AggregateKind::Adt(adt_did, variant, substs, _user_ty, _) => {
+                        ty::tls::with(|tcx| {
                             let mut name = String::new();
+                            let variant_def = &tcx.adt_def(adt_did).variants[variant];
                             let substs = tcx.lift(substs).expect("could not lift for printing");
                             FmtPrinter::new(tcx, &mut name, Namespace::ValueNS)
                                 .print_def_path(variant_def.def_id, substs)?;
-                            Ok(name)
-                        })?;
 
-                        match variant_def.ctor_kind {
-                            CtorKind::Const => fmt.write_str(&name),
-                            CtorKind::Fn => fmt_tuple(fmt, &name),
-                            CtorKind::Fictive => {
-                                let mut struct_fmt = fmt.debug_struct(&name);
-                                for (field, place) in iter::zip(&variant_def.fields, places) {
-                                    struct_fmt.field(&field.ident.as_str(), place);
+                            match variant_def.ctor_kind {
+                                CtorKind::Const => fmt.write_str(&name),
+                                CtorKind::Fn => fmt_tuple(fmt, &name),
+                                CtorKind::Fictive => {
+                                    let mut struct_fmt = fmt.debug_struct(&name);
+                                    for (field, place) in iter::zip(&variant_def.fields, places) {
+                                        struct_fmt.field(field.ident.as_str(), place);
+                                    }
+                                    struct_fmt.finish()
                                 }
-                                struct_fmt.finish()
                             }
-                        }
+                        })
                     }
 
                     AggregateKind::Closure(def_id, substs) => ty::tls::with(|tcx| {
@@ -2433,7 +2471,7 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                             if let Some(upvars) = tcx.upvars_mentioned(def_id) {
                                 for (&var_id, place) in iter::zip(upvars.keys(), places) {
                                     let var_name = tcx.hir().name(var_id);
-                                    struct_fmt.field(&var_name.as_str(), place);
+                                    struct_fmt.field(var_name.as_str(), place);
                                 }
                             }
 
@@ -2453,7 +2491,7 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                             if let Some(upvars) = tcx.upvars_mentioned(def_id) {
                                 for (&var_id, place) in iter::zip(upvars.keys(), places) {
                                     let var_name = tcx.hir().name(var_id);
-                                    struct_fmt.field(&var_name.as_str(), place);
+                                    struct_fmt.field(var_name.as_str(), place);
                                 }
                             }
 
@@ -2503,7 +2541,7 @@ pub enum ConstantKind<'tcx> {
     Val(interpret::ConstValue<'tcx>, Ty<'tcx>),
 }
 
-impl Constant<'tcx> {
+impl<'tcx> Constant<'tcx> {
     pub fn check_static_ptr(&self, tcx: TyCtxt<'_>) -> Option<DefId> {
         match self.literal.const_for_ty()?.val.try_to_scalar() {
             Some(Scalar::Ptr(ptr, _size)) => match tcx.global_alloc(ptr.provenance) {
@@ -2522,14 +2560,14 @@ impl Constant<'tcx> {
     }
 }
 
-impl From<&'tcx ty::Const<'tcx>> for ConstantKind<'tcx> {
+impl<'tcx> From<&'tcx ty::Const<'tcx>> for ConstantKind<'tcx> {
     #[inline]
     fn from(ct: &'tcx ty::Const<'tcx>) -> Self {
         Self::Ty(ct)
     }
 }
 
-impl ConstantKind<'tcx> {
+impl<'tcx> ConstantKind<'tcx> {
     /// Returns `None` if the constant is not trivially safe for use in the type system.
     pub fn const_for_ty(&self) -> Option<&'tcx ty::Const<'tcx>> {
         match self {
@@ -2760,10 +2798,13 @@ impl UserTypeProjection {
 TrivialTypeFoldableAndLiftImpls! { ProjectionKind, }
 
 impl<'tcx> TypeFoldable<'tcx> for UserTypeProjection {
-    fn super_fold_with<F: TypeFolder<'tcx>>(self, folder: &mut F) -> Result<Self, F::Error> {
+    fn try_super_fold_with<F: FallibleTypeFolder<'tcx>>(
+        self,
+        folder: &mut F,
+    ) -> Result<Self, F::Error> {
         Ok(UserTypeProjection {
-            base: self.base.fold_with(folder)?,
-            projs: self.projs.fold_with(folder)?,
+            base: self.base.try_fold_with(folder)?,
+            projs: self.projs.try_fold_with(folder)?,
         })
     }
 
@@ -2808,7 +2849,7 @@ impl<'tcx> Display for ConstantKind<'tcx> {
     }
 }
 
-fn pretty_print_const(
+fn pretty_print_const<'tcx>(
     c: &ty::Const<'tcx>,
     fmt: &mut Formatter<'_>,
     print_types: bool,
@@ -2823,7 +2864,7 @@ fn pretty_print_const(
     })
 }
 
-fn pretty_print_const_value(
+fn pretty_print_const_value<'tcx>(
     val: interpret::ConstValue<'tcx>,
     ty: Ty<'tcx>,
     fmt: &mut Formatter<'_>,
@@ -2870,12 +2911,12 @@ impl<'a, 'b> graph::GraphSuccessors<'b> for Body<'a> {
     type Iter = iter::Cloned<Successors<'b>>;
 }
 
-impl graph::GraphPredecessors<'graph> for Body<'tcx> {
+impl<'tcx, 'graph> graph::GraphPredecessors<'graph> for Body<'tcx> {
     type Item = BasicBlock;
     type Iter = std::iter::Copied<std::slice::Iter<'graph, BasicBlock>>;
 }
 
-impl graph::WithPredecessors for Body<'tcx> {
+impl<'tcx> graph::WithPredecessors for Body<'tcx> {
     #[inline]
     fn predecessors(&self, node: Self::Node) -> <Self as graph::GraphPredecessors<'_>>::Iter {
         self.predecessors()[node].iter().copied()

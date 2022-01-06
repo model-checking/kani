@@ -3,9 +3,6 @@
 #![feature(bool_to_option)]
 #![feature(box_patterns)]
 #![feature(crate_visibility_modifier)]
-#![cfg_attr(bootstrap, feature(format_args_capture))]
-#![feature(in_band_lifetimes)]
-#![feature(iter_zip)]
 #![feature(let_else)]
 #![feature(min_specialization)]
 #![feature(stmt_expr_attributes)]
@@ -792,6 +789,7 @@ impl<'cx, 'tcx> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx> for MirBorrowckCtx
                 options: _,
                 line_spans: _,
                 destination: _,
+                cleanup: _,
             } => {
                 for op in operands {
                     match *op {

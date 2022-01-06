@@ -73,7 +73,7 @@ struct LocalAnalyzer<'mir, 'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
     locals: IndexVec<mir::Local, LocalKind>,
 }
 
-impl<Bx: BuilderMethods<'a, 'tcx>> LocalAnalyzer<'mir, 'a, 'tcx, Bx> {
+impl<'mir, 'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> LocalAnalyzer<'mir, 'a, 'tcx, Bx> {
     fn assign(&mut self, local: mir::Local, location: Location) {
         let kind = &mut self.locals[local];
         match *kind {
@@ -211,6 +211,7 @@ impl<'mir, 'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> Visitor<'tcx>
 
             PlaceContext::MutatingUse(
                 MutatingUseContext::Store
+                | MutatingUseContext::LlvmAsmOutput
                 | MutatingUseContext::AsmOutput
                 | MutatingUseContext::Borrow
                 | MutatingUseContext::AddressOf
@@ -275,9 +276,9 @@ pub fn cleanup_kinds(mir: &mir::Body<'_>) -> IndexVec<mir::BasicBlock, CleanupKi
                 | TerminatorKind::SwitchInt { .. }
                 | TerminatorKind::Yield { .. }
                 | TerminatorKind::FalseEdge { .. }
-                | TerminatorKind::FalseUnwind { .. }
-                | TerminatorKind::InlineAsm { .. } => { /* nothing to do */ }
+                | TerminatorKind::FalseUnwind { .. } => { /* nothing to do */ }
                 TerminatorKind::Call { cleanup: unwind, .. }
+                | TerminatorKind::InlineAsm { cleanup: unwind, .. }
                 | TerminatorKind::Assert { cleanup: unwind, .. }
                 | TerminatorKind::DropAndReplace { unwind, .. }
                 | TerminatorKind::Drop { unwind, .. } => {

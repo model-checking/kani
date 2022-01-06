@@ -285,13 +285,11 @@ pub enum ExternDepSpec {
 #[derive(PartialEq, Debug)]
 pub enum BuiltinLintDiagnostics {
     Normal,
-    BareTraitObject(Span, /* is_global */ bool),
     AbsPathWithModule(Span),
     ProcMacroDeriveResolutionFallback(Span),
     MacroExpandedMacroExportsAccessedByAbsolutePaths(Span),
-    ElidedLifetimesInPaths(usize, Span, bool, Span, String),
     UnknownCrateTypes(Span, String, String),
-    UnusedImports(String, Vec<(Span, String)>),
+    UnusedImports(String, Vec<(Span, String)>, Option<Span>),
     RedundantImport(Vec<(Span, bool)>, Ident),
     DeprecatedMacro(Option<Symbol>, Span),
     MissingAbi(Span, Abi),

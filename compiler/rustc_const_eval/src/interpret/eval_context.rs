@@ -7,7 +7,11 @@ use rustc_hir::{self as hir, def_id::DefId, definitions::DefPathData};
 use rustc_index::vec::IndexVec;
 use rustc_macros::HashStable;
 use rustc_middle::mir;
-use rustc_middle::ty::layout::{self, LayoutError, LayoutOf, LayoutOfHelpers, TyAndLayout};
+use rustc_middle::mir::interpret::{InterpError, InvalidProgramInfo};
+use rustc_middle::ty::layout::{
+    self, FnAbiError, FnAbiOfHelpers, FnAbiRequest, LayoutError, LayoutOf, LayoutOfHelpers,
+    TyAndLayout,
+};
 use rustc_middle::ty::{
     self, query::TyCtxtAt, subst::SubstsRef, ParamEnv, Ty, TyCtxt, TypeFoldable,
 };
@@ -15,7 +19,7 @@ use rustc_mir_dataflow::storage::AlwaysLiveLocals;
 use rustc_query_system::ich::StableHashingContext;
 use rustc_session::Limit;
 use rustc_span::{Pos, Span};
-use rustc_target::abi::{Align, HasDataLayout, Size, TargetDataLayout};
+use rustc_target::abi::{call::FnAbi, Align, HasDataLayout, Size, TargetDataLayout};
 
 use super::{
     AllocId, GlobalId, Immediate, InterpErrorInfo, InterpResult, MPlaceTy, Machine, MemPlace,
@@ -332,6 +336,24 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> LayoutOfHelpers<'tcx> for InterpC
     }
 }
 
+impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> FnAbiOfHelpers<'tcx> for InterpCx<'mir, 'tcx, M> {
+    type FnAbiOfResult = InterpResult<'tcx, &'tcx FnAbi<'tcx, Ty<'tcx>>>;
+
+    fn handle_fn_abi_err(
+        &self,
+        err: FnAbiError<'tcx>,
+        _span: Span,
+        _fn_abi_request: FnAbiRequest<'tcx>,
+    ) -> InterpErrorInfo<'tcx> {
+        match err {
+            FnAbiError::Layout(err) => err_inval!(Layout(err)).into(),
+            FnAbiError::AdjustForForeignAbi(err) => {
+                err_inval!(FnAbiAdjustForForeignAbi(err)).into()
+            }
+        }
+    }
+}
+
 /// Test if it is valid for a MIR assignment to assign `src`-typed place to `dest`-typed value.
 /// This test should be symmetric, as it is primarily about layout compatibility.
 pub(super) fn mir_assign_valid_types<'tcx>(
@@ -508,7 +530,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
     pub(super) fn subst_from_current_frame_and_normalize_erasing_regions<T: TypeFoldable<'tcx>>(
         &self,
         value: T,
-    ) -> T {
+    ) -> Result<T, InterpError<'tcx>> {
         self.subst_from_frame_and_normalize_erasing_regions(self.frame(), value)
     }
 
@@ -518,8 +540,18 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
         &self,
         frame: &Frame<'mir, 'tcx, M::PointerTag, M::FrameExtra>,
         value: T,
-    ) -> T {
-        frame.instance.subst_mir_and_normalize_erasing_regions(*self.tcx, self.param_env, value)
+    ) -> Result<T, InterpError<'tcx>> {
+        frame
+            .instance
+            .try_subst_mir_and_normalize_erasing_regions(*self.tcx, self.param_env, value)
+            .or_else(|e| {
+                self.tcx.sess.delay_span_bug(
+                    self.cur_span(),
+                    format!("failed to normalize {}", e.get_type_for_failure()).as_str(),
+                );
+
+                Err(InterpError::InvalidProgram(InvalidProgramInfo::TooGeneric))
+            })
     }
 
     /// The `substs` are assumed to already be in our interpreter "universe" (param_env).
@@ -554,7 +586,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                 let layout = from_known_layout(self.tcx, self.param_env, layout, || {
                     let local_ty = frame.body.local_decls[local].ty;
                     let local_ty =
-                        self.subst_from_frame_and_normalize_erasing_regions(frame, local_ty);
+                        self.subst_from_frame_and_normalize_erasing_regions(frame, local_ty)?;
                     self.layout_of(local_ty)
                 })?;
                 if let Some(state) = frame.locals.get(local) {
@@ -605,19 +637,9 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                     match self.size_and_align_of(metadata, &field)? {
                         Some(size_and_align) => size_and_align,
                         None => {
-                            // A field with extern type.  If this field is at offset 0, we behave
-                            // like the underlying extern type.
-                            // FIXME: Once we have made decisions for how to handle size and alignment
-                            // of `extern type`, this should be adapted.  It is just a temporary hack
-                            // to get some code to work that probably ought to work.
-                            if sized_size == Size::ZERO {
-                                return Ok(None);
-                            } else {
-                                span_bug!(
-                                    self.cur_span(),
-                                    "Fields cannot be extern types, unless they are at offset 0"
-                                )
-                            }
+                            // A field with an extern type. We don't know the actual dynamic size
+                            // or the alignment.
+                            return Ok(None);
                         }
                     };
 
@@ -702,7 +724,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
         for const_ in &body.required_consts {
             let span = const_.span;
             let const_ =
-                self.subst_from_current_frame_and_normalize_erasing_regions(const_.literal);
+                self.subst_from_current_frame_and_normalize_erasing_regions(const_.literal)?;
             self.mir_const_to_op(&const_, None).map_err(|err| {
                 // If there was an error, set the span of the current frame to this constant.
                 // Avoiding doing this when evaluation succeeds.
@@ -918,12 +940,13 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
         } else {
             self.param_env
         };
+        let param_env = param_env.with_const();
         let val = self.tcx.eval_to_allocation_raw(param_env.and(gid))?;
         self.raw_const_to_mplace(val)
     }
 
     #[must_use]
-    pub fn dump_place(&'a self, place: Place<M::PointerTag>) -> PlacePrinter<'a, 'mir, 'tcx, M> {
+    pub fn dump_place(&self, place: Place<M::PointerTag>) -> PlacePrinter<'_, 'mir, 'tcx, M> {
         PlacePrinter { ecx: self, place }
     }
 

@@ -231,7 +231,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
 
         let is_assoc_fn = self.self_type_is_available(span);
         // Emit help message for fake-self from other languages (e.g., `this` in Javascript).
-        if ["this", "my"].contains(&&*item_str.as_str()) && is_assoc_fn {
+        if ["this", "my"].contains(&item_str.as_str()) && is_assoc_fn {
             err.span_suggestion_short(
                 span,
                 "you might have meant to use `self` here instead",
@@ -298,11 +298,16 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                             .get(0)
                             .map(|p| (p.span.shrink_to_lo(), "&self, "))
                             .unwrap_or_else(|| {
+                                // Try to look for the "(" after the function name, if possible.
+                                // This avoids placing the suggestion into the visibility specifier.
+                                let span = fn_kind
+                                    .ident()
+                                    .map_or(*span, |ident| span.with_lo(ident.span.hi()));
                                 (
                                     self.r
                                         .session
                                         .source_map()
-                                        .span_through_char(*span, '(')
+                                        .span_through_char(span, '(')
                                         .shrink_to_hi(),
                                     "&self",
                                 )
@@ -1353,7 +1358,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
 
         let name = path[path.len() - 1].ident.name;
         // Make sure error reporting is deterministic.
-        names.sort_by_cached_key(|suggestion| suggestion.candidate.as_str());
+        names.sort_by(|a, b| a.candidate.as_str().partial_cmp(b.candidate.as_str()).unwrap());
 
         match find_best_match_for_name(
             &names.iter().map(|suggestion| suggestion.candidate).collect::<Vec<Symbol>>(),
@@ -1372,7 +1377,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
     fn likely_rust_type(path: &[Segment]) -> Option<Symbol> {
         let name = path[path.len() - 1].ident.as_str();
         // Common Java types
-        Some(match &*name {
+        Some(match name {
             "byte" => sym::u8, // In Java, bytes are signed, but in practice one almost always wants unsigned bytes.
             "short" => sym::i16,
             "boolean" => sym::bool,
@@ -1735,7 +1740,7 @@ impl<'a: 'ast, 'ast> LateResolutionVisitor<'a, '_, 'ast> {
                         (generics.span, format!("<{}>", ident))
                     };
                     // Do not suggest if this is coming from macro expansion.
-                    if !span.from_expansion() {
+                    if span.can_be_used_for_suggestions() {
                         return Some((
                             span.shrink_to_hi(),
                             msg,
@@ -1803,7 +1808,7 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
         );
         err.span_label(lifetime_ref.span, "undeclared lifetime");
         let mut suggests_in_band = false;
-        let mut suggest_note = true;
+        let mut suggested_spans = vec![];
         for missing in &self.missing_named_lifetime_spots {
             match missing {
                 MissingLifetimeSpot::Generics(generics) => {
@@ -1821,22 +1826,16 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
                         suggests_in_band = true;
                         (generics.span, format!("<{}>", lifetime_ref))
                     };
-                    if !span.from_expansion() {
+                    if suggested_spans.contains(&span) {
+                        continue;
+                    }
+                    suggested_spans.push(span);
+                    if span.can_be_used_for_suggestions() {
                         err.span_suggestion(
                             span,
                             &format!("consider introducing lifetime `{}` here", lifetime_ref),
                             sugg,
                             Applicability::MaybeIncorrect,
-                        );
-                    } else if suggest_note {
-                        suggest_note = false; // Avoid displaying the same help multiple times.
-                        err.span_label(
-                            span,
-                            &format!(
-                                "lifetime `{}` is missing in item created through this procedural \
-                                 macro",
-                                lifetime_ref,
-                            ),
                         );
                     }
                 }
@@ -1869,6 +1868,117 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
             );
         }
         err.emit();
+    }
+
+    /// Returns whether to add `'static` lifetime to the suggested lifetime list.
+    crate fn report_elision_failure(
+        &mut self,
+        db: &mut DiagnosticBuilder<'_>,
+        params: &[ElisionFailureInfo],
+    ) -> bool {
+        let mut m = String::new();
+        let len = params.len();
+
+        let elided_params: Vec<_> =
+            params.iter().cloned().filter(|info| info.lifetime_count > 0).collect();
+
+        let elided_len = elided_params.len();
+
+        for (i, info) in elided_params.into_iter().enumerate() {
+            let ElisionFailureInfo { parent, index, lifetime_count: n, have_bound_regions, span } =
+                info;
+
+            db.span_label(span, "");
+            let help_name = if let Some(ident) =
+                parent.and_then(|body| self.tcx.hir().body(body).params[index].pat.simple_ident())
+            {
+                format!("`{}`", ident)
+            } else {
+                format!("argument {}", index + 1)
+            };
+
+            m.push_str(
+                &(if n == 1 {
+                    help_name
+                } else {
+                    format!(
+                        "one of {}'s {} {}lifetimes",
+                        help_name,
+                        n,
+                        if have_bound_regions { "free " } else { "" }
+                    )
+                })[..],
+            );
+
+            if elided_len == 2 && i == 0 {
+                m.push_str(" or ");
+            } else if i + 2 == elided_len {
+                m.push_str(", or ");
+            } else if i != elided_len - 1 {
+                m.push_str(", ");
+            }
+        }
+
+        if len == 0 {
+            db.help(
+                "this function's return type contains a borrowed value, \
+                 but there is no value for it to be borrowed from",
+            );
+            true
+        } else if elided_len == 0 {
+            db.help(
+                "this function's return type contains a borrowed value with \
+                 an elided lifetime, but the lifetime cannot be derived from \
+                 the arguments",
+            );
+            true
+        } else if elided_len == 1 {
+            db.help(&format!(
+                "this function's return type contains a borrowed value, \
+                 but the signature does not say which {} it is borrowed from",
+                m
+            ));
+            false
+        } else {
+            db.help(&format!(
+                "this function's return type contains a borrowed value, \
+                 but the signature does not say whether it is borrowed from {}",
+                m
+            ));
+            false
+        }
+    }
+
+    crate fn report_elided_lifetime_in_ty(&self, lifetime_refs: &[&hir::Lifetime]) {
+        let Some(missing_lifetime) = lifetime_refs.iter().find(|lt| {
+            lt.name == hir::LifetimeName::Implicit(true)
+        }) else { return };
+
+        let mut spans: Vec<_> = lifetime_refs.iter().map(|lt| lt.span).collect();
+        spans.sort();
+        let mut spans_dedup = spans.clone();
+        spans_dedup.dedup();
+        let spans_with_counts: Vec<_> = spans_dedup
+            .into_iter()
+            .map(|sp| (sp, spans.iter().filter(|nsp| *nsp == &sp).count()))
+            .collect();
+
+        self.tcx.struct_span_lint_hir(
+            rustc_session::lint::builtin::ELIDED_LIFETIMES_IN_PATHS,
+            missing_lifetime.hir_id,
+            spans,
+            |lint| {
+                let mut db = lint.build("hidden lifetime parameters in types are deprecated");
+                self.add_missing_lifetime_specifiers_label(
+                    &mut db,
+                    spans_with_counts,
+                    &FxHashSet::from_iter([kw::UnderscoreLifetime]),
+                    Vec::new(),
+                    &[],
+                );
+                db.emit()
+            },
+        );
     }
 
     // FIXME(const_generics): This patches over an ICE caused by non-'static lifetimes in const
@@ -2005,11 +2115,19 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
                 let spans_suggs: Vec<_> = formatters
                     .into_iter()
                     .zip(spans_with_counts.iter())
-                    .filter_map(|(fmt, (span, _))| {
-                        if let Some(formatter) = fmt { Some((formatter, span)) } else { None }
+                    .filter_map(|(formatter, (span, _))| {
+                        if let Some(formatter) = formatter {
+                            Some((*span, formatter(name)))
+                        } else {
+                            None
+                        }
                     })
-                    .map(|(formatter, span)| (*span, formatter(name)))
                     .collect();
+                if spans_suggs.is_empty() {
+                    // If all the spans come from macros, we cannot extract snippets and then
+                    // `formatters` only contains None and `spans_suggs` is empty.
+                    return;
+                }
                 err.multipart_suggestion_verbose(
                     &format!(
                         "consider using the `{}` lifetime",
@@ -2230,7 +2348,7 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
                         _ => None,
                     });
                 }
-                suggest_existing(err, &name.as_str()[..], suggs);
+                suggest_existing(err, name.as_str(), suggs);
             }
             [] => {
                 let mut suggs = Vec::new();
@@ -2297,7 +2415,9 @@ impl<'tcx> LifetimeContext<'_, 'tcx> {
         );
         let is_allowed_lifetime = matches!(
             lifetime_ref.name,
-            hir::LifetimeName::Implicit | hir::LifetimeName::Static | hir::LifetimeName::Underscore
+            hir::LifetimeName::Implicit(_)
+                | hir::LifetimeName::Static
+                | hir::LifetimeName::Underscore
         );
 
         if !self.tcx.lazy_normalization() && is_anon_const && !is_allowed_lifetime {

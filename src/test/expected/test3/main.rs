@@ -10,21 +10,22 @@ fn main() {
     }
 
     // at this point, a == 10.0 and i == 0
-    // should fail
-    assert!(a == 10.0 && i == 1);
-    // should fail
-    assert!(a == 9.0 && i == 0);
-    // should fail
-    assert!(a == 9.0 && i == 1);
-    // should succeed
-    assert!(a == 10.0 && i == 0);
-
-    // should succeed
-    assert!(a == 9.0 || i == 0);
-    // should succeed
-    assert!(a == 10.0 || i == 1);
-    // should fail
-    assert!(a == 9.0 || i == 1);
-    // should succeed
-    assert!(a == 10.0 || i == 0);
+    match rmc::nondet::<i8>() {
+        // should fail
+        0 => assert!(a == 10.0 && i == 1),
+        // should fail
+        1 => assert!(a == 9.0 && i == 0),
+        // should fail
+        2 => assert!(a == 9.0 && i == 1),
+        // should succeed
+        3 => assert!(a == 10.0 && i == 0),
+        // should succeed
+        4 => assert!(a == 9.0 || i == 0),
+        // should succeed
+        5 => assert!(a == 10.0 || i == 1),
+        // should fail
+        6 => assert!(a == 9.0 || i == 1),
+        // should succeed
+        _ => assert!(a == 10.0 || i == 0),
+    }
 }

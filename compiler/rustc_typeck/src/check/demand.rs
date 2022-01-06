@@ -1223,7 +1223,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     // Missing try_into implementation for `{integer}` to `{float}`
                     err.multipart_suggestion_verbose(
                         &format!(
-                            "{}, producing the floating point representation of the integer,
+                            "{}, producing the floating point representation of the integer, \
                                  rounded if necessary",
                             cast_msg,
                         ),
@@ -1262,6 +1262,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         Applicability::MaybeIncorrect, // lossy conversion
                     );
                 }
+                true
+            }
+            (
+                &ty::Uint(ty::UintTy::U32 | ty::UintTy::U64 | ty::UintTy::U128)
+                | &ty::Int(ty::IntTy::I32 | ty::IntTy::I64 | ty::IntTy::I128),
+                &ty::Char,
+            ) => {
+                err.multipart_suggestion_verbose(
+                    &format!("{}, since a `char` always occupies 4 bytes", cast_msg,),
+                    cast_suggestion,
+                    Applicability::MachineApplicable,
+                );
                 true
             }
             _ => false,

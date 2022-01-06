@@ -1,3 +1,5 @@
+use std::cmp::Ord;
+
 use crate::graph::{DirectedGraph, GraphSuccessors, WithNumEdges, WithNumNodes, WithSuccessors};
 use rustc_index::vec::{Idx, IndexVec};
 
@@ -17,7 +19,7 @@ pub struct VecGraph<N: Idx> {
     edge_targets: Vec<N>,
 }
 
-impl<N: Idx> VecGraph<N> {
+impl<N: Idx + Ord> VecGraph<N> {
     pub fn new(num_nodes: usize, mut edge_pairs: Vec<(N, N)>) -> Self {
         // Sort the edges by the source -- this is important.
         edge_pairs.sort();
@@ -94,13 +96,13 @@ impl<N: Idx> WithNumEdges for VecGraph<N> {
     }
 }
 
-impl<N: Idx> GraphSuccessors<'graph> for VecGraph<N> {
+impl<'graph, N: Idx> GraphSuccessors<'graph> for VecGraph<N> {
     type Item = N;
 
     type Iter = std::iter::Cloned<std::slice::Iter<'graph, N>>;
 }
 
-impl<N: Idx> WithSuccessors for VecGraph<N> {
+impl<N: Idx + Ord> WithSuccessors for VecGraph<N> {
     fn successors(&self, node: N) -> <Self as GraphSuccessors<'_>>::Iter {
         self.successors(node).iter().cloned()
     }

@@ -1,22 +1,21 @@
-//! A pass that simplifies branches when their condition is known.
-
 use crate::MirPass;
 use rustc_middle::mir::*;
 use rustc_middle::ty::TyCtxt;
 
 use std::borrow::Cow;
 
-pub struct SimplifyBranches {
+/// A pass that replaces a branch with a goto when its condition is known.
+pub struct SimplifyConstCondition {
     label: String,
 }
 
-impl SimplifyBranches {
+impl SimplifyConstCondition {
     pub fn new(label: &str) -> Self {
-        SimplifyBranches { label: format!("SimplifyBranches-{}", label) }
+        SimplifyConstCondition { label: format!("SimplifyConstCondition-{}", label) }
     }
 }
 
-impl<'tcx> MirPass<'tcx> for SimplifyBranches {
+impl<'tcx> MirPass<'tcx> for SimplifyConstCondition {
     fn name(&self) -> Cow<'_, str> {
         Cow::Borrowed(&self.label)
     }
@@ -34,15 +33,8 @@ impl<'tcx> MirPass<'tcx> for SimplifyBranches {
                 } => {
                     let constant = c.literal.try_eval_bits(tcx, param_env, switch_ty);
                     if let Some(constant) = constant {
-                        let otherwise = targets.otherwise();
-                        let mut ret = TerminatorKind::Goto { target: otherwise };
-                        for (v, t) in targets.iter() {
-                            if v == constant {
-                                ret = TerminatorKind::Goto { target: t };
-                                break;
-                            }
-                        }
-                        ret
+                        let target = targets.target_for_value(constant);
+                        TerminatorKind::Goto { target }
                     } else {
                         continue;
                     }
@@ -53,12 +45,6 @@ impl<'tcx> MirPass<'tcx> for SimplifyBranches {
                     Some(v) if v == expected => TerminatorKind::Goto { target },
                     _ => continue,
                 },
-                TerminatorKind::FalseEdge { real_target, .. } => {
-                    TerminatorKind::Goto { target: real_target }
-                }
-                TerminatorKind::FalseUnwind { real_target, .. } => {
-                    TerminatorKind::Goto { target: real_target }
-                }
                 _ => continue,
             };
         }

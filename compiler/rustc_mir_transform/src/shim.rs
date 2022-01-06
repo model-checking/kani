@@ -17,8 +17,8 @@ use std::iter;
 
 use crate::util::expand_aggregate;
 use crate::{
-    abort_unwinding_calls, add_call_guards, add_moves_for_packed_drops, remove_noop_landing_pads,
-    run_passes, simplify,
+    abort_unwinding_calls, add_call_guards, add_moves_for_packed_drops, marker, pass_manager as pm,
+    remove_noop_landing_pads, simplify,
 };
 use rustc_middle::mir::patch::MirPatch;
 use rustc_mir_dataflow::elaborate_drops::{self, DropElaborator, DropFlagMode, DropStyle};
@@ -64,7 +64,19 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
 
             build_call_shim(tcx, instance, Some(Adjustment::RefMut), CallKind::Direct(call_mut))
         }
-        ty::InstanceDef::DropGlue(def_id, ty) => build_drop_shim(tcx, def_id, ty),
+
+        ty::InstanceDef::DropGlue(def_id, ty) => {
+            // FIXME(#91576): Drop shims for generators aren't subject to the MIR passes at the end
+            // of this function. Is this intentional?
+            if let Some(ty::Generator(gen_def_id, substs, _)) = ty.map(ty::TyS::kind) {
+                let body = tcx.optimized_mir(*gen_def_id).generator_drop().unwrap();
+                let body = body.clone().subst(tcx, substs);
+                debug!("make_shim({:?}) = {:?}", instance, body);
+                return body;
+            }
+
+            build_drop_shim(tcx, def_id, ty)
+        }
         ty::InstanceDef::CloneShim(def_id, ty) => build_clone_shim(tcx, def_id, ty),
         ty::InstanceDef::Virtual(..) => {
             bug!("InstanceDef::Virtual ({:?}) is for direct calls only", instance)
@@ -75,17 +87,17 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
     };
     debug!("make_shim({:?}) = untransformed {:?}", instance, result);
 
-    run_passes(
+    pm::run_passes(
         tcx,
         &mut result,
-        MirPhase::Const,
-        &[&[
+        &[
             &add_moves_for_packed_drops::AddMovesForPackedDrops,
             &remove_noop_landing_pads::RemoveNoopLandingPads,
             &simplify::SimplifyCfg::new("make_shim"),
             &add_call_guards::CriticalCallEdges,
             &abort_unwinding_calls::AbortUnwindingCalls,
-        ]],
+            &marker::PhaseChange(MirPhase::Const),
+        ],
     );
 
     debug!("make_shim({:?}) = {:?}", instance, result);
@@ -132,11 +144,7 @@ fn local_decls_for_sig<'tcx>(
 fn build_drop_shim<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, ty: Option<Ty<'tcx>>) -> Body<'tcx> {
     debug!("build_drop_shim(def_id={:?}, ty={:?})", def_id, ty);
 
-    // Check if this is a generator, if so, return the drop glue for it
-    if let Some(&ty::Generator(gen_def_id, substs, _)) = ty.map(|ty| ty.kind()) {
-        let body = tcx.optimized_mir(gen_def_id).generator_drop().unwrap();
-        return body.clone().subst(tcx, substs);
-    }
+    assert!(!matches!(ty, Some(ty) if ty.is_generator()));
 
     let substs = if let Some(ty) = ty {
         tcx.intern_substs(&[ty.into()])
@@ -239,7 +247,7 @@ pub struct DropShimElaborator<'a, 'tcx> {
     pub param_env: ty::ParamEnv<'tcx>,
 }
 
-impl<'a, 'tcx> fmt::Debug for DropShimElaborator<'a, 'tcx> {
+impl fmt::Debug for DropShimElaborator<'_, '_> {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         Ok(())
     }
@@ -329,7 +337,7 @@ struct CloneShimBuilder<'tcx> {
     sig: ty::FnSig<'tcx>,
 }
 
-impl CloneShimBuilder<'tcx> {
+impl<'tcx> CloneShimBuilder<'tcx> {
     fn new(tcx: TyCtxt<'tcx>, def_id: DefId, self_ty: Ty<'tcx>) -> Self {
         // we must subst the self_ty because it's
         // otherwise going to be TySelf and we can't index
@@ -769,7 +777,7 @@ pub fn build_adt_ctor(tcx: TyCtxt<'_>, ctor_id: DefId) -> Body<'_> {
         adt_def.variants[variant_index].fields.iter().enumerate().map(|(idx, field_def)| {
             (Operand::Move(Place::from(Local::new(idx + 1))), field_def.ty(tcx, substs))
         }),
-        AggregateKind::Adt(adt_def, variant_index, substs, None, None),
+        AggregateKind::Adt(adt_def.did, variant_index, substs, None, None),
         source_info,
         tcx,
     )

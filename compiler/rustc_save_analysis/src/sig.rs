@@ -286,7 +286,7 @@ impl<'hir> Sig for hir::Ty<'hir> {
                     refs: vec![SigElement { id, start, end }],
                 })
             }
-            hir::TyKind::Path(hir::QPath::LangItem(lang_item, _)) => {
+            hir::TyKind::Path(hir::QPath::LangItem(lang_item, _, _)) => {
                 Ok(text_sig(format!("#[lang = \"{}\"]", lang_item.name())))
             }
             hir::TyKind::TraitObject(bounds, ..) => {
@@ -616,7 +616,7 @@ impl<'hir> Sig for hir::Generics<'hir> {
             if let hir::GenericParamKind::Const { .. } = param.kind {
                 param_text.push_str("const ");
             }
-            param_text.push_str(&param.name.ident().as_str());
+            param_text.push_str(param.name.ident().as_str());
             defs.push(SigElement {
                 id: id_from_hir_id(param.hir_id, scx),
                 start: offset + text.len(),

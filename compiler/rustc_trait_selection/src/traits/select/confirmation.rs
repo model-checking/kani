@@ -8,12 +8,13 @@
 //! https://rustc-dev-guide.rust-lang.org/traits/resolution.html#confirmation
 use rustc_data_structures::stack::ensure_sufficient_stack;
 use rustc_hir::lang_items::LangItem;
+use rustc_hir::Constness;
 use rustc_index::bit_set::GrowableBitSet;
 use rustc_infer::infer::InferOk;
 use rustc_infer::infer::LateBoundRegionConversionTime::HigherRankedType;
 use rustc_middle::ty::subst::{GenericArg, GenericArgKind, Subst, SubstsRef};
 use rustc_middle::ty::{self, Ty};
-use rustc_middle::ty::{ToPolyTraitRef, ToPredicate, WithConstness};
+use rustc_middle::ty::{ToPolyTraitRef, ToPredicate};
 use rustc_span::def_id::DefId;
 
 use crate::traits::project::{normalize_with_depth, normalize_with_depth_to};
@@ -51,6 +52,38 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         obligation: &TraitObligation<'tcx>,
         candidate: SelectionCandidate<'tcx>,
     ) -> Result<Selection<'tcx>, SelectionError<'tcx>> {
+        let mut obligation = obligation;
+        let new_obligation;
+
+        // HACK(const_trait_impl): the surrounding environment is remapped to a non-const context
+        // because nested obligations might be actually `~const` then (incorrectly) requiring
+        // const impls. for example:
+        // ```
+        // pub trait Super {}
+        // pub trait Sub: Super {}
+        //
+        // impl<A> const Super for &A where A: ~const Super {}
+        // impl<A> const Sub for &A where A: ~const Sub {}
+        // ```
+        //
+        // The procedure to check the code above without the remapping code is as follows:
+        // ```
+        // CheckWf(impl const Sub for &A where A: ~const Sub) // <- const env
+        // CheckPredicate(&A: Super)
+        // CheckPredicate(A: ~const Super) // <- still const env, failure
+        // ```
+        if obligation.param_env.constness() == Constness::Const
+            && obligation.predicate.skip_binder().constness == ty::BoundConstness::NotConst
+        {
+            new_obligation = TraitObligation {
+                cause: obligation.cause.clone(),
+                param_env: obligation.param_env.without_const(),
+                ..*obligation
+            };
+
+            obligation = &new_obligation;
+        }
+
         match candidate {
             BuiltinCandidate { has_nested } => {
                 let data = self.confirm_builtin_candidate(obligation, has_nested);
@@ -58,8 +91,9 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             }
 
             ParamCandidate(param) => {
-                let obligations = self.confirm_param_candidate(obligation, param.0.value);
-                Ok(ImplSource::Param(obligations, param.0.constness))
+                let obligations =
+                    self.confirm_param_candidate(obligation, param.map_bound(|t| t.trait_ref));
+                Ok(ImplSource::Param(obligations, param.skip_binder().constness))
             }
 
             ImplCandidate(impl_def_id) => {
@@ -139,7 +173,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
 
             let trait_predicate = self.infcx.shallow_resolve(obligation.predicate);
             let placeholder_trait_predicate =
-                self.infcx().replace_bound_vars_with_placeholders(trait_predicate);
+                self.infcx().replace_bound_vars_with_placeholders(trait_predicate).trait_ref;
             let placeholder_self_ty = placeholder_trait_predicate.self_ty();
             let placeholder_trait_predicate = ty::Binder::dummy(placeholder_trait_predicate);
             let (def_id, substs) = match *placeholder_self_ty.kind() {
@@ -150,8 +184,9 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
 
             let candidate_predicate = tcx.item_bounds(def_id)[idx].subst(tcx, substs);
             let candidate = candidate_predicate
-                .to_opt_poly_trait_ref()
-                .expect("projection candidate is not a trait predicate");
+                .to_opt_poly_trait_pred()
+                .expect("projection candidate is not a trait predicate")
+                .map_bound(|t| t.trait_ref);
             let mut obligations = Vec::new();
             let candidate = normalize_with_depth_to(
                 self,
@@ -165,7 +200,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             obligations.extend(self.infcx.commit_if_ok(|_| {
                 self.infcx
                     .at(&obligation.cause, obligation.param_env)
-                    .sup(placeholder_trait_predicate.to_poly_trait_ref(), candidate.value)
+                    .sup(placeholder_trait_predicate, candidate)
                     .map(|InferOk { obligations, .. }| obligations)
                     .map_err(|_| Unimplemented)
             })?);

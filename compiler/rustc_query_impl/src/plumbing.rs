@@ -31,7 +31,7 @@ impl<'tcx> std::ops::Deref for QueryCtxt<'tcx> {
     }
 }
 
-impl HasDepContext for QueryCtxt<'tcx> {
+impl<'tcx> HasDepContext for QueryCtxt<'tcx> {
     type DepKind = rustc_middle::dep_graph::DepKind;
     type DepContext = TyCtxt<'tcx>;
 
@@ -41,7 +41,7 @@ impl HasDepContext for QueryCtxt<'tcx> {
     }
 }
 
-impl QueryContext for QueryCtxt<'tcx> {
+impl QueryContext for QueryCtxt<'_> {
     fn current_query_job(&self) -> Option<QueryJobId<Self::DepKind>> {
         tls::with_related_context(**self, |icx| icx.query)
     }
@@ -130,7 +130,7 @@ impl<'tcx> QueryCtxt<'tcx> {
 
     pub(super) fn encode_query_results(
         self,
-        encoder: &mut on_disk_cache::CacheEncoder<'a, 'tcx, opaque::FileEncoder>,
+        encoder: &mut on_disk_cache::CacheEncoder<'_, 'tcx, opaque::FileEncoder>,
         query_result_index: &mut on_disk_cache::EncodedDepNodeIndex,
     ) -> opaque::FileEncodeResult {
         macro_rules! encode_queries {
@@ -231,6 +231,16 @@ macro_rules! get_provider {
     };
 }
 
+macro_rules! opt_remap_env_constness {
+    ([][$name:ident]) => {};
+    ([(remap_env_constness) $($rest:tt)*][$name:ident]) => {
+        let $name = $name.without_const();
+    };
+    ([$other:tt $($modifiers:tt)*][$name:ident]) => {
+        opt_remap_env_constness!([$($modifiers)*][$name])
+    };
+}
+
 macro_rules! define_queries {
     (<$tcx:tt>
      $($(#[$attr:meta])*
@@ -247,6 +257,7 @@ macro_rules! define_queries {
             // Create an eponymous constructor for each query.
             $(#[allow(nonstandard_style)] $(#[$attr])*
             pub fn $name<$tcx>(tcx: QueryCtxt<$tcx>, key: query_keys::$name<$tcx>) -> QueryStackFrame {
+                opt_remap_env_constness!([$($modifiers)*][key]);
                 let kind = dep_graph::DepKind::$name;
                 let name = stringify!($name);
                 // Disable visible paths printing for performance reasons.
@@ -500,7 +511,7 @@ macro_rules! define_queries_struct {
             }
         }
 
-        impl QueryEngine<'tcx> for Queries<'tcx> {
+        impl<'tcx> QueryEngine<'tcx> for Queries<'tcx> {
             fn as_any(&'tcx self) -> &'tcx dyn std::any::Any {
                 let this = unsafe { std::mem::transmute::<&Queries<'_>, &Queries<'_>>(self) };
                 this as _
@@ -521,6 +532,7 @@ macro_rules! define_queries_struct {
                 lookup: QueryLookup,
                 mode: QueryMode,
             ) -> Option<query_stored::$name<$tcx>> {
+                opt_remap_env_constness!([$($modifiers)*][key]);
                 let qcx = QueryCtxt { tcx, queries: self };
                 get_query::<queries::$name<$tcx>, _>(qcx, span, key, lookup, mode)
             })*

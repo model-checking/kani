@@ -8,9 +8,7 @@ use crate::infer::canonical::Canonical;
 use crate::ty::fold::ValidateBoundVars;
 use crate::ty::subst::{GenericArg, InternalSubsts, Subst, SubstsRef};
 use crate::ty::InferTy::{self, *};
-use crate::ty::{
-    self, AdtDef, DefIdTree, Discr, Ty, TyCtxt, TypeFlags, TypeFoldable, WithConstness,
-};
+use crate::ty::{self, AdtDef, DefIdTree, Discr, Ty, TyCtxt, TypeFlags, TypeFoldable};
 use crate::ty::{DelaySpanBugEmitted, List, ParamEnv, TyS};
 use polonius_engine::Atom;
 use rustc_data_structures::captures::Captures;
@@ -200,7 +198,7 @@ pub enum TyKind<'tcx> {
     Error(DelaySpanBugEmitted),
 }
 
-impl TyKind<'tcx> {
+impl<'tcx> TyKind<'tcx> {
     #[inline]
     pub fn is_primitive(&self) -> bool {
         matches!(self, Bool | Char | Int(_) | Uint(_) | Float(_))
@@ -356,14 +354,17 @@ impl<'tcx> ClosureSubsts<'tcx> {
     /// The ordering assumed here must match that used by `ClosureSubsts::new` above.
     fn split(self) -> ClosureSubstsParts<'tcx, GenericArg<'tcx>> {
         match self.substs[..] {
-            [ref parent_substs @ .., closure_kind_ty, closure_sig_as_fn_ptr_ty, tupled_upvars_ty] => {
-                ClosureSubstsParts {
-                    parent_substs,
-                    closure_kind_ty,
-                    closure_sig_as_fn_ptr_ty,
-                    tupled_upvars_ty,
-                }
-            }
+            [
+                ref parent_substs @ ..,
+                closure_kind_ty,
+                closure_sig_as_fn_ptr_ty,
+                tupled_upvars_ty,
+            ] => ClosureSubstsParts {
+                parent_substs,
+                closure_kind_ty,
+                closure_sig_as_fn_ptr_ty,
+                tupled_upvars_ty,
+            },
             _ => bug!("closure substs missing synthetics"),
         }
     }
@@ -786,7 +787,7 @@ impl<'tcx> ExistentialPredicate<'tcx> {
                 tcx.def_path_hash(a.item_def_id).cmp(&tcx.def_path_hash(b.item_def_id))
             }
             (AutoTrait(ref a), AutoTrait(ref b)) => {
-                tcx.trait_def(*a).def_path_hash.cmp(&tcx.trait_def(*b).def_path_hash)
+                tcx.def_path_hash(*a).cmp(&tcx.def_path_hash(*b))
             }
             (Trait(_), _) => Ordering::Less,
             (Projection(_), Trait(_)) => Ordering::Greater,

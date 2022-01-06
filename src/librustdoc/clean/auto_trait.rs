@@ -100,9 +100,12 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                 // Instead, we generate `impl !Send for Foo<T>`, which better
                 // expresses the fact that `Foo<T>` never implements `Send`,
                 // regardless of the choice of `T`.
-                let params = (tcx.generics_of(item_def_id), ty::GenericPredicates::default())
-                    .clean(self.cx)
-                    .params;
+                let raw_generics = clean_ty_generics(
+                    self.cx,
+                    tcx.generics_of(item_def_id),
+                    ty::GenericPredicates::default(),
+                );
+                let params = raw_generics.params;
 
                 Generics { params, where_predicates: Vec::new() }
             }
@@ -449,12 +452,14 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                         _ => false,
                     }
             })
-            .map(|p| p.fold_with(&mut replacer).into_ok());
+            .map(|p| p.fold_with(&mut replacer));
 
-        let mut generic_params =
-            (tcx.generics_of(item_def_id), tcx.explicit_predicates_of(item_def_id))
-                .clean(self.cx)
-                .params;
+        let raw_generics = clean_ty_generics(
+            self.cx,
+            tcx.generics_of(item_def_id),
+            tcx.explicit_predicates_of(item_def_id),
+        );
+        let mut generic_params = raw_generics.params;
 
         debug!("param_env_to_generics({:?}): generic_params={:?}", item_def_id, generic_params);
 
@@ -500,7 +505,7 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
                         .and_then(|trait_| {
                             ty_to_traits
                                 .get(&ty)
-                                .map(|bounds| bounds.contains(&strip_path_generics(trait_.clone())))
+                                .map(|bounds| bounds.contains(&strip_path_generics(trait_)))
                         })
                         .unwrap_or(false)
                     {
@@ -714,11 +719,11 @@ impl<'a, 'tcx> TypeFolder<'tcx> for RegionReplacer<'a, 'tcx> {
         self.tcx
     }
 
-    fn fold_region(&mut self, r: ty::Region<'tcx>) -> Result<ty::Region<'tcx>, Self::Error> {
-        Ok((match *r {
+    fn fold_region(&mut self, r: ty::Region<'tcx>) -> ty::Region<'tcx> {
+        (match *r {
             ty::ReVar(vid) => self.vid_to_region.get(&vid).cloned(),
             _ => None,
         })
-        .unwrap_or_else(|| r.super_fold_with(self).into_ok()))
+        .unwrap_or_else(|| r.super_fold_with(self))
     }
 }

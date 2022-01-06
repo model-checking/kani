@@ -35,3 +35,48 @@ fn test_assume_can_be_in_const_contexts() {
     let rs = unsafe { foo(42, 97) };
     assert_eq!(rs, 0);
 }
+
+#[test]
+#[cfg(not(bootstrap))]
+const fn test_write_bytes_in_const_contexts() {
+    use core::intrinsics::write_bytes;
+
+    const TEST: [u32; 3] = {
+        let mut arr = [1u32, 2, 3];
+        unsafe {
+            write_bytes(arr.as_mut_ptr(), 0, 2);
+        }
+        arr
+    };
+
+    assert!(TEST[0] == 0);
+    assert!(TEST[1] == 0);
+    assert!(TEST[2] == 3);
+
+    const TEST2: [u32; 3] = {
+        let mut arr = [1u32, 2, 3];
+        unsafe {
+            write_bytes(arr.as_mut_ptr(), 1, 2);
+        }
+        arr
+    };
+
+    assert!(TEST2[0] == 16843009);
+    assert!(TEST2[1] == 16843009);
+    assert!(TEST2[2] == 3);
+}
+
+#[test]
+fn test_hints_in_const_contexts() {
+    use core::intrinsics::{likely, unlikely};
+
+    // In const contexts, they just return their argument.
+    const {
+        assert!(true == likely(true));
+        assert!(false == likely(false));
+        assert!(true == unlikely(true));
+        assert!(false == unlikely(false));
+        assert!(42u32 == core::intrinsics::black_box(42u32));
+        assert!(42u32 == core::hint::black_box(42u32));
+    }
+}

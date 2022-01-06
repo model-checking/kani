@@ -567,7 +567,7 @@ fn document_full_inner(
     is_collapsible: bool,
     heading_offset: HeadingOffset,
 ) {
-    if let Some(s) = cx.shared.maybe_collapsed_doc_value(item) {
+    if let Some(s) = item.collapsed_doc_value() {
         debug!("Doc block: =====\n{}\n=====", s);
         if is_collapsible {
             w.write_str(
@@ -640,9 +640,9 @@ fn short_item_info(
         // We display deprecation messages for #[deprecated] and #[rustc_deprecated]
         // but only display the future-deprecation messages for #[rustc_deprecated].
         let mut message = if let Some(since) = since {
-            let since = &since.as_str();
+            let since = since.as_str();
             if !stability::deprecation_in_effect(&depr) {
-                if *since == "TBD" {
+                if since == "TBD" {
                     String::from("Deprecating in a future Rust version")
                 } else {
                     format!("Deprecating in {}", Escape(since))
@@ -658,7 +658,7 @@ fn short_item_info(
             let note = note.as_str();
             let mut ids = cx.id_map.borrow_mut();
             let html = MarkdownHtml(
-                &note,
+                note,
                 &mut ids,
                 error_codes,
                 cx.shared.edition(),
@@ -683,7 +683,7 @@ fn short_item_info(
         let mut message =
             "<span class=\"emoji\">🔬</span> This is a nightly-only experimental API.".to_owned();
 
-        let mut feature = format!("<code>{}</code>", Escape(&feature.as_str()));
+        let mut feature = format!("<code>{}</code>", Escape(feature.as_str()));
         if let (Some(url), Some(issue)) = (&cx.shared.issue_tracker_base_url, issue) {
             feature.push_str(&format!(
                 "&nbsp;<a href=\"{url}{issue}\">#{issue}</a>",
@@ -762,7 +762,6 @@ fn assoc_const(
     w: &mut Buffer,
     it: &clean::Item,
     ty: &clean::Type,
-    _default: Option<&String>,
     link: AssocItemLink<'_>,
     extra: &str,
     cx: &Context<'_>,
@@ -804,17 +803,17 @@ fn assoc_type(
 
 fn render_stability_since_raw(
     w: &mut Buffer,
-    ver: Option<&str>,
-    const_stability: Option<&ConstStability>,
-    containing_ver: Option<&str>,
-    containing_const_ver: Option<&str>,
+    ver: Option<Symbol>,
+    const_stability: Option<ConstStability>,
+    containing_ver: Option<Symbol>,
+    containing_const_ver: Option<Symbol>,
 ) {
     let ver = ver.filter(|inner| !inner.is_empty());
 
     match (ver, const_stability) {
         // stable and const stable
         (Some(v), Some(ConstStability { level: StabilityLevel::Stable { since }, .. }))
-            if Some(since.as_str()).as_deref() != containing_const_ver =>
+            if Some(since) != containing_const_ver =>
         {
             write!(
                 w,
@@ -861,6 +860,7 @@ fn render_assoc_item(
     link: AssocItemLink<'_>,
     parent: ItemType,
     cx: &Context<'_>,
+    render_mode: RenderMode,
 ) {
     fn method(
         w: &mut Buffer,
@@ -871,6 +871,7 @@ fn render_assoc_item(
         link: AssocItemLink<'_>,
         parent: ItemType,
         cx: &Context<'_>,
+        render_mode: RenderMode,
     ) {
         let name = meth.name.as_ref().unwrap();
         let href = match link {
@@ -893,8 +894,14 @@ fn render_assoc_item(
             }
         };
         let vis = meth.visibility.print_with_space(meth.def_id, cx).to_string();
-        let constness =
-            print_constness_with_space(&header.constness, meth.const_stability(cx.tcx()));
+        // FIXME: Once https://github.com/rust-lang/rust/issues/67792 is implemented, we can remove
+        // this condition.
+        let constness = match render_mode {
+            RenderMode::Normal => {
+                print_constness_with_space(&header.constness, meth.const_stability(cx.tcx()))
+            }
+            RenderMode::ForDeref { .. } => "",
+        };
         let asyncness = header.asyncness.print_with_space();
         let unsafety = header.unsafety.print_with_space();
         let defaultness = print_default_space(meth.is_default());
@@ -945,20 +952,14 @@ fn render_assoc_item(
     match *item.kind {
         clean::StrippedItem(..) => {}
         clean::TyMethodItem(ref m) => {
-            method(w, item, m.header, &m.generics, &m.decl, link, parent, cx)
+            method(w, item, m.header, &m.generics, &m.decl, link, parent, cx, render_mode)
         }
         clean::MethodItem(ref m, _) => {
-            method(w, item, m.header, &m.generics, &m.decl, link, parent, cx)
+            method(w, item, m.header, &m.generics, &m.decl, link, parent, cx, render_mode)
         }
-        clean::AssocConstItem(ref ty, ref default) => assoc_const(
-            w,
-            item,
-            ty,
-            default.as_ref(),
-            link,
-            if parent == ItemType::Trait { "    " } else { "" },
-            cx,
-        ),
+        clean::AssocConstItem(ref ty, _) => {
+            assoc_const(w, item, ty, link, if parent == ItemType::Trait { "    " } else { "" }, cx)
+        }
         clean::AssocTypeItem(ref bounds, ref default) => assoc_type(
             w,
             item,
@@ -981,7 +982,7 @@ fn attributes(it: &clean::Item) -> Vec<String> {
         .iter()
         .filter_map(|attr| {
             if ALLOWED_ATTRIBUTES.contains(&attr.name_or_empty()) {
-                Some(pprust::attribute_to_string(attr).replace("\n", "").replace("  ", " "))
+                Some(pprust::attribute_to_string(attr).replace('\n', "").replace("  ", " "))
             } else {
                 None
             }
@@ -1413,7 +1414,7 @@ fn render_impl(
                     let source_id = trait_
                         .and_then(|trait_| {
                             trait_.items.iter().find(|item| {
-                                item.name.map(|n| n.as_str().eq(&name.as_str())).unwrap_or(false)
+                                item.name.map(|n| n.as_str().eq(name.as_str())).unwrap_or(false)
                             })
                         })
                         .map(|item| format!("{}.{}", item.type_(), name));
@@ -1422,7 +1423,7 @@ fn render_impl(
                         "<div id=\"{}\" class=\"{}{} has-srclink\">",
                         id, item_type, in_trait_class,
                     );
-                    render_rightside(w, cx, item, containing_item);
+                    render_rightside(w, cx, item, containing_item, render_mode);
                     write!(w, "<a href=\"#{}\" class=\"anchor\"></a>", id);
                     w.write_str("<h4 class=\"code-header\">");
                     render_assoc_item(
@@ -1431,6 +1432,7 @@ fn render_impl(
                         link.anchor(source_id.as_ref().unwrap_or(&id)),
                         ItemType::Impl,
                         cx,
+                        render_mode,
                     );
                     w.write_str("</h4>");
                     w.write_str("</div>");
@@ -1458,7 +1460,7 @@ fn render_impl(
                 w.write_str("</h4>");
                 w.write_str("</div>");
             }
-            clean::AssocConstItem(ref ty, ref default) => {
+            clean::AssocConstItem(ref ty, _) => {
                 let source_id = format!("{}.{}", item_type, name);
                 let id = cx.derive_id(source_id.clone());
                 write!(
@@ -1466,14 +1468,13 @@ fn render_impl(
                     "<div id=\"{}\" class=\"{}{} has-srclink\">",
                     id, item_type, in_trait_class
                 );
-                render_rightside(w, cx, item, containing_item);
+                render_rightside(w, cx, item, containing_item, render_mode);
                 write!(w, "<a href=\"#{}\" class=\"anchor\"></a>", id);
                 w.write_str("<h4 class=\"code-header\">");
                 assoc_const(
                     w,
                     item,
                     ty,
-                    default.as_ref(),
                     link.anchor(if trait_.is_some() { &source_id } else { &id }),
                     "",
                     cx,
@@ -1611,7 +1612,7 @@ fn render_impl(
             write!(w, "</summary>")
         }
 
-        if let Some(ref dox) = cx.shared.maybe_collapsed_doc_value(&i.impl_item) {
+        if let Some(ref dox) = i.impl_item.collapsed_doc_value() {
             let mut ids = cx.id_map.borrow_mut();
             write!(
                 w,
@@ -1645,16 +1646,24 @@ fn render_rightside(
     cx: &Context<'_>,
     item: &clean::Item,
     containing_item: &clean::Item,
+    render_mode: RenderMode,
 ) {
     let tcx = cx.tcx();
+
+    // FIXME: Once https://github.com/rust-lang/rust/issues/67792 is implemented, we can remove
+    // this condition.
+    let (const_stability, const_stable_since) = match render_mode {
+        RenderMode::Normal => (item.const_stability(tcx), containing_item.const_stable_since(tcx)),
+        RenderMode::ForDeref { .. } => (None, None),
+    };
 
     write!(w, "<div class=\"rightside\">");
     render_stability_since_raw(
         w,
-        item.stable_since(tcx).as_deref(),
-        item.const_stability(tcx),
-        containing_item.stable_since(tcx).as_deref(),
-        containing_item.const_stable_since(tcx).as_deref(),
+        item.stable_since(tcx),
+        const_stability,
+        containing_item.stable_since(tcx),
+        const_stable_since,
     );
 
     write_srclink(cx, item, w);
@@ -1690,7 +1699,7 @@ pub(crate) fn render_impl_summary(
         format!(" data-aliases=\"{}\"", aliases.join(","))
     };
     write!(w, "<div id=\"{}\" class=\"impl has-srclink\"{}>", id, aliases);
-    render_rightside(w, cx, &i.impl_item, containing_item);
+    render_rightside(w, cx, &i.impl_item, containing_item, RenderMode::Normal);
     write!(w, "<a href=\"#{}\" class=\"anchor\"></a>", id);
     write!(w, "<h3 class=\"code-header in-band\">");
 

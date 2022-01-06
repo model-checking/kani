@@ -609,14 +609,12 @@ impl<'tcx> LateLintPass<'tcx> for MissingDoc {
                 // If the trait is private, add the impl items to `private_traits` so they don't get
                 // reported for missing docs.
                 let real_trait = trait_ref.path.res.def_id();
-                if let Some(def_id) = real_trait.as_local() {
-                    let hir_id = cx.tcx.hir().local_def_id_to_hir_id(def_id);
-                    if let Some(Node::Item(item)) = cx.tcx.hir().find(hir_id) {
-                        if let hir::VisibilityKind::Inherited = item.vis.node {
-                            for impl_item_ref in items {
-                                self.private_traits.insert(impl_item_ref.id.hir_id());
-                            }
-                        }
+                let Some(def_id) = real_trait.as_local() else { return };
+                let hir_id = cx.tcx.hir().local_def_id_to_hir_id(def_id);
+                let Some(Node::Item(item)) = cx.tcx.hir().find(hir_id) else { return };
+                if let hir::VisibilityKind::Inherited = item.vis.node {
+                    for impl_item_ref in items {
+                        self.private_traits.insert(impl_item_ref.id.hir_id());
                     }
                 }
                 return;
@@ -829,9 +827,8 @@ impl<'tcx> LateLintPass<'tcx> for MissingDebugImplementations {
             _ => return,
         }
 
-        let debug = match cx.tcx.get_diagnostic_item(sym::Debug) {
-            Some(debug) => debug,
-            None => return,
+        let Some(debug) = cx.tcx.get_diagnostic_item(sym::Debug) else {
+            return
         };
 
         if self.impling_types.is_none() {
@@ -1509,9 +1506,8 @@ impl TypeAliasBounds {
 
 impl<'tcx> LateLintPass<'tcx> for TypeAliasBounds {
     fn check_item(&mut self, cx: &LateContext<'_>, item: &hir::Item<'_>) {
-        let (ty, type_alias_generics) = match item.kind {
-            hir::ItemKind::TyAlias(ref ty, ref generics) => (&*ty, generics),
-            _ => return,
+        let hir::ItemKind::TyAlias(ty, type_alias_generics) = &item.kind else {
+            return
         };
         if let hir::TyKind::OpaqueDef(..) = ty.kind {
             // Bounds are respected for `type X = impl Trait`
@@ -2266,16 +2262,15 @@ impl<'tcx> LateLintPass<'tcx> for ExplicitOutlivesRequirements {
                         // and should check for them here.
                         match predicate.bounded_ty.kind {
                             hir::TyKind::Path(hir::QPath::Resolved(None, ref path)) => {
-                                if let Res::Def(DefKind::TyParam, def_id) = path.res {
-                                    let index = ty_generics.param_def_id_to_index[&def_id];
-                                    (
-                                        Self::lifetimes_outliving_type(inferred_outlives, index),
-                                        &predicate.bounds,
-                                        predicate.span,
-                                    )
-                                } else {
-                                    continue;
-                                }
+                                let Res::Def(DefKind::TyParam, def_id) = path.res else {
+                                    continue
+                                };
+                                let index = ty_generics.param_def_id_to_index[&def_id];
+                                (
+                                    Self::lifetimes_outliving_type(inferred_outlives, index),
+                                    &predicate.bounds,
+                                    predicate.span,
+                                )
                             }
                             _ => {
                                 continue;
@@ -3152,7 +3147,8 @@ declare_lint! {
     /// ### Example
     ///
     /// ```rust,compile_fail
-    /// #![feature(asm)]
+    /// use std::arch::asm;
+    ///
     /// fn main() {
     ///     unsafe {
     ///         asm!("foo: bar");
@@ -3169,10 +3165,7 @@ declare_lint! {
     /// of this, GNU assembler [local labels] *must* be used instead of labels
     /// with a name. Using named labels might cause assembler or linker errors.
     ///
-    /// See the [unstable book] for more details.
-    ///
     /// [local labels]: https://sourceware.org/binutils/docs/as/Symbol-Names.html#Local-Labels
-    /// [unstable book]: https://doc.rust-lang.org/nightly/unstable-book/library-features/asm.html#labels
     pub NAMED_ASM_LABELS,
     Deny,
     "named labels in inline assembly",
@@ -3188,7 +3181,7 @@ impl<'tcx> LateLintPass<'tcx> for NamedAsmLabels {
         } = expr
         {
             for (template_sym, template_snippet, template_span) in template_strs.iter() {
-                let template_str = &template_sym.as_str();
+                let template_str = template_sym.as_str();
                 let find_label_span = |needle: &str| -> Option<Span> {
                     if let Some(template_snippet) = template_snippet {
                         let snippet = template_snippet.as_str();
@@ -3216,18 +3209,17 @@ impl<'tcx> LateLintPass<'tcx> for NamedAsmLabels {
                     for (idx, _) in statement.match_indices(':') {
                         let possible_label = statement[start_idx..idx].trim();
                         let mut chars = possible_label.chars();
-                        if let Some(c) = chars.next() {
-                            // A label starts with an alphabetic character or . or _ and continues with alphanumeric characters, _, or $
-                            if (c.is_alphabetic() || matches!(c, '.' | '_'))
-                                && chars.all(|c| c.is_alphanumeric() || matches!(c, '_' | '$'))
-                            {
-                                found_labels.push(possible_label);
-                            } else {
-                                // If we encounter a non-label, there cannot be any further labels, so stop checking
-                                break;
-                            }
-                        } else {
+                        let Some(c) = chars.next() else {
                             // Empty string means a leading ':' in this section, which is not a label
+                            break
+                        };
+                        // A label starts with an alphabetic character or . or _ and continues with alphanumeric characters, _, or $
+                        if (c.is_alphabetic() || matches!(c, '.' | '_'))
+                            && chars.all(|c| c.is_alphanumeric() || matches!(c, '_' | '$'))
+                        {
+                            found_labels.push(possible_label);
+                        } else {
+                            // If we encounter a non-label, there cannot be any further labels, so stop checking
                             break;
                         }
 

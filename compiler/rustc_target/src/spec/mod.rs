@@ -42,6 +42,7 @@ use rustc_serialize::json::{Json, ToJson};
 use rustc_span::symbol::{sym, Symbol};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -866,6 +867,7 @@ supported_targets! {
     ("powerpc-unknown-freebsd", powerpc_unknown_freebsd),
     ("powerpc64-unknown-freebsd", powerpc64_unknown_freebsd),
     ("powerpc64le-unknown-freebsd", powerpc64le_unknown_freebsd),
+    ("riscv64gc-unknown-freebsd", riscv64gc_unknown_freebsd),
     ("x86_64-unknown-freebsd", x86_64_unknown_freebsd),
 
     ("x86_64-unknown-dragonfly", x86_64_unknown_dragonfly),
@@ -1277,9 +1279,8 @@ pub struct TargetOptions {
     /// `argc` and `argv` values.
     pub main_needs_argc_argv: bool,
 
-    /// Flag indicating whether ELF TLS (e.g., #[thread_local]) is available for
-    /// this target.
-    pub has_elf_tls: bool,
+    /// Flag indicating whether #[thread_local] is available for this target.
+    pub has_thread_local: bool,
     // This is mainly for easy compatibility with emscripten.
     // If we give emcc .o files that are actually .bc files it
     // will 'just work'.
@@ -1485,7 +1486,7 @@ impl Default for TargetOptions {
             archive_format: "gnu".to_string(),
             main_needs_argc_argv: true,
             allow_asm: true,
-            has_elf_tls: false,
+            has_thread_local: false,
             obj_is_bitcode: false,
             forces_embed_bitcode: false,
             bitcode_llvm_cmdline: String::new(),
@@ -2072,7 +2073,7 @@ impl Target {
         key!(archive_format);
         key!(allow_asm, bool);
         key!(main_needs_argc_argv, bool);
-        key!(has_elf_tls, bool);
+        key!(has_thread_local, bool);
         key!(obj_is_bitcode, bool);
         key!(forces_embed_bitcode, bool);
         key!(bitcode_llvm_cmdline);
@@ -2173,12 +2174,11 @@ impl Target {
                 // Additionally look in the sysroot under `lib/rustlib/<triple>/target.json`
                 // as a fallback.
                 let rustlib_path = crate::target_rustlib_path(&sysroot, &target_triple);
-                let p = std::array::IntoIter::new([
+                let p = PathBuf::from_iter([
                     Path::new(sysroot),
                     Path::new(&rustlib_path),
                     Path::new("target.json"),
-                ])
-                .collect::<PathBuf>();
+                ]);
                 if p.is_file() {
                     return load_file(&p);
                 }
@@ -2314,7 +2314,7 @@ impl ToJson for Target {
         target_option_val!(archive_format);
         target_option_val!(allow_asm);
         target_option_val!(main_needs_argc_argv);
-        target_option_val!(has_elf_tls);
+        target_option_val!(has_thread_local);
         target_option_val!(obj_is_bitcode);
         target_option_val!(forces_embed_bitcode);
         target_option_val!(bitcode_llvm_cmdline);

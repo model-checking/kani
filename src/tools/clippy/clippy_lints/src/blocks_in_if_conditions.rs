@@ -41,6 +41,7 @@ declare_clippy_lint! {
     /// let res = { let x = somefunc(); x };
     /// if res { /* ... */ }
     /// ```
+    #[clippy::version = "1.45.0"]
     pub BLOCKS_IN_IF_CONDITIONS,
     style,
     "useless or complex blocks that can be eliminated in conditions"
@@ -72,9 +73,11 @@ impl<'a, 'tcx> Visitor<'tcx> for ExVisitor<'a, 'tcx> {
 
             let body = self.cx.tcx.hir().body(eid);
             let ex = &body.value;
-            if matches!(ex.kind, ExprKind::Block(_, _)) && !body.value.span.from_expansion() {
-                self.found_block = Some(ex);
-                return;
+            if let ExprKind::Block(block, _) = ex.kind {
+                if !body.value.span.from_expansion() && !block.stmts.is_empty() {
+                    self.found_block = Some(ex);
+                    return;
+                }
             }
         }
         walk_expr(self, expr);

@@ -236,7 +236,7 @@ where
 
                                     // These unwraps are safe because `get` ensures the meta item
                                     // is a name/value pair string literal.
-                                    issue_num = match &*issue.unwrap().as_str() {
+                                    issue_num = match issue.unwrap().as_str() {
                                         "none" => None,
                                         issue => {
                                             let emit_diag = |msg: &str| {
@@ -301,7 +301,7 @@ where
 
                     match (feature, reason, issue) {
                         (Some(feature), reason, Some(_)) => {
-                            if !rustc_lexer::is_ident(&feature.as_str()) {
+                            if !rustc_lexer::is_ident(feature.as_str()) {
                                 handle_errors(
                                     &sess.parse_sess,
                                     attr.span,
@@ -519,8 +519,10 @@ pub fn eval_condition(
                 [NestedMetaItem::Literal(Lit { kind: LitKind::Str(sym, ..), span, .. })] => {
                     (sym, span)
                 }
-                [NestedMetaItem::Literal(Lit { span, .. })
-                | NestedMetaItem::MetaItem(MetaItem { span, .. })] => {
+                [
+                    NestedMetaItem::Literal(Lit { span, .. })
+                    | NestedMetaItem::MetaItem(MetaItem { span, .. }),
+                ] => {
                     sess.span_diagnostic
                         .struct_span_err(*span, "expected a version literal")
                         .emit();
@@ -533,7 +535,7 @@ pub fn eval_condition(
                     return false;
                 }
             };
-            let min_version = match parse_version(&min_version.as_str(), false) {
+            let min_version = match parse_version(min_version.as_str(), false) {
                 Some(ver) => ver,
                 None => {
                     sess.span_diagnostic

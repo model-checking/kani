@@ -38,10 +38,9 @@ macro_rules! error {
     ($e:expr, $s:expr) => {
         match $e {
             Ok(_) => panic!("Unexpected success. Should've been: {:?}", $s),
-            Err(ref err) => assert!(
-                err.raw_os_error() == Some($s),
-                format!("`{}` did not have a code of `{}`", err, $s)
-            ),
+            Err(ref err) => {
+                assert!(err.raw_os_error() == Some($s), "`{}` did not have a code of `{}`", err, $s)
+            }
         }
     };
 }
@@ -58,7 +57,7 @@ macro_rules! error_contains {
         match $e {
             Ok(_) => panic!("Unexpected success. Should've been: {:?}", $s),
             Err(ref err) => {
-                assert!(err.to_string().contains($s), format!("`{}` did not contain `{}`", err, $s))
+                assert!(err.to_string().contains($s), "`{}` did not contain `{}`", err, $s)
             }
         }
     };
@@ -1369,7 +1368,7 @@ fn symlink_hard_link() {
     // "hard_link" should appear as a symlink.
     assert!(check!(fs::symlink_metadata(tmpdir.join("hard_link"))).file_type().is_symlink());
 
-    // We sould be able to open "file" via any of the above names.
+    // We should be able to open "file" via any of the above names.
     let _ = check!(fs::File::open(tmpdir.join("file")));
     assert!(fs::File::open(tmpdir.join("file.renamed")).is_err());
     let _ = check!(fs::File::open(tmpdir.join("symlink")));

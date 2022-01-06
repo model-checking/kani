@@ -1,5 +1,6 @@
 use crate::astconv::AstConv;
 use crate::check::coercion::CoerceMany;
+use crate::check::gather_locals::Declaration;
 use crate::check::method::MethodCallee;
 use crate::check::Expectation::*;
 use crate::check::TupleArgumentsFlag::*;
@@ -54,13 +55,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
             let err_inputs = match tuple_arguments {
                 DontTupleArguments => err_inputs,
-                TupleArguments => vec![self.tcx.intern_tup(&err_inputs[..])],
+                TupleArguments => vec![self.tcx.intern_tup(&err_inputs)],
             };
 
             self.check_argument_types(
                 sp,
                 expr,
-                &err_inputs[..],
+                &err_inputs,
                 &[],
                 args_no_rcvr,
                 false,
@@ -324,7 +325,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     self.point_at_type_arg_instead_of_call_if_possible(errors, expr);
                     self.point_at_arg_instead_of_call_if_possible(
                         errors,
-                        &final_arg_types[..],
+                        &final_arg_types,
                         expr,
                         sp,
                         &args,
@@ -538,16 +539,17 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     pub fn check_decl_initializer(
         &self,
-        local: &'tcx hir::Local<'tcx>,
+        hir_id: hir::HirId,
+        pat: &'tcx hir::Pat<'tcx>,
         init: &'tcx hir::Expr<'tcx>,
     ) -> Ty<'tcx> {
         // FIXME(tschottdorf): `contains_explicit_ref_binding()` must be removed
         // for #42640 (default match binding modes).
         //
         // See #44848.
-        let ref_bindings = local.pat.contains_explicit_ref_binding();
+        let ref_bindings = pat.contains_explicit_ref_binding();
 
-        let local_ty = self.local_ty(init.span, local.hir_id).revealed_ty;
+        let local_ty = self.local_ty(init.span, hir_id).revealed_ty;
         if let Some(m) = ref_bindings {
             // Somewhat subtle: if we have a `ref` binding in the pattern,
             // we want to avoid introducing coercions for the RHS. This is
@@ -565,29 +567,33 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
-    /// Type check a `let` statement.
-    pub fn check_decl_local(&self, local: &'tcx hir::Local<'tcx>) {
+    pub(in super::super) fn check_decl(&self, decl: Declaration<'tcx>) {
         // Determine and write the type which we'll check the pattern against.
-        let ty = self.local_ty(local.span, local.hir_id).decl_ty;
-        self.write_ty(local.hir_id, ty);
+        let decl_ty = self.local_ty(decl.span, decl.hir_id).decl_ty;
+        self.write_ty(decl.hir_id, decl_ty);
 
         // Type check the initializer.
-        if let Some(ref init) = local.init {
-            let init_ty = self.check_decl_initializer(local, &init);
-            self.overwrite_local_ty_if_err(local, ty, init_ty);
+        if let Some(ref init) = decl.init {
+            let init_ty = self.check_decl_initializer(decl.hir_id, decl.pat, &init);
+            self.overwrite_local_ty_if_err(decl.hir_id, decl.pat, decl_ty, init_ty);
         }
 
         // Does the expected pattern type originate from an expression and what is the span?
-        let (origin_expr, ty_span) = match (local.ty, local.init) {
+        let (origin_expr, ty_span) = match (decl.ty, decl.init) {
             (Some(ty), _) => (false, Some(ty.span)), // Bias towards the explicit user type.
             (_, Some(init)) => (true, Some(init.span)), // No explicit type; so use the scrutinee.
             _ => (false, None), // We have `let $pat;`, so the expected type is unconstrained.
         };
 
         // Type check the pattern. Override if necessary to avoid knock-on errors.
-        self.check_pat_top(&local.pat, ty, ty_span, origin_expr);
-        let pat_ty = self.node_ty(local.pat.hir_id);
-        self.overwrite_local_ty_if_err(local, ty, pat_ty);
+        self.check_pat_top(&decl.pat, decl_ty, ty_span, origin_expr);
+        let pat_ty = self.node_ty(decl.pat.hir_id);
+        self.overwrite_local_ty_if_err(decl.hir_id, decl.pat, decl_ty, pat_ty);
+    }
+
+    /// Type check a `let` statement.
+    pub fn check_decl_local(&self, local: &'tcx hir::Local<'tcx>) {
+        self.check_decl(local.into());
     }
 
     pub fn check_stmt(&self, stmt: &'tcx hir::Stmt<'tcx>, is_last: bool) {
@@ -891,17 +897,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     fn overwrite_local_ty_if_err(
         &self,
-        local: &'tcx hir::Local<'tcx>,
+        hir_id: hir::HirId,
+        pat: &'tcx hir::Pat<'tcx>,
         decl_ty: Ty<'tcx>,
         ty: Ty<'tcx>,
     ) {
         if ty.references_error() {
             // Override the types everywhere with `err()` to avoid knock on errors.
-            self.write_ty(local.hir_id, ty);
-            self.write_ty(local.pat.hir_id, ty);
+            self.write_ty(hir_id, ty);
+            self.write_ty(pat.hir_id, ty);
             let local_ty = LocalTy { decl_ty, revealed_ty: ty };
-            self.locals.borrow_mut().insert(local.hir_id, local_ty);
-            self.locals.borrow_mut().insert(local.pat.hir_id, local_ty);
+            self.locals.borrow_mut().insert(hir_id, local_ty);
+            self.locals.borrow_mut().insert(pat.hir_id, local_ty);
         }
     }
 
@@ -938,8 +945,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
                 (result.map_or(Res::Err, |(kind, def_id)| Res::Def(kind, def_id)), ty)
             }
-            QPath::LangItem(lang_item, span) => {
-                self.resolve_lang_item_path(lang_item, span, hir_id)
+            QPath::LangItem(lang_item, span, id) => {
+                self.resolve_lang_item_path(lang_item, span, hir_id, id)
             }
         }
     }
@@ -990,7 +997,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 }
                 result_code
             }
-            let self_: ty::subst::GenericArg<'_> = match &*unpeel_to_top(Lrc::new(error.obligation.cause.code.clone())) {
+            let self_: ty::subst::GenericArg<'_> = match &*unpeel_to_top(error.obligation.cause.clone_code()) {
                 ObligationCauseCode::BuiltinDerivedObligation(code) |
                 ObligationCauseCode::ImplDerivedObligation(code) |
                 ObligationCauseCode::DerivedObligation(code) => {
@@ -1033,18 +1040,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 }
                 // We make sure that only *one* argument matches the obligation failure
                 // and we assign the obligation's span to its expression's.
-                error.obligation.cause.make_mut().span = args[ref_in].span;
-                let code = error.obligation.cause.code.clone();
-                error.obligation.cause.make_mut().code =
+                error.obligation.cause.span = args[ref_in].span;
+                let parent_code = error.obligation.cause.clone_code();
+                *error.obligation.cause.make_mut_code() =
                     ObligationCauseCode::FunctionArgumentObligation {
                         arg_hir_id: args[ref_in].hir_id,
                         call_hir_id: expr.hir_id,
-                        parent_code: Lrc::new(code),
+                        parent_code,
                     };
-            } else if error.obligation.cause.make_mut().span == call_sp {
+            } else if error.obligation.cause.span == call_sp {
                 // Make function calls point at the callee, not the whole thing.
                 if let hir::ExprKind::Call(callee, _) = expr.kind {
-                    error.obligation.cause.make_mut().span = callee.span;
+                    error.obligation.cause.span = callee.span;
                 }
             }
         }
@@ -1085,7 +1092,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                     let ty = <dyn AstConv<'_>>::ast_ty_to_ty(self, hir_ty);
                                     let ty = self.resolve_vars_if_possible(ty);
                                     if ty == predicate.self_ty() {
-                                        error.obligation.cause.make_mut().span = hir_ty.span;
+                                        error.obligation.cause.span = hir_ty.span;
                                     }
                                 }
                             }

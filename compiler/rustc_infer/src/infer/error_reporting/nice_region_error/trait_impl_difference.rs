@@ -28,6 +28,7 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
             _sub,
             sup_origin,
             _sup,
+            _,
         ) = error.clone()
         {
             if let (&Subtype(ref sup_trace), &Subtype(ref sub_trace)) = (&sup_origin, &sub_origin) {
@@ -35,7 +36,7 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
                     ValuePairs::Types(sub_expected_found),
                     ValuePairs::Types(sup_expected_found),
                     CompareImplMethodObligation { trait_item_def_id, .. },
-                ) = (&sub_trace.values, &sup_trace.values, &sub_trace.cause.code)
+                ) = (&sub_trace.values, &sup_trace.values, sub_trace.cause.code())
                 {
                     if sup_expected_found == sub_expected_found {
                         self.emit_err(
@@ -85,7 +86,7 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
             counter: usize,
         }
 
-        impl HighlightBuilder<'tcx> {
+        impl<'tcx> HighlightBuilder<'tcx> {
             fn build(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> RegionHighlightMode {
                 let mut builder =
                     HighlightBuilder { highlight: RegionHighlightMode::default(), counter: 1, tcx };
@@ -185,7 +186,7 @@ struct TypeParamSpanVisitor<'tcx> {
     types: Vec<Span>,
 }
 
-impl Visitor<'tcx> for TypeParamSpanVisitor<'tcx> {
+impl<'tcx> Visitor<'tcx> for TypeParamSpanVisitor<'tcx> {
     type Map = rustc_middle::hir::map::Map<'tcx>;
 
     fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {

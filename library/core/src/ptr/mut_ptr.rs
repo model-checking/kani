@@ -47,6 +47,55 @@ impl<T: ?Sized> *mut T {
         self as _
     }
 
+    /// Casts a pointer to its raw bits.
+    ///
+    /// This is equivalent to `as usize`, but is more specific to enhance readability.
+    /// The inverse method is [`from_bits`](#method.from_bits-1).
+    ///
+    /// In particular, `*p as usize` and `p as usize` will both compile for
+    /// pointers to numeric types but do very different things, so using this
+    /// helps emphasize that reading the bits was intentional.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(ptr_to_from_bits)]
+    /// let mut array = [13, 42];
+    /// let mut it = array.iter_mut();
+    /// let p0: *mut i32 = it.next().unwrap();
+    /// assert_eq!(<*mut _>::from_bits(p0.to_bits()), p0);
+    /// let p1: *mut i32 = it.next().unwrap();
+    /// assert_eq!(p1.to_bits() - p0.to_bits(), 4);
+    /// ```
+    #[unstable(feature = "ptr_to_from_bits", issue = "91126")]
+    pub fn to_bits(self) -> usize
+    where
+        T: Sized,
+    {
+        self as usize
+    }
+
+    /// Creates a pointer from its raw bits.
+    ///
+    /// This is equivalent to `as *mut T`, but is more specific to enhance readability.
+    /// The inverse method is [`to_bits`](#method.to_bits-1).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(ptr_to_from_bits)]
+    /// use std::ptr::NonNull;
+    /// let dangling: *mut u8 = NonNull::dangling().as_ptr();
+    /// assert_eq!(<*mut u8>::from_bits(1), dangling);
+    /// ```
+    #[unstable(feature = "ptr_to_from_bits", issue = "91126")]
+    pub fn from_bits(bits: usize) -> Self
+    where
+        T: Sized,
+    {
+        bits as Self
+    }
+
     /// Decompose a (possibly wide) pointer into its address and metadata components.
     ///
     /// The pointer can be later reconstructed with [`from_raw_parts_mut`].
@@ -73,7 +122,7 @@ impl<T: ?Sized> *mut T {
     ///
     /// * The pointer must be properly aligned.
     ///
-    /// * It must be "dereferencable" in the sense defined in [the module documentation].
+    /// * It must be "dereferenceable" in the sense defined in [the module documentation].
     ///
     /// * The pointer must point to an initialized instance of `T`.
     ///
@@ -117,8 +166,9 @@ impl<T: ?Sized> *mut T {
     /// }
     /// ```
     #[stable(feature = "ptr_as_ref", since = "1.9.0")]
+    #[rustc_const_unstable(feature = "const_ptr_as_ref", issue = "91822")]
     #[inline]
-    pub unsafe fn as_ref<'a>(self) -> Option<&'a T> {
+    pub const unsafe fn as_ref<'a>(self) -> Option<&'a T> {
         // SAFETY: the caller must guarantee that `self` is valid for a
         // reference if it isn't null.
         if self.is_null() { None } else { unsafe { Some(&*self) } }
@@ -140,7 +190,7 @@ impl<T: ?Sized> *mut T {
     ///
     /// * The pointer must be properly aligned.
     ///
-    /// * It must be "dereferencable" in the sense defined in [the module documentation].
+    /// * It must be "dereferenceable" in the sense defined in [the module documentation].
     ///
     /// * You must enforce Rust's aliasing rules, since the returned lifetime `'a` is
     ///   arbitrarily chosen and does not necessarily reflect the actual lifetime of the data.
@@ -168,7 +218,8 @@ impl<T: ?Sized> *mut T {
     /// ```
     #[inline]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
-    pub unsafe fn as_uninit_ref<'a>(self) -> Option<&'a MaybeUninit<T>>
+    #[rustc_const_unstable(feature = "const_ptr_as_ref", issue = "91822")]
+    pub const unsafe fn as_uninit_ref<'a>(self) -> Option<&'a MaybeUninit<T>>
     where
         T: Sized,
     {
@@ -319,7 +370,7 @@ impl<T: ?Sized> *mut T {
     ///
     /// * The pointer must be properly aligned.
     ///
-    /// * It must be "dereferencable" in the sense defined in [the module documentation].
+    /// * It must be "dereferenceable" in the sense defined in [the module documentation].
     ///
     /// * The pointer must point to an initialized instance of `T`.
     ///
@@ -362,8 +413,9 @@ impl<T: ?Sized> *mut T {
     /// println!("{:?}", s); // It'll print: "[4, 2, 3]".
     /// ```
     #[stable(feature = "ptr_as_ref", since = "1.9.0")]
+    #[rustc_const_unstable(feature = "const_ptr_as_ref", issue = "91822")]
     #[inline]
-    pub unsafe fn as_mut<'a>(self) -> Option<&'a mut T> {
+    pub const unsafe fn as_mut<'a>(self) -> Option<&'a mut T> {
         // SAFETY: the caller must guarantee that `self` is be valid for
         // a mutable reference if it isn't null.
         if self.is_null() { None } else { unsafe { Some(&mut *self) } }
@@ -385,7 +437,7 @@ impl<T: ?Sized> *mut T {
     ///
     /// * The pointer must be properly aligned.
     ///
-    /// * It must be "dereferencable" in the sense defined in [the module documentation].
+    /// * It must be "dereferenceable" in the sense defined in [the module documentation].
     ///
     /// * You must enforce Rust's aliasing rules, since the returned lifetime `'a` is
     ///   arbitrarily chosen and does not necessarily reflect the actual lifetime of the data.
@@ -397,7 +449,8 @@ impl<T: ?Sized> *mut T {
     /// [the module documentation]: crate::ptr#safety
     #[inline]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
-    pub unsafe fn as_uninit_mut<'a>(self) -> Option<&'a mut MaybeUninit<T>>
+    #[rustc_const_unstable(feature = "const_ptr_as_ref", issue = "91822")]
+    pub const unsafe fn as_uninit_mut<'a>(self) -> Option<&'a mut MaybeUninit<T>>
     where
         T: Sized,
     {
@@ -1020,8 +1073,9 @@ impl<T: ?Sized> *mut T {
     ///
     /// [`ptr::write_bytes`]: crate::ptr::write_bytes()
     #[stable(feature = "pointer_methods", since = "1.26.0")]
+    #[rustc_const_unstable(feature = "const_ptr_write", issue = "86302")]
     #[inline(always)]
-    pub unsafe fn write_bytes(self, val: u8, count: usize)
+    pub const unsafe fn write_bytes(self, val: u8, count: usize)
     where
         T: Sized,
     {
@@ -1217,7 +1271,7 @@ impl<T> *mut [T] {
     /// Returns a raw pointer to an element or subslice, without doing bounds
     /// checking.
     ///
-    /// Calling this method with an out-of-bounds index or when `self` is not dereferencable
+    /// Calling this method with an out-of-bounds index or when `self` is not dereferenceable
     /// is *[undefined behavior]* even if the resulting pointer is not used.
     ///
     /// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
@@ -1239,7 +1293,7 @@ impl<T> *mut [T] {
     where
         I: SliceIndex<[T]>,
     {
-        // SAFETY: the caller ensures that `self` is dereferencable and `index` in-bounds.
+        // SAFETY: the caller ensures that `self` is dereferenceable and `index` in-bounds.
         unsafe { index.get_unchecked_mut(self) }
     }
 
@@ -1285,7 +1339,8 @@ impl<T> *mut [T] {
     /// [allocated object]: crate::ptr#allocated-object
     #[inline]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
-    pub unsafe fn as_uninit_slice<'a>(self) -> Option<&'a [MaybeUninit<T>]> {
+    #[rustc_const_unstable(feature = "const_ptr_as_ref", issue = "91822")]
+    pub const unsafe fn as_uninit_slice<'a>(self) -> Option<&'a [MaybeUninit<T>]> {
         if self.is_null() {
             None
         } else {
@@ -1336,7 +1391,8 @@ impl<T> *mut [T] {
     /// [allocated object]: crate::ptr#allocated-object
     #[inline]
     #[unstable(feature = "ptr_as_uninit", issue = "75402")]
-    pub unsafe fn as_uninit_slice_mut<'a>(self) -> Option<&'a mut [MaybeUninit<T>]> {
+    #[rustc_const_unstable(feature = "const_ptr_as_ref", issue = "91822")]
+    pub const unsafe fn as_uninit_slice_mut<'a>(self) -> Option<&'a mut [MaybeUninit<T>]> {
         if self.is_null() {
             None
         } else {

@@ -133,7 +133,7 @@ async function main(argv) {
     // Print successful tests too
     let debug = false;
     // Run tests in sequentially
-    let no_headless = false;
+    let headless = true;
     const options = new Options();
     try {
         // This is more convenient that setting fields one by one.
@@ -150,7 +150,7 @@ async function main(argv) {
         }
         if (opts["no_headless"]) {
             args.push("--no-headless");
-            no_headless = true;
+            headless = false;
         }
         options.parseArguments(args);
     } catch (error) {
@@ -172,11 +172,16 @@ async function main(argv) {
     }
     files.sort();
 
+    if (!headless) {
+        opts["jobs"] = 1;
+        console.log("`--no-headless` option is active, disabling concurrency for running tests.");
+    }
+
     console.log(`Running ${files.length} rustdoc-gui (${opts["jobs"]} concurrently) ...`);
 
     if (opts["jobs"] < 1) {
         process.setMaxListeners(files.length + 1);
-    } else {
+    } else if (headless) {
         process.setMaxListeners(opts["jobs"] + 1);
     }
 
@@ -217,13 +222,11 @@ async function main(argv) {
                 tests_queue.splice(tests_queue.indexOf(callback), 1);
             });
         tests_queue.push(callback);
-        if (no_headless) {
-            await tests_queue[i];
-        } else if (opts["jobs"] > 0 && tests_queue.length >= opts["jobs"]) {
+        if (opts["jobs"] > 0 && tests_queue.length >= opts["jobs"]) {
             await Promise.race(tests_queue);
         }
     }
-    if (!no_headless && tests_queue.length > 0) {
+    if (tests_queue.length > 0) {
         await Promise.all(tests_queue);
     }
     status_bar.finish();

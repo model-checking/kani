@@ -1,4 +1,4 @@
-use crate::util::check_builtin_macro_attribute;
+use crate::util::{check_builtin_macro_attribute, warn_on_duplicate_attribute};
 
 use rustc_ast as ast;
 use rustc_ast::mut_visit::MutVisitor;
@@ -25,6 +25,7 @@ crate fn expand(
     annotatable: Annotatable,
 ) -> Vec<Annotatable> {
     check_builtin_macro_attribute(ecx, meta_item, sym::cfg_eval);
+    warn_on_duplicate_attribute(&ecx, &annotatable, sym::cfg_eval);
     vec![cfg_eval(ecx.sess, ecx.ecfg.features, annotatable)]
 }
 
@@ -77,6 +78,10 @@ fn flat_map_annotatable(
         Annotatable::Param(param) => vis.flat_map_param(param).pop().map(Annotatable::Param),
         Annotatable::FieldDef(sf) => vis.flat_map_field_def(sf).pop().map(Annotatable::FieldDef),
         Annotatable::Variant(v) => vis.flat_map_variant(v).pop().map(Annotatable::Variant),
+        Annotatable::Crate(mut krate) => {
+            vis.visit_crate(&mut krate);
+            Some(Annotatable::Crate(krate))
+        }
     }
 }
 
@@ -101,6 +106,7 @@ impl CfgFinder {
             Annotatable::Param(param) => finder.visit_param(&param),
             Annotatable::FieldDef(field) => finder.visit_field_def(&field),
             Annotatable::Variant(variant) => finder.visit_variant(&variant),
+            Annotatable::Crate(krate) => finder.visit_crate(krate),
         };
         finder.has_cfg_or_cfg_attr
     }

@@ -20,7 +20,6 @@
 #![feature(negative_impls)]
 #![feature(nll)]
 #![feature(min_specialization)]
-#![feature(thread_local_const_init)]
 
 #[macro_use]
 extern crate rustc_macros;
@@ -425,7 +424,7 @@ impl FileName {
 /// `SpanData` is public because `Span` uses a thread-local interner and can't be
 /// sent to other threads, but some pieces of performance infra run in a separate thread.
 /// Using `Span` is generally preferred.
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct SpanData {
     pub lo: BytePos,
     pub hi: BytePos,
@@ -433,6 +432,36 @@ pub struct SpanData {
     /// code was created by a macro expansion.
     pub ctxt: SyntaxContext,
     pub parent: Option<LocalDefId>,
+}
+
+// Order spans by position in the file.
+impl Ord for SpanData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let SpanData {
+            lo: s_lo,
+            hi: s_hi,
+            ctxt: s_ctxt,
+            // `LocalDefId` does not implement `Ord`.
+            // The other fields are enough to determine in-file order.
+            parent: _,
+        } = self;
+        let SpanData {
+            lo: o_lo,
+            hi: o_hi,
+            ctxt: o_ctxt,
+            // `LocalDefId` does not implement `Ord`.
+            // The other fields are enough to determine in-file order.
+            parent: _,
+        } = other;
+
+        (s_lo, s_hi, s_ctxt).cmp(&(o_lo, o_hi, o_ctxt))
+    }
+}
+
+impl PartialOrd for SpanData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl SpanData {
@@ -549,6 +578,16 @@ impl Span {
     /// Returns `true` if `span` originates in a derive-macro's expansion.
     pub fn in_derive_expansion(self) -> bool {
         matches!(self.ctxt().outer_expn_data().kind, ExpnKind::Macro(MacroKind::Derive, _))
+    }
+
+    /// Gate suggestions that would not be appropriate in a context the user didn't write.
+    pub fn can_be_used_for_suggestions(self) -> bool {
+        !self.from_expansion()
+        // FIXME: If this span comes from a `derive` macro but it points at code the user wrote,
+        // the callsite span and the span will be pointing at different places. It also means that
+        // we can safely provide suggestions on this span.
+            || (matches!(self.ctxt().outer_expn_data().kind, ExpnKind::Macro(MacroKind::Derive, _))
+                && self.parent_callsite().map(|p| (p.lo(), p.hi())) != Some((self.lo(), self.hi())))
     }
 
     #[inline]
@@ -1374,7 +1413,7 @@ impl<S: Encoder> Encodable<S> for SourceFile {
                     // Encode the first element.
                     lines[0].encode(s)?;
 
-                    let diff_iter = lines[..].array_windows().map(|&[fst, snd]| snd - fst);
+                    let diff_iter = lines.array_windows().map(|&[fst, snd]| snd - fst);
 
                     match bytes_per_diff {
                         1 => {
@@ -1497,7 +1536,7 @@ impl SourceFile {
         assert!(end_pos <= u32::MAX as usize);
 
         let (lines, multibyte_chars, non_narrow_chars) =
-            analyze_source_file::analyze_source_file(&src[..], start_pos);
+            analyze_source_file::analyze_source_file(&src, start_pos);
 
         SourceFile {
             name,

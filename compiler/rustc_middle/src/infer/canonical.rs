@@ -75,7 +75,7 @@ pub struct OriginalQueryValues<'tcx> {
     pub var_values: SmallVec<[GenericArg<'tcx>; 8]>,
 }
 
-impl Default for OriginalQueryValues<'tcx> {
+impl<'tcx> Default for OriginalQueryValues<'tcx> {
     fn default() -> Self {
         let mut universe_map = SmallVec::default();
         universe_map.push(ty::UniverseIndex::ROOT);
@@ -243,6 +243,14 @@ impl<'tcx, R> Canonical<'tcx, QueryResponse<'tcx, R>> {
 
     pub fn is_ambiguous(&self) -> bool {
         !self.is_proven()
+    }
+}
+
+impl<'tcx, R> Canonical<'tcx, ty::ParamEnvAnd<'tcx, R>> {
+    #[inline]
+    pub fn without_const(mut self) -> Self {
+        self.value = self.value.without_const();
+        self
     }
 }
 

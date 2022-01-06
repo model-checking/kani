@@ -204,13 +204,6 @@ pub use self::local::os::Key as __OsLocalKeyInner;
 #[doc(hidden)]
 pub use self::local::statik::Key as __StaticLocalKeyInner;
 
-// This is only used to make thread locals with `const { .. }` initialization
-// expressions unstable. If and/or when that syntax is stabilized with thread
-// locals this will simply be removed.
-#[doc(hidden)]
-#[unstable(feature = "thread_local_const_init", issue = "84223")]
-pub const fn require_unstable_const_init_thread_local() {}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Builder
 ////////////////////////////////////////////////////////////////////////////////
@@ -1280,7 +1273,7 @@ impl<T> JoinInner<T> {
 /// An owned permission to join on a thread (block on its termination).
 ///
 /// A `JoinHandle` *detaches* the associated thread when it is dropped, which
-/// means that there is no longer any handle to thread and no way to `join`
+/// means that there is no longer any handle to the thread and no way to `join`
 /// on it.
 ///
 /// Due to platform restrictions, it is not possible to [`Clone`] this

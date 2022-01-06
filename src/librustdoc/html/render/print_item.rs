@@ -101,7 +101,7 @@ pub(super) fn print_item(
     let mut stability_since_raw = Buffer::new();
     render_stability_since_raw(
         &mut stability_since_raw,
-        item.stable_since(cx.tcx()).as_deref(),
+        item.stable_since(cx.tcx()),
         item.const_stability(cx.tcx()),
         None,
         None,
@@ -136,7 +136,7 @@ pub(super) fn print_item(
         page: page,
         static_root_path: page.get_static_root_path(),
         typ: typ,
-        name: &item.name.as_ref().unwrap().as_str(),
+        name: item.name.as_ref().unwrap().as_str(),
         item_type: &item.type_().to_string(),
         path_components: path_components,
         stability_since_raw: &stability_since_raw,
@@ -239,9 +239,9 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
                 (true, false) => return Ordering::Greater,
             }
         }
-        let lhs = i1.name.unwrap_or(kw::Empty).as_str();
-        let rhs = i2.name.unwrap_or(kw::Empty).as_str();
-        compare_names(&lhs, &rhs)
+        let lhs = i1.name.unwrap_or(kw::Empty);
+        let rhs = i2.name.unwrap_or(kw::Empty);
+        compare_names(lhs.as_str(), rhs.as_str())
     }
 
     if cx.shared.sort_modules_alphabetically {
@@ -296,7 +296,7 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
             let (short, name) = item_ty_to_strs(myty.unwrap());
             write!(
                 w,
-                "<h2 id=\"{id}\" class=\"section-header\">\
+                "<h2 id=\"{id}\" class=\"small-section-header\">\
                     <a href=\"#{id}\">{name}</a>\
                  </h2>\n{}",
                 ITEM_TABLE_OPEN,
@@ -315,7 +315,7 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
                         w,
                         "<div class=\"item-left\"><code>{}extern crate {} as {};",
                         myitem.visibility.print_with_space(myitem.def_id, cx),
-                        anchor(myitem.def_id.expect_def_id(), &*src.as_str(), cx),
+                        anchor(myitem.def_id.expect_def_id(), src.as_str(), cx),
                         myitem.name.as_ref().unwrap(),
                     ),
                     None => write!(
@@ -324,7 +324,7 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
                         myitem.visibility.print_with_space(myitem.def_id, cx),
                         anchor(
                             myitem.def_id.expect_def_id(),
-                            &*myitem.name.as_ref().unwrap().as_str(),
+                            myitem.name.as_ref().unwrap().as_str(),
                             cx
                         ),
                     ),
@@ -405,7 +405,7 @@ fn item_module(w: &mut Buffer, cx: &Context<'_>, item: &clean::Item, items: &[cl
                     add = add,
                     stab = stab.unwrap_or_default(),
                     unsafety_flag = unsafety_flag,
-                    href = item_path(myitem.type_(), &myitem.name.unwrap().as_str()),
+                    href = item_path(myitem.type_(), myitem.name.unwrap().as_str()),
                     title = [full_path(cx, myitem), myitem.type_().to_string()]
                         .iter()
                         .filter_map(|s| if !s.is_empty() { Some(s.as_str()) } else { None })
@@ -556,7 +556,14 @@ fn item_trait(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, t: &clean::Tra
                     );
                 }
                 for t in &types {
-                    render_assoc_item(w, t, AssocItemLink::Anchor(None), ItemType::Trait, cx);
+                    render_assoc_item(
+                        w,
+                        t,
+                        AssocItemLink::Anchor(None),
+                        ItemType::Trait,
+                        cx,
+                        RenderMode::Normal,
+                    );
                     w.write_str(";\n");
                 }
                 // If there are too many associated constants, hide everything after them
@@ -580,7 +587,14 @@ fn item_trait(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, t: &clean::Tra
                     w.write_str("\n");
                 }
                 for t in &consts {
-                    render_assoc_item(w, t, AssocItemLink::Anchor(None), ItemType::Trait, cx);
+                    render_assoc_item(
+                        w,
+                        t,
+                        AssocItemLink::Anchor(None),
+                        ItemType::Trait,
+                        cx,
+                        RenderMode::Normal,
+                    );
                     w.write_str(";\n");
                 }
                 if !toggle && should_hide_fields(count_methods) {
@@ -591,7 +605,14 @@ fn item_trait(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, t: &clean::Tra
                     w.write_str("\n");
                 }
                 for (pos, m) in required.iter().enumerate() {
-                    render_assoc_item(w, m, AssocItemLink::Anchor(None), ItemType::Trait, cx);
+                    render_assoc_item(
+                        w,
+                        m,
+                        AssocItemLink::Anchor(None),
+                        ItemType::Trait,
+                        cx,
+                        RenderMode::Normal,
+                    );
                     w.write_str(";\n");
 
                     if pos < required.len() - 1 {
@@ -602,7 +623,14 @@ fn item_trait(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, t: &clean::Tra
                     w.write_str("\n");
                 }
                 for (pos, m) in provided.iter().enumerate() {
-                    render_assoc_item(w, m, AssocItemLink::Anchor(None), ItemType::Trait, cx);
+                    render_assoc_item(
+                        w,
+                        m,
+                        AssocItemLink::Anchor(None),
+                        ItemType::Trait,
+                        cx,
+                        RenderMode::Normal,
+                    );
                     match *m.kind {
                         clean::MethodItem(ref inner, _)
                             if !inner.generics.where_predicates.is_empty() =>
@@ -655,7 +683,14 @@ fn item_trait(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, t: &clean::Tra
         write_srclink(cx, m, w);
         write!(w, "</div>");
         write!(w, "<h4 class=\"code-header\">");
-        render_assoc_item(w, m, AssocItemLink::Anchor(Some(&id)), ItemType::Impl, cx);
+        render_assoc_item(
+            w,
+            m,
+            AssocItemLink::Anchor(Some(&id)),
+            ItemType::Impl,
+            cx,
+            RenderMode::Normal,
+        );
         w.write_str("</h4>");
         w.write_str("</div>");
         if toggled {
@@ -941,6 +976,7 @@ fn item_typedef(
     // associated items from the aliased type (see discussion in #32077), but
     // we need #14072 to make sense of the generics.
     render_assoc_items(w, cx, it, def_id, AssocItemRender::All);
+    document_type_layout(w, cx, def_id);
 }
 
 fn item_union(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, s: &clean::Union) {
@@ -1272,7 +1308,7 @@ fn item_struct(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, s: &clean::St
             document_non_exhaustive(w, it);
             for (index, (field, ty)) in fields.enumerate() {
                 let field_name =
-                    field.name.map_or_else(|| index.to_string(), |sym| (*sym.as_str()).to_string());
+                    field.name.map_or_else(|| index.to_string(), |sym| sym.as_str().to_string());
                 let id = cx.derive_id(format!("{}.{}", ItemType::StructField, field_name));
                 write!(
                     w,
@@ -1374,7 +1410,7 @@ crate fn compare_names(mut lhs: &str, mut rhs: &str) -> Ordering {
 pub(super) fn full_path(cx: &Context<'_>, item: &clean::Item) -> String {
     let mut s = cx.current.join("::");
     s.push_str("::");
-    s.push_str(&item.name.unwrap().as_str());
+    s.push_str(item.name.unwrap().as_str());
     s
 }
 
@@ -1427,10 +1463,10 @@ fn render_stability_since(
 ) {
     render_stability_since_raw(
         w,
-        item.stable_since(tcx).as_deref(),
+        item.stable_since(tcx),
         item.const_stability(tcx),
-        containing_item.stable_since(tcx).as_deref(),
-        containing_item.const_stable_since(tcx).as_deref(),
+        containing_item.stable_since(tcx),
+        containing_item.const_stable_since(tcx),
     )
 }
 

@@ -453,7 +453,7 @@ pub(super) fn check_opaque<'tcx>(
 /// Checks that an opaque type does not use `Self` or `T::Foo` projections that would result
 /// in "inheriting lifetimes".
 #[instrument(level = "debug", skip(tcx, span))]
-pub(super) fn check_opaque_for_inheriting_lifetimes(
+pub(super) fn check_opaque_for_inheriting_lifetimes<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
     span: Span,
@@ -517,7 +517,7 @@ pub(super) fn check_opaque_for_inheriting_lifetimes(
         }
     }
 
-    impl Visitor<'tcx> for ProhibitOpaqueVisitor<'tcx> {
+    impl<'tcx> Visitor<'tcx> for ProhibitOpaqueVisitor<'tcx> {
         type Map = rustc_middle::hir::map::Map<'tcx>;
 
         fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
@@ -541,7 +541,7 @@ pub(super) fn check_opaque_for_inheriting_lifetimes(
     }
 
     if let ItemKind::OpaqueTy(hir::OpaqueTy {
-        origin: hir::OpaqueTyOrigin::AsyncFn | hir::OpaqueTyOrigin::FnReturn,
+        origin: hir::OpaqueTyOrigin::AsyncFn(..) | hir::OpaqueTyOrigin::FnReturn(..),
         ..
     }) = item.kind
     {
@@ -567,7 +567,7 @@ pub(super) fn check_opaque_for_inheriting_lifetimes(
             visitor.visit_item(&item);
             let is_async = match item.kind {
                 ItemKind::OpaqueTy(hir::OpaqueTy { origin, .. }) => {
-                    matches!(origin, hir::OpaqueTyOrigin::AsyncFn)
+                    matches!(origin, hir::OpaqueTyOrigin::AsyncFn(..))
                 }
                 _ => unreachable!(),
             };
@@ -604,7 +604,7 @@ pub(super) fn check_opaque_for_cycles<'tcx>(
 ) -> Result<(), ErrorReported> {
     if tcx.try_expand_impl_trait_type(def_id.to_def_id(), substs).is_err() {
         match origin {
-            hir::OpaqueTyOrigin::AsyncFn => async_opaque_type_cycle_error(tcx, span),
+            hir::OpaqueTyOrigin::AsyncFn(..) => async_opaque_type_cycle_error(tcx, span),
             _ => opaque_type_cycle_error(tcx, def_id, span),
         }
         Err(ErrorReported)
@@ -635,7 +635,7 @@ fn check_opaque_meets_bounds<'tcx>(
 ) {
     match origin {
         // Checked when type checking the function containing them.
-        hir::OpaqueTyOrigin::FnReturn | hir::OpaqueTyOrigin::AsyncFn => return,
+        hir::OpaqueTyOrigin::FnReturn(..) | hir::OpaqueTyOrigin::AsyncFn(..) => return,
         // Can have different predicates to their defining use
         hir::OpaqueTyOrigin::TyAlias => {}
     }
@@ -730,7 +730,7 @@ pub fn check_item_type<'tcx>(tcx: TyCtxt<'tcx>, it: &'tcx hir::Item<'tcx>) {
                         let abi = sig.header.abi;
                         fn_maybe_err(tcx, item.ident.span, abi);
                     }
-                    hir::TraitItemKind::Type(.., Some(_default)) => {
+                    hir::TraitItemKind::Type(.., Some(default)) => {
                         let assoc_item = tcx.associated_item(item.def_id);
                         let trait_substs =
                             InternalSubsts::identity_for_item(tcx, it.def_id.to_def_id());
@@ -738,7 +738,7 @@ pub fn check_item_type<'tcx>(tcx: TyCtxt<'tcx>, it: &'tcx hir::Item<'tcx>) {
                             tcx,
                             assoc_item,
                             assoc_item,
-                            item.span,
+                            default.span,
                             ty::TraitRef { def_id: it.def_id.to_def_id(), substs: trait_substs },
                         );
                     }
@@ -987,12 +987,12 @@ pub(super) fn check_impl_items_against_trait<'tcx>(
                         opt_trait_span,
                     );
                 }
-                hir::ImplItemKind::TyAlias(_) => {
+                hir::ImplItemKind::TyAlias(impl_ty) => {
                     let opt_trait_span = tcx.hir().span_if_local(ty_trait_item.def_id);
                     compare_ty_impl(
                         tcx,
                         &ty_impl_item,
-                        impl_item.span,
+                        impl_ty.span,
                         &ty_trait_item,
                         impl_trait_ref,
                         opt_trait_span,
@@ -1506,19 +1506,13 @@ pub(super) fn check_mod_item_types(tcx: TyCtxt<'_>, module_def_id: LocalDefId) {
     tcx.hir().visit_item_likes_in_module(module_def_id, &mut CheckItemTypesVisitor { tcx });
 }
 
-pub(super) fn check_item_well_formed(tcx: TyCtxt<'_>, def_id: LocalDefId) {
-    wfcheck::check_item_well_formed(tcx, def_id);
-}
+pub(super) use wfcheck::check_item_well_formed;
 
-pub(super) fn check_trait_item_well_formed(tcx: TyCtxt<'_>, def_id: LocalDefId) {
-    wfcheck::check_trait_item(tcx, def_id);
-}
+pub(super) use wfcheck::check_trait_item as check_trait_item_well_formed;
 
-pub(super) fn check_impl_item_well_formed(tcx: TyCtxt<'_>, def_id: LocalDefId) {
-    wfcheck::check_impl_item(tcx, def_id);
-}
+pub(super) use wfcheck::check_impl_item as check_impl_item_well_formed;
 
-fn async_opaque_type_cycle_error(tcx: TyCtxt<'tcx>, span: Span) {
+fn async_opaque_type_cycle_error(tcx: TyCtxt<'_>, span: Span) {
     struct_span_err!(tcx.sess, span, E0733, "recursion in an `async fn` requires boxing")
         .span_label(span, "recursive `async fn`")
         .note("a recursive `async fn` must be rewritten to return a boxed `dyn Future`")
@@ -1536,7 +1530,7 @@ fn async_opaque_type_cycle_error(tcx: TyCtxt<'tcx>, span: Span) {
 ///
 /// If all the return expressions evaluate to `!`, then we explain that the error will go away
 /// after changing it. This can happen when a user uses `panic!()` or similar as a placeholder.
-fn opaque_type_cycle_error(tcx: TyCtxt<'tcx>, def_id: LocalDefId, span: Span) {
+fn opaque_type_cycle_error(tcx: TyCtxt<'_>, def_id: LocalDefId, span: Span) {
     let mut err = struct_span_err!(tcx.sess, span, E0720, "cannot resolve opaque type");
 
     let mut label = false;

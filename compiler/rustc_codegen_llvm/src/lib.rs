@@ -6,11 +6,8 @@
 
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/nightly-rustc/")]
 #![feature(bool_to_option)]
-#![feature(const_cstr_unchecked)]
 #![feature(crate_visibility_modifier)]
 #![feature(extern_types)]
-#![feature(in_band_lifetimes)]
-#![feature(iter_zip)]
 #![feature(nll)]
 #![recursion_limit = "256"]
 
@@ -102,14 +99,6 @@ impl ExtraBackendMethods for LlvmCodegenBackend {
         ModuleLlvm::new_metadata(tcx, mod_name)
     }
 
-    fn write_compressed_metadata<'tcx>(
-        &self,
-        tcx: TyCtxt<'tcx>,
-        metadata: &EncodedMetadata,
-        llvm_module: &mut ModuleLlvm,
-    ) {
-        base::write_compressed_metadata(tcx, metadata, llvm_module)
-    }
     fn codegen_allocator<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
@@ -348,24 +337,29 @@ impl CodegenBackend for LlvmCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         sess: &Session,
-    ) -> Result<(Box<dyn Any>, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
+        outputs: &OutputFilenames,
+    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
         let (codegen_results, work_products) = ongoing_codegen
             .downcast::<rustc_codegen_ssa::back::write::OngoingCodegen<LlvmCodegenBackend>>()
             .expect("Expected LlvmCodegenBackend's OngoingCodegen, found Box<Any>")
             .join(sess);
-        Ok((Box::new(codegen_results), work_products))
+
+        sess.time("llvm_dump_timing_file", || {
+            if sess.opts.debugging_opts.llvm_time_trace {
+                let file_name = outputs.with_extension("llvm_timings.json");
+                llvm_util::time_trace_profiler_finish(&file_name);
+            }
+        });
+
+        Ok((codegen_results, work_products))
     }
 
     fn link(
         &self,
         sess: &Session,
-        codegen_results: Box<dyn Any>,
+        codegen_results: CodegenResults,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported> {
-        let codegen_results = codegen_results
-            .downcast::<CodegenResults>()
-            .expect("Expected CodegenResults, found Box<Any>");
-
         use crate::back::archive::LlvmArchiveBuilder;
         use rustc_codegen_ssa::back::link::link_binary;
 

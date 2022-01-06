@@ -213,11 +213,11 @@ impl<'a> Parser<'a> {
                 }
             }
 
+            // Look for JS' `===` and `!==` and recover
             if (op.node == AssocOp::Equal || op.node == AssocOp::NotEqual)
                 && self.token.kind == token::Eq
                 && self.prev_token.span.hi() == self.token.span.lo()
             {
-                // Look for JS' `===` and `!==` and recover 😇
                 let sp = op.span.to(self.token.span);
                 let sugg = match op.node {
                     AssocOp::Equal => "==",
@@ -230,6 +230,38 @@ impl<'a> Parser<'a> {
                         &format!("`{s}=` is not a valid comparison operator, use `{s}`", s = sugg),
                         sugg.to_string(),
                         Applicability::MachineApplicable,
+                    )
+                    .emit();
+                self.bump();
+            }
+
+            // Look for PHP's `<>` and recover
+            if op.node == AssocOp::Less
+                && self.token.kind == token::Gt
+                && self.prev_token.span.hi() == self.token.span.lo()
+            {
+                let sp = op.span.to(self.token.span);
+                self.struct_span_err(sp, "invalid comparison operator `<>`")
+                    .span_suggestion_short(
+                        sp,
+                        "`<>` is not a valid comparison operator, use `!=`",
+                        "!=".to_string(),
+                        Applicability::MachineApplicable,
+                    )
+                    .emit();
+                self.bump();
+            }
+
+            // Look for C++'s `<=>` and recover
+            if op.node == AssocOp::LessEqual
+                && self.token.kind == token::Gt
+                && self.prev_token.span.hi() == self.token.span.lo()
+            {
+                let sp = op.span.to(self.token.span);
+                self.struct_span_err(sp, "invalid comparison operator `<=>`")
+                    .span_label(
+                        sp,
+                        "`<=>` is not a valid comparison operator, use `std::cmp::Ordering`",
                     )
                     .emit();
                 self.bump();
@@ -1100,30 +1132,37 @@ impl<'a> Parser<'a> {
                 snapshot.bump(); // `(`
                 match snapshot.parse_struct_fields(path, false, token::Paren) {
                     Ok((fields, ..)) if snapshot.eat(&token::CloseDelim(token::Paren)) => {
-                        // We have are certain we have `Enum::Foo(a: 3, b: 4)`, suggest
+                        // We are certain we have `Enum::Foo(a: 3, b: 4)`, suggest
                         // `Enum::Foo { a: 3, b: 4 }` or `Enum::Foo(3, 4)`.
                         *self = snapshot;
                         let close_paren = self.prev_token.span;
                         let span = lo.to(self.prev_token.span);
-                        err.cancel();
-                        self.struct_span_err(
-                            span,
-                            "invalid `struct` delimiters or `fn` call arguments",
-                        )
-                        .multipart_suggestion(
-                            &format!("if `{}` is a struct, use braces as delimiters", name),
-                            vec![(open_paren, " { ".to_string()), (close_paren, " }".to_string())],
-                            Applicability::MaybeIncorrect,
-                        )
-                        .multipart_suggestion(
-                            &format!("if `{}` is a function, use the arguments directly", name),
-                            fields
-                                .into_iter()
-                                .map(|field| (field.span.until(field.expr.span), String::new()))
-                                .collect(),
-                            Applicability::MaybeIncorrect,
-                        )
-                        .emit();
+                        if !fields.is_empty() {
+                            err.cancel();
+                            let mut err = self.struct_span_err(
+                                span,
+                                "invalid `struct` delimiters or `fn` call arguments",
+                            );
+                            err.multipart_suggestion(
+                                &format!("if `{}` is a struct, use braces as delimiters", name),
+                                vec![
+                                    (open_paren, " { ".to_string()),
+                                    (close_paren, " }".to_string()),
+                                ],
+                                Applicability::MaybeIncorrect,
+                            );
+                            err.multipart_suggestion(
+                                &format!("if `{}` is a function, use the arguments directly", name),
+                                fields
+                                    .into_iter()
+                                    .map(|field| (field.span.until(field.expr.span), String::new()))
+                                    .collect(),
+                                Applicability::MaybeIncorrect,
+                            );
+                            err.emit();
+                        } else {
+                            err.emit();
+                        }
                         return Some(self.mk_expr_err(span));
                     }
                     Ok(_) => {}
@@ -1258,7 +1297,6 @@ impl<'a> Parser<'a> {
         } else if self.eat_keyword(kw::Let) {
             self.parse_let_expr(attrs)
         } else if self.eat_keyword(kw::Underscore) {
-            self.sess.gated_spans.gate(sym::destructuring_assignment, self.prev_token.span);
             Ok(self.mk_expr(self.prev_token.span, ExprKind::Underscore, attrs))
         } else if !self.unclosed_delims.is_empty() && self.check(&token::Semi) {
             // Don't complain about bare semicolons after unclosed braces
@@ -1601,7 +1639,7 @@ impl<'a> Parser<'a> {
                     next_token.kind
                 {
                     if self.token.span.hi() == next_token.span.lo() {
-                        let s = String::from("0.") + &symbol.as_str();
+                        let s = String::from("0.") + symbol.as_str();
                         let kind = TokenKind::lit(token::Float, Symbol::intern(&s), suffix);
                         return Some(Token::new(kind, self.token.span.to(next_token.span)));
                     }
@@ -1672,7 +1710,8 @@ impl<'a> Parser<'a> {
                 );
             }
             LitError::InvalidIntSuffix => {
-                let suf = suffix.expect("suffix error with no suffix").as_str();
+                let suf = suffix.expect("suffix error with no suffix");
+                let suf = suf.as_str();
                 if looks_like_width_suffix(&['i', 'u'], &suf) {
                     // If it looks like a width, try to be helpful.
                     let msg = format!("invalid width `{}` for integer literal", &suf[1..]);
@@ -1688,8 +1727,9 @@ impl<'a> Parser<'a> {
                 }
             }
             LitError::InvalidFloatSuffix => {
-                let suf = suffix.expect("suffix error with no suffix").as_str();
-                if looks_like_width_suffix(&['f'], &suf) {
+                let suf = suffix.expect("suffix error with no suffix");
+                let suf = suf.as_str();
+                if looks_like_width_suffix(&['f'], suf) {
                     // If it looks like a width, try to be helpful.
                     let msg = format!("invalid width `{}` for float literal", &suf[1..]);
                     self.struct_span_err(span, &msg).help("valid widths are 32 and 64").emit();
@@ -1988,31 +2028,62 @@ impl<'a> Parser<'a> {
         let lo = self.prev_token.span;
         let cond = self.parse_cond_expr()?;
 
+        let missing_then_block_binop_span = || {
+            match cond.kind {
+                ExprKind::Binary(Spanned { span: binop_span, .. }, _, ref right)
+                    if let ExprKind::Block(..) = right.kind => Some(binop_span),
+                _ => None
+            }
+        };
+
         // Verify that the parsed `if` condition makes sense as a condition. If it is a block, then
         // verify that the last statement is either an implicit return (no `;`) or an explicit
         // return. This won't catch blocks with an explicit `return`, but that would be caught by
         // the dead code lint.
-        let thn = if self.eat_keyword(kw::Else) || !cond.returns() {
-            self.error_missing_if_cond(lo, cond.span)
+        let thn = if self.token.is_keyword(kw::Else) || !cond.returns() {
+            if let Some(binop_span) = missing_then_block_binop_span() {
+                self.error_missing_if_then_block(lo, None, Some(binop_span)).emit();
+                self.mk_block_err(cond.span)
+            } else {
+                self.error_missing_if_cond(lo, cond.span)
+            }
         } else {
             let attrs = self.parse_outer_attributes()?.take_for_recovery(); // For recovery.
             let not_block = self.token != token::OpenDelim(token::Brace);
-            let block = self.parse_block().map_err(|mut err| {
+            let block = self.parse_block().map_err(|err| {
                 if not_block {
-                    err.span_label(lo, "this `if` expression has a condition, but no block");
-                    if let ExprKind::Binary(_, _, ref right) = cond.kind {
-                        if let ExprKind::Block(_, _) = right.kind {
-                            err.help("maybe you forgot the right operand of the condition?");
-                        }
-                    }
+                    self.error_missing_if_then_block(lo, Some(err), missing_then_block_binop_span())
+                } else {
+                    err
                 }
-                err
             })?;
             self.error_on_if_block_attrs(lo, false, block.span, &attrs);
             block
         };
         let els = if self.eat_keyword(kw::Else) { Some(self.parse_else_expr()?) } else { None };
         Ok(self.mk_expr(lo.to(self.prev_token.span), ExprKind::If(cond, thn, els), attrs))
+    }
+
+    fn error_missing_if_then_block(
+        &self,
+        if_span: Span,
+        err: Option<DiagnosticBuilder<'a>>,
+        binop_span: Option<Span>,
+    ) -> DiagnosticBuilder<'a> {
+        let msg = "this `if` expression has a condition, but no block";
+
+        let mut err = if let Some(mut err) = err {
+            err.span_label(if_span, msg);
+            err
+        } else {
+            self.struct_span_err(if_span, msg)
+        };
+
+        if let Some(binop_span) = binop_span {
+            err.span_help(binop_span, "maybe you forgot the right operand of the condition?");
+        }
+
+        err
     }
 
     fn error_missing_if_cond(&self, lo: Span, span: Span) -> P<ast::Block> {
@@ -2550,7 +2621,6 @@ impl<'a> Parser<'a> {
                 let exp_span = self.prev_token.span;
                 // We permit `.. }` on the left-hand side of a destructuring assignment.
                 if self.check(&token::CloseDelim(close_delim)) {
-                    self.sess.gated_spans.gate(sym::destructuring_assignment, self.prev_token.span);
                     base = ast::StructRest::Rest(self.prev_token.span.shrink_to_hi());
                     break;
                 }

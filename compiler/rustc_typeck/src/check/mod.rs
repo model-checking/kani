@@ -508,7 +508,7 @@ struct GeneratorTypes<'tcx> {
 
 /// Given a `DefId` for an opaque type in return position, find its parent item's return
 /// expressions.
-fn get_owner_return_paths(
+fn get_owner_return_paths<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
 ) -> Option<(hir::HirId, ReturnsVisitor<'tcx>)> {
@@ -686,9 +686,8 @@ fn bounds_from_generic_predicates<'tcx>(
     };
     let mut where_clauses = vec![];
     for (ty, bounds) in types {
-        for bound in &bounds {
-            where_clauses.push(format!("{}: {}", ty, tcx.def_path_str(*bound)));
-        }
+        where_clauses
+            .extend(bounds.into_iter().map(|bound| format!("{}: {}", ty, tcx.def_path_str(bound))));
     }
     for projection in &projections {
         let p = projection.skip_binder();
@@ -907,7 +906,7 @@ struct CheckItemTypesVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl ItemLikeVisitor<'tcx> for CheckItemTypesVisitor<'tcx> {
+impl<'tcx> ItemLikeVisitor<'tcx> for CheckItemTypesVisitor<'tcx> {
     fn visit_item(&mut self, i: &'tcx hir::Item<'tcx>) {
         check_item_type(self.tcx, i);
     }

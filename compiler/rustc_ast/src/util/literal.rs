@@ -35,12 +35,12 @@ impl LitKind {
                 LitKind::Bool(symbol == kw::True)
             }
             token::Byte => {
-                return unescape_byte(&symbol.as_str())
+                return unescape_byte(symbol.as_str())
                     .map(LitKind::Byte)
                     .map_err(|_| LitError::LexerError);
             }
             token::Char => {
-                return unescape_char(&symbol.as_str())
+                return unescape_char(symbol.as_str())
                     .map(LitKind::Char)
                     .map_err(|_| LitError::LexerError);
             }
@@ -57,7 +57,7 @@ impl LitKind {
                 // string in the token.
                 let s = symbol.as_str();
                 let symbol =
-                    if s.contains(&['\\', '\r'][..]) {
+                    if s.contains(&['\\', '\r']) {
                         let mut buf = String::with_capacity(s.len());
                         let mut error = Ok(());
                         unescape_literal(&s, Mode::Str, &mut |_, unescaped_char| {

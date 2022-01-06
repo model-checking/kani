@@ -442,8 +442,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             let mut eraser = TypeParamEraser(self, expr.span);
                             let needs_bound = self
                                 .lookup_op_method(
-                                    eraser.fold_ty(lhs_ty).into_ok(),
-                                    &[eraser.fold_ty(rhs_ty).into_ok()],
+                                    eraser.fold_ty(lhs_ty),
+                                    &[eraser.fold_ty(rhs_ty)],
                                     Op::Binary(op, is_assign),
                                 )
                                 .is_ok();
@@ -492,7 +492,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     ) -> bool /* did we suggest to call a function because of missing parentheses? */ {
         err.span_label(span, ty.to_string());
         if let FnDef(def_id, _) = *ty.kind() {
-            let source_map = self.tcx.sess.source_map();
             if !self.tcx.has_typeck_results(def_id) {
                 return false;
             }
@@ -517,20 +516,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 .lookup_op_method(fn_sig.output(), &[other_ty], Op::Binary(op, is_assign))
                 .is_ok()
             {
-                if let Ok(snippet) = source_map.span_to_snippet(span) {
-                    let (variable_snippet, applicability) = if !fn_sig.inputs().is_empty() {
-                        (format!("{}( /* arguments */ )", snippet), Applicability::HasPlaceholders)
-                    } else {
-                        (format!("{}()", snippet), Applicability::MaybeIncorrect)
-                    };
+                let (variable_snippet, applicability) = if !fn_sig.inputs().is_empty() {
+                    ("( /* arguments */ )".to_string(), Applicability::HasPlaceholders)
+                } else {
+                    ("()".to_string(), Applicability::MaybeIncorrect)
+                };
 
-                    err.span_suggestion(
-                        span,
-                        "you might have forgotten to call this function",
-                        variable_snippet,
-                        applicability,
-                    );
-                }
+                err.span_suggestion_verbose(
+                    span.shrink_to_hi(),
+                    "you might have forgotten to call this function",
+                    variable_snippet,
+                    applicability,
+                );
                 return true;
             }
         }
@@ -896,7 +893,7 @@ enum Op {
 }
 
 /// Dereferences a single level of immutable referencing.
-fn deref_ty_if_possible(ty: Ty<'tcx>) -> Ty<'tcx> {
+fn deref_ty_if_possible<'tcx>(ty: Ty<'tcx>) -> Ty<'tcx> {
     match ty.kind() {
         ty::Ref(_, ty, hir::Mutability::Not) => ty,
         _ => ty,
@@ -1010,17 +1007,17 @@ impl<'tcx> TypeVisitor<'tcx> for TypeParamVisitor<'tcx> {
 
 struct TypeParamEraser<'a, 'tcx>(&'a FnCtxt<'a, 'tcx>, Span);
 
-impl TypeFolder<'tcx> for TypeParamEraser<'_, 'tcx> {
+impl<'tcx> TypeFolder<'tcx> for TypeParamEraser<'_, 'tcx> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.0.tcx
     }
 
-    fn fold_ty(&mut self, ty: Ty<'tcx>) -> Result<Ty<'tcx>, Self::Error> {
+    fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
         match ty.kind() {
-            ty::Param(_) => Ok(self.0.next_ty_var(TypeVariableOrigin {
+            ty::Param(_) => self.0.next_ty_var(TypeVariableOrigin {
                 kind: TypeVariableOriginKind::MiscVariable,
                 span: self.1,
-            })),
+            }),
             _ => ty.super_fold_with(self),
         }
     }

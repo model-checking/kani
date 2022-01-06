@@ -280,7 +280,7 @@ impl Session {
     }
 
     fn emit_future_breakage(&self) {
-        if !self.opts.debugging_opts.emit_future_incompat_report {
+        if !self.opts.json_future_incompat {
             return;
         }
 
@@ -562,10 +562,7 @@ impl Session {
         self.opts.debugging_opts.binary_dep_depinfo
     }
     pub fn mir_opt_level(&self) -> usize {
-        self.opts
-            .debugging_opts
-            .mir_opt_level
-            .unwrap_or_else(|| if self.opts.optimize != config::OptLevel::No { 2 } else { 1 })
+        self.opts.mir_opt_level()
     }
 
     /// Gets the features enabled for the current compilation session.
@@ -795,12 +792,11 @@ impl Session {
     /// Returns a list of directories where target-specific tool binaries are located.
     pub fn get_tools_search_paths(&self, self_contained: bool) -> Vec<PathBuf> {
         let rustlib_path = rustc_target::target_rustlib_path(&self.sysroot, &config::host_triple());
-        let p = std::array::IntoIter::new([
+        let p = PathBuf::from_iter([
             Path::new(&self.sysroot),
             Path::new(&rustlib_path),
             Path::new("bin"),
-        ])
-        .collect::<PathBuf>();
+        ]);
         if self_contained { vec![p.clone(), p.join("self-contained")] } else { vec![p] }
     }
 
@@ -1047,18 +1043,15 @@ impl Session {
     }
 
     pub fn instrument_coverage(&self) -> bool {
-        self.opts.debugging_opts.instrument_coverage.unwrap_or(config::InstrumentCoverage::Off)
-            != config::InstrumentCoverage::Off
+        self.opts.instrument_coverage()
     }
 
     pub fn instrument_coverage_except_unused_generics(&self) -> bool {
-        self.opts.debugging_opts.instrument_coverage.unwrap_or(config::InstrumentCoverage::Off)
-            == config::InstrumentCoverage::ExceptUnusedGenerics
+        self.opts.instrument_coverage_except_unused_generics()
     }
 
     pub fn instrument_coverage_except_unused_functions(&self) -> bool {
-        self.opts.debugging_opts.instrument_coverage.unwrap_or(config::InstrumentCoverage::Off)
-            == config::InstrumentCoverage::ExceptUnusedFunctions
+        self.opts.instrument_coverage_except_unused_functions()
     }
 
     pub fn is_proc_macro_attr(&self, attr: &Attribute) -> bool {

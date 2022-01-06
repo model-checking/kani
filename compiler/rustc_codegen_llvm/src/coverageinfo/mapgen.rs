@@ -89,7 +89,7 @@ pub fn finalize<'ll, 'tcx>(cx: &CodegenCx<'ll, 'tcx>) {
     });
 
     let filenames_size = filenames_buffer.len();
-    let filenames_val = cx.const_bytes(&filenames_buffer[..]);
+    let filenames_val = cx.const_bytes(&filenames_buffer);
     let filenames_ref = coverageinfo::hash_bytes(filenames_buffer);
 
     // Generate the LLVM IR representation of the coverage map and store it in a well-known global
@@ -141,7 +141,7 @@ impl CoverageMapGenerator {
     /// the `mapping_regions` and `virtual_file_mapping`, and capture any new filenames. Then use
     /// LLVM APIs to encode the `virtual_file_mapping`, `expressions`, and `mapping_regions` into
     /// the given `coverage_mapping` byte buffer, compliant with the LLVM Coverage Mapping format.
-    fn write_coverage_mapping(
+    fn write_coverage_mapping<'a>(
         &mut self,
         expressions: Vec<CounterExpression>,
         counter_regions: impl Iterator<Item = (Counter, &'a CodeRegion)>,
@@ -200,9 +200,9 @@ impl CoverageMapGenerator {
     /// Construct coverage map header and the array of function records, and combine them into the
     /// coverage map. Save the coverage map data into the LLVM IR as a static global using a
     /// specific, well-known section and name.
-    fn generate_coverage_map(
+    fn generate_coverage_map<'ll>(
         self,
-        cx: &CodegenCx<'ll, 'tcx>,
+        cx: &CodegenCx<'ll, '_>,
         version: u32,
         filenames_size: usize,
         filenames_val: &'ll llvm::Value,
@@ -229,7 +229,7 @@ impl CoverageMapGenerator {
 /// Save the function record into the LLVM IR as a static global using a
 /// specific, well-known section and name.
 fn save_function_record(
-    cx: &CodegenCx<'ll, 'tcx>,
+    cx: &CodegenCx<'_, '_>,
     mangled_function_name: String,
     source_hash: u64,
     filenames_ref: u64,
@@ -238,7 +238,7 @@ fn save_function_record(
 ) {
     // Concatenate the encoded coverage mappings
     let coverage_mapping_size = coverage_mapping_buffer.len();
-    let coverage_mapping_val = cx.const_bytes(&coverage_mapping_buffer[..]);
+    let coverage_mapping_val = cx.const_bytes(&coverage_mapping_buffer);
 
     let func_name_hash = coverageinfo::hash_str(&mangled_function_name);
     let func_name_hash_val = cx.const_u64(func_name_hash);

@@ -53,9 +53,6 @@ pub struct Inherited<'a, 'tcx> {
     pub(super) deferred_generator_interiors:
         RefCell<Vec<(hir::BodyId, Ty<'tcx>, hir::GeneratorKind)>>,
 
-    /// Reports whether this is in a const context.
-    pub(super) constness: hir::Constness,
-
     pub(super) body_id: Option<hir::BodyId>,
 
     /// Whenever we introduce an adjustment from `!` into a type variable,
@@ -79,7 +76,7 @@ pub struct InheritedBuilder<'tcx> {
     def_id: LocalDefId,
 }
 
-impl Inherited<'_, 'tcx> {
+impl<'tcx> Inherited<'_, 'tcx> {
     pub fn build(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> InheritedBuilder<'tcx> {
         let hir_owner = tcx.hir().local_def_id_to_hir_id(def_id).owner;
 
@@ -100,18 +97,8 @@ impl<'tcx> InheritedBuilder<'tcx> {
     }
 }
 
-impl Inherited<'a, 'tcx> {
+impl<'a, 'tcx> Inherited<'a, 'tcx> {
     pub(super) fn new(infcx: InferCtxt<'a, 'tcx>, def_id: LocalDefId) -> Self {
-        let tcx = infcx.tcx;
-        let item_id = tcx.hir().local_def_id_to_hir_id(def_id);
-        Self::with_constness(infcx, def_id, tcx.hir().get(item_id).constness_for_typeck())
-    }
-
-    pub(super) fn with_constness(
-        infcx: InferCtxt<'a, 'tcx>,
-        def_id: LocalDefId,
-        constness: hir::Constness,
-    ) -> Self {
         let tcx = infcx.tcx;
         let item_id = tcx.hir().local_def_id_to_hir_id(def_id);
         let body_id = tcx.hir().maybe_body_owned_by(item_id);
@@ -128,7 +115,6 @@ impl Inherited<'a, 'tcx> {
             deferred_cast_checks: RefCell::new(Vec::new()),
             deferred_generator_interiors: RefCell::new(Vec::new()),
             diverging_type_vars: RefCell::new(Default::default()),
-            constness,
             body_id,
         }
     }

@@ -52,7 +52,7 @@ impl<'tcx> LateLintPass<'tcx> for ArrayIntoIter {
             if let hir::ExprKind::Call(path, [arg]) = &arg.kind {
                 if let hir::ExprKind::Path(hir::QPath::LangItem(
                     hir::LangItem::IntoIterIntoIter,
-                    _,
+                    ..,
                 )) = &path.kind
                 {
                     self.for_expr_span = arg.span;
@@ -79,9 +79,8 @@ impl<'tcx> LateLintPass<'tcx> for ArrayIntoIter {
             let receiver_ty = cx.typeck_results().expr_ty(receiver_arg);
             let adjustments = cx.typeck_results().expr_adjustments(receiver_arg);
 
-            let target = match adjustments.last() {
-                Some(Adjustment { kind: Adjust::Borrow(_), target }) => target,
-                _ => return,
+            let Some(Adjustment { kind: Adjust::Borrow(_), target }) = adjustments.last() else {
+                return
             };
 
             let types =

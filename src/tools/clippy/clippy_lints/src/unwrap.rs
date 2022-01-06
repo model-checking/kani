@@ -39,6 +39,7 @@ declare_clippy_lint! {
     ///     do_something_with(value)
     /// }
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub UNNECESSARY_UNWRAP,
     complexity,
     "checks for calls of `unwrap[_err]()` that cannot fail"
@@ -65,6 +66,7 @@ declare_clippy_lint! {
     /// ```
     ///
     /// This code will always panic. The if condition should probably be inverted.
+    #[clippy::version = "pre 1.29.0"]
     pub PANICKING_UNWRAP,
     correctness,
     "checks for calls of `unwrap[_err]()` that will always fail"
@@ -156,7 +158,7 @@ fn collect_unwrap_info<'tcx>(
             if let Some(local_id) = path_to_local(&args[0]);
             let ty = cx.typeck_results().expr_ty(&args[0]);
             let name = method_name.ident.as_str();
-            if is_relevant_option_call(cx, ty, &name) || is_relevant_result_call(cx, ty, &name);
+            if is_relevant_option_call(cx, ty, name) || is_relevant_result_call(cx, ty, name);
             then {
                 assert!(args.len() == 1);
                 let unwrappable = match name.as_ref() {
@@ -229,8 +231,8 @@ impl<'a, 'tcx> Visitor<'tcx> for UnwrappableVariablesVisitor<'a, 'tcx> {
         } else {
             // find `unwrap[_err]()` calls:
             if_chain! {
-                if let ExprKind::MethodCall(method_name, _, args, _) = expr.kind;
-                if let Some(id) = path_to_local(&args[0]);
+                if let ExprKind::MethodCall(method_name, _, [self_arg, ..], _) = expr.kind;
+                if let Some(id) = path_to_local(self_arg);
                 if [sym::unwrap, sym::expect, sym!(unwrap_err)].contains(&method_name.ident.name);
                 let call_to_unwrap = [sym::unwrap, sym::expect].contains(&method_name.ident.name);
                 if let Some(unwrappable) = self.unwrappables.iter()

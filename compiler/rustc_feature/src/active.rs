@@ -69,10 +69,6 @@ macro_rules! declare_features {
                 }
             }
 
-            pub fn unordered_const_ty_params(&self) -> bool {
-                self.const_generics_defaults || self.generic_const_exprs || self.adt_const_params
-            }
-
             /// Some features are known to be incomplete and using them is likely to have
             /// unanticipated results, such as compiler crashes. We warn the user about these
             /// to alert them.
@@ -290,6 +286,8 @@ declare_features! (
     (active, asm_experimental_arch, "1.58.0", Some(72016), None),
     /// Allows using `sym` operands in inline assembly.
     (active, asm_sym, "1.58.0", Some(72016), None),
+    /// Allows the `may_unwind` option in inline assembly.
+    (active, asm_unwind, "1.58.0", Some(72016), None),
     /// Allows the user of associated type bounds.
     (active, associated_type_bounds, "1.34.0", Some(52662), None),
     /// Allows associated type defaults.
@@ -332,8 +330,6 @@ declare_features! (
     (active, const_fn_trait_bound, "1.53.0", Some(57563), None),
     /// Allows `for _ in _` loops in const contexts.
     (active, const_for, "1.56.0", Some(87575), None),
-    /// Allows const generics to have default values (e.g. `struct Foo<const N: usize = 3>(...);`).
-    (active, const_generics_defaults, "1.51.0", Some(44580), None),
     /// Allows argument and return position `impl Trait` in a `const fn`.
     (active, const_impl_trait, "1.48.0", Some(77463), None),
     /// Allows using `&mut` in constant functions.
@@ -360,8 +356,6 @@ declare_features! (
     (active, default_type_parameter_fallback, "1.3.0", Some(27336), None),
     /// Allows `#[derive(Default)]` and `#[default]` on enums.
     (active, derive_default_enum, "1.56.0", Some(86985), None),
-    /// Allows the use of destructuring assignments.
-    (active, destructuring_assignment, "1.49.0", Some(71126), None),
     /// Tells rustdoc to automatically generate `#[doc(cfg(...))]`.
     (active, doc_auto_cfg, "1.58.0", Some(43781), None),
     /// Allows `#[doc(cfg(...))]`.

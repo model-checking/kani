@@ -3,7 +3,7 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use crate::{GotocCtx, VtableCtx};
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, ExprValue, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -40,12 +40,9 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Goto { target } => {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
-            TerminatorKind::SwitchInt { discr, switch_ty, targets } => match targets {
-                SwitchTargets { values, .. } => {
-                    let all_targets = targets.all_targets();
-                    self.codegen_switch_int(discr, switch_ty, values, all_targets)
-                }
-            },
+            TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
+                self.codegen_switch_int(discr, switch_ty, targets)
+            }
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
             TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
             TerminatorKind::Return => {
@@ -206,62 +203,48 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         discr: &Operand<'tcx>,
         switch_ty: Ty<'tcx>,
-        values: &SmallVec<[u128; 1]>,
-        targets: &[BasicBlock],
+        targets: &SwitchTargets,
     ) -> Stmt {
-        assert_eq!(targets.len(), values.len() + 1);
-
         let v = self.codegen_operand(discr);
         let switch_ty = self.monomorphize(switch_ty);
-        match switch_ty.kind() {
-            //TODO, can replace with guarded goto
-            ty::Bool => {
-                let jmp: usize = values[0].try_into().unwrap();
-                let jmp2 = if jmp == 0 { 1 } else { 0 };
-                Stmt::block(
-                    vec![
-                        v.cast_to(Type::bool()).if_then_else(
+        if targets.all_targets().len() == 1 {
+            // Translate to a guarded goto
+            let first_target = targets.iter().next().unwrap();
+            Stmt::block(
+                vec![
+                    v.eq(Expr::int_constant(first_target.0, self.codegen_ty(switch_ty)))
+                        .if_then_else(
                             Stmt::goto(
-                                self.current_fn().labels()[targets[jmp2].index()].clone(),
+                                self.current_fn().labels()[first_target.1.index()].clone(),
                                 Location::none(),
                             ),
                             None,
                             Location::none(),
                         ),
-                        Stmt::goto(
-                            self.current_fn().labels()[targets[jmp].index()].clone(),
-                            Location::none(),
-                        ),
-                    ],
-                    Location::none(),
-                )
-            }
-            ty::Char | ty::Int(_) | ty::Uint(_) => {
-                let cases = values
-                    .iter()
-                    .enumerate()
-                    .map(|(i, idx)| {
-                        let bb = &targets[i];
-                        Expr::int_constant(*idx, self.codegen_ty(switch_ty)).switch_case(
-                            Stmt::goto(
-                                self.current_fn().labels()[bb.index()].clone(),
-                                Location::none(),
-                            ),
-                        )
-                    })
-                    .collect();
-                let default = Stmt::goto(
-                    self.current_fn().labels()[targets[values.len()].index()].clone(),
-                    Location::none(),
-                );
-                v.switch(cases, Some(default), Location::none())
-            }
-            x => {
-                unreachable!(
-                    "Unexpected switch_ty {:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
-                    discr, switch_ty, values, targets, v, x
-                )
-            }
+                    Stmt::goto(
+                        self.current_fn().labels()[targets.otherwise().index()].clone(),
+                        Location::none(),
+                    ),
+                ],
+                Location::none(),
+            )
+        } else {
+            // Switches with empty targets should've been eliminated already.
+            assert!(targets.all_targets().len() > 1);
+            let cases = targets
+                .iter()
+                .map(|(c, bb)| {
+                    Expr::int_constant(c, self.codegen_ty(switch_ty)).switch_case(Stmt::goto(
+                        self.current_fn().labels()[bb.index()].clone(),
+                        Location::none(),
+                    ))
+                })
+                .collect();
+            let default = Stmt::goto(
+                self.current_fn().labels()[targets.otherwise().index()].clone(),
+                Location::none(),
+            );
+            v.switch(cases, Some(default), Location::none())
         }
     }
 
@@ -482,54 +465,28 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_panic(&mut self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
+    pub fn codegen_panic(&self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
-        // TODO: give a better message here.
-        let arg = match fargs[0].struct_expr_values() {
-            Some(values) => values[0].clone(),
-            _ => Expr::string_constant(
-                "This is a placeholder assertion message; the rust message requires dynamic string formatting, which is not supported by CBMC",
-            ),
-        };
+        assert!(!fargs.is_empty(), "Panic requires a string message");
+        let msg = extract_const_message(&fargs[0]).unwrap_or(String::from(
+            "This is a placeholder message; RMC doesn't support message formatted at runtime",
+        ));
 
-        let loc = self.codegen_span_option(span);
-        let cbb = self.current_fn().current_bb();
-
-        // TODO: is it proper?
-        //
-        // [assert!(expr)] generates code like
-        //     if !expr { panic() }
-        // thus when we compile [panic], we would like to continue with
-        // the code following [assert!(expr)] as well as display the panic
-        // location using the assert's location.
-        let preds = &self.current_fn().mir().predecessors()[cbb];
-        if preds.len() == 1 {
-            let pred: &BasicBlock = preds.first().unwrap();
-            let pred_bbd = &self.current_fn().mir()[*pred];
-            let pterm = pred_bbd.terminator();
-            match pterm.successors().find(|bb| **bb != cbb) {
-                None => self.codegen_assert_false(arg, loc),
-                Some(alt) => {
-                    let loc = self.codegen_span(&pterm.source_info.span);
-                    Stmt::block(
-                        vec![
-                            self.codegen_assert_false(arg, loc.clone()),
-                            Stmt::goto(self.current_fn().find_label(alt), Location::none()),
-                        ],
-                        loc,
-                    )
-                }
-            }
-        } else {
-            self.codegen_assert_false(arg, loc)
-        }
+        self.codegen_fatal_error(&msg, span)
     }
 
-    // By the time we get this, the string constant has been codegenned.
-    // TODO: make this case also use the Stmt::assert_false() constructor
-    pub fn codegen_assert_false(&mut self, err: Expr, loc: Location) -> Stmt {
-        BuiltinFn::CProverAssert.call(vec![Expr::bool_false(), err], loc.clone()).as_stmt(loc)
+    // Generate code for fatal error which should trigger an assertion failure and abort the
+    // execution.
+    pub fn codegen_fatal_error(&self, msg: &str, span: Option<Span>) -> Stmt {
+        let loc = self.codegen_caller_span(&span);
+        Stmt::block(
+            vec![
+                Stmt::assert_false(msg, loc.clone()),
+                BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
+            ],
+            loc,
+        )
     }
 
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
@@ -659,5 +616,24 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
+    }
+}
+
+/// Tries to extract a string message from an `Expr`.
+/// If the expression represents a pointer to a string constant, this will return the string
+/// constant. Otherwise, return `None`.
+fn extract_const_message(arg: &Expr) -> Option<String> {
+    match arg.value() {
+        ExprValue::Struct { values } => match &values[0].value() {
+            ExprValue::AddressOf(address) => match address.value() {
+                ExprValue::Index { array, .. } => match array.value() {
+                    ExprValue::StringConstant { s } => Some(s.to_string()),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
     }
 }

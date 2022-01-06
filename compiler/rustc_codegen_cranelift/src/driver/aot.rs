@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
+use rustc_codegen_ssa::back::metadata::create_compressed_metadata_file;
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo, ModuleKind};
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_metadata::EncodedMetadata;
@@ -84,7 +85,7 @@ fn reuse_workproduct_for_cgu(
     let work_product = cgu.work_product(tcx);
     if let Some(saved_file) = &work_product.saved_file {
         let obj_out =
-            tcx.output_filenames(()).temp_path(OutputType::Object, Some(&cgu.name().as_str()));
+            tcx.output_filenames(()).temp_path(OutputType::Object, Some(cgu.name().as_str()));
         object = Some(obj_out.clone());
         let source_file = rustc_incremental::in_incr_comp_dir_sess(&tcx.sess, &saved_file);
         if let Err(err) = rustc_fs_util::link_or_copy(&source_file, &obj_out) {
@@ -123,6 +124,7 @@ fn module_codegen(
         backend_config.clone(),
         module.isa(),
         tcx.sess.opts.debuginfo != DebugInfo::None,
+        cgu_name,
     );
     super::predefine_mono_items(tcx, &mut module, &mono_items);
     for (mono_item, _) in mono_items {
@@ -176,7 +178,7 @@ fn module_codegen(
         )
     });
 
-    codegen_global_asm(tcx, &cgu.name().as_str(), &cx.global_asm);
+    codegen_global_asm(tcx, cgu.name().as_str(), &cx.global_asm);
 
     codegen_result
 }
@@ -207,7 +209,7 @@ pub(crate) fn run_aot(
         cgus.iter()
             .map(|cgu| {
                 let cgu_reuse = determine_cgu_reuse(tcx, cgu);
-                tcx.sess.cgu_reuse_tracker.set_actual_reuse(&cgu.name().as_str(), cgu_reuse);
+                tcx.sess.cgu_reuse_tracker.set_actual_reuse(cgu.name().as_str(), cgu_reuse);
 
                 match cgu_reuse {
                     _ if backend_config.disable_incr_cache => {}
@@ -277,7 +279,8 @@ pub(crate) fn run_aot(
             let tmp_file =
                 tcx.output_filenames(()).temp_path(OutputType::Metadata, Some(&metadata_cgu_name));
 
-            let obj = crate::metadata::new_metadata_object(tcx, &metadata_cgu_name, &metadata);
+            let symbol_name = rustc_middle::middle::exported_symbols::metadata_symbol_name(tcx);
+            let obj = create_compressed_metadata_file(tcx.sess, &metadata, &symbol_name);
 
             if let Err(err) = std::fs::write(&tmp_file, obj) {
                 tcx.sess.fatal(&format!("error writing metadata object file: {}", err));

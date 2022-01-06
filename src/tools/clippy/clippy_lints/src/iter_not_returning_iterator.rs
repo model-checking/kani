@@ -32,6 +32,7 @@ declare_clippy_lint! {
     ///    }
     /// }
     /// ```
+    #[clippy::version = "1.57.0"]
     pub ITER_NOT_RETURNING_ITERATOR,
     pedantic,
     "methods named `iter` or `iter_mut` that do not return an `Iterator`"
@@ -41,7 +42,7 @@ declare_lint_pass!(IterNotReturningIterator => [ITER_NOT_RETURNING_ITERATOR]);
 
 impl LateLintPass<'_> for IterNotReturningIterator {
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {
-        let name: &str = &impl_item.ident.name.as_str();
+        let name = impl_item.ident.name.as_str();
         if_chain! {
             if let ImplItemKind::Fn(fn_sig, _) = &impl_item.kind;
             let ret_ty = return_ty(cx, impl_item.hir_id());

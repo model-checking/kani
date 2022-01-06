@@ -31,7 +31,7 @@ struct Collector<'tcx> {
     libs: Vec<NativeLib>,
 }
 
-impl ItemLikeVisitor<'tcx> for Collector<'tcx> {
+impl<'tcx> ItemLikeVisitor<'tcx> for Collector<'tcx> {
     fn visit_item(&mut self, it: &'tcx hir::Item<'tcx>) {
         let (abi, foreign_mod_items) = match it.kind {
             hir::ItemKind::ForeignMod { abi, items } => (abi, items),
@@ -67,7 +67,7 @@ impl ItemLikeVisitor<'tcx> for Collector<'tcx> {
                         Some(name) => name,
                         None => continue, // skip like historical compilers
                     };
-                    lib.kind = match &*kind.as_str() {
+                    lib.kind = match kind.as_str() {
                         "static" => NativeLibKind::Static { bundle: None, whole_archive: None },
                         "static-nobundle" => {
                             sess.struct_span_warn(
@@ -132,7 +132,7 @@ impl ItemLikeVisitor<'tcx> for Collector<'tcx> {
                 if let Some(modifiers) = item.value_str() {
                     let span = item.name_value_literal_span().unwrap();
                     for modifier in modifiers.as_str().split(',') {
-                        let (modifier, value) = match modifier.strip_prefix(&['+', '-'][..]) {
+                        let (modifier, value) = match modifier.strip_prefix(&['+', '-']) {
                             Some(m) => (m, modifier.starts_with('+')),
                             None => {
                                 sess.span_err(
@@ -223,7 +223,7 @@ impl ItemLikeVisitor<'tcx> for Collector<'tcx> {
     fn visit_foreign_item(&mut self, _it: &'tcx hir::ForeignItem<'tcx>) {}
 }
 
-impl Collector<'tcx> {
+impl Collector<'_> {
     fn register_native_lib(&mut self, span: Option<Span>, lib: NativeLib) {
         if lib.name.as_ref().map_or(false, |&s| s == kw::Empty) {
             match span {

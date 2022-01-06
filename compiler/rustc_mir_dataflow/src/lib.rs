@@ -3,8 +3,6 @@
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(exact_size_is_empty)]
-#![feature(in_band_lifetimes)]
-#![feature(iter_zip)]
 #![feature(let_else)]
 #![feature(min_specialization)]
 #![feature(once_cell)]
@@ -28,9 +26,9 @@ pub use self::drop_flag_effects::{
     on_lookup_result_bits,
 };
 pub use self::framework::{
-    fmt, graphviz, lattice, visit_results, Analysis, AnalysisDomain, Backward, Direction, Engine,
-    Forward, GenKill, GenKillAnalysis, JoinSemiLattice, Results, ResultsCursor, ResultsRefCursor,
-    ResultsVisitable, ResultsVisitor,
+    fmt, graphviz, lattice, visit_results, Analysis, AnalysisDomain, Backward, CallReturnPlaces,
+    Direction, Engine, Forward, GenKill, GenKillAnalysis, JoinSemiLattice, Results, ResultsCursor,
+    ResultsRefCursor, ResultsVisitable, ResultsVisitor,
 };
 
 use self::move_paths::MoveData;

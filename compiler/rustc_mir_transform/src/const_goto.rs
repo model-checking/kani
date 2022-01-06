@@ -27,10 +27,11 @@ use super::simplify::{simplify_cfg, simplify_locals};
 pub struct ConstGoto;
 
 impl<'tcx> MirPass<'tcx> for ConstGoto {
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
+        sess.mir_opt_level() >= 4
+    }
+
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        if tcx.sess.mir_opt_level() < 4 {
-            return;
-        }
         trace!("Running ConstGoto on {:?}", body.source);
         let param_env = tcx.param_env_reveal_all_normalized(body.source.def_id());
         let mut opt_finder =
@@ -53,7 +54,7 @@ impl<'tcx> MirPass<'tcx> for ConstGoto {
     }
 }
 
-impl<'a, 'tcx> Visitor<'tcx> for ConstGotoOptimizationFinder<'a, 'tcx> {
+impl<'tcx> Visitor<'tcx> for ConstGotoOptimizationFinder<'_, 'tcx> {
     fn visit_terminator(&mut self, terminator: &Terminator<'tcx>, location: Location) {
         let _: Option<_> = try {
             let target = terminator.kind.as_goto()?;
@@ -82,20 +83,7 @@ impl<'a, 'tcx> Visitor<'tcx> for ConstGotoOptimizationFinder<'a, 'tcx> {
                     // Now find which value in the Switch matches the const value.
                     let const_value =
                         _const.literal.try_eval_bits(self.tcx, self.param_env, switch_ty)?;
-                    let found_value_idx_option = targets
-                        .iter()
-                        .enumerate()
-                        .find(|(_, (value, _))| const_value == *value)
-                        .map(|(idx, _)| idx);
-
-                    let target_to_use_in_goto =
-                        if let Some(found_value_idx) = found_value_idx_option {
-                            targets.iter().nth(found_value_idx).unwrap().1
-                        } else {
-                            // If we did not find the const value in values, it must be the otherwise case
-                            targets.otherwise()
-                        };
-
+                    let target_to_use_in_goto = targets.target_for_value(const_value);
                     self.optimizations.push(OptimizationToApply {
                         bb_with_goto: location.block,
                         target_to_use_in_goto,

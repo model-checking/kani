@@ -18,14 +18,13 @@ use rustc_errors::FatalError;
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::subst::{GenericArg, InternalSubsts, Subst};
-use rustc_middle::ty::{self, Ty, TyCtxt, TypeFoldable, TypeVisitor, WithConstness};
+use rustc_middle::ty::{self, Ty, TyCtxt, TypeFoldable, TypeVisitor};
 use rustc_middle::ty::{Predicate, ToPredicate};
 use rustc_session::lint::builtin::WHERE_CLAUSES_OBJECT_SAFETY;
 use rustc_span::symbol::Symbol;
 use rustc_span::{MultiSpan, Span};
 use smallvec::SmallVec;
 
-use std::array;
 use std::iter;
 use std::ops::ControlFlow;
 
@@ -51,10 +50,7 @@ pub fn astconv_object_safety_violations(
     violations
 }
 
-fn object_safety_violations(
-    tcx: TyCtxt<'tcx>,
-    trait_def_id: DefId,
-) -> &'tcx [ObjectSafetyViolation] {
+fn object_safety_violations(tcx: TyCtxt<'_>, trait_def_id: DefId) -> &'_ [ObjectSafetyViolation] {
     debug_assert!(tcx.generics_of(trait_def_id).has_self);
     debug!("object_safety_violations: {:?}", trait_def_id);
 
@@ -273,7 +269,7 @@ fn bounds_reference_self(tcx: TyCtxt<'_>, trait_def_id: DefId) -> SmallVec<[Span
         .collect()
 }
 
-fn predicate_references_self(
+fn predicate_references_self<'tcx>(
     tcx: TyCtxt<'tcx>,
     (predicate, sp): (ty::Predicate<'tcx>, Span),
 ) -> Option<Span> {
@@ -692,13 +688,14 @@ fn receiver_is_dispatchable<'tcx>(
                 .to_predicate(tcx)
         };
 
-        let caller_bounds: Vec<Predicate<'tcx>> = param_env
-            .caller_bounds()
-            .iter()
-            .chain(array::IntoIter::new([unsize_predicate, trait_predicate]))
-            .collect();
+        let caller_bounds: Vec<Predicate<'tcx>> =
+            param_env.caller_bounds().iter().chain([unsize_predicate, trait_predicate]).collect();
 
-        ty::ParamEnv::new(tcx.intern_predicates(&caller_bounds), param_env.reveal())
+        ty::ParamEnv::new(
+            tcx.intern_predicates(&caller_bounds),
+            param_env.reveal(),
+            param_env.constness(),
+        )
     };
 
     // Receiver: DispatchFromDyn<Receiver[Self => U]>

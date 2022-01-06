@@ -79,7 +79,7 @@ src/test/rustdoc-gui/src/**.lock
 /.litani_cache_dir
 /.ninja_deps
 /.ninja_log
-/src/test/dashboard
+/src/test/bookrunner
 *Cargo.lock
 src/test/rmc-dependency-test/diamond-dependency/build
 src/test/rmc-multicrate/type-mismatch/mismatch/target

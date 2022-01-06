@@ -129,7 +129,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             self.describe_enclosure(obligation.cause.body_id).map(|s| s.to_owned()),
         )];
 
-        match obligation.cause.code {
+        match obligation.cause.code() {
             ObligationCauseCode::BuiltinDerivedObligation(..)
             | ObligationCauseCode::ImplDerivedObligation(..)
             | ObligationCauseCode::DerivedObligation(..) => {}
@@ -141,7 +141,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         }
 
         if let ObligationCauseCode::ItemObligation(item)
-        | ObligationCauseCode::BindingObligation(item, _) = obligation.cause.code
+        | ObligationCauseCode::BindingObligation(item, _) = *obligation.cause.code()
         {
             // FIXME: maybe also have some way of handling methods
             // from other traits? That would require name resolution,
@@ -231,7 +231,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         if let Ok(Some(command)) =
             OnUnimplementedDirective::of_item(self.tcx, trait_ref.def_id, def_id)
         {
-            command.evaluate(self.tcx, trait_ref, &flags[..])
+            command.evaluate(self.tcx, trait_ref, &flags)
         } else {
             OnUnimplementedNote::default()
         }

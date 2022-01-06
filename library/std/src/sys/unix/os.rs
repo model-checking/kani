@@ -97,6 +97,7 @@ pub fn errno() -> i32 {
 }
 
 #[cfg(target_os = "dragonfly")]
+#[allow(dead_code)]
 pub fn set_errno(e: i32) {
     extern "C" {
         #[thread_local]
@@ -472,10 +473,7 @@ impl Iterator for Env {
 
 #[cfg(target_os = "macos")]
 pub unsafe fn environ() -> *mut *const *const c_char {
-    extern "C" {
-        fn _NSGetEnviron() -> *mut *const *const c_char;
-    }
-    _NSGetEnviron()
+    libc::_NSGetEnviron() as *mut *const *const c_char
 }
 
 #[cfg(not(target_os = "macos"))]

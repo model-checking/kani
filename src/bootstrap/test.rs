@@ -1227,7 +1227,7 @@ default_test!(CargoRMC { path: "src/test/cargo-rmc", mode: "cargo-rmc", suite: "
 
 default_test!(Expected { path: "src/test/expected", mode: "expected", suite: "expected" });
 
-default_test!(Dashboard { path: "src/test/dashboard", mode: "rmc", suite: "dashboard" });
+default_test!(BookRunner { path: "src/test/bookrunner", mode: "rmc", suite: "bookrunner" });
 
 default_test!(RmcDocs { path: "src/test/rmc-docs", mode: "rmc", suite: "rmc-docs" });
 

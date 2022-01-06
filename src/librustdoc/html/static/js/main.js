@@ -94,6 +94,7 @@ function getVirtualKey(ev) {
 
 var THEME_PICKER_ELEMENT_ID = "theme-picker";
 var THEMES_ELEMENT_ID = "theme-choices";
+var MAIN_ID = "main-content";
 
 function getThemesElement() {
     return document.getElementById(THEMES_ELEMENT_ID);
@@ -362,7 +363,7 @@ function hideThemeButtonState() {
     }
 
     var toggleAllDocsId = "toggle-all-docs";
-    var main = document.getElementById("main");
+    var main = document.getElementById(MAIN_ID);
     var savedHash = "";
 
     function handleHashes(ev) {
@@ -419,6 +420,13 @@ function hideThemeButtonState() {
         return document.getElementById("help");
     }
 
+    /**
+     * Show the help popup.
+     *
+     * @param {boolean} display    - Whether to show or hide the popup
+     * @param {Event}   ev         - The event that triggered this call
+     * @param {Element} [help]     - The help element if it already exists
+     */
     function displayHelp(display, ev, help) {
         if (display) {
             help = help ? help : getHelpElement(true);
@@ -787,7 +795,7 @@ function hideThemeButtonState() {
         } else {
             addClass(innerToggle, "will-expand");
             onEachLazy(document.getElementsByClassName("rustdoc-toggle"), function(e) {
-                if (e.parentNode.id !== "main" ||
+                if (e.parentNode.id !== MAIN_ID ||
                     (!hasClass(e, "implementors-toggle") &&
                      !hasClass(e, "type-contents-toggle")))
                 {
@@ -1001,7 +1009,7 @@ function hideThemeButtonState() {
         container.appendChild(rustdoc_version);
 
         popup.appendChild(container);
-        insertAfter(popup, searchState.outputElement());
+        insertAfter(popup, document.querySelector("main"));
         // So that it's only built once and then it'll do nothing when called!
         buildHelperPopup = function() {};
     };

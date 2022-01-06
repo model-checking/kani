@@ -8,6 +8,7 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
+use rustc_hir::definitions::DefPathData;
 use rustc_hir::Mutability;
 use rustc_metadata::creader::{CStore, LoadedMacro};
 use rustc_middle::ty::{self, TyCtxt};
@@ -15,12 +16,11 @@ use rustc_span::hygiene::MacroKind;
 use rustc_span::symbol::{kw, sym, Symbol};
 
 use crate::clean::{
-    self, utils, Attributes, AttributesExt, ImplKind, ItemId, NestedAttributesExt, Type,
+    self, clean_fn_decl_from_did_and_sig, clean_ty_generics, utils, Attributes, AttributesExt,
+    Clean, ImplKind, ItemId, Type, Visibility,
 };
 use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
-
-use super::{Clean, Visibility};
 
 type Attrs<'hir> = rustc_middle::ty::Attributes<'hir>;
 
@@ -166,9 +166,8 @@ crate fn record_extern_fqn(cx: &mut DocContext<'_>, did: DefId, kind: ItemType) 
     let crate_name = cx.tcx.crate_name(did.krate).to_string();
 
     let relative = cx.tcx.def_path(did).data.into_iter().filter_map(|elem| {
-        // extern blocks have an empty name
-        let s = elem.data.to_string();
-        if !s.is_empty() { Some(s) } else { None }
+        // Filter out extern blocks
+        (elem.data != DefPathData::ForeignMod).then(|| elem.data.to_string())
     });
     let fqn = if let ItemType::Macro = kind {
         // Check to see if it is a macro 2.0 or built-in macro
@@ -208,7 +207,7 @@ crate fn build_external_trait(cx: &mut DocContext<'_>, did: DefId) -> clean::Tra
         .collect();
 
     let predicates = cx.tcx.predicates_of(did);
-    let generics = (cx.tcx.generics_of(did), predicates).clean(cx);
+    let generics = clean_ty_generics(cx, cx.tcx.generics_of(did), predicates);
     let generics = filter_non_trait_generics(did, generics);
     let (generics, supertrait_bounds) = separate_supertrait_bounds(generics);
     let is_auto = cx.tcx.trait_is_auto(did);
@@ -230,7 +229,9 @@ fn build_external_function(cx: &mut DocContext<'_>, did: DefId) -> clean::Functi
     let predicates = cx.tcx.predicates_of(did);
     let (generics, decl) = clean::enter_impl_trait(cx, |cx| {
         // NOTE: generics need to be cleaned before the decl!
-        ((cx.tcx.generics_of(did), predicates).clean(cx), (did, sig).clean(cx))
+        let generics = clean_ty_generics(cx, cx.tcx.generics_of(did), predicates);
+        let decl = clean_fn_decl_from_did_and_sig(cx, did, sig);
+        (generics, decl)
     });
     clean::Function {
         decl,
@@ -243,7 +244,7 @@ fn build_enum(cx: &mut DocContext<'_>, did: DefId) -> clean::Enum {
     let predicates = cx.tcx.explicit_predicates_of(did);
 
     clean::Enum {
-        generics: (cx.tcx.generics_of(did), predicates).clean(cx),
+        generics: clean_ty_generics(cx, cx.tcx.generics_of(did), predicates),
         variants_stripped: false,
         variants: cx.tcx.adt_def(did).variants.iter().map(|v| v.clean(cx)).collect(),
     }
@@ -255,7 +256,7 @@ fn build_struct(cx: &mut DocContext<'_>, did: DefId) -> clean::Struct {
 
     clean::Struct {
         struct_type: variant.ctor_kind,
-        generics: (cx.tcx.generics_of(did), predicates).clean(cx),
+        generics: clean_ty_generics(cx, cx.tcx.generics_of(did), predicates),
         fields: variant.fields.iter().map(|x| x.clean(cx)).collect(),
         fields_stripped: false,
     }
@@ -265,7 +266,7 @@ fn build_union(cx: &mut DocContext<'_>, did: DefId) -> clean::Union {
     let predicates = cx.tcx.explicit_predicates_of(did);
     let variant = cx.tcx.adt_def(did).non_enum_variant();
 
-    let generics = (cx.tcx.generics_of(did), predicates).clean(cx);
+    let generics = clean_ty_generics(cx, cx.tcx.generics_of(did), predicates);
     let fields = variant.fields.iter().map(|x| x.clean(cx)).collect();
     clean::Union { generics, fields, fields_stripped: false }
 }
@@ -276,7 +277,7 @@ fn build_type_alias(cx: &mut DocContext<'_>, did: DefId) -> clean::Typedef {
 
     clean::Typedef {
         type_,
-        generics: (cx.tcx.generics_of(did), predicates).clean(cx),
+        generics: clean_ty_generics(cx, cx.tcx.generics_of(did), predicates),
         item_type: None,
     }
 }
@@ -420,7 +421,7 @@ crate fn build_impl(
                                 associated_trait.def_id,
                             )
                             .unwrap(); // SAFETY: For all impl items there exists trait item that has the same name.
-                        !tcx.get_attrs(trait_item.def_id).lists(sym::doc).has_word(sym::hidden)
+                        !tcx.is_doc_hidden(trait_item.def_id)
                     } else {
                         true
                     }
@@ -440,7 +441,9 @@ crate fn build_impl(
                     }
                 })
                 .collect::<Vec<_>>(),
-            clean::enter_impl_trait(cx, |cx| (tcx.generics_of(did), predicates).clean(cx)),
+            clean::enter_impl_trait(cx, |cx| {
+                clean_ty_generics(cx, tcx.generics_of(did), predicates)
+            }),
         ),
     };
     let polarity = tcx.impl_polarity(did);
@@ -453,7 +456,7 @@ crate fn build_impl(
     let mut stack: Vec<&Type> = vec![&for_];
 
     if let Some(did) = trait_.as_ref().map(|t| t.def_id()) {
-        if tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
+        if tcx.is_doc_hidden(did) {
             return;
         }
     }
@@ -463,7 +466,7 @@ crate fn build_impl(
 
     while let Some(ty) = stack.pop() {
         if let Some(did) = ty.def_id(&cx.cache) {
-            if tcx.get_attrs(did).lists(sym::doc).has_word(sym::hidden) {
+            if tcx.is_doc_hidden(did) {
                 return;
             }
         }

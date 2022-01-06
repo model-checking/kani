@@ -31,7 +31,7 @@ use rustc_middle::ty::fold::TypeFoldable;
 use rustc_middle::ty::subst::{GenericArgKind, SubstsRef, UserSubsts};
 use rustc_middle::ty::{
     self, CanonicalUserTypeAnnotation, CanonicalUserTypeAnnotations, OpaqueTypeKey, RegionVid,
-    ToPredicate, Ty, TyCtxt, UserType, UserTypeAnnotationIndex, WithConstness,
+    ToPredicate, Ty, TyCtxt, UserType, UserTypeAnnotationIndex,
 };
 use rustc_span::def_id::CRATE_DEF_ID;
 use rustc_span::{Span, DUMMY_SP};
@@ -945,7 +945,7 @@ crate struct MirTypeckRegionConstraints<'tcx> {
     crate type_tests: Vec<TypeTest<'tcx>>,
 }
 
-impl MirTypeckRegionConstraints<'tcx> {
+impl<'tcx> MirTypeckRegionConstraints<'tcx> {
     fn placeholder_region(
         &mut self,
         infcx: &InferCtxt<'_, 'tcx>,
@@ -1828,9 +1828,15 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                     self.assert_iscleanup(body, block_data, unwind, true);
                 }
             }
-            TerminatorKind::InlineAsm { destination, .. } => {
+            TerminatorKind::InlineAsm { destination, cleanup, .. } => {
                 if let Some(target) = destination {
                     self.assert_iscleanup(body, block_data, target, is_cleanup);
+                }
+                if let Some(cleanup) = cleanup {
+                    if is_cleanup {
+                        span_mirbug!(self, block_data, "cleanup on cleanup block")
+                    }
+                    self.assert_iscleanup(body, block_data, cleanup, true);
                 }
             }
         }
@@ -1910,7 +1916,8 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
         let tcx = self.tcx();
 
         match *ak {
-            AggregateKind::Adt(def, variant_index, substs, _, active_field_index) => {
+            AggregateKind::Adt(adt_did, variant_index, substs, _, active_field_index) => {
+                let def = tcx.adt_def(adt_did);
                 let variant = &def.variants[variant_index];
                 let adj_field_index = active_field_index.unwrap_or(field_index);
                 if let Some(field) = variant.fields.get(adj_field_index) {
@@ -2615,8 +2622,8 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
         );
 
         let (def_id, instantiated_predicates) = match aggregate_kind {
-            AggregateKind::Adt(def, _, substs, _, _) => {
-                (def.did, tcx.predicates_of(def.did).instantiate(tcx, substs))
+            AggregateKind::Adt(adt_did, _, substs, _, _) => {
+                (*adt_did, tcx.predicates_of(*adt_did).instantiate(tcx, substs))
             }
 
             // For closures, we have some **extra requirements** we

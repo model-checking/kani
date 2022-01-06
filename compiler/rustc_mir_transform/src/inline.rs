@@ -37,21 +37,16 @@ struct CallSite<'tcx> {
     source_info: SourceInfo,
 }
 
-/// Returns true if MIR inlining is enabled in the current compilation session.
-crate fn is_enabled(tcx: TyCtxt<'_>) -> bool {
-    if let Some(enabled) = tcx.sess.opts.debugging_opts.inline_mir {
-        return enabled;
-    }
-
-    tcx.sess.mir_opt_level() >= 3
-}
-
 impl<'tcx> MirPass<'tcx> for Inline {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        if !is_enabled(tcx) {
-            return;
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
+        if let Some(enabled) = sess.opts.debugging_opts.inline_mir {
+            return enabled;
         }
 
+        sess.opts.mir_opt_level() >= 3
+    }
+
+    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         let span = trace_span!("inline", body = %tcx.def_path_str(body.source.def_id()));
         let _guard = span.enter();
         if inline(tcx, body) {
@@ -62,7 +57,7 @@ impl<'tcx> MirPass<'tcx> for Inline {
     }
 }
 
-fn inline(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) -> bool {
+fn inline<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) -> bool {
     let def_id = body.source.def_id();
     let hir_id = tcx.hir().local_def_id_to_hir_id(def_id.expect_local());
 
@@ -71,6 +66,12 @@ fn inline(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) -> bool {
         return false;
     }
     if body.source.promoted.is_some() {
+        return false;
+    }
+    // Avoid inlining into generators, since their `optimized_mir` is used for layout computation,
+    // which can create a cycle, even when no attempt is made to inline the function in the other
+    // direction.
+    if body.generator.is_some() {
         return false;
     }
 
@@ -100,7 +101,7 @@ struct Inliner<'tcx> {
     changed: bool,
 }
 
-impl Inliner<'tcx> {
+impl<'tcx> Inliner<'tcx> {
     fn process_blocks(&mut self, caller_body: &mut Body<'tcx>, blocks: Range<BasicBlock>) {
         for bb in blocks {
             let bb_data = &caller_body[bb];
@@ -207,19 +208,12 @@ impl Inliner<'tcx> {
 
         if let Some(callee_def_id) = callee.def_id().as_local() {
             let callee_hir_id = self.tcx.hir().local_def_id_to_hir_id(callee_def_id);
-            // Avoid inlining into generators,
-            // since their `optimized_mir` is used for layout computation, which can
-            // create a cycle, even when no attempt is made to inline the function
-            // in the other direction.
-            if caller_body.generator.is_some() {
-                return Err("local generator (query cycle avoidance)");
-            }
-
             // Avoid a cycle here by only using `instance_mir` only if we have
             // a lower `HirId` than the callee. This ensures that the callee will
             // not inline us. This trick only works without incremental compilation.
             // So don't do it if that is enabled.
-            if !self.tcx.dep_graph.is_fully_enabled() && self.hir_id < callee_hir_id {
+            if !self.tcx.dep_graph.is_fully_enabled() && self.hir_id.index() < callee_hir_id.index()
+            {
                 return Ok(());
             }
 
@@ -441,6 +435,13 @@ impl Inliner<'tcx> {
                     }
                 }
                 TerminatorKind::Resume => cost += RESUME_PENALTY,
+                TerminatorKind::InlineAsm { cleanup, .. } => {
+                    cost += INSTR_COST;
+
+                    if cleanup.is_some() {
+                        cost += LANDINGPAD_PENALTY;
+                    }
+                }
                 _ => cost += INSTR_COST,
             }
 
@@ -784,7 +785,7 @@ struct Integrator<'a, 'tcx> {
     always_live_locals: BitSet<Local>,
 }
 
-impl<'a, 'tcx> Integrator<'a, 'tcx> {
+impl Integrator<'_, '_> {
     fn map_local(&self, local: Local) -> Local {
         let new = if local == RETURN_PLACE {
             self.destination.local
@@ -813,7 +814,7 @@ impl<'a, 'tcx> Integrator<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> MutVisitor<'tcx> for Integrator<'a, 'tcx> {
+impl<'tcx> MutVisitor<'tcx> for Integrator<'_, 'tcx> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
@@ -954,9 +955,13 @@ impl<'a, 'tcx> MutVisitor<'tcx> for Integrator<'a, 'tcx> {
             {
                 bug!("False unwinds should have been removed before inlining")
             }
-            TerminatorKind::InlineAsm { ref mut destination, .. } => {
+            TerminatorKind::InlineAsm { ref mut destination, ref mut cleanup, .. } => {
                 if let Some(ref mut tgt) = *destination {
                     *tgt = self.map_block(*tgt);
+                } else if !self.in_cleanup_block {
+                    // Unless this inline asm is in a cleanup block, add an unwind edge to
+                    // the original call's cleanup block
+                    *cleanup = self.cleanup_block;
                 }
             }
         }

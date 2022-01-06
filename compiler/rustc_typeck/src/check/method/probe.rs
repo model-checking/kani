@@ -21,7 +21,7 @@ use rustc_infer::infer::{self, InferOk, TyCtxtInferExt};
 use rustc_middle::middle::stability;
 use rustc_middle::ty::subst::{InternalSubsts, Subst, SubstsRef};
 use rustc_middle::ty::GenericParamDefKind;
-use rustc_middle::ty::{self, ParamEnvAnd, ToPredicate, Ty, TyCtxt, TypeFoldable, WithConstness};
+use rustc_middle::ty::{self, ParamEnvAnd, ToPredicate, Ty, TyCtxt, TypeFoldable};
 use rustc_session::lint;
 use rustc_span::def_id::LocalDefId;
 use rustc_span::lev_distance::{find_best_match_for_name, lev_distance};
@@ -1038,7 +1038,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             .collect();
 
         // Sort them by the name so we have a stable result.
-        names.sort_by_cached_key(|n| n.as_str());
+        names.sort_by(|a, b| a.as_str().partial_cmp(b.as_str()).unwrap());
         names
     }
 
@@ -1372,7 +1372,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
 
         if applicable_candidates.len() > 1 {
             if let Some(pick) =
-                self.collapse_candidates_to_trait_pick(self_ty, &applicable_candidates[..])
+                self.collapse_candidates_to_trait_pick(self_ty, &applicable_candidates)
             {
                 return Some(Ok(pick));
             }
@@ -1908,7 +1908,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
                     .associated_items(def_id)
                     .in_definition_order()
                     .filter(|x| {
-                        let dist = lev_distance(&*name.as_str(), &x.ident.as_str());
+                        let dist = lev_distance(name.as_str(), x.ident.as_str());
                         x.kind.namespace() == Namespace::ValueNS && dist > 0 && dist <= max_dist
                     })
                     .copied()

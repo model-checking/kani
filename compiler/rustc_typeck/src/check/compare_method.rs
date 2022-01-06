@@ -208,8 +208,11 @@ fn compare_predicate_entailment<'tcx>(
     // The key step here is to update the caller_bounds's predicates to be
     // the new hybrid bounds we computed.
     let normalize_cause = traits::ObligationCause::misc(impl_m_span, impl_m_hir_id);
-    let param_env =
-        ty::ParamEnv::new(tcx.intern_predicates(&hybrid_preds.predicates), Reveal::UserFacing);
+    let param_env = ty::ParamEnv::new(
+        tcx.intern_predicates(&hybrid_preds.predicates),
+        Reveal::UserFacing,
+        hir::Constness::NotConst,
+    );
     let param_env =
         traits::normalize_param_env_or_error(tcx, impl_m.def_id, param_env, normalize_cause);
 
@@ -229,7 +232,7 @@ fn compare_predicate_entailment<'tcx>(
 
             inh.register_predicates(obligations);
             let mut cause = cause.clone();
-            cause.make_mut().span = span;
+            cause.span = span;
             inh.register_predicate(traits::Obligation::new(cause, param_env, predicate));
         }
 
@@ -290,7 +293,7 @@ fn compare_predicate_entailment<'tcx>(
             let (impl_err_span, trait_err_span) =
                 extract_spans_for_error_reporting(&infcx, &terr, &cause, impl_m, trait_m);
 
-            cause.make_mut().span = impl_err_span;
+            cause.span = impl_err_span;
 
             let mut diag = struct_span_err!(
                 tcx.sess,
@@ -379,6 +382,7 @@ fn compare_predicate_entailment<'tcx>(
                     found: impl_fty,
                 })),
                 &terr,
+                false,
             );
             diag.emit();
             return Err(ErrorReported);
@@ -734,8 +738,7 @@ fn compare_number_of_method_arguments<'tcx>(
             tcx.sess,
             impl_span,
             E0050,
-            "method `{}` has {} but the declaration in \
-                                        trait `{}` has {}",
+            "method `{}` has {} but the declaration in trait `{}` has {}",
             trait_m.ident,
             potentially_plural_count(impl_number_args, "parameter"),
             tcx.def_path_str(trait_m.def_id),
@@ -1040,7 +1043,7 @@ crate fn compare_const_impl<'tcx>(
 
             // Locate the Span containing just the type of the offending impl
             match tcx.hir().expect_impl_item(impl_c.def_id.expect_local()).kind {
-                ImplItemKind::Const(ref ty, _) => cause.make_mut().span = ty.span,
+                ImplItemKind::Const(ref ty, _) => cause.span = ty.span,
                 _ => bug!("{:?} is not a impl const", impl_c),
             }
 
@@ -1069,6 +1072,7 @@ crate fn compare_const_impl<'tcx>(
                     found: impl_ty,
                 })),
                 &terr,
+                false,
             );
             diag.emit();
         }
@@ -1099,7 +1103,8 @@ crate fn compare_ty_impl<'tcx>(
     let _: Result<(), ErrorReported> = (|| {
         compare_number_of_generics(tcx, impl_ty, impl_ty_span, trait_ty, trait_item_span)?;
 
-        compare_type_predicate_entailment(tcx, impl_ty, impl_ty_span, trait_ty, impl_trait_ref)?;
+        let sp = tcx.def_span(impl_ty.def_id);
+        compare_type_predicate_entailment(tcx, impl_ty, sp, trait_ty, impl_trait_ref)?;
 
         check_type_bounds(tcx, trait_ty, impl_ty, impl_ty_span, impl_trait_ref)
     })();
@@ -1165,8 +1170,11 @@ fn compare_type_predicate_entailment<'tcx>(
     debug!("compare_type_predicate_entailment: bounds={:?}", hybrid_preds);
 
     let normalize_cause = traits::ObligationCause::misc(impl_ty_span, impl_ty_hir_id);
-    let param_env =
-        ty::ParamEnv::new(tcx.intern_predicates(&hybrid_preds.predicates), Reveal::UserFacing);
+    let param_env = ty::ParamEnv::new(
+        tcx.intern_predicates(&hybrid_preds.predicates),
+        Reveal::UserFacing,
+        hir::Constness::NotConst,
+    );
     let param_env = traits::normalize_param_env_or_error(
         tcx,
         impl_ty.def_id,
@@ -1351,7 +1359,11 @@ pub fn check_type_bounds<'tcx>(
                 .to_predicate(tcx),
             ),
         };
-        ty::ParamEnv::new(tcx.intern_predicates(&predicates), Reveal::UserFacing)
+        ty::ParamEnv::new(
+            tcx.intern_predicates(&predicates),
+            Reveal::UserFacing,
+            param_env.constness(),
+        )
     };
     debug!(?normalize_param_env);
 
@@ -1360,13 +1372,7 @@ pub fn check_type_bounds<'tcx>(
         impl_ty_substs.rebase_onto(tcx, impl_ty.container.id(), impl_trait_ref.substs);
 
     tcx.infer_ctxt().enter(move |infcx| {
-        let constness = impl_ty
-            .container
-            .impl_def_id()
-            .map(|did| tcx.impl_constness(did))
-            .unwrap_or(hir::Constness::NotConst);
-
-        let inh = Inherited::with_constness(infcx, impl_ty.def_id.expect_local(), constness);
+        let inh = Inherited::new(infcx, impl_ty.def_id.expect_local());
         let infcx = &inh.infcx;
         let mut selcx = traits::SelectionContext::new(&infcx);
 
@@ -1410,8 +1416,7 @@ pub fn check_type_bounds<'tcx>(
 
         // Check that all obligations are satisfied by the implementation's
         // version.
-        let errors =
-            inh.fulfillment_cx.borrow_mut().select_all_with_constness_or_error(&infcx, constness);
+        let errors = inh.fulfillment_cx.borrow_mut().select_all_or_error(&infcx);
         if !errors.is_empty() {
             infcx.report_fulfillment_errors(&errors, None, false);
             return Err(ErrorReported);

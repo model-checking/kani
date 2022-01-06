@@ -377,7 +377,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     })
                 });
                 let adt = Box::new(AggregateKind::Adt(
-                    adt_def,
+                    adt_def.did,
                     variant_index,
                     substs,
                     user_ty,
@@ -467,8 +467,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                         } else {
                             Some(destination_block)
                         },
+                        cleanup: None,
                     },
                 );
+                if options.contains(InlineAsmOptions::MAY_UNWIND) {
+                    this.diverge_from(block);
+                }
                 destination_block.unit()
             }
 

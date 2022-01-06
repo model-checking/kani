@@ -9,7 +9,6 @@ use crate::traits::normalize_projection_type;
 
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stack::ensure_sufficient_stack;
-use rustc_data_structures::sync::Lrc;
 use rustc_errors::{
     error_code, pluralize, struct_span_err, Applicability, DiagnosticBuilder, Style,
 };
@@ -21,7 +20,7 @@ use rustc_hir::lang_items::LangItem;
 use rustc_hir::{AsyncGeneratorKind, GeneratorKind, Node};
 use rustc_middle::ty::{
     self, suggest_arbitrary_trait_bound, suggest_constraining_type_param, AdtKind, DefIdTree,
-    Infer, InferTy, ToPredicate, Ty, TyCtxt, TypeFoldable, WithConstness,
+    Infer, InferTy, ToPredicate, Ty, TyCtxt, TypeFoldable,
 };
 use rustc_middle::ty::{TypeAndMut, TypeckResults};
 use rustc_session::Limit;
@@ -87,6 +86,12 @@ pub trait InferCtxtExt<'tcx> {
         obligation: &PredicateObligation<'tcx>,
         err: &mut DiagnosticBuilder<'_>,
         trait_ref: ty::Binder<'tcx, ty::TraitRef<'tcx>>,
+    );
+
+    fn suggest_remove_await(
+        &self,
+        obligation: &PredicateObligation<'tcx>,
+        err: &mut DiagnosticBuilder<'_>,
     );
 
     fn suggest_change_mut(
@@ -192,7 +197,7 @@ fn predicate_constraint(generics: &hir::Generics<'_>, pred: String) -> (Span, St
 /// Type parameter needs more bounds. The trivial case is `T` `where T: Bound`, but
 /// it can also be an `impl Trait` param that needs to be decomposed to a type
 /// param for cleaner code.
-fn suggest_restriction(
+fn suggest_restriction<'tcx>(
     tcx: TyCtxt<'tcx>,
     generics: &hir::Generics<'tcx>,
     msg: &str,
@@ -262,8 +267,8 @@ fn suggest_restriction(
             match generics
                 .params
                 .iter()
-                .map(|p| p.bounds_span().unwrap_or(p.span))
-                .filter(|&span| generics.span.contains(span) && span.desugaring_kind().is_none())
+                .map(|p| p.bounds_span_for_suggestions().unwrap_or(p.span.shrink_to_hi()))
+                .filter(|&span| generics.span.contains(span) && span.can_be_used_for_suggestions())
                 .max_by_key(|span| span.hi())
             {
                 // `fn foo(t: impl Trait)`
@@ -271,7 +276,7 @@ fn suggest_restriction(
                 None => (generics.span, format!("<{}>", type_param)),
                 // `fn foo<A>(t: impl Trait)`
                 //        ^^^ suggest `<A, T: Trait>` here
-                Some(span) => (span.shrink_to_hi(), format!(", {}", type_param)),
+                Some(span) => (span, format!(", {}", type_param)),
             },
             // `fn foo(t: impl Trait)`
             //                       ^ suggest `where <T as Trait>::A: Bound`
@@ -491,7 +496,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
     ) {
         // It only make sense when suggesting dereferences for arguments
         let code = if let ObligationCauseCode::FunctionArgumentObligation { parent_code, .. } =
-            &obligation.cause.code
+            obligation.cause.code()
         {
             parent_code.clone()
         } else {
@@ -656,7 +661,8 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             }
             _ => return,
         };
-        if matches!(obligation.cause.code, ObligationCauseCode::FunctionArgumentObligation { .. }) {
+        if matches!(obligation.cause.code(), ObligationCauseCode::FunctionArgumentObligation { .. })
+        {
             // When the obligation error has been ensured to have been caused by
             // an argument, the `obligation.cause.span` points at the expression
             // of the argument, so we can provide a suggestion. Otherwise, we give
@@ -682,13 +688,13 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         let span = obligation.cause.span;
 
         let code = if let ObligationCauseCode::FunctionArgumentObligation { parent_code, .. } =
-            &obligation.cause.code
+            obligation.cause.code()
         {
-            parent_code.clone()
+            &parent_code
         } else if let ExpnKind::Desugaring(DesugaringKind::ForLoop) =
             span.ctxt().outer_expn_data().kind
         {
-            Lrc::new(obligation.cause.code.clone())
+            obligation.cause.code()
         } else {
             return false;
         };
@@ -741,7 +747,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
 
                     let msg = format!(
                         "the trait bound `{}: {}` is not satisfied",
-                        orig_ty.to_string(),
+                        orig_ty,
                         old_ref.print_only_trait_path(),
                     );
                     if has_custom_message {
@@ -799,12 +805,12 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             return false;
         };
 
-        if let ObligationCauseCode::ImplDerivedObligation(obligation) = &*code {
+        if let ObligationCauseCode::ImplDerivedObligation(obligation) = code {
             try_borrowing(obligation.parent_trait_ref, &[])
         } else if let ObligationCauseCode::BindingObligation(_, _)
-        | ObligationCauseCode::ItemObligation(_) = &*code
+        | ObligationCauseCode::ItemObligation(_) = code
         {
-            try_borrowing(*poly_trait_ref, &never_suggest_borrow[..])
+            try_borrowing(*poly_trait_ref, &never_suggest_borrow)
         } else {
             false
         }
@@ -873,6 +879,63 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         }
     }
 
+    fn suggest_remove_await(
+        &self,
+        obligation: &PredicateObligation<'tcx>,
+        err: &mut DiagnosticBuilder<'_>,
+    ) {
+        let span = obligation.cause.span;
+
+        if let ObligationCauseCode::AwaitableExpr(hir_id) = obligation.cause.code().peel_derives() {
+            let hir = self.tcx.hir();
+            if let Some(node) = hir_id.and_then(|hir_id| hir.find(hir_id)) {
+                if let hir::Node::Expr(expr) = node {
+                    // FIXME: use `obligation.predicate.kind()...trait_ref.self_ty()` to see if we have `()`
+                    // and if not maybe suggest doing something else? If we kept the expression around we
+                    // could also check if it is an fn call (very likely) and suggest changing *that*, if
+                    // it is from the local crate.
+                    err.span_suggestion_verbose(
+                        expr.span.shrink_to_hi().with_hi(span.hi()),
+                        "remove the `.await`",
+                        String::new(),
+                        Applicability::MachineApplicable,
+                    );
+                    // FIXME: account for associated `async fn`s.
+                    if let hir::Expr { span, kind: hir::ExprKind::Call(base, _), .. } = expr {
+                        if let ty::PredicateKind::Trait(pred) =
+                            obligation.predicate.kind().skip_binder()
+                        {
+                            err.span_label(
+                                *span,
+                                &format!("this call returns `{}`", pred.self_ty()),
+                            );
+                        }
+                        if let Some(typeck_results) =
+                            self.in_progress_typeck_results.map(|t| t.borrow())
+                        {
+                            let ty = typeck_results.expr_ty_adjusted(base);
+                            if let ty::FnDef(def_id, _substs) = ty.kind() {
+                                if let Some(hir::Node::Item(hir::Item { span, ident, .. })) =
+                                    hir.get_if_local(*def_id)
+                                {
+                                    err.span_suggestion_verbose(
+                                        span.shrink_to_lo(),
+                                        &format!(
+                                            "alternatively, consider making `fn {}` asynchronous",
+                                            ident
+                                        ),
+                                        "async ".to_string(),
+                                        Applicability::MaybeIncorrect,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Check if the trait bound is implemented for a different mutability and note it in the
     /// final error.
     fn suggest_change_mut(
@@ -882,7 +945,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         trait_ref: ty::Binder<'tcx, ty::TraitRef<'tcx>>,
     ) {
         let points_at_arg = matches!(
-            obligation.cause.code,
+            obligation.cause.code(),
             ObligationCauseCode::FunctionArgumentObligation { .. },
         );
 
@@ -1009,7 +1072,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         obligation: &PredicateObligation<'tcx>,
         trait_ref: ty::Binder<'tcx, ty::TraitRef<'tcx>>,
     ) -> bool {
-        match obligation.cause.code.peel_derives() {
+        match obligation.cause.code().peel_derives() {
             // Only suggest `impl Trait` if the return type is unsized because it is `dyn Trait`.
             ObligationCauseCode::SizedReturnType => {}
             _ => return false,
@@ -1132,7 +1195,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             <https://doc.rust-lang.org/book/ch17-02-trait-objects.html\
             #using-trait-objects-that-allow-for-values-of-different-types>";
         let has_dyn = snippet.split_whitespace().next().map_or(false, |s| s == "dyn");
-        let trait_obj = if has_dyn { &snippet[4..] } else { &snippet[..] };
+        let trait_obj = if has_dyn { &snippet[4..] } else { &snippet };
         if only_never_return {
             // No return paths, probably using `panic!()` or similar.
             // Suggest `-> T`, `-> impl Trait`, and if `Trait` is object safe, `-> Box<dyn Trait>`.
@@ -1204,7 +1267,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         err: &mut DiagnosticBuilder<'_>,
         obligation: &PredicateObligation<'tcx>,
     ) {
-        match obligation.cause.code.peel_derives() {
+        match obligation.cause.code().peel_derives() {
             ObligationCauseCode::SizedReturnType => {}
             _ => return,
         }
@@ -1398,7 +1461,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
         };
         let mut generator = None;
         let mut outer_generator = None;
-        let mut next_code = Some(&obligation.cause.code);
+        let mut next_code = Some(obligation.cause.code());
 
         let mut seen_upvar_tys_infer_tuple = false;
 
@@ -1654,130 +1717,63 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             format!("does not implement `{}`", trait_ref.print_only_trait_path())
         };
 
-        let mut explain_yield =
-            |interior_span: Span, yield_span: Span, scope_span: Option<Span>| {
-                let mut span = MultiSpan::from_span(yield_span);
-                if let Ok(snippet) = source_map.span_to_snippet(interior_span) {
-                    // #70935: If snippet contains newlines, display "the value" instead
-                    // so that we do not emit complex diagnostics.
-                    let snippet = &format!("`{}`", snippet);
-                    let snippet = if snippet.contains('\n') { "the value" } else { snippet };
-                    // The multispan can be complex here, like:
-                    // note: future is not `Send` as this value is used across an await
-                    //   --> $DIR/issue-70935-complex-spans.rs:13:9
-                    //    |
-                    // LL |            baz(|| async{
-                    //    |  __________^___-
-                    //    | | _________|
-                    //    | ||
-                    // LL | ||             foo(tx.clone());
-                    // LL | ||         }).await;
-                    //    | ||         -      ^- value is later dropped here
-                    //    | ||_________|______|
-                    //    | |__________|      await occurs here, with value maybe used later
-                    //    |            has type `closure` which is not `Send`
-                    //
-                    // So, detect it and separate into some notes, like:
-                    //
-                    // note: future is not `Send` as this value is used across an await
-                    //   --> $DIR/issue-70935-complex-spans.rs:13:9
-                    //    |
-                    // LL | /         baz(|| async{
-                    // LL | |             foo(tx.clone());
-                    // LL | |         }).await;
-                    //    | |________________^ first, await occurs here, with the value maybe used later...
-                    // note: the value is later dropped here
-                    //   --> $DIR/issue-70935-complex-spans.rs:15:17
-                    //    |
-                    // LL |         }).await;
-                    //    |                 ^
-                    //
-                    // If available, use the scope span to annotate the drop location.
-                    if let Some(scope_span) = scope_span {
-                        let scope_span = source_map.end_point(scope_span);
-                        let is_overlapped =
-                            yield_span.overlaps(scope_span) || yield_span.overlaps(interior_span);
-                        if is_overlapped {
-                            span.push_span_label(
-                                yield_span,
-                                format!(
-                                    "first, {} occurs here, with {} maybe used later...",
-                                    await_or_yield, snippet
-                                ),
-                            );
-                            err.span_note(
-                                span,
-                                &format!(
-                                    "{} {} as this value is used across {}",
-                                    future_or_generator, trait_explanation, an_await_or_yield
-                                ),
-                            );
-                            if source_map.is_multiline(interior_span) {
-                                err.span_note(
-                                    scope_span,
-                                    &format!("{} is later dropped here", snippet),
-                                );
-                                err.span_note(
-                                    interior_span,
-                                    &format!(
-                                        "this has type `{}` which {}",
-                                        target_ty, trait_explanation
-                                    ),
-                                );
-                            } else {
-                                let mut span = MultiSpan::from_span(scope_span);
-                                span.push_span_label(
-                                    interior_span,
-                                    format!("has type `{}` which {}", target_ty, trait_explanation),
-                                );
-                                err.span_note(span, &format!("{} is later dropped here", snippet));
-                            }
-                        } else {
-                            span.push_span_label(
-                                yield_span,
-                                format!(
-                                    "{} occurs here, with {} maybe used later",
-                                    await_or_yield, snippet
-                                ),
-                            );
-                            span.push_span_label(
-                                scope_span,
-                                format!("{} is later dropped here", snippet),
-                            );
-                            span.push_span_label(
-                                interior_span,
-                                format!("has type `{}` which {}", target_ty, trait_explanation),
-                            );
-                            err.span_note(
-                                span,
-                                &format!(
-                                    "{} {} as this value is used across {}",
-                                    future_or_generator, trait_explanation, an_await_or_yield
-                                ),
-                            );
-                        }
+        let mut explain_yield = |interior_span: Span,
+                                 yield_span: Span,
+                                 scope_span: Option<Span>| {
+            let mut span = MultiSpan::from_span(yield_span);
+            if let Ok(snippet) = source_map.span_to_snippet(interior_span) {
+                // #70935: If snippet contains newlines, display "the value" instead
+                // so that we do not emit complex diagnostics.
+                let snippet = &format!("`{}`", snippet);
+                let snippet = if snippet.contains('\n') { "the value" } else { snippet };
+                // note: future is not `Send` as this value is used across an await
+                //   --> $DIR/issue-70935-complex-spans.rs:13:9
+                //    |
+                // LL |            baz(|| async {
+                //    |  ______________-
+                //    | |
+                //    | |
+                // LL | |              foo(tx.clone());
+                // LL | |          }).await;
+                //    | |          - ^^^^^^ await occurs here, with value maybe used later
+                //    | |__________|
+                //    |            has type `closure` which is not `Send`
+                // note: value is later dropped here
+                // LL | |          }).await;
+                //    | |                  ^
+                //
+                span.push_span_label(
+                    yield_span,
+                    format!("{} occurs here, with {} maybe used later", await_or_yield, snippet),
+                );
+                span.push_span_label(
+                    interior_span,
+                    format!("has type `{}` which {}", target_ty, trait_explanation),
+                );
+                // If available, use the scope span to annotate the drop location.
+                let mut scope_note = None;
+                if let Some(scope_span) = scope_span {
+                    let scope_span = source_map.end_point(scope_span);
+
+                    let msg = format!("{} is later dropped here", snippet);
+                    if source_map.is_multiline(yield_span.between(scope_span)) {
+                        span.push_span_label(scope_span, msg);
                     } else {
-                        span.push_span_label(
-                            yield_span,
-                            format!(
-                                "{} occurs here, with {} maybe used later",
-                                await_or_yield, snippet
-                            ),
-                        );
-                        span.push_span_label(
-                            interior_span,
-                            format!("has type `{}` which {}", target_ty, trait_explanation),
-                        );
-                        err.span_note(
-                            span,
-                            &format!(
-                                "{} {} as this value is used across {}",
-                                future_or_generator, trait_explanation, an_await_or_yield
-                            ),
-                        );
+                        scope_note = Some((scope_span, msg));
                     }
                 }
-            };
+                err.span_note(
+                    span,
+                    &format!(
+                        "{} {} as this value is used across {}",
+                        future_or_generator, trait_explanation, an_await_or_yield
+                    ),
+                );
+                if let Some((span, msg)) = scope_note {
+                    err.span_note(span, &msg);
+                }
+            }
+        };
         match interior_or_upvar_span {
             GeneratorInteriorOrUpvar::Interior(interior_span) => {
                 if let Some((scope_span, yield_span, expr, from_awaited_ty)) = interior_extra_info {
@@ -1935,6 +1931,9 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
             | ObligationCauseCode::ReturnType
             | ObligationCauseCode::ReturnValue(_)
             | ObligationCauseCode::BlockTailExpression(_)
+            | ObligationCauseCode::AwaitableExpr(_)
+            | ObligationCauseCode::ForLoopIterator
+            | ObligationCauseCode::QuestionMark
             | ObligationCauseCode::LetElse => {}
             ObligationCauseCode::SliceOrArrayElem => {
                 err.note("slice and array elements must have `Sized` type");
@@ -2182,6 +2181,16 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                             err,
                             &parent_predicate,
                             &data.parent_code,
+                            obligated_types,
+                            seen_requirements,
+                        )
+                    });
+                } else {
+                    ensure_sufficient_stack(|| {
+                        self.note_obligation_cause_code(
+                            err,
+                            &parent_predicate,
+                            &cause_code.peel_derives(),
                             obligated_types,
                             seen_requirements,
                         )

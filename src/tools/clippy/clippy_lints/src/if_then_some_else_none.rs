@@ -1,9 +1,9 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::source::snippet_with_macro_callsite;
-use clippy_utils::{higher, is_else_clause, is_lang_ctor, meets_msrv, msrvs};
+use clippy_utils::{contains_return, higher, is_else_clause, is_lang_ctor, meets_msrv, msrvs, peel_blocks};
 use if_chain::if_chain;
 use rustc_hir::LangItem::{OptionNone, OptionSome};
-use rustc_hir::{Expr, ExprKind};
+use rustc_hir::{Expr, ExprKind, Stmt, StmtKind};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_middle::lint::in_external_macro;
 use rustc_semver::RustcVersion;
@@ -36,6 +36,7 @@ declare_clippy_lint! {
     ///     42
     /// });
     /// ```
+    #[clippy::version = "1.53.0"]
     pub IF_THEN_SOME_ELSE_NONE,
     restriction,
     "Finds if-else that could be written using `bool::then`"
@@ -76,11 +77,9 @@ impl LateLintPass<'_> for IfThenSomeElseNone {
             if let ExprKind::Call(then_call, [then_arg]) = then_expr.kind;
             if let ExprKind::Path(ref then_call_qpath) = then_call.kind;
             if is_lang_ctor(cx, then_call_qpath, OptionSome);
-            if let ExprKind::Block(els_block, _) = els.kind;
-            if els_block.stmts.is_empty();
-            if let Some(els_expr) = els_block.expr;
-            if let ExprKind::Path(ref qpath) = els_expr.kind;
+            if let ExprKind::Path(ref qpath) = peel_blocks(els).kind;
             if is_lang_ctor(cx, qpath, OptionNone);
+            if !stmts_contains_early_return(then_block.stmts);
             then {
                 let cond_snip = snippet_with_macro_callsite(cx, cond.span, "[condition]");
                 let cond_snip = if matches!(cond.kind, ExprKind::Unary(_, _) | ExprKind::Binary(_, _, _)) {
@@ -112,4 +111,12 @@ impl LateLintPass<'_> for IfThenSomeElseNone {
     }
 
     extract_msrv_attr!(LateContext);
+}
+
+fn stmts_contains_early_return(stmts: &[Stmt<'_>]) -> bool {
+    stmts.iter().any(|stmt| {
+        let Stmt { kind: StmtKind::Semi(e), .. } = stmt else { return false };
+
+        contains_return(e)
+    })
 }

@@ -72,7 +72,7 @@ crate fn krate(cx: &mut DocContext<'_>) -> Crate {
         }));
     }
 
-    Crate { module, primitives, external_traits: cx.external_traits.clone(), collapsed: false }
+    Crate { module, primitives, external_traits: cx.external_traits.clone() }
 }
 
 fn external_generic_args(
@@ -141,17 +141,12 @@ pub(super) fn external_path(
 }
 
 /// Remove the generic arguments from a path.
-crate fn strip_path_generics(path: Path) -> Path {
-    let segments = path
-        .segments
-        .iter()
-        .map(|s| PathSegment {
-            name: s.name,
-            args: GenericArgs::AngleBracketed { args: vec![], bindings: vec![] },
-        })
-        .collect();
+crate fn strip_path_generics(mut path: Path) -> Path {
+    for ps in path.segments.iter_mut() {
+        ps.args = GenericArgs::AngleBracketed { args: vec![], bindings: vec![] }
+    }
 
-    Path { res: path.res, segments }
+    path
 }
 
 crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
@@ -167,7 +162,7 @@ crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
             s.push_str("::");
         }
         if seg.ident.name != kw::PathRoot {
-            s.push_str(&seg.ident.as_str());
+            s.push_str(seg.ident.as_str());
         }
     }
     s
@@ -395,9 +390,7 @@ crate fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
     let (did, kind) = match res {
         // These should be added to the cache using `record_extern_fqn`.
         Res::Def(
-            kind
-            @
-            (AssocTy | AssocFn | AssocConst | Variant | Fn | TyAlias | Enum | Trait | Struct
+            kind @ (AssocTy | AssocFn | AssocConst | Variant | Fn | TyAlias | Enum | Trait | Struct
             | Union | Mod | ForeignTy | Const | Static | Macro(..) | TraitAlias),
             i,
         ) => (i, kind.into()),

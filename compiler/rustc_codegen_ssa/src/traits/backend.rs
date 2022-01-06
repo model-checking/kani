@@ -97,7 +97,8 @@ pub trait CodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         sess: &Session,
-    ) -> Result<(Box<dyn Any>, FxHashMap<WorkProductId, WorkProduct>), ErrorReported>;
+        outputs: &OutputFilenames,
+    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorReported>;
 
     /// This is called on the returned `Box<dyn Any>` from `join_codegen`
     ///
@@ -107,19 +108,13 @@ pub trait CodegenBackend {
     fn link(
         &self,
         sess: &Session,
-        codegen_results: Box<dyn Any>,
+        codegen_results: CodegenResults,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorReported>;
 }
 
 pub trait ExtraBackendMethods: CodegenBackend + WriteBackendMethods + Sized + Send + Sync {
     fn new_metadata(&self, sess: TyCtxt<'_>, mod_name: &str) -> Self::Module;
-    fn write_compressed_metadata<'tcx>(
-        &self,
-        tcx: TyCtxt<'tcx>,
-        metadata: &EncodedMetadata,
-        llvm_module: &mut Self::Module,
-    );
     fn codegen_allocator<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,

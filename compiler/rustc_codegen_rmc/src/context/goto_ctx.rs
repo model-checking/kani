@@ -92,6 +92,25 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Generate variables
 impl<'tcx> GotocCtx<'tcx> {
+    /// Declare a local variable.
+    /// Handles the bookkeeping of:
+    /// - creating the symbol
+    /// - inserting it into the symbol table
+    /// - adding the declaration to the local function
+    pub fn declare_variable<T: Into<InternedString>, U: Into<InternedString>>(
+        &mut self,
+        name: T,
+        base_name: U,
+        t: Type,
+        value: Option<Expr>,
+        l: Location,
+    ) -> Symbol {
+        let sym = Symbol::variable(name, base_name, t, l);
+        self.symbol_table.insert(sym.clone());
+        self.current_fn_mut().push_onto_block(Stmt::decl(sym.to_expr(), value, l));
+        sym
+    }
+
     // Generate a Symbol Expression representing a function variable from the MIR
     pub fn gen_function_local_variable(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
         self.gen_stack_variable(c, fname, "var", t, Location::none())

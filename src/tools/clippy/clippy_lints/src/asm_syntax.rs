@@ -65,6 +65,7 @@ declare_clippy_lint! {
     /// ```rust,no_run
     /// # #![feature(asm)]
     /// # unsafe { let ptr = "".as_ptr();
+    /// # use std::arch::asm;
     /// asm!("lea {}, [{}]", lateout(reg) _, in(reg) ptr);
     /// # }
     /// ```
@@ -72,9 +73,11 @@ declare_clippy_lint! {
     /// ```rust,no_run
     /// # #![feature(asm)]
     /// # unsafe { let ptr = "".as_ptr();
+    /// # use std::arch::asm;
     /// asm!("lea ({}), {}", in(reg) ptr, lateout(reg) _, options(att_syntax));
     /// # }
     /// ```
+    #[clippy::version = "1.49.0"]
     pub INLINE_ASM_X86_INTEL_SYNTAX,
     restriction,
     "prefer AT&T x86 assembly syntax"
@@ -101,6 +104,7 @@ declare_clippy_lint! {
     /// ```rust,no_run
     /// # #![feature(asm)]
     /// # unsafe { let ptr = "".as_ptr();
+    /// # use std::arch::asm;
     /// asm!("lea ({}), {}", in(reg) ptr, lateout(reg) _, options(att_syntax));
     /// # }
     /// ```
@@ -108,9 +112,11 @@ declare_clippy_lint! {
     /// ```rust,no_run
     /// # #![feature(asm)]
     /// # unsafe { let ptr = "".as_ptr();
+    /// # use std::arch::asm;
     /// asm!("lea {}, [{}]", lateout(reg) _, in(reg) ptr);
     /// # }
     /// ```
+    #[clippy::version = "1.49.0"]
     pub INLINE_ASM_X86_ATT_SYNTAX,
     restriction,
     "prefer Intel x86 assembly syntax"

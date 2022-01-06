@@ -331,9 +331,9 @@ pub struct Ident {
 
 impl Ident {
     fn new(sess: &ParseSess, sym: Symbol, is_raw: bool, span: Span) -> Ident {
-        let sym = nfc_normalize(&sym.as_str());
+        let sym = nfc_normalize(sym.as_str());
         let string = sym.as_str();
-        if !rustc_lexer::is_ident(&string) {
+        if !rustc_lexer::is_ident(string) {
             panic!("`{:?}` is not a valid identifier", string)
         }
         if is_raw && !sym.can_be_raw() {
@@ -466,13 +466,12 @@ impl server::TokenStream for Rustc<'_, '_> {
             ast::ExprKind::Unary(ast::UnOp::Neg, e) => match &e.kind {
                 ast::ExprKind::Lit(l) => match l.token {
                     token::Lit { kind: token::Integer | token::Float, .. } => {
-                        Ok(std::array::IntoIter::new([
+                        Ok(Self::TokenStream::from_iter([
                             // FIXME: The span of the `-` token is lost when
                             // parsing, so we cannot faithfully recover it here.
                             tokenstream::TokenTree::token(token::BinOp(token::Minus), e.span),
                             tokenstream::TokenTree::token(token::Literal(l.token), l.span),
-                        ])
-                        .collect())
+                        ]))
                     }
                     _ => Err(()),
                 },

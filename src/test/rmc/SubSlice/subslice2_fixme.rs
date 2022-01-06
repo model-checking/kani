@@ -27,8 +27,8 @@
 //           * #c_type: unsigned_long_int
 //       * value: 1
 //
-// Full support for subslice projection to be added in
-// https://github.com/model-checking/rmc/issues/357
+// This issue is captured in:
+// https://github.com/model-checking/rmc/issues/708
 
 fn main() {
     let arr = [1, 2, 3];

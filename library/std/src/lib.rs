@@ -216,10 +216,7 @@
 // std may use features in a platform-specific way
 #![allow(unused_features)]
 #![feature(rustc_allow_const_fn_unstable)]
-#![cfg_attr(
-    test,
-    feature(internal_output_capture, print_internals, update_panic_count, thread_local_const_init)
-)]
+#![cfg_attr(test, feature(internal_output_capture, print_internals, update_panic_count))]
 #![cfg_attr(
     all(target_vendor = "fortanix", target_env = "sgx"),
     feature(slice_index_methods, coerce_unsized, sgx_platform)
@@ -236,7 +233,6 @@
 #![feature(allow_internal_unstable)]
 #![feature(arbitrary_self_types)]
 #![feature(array_error_internals)]
-#![feature(asm)]
 #![feature(assert_matches)]
 #![feature(associated_type_bounds)]
 #![feature(async_stream)]
@@ -253,8 +249,8 @@
 #![feature(cfg_target_thread_local)]
 #![feature(char_error_internals)]
 #![feature(char_internals)]
+#![cfg_attr(not(bootstrap), feature(concat_bytes))]
 #![feature(concat_idents)]
-#![feature(const_cstr_unchecked)]
 #![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_fn_fn_ptr_basics)]
 #![feature(const_fn_trait_bound)]
@@ -264,8 +260,7 @@
 #![feature(const_ipv4)]
 #![feature(const_ipv6)]
 #![feature(const_option)]
-#![cfg_attr(bootstrap, feature(const_raw_ptr_deref))]
-#![cfg_attr(not(bootstrap), feature(const_mut_refs))]
+#![feature(const_mut_refs)]
 #![feature(const_socketaddr)]
 #![feature(const_trait_impl)]
 #![feature(container_error_extra)]
@@ -275,9 +270,7 @@
 #![feature(decl_macro)]
 #![feature(doc_cfg)]
 #![feature(doc_cfg_hide)]
-#![cfg_attr(bootstrap, feature(doc_primitive))]
-#![cfg_attr(bootstrap, feature(doc_keyword))]
-#![cfg_attr(not(bootstrap), feature(rustdoc_internals))]
+#![feature(rustdoc_internals)]
 #![feature(doc_masked)]
 #![feature(doc_notable_trait)]
 #![feature(dropck_eyepatch)]
@@ -293,14 +286,12 @@
 #![feature(gen_future)]
 #![feature(generator_trait)]
 #![feature(get_mut_unchecked)]
-#![feature(global_asm)]
 #![feature(hashmap_internals)]
 #![feature(int_error_internals)]
 #![feature(integer_atomics)]
 #![feature(int_log)]
 #![feature(into_future)]
 #![feature(intra_doc_pointers)]
-#![feature(iter_zip)]
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(llvm_asm)]
@@ -309,6 +300,7 @@
 #![feature(maybe_uninit_extra)]
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_uninit_array)]
+#![feature(maybe_uninit_write_slice)]
 #![feature(min_specialization)]
 #![feature(mixed_integer_ops)]
 #![feature(must_not_suspend)]
@@ -323,8 +315,9 @@
 #![feature(panic_internals)]
 #![feature(panic_unwind)]
 #![feature(pin_static_ref)]
-#![cfg_attr(not(bootstrap), feature(portable_simd))]
+#![feature(portable_simd)]
 #![feature(prelude_import)]
+#![feature(ptr_as_uninit)]
 #![feature(ptr_internals)]
 #![feature(rustc_attrs)]
 #![feature(rustc_private)]
@@ -476,7 +469,6 @@ pub use core::ptr;
 #[stable(feature = "rust1", since = "1.0.0")]
 pub use core::result;
 #[unstable(feature = "portable_simd", issue = "86656")]
-#[cfg(not(bootstrap))]
 pub use core::simd;
 #[unstable(feature = "async_stream", issue = "79024")]
 pub use core::stream;
@@ -582,6 +574,14 @@ pub use core::{
     env, file, format_args, format_args_nl, include, include_bytes, include_str, line, llvm_asm,
     log_syntax, module_path, option_env, stringify, trace_macros,
 };
+
+#[unstable(
+    feature = "concat_bytes",
+    issue = "87555",
+    reason = "`concat_bytes` is not stable enough for use and is subject to change"
+)]
+#[cfg(not(bootstrap))]
+pub use core::concat_bytes;
 
 #[stable(feature = "core_primitive", since = "1.43.0")]
 pub use core::primitive;

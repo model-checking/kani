@@ -26,6 +26,7 @@ declare_clippy_lint! {
     /// let sad_people: Vec<&str> = vec![];
     /// assert!(sad_people.is_empty(), "there are sad people: {:?}", sad_people);
     /// ```
+    #[clippy::version = "1.57.0"]
     pub MANUAL_ASSERT,
     pedantic,
     "`panic!` and only a `panic!` in `if`-then statement"
@@ -49,7 +50,7 @@ impl LateLintPass<'_> for ManualAssert {
                 ..
             } = &expr;
             if is_expn_of(stmt.span, "panic").is_some();
-            if !matches!(cond.kind, ExprKind::Let(_, _, _));
+            if !matches!(cond.kind, ExprKind::Let(_));
             if let StmtKind::Semi(semi) = stmt.kind;
             if !cx.tcx.sess.source_map().is_multiline(cond.span);
 

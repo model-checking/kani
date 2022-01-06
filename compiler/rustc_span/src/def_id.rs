@@ -7,6 +7,7 @@ use rustc_macros::HashStable_Generic;
 use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std::borrow::Borrow;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 rustc_index::newtype_index! {
     pub struct CrateNum {
@@ -126,14 +127,17 @@ impl Borrow<Fingerprint> for DefPathHash {
     }
 }
 
-/// A [StableCrateId] is a 64 bit hash of the crate name combined with all
-/// `-Cmetadata` arguments. It is to [CrateNum] what [DefPathHash] is to
-/// [DefId]. It is stable across compilation sessions.
+/// A [`StableCrateId`] is a 64-bit hash of a crate name, together with all
+/// `-Cmetadata` arguments, and some other data. It is to [`CrateNum`] what [`DefPathHash`] is to
+/// [`DefId`]. It is stable across compilation sessions.
 ///
-/// Since the ID is a hash value there is a (very small) chance that two crates
-/// end up with the same [StableCrateId]. The compiler will check for such
+/// Since the ID is a hash value, there is a small chance that two crates
+/// end up with the same [`StableCrateId`]. The compiler will check for such
 /// collisions when loading crates and abort compilation in order to avoid
 /// further trouble.
+///
+/// See the discussion in [`DefId`] for more information
+/// on the possibility of hash collisions in rustc,
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[derive(HashStable_Generic, Encodable, Decodable)]
 pub struct StableCrateId(pub(crate) u64);
@@ -146,13 +150,10 @@ impl StableCrateId {
     /// Computes the stable ID for a crate with the given name and
     /// `-Cmetadata` arguments.
     pub fn new(crate_name: &str, is_exe: bool, mut metadata: Vec<String>) -> StableCrateId {
-        use std::hash::Hash;
-        use std::hash::Hasher;
-
         let mut hasher = StableHasher::new();
         crate_name.hash(&mut hasher);
 
-        // We don't want the stable crate id to dependent on the order
+        // We don't want the stable crate ID to depend on the order of
         // -C metadata arguments, so sort them:
         metadata.sort();
         // Every distinct -C metadata value is only incorporated once:
@@ -170,6 +171,18 @@ impl StableCrateId {
         // Also incorporate crate type, so that we don't get symbol conflicts when
         // linking against a library of the same name, if this is an executable.
         hasher.write(if is_exe { b"exe" } else { b"lib" });
+
+        // Also incorporate the rustc version. Otherwise, with -Zsymbol-mangling-version=v0
+        // and no -Cmetadata, symbols from the same crate compiled with different versions of
+        // rustc are named the same.
+        //
+        // RUSTC_FORCE_INCR_COMP_ARTIFACT_HEADER is used to inject rustc version information
+        // during testing.
+        if let Some(val) = std::env::var_os("RUSTC_FORCE_INCR_COMP_ARTIFACT_HEADER") {
+            hasher.write(val.to_string_lossy().into_owned().as_bytes())
+        } else {
+            hasher.write(option_env!("CFG_VERSION").unwrap_or("unknown version").as_bytes());
+        }
 
         StableCrateId(hasher.finish())
     }
@@ -205,10 +218,38 @@ impl<D: Decoder> Decodable<D> for DefIndex {
 /// index and a def index.
 ///
 /// You can create a `DefId` from a `LocalDefId` using `local_def_id.to_def_id()`.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Copy)]
+// On below-64 bit systems we can simply use the derived `Hash` impl
+#[cfg_attr(not(target_pointer_width = "64"), derive(Hash))]
+// Note that the order is essential here, see below why
 pub struct DefId {
-    pub krate: CrateNum,
     pub index: DefIndex,
+    pub krate: CrateNum,
+}
+
+// On 64-bit systems, we can hash the whole `DefId` as one `u64` instead of two `u32`s. This
+// improves performance without impairing `FxHash` quality. So the below code gets compiled to a
+// noop on little endian systems because the memory layout of `DefId` is as follows:
+//
+// ```
+//     +-1--------------31-+-32-------------63-+
+//     ! index             ! krate             !
+//     +-------------------+-------------------+
+// ```
+//
+// The order here has direct impact on `FxHash` quality because we have far more `DefIndex` per
+// crate than we have `Crate`s within one compilation. Or in other words, this arrangement puts
+// more entropy in the low bits than the high bits. The reason this matters is that `FxHash`, which
+// is used throughout rustc, has problems distributing the entropy from the high bits, so reversing
+// the order would lead to a large number of collisions and thus far worse performance.
+//
+// On 64-bit big-endian systems, this compiles to a 64-bit rotation by 32 bits, which is still
+// faster than another `FxHash` round.
+#[cfg(target_pointer_width = "64")]
+impl Hash for DefId {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        (((self.krate.as_u32() as u64) << 32) | (self.index.as_u32() as u64)).hash(h)
+    }
 }
 
 impl DefId {
@@ -281,7 +322,7 @@ rustc_data_structures::define_id_collections!(DefIdMap, DefIdSet, DefId);
 /// few cases where we know that only DefIds from the local crate are expected
 /// and a DefId from a different crate would signify a bug somewhere. This
 /// is when LocalDefId comes in handy.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LocalDefId {
     pub local_def_index: DefIndex,
 }

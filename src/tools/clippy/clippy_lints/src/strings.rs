@@ -1,8 +1,8 @@
 use clippy_utils::diagnostics::{span_lint, span_lint_and_help, span_lint_and_sugg};
 use clippy_utils::source::{snippet, snippet_with_applicability};
 use clippy_utils::ty::is_type_diagnostic_item;
-use clippy_utils::SpanlessEq;
 use clippy_utils::{get_parent_expr, is_lint_allowed, match_function_call, method_calls, paths};
+use clippy_utils::{peel_blocks, SpanlessEq};
 use if_chain::if_chain;
 use rustc_errors::Applicability;
 use rustc_hir::{BinOpKind, BorrowKind, Expr, ExprKind, LangItem, QPath};
@@ -31,6 +31,7 @@ declare_clippy_lint! {
     /// x += ", World";
     /// x.push_str(", World");
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub STRING_ADD_ASSIGN,
     pedantic,
     "using `x = x + ..` where x is a `String` instead of `push_str()`"
@@ -58,6 +59,7 @@ declare_clippy_lint! {
     /// let x = "Hello".to_owned();
     /// x + ", World";
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub STRING_ADD,
     restriction,
     "using `x + ..` where x is a `String` instead of `push_str()`"
@@ -102,6 +104,7 @@ declare_clippy_lint! {
     /// // Good
     /// let bs = b"a byte string";
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub STRING_LIT_AS_BYTES,
     nursery,
     "calling `as_bytes` on a string literal instead of using a byte string literal"
@@ -125,6 +128,7 @@ declare_clippy_lint! {
     /// ```rust,should_panic
     /// &"Ölkanne"[1..];
     /// ```
+    #[clippy::version = "1.58.0"]
     pub STRING_SLICE,
     restriction,
     "slicing a string"
@@ -197,7 +201,7 @@ fn is_string(cx: &LateContext<'_>, e: &Expr<'_>) -> bool {
 }
 
 fn is_add(cx: &LateContext<'_>, src: &Expr<'_>, target: &Expr<'_>) -> bool {
-    match src.kind {
+    match peel_blocks(src).kind {
         ExprKind::Binary(
             Spanned {
                 node: BinOpKind::Add, ..
@@ -205,9 +209,6 @@ fn is_add(cx: &LateContext<'_>, src: &Expr<'_>, target: &Expr<'_>) -> bool {
             left,
             _,
         ) => SpanlessEq::new(cx).eq_expr(target, left),
-        ExprKind::Block(block, _) => {
-            block.stmts.is_empty() && block.expr.as_ref().map_or(false, |expr| is_add(cx, expr, target))
-        },
         _ => false,
     }
 }
@@ -227,6 +228,7 @@ declare_clippy_lint! {
     /// ```rust
     /// let _ = &"Hello World!"[6..11];
     /// ```
+    #[clippy::version = "1.50.0"]
     pub STRING_FROM_UTF8_AS_BYTES,
     complexity,
     "casting string slices to byte slices and back"
@@ -255,7 +257,7 @@ impl<'tcx> LateLintPass<'tcx> for StringLitAsBytes {
             if method_names[0] == sym!(as_bytes);
 
             // Check for slicer
-            if let ExprKind::Struct(QPath::LangItem(LangItem::Range, _), _, _) = right.kind;
+            if let ExprKind::Struct(QPath::LangItem(LangItem::Range, ..), _, _) = right.kind;
 
             then {
                 let mut applicability = Applicability::MachineApplicable;
@@ -325,7 +327,7 @@ impl<'tcx> LateLintPass<'tcx> for StringLitAsBytes {
             if let ExprKind::MethodCall(path, _, [recv], _) = &e.kind;
             if path.ident.name == sym!(into_bytes);
             if let ExprKind::MethodCall(path, _, [recv], _) = &recv.kind;
-            if matches!(&*path.ident.name.as_str(), "to_owned" | "to_string");
+            if matches!(path.ident.name.as_str(), "to_owned" | "to_string");
             if let ExprKind::Lit(lit) = &recv.kind;
             if let LitKind::Str(lit_content, _) = &lit.node;
 
@@ -371,6 +373,7 @@ declare_clippy_lint! {
     /// // example code which does not raise clippy warning
     /// let _ = "str".to_owned();
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub STR_TO_STRING,
     restriction,
     "using `to_string()` on a `&str`, which should be `to_owned()`"
@@ -420,6 +423,7 @@ declare_clippy_lint! {
     /// let msg = String::from("Hello World");
     /// let _ = msg.clone();
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub STRING_TO_STRING,
     restriction,
     "using `to_string()` on a `String`, which should be `clone()`"

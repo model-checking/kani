@@ -381,7 +381,7 @@ impl<'a> Builder<'a> {
                 tool::Linkchecker,
                 tool::CargoTest,
                 tool::Compiletest,
-                tool::Dashboard,
+                tool::BookRunner,
                 tool::RemoteTestServer,
                 tool::RemoteTestClient,
                 tool::RustInstaller,
@@ -471,7 +471,7 @@ impl<'a> Builder<'a> {
                 test::SMACK,
                 test::CargoRMC,
                 test::Expected,
-                test::Dashboard,
+                test::BookRunner,
                 test::Stub,
                 test::RmcDocs,
                 test::RmcFixme,
@@ -538,7 +538,7 @@ impl<'a> Builder<'a> {
                 install::Rustc
             ),
             Kind::Run => describe!(
-                run::Dashboard,
+                run::BookRunner,
                 run::ExpandYamlAnchors,
                 run::BuildManifest,
                 run::BumpStage0
@@ -1194,6 +1194,7 @@ impl<'a> Builder<'a> {
                 rustflags.arg("-Zosx-rpath-install-name");
                 Some("-Wl,-rpath,@loader_path/../lib")
             } else if !target.contains("windows") {
+                rustflags.arg("-Clink-args=-Wl,-z,origin");
                 Some("-Wl,-rpath,$ORIGIN/../lib")
             } else {
                 None
@@ -1596,11 +1597,11 @@ impl<'a> Builder<'a> {
                 panic!("{}", out);
             }
             if let Some(out) = self.cache.get(&step) {
-                self.verbose(&format!("{}c {:?}", "  ".repeat(stack.len()), step));
+                self.verbose_than(1, &format!("{}c {:?}", "  ".repeat(stack.len()), step));
 
                 return out;
             }
-            self.verbose(&format!("{}> {:?}", "  ".repeat(stack.len()), step));
+            self.verbose_than(1, &format!("{}> {:?}", "  ".repeat(stack.len()), step));
             stack.push(Box::new(step.clone()));
         }
 
@@ -1623,7 +1624,7 @@ impl<'a> Builder<'a> {
             let cur_step = stack.pop().expect("step stack empty");
             assert_eq!(cur_step.downcast_ref(), Some(&step));
         }
-        self.verbose(&format!("{}< {:?}", "  ".repeat(self.stack.borrow().len()), step));
+        self.verbose_than(1, &format!("{}< {:?}", "  ".repeat(self.stack.borrow().len()), step));
         self.cache.put(step, out.clone());
         out
     }

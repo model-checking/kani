@@ -1,5 +1,4 @@
 use clippy_utils::diagnostics::span_lint_and_sugg;
-use clippy_utils::in_macro;
 use clippy_utils::source::snippet_opt;
 use clippy_utils::ty::is_type_diagnostic_item;
 use rustc_errors::Applicability;
@@ -27,6 +26,7 @@ declare_clippy_lint! {
     /// let a = Some(&1);
     /// let b = a;
     /// ```
+    #[clippy::version = "1.57.0"]
     pub NEEDLESS_OPTION_AS_DEREF,
     complexity,
     "no-op use of `deref` or `deref_mut` method to `Option`."
@@ -38,7 +38,7 @@ declare_lint_pass!(OptionNeedlessDeref=> [
 
 impl<'tcx> LateLintPass<'tcx> for OptionNeedlessDeref {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
-        if expr.span.from_expansion() || in_macro(expr.span) {
+        if expr.span.from_expansion() {
             return;
         }
         let typeck = cx.typeck_results();
@@ -48,7 +48,7 @@ impl<'tcx> LateLintPass<'tcx> for OptionNeedlessDeref {
             if is_type_diagnostic_item(cx,outer_ty,sym::Option);
             if let ExprKind::MethodCall(path, _, [sub_expr], _) = expr.kind;
             let symbol = path.ident.as_str();
-            if symbol=="as_deref" || symbol=="as_deref_mut";
+            if symbol == "as_deref" || symbol == "as_deref_mut";
             if TyS::same_type( outer_ty, typeck.expr_ty(sub_expr) );
             then{
                 span_lint_and_sugg(

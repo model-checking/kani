@@ -1,5 +1,6 @@
 use clippy_utils::diagnostics::{span_lint_hir, span_lint_hir_and_then};
 use clippy_utils::is_lint_allowed;
+use clippy_utils::peel_blocks;
 use clippy_utils::source::snippet_opt;
 use clippy_utils::ty::has_drop;
 use rustc_errors::Applicability;
@@ -22,6 +23,7 @@ declare_clippy_lint! {
     /// ```rust
     /// 0;
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub NO_EFFECT,
     complexity,
     "statements with no effect"
@@ -44,6 +46,7 @@ declare_clippy_lint! {
     /// ```rust,ignore
     /// let _i_serve_no_purpose = 1;
     /// ```
+    #[clippy::version = "1.58.0"]
     pub NO_EFFECT_UNDERSCORE_BINDING,
     pedantic,
     "binding to `_` prefixed variable with no side-effect"
@@ -62,6 +65,7 @@ declare_clippy_lint! {
     /// ```rust,ignore
     /// compute_array()[0];
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub UNNECESSARY_OPERATION,
     complexity,
     "outer expressions with no effect"
@@ -111,7 +115,7 @@ fn has_no_effect(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     if expr.span.from_expansion() {
         return false;
     }
-    match expr.kind {
+    match peel_blocks(expr).kind {
         ExprKind::Lit(..) | ExprKind::Closure(..) => true,
         ExprKind::Path(..) => !has_drop(cx, cx.typeck_results().expr_ty(expr)),
         ExprKind::Index(a, b) | ExprKind::Binary(_, a, b) => has_no_effect(cx, a) && has_no_effect(cx, b),
@@ -130,9 +134,12 @@ fn has_no_effect(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
         },
         ExprKind::Call(callee, args) => {
             if let ExprKind::Path(ref qpath) = callee.kind {
-                let res = cx.qpath_res(qpath, callee.hir_id);
+                if cx.typeck_results().type_dependent_def(expr.hir_id).is_some() {
+                    // type-dependent function call like `impl FnOnce for X`
+                    return false;
+                }
                 let def_matched = matches!(
-                    res,
+                    cx.qpath_res(qpath, callee.hir_id),
                     Res::Def(DefKind::Struct | DefKind::Variant | DefKind::Ctor(..), ..)
                 );
                 if def_matched || is_range_literal(expr) {
@@ -143,9 +150,6 @@ fn has_no_effect(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
             } else {
                 false
             }
-        },
-        ExprKind::Block(block, _) => {
-            block.stmts.is_empty() && block.expr.as_ref().map_or(false, |expr| has_no_effect(cx, expr))
         },
         _ => false,
     }
@@ -158,12 +162,13 @@ fn check_unnecessary_operation(cx: &LateContext<'tcx>, stmt: &'tcx Stmt<'_>) {
         if !&reduced.iter().any(|e| e.span.from_expansion());
         then {
             if let ExprKind::Index(..) = &expr.kind {
-                let snippet;
-                if let (Some(arr), Some(func)) = (snippet_opt(cx, reduced[0].span), snippet_opt(cx, reduced[1].span)) {
-                    snippet = format!("assert!({}.len() > {});", &arr, &func);
+                let snippet = if let (Some(arr), Some(func)) =
+                    (snippet_opt(cx, reduced[0].span), snippet_opt(cx, reduced[1].span))
+                {
+                    format!("assert!({}.len() > {});", &arr, &func)
                 } else {
                     return;
-                }
+                };
                 span_lint_hir_and_then(
                     cx,
                     UNNECESSARY_OPERATION,
@@ -235,6 +240,10 @@ fn reduce_expression<'a>(cx: &LateContext<'_>, expr: &'a Expr<'a>) -> Option<Vec
         },
         ExprKind::Call(callee, args) => {
             if let ExprKind::Path(ref qpath) = callee.kind {
+                if cx.typeck_results().type_dependent_def(expr.hir_id).is_some() {
+                    // type-dependent function call like `impl FnOnce for X`
+                    return None;
+                }
                 let res = cx.qpath_res(qpath, callee.hir_id);
                 match res {
                     Res::Def(DefKind::Struct | DefKind::Variant | DefKind::Ctor(..), ..)

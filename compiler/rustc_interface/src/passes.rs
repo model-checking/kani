@@ -10,7 +10,7 @@ use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::parallel;
 use rustc_data_structures::sync::{Lrc, OnceCell, WorkerLocal};
 use rustc_data_structures::temp_dir::MaybeTempDir;
-use rustc_errors::{ErrorReported, PResult};
+use rustc_errors::{Applicability, ErrorReported, PResult};
 use rustc_expand::base::ExtCtxt;
 use rustc_hir::def_id::{StableCrateId, LOCAL_CRATE};
 use rustc_hir::Crate;
@@ -323,8 +323,8 @@ pub fn configure_and_expand(
 
         let crate_attrs = krate.attrs.clone();
         let extern_mod_loaded = |ident: Ident, attrs, items, span| {
-            let krate = ast::Crate { attrs, items, span };
-            pre_expansion_lint(sess, lint_store, &krate, &crate_attrs, &ident.name.as_str());
+            let krate = ast::Crate { attrs, items, span, is_placeholder: None };
+            pre_expansion_lint(sess, lint_store, &krate, &crate_attrs, ident.name.as_str());
             (krate.attrs, krate.items)
         };
         let mut ecx = ExtCtxt::new(sess, cfg, resolver, Some(&extern_mod_loaded));
@@ -456,10 +456,26 @@ pub fn configure_and_expand(
         identifiers.sort_by_key(|&(key, _)| key);
         for (ident, mut spans) in identifiers.into_iter() {
             spans.sort();
-            sess.diagnostic().span_err(
-                MultiSpan::from(spans),
-                &format!("identifiers cannot contain emoji: `{}`", ident),
-            );
+            if ident == sym::ferris {
+                let first_span = spans[0];
+                sess.diagnostic()
+                    .struct_span_err(
+                        MultiSpan::from(spans),
+                        "Ferris cannot be used as an identifier",
+                    )
+                    .span_suggestion(
+                        first_span,
+                        "try using their name instead",
+                        "ferris".to_string(),
+                        Applicability::MaybeIncorrect,
+                    )
+                    .emit();
+            } else {
+                sess.diagnostic().span_err(
+                    MultiSpan::from(spans),
+                    &format!("identifiers cannot contain emoji: `{}`", ident),
+                );
+            }
         }
     });
 
@@ -568,7 +584,7 @@ fn output_conflicts_with_dir(output_paths: &[PathBuf]) -> Option<PathBuf> {
 fn escape_dep_filename(filename: &str) -> String {
     // Apparently clang and gcc *only* escape spaces:
     // https://llvm.org/klaus/clang/commit/9d50634cfc268ecc9a7250226dd5ca0e945240d4
-    filename.replace(" ", "\\ ")
+    filename.replace(' ', "\\ ")
 }
 
 // Makefile comments only need escaping newlines and `\`.
@@ -615,7 +631,7 @@ fn write_out_deps(
         // (e.g. accessed in proc macros).
         let file_depinfo = sess.parse_sess.file_depinfo.borrow();
         let extra_tracked_files = file_depinfo.iter().map(|path_sym| {
-            let path = PathBuf::from(&*path_sym.as_str());
+            let path = PathBuf::from(path_sym.as_str());
             let file = FileName::from(path);
             escape_dep_filename(&file.prefer_local().to_string())
         });
@@ -1033,8 +1049,8 @@ fn encode_and_write_metadata(
 
     let need_metadata_file = tcx.sess.opts.output_types.contains_key(&OutputType::Metadata);
     if need_metadata_file {
-        let crate_name = &tcx.crate_name(LOCAL_CRATE).as_str();
-        let out_filename = filename_for_metadata(tcx.sess, crate_name, outputs);
+        let crate_name = tcx.crate_name(LOCAL_CRATE);
+        let out_filename = filename_for_metadata(tcx.sess, crate_name.as_str(), outputs);
         // To avoid races with another rustc process scanning the output directory,
         // we need to write the file somewhere else and atomically move it to its
         // final destination, with an `fs::rename` call. In order for the rename to

@@ -76,7 +76,21 @@ use crate::fmt;
 ///    destroyed, but not all platforms have this guard. Those platforms that do
 ///    not guard typically have a synthetic limit after which point no more
 ///    destructors are run.
+/// 3. When the process exits on Windows systems, TLS destructors may only be
+///    run on the thread that causes the process to exit. This is because the
+///    other threads may be forcibly terminated.
 ///
+/// ## Synchronization in thread-local destructors
+///
+/// On Windows, synchronization operations (such as [`JoinHandle::join`]) in
+/// thread local destructors are prone to deadlocks and so should be avoided.
+/// This is because the [loader lock] is held while a destructor is run. The
+/// lock is acquired whenever a thread starts or exits or when a DLL is loaded
+/// or unloaded. Therefore these events are blocked for as long as a thread
+/// local destructor is running.
+///
+/// [loader lock]: https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices
+/// [`JoinHandle::join`]: crate::thread::JoinHandle::join
 /// [`with`]: LocalKey::with
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct LocalKey<T: 'static> {
@@ -164,7 +178,6 @@ macro_rules! __thread_local_inner {
     (@key $t:ty, const $init:expr) => {{
         #[cfg_attr(not(windows), inline)] // see comments below
         unsafe fn __getit() -> $crate::option::Option<&'static $t> {
-            const _REQUIRE_UNSTABLE: () = $crate::thread::require_unstable_const_init_thread_local();
             const INIT_EXPR: $t = $init;
 
             // wasm without atomics maps directly to `static mut`, and dtors
@@ -569,7 +582,7 @@ pub mod fast {
             Key { inner: LazyKeyInner::new(), dtor_state: Cell::new(DtorState::Unregistered) }
         }
 
-        // note that this is just a publically-callable function only for the
+        // note that this is just a publicly-callable function only for the
         // const-initialized form of thread locals, basically a way to call the
         // free `register_dtor` function defined elsewhere in libstd.
         pub unsafe fn register_dtor(a: *mut u8, dtor: unsafe extern "C" fn(*mut u8)) {
@@ -580,7 +593,7 @@ pub mod fast {
 
         pub unsafe fn get<F: FnOnce() -> T>(&self, init: F) -> Option<&'static T> {
             // SAFETY: See the definitions of `LazyKeyInner::get` and
-            // `try_initialize` for more informations.
+            // `try_initialize` for more information.
             //
             // The caller must ensure no mutable references are ever active to
             // the inner cell or the inner T when this is called.

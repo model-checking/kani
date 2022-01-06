@@ -55,7 +55,7 @@ pub struct Obligation<'tcx, T> {
 pub type PredicateObligation<'tcx> = Obligation<'tcx, ty::Predicate<'tcx>>;
 pub type TraitObligation<'tcx> = Obligation<'tcx, ty::PolyTraitPredicate<'tcx>>;
 
-impl PredicateObligation<'tcx> {
+impl<'tcx> PredicateObligation<'tcx> {
     /// Flips the polarity of the inner predicate.
     ///
     /// Given `T: Trait` predicate it returns `T: !Trait` and given `T: !Trait` returns `T: Trait`.
@@ -69,9 +69,19 @@ impl PredicateObligation<'tcx> {
     }
 }
 
+impl TraitObligation<'_> {
+    /// Returns `true` if the trait predicate is considered `const` in its ParamEnv.
+    pub fn is_const(&self) -> bool {
+        match (self.predicate.skip_binder().constness, self.param_env.constness()) {
+            (ty::BoundConstness::ConstIfConst, hir::Constness::Const) => true,
+            _ => false,
+        }
+    }
+}
+
 // `PredicateObligation` is used a lot. Make sure it doesn't unintentionally get bigger.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-static_assert_size!(PredicateObligation<'_>, 32);
+static_assert_size!(PredicateObligation<'_>, 48);
 
 pub type PredicateObligations<'tcx> = Vec<PredicateObligation<'tcx>>;
 

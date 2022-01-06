@@ -417,7 +417,7 @@ impl<T> LinkedList<T> {
     /// let list: LinkedList<u32> = LinkedList::new();
     /// ```
     #[inline]
-    #[rustc_const_stable(feature = "const_linked_list_new", since = "1.32.0")]
+    #[rustc_const_stable(feature = "const_linked_list_new", since = "1.39.0")]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[must_use]
     pub const fn new() -> Self {
@@ -1961,7 +1961,7 @@ impl<T, const N: usize> From<[T; N]> for LinkedList<T> {
     /// assert_eq!(list1, list2);
     /// ```
     fn from(arr: [T; N]) -> Self {
-        core::array::IntoIter::new(arr).collect()
+        Self::from_iter(arr)
     }
 }
 

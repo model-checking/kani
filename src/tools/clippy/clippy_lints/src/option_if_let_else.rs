@@ -1,15 +1,14 @@
 use clippy_utils::diagnostics::span_lint_and_sugg;
-use clippy_utils::higher;
 use clippy_utils::sugg::Sugg;
 use clippy_utils::ty::is_type_diagnostic_item;
 use clippy_utils::{
-    can_move_expr_to_closure, eager_or_lazy, in_constant, in_macro, is_else_clause, is_lang_ctor, peel_hir_expr_while,
-    CaptureKind,
+    can_move_expr_to_closure, eager_or_lazy, higher, in_constant, is_else_clause, is_lang_ctor, peel_blocks,
+    peel_hir_expr_while, CaptureKind,
 };
 use if_chain::if_chain;
 use rustc_errors::Applicability;
 use rustc_hir::LangItem::OptionSome;
-use rustc_hir::{def::Res, BindingAnnotation, Block, Expr, ExprKind, Mutability, PatKind, Path, QPath, UnOp};
+use rustc_hir::{def::Res, BindingAnnotation, Expr, ExprKind, Mutability, PatKind, Path, QPath, UnOp};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_session::{declare_lint_pass, declare_tool_lint};
 use rustc_span::sym;
@@ -59,6 +58,7 @@ declare_clippy_lint! {
     ///     y*y
     /// }, |foo| foo);
     /// ```
+    #[clippy::version = "1.47.0"]
     pub OPTION_IF_LET_ELSE,
     nursery,
     "reimplementation of Option::map_or"
@@ -85,32 +85,10 @@ struct OptionIfLetElseOccurence {
     none_expr: String,
 }
 
-/// Extracts the body of a given arm. If the arm contains only an expression,
-/// then it returns the expression. Otherwise, it returns the entire block
-fn extract_body_from_expr<'a>(expr: &'a Expr<'a>) -> Option<&'a Expr<'a>> {
-    if let ExprKind::Block(
-        Block {
-            stmts: block_stmts,
-            expr: Some(block_expr),
-            ..
-        },
-        _,
-    ) = expr.kind
-    {
-        if let [] = block_stmts {
-            Some(block_expr)
-        } else {
-            Some(expr)
-        }
-    } else {
-        None
-    }
-}
-
 fn format_option_in_sugg(cx: &LateContext<'_>, cond_expr: &Expr<'_>, as_ref: bool, as_mut: bool) -> String {
     format!(
         "{}{}",
-        Sugg::hir(cx, cond_expr, "..").maybe_par(),
+        Sugg::hir_with_macro_callsite(cx, cond_expr, "..").maybe_par(),
         if as_mut {
             ".as_mut()"
         } else if as_ref {
@@ -126,7 +104,7 @@ fn format_option_in_sugg(cx: &LateContext<'_>, cond_expr: &Expr<'_>, as_ref: boo
 /// this construct is found, or None if this construct is not found.
 fn detect_option_if_let_else<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) -> Option<OptionIfLetElseOccurence> {
     if_chain! {
-        if !in_macro(expr.span); // Don't lint macros, because it behaves weirdly
+        if !expr.span.from_expansion(); // Don't lint macros, because it behaves weirdly
         if !in_constant(cx, expr.hir_id);
         if let Some(higher::IfLet { let_pat, let_expr, if_then, if_else: Some(if_else) })
             = higher::IfLet::hir(cx, expr);
@@ -134,7 +112,7 @@ fn detect_option_if_let_else<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) ->
         if !is_result_ok(cx, let_expr); // Don't lint on Result::ok because a different lint does it already
         if let PatKind::TupleStruct(struct_qpath, [inner_pat], _) = &let_pat.kind;
         if is_lang_ctor(cx, struct_qpath, OptionSome);
-        if let PatKind::Binding(bind_annotation, _, id, _) = &inner_pat.kind;
+        if let PatKind::Binding(bind_annotation, _, id, None) = &inner_pat.kind;
         if let Some(some_captures) = can_move_expr_to_closure(cx, if_then);
         if let Some(none_captures) = can_move_expr_to_closure(cx, if_else);
         if some_captures
@@ -144,13 +122,9 @@ fn detect_option_if_let_else<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) ->
 
         then {
             let capture_mut = if bind_annotation == &BindingAnnotation::Mutable { "mut " } else { "" };
-            let some_body = extract_body_from_expr(if_then)?;
-            let none_body = extract_body_from_expr(if_else)?;
-            let method_sugg = if eager_or_lazy::is_eagerness_candidate(cx, none_body) {
-                "map_or"
-            } else {
-                "map_or_else"
-            };
+            let some_body = peel_blocks(if_then);
+            let none_body = peel_blocks(if_else);
+            let method_sugg = if eager_or_lazy::switch_to_eager_eval(cx, none_body) { "map_or" } else { "map_or_else" };
             let capture_name = id.name.to_ident_string();
             let (as_ref, as_mut) = match &let_expr.kind {
                 ExprKind::AddrOf(_, Mutability::Not, _) => (true, false),
@@ -183,8 +157,8 @@ fn detect_option_if_let_else<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) ->
             Some(OptionIfLetElseOccurence {
                 option: format_option_in_sugg(cx, cond_expr, as_ref, as_mut),
                 method_sugg: method_sugg.to_string(),
-                some_expr: format!("|{}{}| {}", capture_mut, capture_name, Sugg::hir(cx, some_body, "..")),
-                none_expr: format!("{}{}", if method_sugg == "map_or" { "" } else { "|| " }, Sugg::hir(cx, none_body, "..")),
+                some_expr: format!("|{}{}| {}", capture_mut, capture_name, Sugg::hir_with_macro_callsite(cx, some_body, "..")),
+                none_expr: format!("{}{}", if method_sugg == "map_or" { "" } else { "|| " }, Sugg::hir_with_macro_callsite(cx, none_body, "..")),
             })
         } else {
             None

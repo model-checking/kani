@@ -220,7 +220,7 @@ use rustc_data_structures::memmap::Mmap;
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::svh::Svh;
 use rustc_data_structures::sync::MetadataRef;
-use rustc_errors::struct_span_err;
+use rustc_errors::{struct_span_err, FatalError};
 use rustc_session::config::{self, CrateType};
 use rustc_session::cstore::{CrateSource, MetadataLoader};
 use rustc_session::filesearch::{FileDoesntMatch, FileMatches, FileSearch};
@@ -315,7 +315,7 @@ impl<'a> CrateLocator<'a> {
             exact_paths: if hash.is_none() {
                 sess.opts
                     .externs
-                    .get(&crate_name.as_str())
+                    .get(crate_name.as_str())
                     .into_iter()
                     .filter_map(|entry| entry.files())
                     .flatten()
@@ -734,7 +734,7 @@ impl<'a> CrateLocator<'a> {
     }
 }
 
-fn get_metadata_section(
+fn get_metadata_section<'p>(
     target: &Target,
     flavor: CrateFlavor,
     filename: &'p Path,
@@ -814,11 +814,11 @@ pub fn find_plugin_registrar(
     span: Span,
     name: Symbol,
 ) -> PathBuf {
-    match find_plugin_registrar_impl(sess, metadata_loader, name) {
-        Ok(res) => res,
+    find_plugin_registrar_impl(sess, metadata_loader, name).unwrap_or_else(|err| {
         // `core` is always available if we got as far as loading plugins.
-        Err(err) => err.report(sess, span, false),
-    }
+        err.report(sess, span, false);
+        FatalError.raise()
+    })
 }
 
 fn find_plugin_registrar_impl<'a>(
@@ -931,8 +931,8 @@ impl fmt::Display for MetadataError<'_> {
 }
 
 impl CrateError {
-    crate fn report(self, sess: &Session, span: Span, missing_core: bool) -> ! {
-        let mut err = match self {
+    crate fn report(self, sess: &Session, span: Span, missing_core: bool) {
+        let mut diag = match self {
             CrateError::NonAsciiName(crate_name) => sess.struct_span_err(
                 span,
                 &format!("cannot load a crate with a non-ascii name `{}`", crate_name),
@@ -976,7 +976,8 @@ impl CrateError {
                 let candidates = libraries
                     .iter()
                     .map(|lib| {
-                        let crate_name = &lib.metadata.get_root().name().as_str();
+                        let crate_name = lib.metadata.get_root().name();
+                        let crate_name = crate_name.as_str();
                         let mut paths = lib.source.paths();
 
                         // This `unwrap()` should be okay because there has to be at least one
@@ -1174,7 +1175,7 @@ impl CrateError {
                     } else if crate_name
                         == Symbol::intern(&sess.opts.debugging_opts.profiler_runtime)
                     {
-                        err.note(&"the compiler may have been built without the profiler runtime");
+                        err.note("the compiler may have been built without the profiler runtime");
                     } else if crate_name.as_str().starts_with("rustc_") {
                         err.help(
                             "maybe you need to install the missing components with: \
@@ -1210,8 +1211,6 @@ impl CrateError {
             ),
         };
 
-        err.emit();
-        sess.abort_if_errors();
-        unreachable!();
+        diag.emit();
     }
 }

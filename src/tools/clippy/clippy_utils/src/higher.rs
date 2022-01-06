@@ -101,7 +101,12 @@ impl<'hir> IfLet<'hir> {
     pub fn hir(cx: &LateContext<'_>, expr: &Expr<'hir>) -> Option<Self> {
         if let ExprKind::If(
             Expr {
-                kind: ExprKind::Let(let_pat, let_expr, _),
+                kind:
+                    ExprKind::Let(hir::Let {
+                        pat: let_pat,
+                        init: let_expr,
+                        ..
+                    }),
                 ..
             },
             if_then,
@@ -218,7 +223,7 @@ impl<'a> Range<'a> {
             hir::ExprKind::Call(path, args)
                 if matches!(
                     path.kind,
-                    hir::ExprKind::Path(hir::QPath::LangItem(hir::LangItem::RangeInclusiveNew, _))
+                    hir::ExprKind::Path(hir::QPath::LangItem(hir::LangItem::RangeInclusiveNew, ..))
                 ) =>
             {
                 Some(Range {
@@ -228,27 +233,27 @@ impl<'a> Range<'a> {
                 })
             },
             hir::ExprKind::Struct(path, fields, None) => match &path {
-                hir::QPath::LangItem(hir::LangItem::RangeFull, _) => Some(Range {
+                hir::QPath::LangItem(hir::LangItem::RangeFull, ..) => Some(Range {
                     start: None,
                     end: None,
                     limits: ast::RangeLimits::HalfOpen,
                 }),
-                hir::QPath::LangItem(hir::LangItem::RangeFrom, _) => Some(Range {
+                hir::QPath::LangItem(hir::LangItem::RangeFrom, ..) => Some(Range {
                     start: Some(get_field("start", fields)?),
                     end: None,
                     limits: ast::RangeLimits::HalfOpen,
                 }),
-                hir::QPath::LangItem(hir::LangItem::Range, _) => Some(Range {
+                hir::QPath::LangItem(hir::LangItem::Range, ..) => Some(Range {
                     start: Some(get_field("start", fields)?),
                     end: Some(get_field("end", fields)?),
                     limits: ast::RangeLimits::HalfOpen,
                 }),
-                hir::QPath::LangItem(hir::LangItem::RangeToInclusive, _) => Some(Range {
+                hir::QPath::LangItem(hir::LangItem::RangeToInclusive, ..) => Some(Range {
                     start: None,
                     end: Some(get_field("end", fields)?),
                     limits: ast::RangeLimits::Closed,
                 }),
-                hir::QPath::LangItem(hir::LangItem::RangeTo, _) => Some(Range {
+                hir::QPath::LangItem(hir::LangItem::RangeTo, ..) => Some(Range {
                     start: None,
                     end: Some(get_field("end", fields)?),
                     limits: ast::RangeLimits::HalfOpen,
@@ -368,7 +373,12 @@ impl<'hir> WhileLet<'hir> {
                         kind:
                             ExprKind::If(
                                 Expr {
-                                    kind: ExprKind::Let(let_pat, let_expr, _),
+                                    kind:
+                                        ExprKind::Let(hir::Let {
+                                            pat: let_pat,
+                                            init: let_expr,
+                                            ..
+                                        }),
                                     ..
                                 },
                                 if_then,

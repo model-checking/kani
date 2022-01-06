@@ -90,6 +90,8 @@ declare_features! (
     (accepted, const_fn_union, "1.56.0", Some(51909), None),
     /// Allows unsizing coercions in `const fn`.
     (accepted, const_fn_unsize, "1.54.0", Some(64992), None),
+    /// Allows const generics to have default values (e.g. `struct Foo<const N: usize = 3>(...);`).
+    (accepted, const_generics_defaults, "1.59.0", Some(44580), None),
     /// Allows the use of `if` and `match` in constants.
     (accepted, const_if_match, "1.46.0", Some(49146), None),
     /// Allows indexing into constant arrays.
@@ -112,6 +114,8 @@ declare_features! (
     (accepted, default_type_params, "1.0.0", None, None),
     /// Allows `#[deprecated]` attribute.
     (accepted, deprecated, "1.9.0", Some(29935), None),
+    /// Allows the use of destructuring assignments.
+    (accepted, destructuring_assignment, "1.59.0", Some(71126), None),
     /// Allows `#[doc(alias = "...")]`.
     (accepted, doc_alias, "1.48.0", Some(50146), None),
     /// Allows `..` in tuple (struct) patterns.

@@ -3,7 +3,7 @@ use smallvec::smallvec;
 use crate::infer::outlives::components::{push_outlives_components, Component};
 use crate::traits::{Obligation, ObligationCause, PredicateObligation};
 use rustc_data_structures::fx::{FxHashSet, FxIndexSet};
-use rustc_middle::ty::{self, ToPredicate, TyCtxt, WithConstness};
+use rustc_middle::ty::{self, ToPredicate, TyCtxt};
 use rustc_span::symbol::Ident;
 use rustc_span::Span;
 
@@ -20,7 +20,7 @@ pub struct PredicateSet<'tcx> {
     set: FxHashSet<ty::Predicate<'tcx>>,
 }
 
-impl PredicateSet<'tcx> {
+impl<'tcx> PredicateSet<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         Self { tcx, set: Default::default() }
     }
@@ -40,7 +40,7 @@ impl PredicateSet<'tcx> {
     }
 }
 
-impl Extend<ty::Predicate<'tcx>> for PredicateSet<'tcx> {
+impl<'tcx> Extend<ty::Predicate<'tcx>> for PredicateSet<'tcx> {
     fn extend<I: IntoIterator<Item = ty::Predicate<'tcx>>>(&mut self, iter: I) {
         for pred in iter {
             self.insert(pred);
@@ -131,7 +131,7 @@ fn predicate_obligation<'tcx>(
     Obligation { cause, param_env, recursion_depth: 0, predicate }
 }
 
-impl Elaborator<'tcx> {
+impl<'tcx> Elaborator<'tcx> {
     pub fn filter_to_traits(self) -> FilterToTraits<Self> {
         FilterToTraits::new(self)
     }
@@ -267,7 +267,7 @@ impl Elaborator<'tcx> {
     }
 }
 
-impl Iterator for Elaborator<'tcx> {
+impl<'tcx> Iterator for Elaborator<'tcx> {
     type Item = PredicateObligation<'tcx>;
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -328,8 +328,8 @@ pub fn transitive_bounds_that_define_assoc_type<'tcx>(
                 ));
                 for (super_predicate, _) in super_predicates.predicates {
                     let subst_predicate = super_predicate.subst_supertrait(tcx, &trait_ref);
-                    if let Some(binder) = subst_predicate.to_opt_poly_trait_ref() {
-                        stack.push(binder.value);
+                    if let Some(binder) = subst_predicate.to_opt_poly_trait_pred() {
+                        stack.push(binder.map_bound(|t| t.trait_ref));
                     }
                 }
 
@@ -362,8 +362,8 @@ impl<'tcx, I: Iterator<Item = PredicateObligation<'tcx>>> Iterator for FilterToT
 
     fn next(&mut self) -> Option<ty::PolyTraitRef<'tcx>> {
         while let Some(obligation) = self.base_iterator.next() {
-            if let Some(data) = obligation.predicate.to_opt_poly_trait_ref() {
-                return Some(data.value);
+            if let Some(data) = obligation.predicate.to_opt_poly_trait_pred() {
+                return Some(data.map_bound(|t| t.trait_ref));
             }
         }
         None

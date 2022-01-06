@@ -22,6 +22,7 @@ declare_clippy_lint! {
     ///
     /// OpenOptions::new().read(true).truncate(true);
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub NONSENSICAL_OPEN_OPTIONS,
     correctness,
     "nonsensical combination of options for opening a file"
@@ -81,7 +82,7 @@ fn get_open_options(cx: &LateContext<'_>, argument: &Expr<'_>, options: &mut Vec
                 _ => Argument::Unknown,
             };
 
-            match &*path.ident.as_str() {
+            match path.ident.as_str() {
                 "create" => {
                     options.push((OpenOption::Create, argument_option));
                 },

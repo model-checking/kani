@@ -589,9 +589,10 @@ macro_rules! writeln {
 /// ```
 #[macro_export]
 #[stable(feature = "rust1", since = "1.0.0")]
+#[allow_internal_unstable(core_panic)]
 macro_rules! unreachable {
     () => ({
-        $crate::panic!("internal error: entered unreachable code")
+        $crate::panicking::panic("internal error: entered unreachable code")
     });
     ($msg:expr $(,)?) => ({
         $crate::unreachable!("{}", $msg)
@@ -674,8 +675,9 @@ macro_rules! unreachable {
 /// ```
 #[macro_export]
 #[stable(feature = "rust1", since = "1.0.0")]
+#[allow_internal_unstable(core_panic)]
 macro_rules! unimplemented {
-    () => ($crate::panic!("not implemented"));
+    () => ($crate::panicking::panic("not implemented"));
     ($($arg:tt)+) => ($crate::panic!("not implemented: {}", $crate::format_args!($($arg)+)));
 }
 
@@ -735,8 +737,9 @@ macro_rules! unimplemented {
 /// ```
 #[macro_export]
 #[stable(feature = "todo_macro", since = "1.40.0")]
+#[allow_internal_unstable(core_panic)]
 macro_rules! todo {
-    () => ($crate::panic!("not yet implemented"));
+    () => ($crate::panicking::panic("not yet implemented"));
     ($($arg:tt)+) => ($crate::panic!("not yet implemented: {}", $crate::format_args!($($arg)+)));
 }
 
@@ -967,6 +970,34 @@ pub(crate) mod builtin {
         ($($e:ident),+ $(,)?) => {{ /* compiler built-in */ }};
     }
 
+    /// Concatenates literals into a byte slice.
+    ///
+    /// This macro takes any number of comma-separated literals, and concatenates them all into
+    /// one, yielding an expression of type `&[u8, _]`, which represents all of the literals
+    /// concatenated left-to-right. The literals passed can be any combination of:
+    ///
+    /// - byte literals (`b'r'`)
+    /// - byte strings (`b"Rust"`)
+    /// - arrays of bytes/numbers (`[b'A', 66, b'C']`)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(concat_bytes)]
+    ///
+    /// # fn main() {
+    /// let s: &[u8; 6] = concat_bytes!(b'A', b"BC", [68, b'E', 70]);
+    /// assert_eq!(s, b"ABCDEF");
+    /// # }
+    /// ```
+    #[cfg(not(bootstrap))]
+    #[unstable(feature = "concat_bytes", issue = "87555")]
+    #[rustc_builtin_macro]
+    #[macro_export]
+    macro_rules! concat_bytes {
+        ($($e:literal),+ $(,)?) => {{ /* compiler built-in */ }};
+    }
+
     /// Concatenates literals into a static string slice.
     ///
     /// This macro takes any number of comma-separated literals, yielding an
@@ -1033,6 +1064,18 @@ pub(crate) mod builtin {
     /// ```
     /// let current_col = column!();
     /// println!("defined on column: {}", current_col);
+    /// ```
+    ///
+    /// `column!` counts Unicode code points, not bytes or graphemes. As a result, the first two
+    /// invocations return the same value, but the third does not.
+    ///
+    /// ```
+    /// let a = ("foobar", column!()).1;
+    /// let b = ("人之初性本善", column!()).1;
+    /// let c = ("f̅o̅o̅b̅a̅r̅", column!()).1; // Uses combining overline (U+0305)
+    ///
+    /// assert_eq!(a, b);
+    /// assert_ne!(b, c);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_builtin_macro]

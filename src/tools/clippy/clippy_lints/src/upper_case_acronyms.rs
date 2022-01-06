@@ -33,6 +33,7 @@ declare_clippy_lint! {
     /// ```rust
     /// struct HttpResponse;
     /// ```
+    #[clippy::version = "1.51.0"]
     pub UPPER_CASE_ACRONYMS,
     style,
     "capitalized acronyms are against the naming convention"
@@ -78,7 +79,7 @@ fn correct_ident(ident: &str) -> String {
 
 fn check_ident(cx: &LateContext<'_>, ident: &Ident, be_aggressive: bool) {
     let span = ident.span;
-    let ident = &ident.as_str();
+    let ident = ident.as_str();
     let corrected = correct_ident(ident);
     // warn if we have pure-uppercase idents
     // assume that two-letter words are some kind of valid abbreviation like FP for false positive

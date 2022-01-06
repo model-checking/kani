@@ -94,6 +94,34 @@ fn negative_tests(arg: Option<u32>) -> u32 {
     7
 }
 
+// #7973
+fn pattern_to_vec(pattern: &str) -> Vec<String> {
+    pattern
+        .trim_matches('/')
+        .split('/')
+        .flat_map(|s| {
+            if let Some(idx) = s.find('.') {
+                vec![s[..idx].to_string(), s[idx..].to_string()]
+            } else {
+                vec![s.to_string()]
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+enum DummyEnum {
+    One(u8),
+    Two,
+}
+
+// should not warn since there is a compled complex subpat
+// see #7991
+fn complex_subpat() -> DummyEnum {
+    let x = Some(DummyEnum::One(1));
+    let _ = if let Some(_one @ DummyEnum::One(..)) = x { 1 } else { 2 };
+    DummyEnum::Two
+}
+
 fn main() {
     let optional = Some(5);
     let _ = if let Some(x) = optional { x + 2 } else { 5 };
@@ -171,4 +199,7 @@ fn main() {
         // Don't lint. `await` can't be moved into a closure.
         let _ = if let Some(x) = Some(0) { _f1(x).await } else { 0 };
     }
+
+    let _ = pattern_to_vec("hello world");
+    let _ = complex_subpat();
 }

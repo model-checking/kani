@@ -137,6 +137,11 @@ pub fn spin_loop() {
             unsafe { crate::arch::arm::__yield() };
         }
     }
+
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    {
+        crate::arch::riscv::pause();
+    }
 }
 
 /// An identity function that *__hints__* to the compiler to be maximally pessimistic about what
@@ -154,6 +159,7 @@ pub fn spin_loop() {
 /// [`std::convert::identity`]: crate::convert::identity
 #[inline]
 #[unstable(feature = "bench_black_box", issue = "64102")]
-pub fn black_box<T>(dummy: T) -> T {
+#[rustc_const_unstable(feature = "const_black_box", issue = "none")]
+pub const fn black_box<T>(dummy: T) -> T {
     crate::intrinsics::black_box(dummy)
 }

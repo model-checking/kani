@@ -158,7 +158,7 @@ impl<'sess> rustc_middle::ty::OnDiskCache<'sess> for OnDiskCache<'sess> {
 
         // Wrap in a scope so we can borrow `data`.
         let footer: Footer = {
-            let mut decoder = opaque::Decoder::new(&data[..], start_pos);
+            let mut decoder = opaque::Decoder::new(&data, start_pos);
 
             // Decode the *position* of the footer, which can be found in the
             // last 8 bytes of the file.
@@ -212,7 +212,7 @@ impl<'sess> rustc_middle::ty::OnDiskCache<'sess> for OnDiskCache<'sess> {
     /// Cache promotions require invoking queries, which needs to read the serialized data.
     /// In order to serialize the new on-disk cache, the former on-disk cache file needs to be
     /// deleted, hence we won't be able to refer to its memmapped data.
-    fn drop_serialized_data(&self, tcx: TyCtxt<'tcx>) {
+    fn drop_serialized_data(&self, tcx: TyCtxt<'_>) {
         // Load everything into memory so we can write it out to the on-disk
         // cache. The vast majority of cacheable query results should already
         // be in memory, so this should be a cheap operation.

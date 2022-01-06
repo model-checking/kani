@@ -11,7 +11,9 @@ use crate::fmt;
 use crate::hash::{self, Hash};
 use crate::iter::TrustedLen;
 use crate::mem::{self, MaybeUninit};
-use crate::ops::{Index, IndexMut};
+use crate::ops::{
+    ChangeOutputType, ControlFlow, FromResidual, Index, IndexMut, NeverShortCircuit, Residual, Try,
+};
 use crate::slice::{Iter, IterMut};
 
 mod equality;
@@ -49,8 +51,12 @@ where
 }
 
 /// Creates an array `[T; N]` where each fallible array element `T` is returned by the `cb` call.
-/// Unlike `core::array::from_fn`, where the element creation can't fail, this version will return an error
+/// Unlike [`from_fn`], where the element creation can't fail, this version will return an error
 /// if any element creation was unsuccessful.
+///
+/// The return type of this function depends on the return type of the closure.
+/// If you return `Result<T, E>` from the closure, you'll get a `Result<[T; N]; E>`.
+/// If you return `Option<T>` from the closure, you'll get an `Option<[T; N]>`.
 ///
 /// # Arguments
 ///
@@ -60,27 +66,32 @@ where
 ///
 /// ```rust
 /// #![feature(array_from_fn)]
+/// # // Apparently these doc tests are still on edition2018
+/// # use std::convert::TryInto;
 ///
-/// #[derive(Debug, PartialEq)]
-/// enum SomeError {
-///     Foo,
-/// }
-///
-/// let array = core::array::try_from_fn(|i| Ok::<_, SomeError>(i));
+/// let array: Result<[u8; 5], _> = std::array::try_from_fn(|i| i.try_into());
 /// assert_eq!(array, Ok([0, 1, 2, 3, 4]));
 ///
-/// let another_array = core::array::try_from_fn::<SomeError, _, (), 2>(|_| Err(SomeError::Foo));
-/// assert_eq!(another_array, Err(SomeError::Foo));
+/// let array: Result<[i8; 200], _> = std::array::try_from_fn(|i| i.try_into());
+/// assert!(array.is_err());
+///
+/// let array: Option<[_; 4]> = std::array::try_from_fn(|i| i.checked_add(100));
+/// assert_eq!(array, Some([100, 101, 102, 103]));
+///
+/// let array: Option<[_; 4]> = std::array::try_from_fn(|i| i.checked_sub(100));
+/// assert_eq!(array, None);
 /// ```
 #[inline]
 #[unstable(feature = "array_from_fn", issue = "89379")]
-pub fn try_from_fn<E, F, T, const N: usize>(cb: F) -> Result<[T; N], E>
+pub fn try_from_fn<F, R, const N: usize>(cb: F) -> ChangeOutputType<R, [R::Output; N]>
 where
-    F: FnMut(usize) -> Result<T, E>,
+    F: FnMut(usize) -> R,
+    R: Try,
+    R::Residual: Residual<[R::Output; N]>,
 {
     // SAFETY: we know for certain that this iterator will yield exactly `N`
     // items.
-    unsafe { collect_into_array_rslt_unchecked(&mut (0..N).map(cb)) }
+    unsafe { try_collect_into_array_unchecked(&mut (0..N).map(cb)) }
 }
 
 /// Converts a reference to `T` into a reference to an array of length 1 (without copying).
@@ -151,14 +162,16 @@ impl<T, const N: usize> AsMut<[T]> for [T; N] {
 }
 
 #[stable(feature = "array_borrow", since = "1.4.0")]
-impl<T, const N: usize> Borrow<[T]> for [T; N] {
+#[rustc_const_unstable(feature = "const_borrow", issue = "91522")]
+impl<T, const N: usize> const Borrow<[T]> for [T; N] {
     fn borrow(&self) -> &[T] {
         self
     }
 }
 
 #[stable(feature = "array_borrow", since = "1.4.0")]
-impl<T, const N: usize> BorrowMut<[T]> for [T; N] {
+#[rustc_const_unstable(feature = "const_borrow", issue = "91522")]
+impl<T, const N: usize> const BorrowMut<[T]> for [T; N] {
     fn borrow_mut(&mut self) -> &mut [T] {
         self
     }
@@ -173,6 +186,18 @@ where
 
     fn try_from(slice: &[T]) -> Result<[T; N], TryFromSliceError> {
         <&Self>::try_from(slice).map(|r| *r)
+    }
+}
+
+#[stable(feature = "try_from_mut_slice_to_array", since = "1.59.0")]
+impl<T, const N: usize> TryFrom<&mut [T]> for [T; N]
+where
+    T: Copy,
+{
+    type Error = TryFromSliceError;
+
+    fn try_from(slice: &mut [T]) -> Result<[T; N], TryFromSliceError> {
+        <Self>::try_from(&*slice)
     }
 }
 
@@ -229,27 +254,6 @@ impl<T: Hash, const N: usize> Hash for [T; N] {
 impl<T: fmt::Debug, const N: usize> fmt::Debug for [T; N] {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&&self[..], f)
-    }
-}
-
-// Note: the `#[rustc_skip_array_during_method_dispatch]` on `trait IntoIterator`
-// hides this implementation from explicit `.into_iter()` calls on editions < 2021,
-// so those calls will still resolve to the slice implementation, by reference.
-#[stable(feature = "array_into_iter_impl", since = "1.53.0")]
-impl<T, const N: usize> IntoIterator for [T; N] {
-    type Item = T;
-    type IntoIter = IntoIter<T, N>;
-
-    /// Creates a consuming iterator, that is, one that moves each value out of
-    /// the array (from start to end). The array cannot be used after calling
-    /// this unless `T` implements `Copy`, so the whole array is copied.
-    ///
-    /// Arrays have special behavior when calling `.into_iter()` prior to the
-    /// 2021 edition -- see the [array] Editions section for more information.
-    ///
-    /// [array]: prim@array
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter::new(self)
     }
 }
 
@@ -330,11 +334,9 @@ impl<T: Ord, const N: usize> Ord for [T; N] {
     }
 }
 
-#[cfg(not(bootstrap))]
 #[stable(feature = "copy_clone_array_lib", since = "1.58.0")]
 impl<T: Copy, const N: usize> Copy for [T; N] {}
 
-#[cfg(not(bootstrap))]
 #[stable(feature = "copy_clone_array_lib", since = "1.58.0")]
 impl<T: Clone, const N: usize> Clone for [T; N] {
     #[inline]
@@ -348,12 +350,10 @@ impl<T: Clone, const N: usize> Clone for [T; N] {
     }
 }
 
-#[cfg(not(bootstrap))]
 trait SpecArrayClone: Clone {
     fn clone<const N: usize>(array: &[Self; N]) -> [Self; N];
 }
 
-#[cfg(not(bootstrap))]
 impl<T: Clone> SpecArrayClone for T {
     #[inline]
     default fn clone<const N: usize>(array: &[T; N]) -> [T; N] {
@@ -363,7 +363,6 @@ impl<T: Clone> SpecArrayClone for T {
     }
 }
 
-#[cfg(not(bootstrap))]
 impl<T: Copy> SpecArrayClone for T {
     #[inline]
     fn clone<const N: usize>(array: &[T; N]) -> [T; N] {
@@ -447,6 +446,45 @@ impl<T, const N: usize> [T; N] {
         // SAFETY: we know for certain that this iterator will yield exactly `N`
         // items.
         unsafe { collect_into_array_unchecked(&mut IntoIterator::into_iter(self).map(f)) }
+    }
+
+    /// A fallible function `f` applied to each element on array `self` in order to
+    /// return an array the same size as `self` or the first error encountered.
+    ///
+    /// The return type of this function depends on the return type of the closure.
+    /// If you return `Result<T, E>` from the closure, you'll get a `Result<[T; N]; E>`.
+    /// If you return `Option<T>` from the closure, you'll get an `Option<[T; N]>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(array_try_map)]
+    /// let a = ["1", "2", "3"];
+    /// let b = a.try_map(|v| v.parse::<u32>()).unwrap().map(|v| v + 1);
+    /// assert_eq!(b, [2, 3, 4]);
+    ///
+    /// let a = ["1", "2a", "3"];
+    /// let b = a.try_map(|v| v.parse::<u32>());
+    /// assert!(b.is_err());
+    ///
+    /// use std::num::NonZeroU32;
+    /// let z = [1, 2, 0, 3, 4];
+    /// assert_eq!(z.try_map(NonZeroU32::new), None);
+    /// let a = [1, 2, 3];
+    /// let b = a.try_map(NonZeroU32::new);
+    /// let c = b.map(|x| x.map(NonZeroU32::get));
+    /// assert_eq!(c, Some(a));
+    /// ```
+    #[unstable(feature = "array_try_map", issue = "79711")]
+    pub fn try_map<F, R>(self, f: F) -> ChangeOutputType<R, [R::Output; N]>
+    where
+        F: FnMut(T) -> R,
+        R: Try,
+        R::Residual: Residual<[R::Output; N]>,
+    {
+        // SAFETY: we know for certain that this iterator will yield exactly `N`
+        // items.
+        unsafe { try_collect_into_array_unchecked(&mut IntoIterator::into_iter(self).map(f)) }
     }
 
     /// 'Zips up' two arrays into a single array of pairs.
@@ -621,47 +659,125 @@ impl<T, const N: usize> [T; N] {
     pub fn split_array_mut<const M: usize>(&mut self) -> (&mut [T; M], &mut [T]) {
         (&mut self[..]).split_array_mut::<M>()
     }
+
+    /// Divides one array reference into two at an index from the end.
+    ///
+    /// The first will contain all indices from `[0, N - M)` (excluding
+    /// the index `N - M` itself) and the second will contain all
+    /// indices from `[N - M, N)` (excluding the index `N` itself).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `M > N`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(split_array)]
+    ///
+    /// let v = [1, 2, 3, 4, 5, 6];
+    ///
+    /// {
+    ///    let (left, right) = v.rsplit_array_ref::<0>();
+    ///    assert_eq!(left, &[1, 2, 3, 4, 5, 6]);
+    ///    assert_eq!(right, &[]);
+    /// }
+    ///
+    /// {
+    ///     let (left, right) = v.rsplit_array_ref::<2>();
+    ///     assert_eq!(left, &[1, 2, 3, 4]);
+    ///     assert_eq!(right, &[5, 6]);
+    /// }
+    ///
+    /// {
+    ///     let (left, right) = v.rsplit_array_ref::<6>();
+    ///     assert_eq!(left, &[]);
+    ///     assert_eq!(right, &[1, 2, 3, 4, 5, 6]);
+    /// }
+    /// ```
+    #[unstable(
+        feature = "split_array",
+        reason = "return type should have array as 2nd element",
+        issue = "90091"
+    )]
+    #[inline]
+    pub fn rsplit_array_ref<const M: usize>(&self) -> (&[T], &[T; M]) {
+        (&self[..]).rsplit_array_ref::<M>()
+    }
+
+    /// Divides one mutable array reference into two at an index from the end.
+    ///
+    /// The first will contain all indices from `[0, N - M)` (excluding
+    /// the index `N - M` itself) and the second will contain all
+    /// indices from `[N - M, N)` (excluding the index `N` itself).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `M > N`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(split_array)]
+    ///
+    /// let mut v = [1, 0, 3, 0, 5, 6];
+    /// let (left, right) = v.rsplit_array_mut::<4>();
+    /// assert_eq!(left, &mut [1, 0]);
+    /// assert_eq!(right, &mut [3, 0, 5, 6][..]);
+    /// left[1] = 2;
+    /// right[1] = 4;
+    /// assert_eq!(v, [1, 2, 3, 4, 5, 6]);
+    /// ```
+    #[unstable(
+        feature = "split_array",
+        reason = "return type should have array as 2nd element",
+        issue = "90091"
+    )]
+    #[inline]
+    pub fn rsplit_array_mut<const M: usize>(&mut self) -> (&mut [T], &mut [T; M]) {
+        (&mut self[..]).rsplit_array_mut::<M>()
+    }
 }
 
 /// Pulls `N` items from `iter` and returns them as an array. If the iterator
 /// yields fewer than `N` items, this function exhibits undefined behavior.
 ///
-/// See [`collect_into_array`] for more information.
+/// See [`try_collect_into_array`] for more information.
 ///
 ///
 /// # Safety
 ///
 /// It is up to the caller to guarantee that `iter` yields at least `N` items.
 /// Violating this condition causes undefined behavior.
-unsafe fn collect_into_array_rslt_unchecked<E, I, T, const N: usize>(
-    iter: &mut I,
-) -> Result<[T; N], E>
+unsafe fn try_collect_into_array_unchecked<I, T, R, const N: usize>(iter: &mut I) -> R::TryType
 where
     // Note: `TrustedLen` here is somewhat of an experiment. This is just an
     // internal function, so feel free to remove if this bound turns out to be a
     // bad idea. In that case, remember to also remove the lower bound
     // `debug_assert!` below!
-    I: Iterator<Item = Result<T, E>> + TrustedLen,
+    I: Iterator + TrustedLen,
+    I::Item: Try<Output = T, Residual = R>,
+    R: Residual<[T; N]>,
 {
     debug_assert!(N <= iter.size_hint().1.unwrap_or(usize::MAX));
     debug_assert!(N <= iter.size_hint().0);
 
     // SAFETY: covered by the function contract.
-    unsafe { collect_into_array(iter).unwrap_unchecked() }
+    unsafe { try_collect_into_array(iter).unwrap_unchecked() }
 }
 
-// Infallible version of `collect_into_array_rslt_unchecked`.
+// Infallible version of `try_collect_into_array_unchecked`.
 unsafe fn collect_into_array_unchecked<I, const N: usize>(iter: &mut I) -> [I::Item; N]
 where
     I: Iterator + TrustedLen,
 {
-    let mut map = iter.map(Ok::<_, Infallible>);
+    let mut map = iter.map(NeverShortCircuit);
 
     // SAFETY: The same safety considerations w.r.t. the iterator length
-    // apply for `collect_into_array_rslt_unchecked` as for
+    // apply for `try_collect_into_array_unchecked` as for
     // `collect_into_array_unchecked`
-    match unsafe { collect_into_array_rslt_unchecked(&mut map) } {
-        Ok(array) => array,
+    match unsafe { try_collect_into_array_unchecked(&mut map) } {
+        NeverShortCircuit(array) => array,
     }
 }
 
@@ -675,13 +791,15 @@ where
 ///
 /// If `iter.next()` panicks, all items already yielded by the iterator are
 /// dropped.
-fn collect_into_array<E, I, T, const N: usize>(iter: &mut I) -> Option<Result<[T; N], E>>
+fn try_collect_into_array<I, T, R, const N: usize>(iter: &mut I) -> Option<R::TryType>
 where
-    I: Iterator<Item = Result<T, E>>,
+    I: Iterator,
+    I::Item: Try<Output = T, Residual = R>,
+    R: Residual<[T; N]>,
 {
     if N == 0 {
         // SAFETY: An empty array is always inhabited and has no validity invariants.
-        return unsafe { Some(Ok(mem::zeroed())) };
+        return unsafe { Some(Try::from_output(mem::zeroed())) };
     }
 
     struct Guard<'a, T, const N: usize> {
@@ -706,11 +824,11 @@ where
     let mut guard = Guard { array_mut: &mut array, initialized: 0 };
 
     while let Some(item_rslt) = iter.next() {
-        let item = match item_rslt {
-            Err(err) => {
-                return Some(Err(err));
+        let item = match item_rslt.branch() {
+            ControlFlow::Break(r) => {
+                return Some(FromResidual::from_residual(r));
             }
-            Ok(elem) => elem,
+            ControlFlow::Continue(elem) => elem,
         };
 
         // SAFETY: `guard.initialized` starts at 0, is increased by one in the
@@ -728,7 +846,7 @@ where
             // SAFETY: the condition above asserts that all elements are
             // initialized.
             let out = unsafe { MaybeUninit::array_assume_init(array) };
-            return Some(Ok(out));
+            return Some(Try::from_output(out));
         }
     }
 

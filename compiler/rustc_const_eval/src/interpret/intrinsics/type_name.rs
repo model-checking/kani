@@ -88,7 +88,7 @@ impl<'tcx> Printer<'tcx> for AbsolutePathPrinter<'tcx> {
     }
 
     fn path_crate(mut self, cnum: CrateNum) -> Result<Self::Path, Self::Error> {
-        self.path.push_str(&self.tcx.crate_name(cnum).as_str());
+        self.path.push_str(self.tcx.crate_name(cnum).as_str());
         Ok(self)
     }
 
@@ -148,7 +148,7 @@ impl<'tcx> Printer<'tcx> for AbsolutePathPrinter<'tcx> {
     }
 }
 
-impl PrettyPrinter<'tcx> for AbsolutePathPrinter<'tcx> {
+impl<'tcx> PrettyPrinter<'tcx> for AbsolutePathPrinter<'tcx> {
     fn region_should_not_be_omitted(&self, _region: ty::Region<'_>) -> bool {
         false
     }

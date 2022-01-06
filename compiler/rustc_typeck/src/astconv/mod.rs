@@ -13,6 +13,7 @@ use crate::errors::{
 };
 use crate::middle::resolve_lifetime as rl;
 use crate::require_c_abi_if_c_variadic;
+use rustc_ast::TraitObjectSyntax;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_errors::{struct_span_err, Applicability, ErrorReported, FatalError};
 use rustc_hir as hir;
@@ -24,7 +25,8 @@ use rustc_hir::{GenericArg, GenericArgs};
 use rustc_middle::ty::subst::{self, GenericArgKind, InternalSubsts, Subst, SubstsRef};
 use rustc_middle::ty::GenericParamDefKind;
 use rustc_middle::ty::{self, Const, DefIdTree, Ty, TyCtxt, TypeFoldable};
-use rustc_session::lint::builtin::AMBIGUOUS_ASSOCIATED_ITEMS;
+use rustc_session::lint::builtin::{AMBIGUOUS_ASSOCIATED_ITEMS, BARE_TRAIT_OBJECTS};
+use rustc_span::edition::Edition;
 use rustc_span::lev_distance::find_best_match_for_name;
 use rustc_span::symbol::{Ident, Symbol};
 use rustc_span::{Span, DUMMY_SP};
@@ -35,7 +37,6 @@ use rustc_trait_selection::traits::error_reporting::report_object_safety_error;
 use rustc_trait_selection::traits::wf::object_region_bounds;
 
 use smallvec::SmallVec;
-use std::array;
 use std::collections::BTreeSet;
 use std::slice;
 
@@ -415,34 +416,40 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                 arg: &GenericArg<'_>,
             ) -> subst::GenericArg<'tcx> {
                 let tcx = self.astconv.tcx();
+
+                let mut handle_ty_args = |has_default, ty: &hir::Ty<'_>| {
+                    if has_default {
+                        tcx.check_optional_stability(
+                            param.def_id,
+                            Some(arg.id()),
+                            arg.span(),
+                            None,
+                            |_, _| {
+                                // Default generic parameters may not be marked
+                                // with stability attributes, i.e. when the
+                                // default parameter was defined at the same time
+                                // as the rest of the type. As such, we ignore missing
+                                // stability attributes.
+                            },
+                        )
+                    }
+                    if let (hir::TyKind::Infer, false) = (&ty.kind, self.astconv.allow_ty_infer()) {
+                        self.inferred_params.push(ty.span);
+                        tcx.ty_error().into()
+                    } else {
+                        self.astconv.ast_ty_to_ty(ty).into()
+                    }
+                };
+
                 match (&param.kind, arg) {
                     (GenericParamDefKind::Lifetime, GenericArg::Lifetime(lt)) => {
                         self.astconv.ast_region_to_region(lt, Some(param)).into()
                     }
                     (&GenericParamDefKind::Type { has_default, .. }, GenericArg::Type(ty)) => {
-                        if has_default {
-                            tcx.check_optional_stability(
-                                param.def_id,
-                                Some(arg.id()),
-                                arg.span(),
-                                None,
-                                |_, _| {
-                                    // Default generic parameters may not be marked
-                                    // with stability attributes, i.e. when the
-                                    // default parameter was defined at the same time
-                                    // as the rest of the type. As such, we ignore missing
-                                    // stability attributes.
-                                },
-                            )
-                        }
-                        if let (hir::TyKind::Infer, false) =
-                            (&ty.kind, self.astconv.allow_ty_infer())
-                        {
-                            self.inferred_params.push(ty.span);
-                            tcx.ty_error().into()
-                        } else {
-                            self.astconv.ast_ty_to_ty(ty).into()
-                        }
+                        handle_ty_args(has_default, ty)
+                    }
+                    (&GenericParamDefKind::Type { has_default, .. }, GenericArg::Infer(inf)) => {
+                        handle_ty_args(has_default, &inf.to_ty())
                     }
                     (GenericParamDefKind::Const { .. }, GenericArg::Const(ct)) => {
                         ty::Const::from_opt_const_arg_anon_const(
@@ -454,41 +461,13 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                         )
                         .into()
                     }
-                    (&GenericParamDefKind::Const { has_default }, hir::GenericArg::Infer(inf)) => {
-                        if has_default {
-                            tcx.const_param_default(param.def_id).into()
-                        } else if self.astconv.allow_ty_infer() {
-                            // FIXME(const_generics): Actually infer parameter here?
-                            todo!()
-                        } else {
-                            self.inferred_params.push(inf.span);
-                            tcx.ty_error().into()
-                        }
-                    }
-                    (
-                        &GenericParamDefKind::Type { has_default, .. },
-                        hir::GenericArg::Infer(inf),
-                    ) => {
-                        if has_default {
-                            tcx.check_optional_stability(
-                                param.def_id,
-                                Some(arg.id()),
-                                arg.span(),
-                                None,
-                                |_, _| {
-                                    // Default generic parameters may not be marked
-                                    // with stability attributes, i.e. when the
-                                    // default parameter was defined at the same time
-                                    // as the rest of the type. As such, we ignore missing
-                                    // stability attributes.
-                                },
-                            );
-                        }
+                    (&GenericParamDefKind::Const { .. }, hir::GenericArg::Infer(inf)) => {
+                        let ty = tcx.at(self.span).type_of(param.def_id);
                         if self.astconv.allow_ty_infer() {
-                            self.astconv.ast_ty_to_ty(&inf.to_ty()).into()
+                            self.astconv.ct_infer(ty, Some(param), inf.span).into()
                         } else {
                             self.inferred_params.push(inf.span);
-                            tcx.ty_error().into()
+                            tcx.const_error(ty).into()
                         }
                     }
                     _ => unreachable!(),
@@ -1351,7 +1330,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                     tcx,
                     span,
                     item.trait_ref().def_id(),
-                    &object_safety_violations[..],
+                    &object_safety_violations,
                 )
                 .emit();
                 return tcx.ty_error();
@@ -1588,7 +1567,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                 traits::transitive_bounds_that_define_assoc_type(
                     tcx,
                     predicates.iter().filter_map(|(p, _)| {
-                        p.to_opt_poly_trait_ref().map(|trait_ref| trait_ref.value)
+                        Some(p.to_opt_poly_trait_pred()?.map_bound(|t| t.trait_ref))
                     }),
                     assoc_name,
                 )
@@ -1635,7 +1614,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
             debug!("one_bound_for_assoc_type: bound2 = {:?}", bound2);
 
             let is_equality = is_equality();
-            let bounds = array::IntoIter::new([bound, bound2]).chain(matching_candidates);
+            let bounds = IntoIterator::into_iter([bound, bound2]).chain(matching_candidates);
             let mut err = if is_equality.is_some() {
                 // More specific Error Index entry.
                 struct_span_err!(
@@ -2289,13 +2268,19 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
     /// Parses the programmer's textual representation of a type into our
     /// internal notion of a type.
     pub fn ast_ty_to_ty(&self, ast_ty: &hir::Ty<'_>) -> Ty<'tcx> {
-        self.ast_ty_to_ty_inner(ast_ty, false)
+        self.ast_ty_to_ty_inner(ast_ty, false, false)
+    }
+
+    /// Parses the programmer's textual representation of a type into our
+    /// internal notion of a type.  This is meant to be used within a path.
+    pub fn ast_ty_to_ty_in_path(&self, ast_ty: &hir::Ty<'_>) -> Ty<'tcx> {
+        self.ast_ty_to_ty_inner(ast_ty, false, true)
     }
 
     /// Turns a `hir::Ty` into a `Ty`. For diagnostics' purposes we keep track of whether trait
     /// objects are borrowed like `&dyn Trait` to avoid emitting redundant errors.
     #[tracing::instrument(level = "debug", skip(self))]
-    fn ast_ty_to_ty_inner(&self, ast_ty: &hir::Ty<'_>, borrowed: bool) -> Ty<'tcx> {
+    fn ast_ty_to_ty_inner(&self, ast_ty: &hir::Ty<'_>, borrowed: bool, in_path: bool) -> Ty<'tcx> {
         let tcx = self.tcx();
 
         let result_ty = match ast_ty.kind {
@@ -2306,7 +2291,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
             hir::TyKind::Rptr(ref region, ref mt) => {
                 let r = self.ast_region_to_region(region, None);
                 debug!(?r);
-                let t = self.ast_ty_to_ty_inner(mt.ty, true);
+                let t = self.ast_ty_to_ty_inner(mt.ty, true, false);
                 tcx.mk_ref(r, ty::TypeAndMut { ty: t, mutbl: mt.mutbl })
             }
             hir::TyKind::Never => tcx.types.never,
@@ -2325,6 +2310,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                 ))
             }
             hir::TyKind::TraitObject(bounds, ref lifetime, _) => {
+                self.maybe_lint_bare_trait(ast_ty, in_path);
                 self.conv_object_ty_poly_trait_ref(ast_ty.span, bounds, lifetime, borrowed)
             }
             hir::TyKind::Path(hir::QPath::Resolved(ref maybe_qself, ref path)) => {
@@ -2337,15 +2323,22 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                 let def_id = item_id.def_id.to_def_id();
 
                 match opaque_ty.kind {
-                    hir::ItemKind::OpaqueTy(hir::OpaqueTy { impl_trait_fn, .. }) => {
-                        self.impl_trait_ty_to_ty(def_id, lifetimes, impl_trait_fn.is_some())
-                    }
+                    hir::ItemKind::OpaqueTy(hir::OpaqueTy { origin, .. }) => self
+                        .impl_trait_ty_to_ty(
+                            def_id,
+                            lifetimes,
+                            matches!(
+                                origin,
+                                hir::OpaqueTyOrigin::FnReturn(..)
+                                    | hir::OpaqueTyOrigin::AsyncFn(..)
+                            ),
+                        ),
                     ref i => bug!("`impl Trait` pointed to non-opaque type?? {:#?}", i),
                 }
             }
             hir::TyKind::Path(hir::QPath::TypeRelative(ref qself, ref segment)) => {
                 debug!(?qself, ?segment);
-                let ty = self.ast_ty_to_ty(qself);
+                let ty = self.ast_ty_to_ty_inner(qself, false, true);
 
                 let res = if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = qself.kind {
                     path.res
@@ -2356,7 +2349,7 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
                     .map(|(ty, _, _)| ty)
                     .unwrap_or_else(|_| tcx.ty_error())
             }
-            hir::TyKind::Path(hir::QPath::LangItem(lang_item, span)) => {
+            hir::TyKind::Path(hir::QPath::LangItem(lang_item, span, _)) => {
                 let def_id = tcx.require_lang_item(lang_item, Some(span));
                 let (substs, _) = self.create_substs_for_ast_path(
                     span,
@@ -2601,5 +2594,63 @@ impl<'o, 'tcx> dyn AstConv<'tcx> + 'o {
             tcx.sess.emit_err(AmbiguousLifetimeBound { span });
         }
         Some(r)
+    }
+
+    fn maybe_lint_bare_trait(&self, self_ty: &hir::Ty<'_>, in_path: bool) {
+        let tcx = self.tcx();
+        if let hir::TyKind::TraitObject([poly_trait_ref, ..], _, TraitObjectSyntax::None) =
+            self_ty.kind
+        {
+            let needs_bracket = in_path
+                && !tcx
+                    .sess
+                    .source_map()
+                    .span_to_prev_source(self_ty.span)
+                    .ok()
+                    .map_or(false, |s| s.trim_end().ends_with('<'));
+
+            let is_global = poly_trait_ref.trait_ref.path.is_global();
+            let sugg = Vec::from_iter([
+                (
+                    self_ty.span.shrink_to_lo(),
+                    format!(
+                        "{}dyn {}",
+                        if needs_bracket { "<" } else { "" },
+                        if is_global { "(" } else { "" },
+                    ),
+                ),
+                (
+                    self_ty.span.shrink_to_hi(),
+                    format!(
+                        "{}{}",
+                        if is_global { ")" } else { "" },
+                        if needs_bracket { ">" } else { "" },
+                    ),
+                ),
+            ]);
+            if self_ty.span.edition() >= Edition::Edition2021 {
+                let msg = "trait objects must include the `dyn` keyword";
+                let label = "add `dyn` keyword before this trait";
+                rustc_errors::struct_span_err!(tcx.sess, self_ty.span, E0782, "{}", msg)
+                    .multipart_suggestion_verbose(label, sugg, Applicability::MachineApplicable)
+                    .emit();
+            } else {
+                let msg = "trait objects without an explicit `dyn` are deprecated";
+                tcx.struct_span_lint_hir(
+                    BARE_TRAIT_OBJECTS,
+                    self_ty.hir_id,
+                    self_ty.span,
+                    |lint| {
+                        lint.build(msg)
+                            .multipart_suggestion_verbose(
+                                "use `dyn`",
+                                sugg,
+                                Applicability::MachineApplicable,
+                            )
+                            .emit()
+                    },
+                );
+            }
+        }
     }
 }

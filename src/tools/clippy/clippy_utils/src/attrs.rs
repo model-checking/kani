@@ -14,15 +14,14 @@ pub enum DeprecationStatus {
     None,
 }
 
+#[rustfmt::skip]
 pub const BUILTIN_ATTRIBUTES: &[(&str, DeprecationStatus)] = &[
-    ("author", DeprecationStatus::None),
-    ("cognitive_complexity", DeprecationStatus::None),
-    (
-        "cyclomatic_complexity",
-        DeprecationStatus::Replaced("cognitive_complexity"),
-    ),
-    ("dump", DeprecationStatus::None),
-    ("msrv", DeprecationStatus::None),
+    ("author",                DeprecationStatus::None),
+    ("version",               DeprecationStatus::None),
+    ("cognitive_complexity",  DeprecationStatus::None),
+    ("cyclomatic_complexity", DeprecationStatus::Replaced("cognitive_complexity")),
+    ("dump",                  DeprecationStatus::None),
+    ("msrv",                  DeprecationStatus::None),
 ];
 
 pub struct LimitStack {
@@ -114,7 +113,7 @@ pub fn get_attr<'a>(
 fn parse_attrs<F: FnMut(u64)>(sess: &Session, attrs: &[ast::Attribute], name: &'static str, mut f: F) {
     for attr in get_attr(sess, attrs, name) {
         if let Some(ref value) = attr.value_str() {
-            if let Ok(value) = FromStr::from_str(&value.as_str()) {
+            if let Ok(value) = FromStr::from_str(value.as_str()) {
                 f(value);
             } else {
                 sess.span_err(attr.span, "not a number");

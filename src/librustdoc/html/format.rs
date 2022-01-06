@@ -27,6 +27,8 @@ use crate::html::escape::Escape;
 use crate::html::render::cache::ExternalLocation;
 use crate::html::render::Context;
 
+use super::url_parts_builder::UrlPartsBuilder;
+
 crate trait Print {
     fn print(self, buffer: &mut Buffer);
 }
@@ -139,9 +141,7 @@ crate fn print_generic_bounds<'a, 'tcx: 'a>(
     display_fn(move |f| {
         let mut bounds_dup = FxHashSet::default();
 
-        for (i, bound) in
-            bounds.iter().filter(|b| bounds_dup.insert(b.print(cx).to_string())).enumerate()
-        {
+        for (i, bound) in bounds.iter().filter(|b| bounds_dup.insert(b.clone())).enumerate() {
             if i > 0 {
                 f.write_str(" + ")?;
             }
@@ -173,7 +173,7 @@ impl clean::GenericParamDef {
                 Ok(())
             }
             clean::GenericParamDefKind::Type { bounds, default, .. } => {
-                f.write_str(&*self.name.as_str())?;
+                f.write_str(self.name.as_str())?;
 
                 if !bounds.is_empty() {
                     if f.alternate() {
@@ -220,15 +220,16 @@ impl clean::Generics {
         cx: &'a Context<'tcx>,
     ) -> impl fmt::Display + 'a + Captures<'tcx> {
         display_fn(move |f| {
-            let real_params =
-                self.params.iter().filter(|p| !p.is_synthetic_type_param()).collect::<Vec<_>>();
-            if real_params.is_empty() {
+            let mut real_params =
+                self.params.iter().filter(|p| !p.is_synthetic_type_param()).peekable();
+            if real_params.peek().is_none() {
                 return Ok(());
             }
+
             if f.alternate() {
-                write!(f, "<{:#}>", comma_sep(real_params.iter().map(|g| g.print(cx))))
+                write!(f, "<{:#}>", comma_sep(real_params.map(|g| g.print(cx))))
             } else {
-                write!(f, "&lt;{}&gt;", comma_sep(real_params.iter().map(|g| g.print(cx))))
+                write!(f, "&lt;{}&gt;", comma_sep(real_params.map(|g| g.print(cx))))
             }
         })
     }
@@ -346,7 +347,7 @@ crate fn print_where_clause<'a, 'tcx: 'a>(
 
 impl clean::Lifetime {
     crate fn print(&self) -> impl fmt::Display + '_ {
-        self.get_ref()
+        self.0.as_str()
     }
 }
 
@@ -544,9 +545,9 @@ crate fn href_with_root_path(
                         ExternalLocation::Remote(ref s) => {
                             is_remote = true;
                             let s = s.trim_end_matches('/');
-                            let mut s = vec![s];
-                            s.extend(module_fqp[..].iter().map(String::as_str));
-                            s
+                            let mut builder = UrlPartsBuilder::singleton(s);
+                            builder.extend(module_fqp.iter().map(String::as_str));
+                            builder
                         }
                         ExternalLocation::Local => href_relative_parts(module_fqp, relative_to),
                         ExternalLocation::Unknown => return Err(HrefError::DocumentationNotBuilt),
@@ -560,22 +561,21 @@ crate fn href_with_root_path(
     if !is_remote {
         if let Some(root_path) = root_path {
             let root = root_path.trim_end_matches('/');
-            url_parts.insert(0, root);
+            url_parts.push_front(root);
         }
     }
     debug!(?url_parts);
     let last = &fqp.last().unwrap()[..];
-    let filename;
     match shortty {
         ItemType::Module => {
             url_parts.push("index.html");
         }
         _ => {
-            filename = format!("{}.{}.html", shortty.as_str(), last);
+            let filename = format!("{}.{}.html", shortty.as_str(), last);
             url_parts.push(&filename);
         }
     }
-    Ok((url_parts.join("/"), shortty, fqp.to_vec()))
+    Ok((url_parts.finish(), shortty, fqp.to_vec()))
 }
 
 crate fn href(did: DefId, cx: &Context<'_>) -> Result<(String, ItemType, Vec<String>), HrefError> {
@@ -585,7 +585,7 @@ crate fn href(did: DefId, cx: &Context<'_>) -> Result<(String, ItemType, Vec<Str
 /// Both paths should only be modules.
 /// This is because modules get their own directories; that is, `std::vec` and `std::vec::Vec` will
 /// both need `../iter/trait.Iterator.html` to get at the iterator trait.
-crate fn href_relative_parts<'a>(fqp: &'a [String], relative_to_fqp: &'a [String]) -> Vec<&'a str> {
+crate fn href_relative_parts(fqp: &[String], relative_to_fqp: &[String]) -> UrlPartsBuilder {
     for (i, (f, r)) in fqp.iter().zip(relative_to_fqp.iter()).enumerate() {
         // e.g. linking to std::iter from std::vec (`dissimilar_part_count` will be 1)
         if f != r {
@@ -603,7 +603,7 @@ crate fn href_relative_parts<'a>(fqp: &'a [String], relative_to_fqp: &'a [String
         iter::repeat("..").take(dissimilar_part_count).collect()
     // linking to the same module
     } else {
-        Vec::new()
+        UrlPartsBuilder::new()
     }
 }
 
@@ -637,7 +637,7 @@ fn resolved_path<'cx>(
                 last.name.to_string()
             }
         } else {
-            anchor(did, &*last.name.as_str(), cx).to_string()
+            anchor(did, last.name.as_str(), cx).to_string()
         };
         write!(w, "{}{}", path, last.args.print(cx))?;
     }
@@ -666,20 +666,18 @@ fn primitive_link(
                 needs_termination = true;
             }
             Some(&def_id) => {
-                let cname_str;
+                let cname_sym;
                 let loc = match m.extern_locations[&def_id.krate] {
                     ExternalLocation::Remote(ref s) => {
-                        cname_str =
-                            ExternalCrate { crate_num: def_id.krate }.name(cx.tcx()).as_str();
-                        Some(vec![s.trim_end_matches('/'), &cname_str[..]])
+                        cname_sym = ExternalCrate { crate_num: def_id.krate }.name(cx.tcx());
+                        Some(vec![s.trim_end_matches('/'), cname_sym.as_str()])
                     }
                     ExternalLocation::Local => {
-                        cname_str =
-                            ExternalCrate { crate_num: def_id.krate }.name(cx.tcx()).as_str();
-                        Some(if cx.current.first().map(|x| &x[..]) == Some(&cname_str[..]) {
+                        cname_sym = ExternalCrate { crate_num: def_id.krate }.name(cx.tcx());
+                        Some(if cx.current.first().map(|x| &x[..]) == Some(cname_sym.as_str()) {
                             iter::repeat("..").take(cx.current.len() - 1).collect()
                         } else {
-                            let cname = iter::once(&cname_str[..]);
+                            let cname = iter::once(cname_sym.as_str());
                             iter::repeat("..").take(cx.current.len()).chain(cname).collect()
                         })
                     }
@@ -774,7 +772,7 @@ fn fmt_type<'cx>(
         clean::Primitive(clean::PrimitiveType::Never) => {
             primitive_link(f, PrimitiveType::Never, "!", cx)
         }
-        clean::Primitive(prim) => primitive_link(f, prim, &*prim.as_sym().as_str(), cx),
+        clean::Primitive(prim) => primitive_link(f, prim, prim.as_sym().as_str(), cx),
         clean::BareFunction(ref decl) => {
             if f.alternate() {
                 write!(
@@ -1177,6 +1175,10 @@ impl clean::FnDecl {
                     args.push_str(" <br>");
                     args_plain.push(' ');
                 }
+                if input.is_const {
+                    args.push_str("const ");
+                    args_plain.push_str("const ");
+                }
                 if !input.name.is_empty() {
                     args.push_str(&format!("{}: ", input.name));
                     args_plain.push_str(&format!("{}: ", input.name));
@@ -1266,7 +1268,7 @@ impl clean::Visibility {
                     debug!("path={:?}", path);
                     // modified from `resolved_path()` to work with `DefPathData`
                     let last_name = path.data.last().unwrap().data.get_opt_name().unwrap();
-                    let anchor = anchor(vis_did, &last_name.as_str(), cx).to_string();
+                    let anchor = anchor(vis_did, last_name.as_str(), cx).to_string();
 
                     let mut s = "pub(in ".to_owned();
                     for seg in &path.data[..path.data.len() - 1] {
@@ -1349,10 +1351,7 @@ impl PrintWithSpace for hir::Mutability {
     }
 }
 
-crate fn print_constness_with_space(
-    c: &hir::Constness,
-    s: Option<&ConstStability>,
-) -> &'static str {
+crate fn print_constness_with_space(c: &hir::Constness, s: Option<ConstStability>) -> &'static str {
     match (c, s) {
         // const stable or when feature(staged_api) is not set
         (
@@ -1400,9 +1399,9 @@ impl clean::ImportSource {
                 for seg in &self.path.segments[..self.path.segments.len() - 1] {
                     write!(f, "{}::", seg.name)?;
                 }
-                let name = self.path.last_name();
+                let name = self.path.last();
                 if let hir::def::Res::PrimTy(p) = self.path.res {
-                    primitive_link(f, PrimitiveType::from(p), &*name, cx)?;
+                    primitive_link(f, PrimitiveType::from(p), name.as_str(), cx)?;
                 } else {
                     write!(f, "{}", name)?;
                 }
@@ -1418,7 +1417,7 @@ impl clean::TypeBinding {
         cx: &'a Context<'tcx>,
     ) -> impl fmt::Display + 'a + Captures<'tcx> {
         display_fn(move |f| {
-            f.write_str(&*self.name.as_str())?;
+            f.write_str(self.name.as_str())?;
             match self.kind {
                 clean::TypeBindingKind::Equality { ref ty } => {
                     if f.alternate() {
