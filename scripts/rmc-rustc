@@ -2,29 +2,31 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+
 # Usage:
-# rmc-rustc (--rmc-flags | --rmc-path)
-#   - This will print the configurations used to run rmc version of rustc.
-# rmc-rustc RUSTC_OPTIONS
-#   - This will run RUSTC with RMC flags + the given RUSTC_OPTIONS
+# RMCFLAGS="[<RMC_OPTIONS>]*" rmc-rustc --rmc-flags [<RUSTC_OPTIONS>]*
+#   - This will run rmc-compiler with RMC options provided via RMCFLAGS
+#     environment variable + the given RUSTC_OPTIONS.
+# rmc-rustc [<RMC_OPTIONS>]* [<RUSTC_OPTIONS>]*
+#   - This will run rmc-compiler with RMC options + the given RUSTC_OPTIONS
 set -eu
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 REPO_DIR="$(dirname $SCRIPT_DIR)"
 
 RMC_PATH=${RMC_PATH:-""}
-RMC_LIB_PATH=${RMC_LIB_PATH:-""}
 
 shopt -s nullglob
-set_rmc_path() {
-    local RMC_CANDIDATES=("$REPO_DIR"/build/*/stage1/bin/rustc)
+set_paths() {
+    # TODO: We should build into a specific folder.
+    local RMC_CANDIDATES=("$REPO_DIR"/target/*/rmc-compiler)
 
     if [ -z "${RMC_PATH}" ]
     then
         if [[ -z ${RMC_CANDIDATES:-""} ]] || [[ ${#RMC_CANDIDATES[@]} -ne 1 ]]
         then
             echo "ERROR: Could not find RMC binary."
-            echo "Looked for: $REPO_DIR/build/*/stage1/bin/rustc"
+            echo "Looked for: '$REPO_DIR/target/*/rmc-compiler'"
             echo "Was RMC successfully built first?"
             exit 1
         fi
@@ -32,56 +34,22 @@ set_rmc_path() {
     fi
 }
 
-set_rmc_lib_path() {
-    if [ -z "${RMC_LIB_PATH}" ]
-    then
-        local RMC_LIB_CANDIDATES=("$REPO_DIR"/target/*/librmc.rlib)
-        if [[ -z ${RMC_LIB_CANDIDATES:-""} ]] || [[ ${#RMC_LIB_CANDIDATES[@]} -ne 1 ]]
-        then
-            echo "ERROR: Could not find RMC library."
-            echo "Looked for: \"$REPO_DIR/target/*/librmc.rlib\""
-            echo "Try running <RMC_ROOT>/scripts/setup/build_rmc_lib.sh"
-            exit 1
-        fi
-        RMC_LIB_PATH=$(dirname ${RMC_LIB_CANDIDATES[0]})
-    fi
-    # Having set RMC_LIB_PATH, find RMC_MACRO_LIB_PATH
-    local MACRO_LIB_CANDIDATE=(${RMC_LIB_PATH}/deps/librmc_macros-*)
-    if [[ ${#MACRO_LIB_CANDIDATE[@]} -ne 1 ]]
-    then
-        echo "ERROR: Could not find RMC library."
-        echo "Looked for: \"${RMC_LIB_PATH}/deps/librmc_macros-*\""
-        echo "Try running <RMC_ROOT>/scripts/setup/build_rmc_lib.sh"
-        exit 1
-    fi
-    RMC_MACRO_LIB_PATH="${MACRO_LIB_CANDIDATE[0]}"
-}
+set_paths
 
-set_rmc_path
-if [ "${1:-''}" == "--rmc-path" ]
+# Hack to enable cargo rmc
+#
+# The rmc-compiler requires the flags related to the rmc libraries to be
+# in front of the ones that control rustc.
+#
+# For cargo rmc, cargo sometimes adds flags before the custom RUSTFLAGS, hence,
+# we use a special environment variable to set RMC specific flags. These flags
+# should only be enabled if --rmc-flags is present.
+args="${*#--rmc-flags}"
+if [ "$args" != "$*" ]
 then
-    echo ${RMC_PATH}
+    FLAGS=("${RMCFLAGS} $args")
 else
-    set_rmc_lib_path
-    RMC_FLAGS="-Z codegen-backend=gotoc \
-            -C overflow-checks=on \
-            -C panic=abort \
-            -Z panic_abort_tests=yes \
-            -Z trim-diagnostic-paths=no \
-            -Z human_readable_cgu_names \
-            --cfg=rmc \
-            -Zcrate-attr=feature(register_tool) \
-            -Zcrate-attr=register_tool(rmctool) \
-            -L ${RMC_LIB_PATH} \
-            --extern rmc \
-            -L ${RMC_LIB_PATH}/deps \
-            --extern librmc_macros=${RMC_MACRO_LIB_PATH} \
-            "
-    if [ "${1:-''}" == "--rmc-flags" ]
-    then
-        echo ${RMC_FLAGS}
-    else
-        # Execute rmc
-       "${RMC_PATH}" ${RMC_FLAGS} "$@"
-    fi
+    FLAGS=("$args")
 fi
+
+"${RMC_PATH}" ${FLAGS}

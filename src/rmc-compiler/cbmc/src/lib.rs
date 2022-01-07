@@ -24,6 +24,7 @@
 //!
 //! Speical [id]s include:
 //! 1. [Empty] and [Nil] behaves like [null].
+#![feature(rustc_private)]
 
 mod env;
 pub mod goto_program;
@@ -34,6 +35,8 @@ pub use irep::serialize;
 pub use machine_model::{MachineModel, RoundingMode};
 mod cbmc_string;
 pub use cbmc_string::{InternString, InternStringOption, InternedString};
+
+extern crate rustc_data_structures;
 
 // Rust has difficulty resolving types for None option values: this gives rustc a hint.
 pub const NO_PRETTY_NAME: Option<InternedString> = None;

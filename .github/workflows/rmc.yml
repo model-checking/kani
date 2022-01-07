@@ -46,13 +46,11 @@ jobs:
           git config submodule."src/llvm-project".update none
           git submodule update --init --depth 1
 
-      - name: Build RMC
+      - name: Build RMC and RMC Library
         run: |
           export RUST_BACKTRACE=1
-          ./x.py build -i --stage 1 library/std
-
-      - name: Build RMC Library
-        run: bash -x ./scripts/setup/build_rmc_lib.sh
+          cd src/rmc-compiler
+          cargo build
 
       - name: Execute RMC regression
         run: ./scripts/rmc-regression.sh
