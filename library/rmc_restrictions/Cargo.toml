@@ -11,4 +11,4 @@ edition = "2021"
 [dependencies]
 rustc_data_structures = { path = "../../compiler/rustc_data_structures" }
 serde = {version = "1", features = ["derive"]}
-cbmc = { path = "../../compiler/cbmc" }
+cbmc = { path = "../../src/rmc-compiler/cbmc" }

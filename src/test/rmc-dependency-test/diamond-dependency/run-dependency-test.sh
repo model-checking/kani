@@ -9,18 +9,33 @@ echo
 echo "Starting Diamond Dependency Test..."
 echo
 
+# Test for platform
+PLATFORM=$(uname -sp)
+if [[ $PLATFORM == "Linux x86_64" ]]
+then
+  TARGET="x86_64-unknown-linux-gnu"
+elif [[ $PLATFORM == "Darwin i386" ]]
+then
+  TARGET="x86_64-apple-darwin"
+else
+  echo
+  echo "Test only works on Linux or OSX x86 platforms, skipping..."
+  echo
+  exit 0
+fi
+
 # Compile crates with RMC backend
 cd $(dirname $0)
 rm -rf build
-CARGO_TARGET_DIR=build RUST_BACKTRACE=1 RUSTFLAGS="-Z codegen-backend=gotoc -Z trim-diagnostic-paths=no --cfg=rmc" RUSTC=rmc-rustc cargo build
+RUST_BACKTRACE=1 cargo rmc --target-dir build --only-codegen --keep-temp --verbose
 
-# Convert from JSON to Gotoc 
-cd build/debug/deps/
+# Convert from JSON to Gotoc
+cd build/${TARGET}/debug/deps/
 ls *.symtab.json | xargs symtab2gb
 
 # Add the entry point and remove unused functions
-goto-cc --function harness *.out -o a.out 
-goto-instrument --drop-unused-functions a.out b.out 
+goto-cc --function harness *.out -o a.out
+goto-instrument --drop-unused-functions a.out b.out
 
 # Run the solver
 RESULT="/tmp/dependency_test_result.txt"

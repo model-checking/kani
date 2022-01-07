@@ -3325,6 +3325,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmc-compiler"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rmc_queries",
+ "rustc_codegen_rmc",
+ "tracing",
+]
+
+[[package]]
 name = "rmc-link-restrictions"
 version = "0.1.0"
 dependencies = [
@@ -3337,6 +3347,13 @@ dependencies = [
 [[package]]
 name = "rmc_macros"
 version = "0.1.0"
+
+[[package]]
+name = "rmc_queries"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "rmc_restrictions"
@@ -3890,24 +3907,9 @@ dependencies = [
  "libc",
  "measureme 9.1.2",
  "num",
+ "rmc_queries",
  "rmc_restrictions",
  "rustc-demangle",
- "rustc_arena",
- "rustc_ast",
- "rustc_attr",
- "rustc_codegen_ssa",
- "rustc_data_structures",
- "rustc_errors",
- "rustc_fs_util",
- "rustc_hir",
- "rustc_index",
- "rustc_llvm",
- "rustc_metadata",
- "rustc_middle",
- "rustc_serialize",
- "rustc_session",
- "rustc_span",
- "rustc_target",
  "serde",
  "serde_json",
  "smallvec",
@@ -4186,7 +4188,6 @@ dependencies = [
  "rustc_borrowck",
  "rustc_builtin_macros",
  "rustc_codegen_llvm",
- "rustc_codegen_rmc",
  "rustc_codegen_ssa",
  "rustc_const_eval",
  "rustc_data_structures",
