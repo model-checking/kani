@@ -45,7 +45,7 @@ fn return_f32() -> f32 {
     }
 }
 fn return_f64() -> f64 {
-    let x: f64 = unsafe { rmc::any_raw() };
+    let x: f64 = rmc::any();
     if x <= 10.0 && x >= -10.0 {
         return x;
     } else {

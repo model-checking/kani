@@ -15,6 +15,10 @@ enum Basic {
 fn main() {
     let e = unsafe { rmc::any_raw::<Basic>() };
     // This enum can be invalid and this code may actually not match any of the options below.
+    rmc::expect_fail(
+        matches!(e, Basic::Variant1 | Basic::Variant2 | Basic::Variant3),
+        "Invalid enum variant",
+    );
     match e {
         Basic::Variant1 => {
             let val = e as u8;

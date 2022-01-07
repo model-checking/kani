@@ -13,11 +13,19 @@ macro_rules! error {
 struct MyError {}
 
 unsafe impl rmc::Invariant for MyError {
-    fn is_valid(&self) -> bool { true }
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Default, Clone, Copy)]
 pub struct GuestAddress(pub u64);
+
+unsafe impl rmc::Invariant for GuestAddress {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
 
 static mut TRACK_CHECKED_OFFSET_NONE: bool = false;
 static mut TRACK_READ_OBJ: Option<GuestAddress> = None;
@@ -35,12 +43,12 @@ impl GuestMemoryMmap {
         unsafe {
             if retval.is_none() && !TRACK_CHECKED_OFFSET_NONE {
                 TRACK_CHECKED_OFFSET_NONE = true;
-           }
+            }
         }
         return retval;
     }
 
-    fn read_obj<T>(&self, addr: GuestAddress) -> Result<T, MyError> {
+    fn read_obj<T: rmc::Invariant>(&self, addr: GuestAddress) -> Result<T, MyError> {
         // This assertion means that no descriptor is read more than once
         unsafe {
             if let Some(prev_addr) = TRACK_READ_OBJ {
@@ -50,19 +58,11 @@ impl GuestMemoryMmap {
                 TRACK_READ_OBJ = Some(addr);
             }
         }
-        if rmc::any() {
-            unsafe { Ok(rmc::any_raw::<T>()) }
-        } else {
-            Err(rmc::any::<MyError>())
-        }
+        if rmc::any() { Ok(rmc::any::<T>()) } else { Err(rmc::any::<MyError>()) }
     }
 
     fn read_obj_request_header(&self, addr: GuestAddress) -> Result<RequestHeader, Error> {
-        if rmc::any() {
-            unsafe { Ok(rmc::any_raw::<RequestHeader>()) }
-        } else {
-            unsafe { Err(rmc::any_raw::<Error>()) }
-        }
+        if rmc::any() { Ok(rmc::any::<RequestHeader>()) } else { Err(rmc::any::<Error>()) }
     }
 }
 
@@ -77,6 +77,12 @@ struct Descriptor {
     len: u32,
     flags: u16,
     next: u16,
+}
+
+unsafe impl rmc::Invariant for Descriptor {
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 /// A virtio descriptor chain.
@@ -187,6 +193,12 @@ pub struct RequestHeader {
     sector: u64,
 }
 
+unsafe impl rmc::Invariant for RequestHeader {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
 impl RequestHeader {
     pub fn new(request_type: u32, sector: u64) -> RequestHeader {
         RequestHeader { request_type, _reserved: 0, sector }
@@ -239,6 +251,20 @@ pub enum Error {
     UnexpectedReadOnlyDescriptor,
     /// Guest gave us a write only descriptor that protocol says to read from.
     UnexpectedWriteOnlyDescriptor,
+}
+
+unsafe impl rmc::Invariant for Error {
+    fn is_valid(&self) -> bool {
+        matches!(
+            *self,
+            Error::DescriptorChainTooShort
+                | Error::DescriptorLengthTooSmall
+                | Error::GuestMemory
+                | Error::InvalidOffset
+                | Error::UnexpectedReadOnlyDescriptor
+                | Error::UnexpectedWriteOnlyDescriptor
+        )
+    }
 }
 
 pub struct Request {
