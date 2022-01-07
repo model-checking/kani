@@ -18,3 +18,5 @@
 - [RMC developer documentation](./dev-documentation.md)
   - [Testing](./rmc-testing.md)
   - [Book runner](./bookrunner.md)
+
+- [Limitations](./limitations.md)
