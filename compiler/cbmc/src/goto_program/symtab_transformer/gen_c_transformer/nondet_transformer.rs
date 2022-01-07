@@ -3,12 +3,12 @@
 
 use super::super::Transformer;
 use crate::goto_program::{Expr, Location, Stmt, Symbol, SymbolTable, Type};
-use rustc_data_structures::fx::FxHashMap;
+use std::collections::HashMap;
 
 /// Struct for handling the nondet transformations for --gen-c-runnable.
 pub struct NondetTransformer {
     new_symbol_table: SymbolTable,
-    nondet_types: FxHashMap<String, Type>,
+    nondet_types: HashMap<String, Type>,
 }
 
 impl NondetTransformer {
@@ -16,13 +16,13 @@ impl NondetTransformer {
     /// perform other clean-up operations to make valid C code.
     pub fn transform(original_symbol_table: &SymbolTable) -> SymbolTable {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
-        NondetTransformer { new_symbol_table, nondet_types: FxHashMap::default() }
+        NondetTransformer { new_symbol_table, nondet_types: HashMap::default() }
             .transform_symbol_table(original_symbol_table)
     }
 
     /// Extract `nondet_types` map for final processing.
-    pub fn nondet_types_owned(&mut self) -> FxHashMap<String, Type> {
-        std::mem::replace(&mut self.nondet_types, FxHashMap::default())
+    pub fn nondet_types_owned(&mut self) -> HashMap<String, Type> {
+        std::mem::replace(&mut self.nondet_types, HashMap::default())
     }
 }
 
