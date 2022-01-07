@@ -11,8 +11,8 @@
 // `SIGILL`, `SIGTRAP`, `SIGSEGV` or `SIGBUS`.
 //
 // The documentation mentions that `std::process::abort` is preferred if
-// possible: https://doc.rust-lang.org/core/intrinsics/fn.abort.html In RMC,
-// `std::process::abort` is identified as a panicking function
+// possible: https://doc.rust-lang.org/core/intrinsics/fn.abort.html
+// In RMC, `std::process::abort` is identified as a panicking function
 fn main() {
     std::intrinsics::abort();
 }
