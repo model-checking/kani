@@ -509,7 +509,6 @@ dependencies = [
  "libc",
  "measureme 9.1.2",
  "num",
- "rustc-demangle",
  "serde",
  "serde_test",
  "snap",

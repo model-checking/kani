@@ -22,7 +22,6 @@ snap = "1"
 string-interner = "0.14.0"
 tracing = "0.1"
 vector-map = "1.0.1"
-rustc-demangle = "0.1.21"
 
 [dev-dependencies]
 serde_test = "1"
