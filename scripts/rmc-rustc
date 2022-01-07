@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # Usage:
-# rmc-rustc (--rmc-flags | --rmc-path)
+# RMC_LOG rmc-rustc --rmc-flags RUSTC_OPTIONS
 #   - This will print the configurations used to run rmc version of rustc.
 # rmc-rustc RUSTC_OPTIONS
 #   - This will run RUSTC with RMC flags + the given RUSTC_OPTIONS
@@ -13,10 +13,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 REPO_DIR="$(dirname $SCRIPT_DIR)"
 
 RMC_PATH=${RMC_PATH:-""}
-RMC_LIB_PATH=${RMC_LIB_PATH:-""}
 
 shopt -s nullglob
 set_paths() {
+    # TODO: We should build into a specific folder.
     local RMC_CANDIDATES=("$REPO_DIR"/target/*/rmc-compiler)
 
     if [ -z "${RMC_PATH}" ]
@@ -29,11 +29,6 @@ set_paths() {
             exit 1
         fi
         RMC_PATH=${RMC_CANDIDATES[0]}
-    fi
-
-    if [ -z "${RMC_LIB_PATH}" ]
-    then
-        RMC_LIB_PATH=$(dirname ${RMC_PATH})/deps
     fi
 }
 

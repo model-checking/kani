@@ -7,10 +7,8 @@ use crate::context::metadata::RmcMetadata;
 use crate::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
-use cbmc::goto_program::SymbolTable;
 use cbmc::InternedString;
 use rmc_queries::{QueryDb, UserInput};
-use rmc_restrictions::VtableCtxResults;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
@@ -62,7 +60,7 @@ impl CodegenBackend for GotocCodegenBackend {
         check_options(&tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
-        let mut c = GotocCtx::new(tcx, self.queries.get_emit_vtable_restrictions());
+        let mut c = GotocCtx::new(tcx, self.queries.clone());
 
         // we first declare all functions
         for cgu in codegen_units {

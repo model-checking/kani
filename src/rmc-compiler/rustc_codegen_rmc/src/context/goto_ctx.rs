@@ -22,6 +22,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Symbol
 use cbmc::utils::aggr_tag;
 use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
 use cbmc::{MachineModel, RoundingMode};
+use rmc_queries::{QueryDb, UserInput};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;
@@ -37,10 +38,13 @@ use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
+use std::rc::Rc;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
+    /// the query system for rmc
+    pub queries: Rc<QueryDb>,
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
     pub hooks: GotocHooks<'tcx>,
@@ -59,13 +63,14 @@ pub struct GotocCtx<'tcx> {
 
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, emit_vtable_restrictions: bool) -> GotocCtx<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, queries: Rc<QueryDb>) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
-        let emit_vtable_restrictions = emit_vtable_restrictions;
+        let emit_vtable_restrictions = queries.get_emit_vtable_restrictions();
         GotocCtx {
             tcx,
+            queries,
             symbol_table,
             hooks: fhks,
             full_crate_name: full_crate_name(tcx),

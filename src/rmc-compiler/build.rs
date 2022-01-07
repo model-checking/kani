@@ -7,7 +7,13 @@ use std::process::Command;
 
 macro_rules! path_str {
     ($input:expr) => {
-        &$input.iter().collect::<PathBuf>().to_string_lossy().into_owned()
+        String::from(
+            $input
+                .iter()
+                .collect::<PathBuf>()
+                .to_str()
+                .unwrap_or_else(|| panic!("Invalid path {}", stringify!($input))),
+        )
     };
 }
 
@@ -21,7 +27,7 @@ fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
     let args = [
         "build",
         "--manifest-path",
-        path_str!(rmc_lib_toml),
+        &path_str!(rmc_lib_toml),
         "-Z",
         "unstable-options",
         "--out-dir",
