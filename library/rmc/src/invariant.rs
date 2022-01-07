@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-/// This module introduces the Invariant trait as well as implementation for commonly used types.
+//! This module introduces the Invariant trait as well as implementation for commonly used types.
 use std::num::*;
 
 /// Types that implement a check to ensure its value is valid and safe to be used. See
@@ -9,7 +9,14 @@ use std::num::*;
 ///
 /// Implementations of Invariant traits must ensure that the current bit values of the given type
 /// is valid and that all its invariants hold.
+///
+/// # Safety
+///
+/// This trait is unsafe since &self might represent an invalid value. The `is_valid()` function
+/// must return `true` if and only if the invariant of its type is held.
 pub unsafe trait Invariant {
+    /// Check if `&self` holds a valid value that respect the type invariant.
+    /// This function must return `true` if and only if `&self` is valid.
     fn is_valid(&self) -> bool;
 }
 

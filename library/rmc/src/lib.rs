@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 
+pub mod arbitrary;
 pub mod invariant;
 pub mod slice;
 
+pub use arbitrary::Arbitrary;
 pub use invariant::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -40,20 +42,19 @@ pub fn assume(_cond: bool) {}
 /// # Example:
 ///
 /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
-/// under all possible i32 input values.
+/// under all possible `NonZeroU8` input values, i.e., all possible `u8` values except zero.
 ///
 /// ```rust
-/// let inputA = rmc::any::<i32>();
+/// let inputA = rmc::any::<std::num::NonZeroU8>();
 /// fn_under_verification(inputA);
 /// ```
 ///
-/// Note: This is a safe construct and can only be used with types that implement the `Invariant`
-/// trait. The invariant trait is used to constrain the result to ensure the value is valid.
+/// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
+/// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
+/// valid values for type `T`.
 #[inline(always)]
-pub fn any<T: Invariant>() -> T {
-    let value = unsafe { any_raw::<T>() };
-    assume(value.is_valid());
-    value
+pub fn any<T: Arbitrary>() -> T {
+    T::any()
 }
 
 /// This function creates an unconstrained value of type `T`. This may result in an invalid value.
@@ -67,6 +68,18 @@ pub fn any<T: Invariant>() -> T {
 /// let inputA = unsafe { rmc::any_raw::<char>() };
 /// fn_under_verification(inputA);
 /// ```
+///
+/// # Safety
+///
+/// This function is unsafe and it may represent invalid `T` values which can lead to many
+/// undesirable undefined behaviors. Users must validate that the symbolic variable respects
+/// the type invariant as well as any other constraint relevant to their usage. E.g.:
+///
+/// ```rust
+/// let c = unsafe { rmc::any_raw::char() };
+/// rmc::assume(char::from_u32(c as u32).is_ok());
+/// ```
+///
 #[rustc_diagnostic_item = "RmcAnyRaw"]
 #[inline(never)]
 pub unsafe fn any_raw<T>() -> T {
@@ -76,7 +89,7 @@ pub unsafe fn any_raw<T>() -> T {
 /// This function has been split into a safe and unsafe functions: `rmc::any` and `rmc::any_raw`.
 #[deprecated]
 #[inline(never)]
-pub fn nondet<T: Invariant>() -> T {
+pub fn nondet<T: Arbitrary>() -> T {
     any::<T>()
 }
 
