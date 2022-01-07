@@ -260,19 +260,19 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        if tcx.symbol_name(instance) == "abort" {
-            Stmt::assert_false("abort intrinsic reached", loc)
-        } else {
-            let p = assign_to.unwrap();
-            let target = target.unwrap();
-            Stmt::block(
-                vec![
-                    tcx.codegen_intrinsic(instance, fargs, &p, span),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-                ],
-                loc,
-            )
+        match assign_to {
+            None => tcx.codegen_nonret_intrinsic(instance, span),
+            Some(assign_to) => {
+                let target = target.unwrap();
+                let loc = tcx.codegen_span_option(span);
+                Stmt::block(
+                    vec![
+                        tcx.codegen_intrinsic(instance, fargs, &assign_to, span),
+                        Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
+                    ],
+                    loc,
+                )
+            }
         }
     }
 }

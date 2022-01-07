@@ -29,6 +29,24 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
+    /// Handles codegen for non returning intrinsics
+    /// Non returning intrinsics are not associated with a destination
+    pub fn codegen_nonret_intrinsic(
+        &mut self,
+        instance: Instance<'tcx>,
+        span: Option<Span>,
+    ) -> Stmt {
+        let intrinsic = self.symbol_name(instance);
+        let intrinsic = intrinsic.as_str();
+        let loc = self.codegen_span_option(span);
+        debug!("codegen_nonret_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
+        match intrinsic {
+            "abort" => Stmt::assert_false("reached intrinsic::abort", loc),
+            "transmute" => Stmt::assert_false("transmuting to uninhabited type", loc),
+            _ => unimplemented!(),
+        }
+    }
+
     /// c.f. rustc_codegen_llvm::intrinsic impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>
     /// fn codegen_intrinsic_call
     /// c.f. https://doc.rust-lang.org/std/intrinsics/index.html
@@ -280,7 +298,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         match intrinsic {
-            "abort" => Stmt::assert_false("abort intrinsic", loc),
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
             "arith_offset" => codegen_wrapping_op!(plus),
             "assert_inhabited" => {
