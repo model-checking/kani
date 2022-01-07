@@ -39,17 +39,15 @@ fi
 cargo new std_lib_test --lib
 cd std_lib_test
 
-# Check that we have the nighly toolchain, which is required for -Z build-std
-if ! rustup toolchain list | grep -q nightly; then
-  echo "Installing nightly toolchain"
-  rustup toolchain install nightly
-fi
+# Use same nightly toolchain used to build RMC
+cp ${RMC_DIR}/src/rmc-compiler/rust-toolchain.toml .
 
 echo "Starting cargo build with RMC"
 export RUSTC_LOG=error
-export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
-export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
-$WRAPPER cargo +nightly build -Z build-std --lib --target $TARGET
+export RMCFLAGS="--goto-c"
+export RUSTFLAGS="--rmc-flags"
+export RUSTC="${SCRIPT_DIR}/rmc-rustc"
+$WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
 
 echo
 echo "Finished RMC codegen for the Rust standard library successfully..."

@@ -26,9 +26,8 @@ cd $RMC_DIR/firecracker/src/devices/src/virtio/
 # Disable warnings until https://github.com/model-checking/rmc/issues/573 is fixed
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
-export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
-cargo build --target x86_64-unknown-linux-gnu
+# RMC cannot locate Cargo.toml correctly: https://github.com/model-checking/rmc/issues/717
+cargo rmc --only-codegen --target x86_64-unknown-linux-gnu --no-config-toml
 
 echo
 echo "Finished Firecracker codegen regression successfully..."

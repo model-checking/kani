@@ -20,13 +20,17 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Formatting check
 ./x.py fmt --check
 
-# Build RMC and RMC library
-./x.py build -i --stage 1 library/std ${EXTRA_X_PY_BUILD_ARGS}
-./scripts/setup/build_rmc_lib.sh
+# Build RMC compiler and RMC library
+(cd "${RMC_DIR}/src/rmc-compiler"; cargo build)
+
+# Unit tests
+(cd src/rmc-compiler/cbmc; cargo test)
+(cd src/rmc-compiler; cargo test)
 
 # Standalone rmc tests, expected tests, and cargo tests
-./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs rmc-fixme
-./x.py test -i --stage 0 compiler/cbmc
+./x.py build -i src/tools/compiletest --stage 0
+export COMPILETEST_FORCE_STAGE0=1  # We don't care about the stage anymore. Remove this once we replace ./x.py test
+./x.py test -i --stage 0 rmc firecracker prusti smack expected cargo-rmc rmc-docs rmc-fixme
 
 # Check codegen for the standard library
 time "$SCRIPT_DIR"/std-lib-regression.sh
