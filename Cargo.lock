@@ -427,6 +427,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo-rmc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "glob",
+ "serde",
+ "serde_json",
+ "structopt",
+]
+
+[[package]]
 name = "cargo-test-macro"
 version = "0.1.0"
 
