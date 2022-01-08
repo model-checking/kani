@@ -6,8 +6,7 @@ use crate::goto_program::{
     DatatypeComponent, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, Type,
 };
 use crate::InternedString;
-use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-
+use std::collections::{HashMap, HashSet};
 /// Struct for replacing names with valid C identifiers for --gen-c-runnable.
 pub struct NameTransformer {
     new_symbol_table: SymbolTable,
@@ -17,8 +16,8 @@ pub struct NameTransformer {
     /// To do this, `mapped_names` remembers what each Rust name gets transformed to,
     /// and `used_names` keeps track of what C names have been used.
     // TODO: use InternedString to save memory.
-    mapped_names: FxHashMap<String, String>,
-    used_names: FxHashSet<String>,
+    mapped_names: HashMap<String, String>,
+    used_names: HashSet<String>,
 }
 
 impl NameTransformer {
@@ -27,8 +26,8 @@ impl NameTransformer {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
         NameTransformer {
             new_symbol_table,
-            mapped_names: FxHashMap::default(),
-            used_names: FxHashSet::default(),
+            mapped_names: HashMap::default(),
+            used_names: HashSet::default(),
         }
         .transform_symbol_table(original_symbol_table)
     }

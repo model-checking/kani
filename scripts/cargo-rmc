@@ -26,6 +26,9 @@ def main():
     if args.gen_c_runnable:
         rmc.cargo_build(args.crate, args.target_dir, args, ["gen-c"])
 
+        if args.only_codegen:
+            return 0
+
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
         symbol_table_jsons = glob.glob(pattern)
         rmc.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
@@ -51,6 +54,9 @@ def main():
         rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
     rmc.cargo_build(args.crate, args.target_dir, args)
+
+    if args.only_codegen:
+        return 0
 
     if args.build_target:
         pattern = os.path.join(args.target_dir, args.build_target, "debug", "deps", "*.symtab.json")
@@ -169,6 +175,7 @@ def parse_args():
         config_group.add_argument("--no-config-toml", action="store_true", help="Do not use any configuration toml")
         config_group.add_argument("--build-target", help="Build for the target triple.",
                                   default=default_build_target())
+        config_group.add_argument("--only-codegen", action="store_true", help="RMC will only compile the crate.")
 
         exclude_flags = []
         rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
