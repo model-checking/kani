@@ -176,7 +176,7 @@ def postprocess_results(properties):
     Check for certain cases, e.g. a reachable unsupported construct or a failed
     unwinding assertion, and update the results of impacted checks accordingly.
     """
-    
+
     has_reachable_unsupported_constructs, has_failed_unwinding_asserts = check_special_cases(properties)
 
     for property in properties:
@@ -184,7 +184,7 @@ def postprocess_results(properties):
             # Change status of all properties except failed unsupported
             # construct reachability checks to UNKNOWN
             description = property["description"]
-            if not unsupported_construct_str in description or property["status"] == "SUCCESS":
+            if unsupported_construct_str not in description or property["status"] == "SUCCESS":
                 property["status"] = "UNKNOWN"
         # TODO: Handle unwinding assertion failure
 
