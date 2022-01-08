@@ -1,0 +1,3 @@
+UNKNOWN
+assertion failed: x == 0
+** ERROR: A Rust construct that is not currently supported by RMC was found to be reachable. Check the results for more details.

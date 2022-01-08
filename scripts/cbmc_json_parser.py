@@ -32,6 +32,9 @@ output_style_switcher = {
     'old': 'old'
 }
 
+unsupported_construct_str = "is not currently supported by RMC"
+unwinding_assert_str = "unwinding assertion loop"
+
 class GlobalMessages(str, Enum):
     """
     Enum class to store all the global messages
@@ -84,6 +87,8 @@ def transform_cbmc_output(cbmc_response_string, output_style):
         # Extract property information from the restructured JSON file
         properties, solver_information = extract_solver_information(cbmc_json_array)
 
+        properties, messages = postprocess_results(properties)
+
         # Using Case Switching to Toggle between various output styles
         # For now, the two options provided are default and terse
         if output_style == output_style_switcher["regular"]:
@@ -102,6 +107,7 @@ def transform_cbmc_output(cbmc_response_string, output_style):
 
         # Print using an Interface function
         print(output_message)
+        print(messages)
 
     else:
         # DynTrait tests generate a non json output due to "Invariant check failed" error
@@ -165,6 +171,46 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
+def postprocess_results(properties):
+    """
+    Check for certain cases, e.g. a reachable unsupported construct or a failed
+    unwinding assertion, and update the results of impacted checks accordingly.
+    """
+    
+    has_reachable_unsupported_constructs, has_failed_unwinding_asserts = check_special_cases(properties)
+
+    for property in properties:
+        if has_reachable_unsupported_constructs:
+            # Change status of all properties except failed unsupported
+            # construct reachability checks to UNKNOWN
+            description = property["description"]
+            if not unsupported_construct_str in description or property["status"] == "SUCCESS":
+                property["status"] = "UNKNOWN"
+        # TODO: Handle unwinding assertion failure
+
+    messages = ""
+    if has_reachable_unsupported_constructs:
+        messages += "** ERROR: A Rust construct that is not currently supported " \
+                    "by RMC was found to be reachable. Check the results for " \
+                    "more details."
+
+    return properties, messages
+
+
+def check_special_cases(properties):
+    has_reachable_unsupported_constructs = False
+    has_failed_unwinding_asserts = False
+
+    for property in properties:
+        if unsupported_construct_str in property["description"]:
+            if property["status"] == "FAILURE":
+                has_reachable_unsupported_constructs = True
+        elif unwinding_assert_str in property["description"]:
+            if property["status"] == "FAILURE":
+                has_failed_unwinding_asserts = True
+    return has_reachable_unsupported_constructs, has_failed_unwinding_asserts
+
+
 def construct_solver_information_message(solver_information):
     """
     From the extracted information, construct a message and append to the final Output
@@ -217,7 +263,7 @@ def construct_terse_property_message(properties):
         str - Final string output which is a summary of the property tests
         Ex - SUMMARY:
             ** 1 of 54 failed
-            Failed Tests: assertion failed: 2 == 4
+            Failed Checks: assertion failed: 2 == 4
             File: "/home/ubuntu/test.rs", line 3, in main
             VERIFICATION:- FAILED
     """
@@ -253,10 +299,10 @@ def construct_terse_property_message(properties):
                 failure_message_path = failure_source['file']
                 failure_function_name = failure_source['function']
                 failure_line_number = failure_source['line']
-                output_message += f"Failed Tests: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}"
+                output_message += f"Failed Checks: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}"
             except KeyError:
                 failure_source = "None"
-                output_message += f"Failed Tests: {failure_message}\n"
+                output_message += f"Failed Checks: {failure_message}\n"
 
     # TODO: Get final status from the cprover status
     output_message += f"\nVERIFICATION:- {verification_status}\n"
@@ -304,6 +350,8 @@ def construct_property_message(properties):
 
         if status == "SUCCESS":
             message = Fore.GREEN + f"{status}" + Style.RESET_ALL
+        elif status == "UNKNOWN":
+            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
         else:
             number_tests_failed += 1
             failed_tests.append(property_instance)
@@ -331,10 +379,10 @@ def construct_property_message(properties):
                 failure_message_path = failure_source['file']
                 failure_function_name = failure_source['function']
                 failure_line_number = failure_source['line']
-                output_message += f"Failed Tests: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}"
+                output_message += f"Failed Checks: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}"
             except KeyError:
                 failure_source = "None"
-                output_message += f"Failed Tests: {failure_message}\n"
+                output_message += f"Failed Checks: {failure_message}\n"
 
     # TODO: Change this to cProver status
     # TODO: Extract information from CBMC about iterations
