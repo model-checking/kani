@@ -9,7 +9,7 @@ include!{"../benchmark-prelude.rs"}
 fn operate_on_vec(times: usize) {
     let mut v: Vec<u32> = Vec::with_capacity(times);
     for i in 0..times {
-        v.push(rmc::nondet());
+        v.push(rmc::any());
     }
 }
 

@@ -9,6 +9,6 @@ fn check(s: &[u8]) {
 
 fn main() {
     // returns a slice of length between 0 and 5 with non-det content
-    let slice: rmc::slice::NonDetSlice<u8, 5> = rmc::slice::nondet_slice();
+    let slice: rmc::slice::NonDetSlice<u8, 5> = rmc::slice::any_slice();
     check(&slice);
 }
