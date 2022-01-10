@@ -4,16 +4,8 @@
 
 ```bash
 # Normal build
-./x.py build -i --stage 1 library/std
-```
-```bash
-# Once built successfully once, do a faster rebuild
-./x.py build -i --stage 1 library/std --keep-stage 1
-```
-([`--keep-stage` comes with caveats](https://rustc-dev-guide.rust-lang.org/building/suggested.html#incremental-builds-with---keep-stage). Know that it may cause spurious build failures.)
-```bash
-# Build rmc crate
-./scripts/setup/build_rmc_lib.sh
+cd src/rmc-compiler
+cargo build
 ```
 ```bash
 # Full regression suite
@@ -25,12 +17,12 @@ rm -r build/x86_64-unknown-linux-gnu/test/
 ```
 ```bash
 # Test suite run (to run a specific suite from src/test/, just remove the others)
-./x.py test -i --stage 1 rmc firecracker prusti smack expected cargo-rmc rmc-docs
+COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 rmc firecracker prusti smack expected cargo-rmc rmc-docs
 ```
 ```bash
 # Book runner run
 ./scripts/setup/install_bookrunner_deps.sh
-./x.py run -i --stage 1 bookrunner
+COMPILETEST_FORCE_STAGE0=1 ./x.py run -i --stage 0 bookrunner
 ```
 ```bash
 # Documentation build
@@ -41,10 +33,11 @@ cd rmc-docs
 ### Resolving development issues
 
 ```bash
-# "error[E0514]: found crate `std` compiled by an incompatible version of rustc"
-# or similar error? Clean build RMC:
-rm -rf target build
-./x.py build -i --stage 1 library/std
+# Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
+# or similar error? Clean rmc-compiler build:
+cd src/rmc-compiler
+cargo clean
+cargo build
 ```
 
 ## Git command cheat sheet
@@ -75,7 +68,8 @@ git submodule update --init
 git switch main
 git pull origin
 git submodule update --init
-./x.py build -i --stage 1 library/std
+cd src/rmc-compiler
+cargo build
 ```
 ```bash
 # Need to update local branch (e.g. for an open pull request?)

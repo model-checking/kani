@@ -275,27 +275,41 @@ def parse_args():
         post_process(cl_args)
         return cl_args
 
-# Extract a list of args based on given config toml
+
 def extract_flags_from_toml(path):
+    """Extract a list of args based on given config toml
+       RMC can be configured in the following tables:
+         - rmc
+         - workspace.metadata.rmc
+         - package.metadata.rmc
+       The only field supported today is flags.
+    """
     # Load the flag data from toml
     data = toml.load(path)
 
-    # Extract the rmc flags from the toml, if any present
-    if ("rmc" not in data) or ("flags" not in data["rmc"]):
-        # If no flags are present, just return none
+    # Extract the rmc flags from the toml, if any of the supported tables are present
+    rmc_data = dict()
+    tables = ["workspace.metadata.rmc", "package.metadata.rmc", "rmc"]
+    for table_name in tables:
+        table = data
+        for section in table_name.split("."):
+            table = table.get(section, dict())
+        rmc_data.update(table)
+
+    if "flags" not in rmc_data:
         return []
-    rmc_data = data["rmc"]
+
     flag_data = rmc_data["flags"]
 
     # Extract nested flags
     flags = dict()
 
-    def find_flags(map):
-        for key in map:
-            if isinstance(map[key], dict):
-                find_flags(map[key])
+    def find_flags(args):
+        for key in args:
+            if isinstance(args[key], dict):
+                find_flags(args[key])
             else:
-                flags[key] = map[key]
+                flags[key] = args[key]
     find_flags(flag_data)
 
     # Add config toml flags to flag list
