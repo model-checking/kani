@@ -32,9 +32,6 @@ output_style_switcher = {
     'old': 'old'
 }
 
-unsupported_construct_str = "is not currently supported by RMC"
-unwinding_assert_str = "unwinding assertion loop"
-
 class GlobalMessages(str, Enum):
     """
     Enum class to store all the global messages
@@ -45,6 +42,9 @@ class GlobalMessages(str, Enum):
     MESSAGE_TEXT = 'messageText'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
+    UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by RMC"
+    UNWINDING_ASSERT_DESC = "unwinding assertion loop"
+
 
 def main():
 
@@ -175,6 +175,14 @@ def postprocess_results(properties):
     """
     Check for certain cases, e.g. a reachable unsupported construct or a failed
     unwinding assertion, and update the results of impacted checks accordingly.
+    1. Change all "SUCCESS"/"FAILURE" results to "UNKNOWN" if the reachability
+    check for a Rust construct that is not currently supported by RMC failed,
+    since the missing modeling of the unsupported construct may impact results.
+    2. TODO: Change results from "SUCCESS" to "UNKNOWN" if an unwinding
+    assertion failed, since the insufficient unwinding may cause some execution
+    paths to be left unexplored.
+    Additionally, print a message at the end of the output that indicates if any
+    of the special cases above was hit.
     """
 
     has_reachable_unsupported_constructs, has_failed_unwinding_asserts = check_special_cases(properties)
@@ -184,13 +192,13 @@ def postprocess_results(properties):
             # Change status of all properties except failed unsupported
             # construct reachability checks to UNKNOWN
             description = property["description"]
-            if unsupported_construct_str not in description or property["status"] == "SUCCESS":
+            if GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC not in description or property["status"] == "SUCCESS":
                 property["status"] = "UNKNOWN"
         # TODO: Handle unwinding assertion failure
 
     messages = ""
     if has_reachable_unsupported_constructs:
-        messages += "** ERROR: A Rust construct that is not currently supported " \
+        messages += "** WARNING: A Rust construct that is not currently supported " \
                     "by RMC was found to be reachable. Check the results for " \
                     "more details."
 
@@ -198,14 +206,20 @@ def postprocess_results(properties):
 
 
 def check_special_cases(properties):
+    """
+    Search for the following cases in the CBMC output:
+    1. A check for an unsupported construct (e.g. inline/global assembly) whose
+    result is "FAILURE"
+    2. An unwinding assertion whose result is "FAILURE"
+    """
     has_reachable_unsupported_constructs = False
     has_failed_unwinding_asserts = False
 
     for property in properties:
-        if unsupported_construct_str in property["description"]:
+        if GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC in property["description"]:
             if property["status"] == "FAILURE":
                 has_reachable_unsupported_constructs = True
-        elif unwinding_assert_str in property["description"]:
+        elif GlobalMessages.UNWINDING_ASSERT_DESC in property["description"]:
             if property["status"] == "FAILURE":
                 has_failed_unwinding_asserts = True
     return has_reachable_unsupported_constructs, has_failed_unwinding_asserts
