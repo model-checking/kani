@@ -12,7 +12,7 @@ where
 }
 
 pub fn main() {
-    let mut num: i32 = rmc::nondet();
+    let mut num: i32 = rmc::any();
     if num <= std::i32::MAX - 10 {
         let original_num = num;
         {

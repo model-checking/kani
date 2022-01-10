@@ -71,7 +71,7 @@ The second command opens that report in your default browser (on mac, on linux d
 From this report, we can find the trace of the failure and filter through it to find the relevant line (at present time, an unfortunate amount of generated code is present in the trace):
 
 ```
-let x: u32 = rmc::nondet();
+let x: u32 = rmc::any();
 x = 1023u
 ```
 

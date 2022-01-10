@@ -36,7 +36,7 @@ impl Drop for Concrete2 {
 fn main() {
     {
         let x: Box<dyn T>;
-        if rmc::nondet() {
+        if rmc::any() {
             x = Box::new(Concrete1 {});
         } else {
             x = Box::new(Concrete2 {});
