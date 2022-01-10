@@ -12,7 +12,7 @@ pub fn err() -> ! {
 // Give an empty main to make rustc happy.
 #[no_mangle]
 fn main() {
-    let var = rmc::nondet::<i32>();
+    let var = rmc::any::<i32>();
     if var > 0 {
         err();
     }

@@ -101,26 +101,26 @@ Having run `rmc --visualize` and clicked on one of the failures to see a trace, 
 
 To navigate this trace to find the information you need, we recommend searching for things you expect to be somewhere in the trace:
 
-1. Search the document for `rmc::nondet` or `variable_of_interest =` such as `size =`.
+1. Search the document for `rmc::any` or `variable_of_interest =` such as `size =`.
 We can use this to find out what example values lead to a problem.
-In this case, where we just have a couple of `rmc::nondet` values in our proof harness, we can learn a lot just by seeing what these are.
+In this case, where we just have a couple of `rmc::any` values in our proof harness, we can learn a lot just by seeing what these are.
 In this trace we find (and the values you get may be different):
 
 ```
 Step 23: Function main, File tests/bounds-check.rs, Line 43
-let size: usize = rmc::nondet();
+let size: usize = rmc::any();
 size = 0ul
 
 Step 27: Function main, File tests/bounds-check.rs, Line 45
-let index: usize = rmc::nondet();
+let index: usize = rmc::any();
 index = 0ul
 
 Step 36: Function main, File tests/bounds-check.rs, Line 43
-let size: usize = rmc::nondet();
+let size: usize = rmc::any();
 size = 2464ul
 
 Step 39: Function main, File tests/bounds-check.rs, Line 45
-let index: usize = rmc::nondet();
+let index: usize = rmc::any();
 index = 2463ul
 ```
 

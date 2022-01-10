@@ -38,10 +38,10 @@ impl AddAssign for Point {
 }
 
 pub fn main() {
-    let w = rmc::nondet();
-    let x = rmc::nondet();
-    let y = rmc::nondet();
-    let z = rmc::nondet();
+    let w = rmc::any();
+    let x = rmc::any();
+    let y = rmc::any();
+    let z = rmc::any();
 
     if w <= std::u64::MAX / 2 // avoid overflow
         && x <= std::u64::MAX / 2 // avoid overflow
