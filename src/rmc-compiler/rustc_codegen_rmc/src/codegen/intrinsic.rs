@@ -31,18 +31,19 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Handles codegen for non returning intrinsics
     /// Non returning intrinsics are not associated with a destination
-    pub fn codegen_nonret_intrinsic(
+    pub fn codegen_never_return_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
         span: Option<Span>,
     ) -> Stmt {
         let intrinsic = self.symbol_name(instance);
         let intrinsic = intrinsic.as_str();
-        let loc = self.codegen_span_option(span);
-        debug!("codegen_nonret_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
+
+        debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
+
         match intrinsic {
-            "abort" => Stmt::assert_false("reached intrinsic::abort", loc),
-            "transmute" => Stmt::assert_false("transmuting to uninhabited type", loc),
+            "abort" => self.codegen_fatal_error("reached intrinsic::abort", span),
+            "transmute" => self.codegen_fatal_error("transmuting to uninhabited type", span),
             _ => unimplemented!(),
         }
     }

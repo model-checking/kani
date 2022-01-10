@@ -261,7 +261,7 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
         span: Option<Span>,
     ) -> Stmt {
         match assign_to {
-            None => tcx.codegen_nonret_intrinsic(instance, span),
+            None => tcx.codegen_never_return_intrinsic(instance, span),
             Some(assign_to) => {
                 let target = target.unwrap();
                 let loc = tcx.codegen_span_option(span);
