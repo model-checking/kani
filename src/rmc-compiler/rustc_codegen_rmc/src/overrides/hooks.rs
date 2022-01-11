@@ -153,10 +153,10 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         // Deprecate old __nondet since it doesn't match rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__nondet") {
-            warn!("The function __nondet is deprecated. Use rmc::nondet instead");
+            warn!("The function __nondet is deprecated. Use rmc::any instead");
             return true;
         }
-        matches_function(tcx, instance, "RmcNonDet")
+        matches_function(tcx, instance, "RmcAnyRaw")
     }
 
     fn handle(
@@ -180,11 +180,6 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
             Stmt::block(
                 vec![
                     pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),
-                    // we should potentially generate an assumption
-                    match tcx.codegen_assumption(pt) {
-                        None => Stmt::skip(loc.clone()),
-                        Some(f) => Stmt::assume(f.call(vec![pe.address_of()]), loc.clone()),
-                    },
                     Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
                 ],
                 loc,
@@ -260,19 +255,19 @@ impl<'tcx> GotocHook<'tcx> for Intrinsic {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        if tcx.symbol_name(instance) == "abort" {
-            Stmt::assert_false("abort intrinsic reached", loc)
-        } else {
-            let p = assign_to.unwrap();
-            let target = target.unwrap();
-            Stmt::block(
-                vec![
-                    tcx.codegen_intrinsic(instance, fargs, &p, span),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-                ],
-                loc,
-            )
+        match assign_to {
+            None => tcx.codegen_never_return_intrinsic(instance, span),
+            Some(assign_to) => {
+                let target = target.unwrap();
+                let loc = tcx.codegen_span_option(span);
+                Stmt::block(
+                    vec![
+                        tcx.codegen_intrinsic(instance, fargs, &assign_to, span),
+                        Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
+                    ],
+                    loc,
+                )
+            }
         }
     }
 }
