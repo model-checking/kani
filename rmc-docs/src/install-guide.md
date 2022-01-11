@@ -58,7 +58,6 @@ Then build RMC and its library:
 
 ```
 ./x.py build -i --stage 1 library/std
-./scripts/setup/build_rmc_lib.sh
 ```
 
 Then, optionally, run the regression tests:
