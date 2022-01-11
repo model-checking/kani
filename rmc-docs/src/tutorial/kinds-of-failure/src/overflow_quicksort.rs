@@ -10,8 +10,8 @@ fn find_midpoint(low: u32, high: u32) -> u32 {
 
 // ANCHOR: rmc
 #[cfg(rmc)]
-#[no_mangle]
-fn main() {
+#[rmc::proof]
+fn midpoint_overflow() {
     let a: u32 = rmc::any();
     let b: u32 = rmc::any();
     find_midpoint(a, b);

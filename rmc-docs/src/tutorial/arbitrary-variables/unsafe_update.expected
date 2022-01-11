@@ -1,0 +1,3 @@
+[inventory::verification::unsafe_update.assertion.1] line 61 assertion failed: inventory.get(&id).unwrap() == quantity: SUCCESS
+[std::option::Option::<T>::unwrap.assertion.1] line 759 called `Option::unwrap()` on a `None` value: FAILURE
+VERIFICATION FAILED

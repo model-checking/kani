@@ -1,0 +1,3 @@
+[bounds_check::get_wrapped.assertion.3] line 11 index out of bounds: the length is move _12 but the index is _5: FAILURE
+[bounds_check::get_wrapped.pointer_dereference.5] line 11 dereference failure: pointer outside object bounds in a.data[var_5]: FAILURE
+VERIFICATION FAILED

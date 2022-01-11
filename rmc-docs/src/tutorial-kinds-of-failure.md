@@ -11,13 +11,13 @@ Rust is safe by default, and so includes dynamic (run-time) bounds checking wher
 Consider this Rust code (which can be found under [`rmc-docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/rmc/tree/main/rmc-docs/src/tutorial/kinds-of-failure/)):
 
 ```rust
-{{#include tutorial/kinds-of-failure/tests/bounds-check.rs:code}}
+{{#include tutorial/kinds-of-failure/src/bounds_check.rs:code}}
 ```
 
 We can again write a simple property test against this code:
 
 ```rust
-{{#include tutorial/kinds-of-failure/tests/bounds-check.rs:proptest}}
+{{#include tutorial/kinds-of-failure/src/bounds_check.rs:proptest}}
 ```
 
 This property test will immediately find the failing case because of this dynamic check.
@@ -39,11 +39,11 @@ test tests::doesnt_crash ... ok
 But we're able to check this unsafe code with RMC:
 
 ```rust
-{{#include tutorial/kinds-of-failure/tests/bounds-check.rs:rmc}}
+{{#include tutorial/kinds-of-failure/src/bounds_check.rs:rmc}}
 ```
 
 ```
-# rmc tests/bounds-check.rs
+# rmc src/bounds_check.rs
 [...]
 ** 1 of 468 failed (2 iterations)
 VERIFICATION FAILED
@@ -55,7 +55,7 @@ RMC is inserting a lot more checks than appear as asserts in our code, so the ou
 Let's narrow that output down a bit:
 
 ```
-# rmc tests/bounds-check.rs | grep FAIL
+# rmc src/bounds_check.rs | grep FAIL
 [get_wrapped.pointer_dereference.5] line 10 dereference failure: pointer outside object bounds in *var_5: FAILURE
 VERIFICATION FAILED
 ```
@@ -78,7 +78,7 @@ Consider trying a few more small exercises with this example:
 Having switched back to the safe indexing operation, RMC reports two failures instead of just one:
 
 ```
-# rmc tests/bounds-check.rs | grep FAIL
+# rmc src/bounds_check.rs | grep FAIL
 [get_wrapped.assertion.3] line 9 index out of bounds: the length is move _12 but the index is _5: FAILURE
 [get_wrapped.pointer_dereference.5] line 9 dereference failure: pointer outside object bounds in a.data[var_5]: FAILURE
 VERIFICATION FAILED
@@ -107,19 +107,19 @@ In this case, where we just have a couple of `rmc::any` values in our proof harn
 In this trace we find (and the values you get may be different):
 
 ```
-Step 23: Function main, File tests/bounds-check.rs, Line 43
+Step 23: Function bound_check, File src/bounds_check.rs, Line 43
 let size: usize = rmc::any();
 size = 0ul
 
-Step 27: Function main, File tests/bounds-check.rs, Line 45
+Step 27: Function bound_check, File src/bounds_check.rs, Line 45
 let index: usize = rmc::any();
 index = 0ul
 
-Step 36: Function main, File tests/bounds-check.rs, Line 43
+Step 36: Function bound_check, File src/bounds_check.rs, Line 43
 let size: usize = rmc::any();
 size = 2464ul
 
-Step 39: Function main, File tests/bounds-check.rs, Line 45
+Step 39: Function main, File src/bounds_check.rs, Line 45
 let index: usize = rmc::any();
 index = 2463ul
 ```
@@ -152,10 +152,10 @@ RMC will spot this not as a bound error, but as a mathematical error: on an empt
 1. Exercise: Try to run RMC on the above, to see what this kind of failure looks like.
 
 Rust also performs runtime safety checks for integer overflows, much like it does for bounds checks.
-Consider this code (from `tests/overflow.rs`):
+Consider this code (from `src/overflow.rs`):
 
 ```rust
-{{#include tutorial/kinds-of-failure/tests/overflow.rs:code}}
+{{#include tutorial/kinds-of-failure/src/overflow.rs:code}}
 ```
 
 A trivial function, but if we write a property test for it, we immediately find inputs where it fails, thanks to Rust's dynamic checks.
@@ -163,10 +163,10 @@ RMC will find these failures as well.
 Here's the output from RMC:
 
 ```
-# rmc tests/overflow.rs
+# rmc src/overflow.rs
 [...]
 ** Results:
-./tests/overflow.rs function simple_addition
+./src/overflow.rs function simple_addition
 [simple_addition.assertion.1] line 6 attempt to compute `move _3 + move _4`, which would overflow: FAILURE
 [simple_addition.overflow.1] line 6 arithmetic overflow on unsigned + in var_3 + var_4: FAILURE
 
@@ -185,10 +185,10 @@ For instance, instead of `a + b` write `a.wrapping_add(b)`.
 ### Exercise: Classic overflow failure
 
 One of the classic subtle bugs that persisted in many implementations for a very long time is finding the midpoint in quick sort.
-This often naively looks like this (from `tests/overflow-quicksort.rs`):
+This often naively looks like this (from `src/overflow_quicksort.rs`):
 
 ```rust
-{{#include tutorial/kinds-of-failure/tests/overflow-quicksort.rs:code}}
+{{#include tutorial/kinds-of-failure/src/overflow_quicksort.rs:code}}
 ```
 
 RMC immediately spots the bug in the above code.

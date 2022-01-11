@@ -8,3 +8,6 @@ edition = "2018"
 [dependencies]
 
 [workspace]
+
+[package.metadata.rmc]
+flags = { unwind = "11" }
