@@ -6,5 +6,9 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
+vector-map = "1.0.1"
 
 [workspace]
+
+[workspace.metadata.rmc]
+flags = { default-checks = false, unwind = "2" }
