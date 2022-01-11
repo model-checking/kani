@@ -61,7 +61,7 @@ jobs:
 
       - name: Generate book runner report
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./x.py run -i --stage 0 bookrunner
+        run: ./x.py run -i --stage 1 bookrunner
         env:
             COMPILETEST_FORCE_STAGE0: 1
 

@@ -22,7 +22,7 @@ COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 rmc firecracker prusti smack
 ```bash
 # Book runner run
 ./scripts/setup/install_bookrunner_deps.sh
-COMPILETEST_FORCE_STAGE0=1 ./x.py run -i --stage 0 bookrunner
+./x.py run -i --stage 1 bookrunner
 ```
 ```bash
 # Documentation build

@@ -46,7 +46,7 @@ This section describes how the book runner operates at a high level.
 To kick off the book runner process use
 
 ```
-COMPILETEST_FORCE_STAGE0=1 ./x.py run -i --stage 0 bookrunner
+./x.py run -i --stage 1 bookrunner
 ```
 
 The main function of the bookrunner is `generate_run()` in
