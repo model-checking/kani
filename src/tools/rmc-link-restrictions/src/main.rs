@@ -1,16 +1,17 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use cbmc::InternedString;
 use rmc_restrictions::{TraitDefinedMethod, VtableCtxResults};
-use rustc_data_structures::fx::FxHashMap;
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
 
 fn link_function_pointer_restrictions(data_per_crate: Vec<VtableCtxResults>) -> serde_json::Value {
-    let mut output = FxHashMap::default();
-    let mut combined_possible_methods: FxHashMap<TraitDefinedMethod, Vec<std::string::String>> =
-        FxHashMap::default();
+    let mut output = HashMap::new();
+    let mut combined_possible_methods: HashMap<TraitDefinedMethod, Vec<InternedString>> =
+        HashMap::new();
 
     // Combine method possibilities
     for crate_data in &data_per_crate {
@@ -32,7 +33,7 @@ fn link_function_pointer_restrictions(data_per_crate: Vec<VtableCtxResults>) -> 
             if let Some(possibilities) = combined_possible_methods.get(&trait_def) {
                 output.insert(cbmc_call_site_name, possibilities.clone());
             } else {
-                output.insert(cbmc_call_site_name, Vec::<String>::new());
+                output.insert(cbmc_call_site_name, Vec::<InternedString>::new());
             }
         }
     }
