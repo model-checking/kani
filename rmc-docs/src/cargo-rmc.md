@@ -28,13 +28,13 @@ For example, in order to configure a maximum loop unwind threshold for harnesses
 flags= { unwind = "5" }
 ```
 
-Note that RMC will extract any extra configuration from sections `[rmc]`, `[workspace.metadata.rmc]`, `[package.metadata.rmc]` in the TOML file.
+Note that RMC will extract any extra configuration from sections `[rmc]`, `[workspace.metadata.rmc]`, and `[package.metadata.rmc]` in the TOML file.
 
 # Common cargo-rmc arguments
 
 Cargo rmc supports the rmc standalone arguments described in the [RMC single file section](./rmc-single-file.md). Additionally, it also accepts the following arguments:
 
-**`--config-toml`** Location of a configuration file in toml format for your project. This defaults to to crate's Cargo.toml.
+**`--config-toml`** Location of a configuration file in toml format for your project. This defaults to the crate's Cargo.toml.
 
 **`--no-config-toml`** Do not use any configuration TOML file.
 
