@@ -3338,8 +3338,8 @@ dependencies = [
 name = "rmc-link-restrictions"
 version = "0.1.0"
 dependencies = [
- "cbmc",
  "rmc_restrictions",
+ "rustc_data_structures",
  "serde",
  "serde_json",
 ]
@@ -3360,6 +3360,7 @@ name = "rmc_restrictions"
 version = "0.1.0"
 dependencies = [
  "cbmc",
+ "rustc_data_structures",
  "serde",
 ]
 
