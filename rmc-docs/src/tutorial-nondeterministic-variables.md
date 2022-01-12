@@ -1,17 +1,17 @@
-# Non-deterministic variables
+# Nondeterministic variables
 
 RMC is able to reason about programs and their execution paths by allowing users to assign
-non-deterministic (i.e., symbolic) values to  certain variables. Since RMC is a bit-level model checker, this means
-that RMC considers that an unconstrained non-deterministic value represents all the possible bit-value combinations
+nondeterministic (i.e., symbolic) values to  certain variables. Since RMC is a bit-level model checker, this means
+that RMC considers that an unconstrained nondeterministic value represents all the possible bit-value combinations
 assigned to the variable's memory contents.
 
 As a Rust developer, this sounds a lot like the `mem::transmute` operation, which is highly `unsafe`. And that's correct.
 
-In this tutorial, we will show how to safely use non-deterministic assignments to generate valid symbolic variables
+In this tutorial, we will show how to safely use nondeterministic assignments to generate valid symbolic variables
 that respect Rust's type invariants, as well as show how you can specify invariants for types that you define enabling
-creation of safe non-deterministic variables for those types.
+creation of safe nondeterministic variables for those types.
 
-## Safe non-deterministic variables
+## Safe nondeterministic variables
 
 Let's say you are developing an inventory management tool, and you would like to verify that your API to manage
 items is correct. Here is a simple implementation of this API:
@@ -41,9 +41,9 @@ You can try it out by running the example under
 cargo rmc --function safe_update
 ```
 
-## Unsafe non-deterministic variables
+## Unsafe nondeterministic variables
 
-RMC also includes an **unsafe** method to generate unconstrained non-deterministic variables which do not take type invariants into consideration.
+RMC also includes an **unsafe** method to generate unconstrained nondeterministic variables which do not take type invariants into consideration.
 As any unsafe method in rust, users must be careful when using unsafe methods and ensure the right guardrails are
 put in place to avoid undesirable behavior.
 
@@ -70,7 +70,7 @@ You can try it out by running the example under
 cargo rmc --function unsafe_update
 ```
 
-## Safe non-deterministic variables for custom types
+## Safe nondeterministic variables for custom types
 
 Now you would like to add a new structure to your library that allow users to represent a review rating, which can
 go from 0 to 5 stars. Let's say you add the following implementation:
@@ -79,7 +79,7 @@ go from 0 to 5 stars. Let's say you add the following implementation:
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_struct}}
 ```
 
-The easiest way to allow users to create non-deterministic variables of the Rating type which represents values from
+The easiest way to allow users to create nondeterministic variables of the Rating type which represents values from
 0-5 stars is by implementing the `rmc::Invariant` trait.
 
 The implementation only requires you to define a check to your structure that returns whether its current value is
@@ -89,7 +89,7 @@ valid or not. In our case, we have the following implementation:
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}
 ```
 
-Now you can use `rmc::any()` to create valid non-deterministic variables of the Rating type as shown in this harness:
+Now you can use `rmc::any()` to create valid nondeterministic variables of the Rating type as shown in this harness:
 
 ```rust
 {{#include tutorial/arbitrary-variables/src/rating.rs:verify_rating}}
