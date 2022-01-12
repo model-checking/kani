@@ -381,24 +381,11 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::NullaryOp(NullOp::Box, t) => {
-                let t = self.monomorphize(*t);
-                let layout = self.layout_of(t);
-                let size = layout.size.bytes_usize();
-                let box_ty = self.tcx.mk_box(t);
-                let box_ty = self.codegen_ty(box_ty);
-                let cbmc_t = self.codegen_ty(t);
-                let box_contents = BuiltinFn::Malloc
-                    .call(vec![Expr::int_constant(size, Type::size_t())], Location::none())
-                    .cast_to(cbmc_t.to_pointer());
-                self.box_value(box_contents, box_ty)
-            }
             Rvalue::NullaryOp(k, t) => {
                 let t = self.monomorphize(*t);
                 let layout = self.layout_of(t);
                 match k {
                     NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t()),
-                    NullOp::Box => unreachable!("Should've matched previous expression"),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                 }
             }

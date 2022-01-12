@@ -1297,15 +1297,15 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
         return !self.is_unsized(mir_type)
-            || mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.unit;
+            || mir_type.ptr_metadata_ty(self.tcx, |ty| ty) == self.tcx.types.unit;
     }
     /// A pointer to the mir type should be a slice fat pointer.
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        return mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.usize;
+        return mir_type.ptr_metadata_ty(self.tcx, |ty| ty) == self.tcx.types.usize;
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, |ty| ty);
         return metadata != self.tcx.types.unit && metadata != self.tcx.types.usize;
     }
 
