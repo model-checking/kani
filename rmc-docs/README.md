@@ -18,5 +18,5 @@ It also means the necessary `rmc-` flag-comments must appear in each file.
 To run just these tests, return to the RMC root directory and run:
 
 ```
-./x.py test -i --stage 1 rmc-docs
+COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 rmc-docs
 ```
