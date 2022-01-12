@@ -520,9 +520,16 @@ impl<'a: 'ast, 'ast> Visitor<'ast> for LateResolutionVisitor<'a, '_, 'ast> {
     }
     fn visit_fn(&mut self, fn_kind: FnKind<'ast>, sp: Span, _: NodeId) {
         let rib_kind = match fn_kind {
-            // Bail if there's no body.
-            FnKind::Fn(.., None) => return visit::walk_fn(self, fn_kind, sp),
-            FnKind::Fn(FnCtxt::Free | FnCtxt::Foreign, ..) => FnItemRibKind,
+            // Bail if the function is foreign, and thus cannot validly have
+            // a body, or if there's no body for some other reason.
+            FnKind::Fn(FnCtxt::Foreign, _, sig, ..) | FnKind::Fn(_, _, sig, .., None) => {
+                // We don't need to deal with patterns in parameters, because
+                // they are not possible for foreign or bodiless functions.
+                self.visit_fn_header(&sig.header);
+                visit::walk_fn_decl(self, &sig.decl);
+                return;
+            }
+            FnKind::Fn(FnCtxt::Free, ..) => FnItemRibKind,
             FnKind::Fn(FnCtxt::Assoc(_), ..) => NormalRibKind,
             FnKind::Closure(..) => ClosureOrAsyncRibKind,
         };
@@ -1603,10 +1610,13 @@ impl<'a: 'ast, 'b, 'ast> LateResolutionVisitor<'a, 'b, 'ast> {
         pat_src: PatternSource,
         bindings: &mut SmallVec<[(PatBoundCtx, FxHashSet<Ident>); 1]>,
     ) {
+        // We walk the pattern before declaring the pattern's inner bindings,
+        // so that we avoid resolving a literal expression to a binding defined
+        // by the pattern.
+        visit::walk_pat(self, pat);
         self.resolve_pattern_inner(pat, pat_src, bindings);
         // This has to happen *after* we determine which pat_idents are variants:
         self.check_consistent_bindings_top(pat);
-        visit::walk_pat(self, pat);
     }
 
     /// Resolve bindings in a pattern. This is a helper to `resolve_pattern`.
@@ -2376,7 +2386,9 @@ impl<'a: 'ast, 'b, 'ast> LateResolutionVisitor<'a, 'b, 'ast> {
             ExprKind::While(ref cond, ref block, label) => {
                 self.with_resolved_label(label, expr.id, |this| {
                     this.with_rib(ValueNS, NormalRibKind, |this| {
+                        let old = this.diagnostic_metadata.in_if_condition.replace(cond);
                         this.visit_expr(cond);
+                        this.diagnostic_metadata.in_if_condition = old;
                         this.visit_block(block);
                     })
                 });

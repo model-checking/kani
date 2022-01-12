@@ -18,6 +18,7 @@ use crate::llvm::debuginfo::{
 use crate::value::Value;
 
 use cstr::cstr;
+use rustc_codegen_ssa::debuginfo::type_names::cpp_like_debuginfo;
 use rustc_codegen_ssa::traits::*;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashMap;
@@ -933,16 +934,16 @@ fn basic_type_metadata<'ll, 'tcx>(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>) -> &'l
 
     // When targeting MSVC, emit MSVC style type names for compatibility with
     // .natvis visualizers (and perhaps other existing native debuggers?)
-    let msvc_like_names = cx.tcx.sess.target.is_like_msvc;
+    let cpp_like_debuginfo = cpp_like_debuginfo(cx.tcx);
 
     let (name, encoding) = match t.kind() {
         ty::Never => ("!", DW_ATE_unsigned),
         ty::Tuple(elements) if elements.is_empty() => ("()", DW_ATE_unsigned),
         ty::Bool => ("bool", DW_ATE_boolean),
         ty::Char => ("char", DW_ATE_unsigned_char),
-        ty::Int(int_ty) if msvc_like_names => (int_ty.msvc_basic_name(), DW_ATE_signed),
-        ty::Uint(uint_ty) if msvc_like_names => (uint_ty.msvc_basic_name(), DW_ATE_unsigned),
-        ty::Float(float_ty) if msvc_like_names => (float_ty.msvc_basic_name(), DW_ATE_float),
+        ty::Int(int_ty) if cpp_like_debuginfo => (int_ty.msvc_basic_name(), DW_ATE_signed),
+        ty::Uint(uint_ty) if cpp_like_debuginfo => (uint_ty.msvc_basic_name(), DW_ATE_unsigned),
+        ty::Float(float_ty) if cpp_like_debuginfo => (float_ty.msvc_basic_name(), DW_ATE_float),
         ty::Int(int_ty) => (int_ty.name_str(), DW_ATE_signed),
         ty::Uint(uint_ty) => (uint_ty.name_str(), DW_ATE_unsigned),
         ty::Float(float_ty) => (float_ty.name_str(), DW_ATE_float),
@@ -959,7 +960,7 @@ fn basic_type_metadata<'ll, 'tcx>(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>) -> &'l
         )
     };
 
-    if !msvc_like_names {
+    if !cpp_like_debuginfo {
         return ty_metadata;
     }
 
@@ -1072,7 +1073,11 @@ pub fn compile_unit_metadata<'ll, 'tcx>(
     let output_filenames = tcx.output_filenames(());
     let split_name = if tcx.sess.target_can_use_split_dwarf() {
         output_filenames
-            .split_dwarf_path(tcx.sess.split_debuginfo(), Some(codegen_unit_name))
+            .split_dwarf_path(
+                tcx.sess.split_debuginfo(),
+                tcx.sess.opts.debugging_opts.split_dwarf_kind,
+                Some(codegen_unit_name),
+            )
             // We get a path relative to the working directory from split_dwarf_path
             .map(|f| tcx.sess.source_map().path_mapping().map_prefix(f).0)
     } else {
@@ -1295,7 +1300,7 @@ impl<'tcx> StructMemberDescriptionFactory<'tcx> {
                 let name = if self.variant.ctor_kind == CtorKind::Fn {
                     format!("__{}", i)
                 } else {
-                    f.ident.to_string()
+                    f.name.to_string()
                 };
                 let field = layout.field(cx, i);
                 MemberDescription {
@@ -1475,7 +1480,7 @@ impl<'tcx> UnionMemberDescriptionFactory<'tcx> {
             .map(|(i, f)| {
                 let field = self.layout.field(cx, i);
                 MemberDescription {
-                    name: f.ident.to_string(),
+                    name: f.name.to_string(),
                     type_metadata: type_metadata(cx, field.ty, self.span),
                     offset: Size::ZERO,
                     size: field.size,
@@ -1520,13 +1525,6 @@ fn prepare_union_metadata<'ll, 'tcx>(
 //=-----------------------------------------------------------------------------
 // Enums
 //=-----------------------------------------------------------------------------
-
-/// DWARF variant support is only available starting in LLVM 8, but
-/// on MSVC we have to use the fallback mode, because LLVM doesn't
-/// lower variant parts to PDB.
-fn use_enum_fallback(cx: &CodegenCx<'_, '_>) -> bool {
-    cx.sess().target.is_like_msvc
-}
 
 // FIXME(eddyb) maybe precompute this? Right now it's computed once
 // per generator monomorphization, but it doesn't depend on substs.
@@ -1602,7 +1600,10 @@ impl<'ll, 'tcx> EnumMemberDescriptionFactory<'ll, 'tcx> {
             _ => bug!(),
         };
 
-        let fallback = use_enum_fallback(cx);
+        // While LLVM supports generating debuginfo for variant types (enums), it doesn't support
+        // lowering that debuginfo to CodeView records for msvc targets. So if we are targeting
+        // msvc, then we need to use a different, fallback encoding of the debuginfo.
+        let fallback = cpp_like_debuginfo(cx.tcx);
         // This will always find the metadata in the type map.
         let self_metadata = type_metadata(cx, self.enum_type, self.span);
 
@@ -1949,7 +1950,7 @@ enum VariantInfo<'a, 'tcx> {
 impl<'tcx> VariantInfo<'_, 'tcx> {
     fn map_struct_name<R>(&self, f: impl FnOnce(&str) -> R) -> R {
         match self {
-            VariantInfo::Adt(variant) => f(variant.ident.as_str()),
+            VariantInfo::Adt(variant) => f(variant.name.as_str()),
             VariantInfo::Generator { variant_index, .. } => {
                 f(&GeneratorSubsts::variant_name(*variant_index))
             }
@@ -1958,7 +1959,7 @@ impl<'tcx> VariantInfo<'_, 'tcx> {
 
     fn variant_name(&self) -> String {
         match self {
-            VariantInfo::Adt(variant) => variant.ident.to_string(),
+            VariantInfo::Adt(variant) => variant.name.to_string(),
             VariantInfo::Generator { variant_index, .. } => {
                 // Since GDB currently prints out the raw discriminant along
                 // with every variant, make each variant name be just the value
@@ -1972,7 +1973,7 @@ impl<'tcx> VariantInfo<'_, 'tcx> {
     fn field_name(&self, i: usize) -> String {
         let field_name = match *self {
             VariantInfo::Adt(variant) if variant.ctor_kind != CtorKind::Fn => {
-                Some(variant.fields[i].ident.name)
+                Some(variant.fields[i].name)
             }
             VariantInfo::Generator {
                 generator_layout,
@@ -2062,7 +2063,7 @@ fn prepare_enum_metadata<'ll, 'tcx>(
         let enumerators_metadata: Vec<_> = match enum_type.kind() {
             ty::Adt(def, _) => iter::zip(def.discriminants(tcx), &def.variants)
                 .map(|((_, discr), v)| {
-                    let name = v.ident.as_str();
+                    let name = v.name.as_str();
                     let is_unsigned = match discr.ty.kind() {
                         ty::Int(_) => false,
                         ty::Uint(_) => true,
@@ -2155,7 +2156,10 @@ fn prepare_enum_metadata<'ll, 'tcx>(
         return FinalMetadata(discriminant_type_metadata(tag.value));
     }
 
-    if use_enum_fallback(cx) {
+    // While LLVM supports generating debuginfo for variant types (enums), it doesn't support
+    // lowering that debuginfo to CodeView records for msvc targets. So if we are targeting
+    // msvc, then we need to use a different encoding of the debuginfo.
+    if cpp_like_debuginfo(tcx) {
         let discriminant_type_metadata = match layout.variants {
             Variants::Single { .. } => None,
             Variants::Multiple { tag_encoding: TagEncoding::Niche { .. }, tag, .. }

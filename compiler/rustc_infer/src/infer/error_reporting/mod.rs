@@ -771,7 +771,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                     self.suggest_boxing_for_return_impl_trait(
                         err,
                         ret_sp,
-                        vec![then, else_sp].into_iter(),
+                        [then, else_sp].into_iter(),
                     );
                 }
             }
@@ -807,11 +807,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         );
         let sugg = arm_spans
             .flat_map(|sp| {
-                vec![
-                    (sp.shrink_to_lo(), "Box::new(".to_string()),
-                    (sp.shrink_to_hi(), ")".to_string()),
-                ]
-                .into_iter()
+                [(sp.shrink_to_lo(), "Box::new(".to_string()), (sp.shrink_to_hi(), ")".to_string())]
+                    .into_iter()
             })
             .collect::<Vec<_>>();
         err.multipart_suggestion(
@@ -1924,7 +1921,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 .fields
                 .iter()
                 .filter(|field| field.vis.is_accessible_from(field.did, self.tcx))
-                .map(|field| (field.ident.name, field.ty(self.tcx, expected_substs)))
+                .map(|field| (field.name, field.ty(self.tcx, expected_substs)))
                 .find(|(_, ty)| same_type_modulo_infer(ty, exp_found.found))
             {
                 if let ObligationCauseCode::Pattern { span: Some(span), .. } = *cause.code() {
@@ -2041,11 +2038,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 if let ValuePairs::Types(ty::error::ExpectedFound { expected, found }) =
                     trace.values
                 {
-                    // If a tuple of length one was expected and the found expression has
-                    // parentheses around it, perhaps the user meant to write `(expr,)` to
-                    // build a tuple (issue #86100)
                     match (expected.kind(), found.kind()) {
                         (ty::Tuple(_), ty::Tuple(_)) => {}
+                        // If a tuple of length one was expected and the found expression has
+                        // parentheses around it, perhaps the user meant to write `(expr,)` to
+                        // build a tuple (issue #86100)
                         (ty::Tuple(_), _) if expected.tuple_fields().count() == 1 => {
                             if let Ok(code) = self.tcx.sess().source_map().span_to_snippet(span) {
                                 if let Some(code) =
@@ -2056,6 +2053,41 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                                         "use a trailing comma to create a tuple with one element",
                                         format!("({},)", code),
                                         Applicability::MaybeIncorrect,
+                                    );
+                                }
+                            }
+                        }
+                        // If a character was expected and the found expression is a string literal
+                        // containing a single character, perhaps the user meant to write `'c'` to
+                        // specify a character literal (issue #92479)
+                        (ty::Char, ty::Ref(_, r, _)) if r.is_str() => {
+                            if let Ok(code) = self.tcx.sess().source_map().span_to_snippet(span) {
+                                if let Some(code) =
+                                    code.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                                {
+                                    if code.chars().nth(1).is_none() {
+                                        err.span_suggestion(
+                                            span,
+                                            "if you meant to write a `char` literal, use single quotes",
+                                            format!("'{}'", code),
+                                            Applicability::MachineApplicable,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        // If a string was expected and the found expression is a character literal,
+                        // perhaps the user meant to write `"s"` to specify a string literal.
+                        (ty::Ref(_, r, _), ty::Char) if r.is_str() => {
+                            if let Ok(code) = self.tcx.sess().source_map().span_to_snippet(span) {
+                                if let Some(code) =
+                                    code.strip_prefix('\'').and_then(|s| s.strip_suffix('\''))
+                                {
+                                    err.span_suggestion(
+                                        span,
+                                        "if you meant to write a `str` literal, use double quotes",
+                                        format!("\"{}\"", code),
+                                        Applicability::MachineApplicable,
                                     );
                                 }
                             }
