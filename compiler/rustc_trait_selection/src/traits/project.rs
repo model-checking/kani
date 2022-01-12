@@ -1400,8 +1400,17 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                 // Any type with multiple potential metadata types is therefore not eligible.
                 let self_ty = selcx.infcx().shallow_resolve(obligation.predicate.self_ty());
 
-                // FIXME: should this normalize?
-                let tail = selcx.tcx().struct_tail_without_normalization(self_ty);
+                let tail = selcx.tcx().struct_tail_with_normalize(self_ty, |ty| {
+                    normalize_with_depth(
+                        selcx,
+                        obligation.param_env,
+                        obligation.cause.clone(),
+                        obligation.recursion_depth + 1,
+                        ty,
+                    )
+                    .value
+                });
+
                 match tail.kind() {
                     ty::Bool
                     | ty::Char
@@ -1435,7 +1444,12 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                     | ty::Bound(..)
                     | ty::Placeholder(..)
                     | ty::Infer(..)
-                    | ty::Error(_) => false,
+                    | ty::Error(_) => {
+                        if tail.has_infer_types() {
+                            candidate_set.mark_ambiguous();
+                        }
+                        false
+                    },
                 }
             }
             super::ImplSource::Param(..) => {
@@ -1640,18 +1654,30 @@ fn confirm_pointee_candidate<'cx, 'tcx>(
     _: ImplSourcePointeeData,
 ) -> Progress<'tcx> {
     let tcx = selcx.tcx();
-
     let self_ty = selcx.infcx().shallow_resolve(obligation.predicate.self_ty());
-    let substs = tcx.mk_substs([self_ty.into()].iter());
 
+    let mut obligations = vec![];
+    let metadata_ty = self_ty.ptr_metadata_ty(tcx, |ty| {
+        normalize_with_depth_to(
+            selcx,
+            obligation.param_env,
+            obligation.cause.clone(),
+            obligation.recursion_depth + 1,
+            ty,
+            &mut obligations,
+        )
+    });
+
+    let substs = tcx.mk_substs([self_ty.into()].iter());
     let metadata_def_id = tcx.require_lang_item(LangItem::Metadata, None);
 
     let predicate = ty::ProjectionPredicate {
         projection_ty: ty::ProjectionTy { substs, item_def_id: metadata_def_id },
-        ty: self_ty.ptr_metadata_ty(tcx),
+        ty: metadata_ty,
     };
 
     confirm_param_env_candidate(selcx, obligation, ty::Binder::dummy(predicate), false)
+        .with_addl_obligations(obligations)
 }
 
 fn confirm_fn_pointer_candidate<'cx, 'tcx>(
@@ -1883,7 +1909,6 @@ fn assoc_ty_def(
     assoc_ty_def_id: DefId,
 ) -> Result<specialization_graph::LeafDef, ErrorReported> {
     let tcx = selcx.tcx();
-    let assoc_ty_name = tcx.associated_item(assoc_ty_def_id).ident;
     let trait_def_id = tcx.impl_trait_ref(impl_def_id).unwrap().def_id;
     let trait_def = tcx.trait_def(trait_def_id);
 
@@ -1893,21 +1918,18 @@ fn assoc_ty_def(
     // for the associated item at the given impl.
     // If there is no such item in that impl, this function will fail with a
     // cycle error if the specialization graph is currently being built.
-    let impl_node = specialization_graph::Node::Impl(impl_def_id);
-    for item in impl_node.items(tcx) {
-        if matches!(item.kind, ty::AssocKind::Type)
-            && tcx.hygienic_eq(item.ident, assoc_ty_name, trait_def_id)
-        {
-            return Ok(specialization_graph::LeafDef {
-                item: *item,
-                defining_node: impl_node,
-                finalizing_node: if item.defaultness.is_default() { None } else { Some(impl_node) },
-            });
-        }
+    if let Some(&impl_item_id) = tcx.impl_item_implementor_ids(impl_def_id).get(&assoc_ty_def_id) {
+        let item = tcx.associated_item(impl_item_id);
+        let impl_node = specialization_graph::Node::Impl(impl_def_id);
+        return Ok(specialization_graph::LeafDef {
+            item: *item,
+            defining_node: impl_node,
+            finalizing_node: if item.defaultness.is_default() { None } else { Some(impl_node) },
+        });
     }
 
     let ancestors = trait_def.ancestors(tcx, impl_def_id)?;
-    if let Some(assoc_item) = ancestors.leaf_def(tcx, assoc_ty_name, ty::AssocKind::Type) {
+    if let Some(assoc_item) = ancestors.leaf_def(tcx, assoc_ty_def_id) {
         Ok(assoc_item)
     } else {
         // This is saying that neither the trait nor
@@ -1916,7 +1938,11 @@ fn assoc_ty_def(
         // could only arise through a compiler bug --
         // if the user wrote a bad item name, it
         // should have failed in astconv.
-        bug!("No associated type `{}` for {}", assoc_ty_name, tcx.def_path_str(impl_def_id))
+        bug!(
+            "No associated type `{}` for {}",
+            tcx.item_name(assoc_ty_def_id),
+            tcx.def_path_str(impl_def_id)
+        )
     }
 }
 

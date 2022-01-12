@@ -32,8 +32,8 @@ crate struct Module<'hir> {
     crate foreigns: Vec<(&'hir hir::ForeignItem<'hir>, Option<Symbol>)>,
 }
 
-impl Module<'hir> {
-    crate fn new(name: Symbol, id: hir::HirId, where_inner: Span) -> Module<'hir> {
+impl Module<'_> {
+    crate fn new(name: Symbol, id: hir::HirId, where_inner: Span) -> Self {
         Module { name, id, where_inner, mods: Vec::new(), items: Vec::new(), foreigns: Vec::new() }
     }
 
@@ -112,7 +112,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
         // is declared but also a reexport of itself producing two exports of the same
         // macro in the same module.
         let mut inserted = FxHashSet::default();
-        for export in self.cx.tcx.module_exports(CRATE_DEF_ID).unwrap_or(&[]) {
+        for export in self.cx.tcx.module_reexports(CRATE_DEF_ID).unwrap_or(&[]) {
             if let Res::Def(DefKind::Macro(_), def_id) = export.res {
                 if let Some(local_def_id) = def_id.as_local() {
                     if self.cx.tcx.has_attr(def_id, sym::macro_export) {

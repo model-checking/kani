@@ -21,10 +21,12 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::def_id::CRATE_DEF_INDEX;
 use rustc_target::spec::abi::Abi;
 
-use crate::clean::{self, utils::find_nearest_parent_module, ExternalCrate, ItemId, PrimitiveType};
+use crate::clean::{
+    self, types::ExternalLocation, utils::find_nearest_parent_module, ExternalCrate, ItemId,
+    PrimitiveType,
+};
 use crate::formats::item_type::ItemType;
 use crate::html::escape::Escape;
-use crate::html::render::cache::ExternalLocation;
 use crate::html::render::Context;
 
 use super::url_parts_builder::UrlPartsBuilder;
@@ -953,7 +955,7 @@ fn fmt_type<'cx>(
                 Ok((ref url, _, ref path)) if !f.alternate() => {
                     write!(
                         f,
-                        "<a class=\"type\" href=\"{url}#{shortty}.{name}\" \
+                        "<a class=\"associatedtype\" href=\"{url}#{shortty}.{name}\" \
                                     title=\"type {path}::{name}\">{name}</a>",
                         url = url,
                         shortty = ItemType::AssocType,

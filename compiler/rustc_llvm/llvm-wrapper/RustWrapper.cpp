@@ -341,14 +341,12 @@ extern "C" void LLVMRustRemoveFunctionAttributes(LLVMValueRef Fn,
                                                  unsigned Index,
                                                  LLVMRustAttribute RustAttr) {
   Function *F = unwrap<Function>(Fn);
-  Attribute Attr = Attribute::get(F->getContext(), fromRust(RustAttr));
-  AttrBuilder B(Attr);
-  auto PAL = F->getAttributes();
+  AttributeList PAL = F->getAttributes();
   AttributeList PALNew;
 #if LLVM_VERSION_LT(14, 0)
-  PALNew = PAL.removeAttributes(F->getContext(), Index, B);
+  PALNew = PAL.removeAttribute(F->getContext(), Index, fromRust(RustAttr));
 #else
-  PALNew = PAL.removeAttributesAtIndex(F->getContext(), Index, B);
+  PALNew = PAL.removeAttributeAtIndex(F->getContext(), Index, fromRust(RustAttr));
 #endif
   F->setAttributes(PALNew);
 }
@@ -716,6 +714,14 @@ extern "C" uint32_t LLVMRustVersionMinor() { return LLVM_VERSION_MINOR; }
 
 extern "C" uint32_t LLVMRustVersionMajor() { return LLVM_VERSION_MAJOR; }
 
+extern "C" bool LLVMRustIsRustLLVM() {
+#ifdef LLVM_RUSTLLVM
+  return true;
+#else
+  return false;
+#endif
+}
+
 extern "C" void LLVMRustAddModuleFlag(LLVMModuleRef M, const char *Name,
                                       uint32_t Value) {
   unwrap(M)->addModuleFlag(Module::Warning, Name, Value);
@@ -971,11 +977,11 @@ LLVMRustDIBuilderGetOrCreateArray(LLVMRustDIBuilderRef Builder,
 
 extern "C" LLVMValueRef LLVMRustDIBuilderInsertDeclareAtEnd(
     LLVMRustDIBuilderRef Builder, LLVMValueRef V, LLVMMetadataRef VarInfo,
-    int64_t *AddrOps, unsigned AddrOpsCount, LLVMMetadataRef DL,
+    uint64_t *AddrOps, unsigned AddrOpsCount, LLVMMetadataRef DL,
     LLVMBasicBlockRef InsertAtEnd) {
   return wrap(Builder->insertDeclare(
       unwrap(V), unwrap<DILocalVariable>(VarInfo),
-      Builder->createExpression(llvm::ArrayRef<int64_t>(AddrOps, AddrOpsCount)),
+      Builder->createExpression(llvm::ArrayRef<uint64_t>(AddrOps, AddrOpsCount)),
       DebugLoc(cast<MDNode>(unwrap(DL))),
       unwrap(InsertAtEnd)));
 }
@@ -1049,11 +1055,11 @@ LLVMRustDIBuilderCreateDebugLocation(unsigned Line, unsigned Column,
   return wrap(Loc);
 }
 
-extern "C" int64_t LLVMRustDIBuilderCreateOpDeref() {
+extern "C" uint64_t LLVMRustDIBuilderCreateOpDeref() {
   return dwarf::DW_OP_deref;
 }
 
-extern "C" int64_t LLVMRustDIBuilderCreateOpPlusUconst() {
+extern "C" uint64_t LLVMRustDIBuilderCreateOpPlusUconst() {
   return dwarf::DW_OP_plus_uconst;
 }
 
