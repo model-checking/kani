@@ -12,8 +12,8 @@ fn find_midpoint(low: u32, high: u32) -> u32 {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let a: u32 = rmc::nondet();
-    let b: u32 = rmc::nondet();
+    let a: u32 = rmc::any();
+    let b: u32 = rmc::any();
     find_midpoint(a, b);
 }
 // ANCHOR_END: rmc

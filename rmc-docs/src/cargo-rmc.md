@@ -1,52 +1,37 @@
 # RMC on a package
 
-> RMC currently ships with a `cargo-rmc` script, but this support is deeply limited (e.g. to a single crate).
-> This will be corrected soon, and this documentation updated.
-> In the meantime, we document the current build process for a larger project with dependencies here.
+RMC currently ships with a `cargo-rmc` script, but this support is limited. If you find any issue, please [filed a bug report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md).
 
-To build a larger project (one with dependencies or multiple crates) with RMC, you currently need to:
+To run `cargo-rmc` in your crate, execute from the crate directory:
 
-1. Build the project with an appropriate set of flags to output CBMC "symbol table" `.json` files.
-2. Link these together into a single "goto binary", with appropriate preprocessing flags.
-3. Directly call CBMC on this resulting binary.
-
-We give an example of this kind of script, with explanations, below.
-
-# Building and running
-
-Let's assume you have a project you can build with `cargo build` and you've written a proof harness somewhere in it that you want to run RMC on:
-
-```rust
-#[no_mangle]
-#[cfg(rmc)]
-fn my_harness() {
-}
+```
+cargo rmc [RMC_ARGUMENTS]* [--cbmc-args [CBMC_ARGUMENTS]*]
 ```
 
-A sample build script might start like this:
+To list all the arguments supported by cargo rmc, execute:
 
-```bash
-{{#include sample-rmc-build.sh:cargo}}
+```
+cargo rmc --help
 ```
 
-This allows us to re-use the `cargo` build system, but with flags that override `rustc` with RMC instead.
-More specifically, by setting the `RUSTC` environment variable to `rmc-rustc`, each Rust source file targeted by `cargo build` is "compiled" with RMC instead of `rustc`.
-The result of running `rmc-rustc` on a source file is a symbol table json file written in the CBMC Goto-C language.
-The use of an alternate target directory ensures RMC and rustc don't confuse each other with different intermediate output.
+# Common cargo-rmc arguments
 
-Next we can convert the symbol tables into goto binaries, in parallel, and then link them together:
+Cargo rmc supports the rmc standalone arguments described in the [RMC single file section](./rmc-single-file.md). Additionally, it also accepts the following arguments:
 
-```bash
-{{#include sample-rmc-build.sh:linking}}
+**`--config-toml`** Location of a configuration file in toml format for your project. This defaults to the crate's Cargo.toml.
+
+**`--no-config-toml`** Do not use any configuration TOML file.
+
+**`--build-target`** Build for the target triple.
+
+# Package configuration
+
+Users may want to add default configurations for their crate's or workspace's harnesses, and they can do it by adding configurations to their `Cargo.toml` or any other TOML file.
+
+For example, in order to configure a maximum loop unwind threshold for harnesses in a package, you can add the following line to your package `Cargo.toml`:
+```toml
+[package.metadata.rmc]
+flags= { unwind = "5" }
 ```
 
-At this point we have the project built, but now we want to transform it into something that will run a specific proof harness.
-To do that, we specialize it, preprocess it, and then run CBMC on the result:
-(In practice, we might want to do the above steps once, then repeat the below steps for each proof harness.)
-
-```bash
-{{#include sample-rmc-build.sh:cbmc}}
-```
-
-At this point we have a complete script and should now be able to run `./sample-rmc-build my_harness` to run a particular proof harness.
-Even in very large projects the removal of unreachable code should mean only the parts relevant to that proof harness are preserved in the RMC run.
+Note that RMC will extract any extra configuration from sections `[rmc]`, `[workspace.metadata.rmc]`, and `[package.metadata.rmc]` in the TOML file.

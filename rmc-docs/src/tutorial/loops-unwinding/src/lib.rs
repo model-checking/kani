@@ -23,7 +23,7 @@ fn main() {
     const LIMIT: usize = 10;
     let mut buffer: [u8; LIMIT] = [1; LIMIT];
 
-    let length = rmc::nondet();
+    let length = rmc::any();
     rmc::assume(length <= LIMIT);
 
     initialize_prefix(length, &mut buffer);
