@@ -3,14 +3,14 @@
 use std::convert::TryInto;
 fn main() {
     let input: &[u8] = &vec![
-        rmc::nondet(),
-        rmc::nondet(),
-        rmc::nondet(),
-        rmc::nondet(),
-        rmc::nondet(),
-        rmc::nondet(),
-        rmc::nondet(),
-        rmc::nondet(),
+        rmc::any(),
+        rmc::any(),
+        rmc::any(),
+        rmc::any(),
+        rmc::any(),
+        rmc::any(),
+        rmc::any(),
+        rmc::any(),
     ];
     let buffer = input.as_ref();
     let bytes: [u8; 8] = buffer.try_into().unwrap();

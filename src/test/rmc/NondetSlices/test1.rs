@@ -19,6 +19,6 @@ fn main() {
     let arr = [1, 2, 3];
     // The slice returned can be any of the following:
     // {[], [1], [2], [3], [1, 2], [2, 3], [1, 2, 3]}
-    let slice = rmc::slice::nondet_slice_of_array(&arr);
+    let slice = rmc::slice::any_slice_of_array(&arr);
     check(slice);
 }

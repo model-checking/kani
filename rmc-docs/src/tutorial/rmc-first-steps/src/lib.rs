@@ -51,7 +51,7 @@ mod tests {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let x: u32 = rmc::nondet();
+    let x: u32 = rmc::any();
     estimate_size(x);
 }
 // ANCHOR_END: rmc

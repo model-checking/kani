@@ -12,8 +12,20 @@ macro_rules! error {
 
 struct MyError {}
 
+unsafe impl rmc::Invariant for MyError {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
 #[derive(Default, Clone, Copy)]
 pub struct GuestAddress(pub u64);
+
+unsafe impl rmc::Invariant for GuestAddress {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
 
 static mut TRACK_CHECKED_OFFSET_NONE: bool = false;
 static mut TRACK_READ_OBJ: Option<GuestAddress> = None;
@@ -23,7 +35,7 @@ pub struct GuestMemoryMmap {}
 impl GuestMemoryMmap {
     fn checked_offset(&self, base: GuestAddress, offset: usize) -> Option<GuestAddress> {
         let mut retval = None;
-        if rmc::nondet() {
+        if rmc::any() {
             if let Some(sum) = base.0.checked_add(offset as u64) {
                 retval = Some(GuestAddress(sum))
             }
@@ -36,21 +48,21 @@ impl GuestMemoryMmap {
         return retval;
     }
 
-    fn read_obj<T>(&self, addr: GuestAddress) -> Result<T, MyError> {
+    fn read_obj<T: rmc::Invariant>(&self, addr: GuestAddress) -> Result<T, MyError> {
         // This assertion means that no descriptor is read more than once
         unsafe {
             if let Some(prev_addr) = TRACK_READ_OBJ {
                 assert!(prev_addr.0 != addr.0);
             }
-            if rmc::nondet() && TRACK_READ_OBJ.is_none() {
+            if rmc::any() && TRACK_READ_OBJ.is_none() {
                 TRACK_READ_OBJ = Some(addr);
             }
         }
-        rmc::nondet()
+        if rmc::any() { Ok(rmc::any::<T>()) } else { Err(rmc::any::<MyError>()) }
     }
 
     fn read_obj_request_header(&self, addr: GuestAddress) -> Result<RequestHeader, Error> {
-        rmc::nondet()
+        if rmc::any() { Ok(rmc::any::<RequestHeader>()) } else { Err(rmc::any::<Error>()) }
     }
 }
 
@@ -65,6 +77,12 @@ struct Descriptor {
     len: u32,
     flags: u16,
     next: u16,
+}
+
+unsafe impl rmc::Invariant for Descriptor {
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 /// A virtio descriptor chain.
@@ -175,6 +193,12 @@ pub struct RequestHeader {
     sector: u64,
 }
 
+unsafe impl rmc::Invariant for RequestHeader {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
 impl RequestHeader {
     pub fn new(request_type: u32, sector: u64) -> RequestHeader {
         RequestHeader { request_type, _reserved: 0, sector }
@@ -227,6 +251,20 @@ pub enum Error {
     UnexpectedReadOnlyDescriptor,
     /// Guest gave us a write only descriptor that protocol says to read from.
     UnexpectedWriteOnlyDescriptor,
+}
+
+unsafe impl rmc::Invariant for Error {
+    fn is_valid(&self) -> bool {
+        matches!(
+            *self,
+            Error::DescriptorChainTooShort
+                | Error::DescriptorLengthTooSmall
+                | Error::GuestMemory
+                | Error::InvalidOffset
+                | Error::UnexpectedReadOnlyDescriptor
+                | Error::UnexpectedWriteOnlyDescriptor
+        )
+    }
 }
 
 pub struct Request {
@@ -317,12 +355,12 @@ fn is_nonzero_pow2(x: u16) -> bool {
 
 fn main() {
     let mem = GuestMemoryMmap {};
-    let queue_size: u16 = rmc::nondet();
+    let queue_size: u16 = rmc::any();
     if !is_nonzero_pow2(queue_size) {
         return;
     }
-    let index: u16 = rmc::nondet();
-    let desc_table = GuestAddress(rmc::nondet::<u64>() & 0xffff_ffff_ffff_fff0);
+    let index: u16 = rmc::any();
+    let desc_table = GuestAddress(rmc::any::<u64>() & 0xffff_ffff_ffff_fff0);
     let desc = DescriptorChain::checked_new(&mem, desc_table, queue_size, index);
     match desc {
         Some(x) => {
