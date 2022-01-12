@@ -88,6 +88,11 @@ struct DepGraphData<K: DepKind> {
     previous_work_products: FxHashMap<WorkProductId, WorkProduct>,
 
     dep_node_debug: Lock<FxHashMap<DepNode<K>, String>>,
+
+    /// Used by incremental compilation tests to assert that
+    /// a particular query result was decoded from disk
+    /// (not just marked green)
+    debug_loaded_from_disk: Lock<FxHashSet<DepNode<K>>>,
 }
 
 pub fn hash_result<R>(hcx: &mut StableHashingContext<'_>, result: &R) -> Fingerprint
@@ -135,6 +140,7 @@ impl<K: DepKind> DepGraph<K> {
                 processed_side_effects: Default::default(),
                 previous: prev_graph,
                 colors: DepNodeColorMap::new(prev_graph_node_count),
+                debug_loaded_from_disk: Default::default(),
             })),
             virtual_dep_node_index: Lrc::new(AtomicU32::new(0)),
         }
@@ -169,6 +175,62 @@ impl<K: DepKind> DepGraph<K> {
         OP: FnOnce() -> R,
     {
         K::with_deps(None, op)
+    }
+
+    /// Used to wrap the deserialization of a query result from disk,
+    /// This method enforces that no new `DepNodes` are created during
+    /// query result deserialization.
+    ///
+    /// Enforcing this makes the query dep graph simpler - all nodes
+    /// must be created during the query execution, and should be
+    /// created from inside the 'body' of a query (the implementation
+    /// provided by a particular compiler crate).
+    ///
+    /// Consider the case of three queries `A`, `B`, and `C`, where
+    /// `A` invokes `B` and `B` invokes `C`:
+    ///
+    /// `A -> B -> C`
+    ///
+    /// Suppose that decoding the result of query `B` required re-computing
+    /// the query `C`. If we did not create a fresh `TaskDeps` when
+    /// decoding `B`, we would still be using the `TaskDeps` for query `A`
+    /// (if we needed to re-execute `A`). This would cause us to create
+    /// a new edge `A -> C`. If this edge did not previously
+    /// exist in the `DepGraph`, then we could end up with a different
+    /// `DepGraph` at the end of compilation, even if there were no
+    /// meaningful changes to the overall program (e.g. a newline was added).
+    /// In addition, this edge might cause a subsequent compilation run
+    /// to try to force `C` before marking other necessary nodes green. If
+    /// `C` did not exist in the new compilation session, then we could
+    /// get an ICE. Normally, we would have tried (and failed) to mark
+    /// some other query green (e.g. `item_children`) which was used
+    /// to obtain `C`, which would prevent us from ever trying to force
+    /// a non-existent `D`.
+    ///
+    /// It might be possible to enforce that all `DepNode`s read during
+    /// deserialization already exist in the previous `DepGraph`. In
+    /// the above example, we would invoke `D` during the deserialization
+    /// of `B`. Since we correctly create a new `TaskDeps` from the decoding
+    /// of `B`, this would result in an edge `B -> D`. If that edge already
+    /// existed (with the same `DepPathHash`es), then it should be correct
+    /// to allow the invocation of the query to proceed during deserialization
+    /// of a query result. We would merely assert that the dep-graph fragment
+    /// that would have been added by invoking `C` while decoding `B`
+    /// is equivalent to the dep-graph fragment that we already instantiated for B
+    /// (at the point where we successfully marked B as green).
+    ///
+    /// However, this would require additional complexity
+    /// in the query infrastructure, and is not currently needed by the
+    /// decoding of any query results. Should the need arise in the future,
+    /// we should consider extending the query system with this functionality.
+    pub fn with_query_deserialization<OP, R>(&self, op: OP) -> R
+    where
+        OP: FnOnce() -> R,
+    {
+        let mut deps = TaskDeps::default();
+        deps.read_allowed = false;
+        let deps = Lock::new(deps);
+        K::with_deps(Some(&deps), op)
     }
 
     /// Starts a new dep-graph task. Dep-graph tasks are specified
@@ -251,6 +313,7 @@ impl<K: DepKind> DepGraph<K> {
                 reads: SmallVec::new(),
                 read_set: Default::default(),
                 phantom_data: PhantomData,
+                read_allowed: true,
             }))
         };
         let result = K::with_deps(task_deps.as_ref(), || task(cx, arg));
@@ -362,6 +425,11 @@ impl<K: DepKind> DepGraph<K> {
                 if let Some(task_deps) = task_deps {
                     let mut task_deps = task_deps.lock();
                     let task_deps = &mut *task_deps;
+
+                    if !task_deps.read_allowed {
+                        panic!("Illegal read of: {:?}", dep_node_index);
+                    }
+
                     if cfg!(debug_assertions) {
                         data.current.total_read_count.fetch_add(1, Relaxed);
                     }
@@ -436,6 +504,14 @@ impl<K: DepKind> DepGraph<K> {
     /// used during saving of the dep-graph.
     pub fn previous_work_products(&self) -> &FxHashMap<WorkProductId, WorkProduct> {
         &self.data.as_ref().unwrap().previous_work_products
+    }
+
+    pub fn mark_debug_loaded_from_disk(&self, dep_node: DepNode<K>) {
+        self.data.as_ref().unwrap().debug_loaded_from_disk.lock().insert(dep_node);
+    }
+
+    pub fn debug_was_loaded_from_disk(&self, dep_node: DepNode<K>) -> bool {
+        self.data.as_ref().unwrap().debug_loaded_from_disk.lock().contains(&dep_node)
     }
 
     #[inline(always)]
@@ -1115,6 +1191,12 @@ pub struct TaskDeps<K> {
     reads: EdgesVec,
     read_set: FxHashSet<DepNodeIndex>,
     phantom_data: PhantomData<DepNode<K>>,
+    /// Whether or not we allow `DepGraph::read_index` to run.
+    /// This is normally true, except inside `with_query_deserialization`,
+    /// where it set to `false` to enforce that no new `DepNode` edges are
+    /// created. See the documentation of `with_query_deserialization` for
+    /// more details.
+    read_allowed: bool,
 }
 
 impl<K> Default for TaskDeps<K> {
@@ -1125,6 +1207,7 @@ impl<K> Default for TaskDeps<K> {
             reads: EdgesVec::new(),
             read_set: FxHashSet::default(),
             phantom_data: PhantomData,
+            read_allowed: true,
         }
     }
 }

@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::default::Default;
-use std::fmt::Write;
 use std::hash::Hash;
 use std::lazy::SyncOnceCell as OnceCell;
 use std::path::PathBuf;
@@ -39,7 +38,6 @@ use crate::clean::Clean;
 use crate::core::DocContext;
 use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
-use crate::html::render::cache::ExternalLocation;
 use crate::html::render::Context;
 use crate::passes::collect_intra_doc_links::UrlFragment;
 
@@ -266,7 +264,7 @@ impl ExternalCrate {
                 })
                 .collect()
         } else {
-            tcx.item_children(root).iter().map(|item| item.res).filter_map(as_keyword).collect()
+            tcx.module_children(root).iter().map(|item| item.res).filter_map(as_keyword).collect()
         }
     }
 
@@ -334,9 +332,19 @@ impl ExternalCrate {
                 })
                 .collect()
         } else {
-            tcx.item_children(root).iter().map(|item| item.res).filter_map(as_primitive).collect()
+            tcx.module_children(root).iter().map(|item| item.res).filter_map(as_primitive).collect()
         }
     }
+}
+
+/// Indicates where an external crate can be found.
+crate enum ExternalLocation {
+    /// Remote URL root of the external crate
+    Remote(String),
+    /// This external crate can be found in the local doc/ folder
+    Local,
+    /// The external crate could not be found.
+    Unknown,
 }
 
 /// Anything with a source location and set of attributes and, optionally, a
@@ -487,7 +495,7 @@ impl Item {
                 if let Ok((mut href, ..)) = href(*did, cx) {
                     debug!(?href);
                     if let Some(ref fragment) = *fragment {
-                        write!(href, "{}", fragment).unwrap()
+                        fragment.render(&mut href, cx.tcx()).unwrap()
                     }
                     Some(RenderedLink {
                         original_text: s.clone(),
@@ -880,20 +888,25 @@ impl AttributesExt for [ast::Attribute] {
 }
 
 crate trait NestedAttributesExt {
-    /// Returns `true` if the attribute list contains a specific `Word`
-    fn has_word(self, word: Symbol) -> bool;
+    /// Returns `true` if the attribute list contains a specific `word`
+    fn has_word(self, word: Symbol) -> bool
+    where
+        Self: std::marker::Sized,
+    {
+        <Self as NestedAttributesExt>::get_word_attr(self, word).is_some()
+    }
+
+    /// Returns `Some(attr)` if the attribute list contains 'attr'
+    /// corresponding to a specific `word`
     fn get_word_attr(self, word: Symbol) -> Option<ast::NestedMetaItem>;
 }
 
-impl<I: Iterator<Item = ast::NestedMetaItem> + IntoIterator<Item = ast::NestedMetaItem>>
-    NestedAttributesExt for I
+impl<I> NestedAttributesExt for I
+where
+    I: IntoIterator<Item = ast::NestedMetaItem>,
 {
-    fn has_word(self, word: Symbol) -> bool {
-        self.into_iter().any(|attr| attr.is_word() && attr.has_name(word))
-    }
-
-    fn get_word_attr(mut self, word: Symbol) -> Option<ast::NestedMetaItem> {
-        self.find(|attr| attr.is_word() && attr.has_name(word))
+    fn get_word_attr(self, word: Symbol) -> Option<ast::NestedMetaItem> {
+        self.into_iter().find(|attr| attr.is_word() && attr.has_name(word))
     }
 }
 
@@ -1068,9 +1081,6 @@ impl Attributes {
         let mut out = String::new();
         add_doc_fragment(&mut out, ori);
         for new_frag in iter {
-            if new_frag.kind != ori.kind || new_frag.parent_module != ori.parent_module {
-                break;
-            }
             add_doc_fragment(&mut out, new_frag);
         }
         out.pop();
@@ -2051,14 +2061,14 @@ rustc_data_structures::static_assert_size!(GenericArg, 80);
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate enum GenericArgs {
-    AngleBracketed { args: Vec<GenericArg>, bindings: Vec<TypeBinding> },
+    AngleBracketed { args: Vec<GenericArg>, bindings: ThinVec<TypeBinding> },
     Parenthesized { inputs: Vec<Type>, output: Option<Box<Type>> },
 }
 
 // `GenericArgs` is in every `PathSegment`, so its size can significantly
 // affect rustdoc's memory usage.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(GenericArgs, 56);
+rustc_data_structures::static_assert_size!(GenericArgs, 40);
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate struct PathSegment {
@@ -2069,7 +2079,7 @@ crate struct PathSegment {
 // `PathSegment` usually occurs multiple times in every `Path`, so its size can
 // significantly affect rustdoc's memory usage.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(PathSegment, 64);
+rustc_data_structures::static_assert_size!(PathSegment, 48);
 
 #[derive(Clone, Debug)]
 crate struct Typedef {

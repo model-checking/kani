@@ -13,7 +13,7 @@ use rustc_span::symbol::Ident;
 use rustc_span::{Span, DUMMY_SP};
 
 use super::ItemCtxt;
-use super::{bad_placeholder_type, is_suggestable_infer_ty};
+use super::{bad_placeholder, is_suggestable_infer_ty};
 
 /// Computes the relevant generic parameter for a potential generic const argument.
 ///
@@ -470,14 +470,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
 
         Node::Field(field) => icx.to_ty(field.ty),
 
-        Node::Expr(&Expr { kind: ExprKind::Closure(.., gen), .. }) => {
-            let substs = InternalSubsts::identity_for_item(tcx, def_id.to_def_id());
-            if let Some(movability) = gen {
-                tcx.mk_generator(def_id.to_def_id(), substs, movability)
-            } else {
-                tcx.mk_closure(def_id.to_def_id(), substs)
-            }
-        }
+        Node::Expr(&Expr { kind: ExprKind::Closure(..), .. }) => tcx.typeck(def_id).node_type(hir_id),
 
         Node::AnonConst(_) if let Some(param) = tcx.opt_const_param_of(def_id) => {
             // We defer to `type_of` of the corresponding parameter
@@ -490,7 +483,7 @@ pub(super) fn type_of(tcx: TyCtxt<'_>, def_id: DefId) -> Ty<'_> {
             match parent_node {
                 Node::Ty(&Ty { kind: TyKind::Array(_, ref constant), .. })
                 | Node::Expr(&Expr { kind: ExprKind::Repeat(_, ref constant), .. })
-                    if constant.hir_id == hir_id =>
+                    if constant.hir_id() == hir_id =>
                 {
                     tcx.types.usize
                 }
@@ -788,7 +781,7 @@ fn infer_placeholder_type<'a>(
             err.emit();
         }
         None => {
-            let mut diag = bad_placeholder_type(tcx, vec![span], kind);
+            let mut diag = bad_placeholder(tcx, "type", vec![span], kind);
 
             if !ty.references_error() {
                 let mut mk_nameable = MakeNameable::new(tcx);
