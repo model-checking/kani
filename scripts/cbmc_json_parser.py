@@ -313,7 +313,7 @@ def construct_terse_property_message(properties):
                 failure_message_path = failure_source['file']
                 failure_function_name = failure_source['function']
                 failure_line_number = failure_source['line']
-                output_message += f"Failed Checks: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}"
+                output_message += f"Failed Checks: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}\n"
             except KeyError:
                 failure_source = "None"
                 output_message += f"Failed Checks: {failure_message}\n"
@@ -393,7 +393,7 @@ def construct_property_message(properties):
                 failure_message_path = failure_source['file']
                 failure_function_name = failure_source['function']
                 failure_line_number = failure_source['line']
-                output_message += f"Failed Checks: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}"
+                output_message += f"Failed Checks: {failure_message}\n File: \"{failure_message_path}\", line {failure_line_number}, in {failure_function_name}\n"
             except KeyError:
                 failure_source = "None"
                 output_message += f"Failed Checks: {failure_message}\n"
