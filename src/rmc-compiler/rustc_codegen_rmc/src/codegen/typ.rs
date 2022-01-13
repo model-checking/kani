@@ -1296,6 +1296,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
+        // TODO: We should normalize the type projection here. For more details, see
+        // https://github.com/model-checking/rmc/issues/752
         return !self.is_unsized(mir_type)
             || mir_type.ptr_metadata_ty(self.tcx, |ty| ty) == self.tcx.types.unit;
     }
