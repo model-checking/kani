@@ -1,5 +1,4 @@
 UNDETERMINED
 assertion failed: x == 0
- ** 1 of 3 failed
 Failed Checks: InlineAsm is not currently supported by RMC. Please post your example at https://github.com/model-checking/rmc/issues/2 
 ** WARNING: A Rust construct that is not currently supported by RMC was found to be reachable. Check the results for more details.
