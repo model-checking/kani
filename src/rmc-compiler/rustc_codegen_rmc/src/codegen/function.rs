@@ -73,13 +73,12 @@ impl<'tcx> GotocCtx<'tcx> {
             warn!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
             debug!("Skipping function {}", self.current_fn().readable_name());
-            let loc = self.codegen_span(&self.current_fn().mir().span);
-            let body = Stmt::assert_false(
-                &format!(
-                    "The function {} is not currently supported by RMC",
-                    self.current_fn().readable_name()
+            let body = self.codegen_fatal_error(
+                &GotocCtx::unsupported_msg(
+                    &(String::from("The function ") + self.current_fn().readable_name()),
+                    None,
                 ),
-                loc,
+                Some(self.current_fn().mir().span),
             );
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {
