@@ -175,11 +175,11 @@ def postprocess_results(properties):
     """
     Check for certain cases, e.g. a reachable unsupported construct or a failed
     unwinding assertion, and update the results of impacted checks accordingly.
-    1. Change all "SUCCESS" results to "UNKNOWN" if the reachability check for a
-    Rust construct that is not currently supported by RMC failed, since the
-    missing exploration of execution paths through the unsupported construct may
-    hide failures
-    2. TODO: Change results from "SUCCESS" to "UNKNOWN" if an unwinding
+    1. Change all "SUCCESS" results to "UNDETERMINED" if the reachability check
+    for a Rust construct that is not currently supported by RMC failed, since
+    the missing exploration of execution paths through the unsupported construct
+    may hide failures
+    2. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
     assertion failed, since the insufficient unwinding may cause some execution
     paths to be left unexplored (https://github.com/model-checking/rmc/issues/746)
 
@@ -191,9 +191,9 @@ def postprocess_results(properties):
 
     for property in properties:
         if has_reachable_unsupported_constructs:
-            # Change SUCCESS to UNKNOWN for all properties
+            # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
-                property["status"] = "UNKNOWN"
+                property["status"] = "UNDETERMINED"
         # TODO: Handle unwinding assertion failure
 
     messages = ""
@@ -364,7 +364,7 @@ def construct_property_message(properties):
 
         if status == "SUCCESS":
             message = Fore.GREEN + f"{status}" + Style.RESET_ALL
-        elif status == "UNKNOWN":
+        elif status == "UNDETERMINED":
             message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
         else:
             number_tests_failed += 1
