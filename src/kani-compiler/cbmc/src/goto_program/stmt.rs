@@ -233,6 +233,14 @@ impl Stmt {
         stmt!(Continue, loc)
     }
 
+    /// `__CPROVER_cover(cond);`
+    pub fn cover(cond: Expr, loc: Location) -> Self {
+        assert!(cond.typ().is_bool());
+        BuiltinFn::CProverCover
+            .call(vec![cond], loc.clone())
+            .as_stmt(loc)
+    }
+
     /// `lhs.typ lhs = value;` or `lhs.typ lhs;`
     pub fn decl(lhs: Expr, value: Option<Expr>, loc: Location) -> Self {
         assert!(lhs.is_symbol());
