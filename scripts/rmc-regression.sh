@@ -41,7 +41,7 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 cargo build --release --manifest-path src/tools/rmc-link-restrictions/Cargo.toml 
 
 # Build compiletest
-cargo build --release --manifest-path src/tools/compiletest/Cargo.toml
+(cd "${RMC_DIR}/src/tools/compiletest"; cargo build --release)
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -61,7 +61,7 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
-  ./target/release/compiletest --rmc-dir-path /home/ubuntu/rmc-dash/scripts --src-base /home/ubuntu/rmc-dash/src/test/$suite --build-base /home/ubuntu/rmc-dash/build/$TARGET/test/$suite --stage-id stage1-$TARGET --suite $suite --mode $mode --target $TARGET --host $TARGET --quiet --channel dev
+  ./target/release/compiletest --rmc-dir-path scripts --src-base src/test/$suite --build-base build/$TARGET/test/$suite --stage-id stage1-$TARGET --suite $suite --mode $mode --target $TARGET --host $TARGET --quiet --channel dev
 done
 
 # Check codegen for the standard library
