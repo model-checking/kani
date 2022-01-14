@@ -61,7 +61,14 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
-  ./target/release/compiletest --rmc-dir-path scripts --src-base src/test/$suite --build-base build/$TARGET/test/$suite --stage-id stage1-$TARGET --suite $suite --mode $mode --target $TARGET --host $TARGET --quiet --channel dev
+  # Note: `cargo-rmc` tests fail if we do not add `$(pwd)` to `--build-base`
+  # Tracking issue: https://github.com/model-checking/rmc/issues/755
+  ./target/release/compiletest --rmc-dir-path scripts --src-base src/test/$suite \
+                               --build-base $(pwd)/build/$TARGET/test/$suite \
+                               --stage-id stage1-$TARGET \
+                               --suite $suite --mode $mode \
+                               --target $TARGET --host $TARGET \
+                               --quiet --channel dev
 done
 
 # Check codegen for the standard library
