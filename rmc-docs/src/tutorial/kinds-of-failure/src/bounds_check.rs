@@ -32,8 +32,8 @@ mod tests {
 
 // ANCHOR: rmc
 #[cfg(rmc)]
-#[no_mangle]
-fn main() {
+#[rmc::proof]
+fn bound_check() {
     let size: usize = rmc::any();
     rmc::assume(size < 4096);
     let index: usize = rmc::any();

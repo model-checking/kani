@@ -143,7 +143,7 @@ It seems a bit odd that we can take billions of inputs, but our function clearly
 Let's codify this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug:
 
 ```rust
-{{#include tutorial/rmc-first-steps/tests/final-form.rs:code}}
+{{#include tutorial/rmc-first-steps/src/final_form.rs:code}}
 ```
 
 Now we have stated our previously implicit expectation: this function should never be called with inputs that are too big.
@@ -151,7 +151,7 @@ But if we attempt to verify this, we get a problem:
 
 ```
 ** Results:
-./tests/final-form.rs function estimate_size
+./src/final_form.rs function estimate_size
 [estimate_size.assertion.1] line 3 assertion failed: x < 4096: FAILURE
 
 ** 1 of 1 failed (2 iterations)
@@ -167,7 +167,7 @@ Much like property testing (which would also find this assertion failure as a bu
 Here's a revised example of the proof harness, one that now succeeds:
 
 ```rust
-{{#include tutorial/rmc-first-steps/tests/final-form.rs:rmc}}
+{{#include tutorial/rmc-first-steps/src/final_form.rs:rmc}}
 ```
 
 But now we must wonder if we've really fully tested our function.
@@ -177,7 +177,7 @@ Fortunately, RMC is able to report a coverage metric for each proof harness.
 Try running:
 
 ```
-rmc --visualize tests/final-form.rs
+rmc --visualize src/final_form.rs --function verify_success
 open report/html/index.html
 ```
 

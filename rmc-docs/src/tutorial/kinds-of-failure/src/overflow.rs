@@ -25,8 +25,8 @@ mod tests {
 
 // ANCHOR: rmc
 #[cfg(rmc)]
-#[no_mangle]
-fn main() {
+#[rmc::proof]
+fn add_overflow() {
     let a: u32 = rmc::any();
     let b: u32 = rmc::any();
     simple_addition(a, b);

@@ -13,6 +13,7 @@
   - [First steps with RMC](./tutorial-first-steps.md)
   - [Failures that RMC can spot](./tutorial-kinds-of-failure.md)
   - [Loops, unwinding, and bounds](./tutorial-loops-unwinding.md)
+  - [Creating non-deterministic variables](./tutorial-nondeterministic-variables.md)
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [RMC developer documentation](./dev-documentation.md)
