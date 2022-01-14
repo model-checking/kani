@@ -187,7 +187,8 @@ def postprocess_results(properties):
     of the special cases above was hit.
     """
 
-    has_reachable_unsupported_constructs, has_failed_unwinding_asserts = check_special_cases(properties)
+    has_reachable_unsupported_constructs = has_check_failure(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
+    has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
 
     for property in properties:
         if has_reachable_unsupported_constructs:
@@ -205,24 +206,14 @@ def postprocess_results(properties):
     return properties, messages
 
 
-def check_special_cases(properties):
+def has_check_failure(properties, message):
     """
-    Search for the following cases in the CBMC output:
-    1. A check for an unsupported construct (e.g. inline/global assembly) whose
-    result is "FAILURE"
-    2. An unwinding assertion whose result is "FAILURE"
+    Search in properties for a failed property with the given message
     """
-    has_reachable_unsupported_constructs = False
-    has_failed_unwinding_asserts = False
-
     for property in properties:
-        if GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC in property["description"]:
-            if property["status"] == "FAILURE":
-                has_reachable_unsupported_constructs = True
-        elif GlobalMessages.UNWINDING_ASSERT_DESC in property["description"]:
-            if property["status"] == "FAILURE":
-                has_failed_unwinding_asserts = True
-    return has_reachable_unsupported_constructs, has_failed_unwinding_asserts
+        if message in property["description"] and property["status"] == "FAILURE":
+            return True
+    return False
 
 
 def construct_solver_information_message(solver_information):
