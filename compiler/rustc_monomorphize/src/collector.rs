@@ -688,15 +688,6 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirNeighborCollector<'a, 'tcx> {
                     _ => bug!(),
                 }
             }
-            mir::Rvalue::NullaryOp(mir::NullOp::Box, _) => {
-                let tcx = self.tcx;
-                let exchange_malloc_fn_def_id =
-                    tcx.require_lang_item(LangItem::ExchangeMalloc, None);
-                let instance = Instance::mono(tcx, exchange_malloc_fn_def_id);
-                if should_codegen_locally(tcx, &instance) {
-                    self.output.push(create_fn_mono_item(self.tcx, instance, span));
-                }
-            }
             mir::Rvalue::ThreadLocalRef(def_id) => {
                 assert!(self.tcx.is_thread_local_static(def_id));
                 let instance = Instance::mono(self.tcx, def_id);
@@ -1319,10 +1310,9 @@ fn create_mono_items_for_default_impls<'tcx>(
             if let Some(trait_ref) = tcx.impl_trait_ref(item.def_id) {
                 let param_env = ty::ParamEnv::reveal_all();
                 let trait_ref = tcx.normalize_erasing_regions(param_env, trait_ref);
-                let overridden_methods: FxHashSet<_> =
-                    impl_.items.iter().map(|iiref| iiref.ident.normalize_to_macros_2_0()).collect();
+                let overridden_methods = tcx.impl_item_implementor_ids(item.def_id);
                 for method in tcx.provided_trait_methods(trait_ref.def_id) {
-                    if overridden_methods.contains(&method.ident.normalize_to_macros_2_0()) {
+                    if overridden_methods.contains_key(&method.def_id) {
                         continue;
                     }
 

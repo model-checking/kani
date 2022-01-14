@@ -14,7 +14,7 @@ EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 RMC_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 43
+check-cbmc-version.py --major 5 --minor 48
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
