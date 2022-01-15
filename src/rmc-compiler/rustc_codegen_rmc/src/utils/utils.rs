@@ -39,19 +39,22 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
-            Stmt::assert_false(
-                &format!(
-                    "{} is not currently supported by RMC. Please post your example at {} ",
-                    operation_name, url
-                ),
-                loc.clone(),
-            ),
+            Stmt::assert_false(&GotocCtx::unsupported_msg(operation_name, Some(url)), loc.clone()),
             // Assume false to block any further exploration of this path.
             Stmt::assume(Expr::bool_false(), loc.clone()),
             t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
         ];
 
         Expr::statement_expression(body, t).with_location(loc)
+    }
+
+    pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
+        let mut s = format!("{} is not currently supported by RMC", item);
+        if url.is_some() {
+            s.push_str(". Please post your example at ");
+            s.push_str(url.unwrap());
+        }
+        s
     }
 }
 
