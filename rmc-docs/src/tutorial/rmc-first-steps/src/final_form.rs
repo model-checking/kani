@@ -50,8 +50,8 @@ mod tests {
 
 // ANCHOR: rmc
 #[cfg(rmc)]
-#[no_mangle]
-fn main() {
+#[rmc::proof]
+fn verify_success() {
     let x: u32 = rmc::any();
     rmc::assume(x < 4096);
     let y = estimate_size(x);
@@ -60,8 +60,10 @@ fn main() {
 // ANCHOR_END: rmc
 
 #[cfg(rmc)]
-#[no_mangle]
-fn failing_main() {
+#[rmc::proof]
+fn verify_failure() {
     let x: u32 = rmc::any();
     let y = estimate_size(x);
 }
+
+fn main() {}
