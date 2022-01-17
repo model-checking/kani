@@ -14,7 +14,7 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
-use super::metadata::HarnessMetadata;
+use super::metadata::{HarnessMetadata, UnwindMetadata};
 use super::vtable_ctx::VtableCtx;
 use crate::overrides::{fn_hooks, GotocHooks};
 use crate::utils::full_crate_name;
@@ -55,6 +55,7 @@ pub struct GotocCtx<'tcx> {
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
     pub proof_harnesses: Vec<HarnessMetadata>,
+    pub unwind_metadata: Vec<UnwindMetadata>,
 }
 
 /// Constructor
@@ -75,6 +76,7 @@ impl<'tcx> GotocCtx<'tcx> {
             current_fn: None,
             type_map: FxHashMap::default(),
             proof_harnesses: vec![],
+            unwind_metadata: vec![],
         }
     }
 }

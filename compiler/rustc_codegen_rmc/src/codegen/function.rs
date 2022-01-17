@@ -3,7 +3,7 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::context::metadata::HarnessMetadata;
+use crate::context::metadata::{HarnessMetadata, UnwindMetadata};
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
@@ -251,10 +251,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let instance = self.current_fn().instance();
 
         for attr in self.tcx.get_attrs(instance.def_id()) {
-            match rmctool_attr_name(attr).as_deref() {
-                Some("proof") => self.handle_rmctool_proof(),
-                _ => {}
-            }
+            if let Some(random_string) = rmctool_attr_name(attr).as_deref() {
+                if random_string.contains("unwind") {
+                    self.handle_rmctool_unwind(random_string);
+                } else if random_string.contains("proof") {
+                    self.handle_rmctool_proof();
+                } else {
+                }
+            };
         }
     }
 
@@ -274,15 +278,52 @@ impl<'tcx> GotocCtx<'tcx> {
 
         self.proof_harnesses.push(harness);
     }
+    /// Update `self` (the goto context) to add the current function as a listed proof harness
+    fn handle_rmctool_unwind(&mut self, attribute_string: &str) {
+        /// clone parameter string for manipulation
+        let temp_string = attribute_string;
+
+        let vec_int: Vec<u32> = temp_string.chars().filter_map(|a| a.to_digit(10)).collect();
+
+        let x = vec_int.iter().fold(0, |acc, elem| acc * 10 + elem);
+
+        let argument_value: u32 = match x {
+            x if (x >= 0 && x < u32::MAX) => x,
+            x if (x < 0 || x > u32::MAX) => 1,
+            _ => 1,
+        };
+
+        let current_fn = self.current_fn();
+        let pretty_name = current_fn.readable_name().to_owned();
+        let loc = self.codegen_span(&current_fn.mir().span);
+        let original_file = loc.filename().unwrap().to_string();
+        let original_line = loc.line().unwrap().to_string();
+
+        let mut line_location = String::new();
+        line_location += &original_file;
+        line_location += "/";
+        line_location += &original_line;
+
+        let unwind_instance = UnwindMetadata {
+            pretty_name: pretty_name,
+            original_file: line_location,
+            unwind_argument_value: argument_value,
+        };
+        self.unwind_metadata.push(unwind_instance);
+    }
 }
 
 /// If the attribute is named `rmctool::name`, this extracts `name`
 fn rmctool_attr_name(attr: &ast::Attribute) -> Option<String> {
     match &attr.kind {
         ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
-            if segments.len() == 2 && segments[0].ident.as_str() == "rmctool" =>
+            if segments[0].ident.as_str() == "rmctool" =>
         {
-            Some(segments[1].ident.as_str().to_string())
+            let mut new_string = String::new();
+            for index in 0..segments.len() {
+                new_string.push_str(segments[index].ident.as_str());
+            }
+            Some(new_string)
         }
         _ => None,
     }

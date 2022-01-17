@@ -56,7 +56,10 @@ def main():
         pattern = os.path.join(args.target_dir, args.build_target, "debug", "deps", "*.symtab.json")
     else:
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
+
+    rmc_metadata_patterns = os.path.join(args.target_dir, "x86_64-unknown-linux-gnu", "debug", "deps", "*.rmc-metadata.json")
     symbol_table_jsons = glob.glob(pattern)
+    rmc_metadata_patterns_jsons = glob.glob(rmc_metadata_patterns)
 
     if not args.dry_run:
         rmc.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
@@ -68,6 +71,13 @@ def main():
     c_filename = os.path.join(args.target_dir, "cbmc.c")
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
     out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
+    rmc_metadata_files = rmc.process_rmc_metadata_files(rmc_metadata_patterns_jsons, args.verbose, args.keep_temps, args.dry_run)
+
+    if args.unwind is None:
+        target_function_name = args.function
+        current_file_metadata = rmc_metadata_files[rmc_metadata_patterns_jsons[0]]["unwind_metadata"]
+        unwind_harness = list(filter(lambda item: item['pretty_name'] == target_function_name, current_file_metadata))[0]
+        args.unwind = unwind_harness["unwind_argument_value"]
 
     restrictions_filename = os.path.join(args.target_dir, "debug", "deps") if args.restrict_vtable else None
 
@@ -118,6 +128,10 @@ def main():
 
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
+
+    # Adding read unwind value to cbmc args for easier parsing in rmc scripts
+    if "--unwind" not in args.cbmc_args and args.unwind :
+        args.cbmc_args.extend(["--unwind", str(args.unwind)])
 
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)

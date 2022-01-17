@@ -10,6 +10,7 @@ import re
 import pathlib
 import rmc_flags
 import cbmc_json_parser
+import json
 
 RMC_CFG = "rmc"
 RMC_RUSTC_EXE = "rmc-rustc"
@@ -129,8 +130,26 @@ def process_unwind_flag(args):
                             " compatible with other `--unwind` flags.")
         return
     flag_info = ("--unwind", "unwind", rmc_flags.DEFAULT_UNWIND_VALUE)
+
+    # here, reading the rmc-metadata.json file for the unwind argument
+
     set_common_cbmc_flag(args, flag_info)
     add_common_cbmc_flag(args, flag_info)
+
+# Processes vtable restrictions to the format CBMC expects
+# TODO: once restrictions are on by default, we should build release ahead of time
+def process_rmc_metadata_files(metadata_json_files, verbose=False, keep_temps=False, dry_run=False):
+    rmc_metadata_files = {}
+    json_files = []
+    for json_file in metadata_json_files:
+        with open(json_file, 'r') as f:
+            json_files.append(json_file)
+            current_data = json.load(f)
+            rmc_metadata_files[json_file] = current_data
+
+        atexit.register(delete_file, json_file)
+
+    return rmc_metadata_files
 
 # Process common CBMC flags
 def process_common_cbmc_flags(args):

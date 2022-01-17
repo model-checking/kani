@@ -9,6 +9,7 @@
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(rmctool)"
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
+extern crate proc_macro;
 use proc_macro::TokenStream;
 
 #[cfg(all(not(rmc), not(test)))]
@@ -48,4 +49,29 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     //     #[rmctool::proof]
     //     $item
     // )
+}
+
+#[cfg(not(rmc))]
+#[proc_macro_attribute]
+pub fn unwind_loop(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    // Not-RMC, Not-Test means this code shouldn't exist, return nothing.
+    TokenStream::new()
+}
+
+#[cfg(rmc)]
+#[proc_macro_attribute]
+pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+
+    // Debug attribute arguments (Metadata of the macro). For ex - #[rmc::unwind(9)] has the metadata = "9"
+    let attr_copy = attr.clone().to_string();
+    println!("Attributes {}", attr_copy);
+
+    // Translate #[rmc::unwind(arg)] to #[rmctool::unwind_arg_] for easier handling
+    let insert_string = "#[rmctool::unwind_".to_owned() + &attr.clone().to_string() + "_]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+    result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
+    result.extend(item);
+    result
+    // / _attr
 }

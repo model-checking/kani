@@ -19,8 +19,17 @@ pub struct HarnessMetadata {
     pub original_line: String,
 }
 
+// We emit for every unwind we find
+#[derive(Serialize)]
+pub struct UnwindMetadata {
+    pub pretty_name: String,
+    pub original_file: String,
+    pub unwind_argument_value: u32,
+}
+
 /// The structure of `.rmc-metadata.json` files, which are emitted for each crate
 #[derive(Serialize)]
 pub struct RmcMetadata {
     pub proof_harnesses: Vec<HarnessMetadata>,
+    pub unwind_metadata: Vec<UnwindMetadata>,
 }
