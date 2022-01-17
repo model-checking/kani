@@ -23,7 +23,7 @@
 //! These threads are not parallelized (they haven't been a bottleneck yet), and
 //! both occur before the crate is rendered.
 
-crate mod cache;
+crate mod search_index;
 
 #[cfg(test)]
 mod tests;
@@ -182,7 +182,7 @@ impl StylePath {
 
 fn write_srclink(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer) {
     if let Some(l) = cx.src_href(item) {
-        write!(buf, "<a class=\"srclink\" href=\"{}\" title=\"goto source code\">[src]</a>", l)
+        write!(buf, "<a class=\"srclink\" href=\"{}\" title=\"goto source code\">source</a>", l)
     }
 }
 
@@ -312,14 +312,6 @@ impl AllTypes {
         f.write_str(
             "<h1 class=\"fqn\">\
                  <span class=\"in-band\">List of all items</span>\
-                 <span class=\"out-of-band\">\
-                     <span id=\"render-detail\">\
-                         <a id=\"toggle-all-docs\" href=\"javascript:void(0)\" \
-                            title=\"collapse all docs\">\
-                             [<span class=\"inner\">&#x2212;</span>]\
-                         </a>\
-                     </span>
-                 </span>
              </h1>",
         );
         // Note: print_entries does not escape the title, because we know the current set of titles
@@ -788,7 +780,7 @@ fn assoc_type(
 ) {
     write!(
         w,
-        "{}type <a href=\"{}\" class=\"type\">{}</a>",
+        "{}type <a href=\"{}\" class=\"associatedtype\">{}</a>",
         extra,
         naive_assoc_href(it, link, cx),
         it.name.as_ref().unwrap()
@@ -807,7 +799,7 @@ fn render_stability_since_raw(
     const_stability: Option<ConstStability>,
     containing_ver: Option<Symbol>,
     containing_const_ver: Option<Symbol>,
-) {
+) -> bool {
     let ver = ver.filter(|inner| !inner.is_empty());
 
     match (ver, const_stability) {
@@ -850,8 +842,9 @@ fn render_stability_since_raw(
                 v
             );
         }
-        _ => {}
+        _ => return false,
     }
+    true
 }
 
 fn render_assoc_item(
@@ -1640,7 +1633,7 @@ fn render_impl(
 }
 
 // Render the items that appear on the right side of methods, impls, and
-// associated types. For example "1.0.0 (const: 1.39.0) [src]".
+// associated types. For example "1.0.0 (const: 1.39.0) · source".
 fn render_rightside(
     w: &mut Buffer,
     cx: &Context<'_>,
@@ -1658,13 +1651,16 @@ fn render_rightside(
     };
 
     write!(w, "<div class=\"rightside\">");
-    render_stability_since_raw(
+    let has_stability = render_stability_since_raw(
         w,
         item.stable_since(tcx),
         const_stability,
         containing_item.stable_since(tcx),
         const_stable_since,
     );
+    if has_stability {
+        w.write_str(" · ");
+    }
 
     write_srclink(cx, item, w);
     w.write_str("</div>");

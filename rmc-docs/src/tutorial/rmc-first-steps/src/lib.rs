@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // rmc-verify-fail
 
+pub mod final_form;
+
 // ANCHOR: code
 fn estimate_size(x: u32) -> u32 {
     if x < 256 {
@@ -51,7 +53,7 @@ mod tests {
 #[cfg(rmc)]
 #[no_mangle]
 fn main() {
-    let x: u32 = rmc::nondet();
+    let x: u32 = rmc::any();
     estimate_size(x);
 }
 // ANCHOR_END: rmc

@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --cbmc-args --unwind 11
-// rmc-verify-fail
 
 // ANCHOR: code
 fn initialize_prefix(length: usize, buffer: &mut [u8]) {
@@ -23,7 +21,7 @@ fn main() {
     const LIMIT: usize = 10;
     let mut buffer: [u8; LIMIT] = [1; LIMIT];
 
-    let length = rmc::nondet();
+    let length = rmc::any();
     rmc::assume(length <= LIMIT);
 
     initialize_prefix(length, &mut buffer);

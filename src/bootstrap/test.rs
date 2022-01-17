@@ -1229,7 +1229,7 @@ default_test!(Expected { path: "src/test/expected", mode: "expected", suite: "ex
 
 default_test!(BookRunner { path: "src/test/bookrunner", mode: "rmc", suite: "bookrunner" });
 
-default_test!(RmcDocs { path: "src/test/rmc-docs", mode: "rmc", suite: "rmc-docs" });
+default_test!(RmcDocs { path: "src/test/rmc-docs", mode: "cargo-rmc", suite: "rmc-docs" });
 
 default_test!(RmcFixme { path: "src/test/rmc-fixme", mode: "rmc-fixme", suite: "rmc-fixme" });
 

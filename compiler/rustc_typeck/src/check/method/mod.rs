@@ -7,7 +7,7 @@ mod prelude2021;
 pub mod probe;
 mod suggest;
 
-pub use self::suggest::{SelfSource, TraitInfo};
+pub use self::suggest::SelfSource;
 pub use self::CandidateSource::*;
 pub use self::MethodError::*;
 
@@ -31,7 +31,6 @@ use rustc_trait_selection::traits::query::evaluate_obligation::InferCtxtExt;
 use self::probe::{IsSuggestion, ProbeScope};
 
 pub fn provide(providers: &mut ty::query::Providers) {
-    suggest::provide(providers);
     probe::provide(providers);
 }
 
@@ -483,7 +482,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 let variant_def = adt_def
                     .variants
                     .iter()
-                    .find(|vd| tcx.hygienic_eq(method_name, vd.ident, adt_def.did));
+                    .find(|vd| tcx.hygienic_eq(method_name, vd.ident(tcx), adt_def.did));
                 if let Some(variant_def) = variant_def {
                     // Braced variants generate unusable names in value namespace (reserved for
                     // possible future use), so variants resolved as associated items may refer to

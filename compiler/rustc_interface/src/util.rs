@@ -254,7 +254,6 @@ pub fn get_codegen_backend(
             filename if filename.contains('.') => load_backend_from_dylib(filename.as_ref()),
             #[cfg(feature = "llvm")]
             "llvm" => rustc_codegen_llvm::LlvmCodegenBackend::new,
-            "gotoc" => rustc_codegen_rmc::GotocCodegenBackend::new,
             backend_name => get_codegen_sysroot(maybe_sysroot, backend_name),
         }
     });
@@ -485,7 +484,7 @@ pub(crate) fn check_attr_crate_type(
                     return;
                 }
 
-                if let ast::MetaItemKind::NameValue(spanned) = a.meta().unwrap().kind {
+                if let ast::MetaItemKind::NameValue(spanned) = a.meta_kind().unwrap() {
                     let span = spanned.span;
                     let lev_candidate = find_best_match_for_name(
                         &CRATE_TYPES.iter().map(|(k, _)| *k).collect::<Vec<_>>(),
