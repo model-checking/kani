@@ -79,11 +79,13 @@ def main():
     out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
     rmc_metadata_files = rmc.process_rmc_metadata_files(rmc_metadata_patterns_jsons, args.verbose, args.keep_temps, args.dry_run)
 
-    if args.unwind is None:
+    if args.unwind is None and args.function:
         target_function_name = args.function
         current_file_metadata = rmc_metadata_files[rmc_metadata_patterns_jsons[0]]["unwind_metadata"]
-        unwind_harness = list(filter(lambda item: item['pretty_name'] == target_function_name, current_file_metadata))[0]
-        args.unwind = unwind_harness["unwind_argument_value"]
+        unwind_harness_list = list(filter(lambda item: item['pretty_name'] == target_function_name, current_file_metadata))
+        if len(unwind_harness_list) == 1:
+            unwind_harness = list(filter(lambda item: item['pretty_name'] == target_function_name, current_file_metadata))[0]
+            args.unwind = unwind_harness["unwind_argument_value"]
 
     restrictions_filename = os.path.join(args.target_dir, "debug", "deps") if args.restrict_vtable else None
 
