@@ -1292,20 +1292,28 @@ pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
     }
 }
 
+/// This is a place holder function that should normalize the given type.
+///
+/// TODO: We should normalize the type projection here. For more details, see
+/// https://github.com/model-checking/rmc/issues/752
+fn normalize_type(ty: Ty<'tcx>) -> Ty<'tcx> {
+    ty
+}
+
 impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
         return !self.is_unsized(mir_type)
-            || mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.unit;
+            || mir_type.ptr_metadata_ty(self.tcx, normalize_type) == self.tcx.types.unit;
     }
     /// A pointer to the mir type should be a slice fat pointer.
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        return mir_type.ptr_metadata_ty(self.tcx) == self.tcx.types.usize;
+        return mir_type.ptr_metadata_ty(self.tcx, normalize_type) == self.tcx.types.usize;
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         return metadata != self.tcx.types.unit && metadata != self.tcx.types.usize;
     }
 
