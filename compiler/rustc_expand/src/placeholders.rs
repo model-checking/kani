@@ -50,7 +50,8 @@ pub fn placeholder(
             attrs: Default::default(),
             items: Default::default(),
             span,
-            is_placeholder: Some(id),
+            id,
+            is_placeholder: true,
         }),
         AstFragmentKind::Expr => AstFragment::Expr(expr_placeholder()),
         AstFragmentKind::OptExpr => AstFragment::OptExpr(Some(expr_placeholder())),
@@ -122,7 +123,7 @@ pub fn placeholder(
             span,
             is_placeholder: true,
         }]),
-        AstFragmentKind::Fields => AstFragment::Fields(smallvec![ast::ExprField {
+        AstFragmentKind::ExprFields => AstFragment::ExprFields(smallvec![ast::ExprField {
             attrs: Default::default(),
             expr: expr_placeholder(),
             id,
@@ -131,7 +132,7 @@ pub fn placeholder(
             span,
             is_placeholder: true,
         }]),
-        AstFragmentKind::FieldPats => AstFragment::FieldPats(smallvec![ast::PatField {
+        AstFragmentKind::PatFields => AstFragment::PatFields(smallvec![ast::PatField {
             attrs: Default::default(),
             id,
             ident,
@@ -158,7 +159,7 @@ pub fn placeholder(
             ty: ty(),
             is_placeholder: true,
         }]),
-        AstFragmentKind::StructFields => AstFragment::StructFields(smallvec![ast::FieldDef {
+        AstFragmentKind::FieldDefs => AstFragment::FieldDefs(smallvec![ast::FieldDef {
             attrs: Default::default(),
             id,
             ident: None,
@@ -362,8 +363,8 @@ impl MutVisitor for PlaceholderExpander {
     }
 
     fn visit_crate(&mut self, krate: &mut ast::Crate) {
-        if let Some(id) = krate.is_placeholder {
-            *krate = self.remove(id).make_crate();
+        if krate.is_placeholder {
+            *krate = self.remove(krate.id).make_crate();
         } else {
             noop_visit_crate(krate, self)
         }

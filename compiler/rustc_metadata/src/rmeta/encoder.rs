@@ -26,7 +26,8 @@ use rustc_middle::mir::interpret;
 use rustc_middle::thir;
 use rustc_middle::traits::specialization_graph;
 use rustc_middle::ty::codec::TyEncoder;
-use rustc_middle::ty::fast_reject::{self, SimplifyParams, StripReferences};
+use rustc_middle::ty::fast_reject::{self, SimplifiedType, SimplifyParams, StripReferences};
+use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, SymbolName, Ty, TyCtxt};
 use rustc_serialize::{opaque, Encodable, Encoder};
 use rustc_session::config::CrateType;
@@ -403,24 +404,24 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         &mut self,
         lazy: Lazy<T>,
     ) -> Result<(), <Self as Encoder>::Error> {
-        let min_end = lazy.position.get() + T::min_size(lazy.meta);
+        let pos = lazy.position.get();
         let distance = match self.lazy_state {
             LazyState::NoNode => bug!("emit_lazy_distance: outside of a metadata node"),
             LazyState::NodeStart(start) => {
                 let start = start.get();
-                assert!(min_end <= start);
-                start - min_end
+                assert!(pos <= start);
+                start - pos
             }
-            LazyState::Previous(last_min_end) => {
+            LazyState::Previous(last_pos) => {
                 assert!(
-                    last_min_end <= lazy.position,
+                    last_pos <= lazy.position,
                     "make sure that the calls to `lazy*` \
                      are in the same order as the metadata fields",
                 );
-                lazy.position.get() - last_min_end.get()
+                lazy.position.get() - last_pos.get()
             }
         };
-        self.lazy_state = LazyState::Previous(NonZeroUsize::new(min_end).unwrap());
+        self.lazy_state = LazyState::Previous(NonZeroUsize::new(pos).unwrap());
         self.emit_usize(distance)
     }
 
@@ -435,7 +436,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         let meta = value.encode_contents_for_lazy(self);
         self.lazy_state = LazyState::NoNode;
 
-        assert!(pos.get() + <T>::min_size(meta) <= self.position());
+        assert!(pos.get() <= self.position());
 
         Lazy::from_position_and_meta(pos, meta)
     }
@@ -612,10 +613,15 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         self.encode_def_path_table();
         let def_path_table_bytes = self.position() - i;
 
+        // Encode the def IDs of traits, for rustdoc and diagnostics.
+        i = self.position();
+        let traits = self.encode_traits();
+        let traits_bytes = self.position() - i;
+
         // Encode the def IDs of impls, for coherence checking.
         i = self.position();
         let impls = self.encode_impls();
-        let impl_bytes = self.position() - i;
+        let impls_bytes = self.position() - i;
 
         let tcx = self.tcx;
 
@@ -715,7 +721,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
             no_builtins: tcx.sess.contains_name(&attrs, sym::no_builtins),
             panic_runtime: tcx.sess.contains_name(&attrs, sym::panic_runtime),
             profiler_runtime: tcx.sess.contains_name(&attrs, sym::profiler_runtime),
-            symbol_mangling_version: tcx.sess.opts.debugging_opts.get_symbol_mangling_version(),
+            symbol_mangling_version: tcx.sess.opts.get_symbol_mangling_version(),
 
             crate_deps,
             dylib_dependency_formats,
@@ -726,6 +732,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
             native_libraries,
             foreign_modules,
             source_map,
+            traits,
             impls,
             exported_symbols,
             interpret_alloc_index,
@@ -753,7 +760,8 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
             eprintln!(" diagnostic item bytes: {}", diagnostic_item_bytes);
             eprintln!("          native bytes: {}", native_lib_bytes);
             eprintln!("      source_map bytes: {}", source_map_bytes);
-            eprintln!("            impl bytes: {}", impl_bytes);
+            eprintln!("          traits bytes: {}", traits_bytes);
+            eprintln!("           impls bytes: {}", impls_bytes);
             eprintln!("    exp. symbols bytes: {}", exported_symbols_bytes);
             eprintln!("  def-path table bytes: {}", def_path_table_bytes);
             eprintln!(" def-path hashes bytes: {}", def_path_hash_map_bytes);
@@ -1044,7 +1052,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
             assert!(f.did.is_local());
             f.did.index
         }));
-        self.encode_ident_span(def_id, variant.ident);
+        self.encode_ident_span(def_id, variant.ident(tcx));
         self.encode_item_type(def_id);
         if variant.ctor_kind == CtorKind::Fn {
             // FIXME(eddyb) encode signature only in `encode_enum_variant_ctor`.
@@ -1086,7 +1094,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         // code uses it). However, we skip encoding anything relating to child
         // items - we encode information about proc-macros later on.
         let reexports = if !self.is_proc_macro {
-            match tcx.module_exports(local_def_id) {
+            match tcx.module_reexports(local_def_id) {
                 Some(exports) => self.lazy(exports),
                 _ => Lazy::empty(),
             }
@@ -1096,7 +1104,6 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
 
         record!(self.tables.kind[def_id] <- EntryKind::Mod(reexports));
         if self.is_proc_macro {
-            record!(self.tables.children[def_id] <- &[]);
             // Encode this here because we don't do it in encode_def_ids.
             record!(self.tables.expn_that_defined[def_id] <- tcx.expn_that_defined(local_def_id));
         } else {
@@ -1131,7 +1138,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         debug!("EncodeContext::encode_field({:?})", def_id);
 
         record!(self.tables.kind[def_id] <- EntryKind::Field);
-        self.encode_ident_span(def_id, field.ident);
+        self.encode_ident_span(def_id, field.ident(self.tcx));
         self.encode_item_type(def_id);
     }
 
@@ -1286,6 +1293,9 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         }
         self.encode_ident_span(def_id, impl_item.ident);
         self.encode_item_type(def_id);
+        if let Some(trait_item_def_id) = impl_item.trait_item_def_id {
+            record!(self.tables.trait_item_def_id[def_id] <- trait_item_def_id);
+        }
         if impl_item.kind == ty::AssocKind::Fn {
             record!(self.tables.fn_sig[def_id] <- tcx.fn_sig(def_id));
         }
@@ -1790,12 +1800,17 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         self.lazy(&tcx.lang_items().missing)
     }
 
+    fn encode_traits(&mut self) -> Lazy<[DefIndex]> {
+        empty_proc_macro!(self);
+        self.lazy(self.tcx.traits_in_crate(LOCAL_CRATE).iter().map(|def_id| def_id.index))
+    }
+
     /// Encodes an index, mapping each trait to its (local) implementations.
     fn encode_impls(&mut self) -> Lazy<[TraitImpls]> {
+        debug!("EncodeContext::encode_traits_and_impls()");
         empty_proc_macro!(self);
-        debug!("EncodeContext::encode_impls()");
         let tcx = self.tcx;
-        let mut visitor = ImplVisitor { tcx, impls: FxHashMap::default() };
+        let mut visitor = ImplsVisitor { tcx, impls: FxHashMap::default() };
         tcx.hir().visit_all_item_likes(&mut visitor);
 
         let mut all_impls: Vec<_> = visitor.impls.into_iter().collect();
@@ -2040,27 +2055,30 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
     }
 }
 
-struct ImplVisitor<'tcx> {
+struct ImplsVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
-    impls: FxHashMap<DefId, Vec<(DefIndex, Option<fast_reject::SimplifiedType>)>>,
+    impls: FxHashMap<DefId, Vec<(DefIndex, Option<SimplifiedType>)>>,
 }
 
-impl<'tcx, 'v> ItemLikeVisitor<'v> for ImplVisitor<'tcx> {
+impl<'tcx, 'v> ItemLikeVisitor<'v> for ImplsVisitor<'tcx> {
     fn visit_item(&mut self, item: &hir::Item<'_>) {
-        if let hir::ItemKind::Impl { .. } = item.kind {
-            if let Some(trait_ref) = self.tcx.impl_trait_ref(item.def_id.to_def_id()) {
-                let simplified_self_ty = fast_reject::simplify_type(
-                    self.tcx,
-                    trait_ref.self_ty(),
-                    SimplifyParams::No,
-                    StripReferences::No,
-                );
+        match item.kind {
+            hir::ItemKind::Impl(..) => {
+                if let Some(trait_ref) = self.tcx.impl_trait_ref(item.def_id.to_def_id()) {
+                    let simplified_self_ty = fast_reject::simplify_type(
+                        self.tcx,
+                        trait_ref.self_ty(),
+                        SimplifyParams::No,
+                        StripReferences::No,
+                    );
 
-                self.impls
-                    .entry(trait_ref.def_id)
-                    .or_default()
-                    .push((item.def_id.local_def_index, simplified_self_ty));
+                    self.impls
+                        .entry(trait_ref.def_id)
+                        .or_default()
+                        .push((item.def_id.local_def_index, simplified_self_ty));
+                }
             }
+            _ => {}
         }
     }
 
@@ -2208,4 +2226,35 @@ fn encode_metadata_impl(tcx: TyCtxt<'_>) -> EncodedMetadata {
     tcx.prof.artifact_size("crate_metadata", "crate_metadata", result.len() as u64);
 
     EncodedMetadata { raw_data: result }
+}
+
+pub fn provide(providers: &mut Providers) {
+    *providers = Providers {
+        traits_in_crate: |tcx, cnum| {
+            assert_eq!(cnum, LOCAL_CRATE);
+
+            #[derive(Default)]
+            struct TraitsVisitor {
+                traits: Vec<DefId>,
+            }
+            impl ItemLikeVisitor<'_> for TraitsVisitor {
+                fn visit_item(&mut self, item: &hir::Item<'_>) {
+                    if let hir::ItemKind::Trait(..) | hir::ItemKind::TraitAlias(..) = item.kind {
+                        self.traits.push(item.def_id.to_def_id());
+                    }
+                }
+                fn visit_trait_item(&mut self, _trait_item: &hir::TraitItem<'_>) {}
+                fn visit_impl_item(&mut self, _impl_item: &hir::ImplItem<'_>) {}
+                fn visit_foreign_item(&mut self, _foreign_item: &hir::ForeignItem<'_>) {}
+            }
+
+            let mut visitor = TraitsVisitor::default();
+            tcx.hir().visit_all_item_likes(&mut visitor);
+            // Bring everything into deterministic order.
+            visitor.traits.sort_by_cached_key(|&def_id| tcx.def_path_hash(def_id));
+            tcx.arena.alloc_slice(&visitor.traits)
+        },
+
+        ..*providers
+    };
 }

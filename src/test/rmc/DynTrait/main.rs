@@ -9,11 +9,6 @@ trait Animal {
     fn noise(&self) -> i32;
 }
 
-trait Other {
-    // Instance method signature
-    fn noise(&self) -> i32;
-}
-
 // Implement the `Animal` trait for `Sheep`.
 impl Animal for Sheep {
     fn noise(&self) -> i32 {
@@ -34,7 +29,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 }
 
 fn main() {
-    let random_number = rmc::nondet();
+    let random_number = rmc::any();
     let animal = random_animal(random_number);
     let s = animal.noise();
     if random_number < 5 {

@@ -13,7 +13,7 @@ use rustc_hir::def::{
     PerNS,
 };
 use rustc_hir::def_id::{CrateNum, DefId};
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{DefIdTree, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug, ty};
 use rustc_resolve::ParentScope;
 use rustc_session::lint::Lint;
@@ -25,8 +25,8 @@ use smallvec::{smallvec, SmallVec};
 use pulldown_cmark::LinkType;
 
 use std::borrow::Cow;
-use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Write;
 use std::mem;
 use std::ops::Range;
 
@@ -38,7 +38,7 @@ use crate::passes::Pass;
 use crate::visit::DocVisitor;
 
 mod early;
-crate use early::load_intra_link_crates;
+crate use early::early_resolve_intra_doc_links;
 
 crate const COLLECT_INTRA_DOC_LINKS: Pass = Pass {
     name: "collect-intra-doc-links",
@@ -47,12 +47,8 @@ crate const COLLECT_INTRA_DOC_LINKS: Pass = Pass {
 };
 
 fn collect_intra_doc_links(krate: Crate, cx: &mut DocContext<'_>) -> Crate {
-    let mut collector = LinkCollector {
-        cx,
-        mod_ids: Vec::new(),
-        kind_side_channel: Cell::new(None),
-        visited_links: FxHashMap::default(),
-    };
+    let mut collector =
+        LinkCollector { cx, mod_ids: Vec::new(), visited_links: FxHashMap::default() };
     collector.visit_crate(&krate);
     krate
 }
@@ -210,7 +206,7 @@ enum MalformedGenerics {
     EmptyAngleBrackets,
 }
 
-impl ResolutionFailure<'a> {
+impl ResolutionFailure<'_> {
     /// This resolved fully (not just partially) but is erroneous for some other reason
     ///
     /// Returns the full resolution of the link, if present.
@@ -240,53 +236,73 @@ enum AnchorFailure {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 crate enum UrlFragment {
-    Method(Symbol),
-    TyMethod(Symbol),
-    AssociatedConstant(Symbol),
-    AssociatedType(Symbol),
-
-    StructField(Symbol),
-    Variant(Symbol),
-    VariantField { variant: Symbol, field: Symbol },
-
+    Item(ItemFragment),
     UserWritten(String),
 }
 
 impl UrlFragment {
-    /// Create a fragment for an associated item.
-    ///
-    /// `is_prototype` is whether this associated item is a trait method
-    /// without a default definition.
-    fn from_assoc_item(name: Symbol, kind: ty::AssocKind, is_prototype: bool) -> Self {
-        match kind {
-            ty::AssocKind::Fn => {
-                if is_prototype {
-                    UrlFragment::TyMethod(name)
-                } else {
-                    UrlFragment::Method(name)
-                }
-            }
-            ty::AssocKind::Const => UrlFragment::AssociatedConstant(name),
-            ty::AssocKind::Type => UrlFragment::AssociatedType(name),
+    /// Render the fragment, including the leading `#`.
+    crate fn render(&self, s: &mut String, tcx: TyCtxt<'_>) -> std::fmt::Result {
+        match self {
+            UrlFragment::Item(frag) => frag.render(s, tcx),
+            UrlFragment::UserWritten(raw) => write!(s, "#{}", raw),
         }
     }
 }
 
-/// Render the fragment, including the leading `#`.
-impl std::fmt::Display for UrlFragment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#")?;
-        match self {
-            UrlFragment::Method(name) => write!(f, "method.{}", name),
-            UrlFragment::TyMethod(name) => write!(f, "tymethod.{}", name),
-            UrlFragment::AssociatedConstant(name) => write!(f, "associatedconstant.{}", name),
-            UrlFragment::AssociatedType(name) => write!(f, "associatedtype.{}", name),
-            UrlFragment::StructField(name) => write!(f, "structfield.{}", name),
-            UrlFragment::Variant(name) => write!(f, "variant.{}", name),
-            UrlFragment::VariantField { variant, field } => {
-                write!(f, "variant.{}.field.{}", variant, field)
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+crate struct ItemFragment(FragmentKind, DefId);
+
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+crate enum FragmentKind {
+    Method,
+    TyMethod,
+    AssociatedConstant,
+    AssociatedType,
+
+    StructField,
+    Variant,
+    VariantField,
+}
+
+impl ItemFragment {
+    /// Create a fragment for an associated item.
+    ///
+    /// `is_prototype` is whether this associated item is a trait method
+    /// without a default definition.
+    fn from_assoc_item(def_id: DefId, kind: ty::AssocKind, is_prototype: bool) -> Self {
+        match kind {
+            ty::AssocKind::Fn => {
+                if is_prototype {
+                    ItemFragment(FragmentKind::TyMethod, def_id)
+                } else {
+                    ItemFragment(FragmentKind::Method, def_id)
+                }
             }
-            UrlFragment::UserWritten(raw) => write!(f, "{}", raw),
+            ty::AssocKind::Const => ItemFragment(FragmentKind::AssociatedConstant, def_id),
+            ty::AssocKind::Type => ItemFragment(FragmentKind::AssociatedType, def_id),
+        }
+    }
+
+    /// Render the fragment, including the leading `#`.
+    crate fn render(&self, s: &mut String, tcx: TyCtxt<'_>) -> std::fmt::Result {
+        write!(s, "#")?;
+        match *self {
+            ItemFragment(kind, def_id) => {
+                let name = tcx.item_name(def_id);
+                match kind {
+                    FragmentKind::Method => write!(s, "method.{}", name),
+                    FragmentKind::TyMethod => write!(s, "tymethod.{}", name),
+                    FragmentKind::AssociatedConstant => write!(s, "associatedconstant.{}", name),
+                    FragmentKind::AssociatedType => write!(s, "associatedtype.{}", name),
+                    FragmentKind::StructField => write!(s, "structfield.{}", name),
+                    FragmentKind::Variant => write!(s, "variant.{}", name),
+                    FragmentKind::VariantField => {
+                        let variant = tcx.item_name(tcx.parent(def_id).unwrap());
+                        write!(s, "variant.{}.field.{}", variant, name)
+                    }
+                }
+            }
         }
     }
 }
@@ -296,7 +312,7 @@ struct ResolutionInfo {
     module_id: DefId,
     dis: Option<Disambiguator>,
     path_str: String,
-    extra_fragment: Option<UrlFragment>,
+    extra_fragment: Option<String>,
 }
 
 #[derive(Clone)]
@@ -310,7 +326,6 @@ struct DiagnosticInfo<'a> {
 #[derive(Clone, Debug, Hash)]
 struct CachedLink {
     pub res: (Res, Option<UrlFragment>),
-    pub side_channel: Option<(DefKind, DefId)>,
 }
 
 struct LinkCollector<'a, 'tcx> {
@@ -320,10 +335,6 @@ struct LinkCollector<'a, 'tcx> {
     /// The last module will be used if the parent scope of the current item is
     /// unknown.
     mod_ids: Vec<DefId>,
-    /// This is used to store the kind of associated items,
-    /// because `clean` and the disambiguator code expect them to be different.
-    /// See the code for associated items on inherent impls for details.
-    kind_side_channel: Cell<Option<(DefKind, DefId)>>,
     /// Cache the resolved links so we can avoid resolving (and emitting errors for) the same link.
     /// The link will be `None` if it could not be resolved (i.e. the error was cached).
     visited_links: FxHashMap<ResolutionInfo, Option<CachedLink>>,
@@ -336,11 +347,11 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
     /// full path segments left in the link.
     ///
     /// [enum struct variant]: hir::VariantData::Struct
-    fn variant_field(
+    fn variant_field<'path>(
         &self,
         path_str: &'path str,
         module_id: DefId,
-    ) -> Result<(Res, Option<UrlFragment>), ErrorKind<'path>> {
+    ) -> Result<(Res, Option<ItemFragment>), ErrorKind<'path>> {
         let tcx = self.cx.tcx;
         let no_res = || ResolutionFailure::NotResolved {
             module_id,
@@ -387,14 +398,10 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                 }
                 match tcx.type_of(did).kind() {
                     ty::Adt(def, _) if def.is_enum() => {
-                        if def.all_fields().any(|item| item.ident.name == variant_field_name) {
-                            Ok((
-                                ty_res,
-                                Some(UrlFragment::VariantField {
-                                    variant: variant_name,
-                                    field: variant_field_name,
-                                }),
-                            ))
+                        if let Some(field) =
+                            def.all_fields().find(|f| f.ident(tcx).name == variant_field_name)
+                        {
+                            Ok((ty_res, Some(ItemFragment(FragmentKind::VariantField, field.did))))
                         } else {
                             Err(ResolutionFailure::NotResolved {
                                 module_id,
@@ -422,7 +429,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
         prim_ty: PrimitiveType,
         ns: Namespace,
         item_name: Symbol,
-    ) -> Option<(Res, UrlFragment, Option<(DefKind, DefId)>)> {
+    ) -> Option<(Res, ItemFragment)> {
         let tcx = self.cx.tcx;
 
         prim_ty.impls(tcx).into_iter().find_map(|&impl_| {
@@ -430,8 +437,8 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                 .find_by_name_and_namespace(tcx, Ident::with_dummy_span(item_name), ns, impl_)
                 .map(|item| {
                     let kind = item.kind;
-                    let fragment = UrlFragment::from_assoc_item(item_name, kind, false);
-                    (Res::Primitive(prim_ty), fragment, Some((kind.as_def_kind(), item.def_id)))
+                    let fragment = ItemFragment::from_assoc_item(item.def_id, kind, false);
+                    (Res::Primitive(prim_ty), fragment)
                 })
         })
     }
@@ -505,8 +512,30 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
         path_str: &'path str,
         ns: Namespace,
         module_id: DefId,
-        extra_fragment: &Option<UrlFragment>,
+        user_fragment: &Option<String>,
     ) -> Result<(Res, Option<UrlFragment>), ErrorKind<'path>> {
+        let (res, rustdoc_fragment) = self.resolve_inner(path_str, ns, module_id)?;
+        let chosen_fragment = match (user_fragment, rustdoc_fragment) {
+            (Some(_), Some(r_frag)) => {
+                let diag_res = match r_frag {
+                    ItemFragment(_, did) => Res::Def(self.cx.tcx.def_kind(did), did),
+                };
+                let failure = AnchorFailure::RustdocAnchorConflict(diag_res);
+                return Err(ErrorKind::AnchorFailure(failure));
+            }
+            (Some(u_frag), None) => Some(UrlFragment::UserWritten(u_frag.clone())),
+            (None, Some(r_frag)) => Some(UrlFragment::Item(r_frag)),
+            (None, None) => None,
+        };
+        Ok((res, chosen_fragment))
+    }
+
+    fn resolve_inner<'path>(
+        &mut self,
+        path_str: &'path str,
+        ns: Namespace,
+        module_id: DefId,
+    ) -> Result<(Res, Option<ItemFragment>), ErrorKind<'path>> {
         if let Some(res) = self.resolve_path(path_str, ns, module_id) {
             match res {
                 // FIXME(#76467): make this fallthrough to lookup the associated
@@ -514,10 +543,10 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                 Res::Def(DefKind::AssocFn | DefKind::AssocConst, _) => assert_eq!(ns, ValueNS),
                 Res::Def(DefKind::AssocTy, _) => assert_eq!(ns, TypeNS),
                 Res::Def(DefKind::Variant, _) => {
-                    return handle_variant(self.cx, res, extra_fragment);
+                    return handle_variant(self.cx, res);
                 }
                 // Not a trait item; just return what we found.
-                _ => return Ok((res, extra_fragment.clone())),
+                _ => return Ok((res, None)),
             }
         }
 
@@ -548,23 +577,10 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
         resolve_primitive(&path_root, TypeNS)
             .or_else(|| self.resolve_path(&path_root, TypeNS, module_id))
             .and_then(|ty_res| {
-                let (res, fragment, side_channel) =
+                let (res, fragment) =
                     self.resolve_associated_item(ty_res, item_name, ns, module_id)?;
-                let result = if extra_fragment.is_some() {
-                    // NOTE: can never be a primitive since `side_channel.is_none()` only when `res`
-                    // is a trait (and the side channel DefId is always an associated item).
-                    let diag_res = side_channel.map_or(res, |(k, r)| Res::Def(k, r));
-                    Err(ErrorKind::AnchorFailure(AnchorFailure::RustdocAnchorConflict(diag_res)))
-                } else {
-                    // HACK(jynelson): `clean` expects the type, not the associated item
-                    // but the disambiguator logic expects the associated item.
-                    // Store the kind in a side channel so that only the disambiguator logic looks at it.
-                    if let Some((kind, id)) = side_channel {
-                        self.kind_side_channel.set(Some((kind, id)));
-                    }
-                    Ok((res, Some(fragment)))
-                };
-                Some(result)
+
+                Some(Ok((res, Some(fragment))))
             })
             .unwrap_or_else(|| {
                 if ns == Namespace::ValueNS {
@@ -618,6 +634,39 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
         })
     }
 
+    /// Convert a PrimitiveType to a Ty, where possible.
+    ///
+    /// This is used for resolving trait impls for primitives
+    fn primitive_type_to_ty(&mut self, prim: PrimitiveType) -> Option<Ty<'tcx>> {
+        use PrimitiveType::*;
+        let tcx = self.cx.tcx;
+
+        // FIXME: Only simple types are supported here, see if we can support
+        // other types such as Tuple, Array, Slice, etc.
+        // See https://github.com/rust-lang/rust/issues/90703#issuecomment-1004263455
+        Some(tcx.mk_ty(match prim {
+            Bool => ty::Bool,
+            Str => ty::Str,
+            Char => ty::Char,
+            Never => ty::Never,
+            I8 => ty::Int(ty::IntTy::I8),
+            I16 => ty::Int(ty::IntTy::I16),
+            I32 => ty::Int(ty::IntTy::I32),
+            I64 => ty::Int(ty::IntTy::I64),
+            I128 => ty::Int(ty::IntTy::I128),
+            Isize => ty::Int(ty::IntTy::Isize),
+            F32 => ty::Float(ty::FloatTy::F32),
+            F64 => ty::Float(ty::FloatTy::F64),
+            U8 => ty::Uint(ty::UintTy::U8),
+            U16 => ty::Uint(ty::UintTy::U16),
+            U32 => ty::Uint(ty::UintTy::U32),
+            U64 => ty::Uint(ty::UintTy::U64),
+            U128 => ty::Uint(ty::UintTy::U128),
+            Usize => ty::Uint(ty::UintTy::Usize),
+            _ => return None,
+        }))
+    }
+
     /// Returns:
     /// - None if no associated item was found
     /// - Some((_, _, Some(_))) if an item was found and should go through a side channel
@@ -628,11 +677,26 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
         item_name: Symbol,
         ns: Namespace,
         module_id: DefId,
-    ) -> Option<(Res, UrlFragment, Option<(DefKind, DefId)>)> {
+    ) -> Option<(Res, ItemFragment)> {
         let tcx = self.cx.tcx;
 
         match root_res {
-            Res::Primitive(prim) => self.resolve_primitive_associated_item(prim, ns, item_name),
+            Res::Primitive(prim) => {
+                self.resolve_primitive_associated_item(prim, ns, item_name).or_else(|| {
+                    let assoc_item = self
+                        .primitive_type_to_ty(prim)
+                        .map(|ty| {
+                            resolve_associated_trait_item(ty, module_id, item_name, ns, self.cx)
+                        })
+                        .flatten();
+
+                    assoc_item.map(|item| {
+                        let kind = item.kind;
+                        let fragment = ItemFragment::from_assoc_item(item.def_id, kind, false);
+                        (root_res, fragment)
+                    })
+                })
+            }
             Res::Def(DefKind::TyAlias, did) => {
                 // Resolve the link on the type the alias points to.
                 // FIXME: if the associated item is defined directly on the type alias,
@@ -666,57 +730,64 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                     // To handle that properly resolve() would have to support
                     // something like [`ambi_fn`](<SomeStruct as SomeTrait>::ambi_fn)
                     .or_else(|| {
-                        let item =
-                            resolve_associated_trait_item(did, module_id, item_name, ns, self.cx);
+                        let item = resolve_associated_trait_item(
+                            tcx.type_of(did),
+                            module_id,
+                            item_name,
+                            ns,
+                            self.cx,
+                        );
                         debug!("got associated item {:?}", item);
                         item
                     });
 
                 if let Some(item) = assoc_item {
                     let kind = item.kind;
-                    let fragment = UrlFragment::from_assoc_item(item_name, kind, false);
-                    // HACK(jynelson): `clean` expects the type, not the associated item
-                    // but the disambiguator logic expects the associated item.
-                    // Store the kind in a side channel so that only the disambiguator logic looks at it.
-                    return Some((root_res, fragment, Some((kind.as_def_kind(), item.def_id))));
+                    let fragment = ItemFragment::from_assoc_item(item.def_id, kind, false);
+                    return Some((root_res, fragment));
                 }
 
                 if ns != Namespace::ValueNS {
                     return None;
                 }
-                debug!("looking for variants or fields named {} for {:?}", item_name, did);
+                debug!("looking for fields named {} for {:?}", item_name, did);
                 // FIXME: this doesn't really belong in `associated_item` (maybe `variant_field` is better?)
-                // NOTE: it's different from variant_field because it resolves fields and variants,
+                // NOTE: it's different from variant_field because it only resolves struct fields,
                 // not variant fields (2 path segments, not 3).
+                //
+                // We need to handle struct (and union) fields in this code because
+                // syntactically their paths are identical to associated item paths:
+                // `module::Type::field` and `module::Type::Assoc`.
+                //
+                // On the other hand, variant fields can't be mistaken for associated
+                // items because they look like this: `module::Type::Variant::field`.
+                //
+                // Variants themselves don't need to be handled here, even though
+                // they also look like associated items (`module::Type::Variant`),
+                // because they are real Rust syntax (unlike the intra-doc links
+                // field syntax) and are handled by the compiler's resolver.
                 let def = match tcx.type_of(did).kind() {
-                    ty::Adt(def, _) => def,
+                    ty::Adt(def, _) if !def.is_enum() => def,
                     _ => return None,
                 };
-                let field = if def.is_enum() {
-                    def.all_fields().find(|item| item.ident.name == item_name)
-                } else {
-                    def.non_enum_variant().fields.iter().find(|item| item.ident.name == item_name)
-                }?;
-                let kind = if def.is_enum() { DefKind::Variant } else { DefKind::Field };
-                let fragment = if def.is_enum() {
-                    // FIXME: how can the field be a variant?
-                    UrlFragment::Variant(field.ident.name)
-                } else {
-                    UrlFragment::StructField(field.ident.name)
-                };
-                Some((root_res, fragment, Some((kind, field.did))))
+                let field = def
+                    .non_enum_variant()
+                    .fields
+                    .iter()
+                    .find(|item| item.ident(tcx).name == item_name)?;
+                Some((root_res, ItemFragment(FragmentKind::StructField, field.did)))
             }
             Res::Def(DefKind::Trait, did) => tcx
                 .associated_items(did)
                 .find_by_name_and_namespace(tcx, Ident::with_dummy_span(item_name), ns, did)
                 .map(|item| {
-                    let fragment = UrlFragment::from_assoc_item(
-                        item_name,
+                    let fragment = ItemFragment::from_assoc_item(
+                        item.def_id,
                         item.kind,
                         !item.defaultness.has_value(),
                     );
                     let res = Res::Def(item.kind.as_def_kind(), item.def_id);
-                    (res, fragment, None)
+                    (res, fragment)
                 }),
             _ => None,
         }
@@ -733,23 +804,32 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
         ns: Namespace,
         path_str: &str,
         module_id: DefId,
-        extra_fragment: &Option<UrlFragment>,
+        extra_fragment: &Option<String>,
     ) -> Option<Res> {
         // resolve() can't be used for macro namespace
         let result = match ns {
-            Namespace::MacroNS => self.resolve_macro(path_str, module_id).map_err(ErrorKind::from),
+            Namespace::MacroNS => self
+                .resolve_macro(path_str, module_id)
+                .map(|res| (res, None))
+                .map_err(ErrorKind::from),
             Namespace::TypeNS | Namespace::ValueNS => {
-                self.resolve(path_str, ns, module_id, extra_fragment).map(|(res, _)| res)
+                self.resolve(path_str, ns, module_id, extra_fragment)
             }
         };
 
         let res = match result {
-            Ok(res) => Some(res),
+            Ok((res, frag)) => {
+                if let Some(UrlFragment::Item(ItemFragment(_, id))) = frag {
+                    Some(Res::Def(self.cx.tcx.def_kind(id), id))
+                } else {
+                    Some(res)
+                }
+            }
             Err(ErrorKind::Resolve(box kind)) => kind.full_res(),
             Err(ErrorKind::AnchorFailure(AnchorFailure::RustdocAnchorConflict(res))) => Some(res),
             Err(ErrorKind::AnchorFailure(AnchorFailure::MultipleAnchors)) => None,
         };
-        self.kind_side_channel.take().map(|(kind, id)| Res::Def(kind, id)).or(res)
+        res
     }
 }
 
@@ -758,12 +838,12 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
 /// Given `[std::io::Error::source]`, where `source` is unresolved, this would
 /// find `std::error::Error::source` and return
 /// `<io::Error as error::Error>::source`.
-fn resolve_associated_trait_item(
-    did: DefId,
+fn resolve_associated_trait_item<'a>(
+    ty: Ty<'a>,
     module: DefId,
     item_name: Symbol,
     ns: Namespace,
-    cx: &mut DocContext<'_>,
+    cx: &mut DocContext<'a>,
 ) -> Option<ty::AssocItem> {
     // FIXME: this should also consider blanket impls (`impl<T> X for T`). Unfortunately
     // `get_auto_trait_and_blanket_impls` is broken because the caching behavior is wrong. In the
@@ -771,7 +851,7 @@ fn resolve_associated_trait_item(
 
     // Next consider explicit impls: `impl MyTrait for MyType`
     // Give precedence to inherent impls.
-    let traits = traits_implemented_by(cx, did, module);
+    let traits = traits_implemented_by(cx, ty, module);
     debug!("considering traits {:?}", traits);
     let mut candidates = traits.iter().filter_map(|&trait_| {
         cx.tcx.associated_items(trait_).find_by_name_and_namespace(
@@ -790,7 +870,11 @@ fn resolve_associated_trait_item(
 ///
 /// NOTE: this cannot be a query because more traits could be available when more crates are compiled!
 /// So it is not stable to serialize cross-crate.
-fn traits_implemented_by(cx: &mut DocContext<'_>, type_: DefId, module: DefId) -> FxHashSet<DefId> {
+fn traits_implemented_by<'a>(
+    cx: &mut DocContext<'a>,
+    ty: Ty<'a>,
+    module: DefId,
+) -> FxHashSet<DefId> {
     let mut resolver = cx.resolver.borrow_mut();
     let in_scope_traits = cx.module_trait_cache.entry(module).or_insert_with(|| {
         resolver.access(|resolver| {
@@ -804,7 +888,6 @@ fn traits_implemented_by(cx: &mut DocContext<'_>, type_: DefId, module: DefId) -
     });
 
     let tcx = cx.tcx;
-    let ty = tcx.type_of(type_);
     let iter = in_scope_traits.iter().flat_map(|&trait_| {
         trace!("considering explicit impl for trait {:?}", trait_);
 
@@ -817,19 +900,10 @@ fn traits_implemented_by(cx: &mut DocContext<'_>, type_: DefId, module: DefId) -
                 "comparing type {} with kind {:?} against type {:?}",
                 impl_type,
                 impl_type.kind(),
-                type_
+                ty
             );
             // Fast path: if this is a primitive simple `==` will work
-            let saw_impl = impl_type == ty
-                || match impl_type.kind() {
-                    // Check if these are the same def_id
-                    ty::Adt(def, _) => {
-                        debug!("adt def_id: {:?}", def.did);
-                        def.did == type_
-                    }
-                    ty::Foreign(def_id) => *def_id == type_,
-                    _ => false,
-                };
+            let saw_impl = impl_type == ty;
 
             if saw_impl { Some(trait_) } else { None }
         })
@@ -853,8 +927,6 @@ fn is_derive_trait_collision<T>(ns: &PerNS<Result<(Res, T), ResolutionFailure<'_
 
 impl<'a, 'tcx> DocVisitor for LinkCollector<'a, 'tcx> {
     fn visit_item(&mut self, item: &Item) {
-        use rustc_middle::ty::DefIdTree;
-
         let parent_node =
             item.def_id.as_def_id().and_then(|did| find_nearest_parent_module(self.cx.tcx, did));
         if parent_node.is_some() {
@@ -974,7 +1046,7 @@ impl From<AnchorFailure> for PreprocessingError<'_> {
 struct PreprocessingInfo {
     path_str: String,
     disambiguator: Option<Disambiguator>,
-    extra_fragment: Option<UrlFragment>,
+    extra_fragment: Option<String>,
     link_text: String,
 }
 
@@ -1060,7 +1132,7 @@ fn preprocess_link<'a>(
     Some(Ok(PreprocessingInfo {
         path_str,
         disambiguator,
-        extra_fragment: extra_fragment.map(|frag| UrlFragment::UserWritten(frag.to_owned())),
+        extra_fragment: extra_fragment.map(|frag| frag.to_owned()),
         link_text: link_text.to_owned(),
     }))
 }
@@ -1227,7 +1299,11 @@ impl LinkCollector<'_, '_> {
         };
 
         let verify = |kind: DefKind, id: DefId| {
-            let (kind, id) = self.kind_side_channel.take().unwrap_or((kind, id));
+            let (kind, id) = if let Some(UrlFragment::Item(ItemFragment(_, id))) = fragment {
+                (self.cx.tcx.def_kind(id), id)
+            } else {
+                (kind, id)
+            };
             debug!("intra-doc link to {} resolved to {:?} (id: {:?})", path_str, res, id);
 
             // Disallow e.g. linking to enums with `struct@`
@@ -1271,7 +1347,9 @@ impl LinkCollector<'_, '_> {
 
         match res {
             Res::Primitive(prim) => {
-                if let Some((kind, id)) = self.kind_side_channel.take() {
+                if let Some(UrlFragment::Item(ItemFragment(_, id))) = fragment {
+                    let kind = self.cx.tcx.def_kind(id);
+
                     // We're actually resolving an associated item of a primitive, so we need to
                     // verify the disambiguator (if any) matches the type of the associated item.
                     // This case should really follow the same flow as the `Res::Def` branch below,
@@ -1288,22 +1366,7 @@ impl LinkCollector<'_, '_> {
                         && item.def_id.is_local()
                         && !self.cx.tcx.features().intra_doc_pointers
                     {
-                        let span = super::source_span_for_markdown_range(
-                            self.cx.tcx,
-                            dox,
-                            &ori_link.range,
-                            &item.attrs,
-                        )
-                        .unwrap_or_else(|| item.attr_span(self.cx.tcx));
-
-                        rustc_session::parse::feature_err(
-                            &self.cx.tcx.sess.parse_sess,
-                            sym::intra_doc_pointers,
-                            span,
-                            "linking to associated items of raw pointers is experimental",
-                        )
-                        .note("rustdoc does not allow disambiguating between `*const` and `*mut`, and pointers are unstable until it does")
-                        .emit();
+                        self.report_rawptr_assoc_feature_gate(dox, &ori_link, item);
                     }
                 } else {
                     match disambiguator {
@@ -1330,6 +1393,20 @@ impl LinkCollector<'_, '_> {
         }
     }
 
+    fn report_rawptr_assoc_feature_gate(&self, dox: &str, ori_link: &MarkdownLink, item: &Item) {
+        let span =
+            super::source_span_for_markdown_range(self.cx.tcx, dox, &ori_link.range, &item.attrs)
+                .unwrap_or_else(|| item.attr_span(self.cx.tcx));
+        rustc_session::parse::feature_err(
+            &self.cx.tcx.sess.parse_sess,
+            sym::intra_doc_pointers,
+            span,
+            "linking to associated items of raw pointers is experimental",
+        )
+        .note("rustdoc does not allow disambiguating between `*const` and `*mut`, and pointers are unstable until it does")
+        .emit();
+    }
+
     fn resolve_with_disambiguator_cached(
         &mut self,
         key: ResolutionInfo,
@@ -1340,7 +1417,6 @@ impl LinkCollector<'_, '_> {
         if let Some(ref cached) = self.visited_links.get(&key) {
             match cached {
                 Some(cached) => {
-                    self.kind_side_channel.set(cached.side_channel);
                     return Some(cached.res.clone());
                 }
                 None if cache_resolution_failure => return None,
@@ -1357,13 +1433,7 @@ impl LinkCollector<'_, '_> {
         // Cache only if resolved successfully - don't silence duplicate errors
         if let Some(res) = res {
             // Store result for the actual namespace
-            self.visited_links.insert(
-                key,
-                Some(CachedLink {
-                    res: res.clone(),
-                    side_channel: self.kind_side_channel.clone().into_inner(),
-                }),
-            );
+            self.visited_links.insert(key, Some(CachedLink { res: res.clone() }));
 
             Some(res)
         } else {
@@ -1425,7 +1495,7 @@ impl LinkCollector<'_, '_> {
                 let mut candidates = PerNS {
                     macro_ns: self
                         .resolve_macro(path_str, base_node)
-                        .map(|res| (res, extra_fragment.clone())),
+                        .map(|res| (res, extra_fragment.clone().map(UrlFragment::UserWritten))),
                     type_ns: match self.resolve(path_str, TypeNS, base_node, extra_fragment) {
                         Ok(res) => {
                             debug!("got res in TypeNS: {:?}", res);
@@ -1457,7 +1527,10 @@ impl LinkCollector<'_, '_> {
                                         // Shouldn't happen but who knows?
                                         Ok((res, Some(fragment)))
                                     }
-                                    (fragment, None) | (None, fragment) => Ok((res, fragment)),
+                                    (fragment, None) => Ok((res, fragment)),
+                                    (None, fragment) => {
+                                        Ok((res, fragment.map(UrlFragment::UserWritten)))
+                                    }
                                 }
                             }
                         }
@@ -1494,7 +1567,7 @@ impl LinkCollector<'_, '_> {
             }
             Some(MacroNS) => {
                 match self.resolve_macro(path_str, base_node) {
-                    Ok(res) => Some((res, extra_fragment.clone())),
+                    Ok(res) => Some((res, extra_fragment.clone().map(UrlFragment::UserWritten))),
                     Err(mut kind) => {
                         // `resolve_macro` only looks in the macro namespace. Try to give a better error if possible.
                         for ns in [TypeNS, ValueNS] {
@@ -2213,20 +2286,13 @@ fn privacy_error(cx: &DocContext<'_>, diag_info: &DiagnosticInfo<'_>, path_str: 
 fn handle_variant(
     cx: &DocContext<'_>,
     res: Res,
-    extra_fragment: &Option<UrlFragment>,
-) -> Result<(Res, Option<UrlFragment>), ErrorKind<'static>> {
-    use rustc_middle::ty::DefIdTree;
-
-    if extra_fragment.is_some() {
-        // NOTE: `res` can never be a primitive since this function is only called when `tcx.def_kind(res) == DefKind::Variant`.
-        return Err(ErrorKind::AnchorFailure(AnchorFailure::RustdocAnchorConflict(res)));
-    }
+) -> Result<(Res, Option<ItemFragment>), ErrorKind<'static>> {
     cx.tcx
         .parent(res.def_id(cx.tcx))
         .map(|parent| {
             let parent_def = Res::Def(DefKind::Enum, parent);
             let variant = cx.tcx.expect_variant_res(res.as_hir_res().unwrap());
-            (parent_def, Some(UrlFragment::Variant(variant.ident.name)))
+            (parent_def, Some(ItemFragment(FragmentKind::Variant, variant.def_id)))
         })
         .ok_or_else(|| ResolutionFailure::NoParentItem.into())
 }
