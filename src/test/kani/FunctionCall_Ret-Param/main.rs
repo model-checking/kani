@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-flags: --no-unwinding-checks
+// kani-flags: --no-unwinding-checks
 // cbmc-flags: --unwind 10
 
 // We use `--no-unwinding-checks` in this test to avoid getting
@@ -9,7 +9,7 @@
 // a nondet. variable)
 
 fn main() {
-    let x: u32 = rmc::any();
+    let x: u32 = kani::any();
     let pi = 3.14159265359;
 
     let x_iters = leibniz_pi(x);

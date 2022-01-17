@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "rmc_restrictions"
+name = "kani_restrictions"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,4 +10,4 @@ edition = "2021"
 
 [dependencies]
 serde = {version = "1", features = ["derive"]}
-cbmc = { path = "../../src/rmc-compiler/cbmc" }
+cbmc = { path = "../../src/kani-compiler/cbmc" }

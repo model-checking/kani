@@ -24,10 +24,10 @@ else
   exit 0
 fi
 
-# Compile crates with RMC backend
+# Compile crates with Kani backend
 cd $(dirname $0)
 rm -rf build
-RUST_BACKTRACE=1 cargo rmc --target-dir build --only-codegen --keep-temp --verbose
+RUST_BACKTRACE=1 cargo kani --target-dir build --only-codegen --keep-temp --verbose
 
 # Convert from JSON to Gotoc
 cd build/${TARGET}/debug/deps/

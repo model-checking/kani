@@ -1,15 +1,15 @@
-# RMC developer documentation
+# Kani developer documentation
 
 ## Build command cheat sheet
 
 ```bash
 # Normal build
-cd src/rmc-compiler
+cd src/kani-compiler
 cargo build
 ```
 ```bash
 # Full regression suite
-./scripts/rmc-regression.sh
+./scripts/kani-regression.sh
 ```
 ```bash
 # Delete regression test caches
@@ -17,7 +17,7 @@ rm -r build/x86_64-unknown-linux-gnu/test/
 ```
 ```bash
 # Test suite run (to run a specific suite from src/test/, just remove the others)
-COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 rmc firecracker prusti smack expected cargo-rmc rmc-docs
+COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 kani firecracker prusti smack expected cargo-kani kani-docs
 ```
 ```bash
 # Book runner run
@@ -26,7 +26,7 @@ COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 rmc firecracker prusti smack
 ```
 ```bash
 # Documentation build
-cd rmc-docs
+cd kani-docs
 ./build-docs.sh
 ```
 
@@ -34,29 +34,29 @@ cd rmc-docs
 
 ```bash
 # Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
-# or similar error? Clean rmc-compiler build:
-cd src/rmc-compiler
+# or similar error? Clean kani-compiler build:
+cd src/kani-compiler
 cargo clean
 cargo build
 ```
 
 ## Git command cheat sheet
 
-RMC follows the "squash and merge pull request" pattern.
+Kani follows the "squash and merge pull request" pattern.
 As a result, the "main commit message" will be the title of your pull request.
 The individual commit message bodies you commit during development will by default be a bulleted list in the squashed commit message body, but these are editable at merge time.
 So you don't have to worry about a series of "oops typo fix" messages while fixing up your pull request, these can be edited out of the final message when you click merge.
 
 ```bash
 # Set up your git fork
-git remote add fork git@github.com:${USER}/rmc.git
+git remote add fork git@github.com:${USER}/kani.git
 ```
 ```bash
 # Reset everything. Don't have any uncommitted changes!
 git clean -xffd
 git submodule foreach --recursive git clean -xffd
 git submodule update --init
-# Don't forget to re-configure your RMC build:
+# Don't forget to re-configure your Kani build:
 ./configure \
     --enable-debug \
     --set=llvm.download-ci-llvm=true \
@@ -68,7 +68,7 @@ git submodule update --init
 git switch main
 git pull origin
 git submodule update --init
-cd src/rmc-compiler
+cd src/kani-compiler
 cargo build
 ```
 ```bash
@@ -88,29 +88,29 @@ git switch pr/$ID
 git grep codegen_panic
 ```
 ```bash
-# See all commits that are part of RMC, not part of Rust
+# See all commits that are part of Kani, not part of Rust
 git log --graph --oneline origin/upstream-rustc..origin/main
 ```
 ```bash
-# See all files modified by RMC (compared to upstream Rust)
+# See all files modified by Kani (compared to upstream Rust)
 git diff --stat origin/upstream-rustc..origin/main
 ```
 
-## RMC command cheat sheet
+## Kani command cheat sheet
 
-These can help understand what RMC is generating or encountering on an example or test file:
+These can help understand what Kani is generating or encountering on an example or test file:
 
 ```bash
-# Enable `debug!` macro logging output when running RMC:
-rmc --debug file.rs
+# Enable `debug!` macro logging output when running Kani:
+kani --debug file.rs
 ```
 ```bash
 # Keep CBMC Symbol Table and Goto-C output (.json and .goto)
-rmc --keep-temps file.rs
+kani --keep-temps file.rs
 ```
 ```bash
 # Generate "C code" from CBMC IR (.c)
-rmc --gen-c file.rs
+kani --gen-c file.rs
 ```
 
 ## CBMC command cheat sheet

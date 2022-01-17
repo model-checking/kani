@@ -1,11 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @expect error
-// rmc-verify-fail
+// kani-verify-fail
 
 pub fn main() {
-    let a = rmc::any();
-    let b = rmc::any();
+    let a = kani::any();
+    let b = kani::any();
     if 4 < a && a < 8 {
         // a in [5,7]
         if 5 < b && b < 9 {

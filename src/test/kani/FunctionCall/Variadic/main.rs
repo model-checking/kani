@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // https://github.com/model-checking/rmc/issues/555
-// rmc-flags: --no-undefined-function-checks
+// kani-flags: --no-undefined-function-checks
 
 // Minimized from vmm-sys-util/src/linux/aio.rs new()
 #![feature(c_variadic)]

@@ -24,5 +24,5 @@ fn main() {
     // The vtable for b will now have two Foo::method entries,
     // one for Foo<u32> and one for Foo<i32>.
     let result = <dyn Bar as Foo<u32>>::method(b, 22_u32);
-    rmc::expect_fail(result == 0, "Wrong result");
+    kani::expect_fail(result == 0, "Wrong result");
 }

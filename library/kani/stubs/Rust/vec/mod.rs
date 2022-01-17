@@ -3,5 +3,5 @@
 
 pub mod c_vec;
 pub mod noback_vec;
-pub mod rmc_vec;
+pub mod kani_vec;
 pub mod utils;

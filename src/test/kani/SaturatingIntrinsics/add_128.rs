@@ -6,7 +6,7 @@
 use std::intrinsics;
 
 fn main() {
-    let v: u128 = rmc::any();
-    let w: u128 = rmc::any();
+    let v: u128 = kani::any();
+    let w: u128 = kani::any();
     intrinsics::saturating_add(v, w);
 }

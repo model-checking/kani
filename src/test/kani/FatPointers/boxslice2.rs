@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 // Casts boxed array to boxed slice (example taken from rust documentation)
 use std::str;

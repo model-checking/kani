@@ -19,7 +19,7 @@ use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::InternedString;
 use cbmc::NO_PRETTY_NAME;
-use rmc_restrictions::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
+use kani_restrictions::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::stable_map::FxHashMap;
 use tracing::debug;
 
@@ -114,7 +114,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the naming unambiguous.
     ///
     /// This can be simplified if CBMC implemented label-based restrictions.
-    /// RMC tracking: https://github.com/model-checking/rmc/issues/651
+    /// Kani tracking: https://github.com/model-checking/rmc/issues/651
     /// CBMC tracking: https://github.com/diffblue/cbmc/issues/6464
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,

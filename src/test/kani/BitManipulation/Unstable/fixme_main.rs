@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{ctlz, cttz, cttz_nonzero};

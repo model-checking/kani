@@ -3,9 +3,9 @@
 //
 // Check that the Invariant implementation for Result respect underlying types invariant.
 
-extern crate rmc;
+extern crate kani;
 
-use rmc::Invariant;
+use kani::Invariant;
 
 #[derive(PartialEq)]
 enum Error {
@@ -18,20 +18,20 @@ struct MyType {
     pub is_negative: bool,
 }
 
-unsafe impl rmc::Invariant for MyType {
+unsafe impl kani::Invariant for MyType {
     fn is_valid(&self) -> bool {
         (self.is_negative && self.val < 0) || (!self.is_negative && self.val >= 0)
     }
 }
 
-unsafe impl rmc::Invariant for Error {
+unsafe impl kani::Invariant for Error {
     fn is_valid(&self) -> bool {
         matches!(*self, Error::Error1 | Error::Error2)
     }
 }
 
 fn main() {
-    let result: Result<MyType, Error> = rmc::any();
+    let result: Result<MyType, Error> = kani::any();
     match result {
         Ok(v) => assert!(v.is_valid()),
         Err(e) => assert!(e.is_valid()),

@@ -19,8 +19,8 @@ pub struct HarnessMetadata {
     pub original_line: String,
 }
 
-/// The structure of `.rmc-metadata.json` files, which are emitted for each crate
+/// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Serialize)]
-pub struct RmcMetadata {
+pub struct KaniMetadata {
     pub proof_harnesses: Vec<HarnessMetadata>,
 }

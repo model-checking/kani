@@ -4,7 +4,7 @@
 // cbmc-flags: --unwind 11
 
 fn main() {
-    let mut a: u32 = rmc::any();
+    let mut a: u32 = kani::any();
 
     if a < 1024 {
         while a > 0 {

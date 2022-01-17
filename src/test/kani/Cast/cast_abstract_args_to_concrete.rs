@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // https://github.com/model-checking/rmc/issues/555
-// rmc-flags: --no-undefined-function-checks
+// kani-flags: --no-undefined-function-checks
 
 // This regression test is in response to issue #135.
 // The type of the second parameter to powi is a `CInteger`, but
 // the type of `2` here is a `u32`. This test ensures that
-// rmc automatically casts the `2` to a `CInteger`.
+// kani automatically casts the `2` to a `CInteger`.
 
 // More generally, this acts as a stand-in to make sure that
 // abstract types (e.g. u32, i32) are automatically casted to

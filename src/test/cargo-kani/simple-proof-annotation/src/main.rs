@@ -12,7 +12,7 @@ fn main() {
 // as a valid proof harness, since it isn't annotated as such.
 // This test should be updated if we go that route.
 
-#[rmc::proof]
+#[kani::proof]
 fn harness() {
     assert!(3 == 4);
 }

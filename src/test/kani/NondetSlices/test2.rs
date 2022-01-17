@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Test the RMC library's API for creating a non-det slice
+// Test the Kani library's API for creating a non-det slice
 
 fn check(s: &[u8]) {
     let len = s.len();
@@ -9,6 +9,6 @@ fn check(s: &[u8]) {
 
 fn main() {
     // returns a slice of length between 0 and 5 with non-det content
-    let slice: rmc::slice::NonDetSlice<u8, 5> = rmc::slice::any_slice();
+    let slice: kani::slice::NonDetSlice<u8, 5> = kani::slice::any_slice();
     check(&slice);
 }

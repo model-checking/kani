@@ -13,7 +13,7 @@ use std::any::Any;
 fn downcast_to_concrete(a: &dyn Any) {
     match a.downcast_ref::<i32>() {
         Some(i) => {
-            rmc::expect_fail(*i == 8, "Wrong underlying concrete value");
+            kani::expect_fail(*i == 8, "Wrong underlying concrete value");
         }
         None => {
             assert!(false);

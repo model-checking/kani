@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-name: RMC CI
+name: Kani CI
 on: [push, pull_request]
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout RMC
+      - name: Checkout Kani
         uses: actions/checkout@v2
         # https://github.com/rust-lang/rust/issues/87890
         # A non-shallow clone is unfortunately necessary, as bootstrap.py searches commit history
@@ -46,14 +46,14 @@ jobs:
           git config submodule."src/llvm-project".update none
           git submodule update --init --depth 1
 
-      - name: Build RMC and RMC Library
+      - name: Build Kani and Kani Library
         run: |
           export RUST_BACKTRACE=1
-          cd src/rmc-compiler
+          cd src/kani-compiler
           cargo build
 
-      - name: Execute RMC regression
-        run: ./scripts/rmc-regression.sh
+      - name: Execute Kani regression
+        run: ./scripts/kani-regression.sh
 
       - name: Install book runner dependencies
         if: ${{ matrix.os == 'ubuntu-20.04' }}
@@ -70,7 +70,7 @@ jobs:
       # On one OS only, build the documentation, too.
       - name: Build Documentation
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./rmc-docs/build-docs.sh
+        run: ./kani-docs/build-docs.sh
 
       # When we're pushed to main branch, only then actually publish the docs.
       - name: Publish Documentation
@@ -78,4 +78,4 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@4.1.4
         with:
           branch: gh-pages
-          folder: rmc-docs/book/
+          folder: kani-docs/book/

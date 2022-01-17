@@ -29,12 +29,12 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 }
 
 fn main() {
-    let random_number = rmc::any();
+    let random_number = kani::any();
     let animal = random_animal(random_number);
     let s = animal.noise();
     if (random_number < 5) {
-        rmc::expect_fail(s == 2, "Wrong noise");
+        kani::expect_fail(s == 2, "Wrong noise");
     } else {
-        rmc::expect_fail(s == 1, "Wrong noise");
+        kani::expect_fail(s == 1, "Wrong noise");
     }
 }

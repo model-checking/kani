@@ -1213,25 +1213,25 @@ host_test!(RunMakeFullDeps {
 
 default_test!(Assembly { path: "src/test/assembly", mode: "assembly", suite: "assembly" });
 
-default_test!(RMC { path: "src/test/rmc", mode: "rmc", suite: "rmc" });
+default_test!(Kani { path: "src/test/kani", mode: "kani", suite: "kani" });
 
-default_test!(Firecracker { path: "src/test/firecracker", mode: "rmc", suite: "firecracker" });
+default_test!(Firecracker { path: "src/test/firecracker", mode: "kani", suite: "firecracker" });
 
-default_test!(Prusti { path: "src/test/prusti", mode: "rmc", suite: "prusti" });
+default_test!(Prusti { path: "src/test/prusti", mode: "kani", suite: "prusti" });
 
-default_test!(Serial { path: "src/test/serial", mode: "rmc", suite: "serial" });
+default_test!(Serial { path: "src/test/serial", mode: "kani", suite: "serial" });
 
-default_test!(SMACK { path: "src/test/smack", mode: "rmc", suite: "smack" });
+default_test!(SMACK { path: "src/test/smack", mode: "kani", suite: "smack" });
 
-default_test!(CargoRMC { path: "src/test/cargo-rmc", mode: "cargo-rmc", suite: "cargo-rmc" });
+default_test!(CargoKani { path: "src/test/cargo-kani", mode: "cargo-kani", suite: "cargo-kani" });
 
 default_test!(Expected { path: "src/test/expected", mode: "expected", suite: "expected" });
 
-default_test!(BookRunner { path: "src/test/bookrunner", mode: "rmc", suite: "bookrunner" });
+default_test!(BookRunner { path: "src/test/bookrunner", mode: "kani", suite: "bookrunner" });
 
-default_test!(RmcDocs { path: "src/test/rmc-docs", mode: "cargo-rmc", suite: "rmc-docs" });
+default_test!(KaniDocs { path: "src/test/kani-docs", mode: "cargo-kani", suite: "kani-docs" });
 
-default_test!(RmcFixme { path: "src/test/rmc-fixme", mode: "rmc-fixme", suite: "rmc-fixme" });
+default_test!(KaniFixme { path: "src/test/kani-fixme", mode: "kani-fixme", suite: "kani-fixme" });
 
 default_test!(Stub { path: "src/test/stub-tests", mode: "stub-tests", suite: "stub-tests" });
 
@@ -1313,9 +1313,9 @@ note: if you're sure you want to do this, please open an issue as to why. In the
         cmd.arg("--run-lib-path").arg(builder.sysroot_libdir(compiler, target));
         cmd.arg("--rustc-path").arg(builder.rustc(compiler));
 
-        // Pass the path to the RMC script directory as an option to compiletest.
-        if let Ok(path) = env::var("RMC_DIR") {
-            cmd.arg("--rmc-dir-path")
+        // Pass the path to the Kani script directory as an option to compiletest.
+        if let Ok(path) = env::var("KANI_DIR") {
+            cmd.arg("--kani-dir-path")
                 .arg(Path::new(&path).components().collect::<PathBuf>().to_str().unwrap());
         }
 

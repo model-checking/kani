@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 #![feature(never_type)]
 
@@ -12,7 +12,7 @@ pub fn err() -> ! {
 // Give an empty main to make rustc happy.
 #[no_mangle]
 fn main() {
-    let var = rmc::any::<i32>();
+    let var = kani::any::<i32>();
     if var > 0 {
         err();
     }

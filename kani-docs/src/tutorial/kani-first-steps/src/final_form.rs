@@ -48,21 +48,21 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-// ANCHOR: rmc
-#[cfg(rmc)]
-#[rmc::proof]
+// ANCHOR: kani
+#[cfg(kani)]
+#[kani::proof]
 fn verify_success() {
-    let x: u32 = rmc::any();
-    rmc::assume(x < 4096);
+    let x: u32 = kani::any();
+    kani::assume(x < 4096);
     let y = estimate_size(x);
     assert!(y < 10);
 }
-// ANCHOR_END: rmc
+// ANCHOR_END: kani
 
-#[cfg(rmc)]
-#[rmc::proof]
+#[cfg(kani)]
+#[kani::proof]
 fn verify_failure() {
-    let x: u32 = rmc::any();
+    let x: u32 = kani::any();
     let y = estimate_size(x);
 }
 

@@ -10,27 +10,27 @@ use std::path::{Path, PathBuf};
 
 use tracing::*;
 
-use crate::common::{Config, Mode, RMCFailStep};
+use crate::common::{Config, Mode, KaniFailStep};
 
 #[derive(Clone, Debug)]
 pub struct TestProps {
     // Extra flags to pass to the compiler
     pub compile_flags: Vec<String>,
-    // Extra flags to pass to RMC
-    pub rmc_flags: Vec<String>,
+    // Extra flags to pass to Kani
+    pub kani_flags: Vec<String>,
     // Extra flags to pass to CBMC
     pub cbmc_flags: Vec<String>,
-    // The step where RMC is expected to fail
-    pub rmc_panic_step: Option<RMCFailStep>,
+    // The step where Kani is expected to fail
+    pub kani_panic_step: Option<KaniFailStep>,
 }
 
 impl TestProps {
     pub fn new() -> Self {
         TestProps {
             compile_flags: vec![],
-            rmc_flags: vec![],
+            kani_flags: vec![],
             cbmc_flags: vec![],
-            rmc_panic_step: None,
+            kani_panic_step: None,
         }
     }
 
@@ -59,8 +59,8 @@ impl TestProps {
                     self.compile_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
                 }
 
-                if let Some(flags) = config.parse_rmc_flags(ln) {
-                    self.rmc_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
+                if let Some(flags) = config.parse_kani_flags(ln) {
+                    self.kani_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
                 }
 
                 if let Some(flags) = config.parse_cbmc_flags(ln) {
@@ -72,7 +72,7 @@ impl TestProps {
                     has_edition = true;
                 }
 
-                self.update_rmc_fail_mode(ln, config);
+                self.update_kani_fail_mode(ln, config);
             });
         }
 
@@ -82,12 +82,12 @@ impl TestProps {
     }
 
     /// Checks if `ln` specifies which stage the test should fail on and updates
-    /// RMC fail mode accordingly.
-    fn update_rmc_fail_mode(&mut self, ln: &str, config: &Config) {
-        let rmc_fail_step = config.parse_rmc_step_fail_directive(ln);
-        match (self.rmc_panic_step, rmc_fail_step) {
-            (None, Some(_)) => self.rmc_panic_step = rmc_fail_step,
-            (Some(_), Some(_)) => panic!("multiple `rmc-*-fail` headers in a single test"),
+    /// Kani fail mode accordingly.
+    fn update_kani_fail_mode(&mut self, ln: &str, config: &Config) {
+        let kani_fail_step = config.parse_kani_step_fail_directive(ln);
+        match (self.kani_panic_step, kani_fail_step) {
+            (None, Some(_)) => self.kani_panic_step = kani_fail_step,
+            (Some(_), Some(_)) => panic!("multiple `kani-*-fail` headers in a single test"),
             (_, None) => {}
         }
     }
@@ -126,31 +126,31 @@ impl Config {
         self.parse_name_value_directive(line, "compile-flags")
     }
 
-    /// Parses strings of the form `rmc-*-fail` and returns the step at which
-    /// RMC is expected to panic.
-    fn parse_rmc_step_fail_directive(&self, line: &str) -> Option<RMCFailStep> {
-        let check_rmc = |mode: &str| {
-            if self.mode != Mode::RMC {
-                panic!("`rmc-{}-fail` header is only supported in RMC tests", mode);
+    /// Parses strings of the form `kani-*-fail` and returns the step at which
+    /// Kani is expected to panic.
+    fn parse_kani_step_fail_directive(&self, line: &str) -> Option<KaniFailStep> {
+        let check_kani = |mode: &str| {
+            if self.mode != Mode::Kani {
+                panic!("`kani-{}-fail` header is only supported in Kani tests", mode);
             }
         };
-        if self.parse_name_directive(line, "rmc-check-fail") {
-            check_rmc("check");
-            Some(RMCFailStep::Check)
-        } else if self.parse_name_directive(line, "rmc-codegen-fail") {
-            check_rmc("codegen");
-            Some(RMCFailStep::Codegen)
-        } else if self.parse_name_directive(line, "rmc-verify-fail") {
-            check_rmc("verify");
-            Some(RMCFailStep::Verify)
+        if self.parse_name_directive(line, "kani-check-fail") {
+            check_kani("check");
+            Some(KaniFailStep::Check)
+        } else if self.parse_name_directive(line, "kani-codegen-fail") {
+            check_kani("codegen");
+            Some(KaniFailStep::Codegen)
+        } else if self.parse_name_directive(line, "kani-verify-fail") {
+            check_kani("verify");
+            Some(KaniFailStep::Verify)
         } else {
             None
         }
     }
 
-    /// Parses strings of the form `// rmc-flags: ...` and returns the options listed after `rmc-flags:`
-    fn parse_rmc_flags(&self, line: &str) -> Option<String> {
-        self.parse_name_value_directive(line, "rmc-flags")
+    /// Parses strings of the form `// kani-flags: ...` and returns the options listed after `kani-flags:`
+    fn parse_kani_flags(&self, line: &str) -> Option<String> {
+        self.parse_name_value_directive(line, "kani-flags")
     }
 
     /// Parses strings of the form `// cbmc-flags: ...` and returns the options listed after `cbmc-flags:`
@@ -204,17 +204,17 @@ pub fn make_test_description<R: Read>(
     let mut ignore = false;
     let mut should_fail = false;
 
-    if config.mode == Mode::RMC || config.mode == Mode::Stub {
+    if config.mode == Mode::Kani || config.mode == Mode::Stub {
         // If the path to the test contains "fixme" or "ignore", skip it.
         let file_path = path.to_str().unwrap();
         ignore |= file_path.contains("fixme") || file_path.contains("ignore");
     }
 
-    // The `RmcFixme` mode runs tests that are ignored in the `rmc` suite
-    if config.mode == Mode::RmcFixme {
+    // The `KaniFixme` mode runs tests that are ignored in the `kani` suite
+    if config.mode == Mode::KaniFixme {
         let file_path = path.to_str().unwrap();
 
-        // `file_path` is going to be `src/test/rmc-fixme/...` so we
+        // `file_path` is going to be `src/test/kani-fixme/...` so we
         // need to extract the base name if we want to ignore it
         let test_name: Vec<&str> = file_path.rsplit('/').collect();
         let base_name = test_name[0];

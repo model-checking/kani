@@ -9,7 +9,7 @@ echo
 echo "Starting type mismatch test..."
 echo
 
-# Compile crates with RMC backend
+# Compile crates with Kani backend
 cd $(dirname $0)
 rm -rf /tmp/type_mismatch_test_build
 cd mismatch
@@ -19,7 +19,7 @@ RESULT="/tmp/dependency_test_result.txt"
 export RUSTC_LOG=error
 export CARGO_TARGET_DIR=/tmp/type_mismatch_test_build
 export RUST_BACKTRACE=1
-cargo rmc &> $RESULT
+cargo kani &> $RESULT
 
 if ! grep -q "VERIFICATION SUCCESSFUL" $RESULT; then
   cat $RESULT

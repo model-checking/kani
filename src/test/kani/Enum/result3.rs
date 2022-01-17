@@ -11,10 +11,10 @@ fn foo(input: &Result<u32, Unit>) -> u32 {
 }
 
 fn main() {
-    let input: Result<u32, Unit> = unsafe { rmc::any_raw() };
+    let input: Result<u32, Unit> = unsafe { kani::any_raw() };
     let x = foo(&input);
     assert!(x == 3 || input != Err(Unit::Unit));
-    let input: Result<u32, Unit> = if rmc::any() { Ok(0) } else { Err(Unit::Unit) };
+    let input: Result<u32, Unit> = if kani::any() { Ok(0) } else { Err(Unit::Unit) };
     let x = foo(&input);
     assert!(x != 3 || input == Err(Unit::Unit));
     assert!(x != 0 || input == Ok(0));

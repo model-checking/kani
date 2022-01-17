@@ -12,7 +12,7 @@ use core::ops::{Deref, DerefMut};
 ///
 /// ```rust
 /// let arr = [1, 2, 3];
-/// let slice = rmc::slice::any_slice_of_array(&arr);
+/// let slice = kani::slice::any_slice_of_array(&arr);
 /// foo(slice); // where foo is a function that takes a slice and verifies a property about it
 /// ```
 pub fn any_slice_of_array<T, const LENGTH: usize>(arr: &[T; LENGTH]) -> &[T] {
@@ -43,7 +43,7 @@ fn any_range<const LENGTH: usize>() -> (usize, usize) {
 /// # Example:
 ///
 /// ```rust
-/// let slice: rmc::slice::NonDetSlice<u8, 5> = rmc::slice::any_slice();
+/// let slice: kani::slice::NonDetSlice<u8, 5> = kani::slice::any_slice();
 /// foo(&slice); // where foo is a function that takes a slice and verifies a property about it
 /// ```
 pub struct NonDetSlice<T, const MAX_SLICE_LENGTH: usize> {

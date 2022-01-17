@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use cbmc::InternedString;
-use rmc_restrictions::{TraitDefinedMethod, VtableCtxResults};
+use kani_restrictions::{TraitDefinedMethod, VtableCtxResults};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;

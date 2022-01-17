@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 //! This tests whether we properly replace missing functions with `assert(false)`
 

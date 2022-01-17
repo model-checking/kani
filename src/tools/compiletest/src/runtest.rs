@@ -5,9 +5,9 @@
 
 // ignore-tidy-filelength
 
-use crate::common::RMCFailStep;
+use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoRMC, Expected, RmcFixme, Stub, RMC};
+use crate::common::{CargoKani, Expected, KaniFixme, Stub, Kani};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
@@ -69,9 +69,9 @@ impl<'test> TestCx<'test> {
     /// revisions, exactly once, with revision == None).
     fn run_revision(&self) {
         match self.config.mode {
-            RMC => self.run_rmc_test(),
-            RmcFixme => self.run_rmc_test(),
-            CargoRMC => self.run_cargo_rmc_test(),
+            Kani => self.run_kani_test(),
+            KaniFixme => self.run_kani_test(),
+            CargoKani => self.run_cargo_kani_test(),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
         }
@@ -172,33 +172,33 @@ impl<'test> TestCx<'test> {
         proc_res.fatal(None, || ());
     }
 
-    /// Adds rmc scripts directory to the `PATH` environment variable.
-    fn add_rmc_dir_to_path(&self, command: &mut Command) {
+    /// Adds kani scripts directory to the `PATH` environment variable.
+    fn add_kani_dir_to_path(&self, command: &mut Command) {
         // If the PATH environment variable is already defined,
         if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
-            // Add the RMC scripts directory to the PATH.
-            command.env(key, format!("{}:{}", self.config.rmc_dir_path.to_str().unwrap(), val));
+            // Add the Kani scripts directory to the PATH.
+            command.env(key, format!("{}:{}", self.config.kani_dir_path.to_str().unwrap(), val));
         } else {
-            // Otherwise, insert PATH as a new environment variable and set its value to the RMC scripts directory.
+            // Otherwise, insert PATH as a new environment variable and set its value to the Kani scripts directory.
             command.env(
                 String::from("PATH"),
-                String::from(self.config.rmc_dir_path.to_str().unwrap()),
+                String::from(self.config.kani_dir_path.to_str().unwrap()),
             );
         }
     }
 
-    /// Runs `rmc-rustc` on the test file specified by `self.testpaths.file`. An
+    /// Runs `kani-rustc` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the check result is not expected.
     fn check(&self) {
-        let mut rustc = Command::new("rmc-rustc");
+        let mut rustc = Command::new("kani-rustc");
         rustc
             .args(["--goto-c"])
             .args(self.props.compile_flags.clone())
             .args(["-Z", "no-codegen"])
             .arg(&self.testpaths.file);
-        self.add_rmc_dir_to_path(&mut rustc);
+        self.add_kani_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run(rustc);
-        if self.props.rmc_panic_step == Some(RMCFailStep::Check) {
+        if self.props.kani_panic_step == Some(KaniFailStep::Check) {
             if proc_res.status.success() {
                 self.fatal_proc_rec("test failed: expected check failure, got success", &proc_res);
             }
@@ -209,20 +209,20 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs `rmc-rustc` on the test file specified by `self.testpaths.file`. An
+    /// Runs `kani-rustc` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the codegen result is not
     /// expected.
     fn codegen(&self) {
-        let mut rustc = Command::new("rmc-rustc");
+        let mut rustc = Command::new("kani-rustc");
         rustc
             .args(["--goto-c"])
             .args(self.props.compile_flags.clone())
             .args(["--out-dir"])
             .arg(self.output_base_dir())
             .arg(&self.testpaths.file);
-        self.add_rmc_dir_to_path(&mut rustc);
+        self.add_kani_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run(rustc);
-        if self.props.rmc_panic_step == Some(RMCFailStep::Codegen) {
+        if self.props.kani_panic_step == Some(KaniFailStep::Codegen) {
             if proc_res.status.success() {
                 self.fatal_proc_rec(
                     "test failed: expected codegen failure, got success",
@@ -239,10 +239,10 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs RMC on the test file specified by `self.testpaths.file`. An error
+    /// Runs Kani on the test file specified by `self.testpaths.file`. An error
     /// message is printed to stdout if the verification result is not expected.
     fn verify(&self) {
-        let proc_res = self.run_rmc();
+        let proc_res = self.run_kani();
         // If the test file contains expected failures in some locations, ensure
         // that verification does indeed fail in those locations
         if proc_res.stdout.contains("EXPECTED FAIL") {
@@ -255,19 +255,19 @@ impl<'test> TestCx<'test> {
             }
         } else {
             // The code above depends too much on the exact string output of
-            // RMC. If the output of RMC changes in the future, the check below
+            // Kani. If the output of Kani changes in the future, the check below
             // will (hopefully) force some tests to fail and remind us to
             // update the code above as well.
             if fs::read_to_string(&self.testpaths.file).unwrap().contains("__VERIFIER_expect_fail")
             {
                 self.fatal_proc_rec(
                     "found call to `__VERIFIER_expect_fail` with no corresponding \
-                 \"EXPECTED FAIL\" in RMC's output",
+                 \"EXPECTED FAIL\" in Kani's output",
                     &proc_res,
                 )
             }
             // Print an error if the verification result is not expected.
-            if self.props.rmc_panic_step == Some(RMCFailStep::Verify) {
+            if self.props.kani_panic_step == Some(KaniFailStep::Verify) {
                 if proc_res.status.success() {
                     self.fatal_proc_rec(
                         "test failed: expected verification failure, got success",
@@ -288,13 +288,13 @@ impl<'test> TestCx<'test> {
     /// Checks, codegens, and verifies the test file specified by
     /// `self.testpaths.file`. An error message is printed to stdout if a result
     /// is not expected.
-    fn run_rmc_test(&self) {
+    fn run_kani_test(&self) {
         self.check();
-        if self.props.rmc_panic_step == Some(RMCFailStep::Check) {
+        if self.props.kani_panic_step == Some(KaniFailStep::Check) {
             return;
         }
         self.codegen();
-        if self.props.rmc_panic_step == Some(RMCFailStep::Codegen) {
+        if self.props.kani_panic_step == Some(KaniFailStep::Codegen) {
             return;
         }
         self.verify();
@@ -314,69 +314,69 @@ impl<'test> TestCx<'test> {
         lines
     }
 
-    /// Runs cargo-rmc on the function specified by the stem of `self.testpaths.file`.
+    /// Runs cargo-kani on the function specified by the stem of `self.testpaths.file`.
     /// An error message is printed to stdout if verification output does not
     /// contain the expected output in `self.testpaths.file`.
-    fn run_cargo_rmc_test(&self) {
-        // We create our own command for the same reasons listed in `run_rmc_test` method.
+    fn run_cargo_kani_test(&self) {
+        // We create our own command for the same reasons listed in `run_kani_test` method.
         let mut cargo = Command::new("cargo");
         // We run `cargo` on the directory where we found the `*.expected` file
         let parent_dir = self.testpaths.file.parent().unwrap();
         // The name of the function to test is the same as the stem of `*.expected` file
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
         cargo
-            .arg("rmc")
+            .arg("kani")
             .args(["--function", function_name])
             .arg("--target")
             .arg(self.output_base_dir().join("target"))
             .arg("--crate")
             .arg(&parent_dir);
-        self.add_rmc_dir_to_path(&mut cargo);
+        self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
         self.verify_output(&proc_res, &expected);
     }
 
-    /// Common method used to run RMC on a single file test.
-    fn run_rmc(&self) -> ProcRes {
+    /// Common method used to run Kani on a single file test.
+    fn run_kani(&self) -> ProcRes {
         // Other modes call self.compile_test(...). However, we cannot call it here for two reasons:
-        // 1. It calls rustc instead of RMC
-        // 2. It may pass some options that do not make sense for RMC
-        // So we create our own command to execute RMC and pass it to self.compose_and_run(...) directly.
-        let mut rmc = Command::new("rmc");
-        // We cannot pass rustc flags directly to RMC. Instead, we add them
+        // 1. It calls rustc instead of Kani
+        // 2. It may pass some options that do not make sense for Kani
+        // So we create our own command to execute Kani and pass it to self.compose_and_run(...) directly.
+        let mut kani = Command::new("kani");
+        // We cannot pass rustc flags directly to Kani. Instead, we add them
         // to the current environment through the `RUSTFLAGS` environment
-        // variable. RMC recognizes the variable and adds those flags to its
+        // variable. Kani recognizes the variable and adds those flags to its
         // internal call to rustc.
         if !self.props.compile_flags.is_empty() {
-            rmc.env("RUSTFLAGS", self.props.compile_flags.join(" "));
+            kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
-        // Pass the test path along with RMC and CBMC flags parsed from comments at the top of the test file.
-        rmc.args(&self.props.rmc_flags)
+        // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
+        kani.args(&self.props.kani_flags)
             .arg("--input")
             .arg(&self.testpaths.file)
             .arg("--cbmc-args")
             .args(&self.props.cbmc_flags);
-        self.add_rmc_dir_to_path(&mut rmc);
-        self.compose_and_run(rmc)
+        self.add_kani_dir_to_path(&mut kani);
+        self.compose_and_run(kani)
     }
 
-    /// Runs RMC on the test file specified by `self.testpaths.file`. An error
+    /// Runs Kani on the test file specified by `self.testpaths.file`. An error
     /// message is printed to stdout if verification output does not contain
     /// the expected output in `expected` file.
     fn run_expected_test(&self) {
-        let proc_res = self.run_rmc();
+        let proc_res = self.run_kani();
         let expected =
             fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
         self.verify_output(&proc_res, &expected);
     }
 
-    /// Runs RMC with stub implementations of various data structures.
-    /// Currently, it only runs tests for the Vec module with the (RMC)Vec
+    /// Runs Kani with stub implementations of various data structures.
+    /// Currently, it only runs tests for the Vec module with the (Kani)Vec
     /// abstraction. At a later stage, it should be possible to add command-line
     /// arguments to test specific abstractions and modules.
     fn run_stub_test(&self) {
-        let proc_res = self.run_rmc();
+        let proc_res = self.run_kani();
         if !proc_res.status.success() {
             self.fatal_proc_rec(
                 "test failed: expected verification success, got failure",

@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! To run this test, do
-//! rmc main.rs -- lib.c
+//! kani main.rs -- lib.c
 
-// rmc-flags: --c-lib src/test/rmc/ForeignItems/lib.c
+// kani-flags: --c-lib src/test/kani/ForeignItems/lib.c
 
 #[repr(C)]
 pub struct Foo {

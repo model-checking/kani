@@ -11,18 +11,18 @@ use std::marker::PhantomData;
 // as wrappers around FFI functions which call into methods implemented in C. There
 // were multiple reasons as to why this abstractions was conceived:
 //
-// 1. Reduce the cost of translation: RMC translates Rust code into equivalent
+// 1. Reduce the cost of translation: Kani translates Rust code into equivalent
 // gotoC representation which is used for verification with CBMC. However, this
 // might introduce additional overhead due to nesting of calls, monomorphization,
 // handling generics, etc. CVec gets around that issue by making direct calls
 // to the C implementation. This is usually hard to reason about for most other
 // frameworks since they are unable to handle unsafe code. But because of the
-// way RMC works, it is almost zero cost to achieve this.
+// way Kani works, it is almost zero cost to achieve this.
 //
 // 2. Leverage CBMC primitives: Some CBMC primitives cannot yet be correctly
-// translated/handled by RMC, for instance: __CPROVER_constant_infinity_uint. If
+// translated/handled by Kani, for instance: __CPROVER_constant_infinity_uint. If
 // there are improvements in CBMC, a quick way to test their applicability in
-// RMC would be to work with this abstraction and perform experiments.
+// Kani would be to work with this abstraction and perform experiments.
 
 // A c_vec consists of a pointer to allocated memory, the capacity of the allocation and
 // the length of the vector to be used in verification. This structure is also
@@ -161,7 +161,7 @@ impl<T> Drop for Vec<T> {
     }
 }
 
-// Here, we define the rmc_vec! macro which behaves similar to the vec! macro
+// Here, we define the kani_vec! macro which behaves similar to the vec! macro
 // found in the std prelude. If we try to override the vec! macro, we get error:
 //
 //     = note: `vec` could refer to a macro from prelude
@@ -170,7 +170,7 @@ impl<T> Drop for Vec<T> {
 // Relevant Zulip stream:
 // https://rust-lang.zulipchat.com/#narrow/stream/122651-general/topic/Override.20prelude.20macro
 //
-// The workaround for now is to define a new macro. rmc_vec! will initialize a new
+// The workaround for now is to define a new macro. kani_vec! will initialize a new
 // Vec based on its definition in this file. We support two types of initialization
 // expressions:
 //
@@ -178,7 +178,7 @@ impl<T> Drop for Vec<T> {
 // [ elem1, elem2, ...] - initialize a Vector with elements elem1, elem2...
 #[cfg(abs_type = "c-ffi")]
 #[macro_export]
-macro_rules! rmc_vec {
+macro_rules! kani_vec {
   ( $val:expr ; $count:expr ) =>
     ({
       let mut result = Vec::with_capacity($count);

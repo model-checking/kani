@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Check that regular arithmetic operations in unsafe blocks still trigger overflow checks.
-// rmc-verify-fail
-// rmc-flags: --function check_mul
+// kani-verify-fail
+// kani-flags: --function check_mul
 // compile-flags: --crate-type lib
 
 pub fn check_mul(a: u8, b: u8) {

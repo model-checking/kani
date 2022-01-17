@@ -8,13 +8,13 @@ import os.path
 import sys
 import re
 import pathlib
-import rmc_flags
+import kani_flags
 import cbmc_json_parser
 
-RMC_CFG = "rmc"
-RMC_RUSTC_EXE = "rmc-rustc"
+KANI_CFG = "kani"
+KANI_RUSTC_EXE = "kani-rustc"
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
-GEN_C_LIB = MY_PATH / "library" / "rmc" / "gen_c_lib.c"
+GEN_C_LIB = MY_PATH / "library" / "kani" / "gen_c_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -55,7 +55,7 @@ def is_exe(name):
 
 
 def ensure_dependencies_in_path():
-    for program in [RMC_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
+    for program in [KANI_RUSTC_EXE, "symtab2gb", "cbmc", "cbmc-viewer", "goto-instrument", "goto-cc"]:
         ensure(is_exe(program), f"Could not find {program} in PATH")
 
 # Assert a condition holds, or produce a user error message.
@@ -94,63 +94,63 @@ def add_selected_default_cbmc_checks(args):
 
 # Add a common CBMC flag to `cbmc_args`
 def add_common_cbmc_flag(args, flag_info):
-    (cbmc_arg, rmc_arg, _) = flag_info
-    rmc_value = getattr(args, rmc_arg)
-    if rmc_value is not None:
-        args.cbmc_args.extend([cbmc_arg, rmc_value])
+    (cbmc_arg, kani_arg, _) = flag_info
+    kani_value = getattr(args, kani_arg)
+    if kani_value is not None:
+        args.cbmc_args.extend([cbmc_arg, kani_value])
 
-# Set a common CBMC flag by examining both RMC & CBMC flags
+# Set a common CBMC flag by examining both Kani & CBMC flags
 def set_common_cbmc_flag(args, flag_info):
-    (cbmc_arg, rmc_arg, default_value) = flag_info
-    if getattr(args, rmc_arg) is not None:
+    (cbmc_arg, kani_arg, default_value) = flag_info
+    if getattr(args, kani_arg) is not None:
         if cbmc_arg in args.cbmc_args:
             # Case #1: The flag is specified twice - Result: Raise an exception
             raise Exception(f"Conflicting flags: `{cbmc_arg}` was specified twice.")
-        # Case #2: Flag specified via `args.rmc_arg` only - Result: Use `args.rmc_arg`
+        # Case #2: Flag specified via `args.kani_arg` only - Result: Use `args.kani_arg`
         return
     if cbmc_arg in args.cbmc_args:
         # Case #3: Flag specified via `cbmc_arg` only - Result: Use `cbmc_arg`
-        # Note: `args.rmc_arg` is `None` so nothing will be added later
+        # Note: `args.kani_arg` is `None` so nothing will be added later
         return
     # Case #4: The flag has not been specified - Result: Assign default value
-    setattr(args, rmc_arg, default_value)
+    setattr(args, kani_arg, default_value)
 
 def process_object_bits_flag(args):
-    flag_info = ("--object-bits", "object_bits", rmc_flags.DEFAULT_OBJECT_BITS_VALUE)
+    flag_info = ("--object-bits", "object_bits", kani_flags.DEFAULT_OBJECT_BITS_VALUE)
     set_common_cbmc_flag(args, flag_info)
     add_common_cbmc_flag(args, flag_info)
 
 def process_unwind_flag(args):
     # We raise an exception if `--auto-unwind` is being used in
-    # addition to other `--unwind` flags in RMC or CBMC
+    # addition to other `--unwind` flags in Kani or CBMC
     if args.auto_unwind:
         if args.unwind is not None or "--unwind" in args.cbmc_args:
             raise Exception("Conflicting flags: `--auto-unwind` is not"
                             " compatible with other `--unwind` flags.")
         return
-    flag_info = ("--unwind", "unwind", rmc_flags.DEFAULT_UNWIND_VALUE)
+    flag_info = ("--unwind", "unwind", kani_flags.DEFAULT_UNWIND_VALUE)
     set_common_cbmc_flag(args, flag_info)
     add_common_cbmc_flag(args, flag_info)
 
 # Process common CBMC flags
 def process_common_cbmc_flags(args):
-    # For each CBMC flag we set the RMC flag if needed, then
-    # we add the associated CBMC flag if RMC flag has been set
+    # For each CBMC flag we set the Kani flag if needed, then
+    # we add the associated CBMC flag if Kani flag has been set
     process_object_bits_flag(args)
     process_unwind_flag(args)
 
 # Updates environment to use gotoc backend debugging
-def add_rmc_rustc_debug_to_env(env):
-    env["RMC_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_rmc")
+def add_kani_rustc_debug_to_env(env):
+    env["KANI_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_kani")
 
-# Prints info about the RMC process
-def print_rmc_step_status(step_name, completed_process, verbose=False):
+# Prints info about the Kani process
+def print_kani_step_status(step_name, completed_process, verbose=False):
     status = "PASS"
     if completed_process.returncode != EXIT_CODE_SUCCESS:
         status = "FAIL"
     if verbose:
-        print(f"[RMC] stage: {step_name} ({status})")
-        print(f"[RMC] cmd: {' '.join(completed_process.args)}")
+        print(f"[Kani] stage: {step_name} ({status})")
+        print(f"[Kani] cmd: {' '.join(completed_process.args)}")
 
 # Handler for running arbitrary command-line commands
 def run_cmd(
@@ -164,7 +164,7 @@ def run_cmd(
         debug=False,
         scanners=[],
         dry_run=False,
-        output_style=rmc_flags.OutputStyle.DEFAULT
+        output_style=kani_flags.OutputStyle.DEFAULT
 ):
     # If this a dry run, we emulate running a successful process whose output is the command itself
     # We set `output_to` to `stdout` so that the output is not omitted below
@@ -185,7 +185,7 @@ def run_cmd(
 
     # Print status
     if label is not None:
-        print_rmc_step_status(label, process, verbose)
+        print_kani_step_status(label, process, verbose)
 
     stdout = process.stdout
     for scanner in scanners:
@@ -195,7 +195,7 @@ def run_cmd(
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
         # By Default, the flag passed is the old output style
-        if (output_style != rmc_flags.OutputStyle.OLD):
+        if (output_style != kani_flags.OutputStyle.OLD):
             try:
                 cbmc_json_parser.transform_cbmc_output(stdout, output_style)
             except BaseException:
@@ -212,19 +212,19 @@ def run_cmd(
 
 
 def compiler_flags(mangler, symbol_table_passes, restrict_vtable):
-    rmc_flags = ["--goto-c"]
+    kani_flags = ["--goto-c"]
     if symbol_table_passes:
-        rmc_flags.append(f"--symbol-table-passes={','.join(symbol_table_passes)}")
+        kani_flags.append(f"--symbol-table-passes={','.join(symbol_table_passes)}")
 
     if restrict_vtable:
-        rmc_flags.append("--restrict-vtable-fn-ptrs")
+        kani_flags.append("--restrict-vtable-fn-ptrs")
 
     rustc_flags = ["-Z", f"symbol-mangling-version={mangler}"]
 
     if "RUSTFLAGS" in os.environ:
         rustc_flags += os.environ["RUSTFLAGS"].split(" ")
 
-    return rmc_flags + rustc_flags
+    return kani_flags + rustc_flags
 
 # Generates a symbol table from a rust file
 def compile_single_rust_file(
@@ -236,9 +236,9 @@ def compile_single_rust_file(
     if not extra_args.keep_temps:
         atexit.register(delete_file, output_filename)
         atexit.register(delete_file, base + ".type_map.json")
-        atexit.register(delete_file, base + ".rmc-metadata.json")
+        atexit.register(delete_file, base + ".kani-metadata.json")
 
-    build_cmd = [RMC_RUSTC_EXE] + compiler_flags(extra_args.mangler, symbol_table_passes,
+    build_cmd = [KANI_RUSTC_EXE] + compiler_flags(extra_args.mangler, symbol_table_passes,
                                                  extra_args.restrict_vtable)
 
     if extra_args.use_abs:
@@ -253,7 +253,7 @@ def compile_single_rust_file(
 
     build_env = os.environ
     if extra_args.debug:
-        add_rmc_rustc_debug_to_env(build_env)
+        add_kani_rustc_debug_to_env(build_env)
 
     return run_cmd(
         build_cmd,
@@ -278,14 +278,14 @@ def cargo_build(
     if extra_args.build_target:
         build_cmd += ["--target", str(extra_args.build_target)]
     build_env = os.environ
-    # rmc-compiler expects the rmc flags to precede rustc flags but cargo is unpredictable. Use this to allow us to
+    # kani-compiler expects the kani flags to precede rustc flags but cargo is unpredictable. Use this to allow us to
     # separate them programmatically.
-    build_env.update({"RUSTFLAGS": "--rmc-flags",
-                      "RMCFLAGS": " ".join(rustflags),
-                      "RUSTC": RMC_RUSTC_EXE
+    build_env.update({"RUSTFLAGS": "--kani-flags",
+                      "KaniFLAGS": " ".join(rustflags),
+                      "RUSTC": KANI_RUSTC_EXE
                       })
     if extra_args.debug:
-        add_rmc_rustc_debug_to_env(build_env)
+        add_kani_rustc_debug_to_env(build_env)
     if extra_args.verbose:
         build_cmd.append("-v")
     if extra_args.dry_run:
@@ -296,10 +296,10 @@ def cargo_build(
         raise Exception("Failed to run command: {}".format(" ".join(build_cmd)))
 
 
-# Adds information about unwinding to the RMC output
+# Adds information about unwinding to the Kani output
 def append_unwind_tip(text):
-    unwind_tip = ("[RMC] info: Verification output shows one or more unwinding failures.\n"
-                  "[RMC] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n")
+    unwind_tip = ("[Kani] info: Verification output shows one or more unwinding failures.\n"
+                  "[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n")
     return text + unwind_tip
 
 # Generates a goto program from a symbol table
@@ -332,7 +332,7 @@ def run_cbmc(
         verbose=False,
         quiet=False,
         dry_run=False,
-        output_style=rmc_flags.OutputStyle.DEFAULT):
+        output_style=kani_flags.OutputStyle.DEFAULT):
     cbmc_cmd = ["cbmc"] + cbmc_args + [cbmc_filename]
     scanners = []
     if "--unwinding-assertions" in cbmc_args:
@@ -371,9 +371,9 @@ def run_visualize(
         for filename in [results_filename, coverage_filename, property_filename]:
             atexit.register(delete_file, filename)
 
-    # 1) cbmc --xml-ui --trace ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > results.xml
-    # 2) cbmc --xml-ui --cover location ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > coverage.xml
-    # 3) cbmc --xml-ui --show-properties ~/rmc/library/rmc/rmc_lib.c <cbmc_filename> > property.xml
+    # 1) cbmc --xml-ui --trace ~/kani/library/kani/kani_lib.c <cbmc_filename> > results.xml
+    # 2) cbmc --xml-ui --cover location ~/kani/library/kani/kani_lib.c <cbmc_filename> > coverage.xml
+    # 3) cbmc --xml-ui --show-properties ~/kani/library/kani/kani_lib.c <cbmc_filename> > property.xml
     # 4) cbmc-viewer --result results.xml --coverage coverage.xml
     #                --property property.xml --srcdir .
     #                --goto <cbmc_filename> --reportdir report
@@ -432,10 +432,10 @@ def run_goto_instrument(
 # Processes vtable restrictions to the format CBMC expects
 # TODO: once restrictions are on by default, we should build release ahead of time
 def process_vtable_restrictions(restrictions_filename, verbose=False, dry_run=False):
-    cmd = ["cargo", "run", "--release", "--manifest-path", "src/tools/rmc-link-restrictions/Cargo.toml"]
+    cmd = ["cargo", "run", "--release", "--manifest-path", "src/tools/kani-link-restrictions/Cargo.toml"]
     outname = os.path.join(os.path.dirname(os.path.abspath(restrictions_filename)), "linked-restrictions.json")
     cmd += ["--", restrictions_filename, outname]
-    if (run_cmd(cmd, label="rmc-link-restrictions", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS):
+    if (run_cmd(cmd, label="kani-link-restrictions", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS):
         raise Exception("Failed to run command: {}".format(" ".join(cmd)))
     return outname
 

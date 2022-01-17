@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-flags: --no-overflow-checks
+// kani-flags: --no-overflow-checks
 
 // We use `--no-overflow-checks` in this test to avoid getting
 // a verification failure:
@@ -21,7 +21,7 @@ fn main() {
     make_true(&mut z);
     assert!(z);
 
-    let mut a: f32 = rmc::any();
+    let mut a: f32 = kani::any();
     let b = a;
     div_by_two(&mut a);
     //       NaN

@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a bug report for RMC
+about: Create a bug report for Kani
 labels: bug
 ---
 <!--
@@ -29,12 +29,12 @@ using the following command line invocation:
 <command>
 ```
 
-with RMC version:
+with Kani version:
 
 I expected to see this happen: *explanation*
 
 <!--
-If RMC crashed, please include a backtrace in the code block by setting
-`RUST_BACKTRACE=1` in your environment. E.g. `RUST_BACKTRACE=1 rmc ...`
+If Kani crashed, please include a backtrace in the code block by setting
+`RUST_BACKTRACE=1` in your environment. E.g. `RUST_BACKTRACE=1 kani ...`
 -->
 Instead, this happened: *explanation*

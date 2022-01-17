@@ -9,5 +9,5 @@ edition = "2018"
 
 [workspace]
 
-[rmc.flags.linking]
+[kani.flags.linking]
 c-lib = ["src/helper.c"]

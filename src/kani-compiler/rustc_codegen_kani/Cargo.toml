@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "rustc_codegen_rmc"
+name = "rustc_codegen_kani"
 version = "0.0.0"
 edition = "2018"
 
@@ -21,7 +21,7 @@ serde = "1"
 serde_json = "1"
 snap = "1"
 tracing = "0.1"
-rmc_queries = { path = "../rmc_queries" }
-rmc_restrictions = { path = "../../../library/rmc_restrictions" }
+kani_queries = { path = "../kani_queries" }
+kani_restrictions = { path = "../../../library/kani_restrictions" }
 rustc-demangle = "0.1.21"
 smallvec = { version = "1.6.1", features = ["union", "may_dangle"] }

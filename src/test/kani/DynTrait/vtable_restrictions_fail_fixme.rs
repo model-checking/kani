@@ -5,8 +5,8 @@
 
 // FIXME until the corresponding CBMC path lands: https://github.com/diffblue/cbmc/pull/6376
 
-// rmc-expect-fail
-// rmc-flags: --restrict-vtable
+// kani-expect-fail
+// kani-flags: --restrict-vtable
 
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
@@ -56,7 +56,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 }
 
 pub fn main() {
-    let random_number = rmc::nondet();
+    let random_number = kani::nondet();
     let animal = random_animal(random_number);
     let s = animal.noise();
     if random_number < 5 {

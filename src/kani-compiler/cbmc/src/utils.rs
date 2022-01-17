@@ -5,7 +5,7 @@
 use crate::InternedString;
 use num::bigint::BigInt;
 
-/// RMC bug report URL, for asserts/errors
+/// Kani bug report URL, for asserts/errors
 pub const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/rmc/issues/new?template=bug_report.md";
 

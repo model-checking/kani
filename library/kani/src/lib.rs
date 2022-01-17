@@ -18,8 +18,8 @@ pub use invariant::Invariant;
 /// The code snippet below should never panic.
 ///
 /// ```rust
-/// let i : i32 = rmc::any();
-/// rmc::assume(i > 10);
+/// let i : i32 = kani::any();
+/// kani::assume(i > 10);
 /// if i < 0 {
 ///   panic!("This will never panic");
 /// }
@@ -28,12 +28,12 @@ pub use invariant::Invariant;
 /// The following code may panic though:
 ///
 /// ```rust
-/// let i : i32 = rmc::any();
+/// let i : i32 = kani::any();
 /// assert!(i < 0, "This may panic and verification should fail.");
-/// rmc::assume(i > 10);
+/// kani::assume(i > 10);
 /// ```
 #[inline(never)]
-#[rustc_diagnostic_item = "RmcAssume"]
+#[rustc_diagnostic_item = "KaniAssume"]
 pub fn assume(_cond: bool) {}
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
@@ -45,7 +45,7 @@ pub fn assume(_cond: bool) {}
 /// under all possible `NonZeroU8` input values, i.e., all possible `u8` values except zero.
 ///
 /// ```rust
-/// let inputA = rmc::any::<std::num::NonZeroU8>();
+/// let inputA = kani::any::<std::num::NonZeroU8>();
 /// fn_under_verification(inputA);
 /// ```
 ///
@@ -65,7 +65,7 @@ pub fn any<T: Arbitrary>() -> T {
 /// under all possible values of char, including invalid ones that are greater than char::MAX.
 ///
 /// ```rust
-/// let inputA = unsafe { rmc::any_raw::<char>() };
+/// let inputA = unsafe { kani::any_raw::<char>() };
 /// fn_under_verification(inputA);
 /// ```
 ///
@@ -76,17 +76,17 @@ pub fn any<T: Arbitrary>() -> T {
 /// the type invariant as well as any other constraint relevant to their usage. E.g.:
 ///
 /// ```rust
-/// let c = unsafe { rmc::any_raw::char() };
-/// rmc::assume(char::from_u32(c as u32).is_ok());
+/// let c = unsafe { kani::any_raw::char() };
+/// kani::assume(char::from_u32(c as u32).is_ok());
 /// ```
 ///
-#[rustc_diagnostic_item = "RmcAnyRaw"]
+#[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
 pub unsafe fn any_raw<T>() -> T {
-    unimplemented!("RMC any_raw")
+    unimplemented!("Kani any_raw")
 }
 
-/// This function has been split into a safe and unsafe functions: `rmc::any` and `rmc::any_raw`.
+/// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
 #[deprecated]
 #[inline(never)]
 pub fn nondet<T: Arbitrary>() -> T {
@@ -95,8 +95,8 @@ pub fn nondet<T: Arbitrary>() -> T {
 
 /// Function used in tests for cases where the condition is not always true.
 #[inline(never)]
-#[rustc_diagnostic_item = "RmcExpectFail"]
+#[rustc_diagnostic_item = "KaniExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &str) {}
 
-/// RMC proc macros must be in a separate crate
-pub use rmc_macros::*;
+/// Kani proc macros must be in a separate crate
+pub use kani_macros::*;

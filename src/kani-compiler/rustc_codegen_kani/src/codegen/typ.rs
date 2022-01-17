@@ -424,7 +424,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
         // Crate resolution: mangled names need to be distinct across different versions
-        // of the same crate that could be pulled in by dependencies. However, RMC's
+        // of the same crate that could be pulled in by dependencies. However, Kani's
         // treatment of FFI C calls asssumes that we generate the same name for structs
         // as the C name, so don't mangle in that case.
         // TODO: this is likely insufficient if a dependent crate has two versions of
@@ -719,7 +719,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Fn::call is not a closure, because dynamically, the pointer may be to
     /// a function definition instead. We still need to untuple in this case,
     /// so we follow the example elsewhere in Rust to use the ABI call type.
-    /// See `make_call_args` in rmc/compiler/rustc_mir/src/transform/inline.rs
+    /// See `make_call_args` in kani/compiler/rustc_mir/src/transform/inline.rs
     pub fn ty_needs_closure_untupled(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
             ty::FnDef(..) | ty::FnPtr(..) => ty.fn_sig(self.tcx).abi() == Abi::RustCall,

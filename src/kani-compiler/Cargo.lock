@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "rmc-compiler"
+name = "kani-compiler"
 version = "0.1.0"

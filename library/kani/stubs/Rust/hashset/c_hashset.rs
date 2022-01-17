@@ -38,7 +38,7 @@
 // In theory, this can also be implemented purely in Rust. We chose to implement
 // using the C-FFI to leverage CBMC constructs.
 //
-// But it important to note here that RMC currently does not support unbounded
+// But it important to note here that Kani currently does not support unbounded
 // structures and arrays;
 // Tracking issue: https://github.com/model-checking/rmc/issues/311
 #[repr(C)]

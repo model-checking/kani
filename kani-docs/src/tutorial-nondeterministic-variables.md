@@ -1,7 +1,7 @@
 # Nondeterministic variables
 
-RMC is able to reason about programs and their execution paths by allowing users to assign nondeterministic (i.e., symbolic) values to  certain variables.
-Since RMC is a bit-level model checker, this means that RMC considers that an unconstrained nondeterministic value represents all the possible bit-value combinations assigned to the variable's memory contents.
+Kani is able to reason about programs and their execution paths by allowing users to assign nondeterministic (i.e., symbolic) values to  certain variables.
+Since Kani is a bit-level model checker, this means that Kani considers that an unconstrained nondeterministic value represents all the possible bit-value combinations assigned to the variable's memory contents.
 
 As a Rust developer, this sounds a lot like the `mem::transmute` operation, which is highly `unsafe`.
 And that's correct.
@@ -23,41 +23,41 @@ Now we would like to verify that no matter which combination of `id` and `quanti
 {{#include tutorial/arbitrary-variables/src/inventory.rs:safe_update}}
 ```
 
-In this harness, we use`rmc::any()` to generate `ProductId` and the new quantity.
-`rmc::any()` is a **safe** API function, and it represents only valid values.
+In this harness, we use`kani::any()` to generate `ProductId` and the new quantity.
+`kani::any()` is a **safe** API function, and it represents only valid values.
 
-If we run this example, RMC verification will succeed, including the assertion that shows that the underlying `u32` variable  used to represent `NonZeroU32` cannot be zero, per its type invariant:
+If we run this example, Kani verification will succeed, including the assertion that shows that the underlying `u32` variable  used to represent `NonZeroU32` cannot be zero, per its type invariant:
 
 You can try it out by running the example under
-[arbitrary-variables directory](https://github.com/model-checking/rmc/tree/main/rmc-docs/src/tutorial/arbitrary-variables/):
+[arbitrary-variables directory](https://github.com/model-checking/rmc/tree/main/kani-docs/src/tutorial/arbitrary-variables/):
 
 ```
-cargo rmc --function safe_update
+cargo kani --function safe_update
 ```
 
 ## Unsafe nondeterministic variables
 
-RMC also includes an **unsafe** method to generate unconstrained nondeterministic variables which do not take type invariants into consideration.
+Kani also includes an **unsafe** method to generate unconstrained nondeterministic variables which do not take type invariants into consideration.
 As any unsafe method in rust, users must be careful when using unsafe methods and ensure the right guardrails are put in place to avoid undesirable behavior.
 
 That said, there may be cases where you want to verify your code taking into consideration that some inputs may contain invalid data.
 
-Let's see what happens if we modify our verification harness to use the unsafe method `rmc::any_raw()` to generate the updated value.
+Let's see what happens if we modify our verification harness to use the unsafe method `kani::any_raw()` to generate the updated value.
 
 ```rust
 {{#include tutorial/arbitrary-variables/src/inventory.rs:unsafe_update}}
 ```
 
 We commented out the assertion that the underlying `u32` variable cannot be `0`, since this no longer holds.
-The RMC verification will now fail showing that `inventory.get(&id).unwrap()` method call can panic.
+The Kani verification will now fail showing that `inventory.get(&id).unwrap()` method call can panic.
 
 This is an interesting issue that emerges from how `rustc` optimizes the memory layout of `Option<NonZeroU32>`.
 The compiler is able to represent `Option<NonZeroU32>` using `32` bits by using the value `0` to represent `None`.
 
-You can try it out by running the example under [arbitrary-variables directory](https://github.com/model-checking/rmc/tree/main/rmc-docs/src/tutorial/arbitrary-variables/):
+You can try it out by running the example under [arbitrary-variables directory](https://github.com/model-checking/rmc/tree/main/kani-docs/src/tutorial/arbitrary-variables/):
 
 ```
-cargo rmc --function unsafe_update
+cargo kani --function unsafe_update
 ```
 
 ## Safe nondeterministic variables for custom types
@@ -69,7 +69,7 @@ Let's say you add the following implementation:
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_struct}}
 ```
 
-The easiest way to allow users to create nondeterministic variables of the Rating type which represents values from 0-5 stars is by implementing the `rmc::Invariant` trait.
+The easiest way to allow users to create nondeterministic variables of the Rating type which represents values from 0-5 stars is by implementing the `kani::Invariant` trait.
 
 The implementation only requires you to define a check to your structure that returns whether its current value is valid or not.
 In our case, we have the following implementation:
@@ -78,15 +78,15 @@ In our case, we have the following implementation:
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}
 ```
 
-Now you can use `rmc::any()` to create valid nondeterministic variables of the Rating type as shown in this harness:
+Now you can use `kani::any()` to create valid nondeterministic variables of the Rating type as shown in this harness:
 
 ```rust
 {{#include tutorial/arbitrary-variables/src/rating.rs:verify_rating}}
 ```
 
 You can try it out by running the example under
-[`rmc-docs/src/tutorial/arbitrary-variables`](https://github.com/model-checking/rmc/tree/main/rmc-docs/src/tutorial/arbitrary-variables/):
+[`kani-docs/src/tutorial/arbitrary-variables`](https://github.com/model-checking/rmc/tree/main/kani-docs/src/tutorial/arbitrary-variables/):
 
 ```
-cargo rmc --function check_rating
+cargo kani --function check_rating
 ```

@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "rmc-link-restrictions"
+name = "kani-link-restrictions"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rmc_restrictions = { path = "../../../library/rmc_restrictions" }
+kani_restrictions = { path = "../../../library/kani_restrictions" }
 serde = {version = "1", features = ["derive"]}
 serde_json = {version = "1"}
-cbmc = { path = "../../rmc-compiler/cbmc" }
+cbmc = { path = "../../kani-compiler/cbmc" }

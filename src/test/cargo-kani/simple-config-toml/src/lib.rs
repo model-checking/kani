@@ -11,15 +11,15 @@ mod tests {
     }
 }
 
-#[cfg(rmc)]
-mod rmc_tests {
+#[cfg(kani)]
+mod kani_tests {
     use super::*;
 
     #[allow(dead_code)]
     #[no_mangle]
     fn test_sum() {
-        let a: u64 = rmc::any();
-        let b: u64 = rmc::any();
+        let a: u64 = kani::any();
+        let b: u64 = kani::any();
         let p = Pair::new(a, b);
         assert!(p.sum() == a.wrapping_add(b));
     }

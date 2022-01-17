@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Create a feature request for RMC
+about: Create a feature request for Kani
 labels: 
 ---
 <!--
@@ -9,7 +9,7 @@ Please report security concerns to us on the
 -->
 
 <!--
-Thank you for requesting an RMC feature!
+Thank you for requesting a Kani feature!
 Please include the following information if it applies to your case:
 -->
 Requested feature:

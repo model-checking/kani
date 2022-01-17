@@ -21,7 +21,7 @@
 //           * #source_location:
 //             * file: <built-in-additions>
 //             * line: 1
-//             * working_directory: /home/ubuntu/rmc-rebase
+//             * working_directory: /home/ubuntu/kani-rebase
 //           * width: 64
 //           * #typedef: __CPROVER_size_t
 //           * #c_type: unsigned_long_int

@@ -1,13 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// This test ensures that rmc follows the correct CFG for assertion failures.
+// This test ensures that kani follows the correct CFG for assertion failures.
 // - Statements that succeeds an assertion failure should be unreachable.
 // - Cleanup statements should still be executed though.
 // - Note that failures while unwinding actually crashes the process. So drop may only be called
 //   once.
 // File: cleanup.rs
-// rmc-verify-fail
+// kani-verify-fail
 
 #[derive(PartialEq, Eq)]
 struct S {

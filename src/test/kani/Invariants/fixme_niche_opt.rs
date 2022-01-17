@@ -8,7 +8,7 @@
 ///
 /// If you run:
 /// ```
-/// RUSTFLAGS="--cfg=ok" rmc fixme_niche_opt.rs
+/// RUSTFLAGS="--cfg=ok" kani fixme_niche_opt.rs
 /// ```
 /// This test will succeed.
 ///

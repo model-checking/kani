@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! To run this test, do
-//! rmc fixme_main.rs -- lib.c
+//! kani fixme_main.rs -- lib.c
 
-// rmc-flags: --c-lib lib.c
+// kani-flags: --c-lib lib.c
 
 // TODO, we should also test packed and transparent representations
 // https://doc.rust-lang.org/reference/type-layout.html

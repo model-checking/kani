@@ -53,7 +53,7 @@ These are data of unbounded size.
 Much like needing to put bounds on loops, these can be hard to model since you needs to put bounds on their size, too.
 
 3. I/O code.
-RMC doesn't model I/O, so if you're depending on behavior like reading/writing to a file, you won't be able to prove anything.
+Kani doesn't model I/O, so if you're depending on behavior like reading/writing to a file, you won't be able to prove anything.
 This is one obvious area where testability helps provability: often we separate I/O and "pure" computation into different functions, so we can unit test the latter.
 
 4. Deeper call graphs.
@@ -72,15 +72,15 @@ A first proof will likely start in the following form:
 2. Call the function in question with these inputs.
 3. Don't (yet) assert any post-conditions.
 
-Running RMC on this simple starting point will help figure out:
+Running Kani on this simple starting point will help figure out:
 
 1. What unexpected constraints might be needed on your inputs to avoid "expected" failures.
 2. Whether you're over-constrained. Check the coverage report using `--visualize`. Ideally you'd see 100% coverage, and if not, it's usually because now you've over-constrained the inputs.
-3. Whether RMC will support all the Rust features involved.
+3. Whether Kani will support all the Rust features involved.
 4. Whether you've started with a tractable problem.
 (If the problem is initially intractable, try `--unwind 1` and see if you can follow the techniques in the previous section to put a bound on the problem.)
 
-Once you've got something working, the next step is to prove more interesting properties than what RMC covers by default.
+Once you've got something working, the next step is to prove more interesting properties than what Kani covers by default.
 You accomplish this by adding new assertions.
 These are not necessarily assertions just in your proof harness: consider also adding new assertions to the code being run.
 These count too!

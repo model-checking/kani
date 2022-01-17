@@ -9,13 +9,13 @@ edition = "2018"
 
 [workspace]
 
-[rmc.flags.loudness]
+[kani.flags.loudness]
 quiet = false
 
-[rmc.flags.artifacts.extra.suffixes]
+[kani.flags.artifacts.extra.suffixes]
 gen-c = true
 
-[rmc.flags]
+[kani.flags]
 visualize = false
 mangler = "v0"
 cbmc-args = []

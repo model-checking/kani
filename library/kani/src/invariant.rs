@@ -65,7 +65,7 @@ unsafe impl Invariant for bool {
 unsafe impl Invariant for char {
     #[inline(always)]
     fn is_valid(&self) -> bool {
-        // RMC translates char into i32.
+        // Kani translates char into i32.
         let val = *self as i32;
         val <= 0xD7FF || (val >= 0xE000 && val <= 0x10FFFF)
     }

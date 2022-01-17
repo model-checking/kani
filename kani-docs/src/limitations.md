@@ -2,7 +2,7 @@
 
 ## Rust feature support
 
-The table below tries to summarize the current support in RMC for
+The table below tries to summarize the current support in Kani for
 the Rust language features according to the [Rust Reference](https://doc.rust-lang.org/stable/reference/).
 We use the following values to indicate the level of support:
  * **Yes**: The feature is fully supported. We are not aware of any issue with it.
@@ -110,11 +110,11 @@ Reference | Feature | Support | Notes |
 
 ### Code generation for unsupported features
 
-RMC aims to be an industrial verification tool. Most industrial crates may
+Kani aims to be an industrial verification tool. Most industrial crates may
 include unsupported features in parts of their code that do not need to be
-verified. In general, this should not prevent users using RMC to verify their code.
+verified. In general, this should not prevent users using Kani to verify their code.
 
-Because of that, the general rule is that RMC generates an `assert(false)`
+Because of that, the general rule is that Kani generates an `assert(false)`
 statement followed by an `assume(false)` statement when compiling any
 unsupported feature. `assert(false)` will cause verification to fail if the
 statement is reachable during the verification stage, while `assume(false)` will
@@ -125,7 +125,7 @@ features.
 
 ### Assembly
 
-RMC does not support assembly code for now. We may add it in the future but at
+Kani does not support assembly code for now. We may add it in the future but at
 present there are no plans to do so.
 
 Check out the tracking issues for [inline assembly (`asm!`
@@ -135,15 +135,15 @@ more about the current status.
 
 ### Concurrency
 
-Concurrent features are currently out of scope for RMC. In general, the
+Concurrent features are currently out of scope for Kani. In general, the
 verification of concurrent programs continues to be an open research problem
 where most tools that analyze concurrent code lack support for other features.
-Because of this, RMC emits a warning whenever it encounters concurrent code and
+Because of this, Kani emits a warning whenever it encounters concurrent code and
 compiles as if it was sequential code.
 
 ### Standard library functions
 
-At present, RMC is able to link in functions from the standard library but the
+At present, Kani is able to link in functions from the standard library but the
 generated code will not contain them unless they are generic, intrinsics,
 inlined or macros. Missing functions are treated in a similar way to unsupported
 features (i.e., replacing the function body with an `assert(false)` statement).
@@ -186,7 +186,7 @@ Rust has two different strategies when a panic occurs:
     each function it encounters.
  2. Abortion: Immediately ends the program without cleaning up.
 
-Currently, RMC does not support stack unwinding. This has some implications
+Currently, Kani does not support stack unwinding. This has some implications
 regarding memory safety since programs sometimes rely on the unwinding logic to
 ensure there is no resource leak or persistent data inconsistency. Check out
 [this issue](https://github.com/model-checking/rmc/issues/692) for updates on
@@ -199,7 +199,7 @@ related to [advanced features](#advanced-features).
 
 ### Intrinsics
 
-The table below tries to summarize the current support in RMC for Rust
+The table below tries to summarize the current support in Kani for Rust
 intrinsics.
 
 In general, code generation for unsupported intrinsics follows the rule
@@ -420,13 +420,13 @@ write_bytes | Yes | |
 #### Atomics
 
 All atomic intrinsics are compiled as an atomic block where the operation is
-performed. But as noted in [Notes - Concurrency](#concurrency), RMC support for
+performed. But as noted in [Notes - Concurrency](#concurrency), Kani support for
 concurrent verification is limited and not used by default. Verification on code
-containing atomic intrinsics should not be trusted given that RMC assumes the
+containing atomic intrinsics should not be trusted given that Kani assumes the
 code to be sequential.
 
 #### SIMD instructions
 
-While RMC is capable of generating code for SIMD instructions, unfortunately, it
+While Kani is capable of generating code for SIMD instructions, unfortunately, it
 does not provide support for the verification of some operations like vector
 comparison (e.g., `simd_eq`).

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 pub mod final_form;
 
@@ -49,11 +49,11 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-// ANCHOR: rmc
-#[cfg(rmc)]
+// ANCHOR: kani
+#[cfg(kani)]
 #[no_mangle]
 fn main() {
-    let x: u32 = rmc::any();
+    let x: u32 = kani::any();
     estimate_size(x);
 }
-// ANCHOR_END: rmc
+// ANCHOR_END: kani

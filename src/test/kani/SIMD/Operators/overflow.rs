@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// rmc-verify-fail
+// kani-verify-fail
 //
-// This test ensures that overflow in SIMD operations are detected by RMC.
+// This test ensures that overflow in SIMD operations are detected by Kani.
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]

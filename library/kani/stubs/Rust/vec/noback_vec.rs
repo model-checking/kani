@@ -206,7 +206,7 @@ impl<T> IntoIterator for Vec<T> {
     }
 }
 
-// Here, we define the rmc_vec! macro which behaves similar to the vec! macro
+// Here, we define the kani_vec! macro which behaves similar to the vec! macro
 // found in the std prelude. If we try to override the vec! macro, we get error:
 //
 //     = note: `vec` could refer to a macro from prelude
@@ -215,7 +215,7 @@ impl<T> IntoIterator for Vec<T> {
 // Relevant Zulip stream:
 // https://rust-lang.zulipchat.com/#narrow/stream/122651-general/topic/Override.20prelude.20macro
 //
-// The workaround for now is to define a new macro. rmc_vec! will initialize a new
+// The workaround for now is to define a new macro. kani_vec! will initialize a new
 // Vec based on its definition in this file. We support two types of initialization
 // expressions:
 //
@@ -223,7 +223,7 @@ impl<T> IntoIterator for Vec<T> {
 // [ elem1, elem2, ...] - initialize a Vector with elements elem1, elem2...
 #[cfg(abs_type = "no-back")]
 #[macro_export]
-macro_rules! rmc_vec {
+macro_rules! kani_vec {
   ( $val:expr ; $count:expr ) =>
     ({
       let mut result = Vec::new();

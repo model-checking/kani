@@ -103,7 +103,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
 
-            self.handle_rmctool_attributes();
+            self.handle_kanitool_attributes();
         }
         self.reset_current_fn();
     }
@@ -245,20 +245,20 @@ impl<'tcx> GotocCtx<'tcx> {
     /// attributes.
     ///
     /// Currently, this is only proof harness annotations.
-    /// i.e. `#[rmc::proof]` (which rmc_macros translates to `#[rmctool::proof]` for us to handle here)
-    fn handle_rmctool_attributes(&mut self) {
+    /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
+    fn handle_kanitool_attributes(&mut self) {
         let instance = self.current_fn().instance();
 
         for attr in self.tcx.get_attrs(instance.def_id()) {
-            match rmctool_attr_name(attr).as_deref() {
-                Some("proof") => self.handle_rmctool_proof(),
+            match kanitool_attr_name(attr).as_deref() {
+                Some("proof") => self.handle_kanitool_proof(),
                 _ => {}
             }
         }
     }
 
     /// Update `self` (the goto context) to add the current function as a listed proof harness
-    fn handle_rmctool_proof(&mut self) {
+    fn handle_kanitool_proof(&mut self) {
         let current_fn = self.current_fn();
         let pretty_name = current_fn.readable_name().to_owned();
         let mangled_name = current_fn.name();
@@ -275,11 +275,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-/// If the attribute is named `rmctool::name`, this extracts `name`
-fn rmctool_attr_name(attr: &ast::Attribute) -> Option<String> {
+/// If the attribute is named `kanitool::name`, this extracts `name`
+fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     match &attr.kind {
         ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
-            if segments.len() == 2 && segments[0].ident.as_str() == "rmctool" =>
+            if segments.len() == 2 && segments[0].ident.as_str() == "kanitool" =>
         {
             Some(segments[1].ident.as_str().to_string())
         }

@@ -26,14 +26,14 @@ enum Random {
 
 macro_rules! check_enum {
     ( $fn_name:ident, $repr:ty, $enum_type:ident, $v1:literal, $v2:literal, $v3:literal ) => {
-        unsafe impl rmc::Invariant for $enum_type {
+        unsafe impl kani::Invariant for $enum_type {
             fn is_valid(&self) -> bool {
                 matches!(*self, $enum_type::Variant1 | $enum_type::Variant2 | $enum_type::Variant3)
             }
         }
 
         fn $fn_name() {
-            let e = rmc::any::<$enum_type>();
+            let e = kani::any::<$enum_type>();
             match e {
                 $enum_type::Variant1 => {
                     let val = e as $repr;

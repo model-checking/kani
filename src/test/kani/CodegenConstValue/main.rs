@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-flags: --no-memory-safety-checks
+// kani-flags: --no-memory-safety-checks
 
 // We use `--no-memory-safety-checks` in this test to avoid getting
 // a verification failure:

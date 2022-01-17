@@ -2,7 +2,7 @@
 
 The [book runner](./bookrunner/index.html) is a testing tool based on [Litani](https://github.com/awslabs/aws-build-accumulator).
 
-The purpose of the book runner is to get data about feature coverage in RMC.
+The purpose of the book runner is to get data about feature coverage in Kani.
 To this end, we use Rust code snippet examples from the following general Rust documentation books:
  * The Rust Reference
  * The Rustonomicon
@@ -14,7 +14,7 @@ For instance, some of them are only included to show what is valid Rust code (or
 
 Because of that, we run up to three different types of jobs when generating the report:
  * `check` jobs: This check uses the Rust front-end to detect if the example is valid Rust code.
- * `codegen` jobs: This check uses the RMC back-end to determine if we can generate GotoC code.
+ * `codegen` jobs: This check uses the Kani back-end to determine if we can generate GotoC code.
  * `verification` jobs: This check uses CBMC to obtain a verification result.
 
 Note that these are incremental: A `verification` job depends on a previous `codegen` job.
@@ -29,15 +29,15 @@ Similary, a `codegen` job depends on a `check` job.
 
 Before running the above mentioned jobs, we pre-process the examples to:
  1. Set the expected output according to flags present in the code snippet.
- 2. Add any required compiler/RMC flags (e.g., CBMC unwinding flags).
+ 2. Add any required compiler/Kani flags (e.g., CBMC unwinding flags).
 
 Finally, we run all jobs, collect their outputs and compare them against the expected outputs.
 The results are summarized as follows: If the obtained and expected outputs differ,
 the color of the stage bar will be red. Otherwise, it will be blue.
-If an example shows one red bar, it is considered a failed example that cannot be handled by RMC.
+If an example shows one red bar, it is considered a failed example that cannot be handled by Kani.
 
 The [book runner report](./bookrunner/index.html) and [its text version](./bookrunner/bookrunner.txt) are
-automatically updated whenever a PR gets merged into RMC.
+automatically updated whenever a PR gets merged into Kani.
 
 ## The book running procedure
 

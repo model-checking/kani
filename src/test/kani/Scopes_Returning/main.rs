@@ -18,7 +18,7 @@ fn main() {
     };
     assert!(c == 10);
 
-    let d: u32 = rmc::any();
+    let d: u32 = kani::any();
     let e = {
         let f: u32;
 
@@ -32,7 +32,7 @@ fn main() {
     };
     assert!(e == d || e == 10);
 
-    let g: u32 = rmc::any();
+    let g: u32 = kani::any();
     let h = {
         if g < 10 { g } else { 10 }
     };

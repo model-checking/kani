@@ -134,8 +134,8 @@ class OutputStyle(str, Enum):
     """
     Index for the various display and output styles
 
-    Allows user to pass flags and for rmc to change the UI based on the
-    flag that is passed. Ex - rmc test.rs --output-format new
+    Allows user to pass flags and for kani to change the UI based on the
+    flag that is passed. Ex - kani test.rs --output-format new
     """
     DEFAULT = 'old'
     REGULAR = 'regular'
@@ -159,7 +159,7 @@ def add_loudness_flags(make_group, add_flag, config):
 # Add flags which specify configurations for the proof.
 def add_linking_flags(make_group, add_flag, config):
     group = make_group("Linking flags",
-                       "Provide information about how to link the prover for RMC.")
+                       "Provide information about how to link the prover for Kani.")
     add_flag(group, "--c-lib", type=pl.Path, nargs="*", default=[],
              action=ExtendAction,
              help="Link external C files referenced by Rust code")
@@ -176,7 +176,7 @@ def add_artifact_flags(make_group, add_flag, config):
         "This is a bug; please report this to https://github.com/model-checking/rmc/issues."
 
     group = make_group(
-        "Artifact flags", "Produce artifacts in addition to a basic RMC report.")
+        "Artifact flags", "Produce artifacts in addition to a basic Kani report.")
     add_flag(group, "--gen-c", default=False, action=BooleanOptionalAction,
              help="Generate C file equivalent to inputted program")
     add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
@@ -186,7 +186,7 @@ def add_artifact_flags(make_group, add_flag, config):
     add_flag(group, "--gen-symbols", default=False, action=BooleanOptionalAction,
              help="Generate a goto symbol table")
     add_flag(group, "--keep-temps", default=False, action=BooleanOptionalAction,
-             help="Keep temporary files generated throughout RMC process")
+             help="Keep temporary files generated throughout Kani process")
     add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
              help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
@@ -210,7 +210,7 @@ def add_common_flags(make_group, add_flag, config):
     # since the flag may have been set via `--cbmc-args`. Here, we print the
     # default values here but we set them later using `process_common_cbmc_flags`
     default_unwind_value = DEFAULT_UNWIND_VALUE if DEFAULT_UNWIND_VALUE else "None"
-    group = make_group("Common flags", "Common CBMC flags handled by RMC.")
+    group = make_group("Common flags", "Common CBMC flags handled by Kani.")
     add_flag(group, "--object-bits", type=str,
              help="Specify the number of bits used for representing object IDs in CBMC"
                   " (default: " + DEFAULT_OBJECT_BITS_VALUE + ")")
@@ -224,7 +224,7 @@ def add_common_flags(make_group, add_flag, config):
 def add_visualizer_flags(make_group, add_flag, config):
     group = make_group(
         "Visualizer flags",
-        "Generate an HTML-based UI for the generated RMC report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
+        "Generate an HTML-based UI for the generated Kani report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
     add_flag(group, "--srcdir", type=pl.Path, default=".",
              help="The source directory: the root of the source tree")
     add_flag(group, "--visualize", default=False, action=BooleanOptionalAction,
@@ -232,7 +232,7 @@ def add_visualizer_flags(make_group, add_flag, config):
     add_flag(group, "--wkdir", type=pl.Path, default=".",
              help="""
                   The working directory: used to determine source locations in output;
-                  this is generally the location from which rmc is currently being invoked
+                  this is generally the location from which kani is currently being invoked
                   """)
 
 # Add flags needed for toggling and switching between outputs.
@@ -258,19 +258,19 @@ def add_other_flags(make_group, add_flag, config):
 # Add flags we don't expect end-users to use.
 def add_developer_flags(make_group, add_flag, config):
     group = make_group(
-        "Developer flags", "These are generally meant for use by RMC developers, and are not stable.")
+        "Developer flags", "These are generally meant for use by Kani developers, and are not stable.")
     add_flag(group, "--cbmc-args", nargs=argparse.REMAINDER, default=[],
              help="Pass through directly to CBMC; must be the last flag")
     add_flag(group, "--mangler", default="v0", choices=["v0", "legacy"],
              help="Change what mangler is used by the Rust compiler")
     add_flag(group, "--use-abs", default=False, action=BooleanOptionalAction,
              help="Use abstractions for the standard library")
-    add_flag(group, "--abs-type", default="std", choices=["std", "rmc", "c-ffi", "no-back"],
+    add_flag(group, "--abs-type", default="std", choices=["std", "kani", "c-ffi", "no-back"],
              help="Choose abstraction for modules of standard library if available")
     add_flag(group, "--restrict-vtable", default=False, action=BooleanOptionalAction,
              help="Restrict the targets of virtual table function pointer calls")
 
-# Adds the flags common to both rmc and cargo-rmc.
+# Adds the flags common to both kani and cargo-kani.
 # Allows you to specify flags/groups of flags to not add.
 # This does not return the parser, but mutates the one provided.
 def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):

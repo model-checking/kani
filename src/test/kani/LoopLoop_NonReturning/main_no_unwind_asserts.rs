@@ -1,12 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-flags: --no-default-checks
+// kani-flags: --no-default-checks
 // cbmc-flags: --unwind 9
 
-// This example tests the RMC flag `--no-default-checks`
+// This example tests the Kani flag `--no-default-checks`
 //
-// It is the same as `main.rs` except for the flags passed to RMC and CBMC
+// It is the same as `main.rs` except for the flags passed to Kani and CBMC
 // Running it with `--unwind 10` is not enough to unwind the loop
 // and generates this verification output:
 //
@@ -22,7 +22,7 @@
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
 fn main() {
-    let mut a: u32 = rmc::any();
+    let mut a: u32 = kani::any();
 
     if a < 1024 {
         loop {

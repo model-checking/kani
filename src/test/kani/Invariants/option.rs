@@ -3,22 +3,22 @@
 //
 // Check that the Invariant implementation for Option respect underlying types invariant.
 
-extern crate rmc;
+extern crate kani;
 
-use rmc::Invariant;
+use kani::Invariant;
 
 struct MyType {
     pub val: char,
 }
 
-unsafe impl rmc::Invariant for MyType {
+unsafe impl kani::Invariant for MyType {
     fn is_valid(&self) -> bool {
         self.val.is_valid()
     }
 }
 
 fn main() {
-    let option: Option<MyType> = rmc::any();
+    let option: Option<MyType> = kani::any();
     match option {
         Some(v) => assert!(v.is_valid() && v.val <= char::MAX),
         None => (),

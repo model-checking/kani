@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 // ANCHOR: code
 /// Wrap "too-large" indexes back into a valid range for the array
@@ -30,14 +30,14 @@ mod tests {
     // ANCHOR_END: proptest
 }
 
-// ANCHOR: rmc
-#[cfg(rmc)]
-#[rmc::proof]
+// ANCHOR: kani
+#[cfg(kani)]
+#[kani::proof]
 fn bound_check() {
-    let size: usize = rmc::any();
-    rmc::assume(size < 4096);
-    let index: usize = rmc::any();
+    let size: usize = kani::any();
+    kani::assume(size < 4096);
+    let index: usize = kani::any();
     let array: Vec<u32> = vec![0; size];
     get_wrapped(index, &array);
 }
-// ANCHOR_END: rmc
+// ANCHOR_END: kani

@@ -14,7 +14,7 @@ Property testing is often quite effective, but the engine can't fully prove the 
 
 **Model checking** is similar to these techniques in how you use them, but model checking is non-random and exhaustive (though often only up to some bound on input or problem size).
 Thus, properties checked with a model checker are effectively proofs.
-Instead of naively trying all possible _concrete_ inputs (which could be infeasible and blow up exponentially), model checkers like RMC will cleverly encode program traces as _symbolic_ "[SAT](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem)/[SMT](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories)" problems, and hand them off to SAT/SMT solvers.
+Instead of naively trying all possible _concrete_ inputs (which could be infeasible and blow up exponentially), model checkers like Kani will cleverly encode program traces as _symbolic_ "[SAT](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem)/[SMT](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories)" problems, and hand them off to SAT/SMT solvers.
 Again, SAT/SMT solving is an [NP-complete](https://en.wikipedia.org/wiki/NP-completeness) problem, but most practical programs can be model checked within milliseconds to seconds (with notable exceptions: you can easily try to reverse a cryptographic hash with a model checker, but good luck getting it to terminate!)
 
 Model checking allows you to prove non-trivial properties about programs, and check those proofs in roughly the same amount of time as a traditional test suite would take to run.

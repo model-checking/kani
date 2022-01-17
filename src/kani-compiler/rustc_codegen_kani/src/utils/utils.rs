@@ -17,10 +17,10 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    /// RMC does not currently support all MIR constructs.
+    /// Kani does not currently support all MIR constructs.
     /// When we hit a construct we don't handle, we have two choices:
     /// We can use the `unimplemented!()` macro, which causes a compile time failure.
-    /// Or, we can use this function, which inserts an `assert(false, "FOO is not currently supported by RMC")` into the generated code.
+    /// Or, we can use this function, which inserts an `assert(false, "FOO is not currently supported by Kani")` into the generated code.
     /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
     /// If it is not used, we the assertion will pass.
     /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
@@ -49,7 +49,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
-        let mut s = format!("{} is not currently supported by RMC", item);
+        let mut s = format!("{} is not currently supported by Kani", item);
         if url.is_some() {
             s.push_str(". Please post your example at ");
             s.push_str(url.unwrap());
@@ -63,7 +63,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// WARNING: This is based on a manual inspection of how boxed types are currently
     /// a) implemented by the rust standard library
-    /// b) codegenned by RMC.
+    /// b) codegenned by Kani.
     /// If either of those change, this will almost certainly stop working.
     pub fn deref_box(&self, e: Expr) -> Expr {
         // Internally, a Boxed type is stored as a chain of structs.
@@ -72,10 +72,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // It has a pointer of type `ptr::Unique<T>` and an allocator of type `alloc::Global`
         // Unique<T> is an owning raw pointer to a location in memory.
         // So given a Box<T>, we can follow the chain to get the desired pointer.
-        // If either rustc or RMC changes how boxed types are represented, this will need to be
+        // If either rustc or Kani changes how boxed types are represented, this will need to be
         // updated.
         //
-        // The following C code is the result of running `rmc --gen-c` on rust with boxed types:
+        // The following C code is the result of running `kani --gen-c` on rust with boxed types:
         // Given a boxed type (note that Rust can reorder fields to improve struct packing):
         // ```
         // struct std::boxed::Box<[u8]>

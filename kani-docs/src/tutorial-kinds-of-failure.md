@@ -1,14 +1,14 @@
-# Failures that RMC can spot
+# Failures that Kani can spot
 
-In the [last section](./tutorial-first-steps.md) we saw RMC spot two major kinds of failures: assertions and panics.
-If the proof harness allows some program trace that results in a panic, then RMC will report that as a failure.
+In the [last section](./tutorial-first-steps.md) we saw Kani spot two major kinds of failures: assertions and panics.
+If the proof harness allows some program trace that results in a panic, then Kani will report that as a failure.
 We additionally saw very briefly a couple of other kinds of failures, like null pointer dereferences and overflow.
-In this section, we're going to expand on these additional checks, to give you an idea of what other problems RMC will find.
+In this section, we're going to expand on these additional checks, to give you an idea of what other problems Kani will find.
 
 ## Bounds checking and pointers
 
 Rust is safe by default, and so includes dynamic (run-time) bounds checking where needed.
-Consider this Rust code (which can be found under [`rmc-docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/rmc/tree/main/rmc-docs/src/tutorial/kinds-of-failure/)):
+Consider this Rust code (which can be found under [`kani-docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/rmc/tree/main/kani-docs/src/tutorial/kinds-of-failure/)):
 
 ```rust
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:code}}
@@ -36,14 +36,14 @@ Now the error becomes invisible to this test:
 test tests::doesnt_crash ... ok
 ```
 
-But we're able to check this unsafe code with RMC:
+But we're able to check this unsafe code with Kani:
 
 ```rust
-{{#include tutorial/kinds-of-failure/src/bounds_check.rs:rmc}}
+{{#include tutorial/kinds-of-failure/src/bounds_check.rs:kani}}
 ```
 
 ```
-# rmc src/bounds_check.rs
+# kani src/bounds_check.rs
 [...]
 ** 1 of 468 failed (2 iterations)
 VERIFICATION FAILED
@@ -51,41 +51,41 @@ VERIFICATION FAILED
 
 Notice there were a *lot* of verification conditions being checked: in the above output, 468! (It may change for you.)
 This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
-RMC is inserting a lot more checks than appear as asserts in our code, so the output can be large.
+Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
 Let's narrow that output down a bit:
 
 ```
-# rmc src/bounds_check.rs | grep FAIL
+# kani src/bounds_check.rs | grep FAIL
 [get_wrapped.pointer_dereference.5] line 10 dereference failure: pointer outside object bounds in *var_5: FAILURE
 VERIFICATION FAILED
 ```
 
-Notice that, for RMC, this has gone from a simple bounds-checking problem to a pointer-checking problem.
-RMC will check operations on pointers to ensure they're not potentially invalid memory accesses.
+Notice that, for Kani, this has gone from a simple bounds-checking problem to a pointer-checking problem.
+Kani will check operations on pointers to ensure they're not potentially invalid memory accesses.
 Any unsafe code that manipulates pointers will, as we see here, raise failures if its behavior is actually unsafe. 
 
 Consider trying a few more small exercises with this example:
 
-1. Exercise: Switch back to the normal/safe indexing operation and re-try RMC. What changes compared to the unsafe operation and why?
+1. Exercise: Switch back to the normal/safe indexing operation and re-try Kani. What changes compared to the unsafe operation and why?
 (Try predicting the answer, then seeing if you got it right.)
-2. Exercise: [Remember how to get a trace from RMC?](./tutorial-first-steps.md#getting-a-trace) Find out what inputs it failed on.
-3. Exercise: Fix the error, run RMC, and see a successful verification.
-4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run RMC. It should still successfully verify.
+2. Exercise: [Remember how to get a trace from Kani?](./tutorial-first-steps.md#getting-a-trace) Find out what inputs it failed on.
+3. Exercise: Fix the error, run Kani, and see a successful verification.
+4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run Kani. It should still successfully verify.
 
 <details>
 <summary>Click to see explanation for exercise 1</summary>
 
-Having switched back to the safe indexing operation, RMC reports two failures instead of just one:
+Having switched back to the safe indexing operation, Kani reports two failures instead of just one:
 
 ```
-# rmc src/bounds_check.rs | grep FAIL
+# kani src/bounds_check.rs | grep FAIL
 [get_wrapped.assertion.3] line 9 index out of bounds: the length is move _12 but the index is _5: FAILURE
 [get_wrapped.pointer_dereference.5] line 9 dereference failure: pointer outside object bounds in a.data[var_5]: FAILURE
 VERIFICATION FAILED
 ```
 
 The first is Rust's implicit assertion for the safe indexing operation.
-The second is RMC's check to ensure the pointer operation is actually safe.
+The second is Kani's check to ensure the pointer operation is actually safe.
 This pattern (two checks for similar issues in safe Rust code) is common, and we'll see it again in the next section.
 
 </details>
@@ -93,7 +93,7 @@ This pattern (two checks for similar issues in safe Rust code) is common, and we
 <details>
 <summary>Click to see explanation for exercise 2</summary>
 
-Having run `rmc --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
+Having run `kani --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
 
 1. This trace is huge. The standard library `Vec` is involved, there's a lot going on.
 2. The top of the trace file contains some "trace navigation tips" that might be helpful in navigating the trace.
@@ -101,26 +101,26 @@ Having run `rmc --visualize` and clicked on one of the failures to see a trace, 
 
 To navigate this trace to find the information you need, we recommend searching for things you expect to be somewhere in the trace:
 
-1. Search the document for `rmc::any` or `variable_of_interest =` such as `size =`.
+1. Search the document for `kani::any` or `variable_of_interest =` such as `size =`.
 We can use this to find out what example values lead to a problem.
-In this case, where we just have a couple of `rmc::any` values in our proof harness, we can learn a lot just by seeing what these are.
+In this case, where we just have a couple of `kani::any` values in our proof harness, we can learn a lot just by seeing what these are.
 In this trace we find (and the values you get may be different):
 
 ```
 Step 23: Function bound_check, File src/bounds_check.rs, Line 43
-let size: usize = rmc::any();
+let size: usize = kani::any();
 size = 0ul
 
 Step 27: Function bound_check, File src/bounds_check.rs, Line 45
-let index: usize = rmc::any();
+let index: usize = kani::any();
 index = 0ul
 
 Step 36: Function bound_check, File src/bounds_check.rs, Line 43
-let size: usize = rmc::any();
+let size: usize = kani::any();
 size = 2464ul
 
 Step 39: Function main, File src/bounds_check.rs, Line 45
-let index: usize = rmc::any();
+let index: usize = kani::any();
 index = 2463ul
 ```
 
@@ -147,9 +147,9 @@ fn get_wrapped(i: usize, a: &[u32]) -> u32 {
 ```
 
 We've corrected the out-of-bounds access, but now we've omitted the "base case": what to return on an empty list.
-RMC will spot this not as a bound error, but as a mathematical error: on an empty list the modulus operator (`%`) will cause a division by zero.
+Kani will spot this not as a bound error, but as a mathematical error: on an empty list the modulus operator (`%`) will cause a division by zero.
 
-1. Exercise: Try to run RMC on the above, to see what this kind of failure looks like.
+1. Exercise: Try to run Kani on the above, to see what this kind of failure looks like.
 
 Rust also performs runtime safety checks for integer overflows, much like it does for bounds checks.
 Consider this code (from `src/overflow.rs`):
@@ -159,11 +159,11 @@ Consider this code (from `src/overflow.rs`):
 ```
 
 A trivial function, but if we write a property test for it, we immediately find inputs where it fails, thanks to Rust's dynamic checks.
-RMC will find these failures as well.
-Here's the output from RMC:
+Kani will find these failures as well.
+Here's the output from Kani:
 
 ```
-# rmc src/overflow.rs
+# kani src/overflow.rs
 [...]
 ** Results:
 ./src/overflow.rs function simple_addition
@@ -174,13 +174,13 @@ Here's the output from RMC:
 VERIFICATION FAILED
 ```
 
-Notice the two failures: the Rust-inserted overflow check (`simple_addition.assertion.1`) and RMC's explicit overflow check (`simple_addition.overflow.1`).
+Notice the two failures: the Rust-inserted overflow check (`simple_addition.assertion.1`) and Kani's explicit overflow check (`simple_addition.overflow.1`).
 
 > **NOTE:** You could attempt to fix this issue by using Rust's alternative mathematical functions with explicit overflow behavior.
 For instance, instead of `a + b` write `a.wrapping_add(b)`.
 >
-> However, [at the present time](https://github.com/model-checking/rmc/issues/480), while this disables the dynamic assertion that Rust inserts, it does not disable the additional RMC overflow check.
-> As a result, this currently still fails in RMC.
+> However, [at the present time](https://github.com/model-checking/rmc/issues/480), while this disables the dynamic assertion that Rust inserts, it does not disable the additional Kani overflow check.
+> As a result, this currently still fails in Kani.
 
 ### Exercise: Classic overflow failure
 
@@ -191,7 +191,7 @@ This often naively looks like this (from `src/overflow_quicksort.rs`):
 {{#include tutorial/kinds-of-failure/src/overflow_quicksort.rs:code}}
 ```
 
-RMC immediately spots the bug in the above code.
+Kani immediately spots the bug in the above code.
 
 1. Exercise: Fix this function so it no longer overflows.
 (Hint: depending on which approach you take, you may need to add the assumption that `high > low` to your proof harness.
@@ -221,20 +221,20 @@ assert!(result as u64 == (a as u64 + b as u64) / 2);
 ```
 
 Since this implementation is just the original one, but cast to a wider unsigned integer type, it should have the same result but without overflowing.
-When RMC tells us both of these methods yield the same exact result, that gives us additional confidence that we haven't overlooked something.
+When Kani tells us both of these methods yield the same exact result, that gives us additional confidence that we haven't overlooked something.
 
 </details>
 
 ## Future work
 
-RMC notably does not currently check the following:
+Kani notably does not currently check the following:
 
 1. Concurrency bugs, deadlocks, or data races.
-It's possible RMC may be extended in the future to find such issues.
+It's possible Kani may be extended in the future to find such issues.
 
 2. Rust type invariants.
 For example, it's undefined behavior in Rust to produce a value of type `bool` that isn't `0` or `1`.
-RMC will not spot this error (in presumably unsafe code), yet.
+Kani will not spot this error (in presumably unsafe code), yet.
 
 3. Fully generic functions.
 To write a proof harness and call functions, they must be fully "monomorphized."
@@ -246,8 +246,8 @@ Proof harnesses have to be written specializing type parameters (`T`) to concret
 
 In this section:
 
-1. We saw RMC spot potential bounds check errors.
-2. We saw RMC spot actually-unsafe dereferencing of a raw pointer to invalid memory.
-3. We saw RMC spot a division by zero error.
-4. We saw RMC spot overflowing addition.
+1. We saw Kani spot potential bounds check errors.
+2. We saw Kani spot actually-unsafe dereferencing of a raw pointer to invalid memory.
+3. We saw Kani spot a division by zero error.
+4. We saw Kani spot overflowing addition.
 5. As an exercise, we tried proving an assertion (finding the midpoint) that was not completely trivial.

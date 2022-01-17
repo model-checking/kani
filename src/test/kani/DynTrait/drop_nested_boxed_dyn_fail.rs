@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-verify-fail
+// kani-verify-fail
 // cbmc-flags: --unwind 2 --unwinding-assertions
 
 static mut CELL: i32 = 0;
@@ -36,6 +36,6 @@ fn main() {
         let _nested: Box<dyn Send> = Box::new(x);
     }
     unsafe {
-        rmc::expect_fail(CELL == 2, "wrong cell value"); // Should fail
+        kani::expect_fail(CELL == 2, "wrong cell value"); // Should fail
     }
 }

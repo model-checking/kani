@@ -1,11 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --use-abs --abs-type rmc
+// kani-flags: --use-abs --abs-type kani
 use std::ptr;
 
 fn main() {
     fn from_raw_parts_test() {
-        let v = rmc_vec![1, 2, 3];
+        let v = kani_vec![1, 2, 3];
 
         // Prevent running `v`'s destructor so we are in complete control
         // of the allocation.

@@ -78,11 +78,11 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
             warn!(
-                "The function __VERIFIER_expect_fail is deprecated. Use rmc::expect_fail instead"
+                "The function __VERIFIER_expect_fail is deprecated. Use kani::expect_fail instead"
             );
             return true;
         }
-        matches_function(tcx, instance, "RmcExpectFail")
+        matches_function(tcx, instance, "KaniExpectFail")
     }
 
     fn handle(
@@ -116,10 +116,10 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
-            warn!("The function __VERIFIER_assume is deprecated. Use rmc::assume instead");
+            warn!("The function __VERIFIER_assume is deprecated. Use kani::assume instead");
             return true;
         }
-        matches_function(tcx, instance, "RmcAssume")
+        matches_function(tcx, instance, "KaniAssume")
     }
 
     fn handle(
@@ -153,10 +153,10 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         // Deprecate old __nondet since it doesn't match rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/rmc/issues/599
         if instance_name_starts_with(tcx, instance, "__nondet") {
-            warn!("The function __nondet is deprecated. Use rmc::any instead");
+            warn!("The function __nondet is deprecated. Use kani::any instead");
             return true;
         }
-        matches_function(tcx, instance, "RmcAnyRaw")
+        matches_function(tcx, instance, "KaniAnyRaw")
     }
 
     fn handle(

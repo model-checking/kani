@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "rmc"
+name = "kani"
 version = "0.1.0"
 edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rmc_macros = { path = "../rmc_macros" }
+kani_macros = { path = "../kani_macros" }

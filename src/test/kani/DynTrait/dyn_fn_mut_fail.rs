@@ -16,5 +16,5 @@ pub fn mut_i32_ptr(x: &mut i32) {
 fn main() {
     let mut x = 1;
     takes_dyn_fun(Box::new(&mut_i32_ptr), &mut x);
-    rmc::expect_fail(x == 3, "Wrong x")
+    kani::expect_fail(x == 3, "Wrong x")
 }

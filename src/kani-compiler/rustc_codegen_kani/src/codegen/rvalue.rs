@@ -804,7 +804,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The size and alignment for the vtable is of the underlying type.
     /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
     /// returns the correct size to match rustc vtable values. Checked via
-    /// RMC-compile-time and CBMC assertions in check_vtable_size.
+    /// Kani-compile-time and CBMC assertions in check_vtable_size.
     fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);

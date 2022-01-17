@@ -8,9 +8,9 @@
 include!("../Helpers/vtable_utils_ignore.rs");
 fn takes_dyn_fun(fun: &dyn Fn() -> i32) {
     let x = fun();
-    rmc::expect_fail(x != 5, "Wrong return");
+    kani::expect_fail(x != 5, "Wrong return");
     /* The closure captures `a` and thus is sized */
-    rmc::expect_fail(size_from_vtable(vtable!(fun)) != 8, "Wrong size");
+    kani::expect_fail(size_from_vtable(vtable!(fun)) != 8, "Wrong size");
 }
 
 fn main() {

@@ -7,6 +7,6 @@ edition = "2018"
 
 [dependencies]
 
-[package.metadata.rmc]
+[package.metadata.kani]
 flags={unwind = "5", unwinding-checks = false, function="check_config"}
 

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 
 // ANCHOR: code
 fn find_midpoint(low: u32, high: u32) -> u32 {
@@ -8,12 +8,12 @@ fn find_midpoint(low: u32, high: u32) -> u32 {
 }
 // ANCHOR_END: code
 
-// ANCHOR: rmc
-#[cfg(rmc)]
-#[rmc::proof]
+// ANCHOR: kani
+#[cfg(kani)]
+#[kani::proof]
 fn midpoint_overflow() {
-    let a: u32 = rmc::any();
-    let b: u32 = rmc::any();
+    let a: u32 = kani::any();
+    let b: u32 = kani::any();
     find_midpoint(a, b);
 }
-// ANCHOR_END: rmc
+// ANCHOR_END: kani

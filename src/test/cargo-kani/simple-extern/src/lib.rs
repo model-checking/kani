@@ -13,14 +13,14 @@ mod tests {
     }
 }
 
-#[cfg(rmc)]
-mod rmc_tests {
+#[cfg(kani)]
+mod kani_tests {
     use super::*;
 
     #[allow(dead_code)]
     #[no_mangle]
     fn test_sum() {
-        let a: u32 = rmc::any();
+        let a: u32 = kani::any();
 
         if a < 100 {
             unsafe {

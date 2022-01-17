@@ -5,8 +5,8 @@
 #![feature(core_intrinsics)]
 
 fn main() {
-    let a: u8 = rmc::nondet();
-    let b: u8 = rmc::nondet();
+    let a: u8 = kani::nondet();
+    let b: u8 = kani::nondet();
     let sum0 = core::intrinsics::wrapping_add(a, b);
     let sum1 = a.wrapping_add(b);
     let sum2 = a.checked_add(b);

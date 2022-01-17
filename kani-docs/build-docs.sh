@@ -18,18 +18,18 @@ if [ ! -x mdbook ]; then
 fi
 
 # Publish bookrunner report into our documentation
-RMC_DIR=$SCRIPT_DIR/..
-HTML_DIR=$RMC_DIR/build/output/latest/html/
+KANI_DIR=$SCRIPT_DIR/..
+HTML_DIR=$KANI_DIR/build/output/latest/html/
 
 if [ -d $HTML_DIR ]; then
     # Litani run is copied into `src` to avoid deletion by `mdbook`
     cp -r $HTML_DIR src/bookrunner/
     # Replace artifacts by examples under test
-    BOOKS_DIR=$RMC_DIR/src/test/bookrunner/books
+    BOOKS_DIR=$KANI_DIR/src/test/bookrunner/books
     rm -r src/bookrunner/artifacts
     cp -r $BOOKS_DIR src/bookrunner/artifacts
     # Update paths in HTML report
-    python $RMC_DIR/scripts/ci/update_bookrunner_report.py src/bookrunner/index.html new_index.html
+    python $KANI_DIR/scripts/ci/update_bookrunner_report.py src/bookrunner/index.html new_index.html
     mv new_index.html src/bookrunner/index.html
 
     # rm src/bookrunner/run.json
@@ -43,7 +43,7 @@ mkdir -p book
 touch book/.nojekyll
 
 # Testing of the code in the documentation is done via the usual
-# ./scripts/rmc-regression.sh script. A note on running just the
+# ./scripts/kani-regression.sh script. A note on running just the
 # doc tests is in README.md. We don't run them here because
 # that would cause CI to run these tests twice.
 

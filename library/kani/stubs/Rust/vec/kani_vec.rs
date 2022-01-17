@@ -36,28 +36,28 @@ const CBMC_MAX_MALLOC_SIZE: usize = 18014398509481984;
 // tight bounds on the Vec capacity.
 const MIN_NON_ZERO_CAP: usize = 1024;
 
-// RmcVec implements a fine-grained abstraction of the Vector library for Rust.
+// KaniVec implements a fine-grained abstraction of the Vector library for Rust.
 // It is aimed to provide a lot more functionality than the other two available
-// abstractions - NoBackVec and CVec. RmcVec aims to implement close-to-complete
+// abstractions - NoBackVec and CVec. KaniVec aims to implement close-to-complete
 // compatibility with the Rust Standard Library (RSL) implementation.
 //
-// The goal of RMCVec is to implement basic operations of the Vec such as push(),
+// The goal of KaniVec is to implement basic operations of the Vec such as push(),
 // pop(), append(), insert() in a much simpler way than it is done in the RSL. The
 // intuition behind this idea is that with a simple trace, it would be much easier
 // for verification techniques such as bounded model checking to reason about
 // that piece of code. For that reason, we choose to directly drop down to libc
 // functions for low-level operations so that they can be directly translated
 // to CBMC primitives. That way, if CBMC performs better through some optimizations
-// RMC would too.
+// Kani would too.
 //
-// We first implement RMCRawVec, an auxiliary data structure which holds a pointer
+// We first implement KaniRawVec, an auxiliary data structure which holds a pointer
 // to allocated memory and the capacity of the allocation. This abstracts away
 // all low-level memory resizing operations from the actual Vec data structure.
-// It is also used later to implement RMCIter, an iterator for the RMCVec
+// It is also used later to implement KaniIter, an iterator for the KaniVec
 // data structure.
 //
-// We then use RMCRawVec as a member of Vec (RMCVec) which is the interface exposed
-// to the public. RMCVec aims to main close-to-complete compatibility with the
+// We then use KaniRawVec as a member of Vec (KaniVec) which is the interface exposed
+// to the public. KaniVec aims to main close-to-complete compatibility with the
 // RSL Vec implementation.
 //
 // An important future work direction here is to abstract other relevant
@@ -76,14 +76,14 @@ const MIN_NON_ZERO_CAP: usize = 1024;
 // Please note that this implementation has not been tested against ZSTs - Zero
 // Sized Types and might show unsound behavior.
 
-// RMCRawVec consists of a pointer to allocated memory and another variable tracking
+// KaniRawVec consists of a pointer to allocated memory and another variable tracking
 // the capacity of the allocation.
-struct RmcRawVec<T> {
+struct KaniRawVec<T> {
     ptr: *const T,
     cap: usize,
 }
 
-impl<T> RmcRawVec<T> {
+impl<T> KaniRawVec<T> {
     fn new() -> Self {
         let elem_size = mem::size_of::<T>();
         // NOTE: Currently, this abstraction is not tested against code which has
@@ -99,14 +99,14 @@ impl<T> RmcRawVec<T> {
         // index crosses the length of the array.
         let cap = DEFAULT_CAPACITY;
         let ptr = unsafe { libc::malloc(cap * elem_size) as *mut T };
-        RmcRawVec { ptr, cap }
+        KaniRawVec { ptr, cap }
     }
 
     fn new_with_capacity(cap: usize) -> Self {
         let elem_size = mem::size_of::<T>();
         // In this case, allocate space for capacity elements as requested.
         let ptr = unsafe { libc::malloc(cap * elem_size) as *mut T };
-        RmcRawVec { ptr, cap }
+        KaniRawVec { ptr, cap }
     }
 
     // Checks if the Vector needs to be resized to allocate additional more elements.
@@ -177,7 +177,7 @@ impl<T> RmcRawVec<T> {
     //
     // As can be observed, the capacity cannot be relied upon to be precisely minimal.
     // However, we try to model the RSL behavior as much as we can. Please refer to
-    // grow_exact() from rmc_vec.rs for more details.
+    // grow_exact() from kani_vec.rs for more details.
     fn grow_exact(&mut self, len: usize, additional: usize) {
         let elem_size = mem::size_of::<T>();
         let req_cap = len + additional;
@@ -220,10 +220,10 @@ impl<T> RmcRawVec<T> {
     }
 }
 
-// Since we allocate memory manually, the Drop for RMCVec should ensure that we
+// Since we allocate memory manually, the Drop for KaniVec should ensure that we
 // free that allocation. We drop to libc::free since we have a pointer to the memory
 // that was allocated by libc::malloc / libc::realloc.
-impl<T> Drop for RmcRawVec<T> {
+impl<T> Drop for KaniRawVec<T> {
     fn drop(&mut self) {
         unsafe {
             libc::free(self.ptr as *mut _);
@@ -238,28 +238,28 @@ impl<T> Drop for RmcRawVec<T> {
 //
 // We define an empty trait Allocator which shadows std::alloc::Allocator.
 //
-// We also define an empty RmcAllocator structure here which serves as the default type
+// We also define an empty KaniAllocator structure here which serves as the default type
 // for the Vec data structure. The Vec implemented as part of the Rust Standard
 // Library has the Global allocator as its default.
 pub trait Allocator {}
 
 #[derive(Clone, Copy)]
-pub struct RmcAllocator {}
+pub struct KaniAllocator {}
 
-impl RmcAllocator {
+impl KaniAllocator {
     pub fn new() -> Self {
-        RmcAllocator {}
+        KaniAllocator {}
     }
 }
 
 // Implement the Allocator trait
-impl Allocator for RmcAllocator {}
+impl Allocator for KaniAllocator {}
 
 // This is the primary Vec abstraction that is exposed to the user. It has a
-// RmcRawVec which tracks the underlying memory and values stored in the Vec. We
+// KaniRawVec which tracks the underlying memory and values stored in the Vec. We
 // also track the length and an allocator instance.
-pub struct Vec<T, A: Allocator = RmcAllocator> {
-    buf: RmcRawVec<T>,
+pub struct Vec<T, A: Allocator = KaniAllocator> {
+    buf: KaniRawVec<T>,
     len: usize,
     allocator: A,
 }
@@ -271,17 +271,17 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     fn with_capacity_in(capacity: usize, allocator: A) -> Self {
-        Vec { buf: RmcRawVec::new_with_capacity(capacity), len: 0, allocator: allocator }
+        Vec { buf: KaniRawVec::new_with_capacity(capacity), len: 0, allocator: allocator }
     }
 }
 
 impl<T> Vec<T> {
     pub fn new() -> Self {
-        Vec { buf: RmcRawVec::new(), len: 0, allocator: RmcAllocator::new() }
+        Vec { buf: KaniRawVec::new(), len: 0, allocator: KaniAllocator::new() }
     }
 
     pub fn with_capacity(cap: usize) -> Self {
-        Self::with_capacity_in(cap, RmcAllocator::new())
+        Self::with_capacity_in(cap, KaniAllocator::new())
     }
 
     // A lot of invariants here are not checked:
@@ -298,9 +298,9 @@ impl<T> Vec<T> {
         // We cannot check if the capacity of the memory pointer to by ptr is
         // atleast "capacity", this is to be assumed.
         let mut v = Vec {
-            buf: RmcRawVec::new_with_capacity(capacity),
+            buf: KaniRawVec::new_with_capacity(capacity),
             len: 0,
-            allocator: RmcAllocator::new(),
+            allocator: KaniAllocator::new(),
         };
         unsafe {
             let mut curr_idx: isize = 0;
@@ -586,7 +586,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     pub fn new_in(alloc: A) -> Self {
-        Vec { buf: RmcRawVec::new(), len: 0, allocator: alloc }
+        Vec { buf: KaniRawVec::new(), len: 0, allocator: alloc }
     }
 }
 
@@ -891,17 +891,17 @@ impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
     }
 }
 
-// We implement an IntoIterator for (Rmc)Vec using a custom structure -
-// RmcIter. For RmcIter, we implement RmcRawValIter as a member which stores
+// We implement an IntoIterator for (Kani)Vec using a custom structure -
+// KaniIter. For KaniIter, we implement KaniRawValIter as a member which stores
 // raw pointers to the start and end of memory of the sequence.
-struct RmcRawValIter<T> {
+struct KaniRawValIter<T> {
     start: *const T,
     end: *const T,
 }
 
-impl<T> RmcRawValIter<T> {
+impl<T> KaniRawValIter<T> {
     unsafe fn new(slice: &[T]) -> Self {
-        RmcRawValIter {
+        KaniRawValIter {
             // The pointer to the slice marks its beginning
             start: slice.as_ptr(),
             end: if mem::size_of::<T>() == 0 {
@@ -921,7 +921,7 @@ impl<T> RmcRawValIter<T> {
 }
 
 // An interface for dealing with iterators.
-impl<T> Iterator for RmcRawValIter<T> {
+impl<T> Iterator for KaniRawValIter<T> {
     type Item = T;
 
     // Yield the next element of the sequence. This method changes the internal
@@ -956,7 +956,7 @@ impl<T> Iterator for RmcRawValIter<T> {
 //
 // once a DoubleEndedIterator returns None from a next_back(), calling it again
 // may or may not ever return Some again
-impl<T> DoubleEndedIterator for RmcRawValIter<T> {
+impl<T> DoubleEndedIterator for KaniRawValIter<T> {
     fn next_back(&mut self) -> Option<T> {
         // If we have already consumed the iterator, return a None. According to
         // the documentation, individual implementations may or may not choose
@@ -979,14 +979,14 @@ impl<T> DoubleEndedIterator for RmcRawValIter<T> {
     }
 }
 
-// RmcIntoIter contains a RmcRawVec and RmcRawValIter to track the Vector and
+// KaniIntoIter contains a KaniRawVec and KaniRawValIter to track the Vector and
 // the Iterator. This exposes a public interface which can be used with Vec.
-pub struct RmcIntoIter<T: Sized> {
-    _buf: RmcRawVec<T>,
-    iter: RmcRawValIter<T>,
+pub struct KaniIntoIter<T: Sized> {
+    _buf: KaniRawVec<T>,
+    iter: KaniRawValIter<T>,
 }
 
-impl<T: Sized> Iterator for RmcIntoIter<T> {
+impl<T: Sized> Iterator for KaniIntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
@@ -994,7 +994,7 @@ impl<T: Sized> Iterator for RmcIntoIter<T> {
     }
 }
 
-impl<T: Sized> DoubleEndedIterator for RmcIntoIter<T> {
+impl<T: Sized> DoubleEndedIterator for KaniIntoIter<T> {
     fn next_back(&mut self) -> Option<T> {
         self.iter.next_back()
     }
@@ -1006,24 +1006,24 @@ impl<T: Sized> DoubleEndedIterator for RmcIntoIter<T> {
 // to an iterator.
 impl<T, A: Allocator> IntoIterator for Vec<T, A> {
     type Item = T;
-    type IntoIter = RmcIntoIter<T>;
+    type IntoIter = KaniIntoIter<T>;
 
-    fn into_iter(self) -> RmcIntoIter<T> {
+    fn into_iter(self) -> KaniIntoIter<T> {
         unsafe {
-            let iter = RmcRawValIter::new(&self);
+            let iter = KaniRawValIter::new(&self);
             let buf = read(&self.buf);
             // into_iter() takes self by value, and it consumes that collection.
             // For that reason, we need to ensure that the destructor for the Vec
             // is not called since that will free the underlying buffer. In that
             // case, we need to take ownership of the data while making sure
             // that the destructor is not called. mem::forget allows us to do
-            // that. We implement a Drop for RmcIntoIter to ensure that elements
+            // that. We implement a Drop for KaniIntoIter to ensure that elements
             // which were not yielded are dropped appropriately.
             //
             // For reference: https://doc.rust-lang.org/nomicon/vec-into-iter.html
             mem::forget(self);
 
-            RmcIntoIter { iter, _buf: buf }
+            KaniIntoIter { iter, _buf: buf }
         }
     }
 }
@@ -1059,7 +1059,7 @@ impl<'a, T, A: Allocator> IntoIterator for &'a mut Vec<T, A> {
     }
 }
 
-// Here, we define the rmc_vec! macro which behaves similar to the vec! macro
+// Here, we define the kani_vec! macro which behaves similar to the vec! macro
 // found in the std prelude. If we try to override the vec! macro, we get error:
 //
 //     = note: `vec` could refer to a macro from prelude
@@ -1068,15 +1068,15 @@ impl<'a, T, A: Allocator> IntoIterator for &'a mut Vec<T, A> {
 // Relevant Zulip stream:
 // https://rust-lang.zulipchat.com/#narrow/stream/122651-general/topic/Override.20prelude.20macro
 //
-// The workaround for now is to define a new macro. rmc_vec! will initialize a new
+// The workaround for now is to define a new macro. kani_vec! will initialize a new
 // Vec based on its definition in this file. We support two types of initialization
 // expressions:
 //
 // [ elem; count] -  initialize a Vector with element value `elem` occurring count times.
 // [ elem1, elem2, ...] - initialize a Vector with elements elem1, elem2...
-#[cfg(abs_type = "rmc")]
+#[cfg(abs_type = "kani")]
 #[macro_export]
-macro_rules! rmc_vec {
+macro_rules! kani_vec {
   ( $val:expr ; $count:expr ) =>
     ({
       // Reserve space for atleast $count elements to avoid resizing operations

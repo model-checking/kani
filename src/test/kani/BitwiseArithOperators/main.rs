@@ -7,8 +7,8 @@ fn main() {
     assert!(!8 ^ !0 == 8);
 
     let x = 1;
-    let a: u32 = rmc::any();
-    let b: u32 = rmc::any();
+    let a: u32 = kani::any();
+    let b: u32 = kani::any();
     if a < 100000 && b < 100000 {
         let c = a + b;
         if c & x == x {

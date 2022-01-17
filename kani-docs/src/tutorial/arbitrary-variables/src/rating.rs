@@ -19,12 +19,12 @@ impl Rating {
 
 // ANCHOR_END: rating_struct
 
-#[cfg(rmc)]
+#[cfg(kani)]
 mod verification {
     use super::*;
 
     // ANCHOR: rating_invariant
-    unsafe impl rmc::Invariant for Rating {
+    unsafe impl kani::Invariant for Rating {
         fn is_valid(&self) -> bool {
             self.value <= 5
         }
@@ -32,9 +32,9 @@ mod verification {
     // ANCHOR_END: rating_invariant
 
     // ANCHOR: verify_rating
-    #[rmc::proof]
+    #[kani::proof]
     pub fn check_rating() {
-        let rating = rmc::any::<Rating>();
+        let rating = kani::any::<Rating>();
         assert!(rating.get() <= 5);
         assert!(Rating::from(rating.get()).is_some());
     }

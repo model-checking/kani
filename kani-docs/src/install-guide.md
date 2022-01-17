@@ -1,6 +1,6 @@
-# RMC Installation Guide
+# Kani Installation Guide
 
-RMC must currently be built from source.
+Kani must currently be built from source.
 
 In general, the following dependencies are required:
 
@@ -17,7 +17,7 @@ The simplest way to install (especially if you're using a fresh VM) is following
 ```
 # git clone git@github.com:model-checking/rmc.git
 git clone https://github.com/model-checking/rmc.git
-cd rmc
+cd kani
 git submodule update --init
 ./scripts/setup/ubuntu-20.04/install_deps.sh
 ./scripts/setup/ubuntu-20.04/install_cbmc.sh
@@ -32,7 +32,7 @@ You need to have [Homebrew](https://brew.sh/) installed already.
 ```
 # git clone git@github.com:model-checking/rmc.git
 git clone https://github.com/model-checking/rmc.git
-cd rmc
+cd kani
 git submodule update --init
 ./scripts/setup/macos-10.15/install_deps.sh
 ./scripts/setup/macos-10.15/install_cbmc.sh
@@ -40,7 +40,7 @@ git submodule update --init
 ./scripts/setup/install_rustup.sh
 ```
 
-## Building and testing RMC
+## Building and testing Kani
 
 Perform one-time build configuration:
 
@@ -54,28 +54,28 @@ Perform one-time build configuration:
 
 **NOTE: If you skip the above (`llvm.download-ci-llvm=true` specifically), builds may take a long time as all of LLVM would need to be built from scratch.**
 
-Then build rmc-compiler executable:
+Then build kani-compiler executable:
 
 ```
-cd src/rmc-compiler
+cd src/kani-compiler
 cargo build
 ```
 
 Then, optionally, run the regression tests:
 
 ```
-./scripts/rmc-regression.sh
+./scripts/kani-regression.sh
 ```
 
 This script has a lot of noisy output, but on a successful run you will see:
 
 ```
-All RMC regression tests completed successfully.
+All Kani regression tests completed successfully.
 ```
 
-## Try running RMC
+## Try running Kani
 
-Get the RMC script in your path:
+Get the Kani script in your path:
 
 ```bash
 export PATH=$(pwd)/scripts:$PATH
@@ -90,10 +90,10 @@ fn main() {
 }
 ```
 
-Run RMC on the single file:
+Run Kani on the single file:
 
 ```
-rmc test.rs
+kani test.rs
 ```
 
 You should get a result like this one:
@@ -108,4 +108,4 @@ test.rs function main
 VERIFICATION FAILED
 ```
 
-Fix the test and you should see `rmc` succeed.
+Fix the test and you should see `kani` succeed.

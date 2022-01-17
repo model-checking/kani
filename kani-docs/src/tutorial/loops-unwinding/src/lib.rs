@@ -14,16 +14,16 @@ fn initialize_prefix(length: usize, buffer: &mut [u8]) {
 }
 // ANCHOR_END: code
 
-// ANCHOR: rmc
-#[cfg(rmc)]
+// ANCHOR: kani
+#[cfg(kani)]
 #[no_mangle]
 fn main() {
     const LIMIT: usize = 10;
     let mut buffer: [u8; LIMIT] = [1; LIMIT];
 
-    let length = rmc::any();
-    rmc::assume(length <= LIMIT);
+    let length = kani::any();
+    kani::assume(length <= LIMIT);
 
     initialize_prefix(length, &mut buffer);
 }
-// ANCHOR_END: rmc
+// ANCHOR_END: kani

@@ -5,7 +5,7 @@
 // Arc<Mutex<dyn Subscriber>>.
 
 // https://github.com/model-checking/rmc/issues/426
-// Current RMC-time compiler panic in implementing drop_in_place:
+// Current Kani-time compiler panic in implementing drop_in_place:
 
 // thread 'rustc' panicked at 'Function call does not type check:
 // "func":"Expr"{

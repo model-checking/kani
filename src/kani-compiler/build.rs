@@ -19,15 +19,15 @@ macro_rules! path_str {
 
 /// Build the target library, and setup cargo to rerun them if the source has changed.
 fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
-    let rmc_lib = vec!["..", "..", "library", lib];
-    println!("cargo:rerun-if-changed={}", path_str!(rmc_lib));
+    let kani_lib = vec!["..", "..", "library", lib];
+    println!("cargo:rerun-if-changed={}", path_str!(kani_lib));
 
-    let mut rmc_lib_toml = rmc_lib;
-    rmc_lib_toml.push("Cargo.toml");
+    let mut kani_lib_toml = kani_lib;
+    kani_lib_toml.push("Cargo.toml");
     let args = [
         "build",
         "--manifest-path",
-        &path_str!(rmc_lib_toml),
+        &path_str!(kani_lib_toml),
         "-Z",
         "unstable-options",
         "--out-dir",
@@ -35,22 +35,22 @@ fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
         "--target-dir",
         &out_dir,
     ];
-    Command::new("cargo").env("CARGO_ENCODED_RUSTFLAGS", "--cfg=rmc").args(args).status().unwrap();
+    Command::new("cargo").env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani").args(args).status().unwrap();
 }
 
-/// Configure the compiler to build rmc-compiler binary. We currently support building
-/// rmc-compiler with nightly only. We also link to the rustup rustc_driver library for now.
+/// Configure the compiler to build kani-compiler binary. We currently support building
+/// kani-compiler with nightly only. We also link to the rustup rustc_driver library for now.
 pub fn main() {
     // Add rustup to the rpath in order to properly link with the correct rustc version.
     let rustup_home = env::var("RUSTUP_HOME").unwrap();
     let rustup_tc = env::var("RUSTUP_TOOLCHAIN").unwrap();
     let rustup_lib = path_str!([&rustup_home, "toolchains", &rustup_tc, "lib"]);
-    println!("cargo:rustc-link-arg-bin=rmc-compiler=-Wl,-rpath,{}", rustup_lib);
+    println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{}", rustup_lib);
 
-    // Compile rmc library and export RMC_LIB_PATH variable with its relative location.
+    // Compile kani library and export KANI_LIB_PATH variable with its relative location.
     let out_dir = env::var("OUT_DIR").unwrap();
     let lib_out = path_str!([&out_dir, "lib"]);
-    setup_lib(&out_dir, &lib_out, "rmc");
-    setup_lib(&out_dir, &lib_out, "rmc_macros");
-    println!("cargo:rustc-env=RMC_LIB_PATH={}", lib_out);
+    setup_lib(&out_dir, &lib_out, "kani");
+    setup_lib(&out_dir, &lib_out, "kani_macros");
+    println!("cargo:rustc-env=KANI_LIB_PATH={}", lib_out);
 }

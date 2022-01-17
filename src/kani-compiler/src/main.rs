@@ -16,7 +16,7 @@ use clap::{
     app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, AppSettings,
     Arg, ArgMatches,
 };
-use rmc_queries::{QueryDb, UserInput};
+use kani_queries::{QueryDb, UserInput};
 use rustc_driver::{init_env_logger, install_ice_hook, Callbacks, RunCompiler};
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ use std::rc::Rc;
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
-    let rmc_deps = lib_path.clone().to_owned() + "/deps";
+    let kani_deps = lib_path.clone().to_owned() + "/deps";
     let args = vec![
         "-C",
         "overflow-checks=on",
@@ -36,17 +36,17 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "trim-diagnostic-paths=no",
         "-Z",
         "human_readable_cgu_names",
-        "--cfg=rmc",
+        "--cfg=kani",
         "-Z",
         "crate-attr=feature(register_tool)",
         "-Z",
-        "crate-attr=register_tool(rmctool)",
+        "crate-attr=register_tool(kanitool)",
         "-L",
         lib_path,
         "--extern",
-        "rmc",
+        "kani",
         "-L",
-        rmc_deps.as_str(),
+        kani_deps.as_str(),
     ];
     args.iter().map(|s| s.to_string()).collect()
 }
@@ -57,10 +57,10 @@ fn parser<'a, 'b>() -> App<'a, 'b> {
         .setting(clap::AppSettings::AllowLeadingHyphen)
         .version_short("?")
         .arg(
-            Arg::with_name("rmc-lib")
-                .long("--rmc-lib")
+            Arg::with_name("kani-lib")
+                .long("--kani-lib")
                 .value_name("FOLDER_PATH")
-                .help("Sets the path to locate the rmc library.")
+                .help("Sets the path to locate the kani library.")
                 .takes_value(true),
         )
         .arg(
@@ -87,12 +87,12 @@ fn parser<'a, 'b>() -> App<'a, 'b> {
                 .long("--sysroot")
                 .help("Override the system root.")
                 .long_help(
-                    "The \"sysroot\" is the location where RMC will look for the Rust \
+                    "The \"sysroot\" is the location where Kani will look for the Rust \
                 distribution.",
                 ),
         )
         .arg(
-            // TODO: Move this to a cargo wrapper. This should return rmc version.
+            // TODO: Move this to a cargo wrapper. This should return kani version.
             Arg::with_name("rustc-version")
                 .short("V")
                 .long("--version")
@@ -111,7 +111,7 @@ fn main() -> Result<(), &'static str> {
     let matches = parser().get_matches();
 
     // Initialize the logger.
-    init_env_logger("RMC_LOG");
+    init_env_logger("KANI_LOG");
 
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
@@ -124,27 +124,27 @@ fn main() -> Result<(), &'static str> {
     queries.set_emit_vtable_restrictions(matches.is_present("restrict-vtable-fn-ptrs"));
 
     // Configure and run compiler.
-    let mut callbacks = RmcCallbacks {};
+    let mut callbacks = KaniCallbacks {};
     install_ice_hook();
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
     if matches.is_present("goto-c") {
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
-            rustc_codegen_rmc::GotocCodegenBackend::new(&Rc::new(queries))
+            rustc_codegen_kani::GotocCodegenBackend::new(&Rc::new(queries))
         })));
     }
     compiler.run().or(Err("Failed to compile crate."))
 }
 
 /// Empty struct since we don't support any callbacks yet.
-struct RmcCallbacks {}
+struct KaniCallbacks {}
 
 /// Use default function implementations.
-impl Callbacks for RmcCallbacks {}
+impl Callbacks for KaniCallbacks {}
 
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     let mut gotoc_args =
-        rustc_gotoc_flags(&args.value_of("rmc-lib").unwrap_or(std::env!("RMC_LIB_PATH")));
+        rustc_gotoc_flags(&args.value_of("kani-lib").unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present("goto-c") {
         rustc_args.append(&mut gotoc_args);
@@ -157,7 +157,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     if let Some(extra_flags) = args.values_of_os("rustc-options") {
         extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
     }
-    let sysroot = sysroot_path(args.value_of("sysroot")).expect("[Error] Invalid sysroot. Rebuild RMC or provide the path to rust sysroot using --sysroot option");
+    let sysroot = sysroot_path(args.value_of("sysroot")).expect("[Error] Invalid sysroot. Rebuild Kani or provide the path to rust sysroot using --sysroot option");
     rustc_args.push(String::from("--sysroot"));
     rustc_args.push(convert_arg(sysroot.as_os_str()));
     tracing::info!(?rustc_args, "Compile");
@@ -214,17 +214,17 @@ mod parser_test {
 
     #[test]
     fn test_rustc_version() {
-        let args = vec!["rmc-compiler", "-V"];
+        let args = vec!["kani-compiler", "-V"];
         let matches = parser().get_matches_from(args);
         assert!(matches.is_present("rustc-version"));
     }
 
     #[test]
-    fn test_rmc_flags() {
-        let args = vec!["rmc-compiler", "--goto-c", "--rmc-lib", "some/path"];
+    fn test_kani_flags() {
+        let args = vec!["kani-compiler", "--goto-c", "--kani-lib", "some/path"];
         let matches = parser().get_matches_from(args);
         assert!(matches.is_present("goto-c"));
-        assert_eq!(matches.value_of("rmc-lib"), Some("some/path"));
+        assert_eq!(matches.value_of("kani-lib"), Some("some/path"));
     }
 
     #[cfg(unix)]

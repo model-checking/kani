@@ -5,15 +5,15 @@
 import argparse
 import glob
 import sys
-import rmc
-import rmc_flags
+import kani
+import kani_flags
 import os
 import pathlib
 import platform
 import toml
 
 MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
-RMC_C_LIB = MY_PATH / "library" / "rmc" / "rmc_lib.c"
+KANI_C_LIB = MY_PATH / "library" / "kani" / "kani_lib.c"
 EXIT_CODE_SUCCESS = 0
 CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 
@@ -21,29 +21,29 @@ CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
 def main():
     args = parse_args()
 
-    rmc.ensure_dependencies_in_path()
+    kani.ensure_dependencies_in_path()
 
     if args.gen_c_runnable:
-        rmc.cargo_build(args.crate, args.target_dir, args, ["gen-c"])
+        kani.cargo_build(args.crate, args.target_dir, args, ["gen-c"])
 
         if args.only_codegen:
             return 0
 
         pattern = os.path.join(args.target_dir, "debug", "deps", "*.symtab.json")
         symbol_table_jsons = glob.glob(pattern)
-        rmc.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
+        kani.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
 
         cbmc_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.out")
         c_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.c")
         restrictions_runnable_filename = os.path.join(
             args.target_dir, "debug", "deps") if args.restrict_vtable else None
 
-        out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
+        out_files = kani.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
-        rmc.link_c_lib(out_files, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
+        kani.link_c_lib(out_files, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
                        args.dry_run, args.keep_temps)
 
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(
+        if EXIT_CODE_SUCCESS != kani.goto_to_c(
                 cbmc_runnable_filename,
                 c_runnable_filename,
                 restrictions_runnable_filename,
@@ -51,9 +51,9 @@ def main():
                 args.dry_run):
             return 1
 
-        rmc.gen_c_postprocess(c_runnable_filename, args.dry_run)
+        kani.gen_c_postprocess(c_runnable_filename, args.dry_run)
 
-    rmc.cargo_build(args.crate, args.target_dir, args)
+    kani.cargo_build(args.crate, args.target_dir, args)
 
     if args.only_codegen:
         return 0
@@ -65,7 +65,7 @@ def main():
     symbol_table_jsons = glob.glob(pattern)
 
     if not args.dry_run:
-        rmc.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
+        kani.ensure(len(symbol_table_jsons) > 0, f"Unexpected number of json outputs: {len(symbol_table_jsons)}")
     else:
         # Add a dummy value so dry-run works.
         symbol_table_jsons = ["dry-run.symtab.json"]
@@ -73,13 +73,13 @@ def main():
     cbmc_filename = os.path.join(args.target_dir, "cbmc.out")
     c_filename = os.path.join(args.target_dir, "cbmc.c")
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
-    out_files = rmc.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
+    out_files = kani.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
     restrictions_filename = os.path.join(args.target_dir, "debug", "deps") if args.restrict_vtable else None
 
-    args.c_lib.append(str(RMC_C_LIB))
+    args.c_lib.append(str(KANI_C_LIB))
 
-    rmc.link_c_lib(
+    kani.link_c_lib(
         out_files,
         cbmc_filename,
         args.c_lib,
@@ -90,7 +90,7 @@ def main():
         args.keep_temps)
 
     if args.gen_c:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_c(
+        if EXIT_CODE_SUCCESS != kani.goto_to_c(
                 cbmc_filename,
                 c_filename,
                 restrictions_filename,
@@ -99,24 +99,24 @@ def main():
             return 1
 
     if args.gen_symbols:
-        if EXIT_CODE_SUCCESS != rmc.goto_to_symbols(cbmc_filename, symbols_filename, args.verbose, args.dry_run):
+        if EXIT_CODE_SUCCESS != kani.goto_to_symbols(cbmc_filename, symbols_filename, args.verbose, args.dry_run):
             return 1
 
     if args.undefined_function_checks:
         # https://github.com/diffblue/cbmc/issues/6393
-        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+        if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
                 cbmc_filename, cbmc_filename,
                 ['--add-library'],
                 args.verbose, dry_run=args.dry_run, restrictions_filename=restrictions_filename):
             return 1
-        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+        if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
                 cbmc_filename, cbmc_filename,
                 ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
                 args.verbose, dry_run=args.dry_run, restrictions_filename=restrictions_filename):
             return 1
     else:
         # Apply --drop-unused-functions if undefined-function-checks was turned off
-        if EXIT_CODE_SUCCESS != rmc.run_goto_instrument(
+        if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
                 cbmc_filename, cbmc_filename,
                 ['--drop-unused-functions'],
                 args.verbose, dry_run=args.dry_run):
@@ -128,11 +128,11 @@ def main():
     if args.visualize:
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
-        retcode = rmc.run_visualize(cbmc_filename, args.cbmc_args, cover_args,
+        retcode = kani.run_visualize(cbmc_filename, args.cbmc_args, cover_args,
                                     args.verbose, args.quiet, args.keep_temps,
                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
-        retcode = rmc.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
+        retcode = kani.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
 
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
         retcode = EXIT_CODE_SUCCESS
@@ -161,7 +161,7 @@ def parse_args():
     # Create parser
     def create_parser():
         parser = argparse.ArgumentParser(
-            prog="cargo rmc",
+            prog="cargo kani",
             description="Verify a Rust crate. For more information, see https://github.com/model-checking/rmc.")
 
         crate_group = parser.add_argument_group(
@@ -169,16 +169,16 @@ def parse_args():
         crate_group.add_argument("crate", help="crate to verify", nargs="?")
         crate_group.add_argument("--crate", help="crate to verify", dest="crate_flag", metavar="CRATE")
 
-        config_group = parser.add_argument_group("Config", "You can configure cargo rmc with your Cargo.toml file.")
+        config_group = parser.add_argument_group("Config", "You can configure cargo kani with your Cargo.toml file.")
         config_group.add_argument("--config-toml",
                                   help="Where to read configuration from; defaults to crate's Cargo.toml")
         config_group.add_argument("--no-config-toml", action="store_true", help="Do not use any configuration toml")
         config_group.add_argument("--build-target", help="Build for the target triple.",
                                   default=default_build_target())
-        config_group.add_argument("--only-codegen", action="store_true", help="RMC will only compile the crate.")
+        config_group.add_argument("--only-codegen", action="store_true", help="Kani will only compile the crate.")
 
         exclude_flags = []
-        rmc_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
+        kani_flags.add_flags(parser, {"default-target": "target"}, exclude_flags=exclude_flags)
 
         return parser
 
@@ -195,12 +195,12 @@ def parse_args():
             return None
         elif config_toml is not None:
             # If config_toml is explicitly given, ensure it exists
-            rmc.ensure(pathlib.Path(config_toml).is_file(), f"Invalid path to config file: {config_toml}")
+            kani.ensure(pathlib.Path(config_toml).is_file(), f"Invalid path to config file: {config_toml}")
             return config_toml
         else:
             # If no config flags are set, look for config toml in default location (<crate>/Cargo.toml)
             cargo_toml = pathlib.Path(crate).joinpath("Cargo.toml")
-            rmc.ensure(cargo_toml.is_file(), f"Cannot find configuration toml at expected location: {cargo_toml}")
+            kani.ensure(cargo_toml.is_file(), f"Cannot find configuration toml at expected location: {cargo_toml}")
             return cargo_toml
 
     # Combine args set by config toml and provided on command line
@@ -232,8 +232,8 @@ def parse_args():
 
     # Check for conflicting flags
     def validate(args):
-        rmc.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")
-        rmc.ensure(not (args.no_config_toml and args.config_toml),
+        kani.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")
+        kani.ensure(not (args.no_config_toml and args.config_toml),
                    "Incompatible flags: --config-toml, --no-config-toml")
 
     # Fix up args before returning
@@ -247,13 +247,13 @@ def parse_args():
 
         # Add some CBMC flags by default unless `--no-default-checks` is being used
         if args.default_checks:
-            rmc.add_selected_default_cbmc_checks(args)
+            kani.add_selected_default_cbmc_checks(args)
 
         # Conditionally add common CBMC flags
-        rmc.process_common_cbmc_flags(args)
+        kani.process_common_cbmc_flags(args)
 
-    # Remove "rmc" from arg if invoked `cargo rmc ...`
-    if len(sys.argv) >= 2 and sys.argv[1] == "rmc":
+    # Remove "kani" from arg if invoked `cargo kani ...`
+    if len(sys.argv) >= 2 and sys.argv[1] == "kani":
         del sys.argv[1]
 
     # Parse command line args to find crate and check for config flags
@@ -278,28 +278,28 @@ def parse_args():
 
 def extract_flags_from_toml(path):
     """Extract a list of args based on given config toml
-       RMC can be configured in the following tables:
-         - rmc
-         - workspace.metadata.rmc
-         - package.metadata.rmc
+       Kani can be configured in the following tables:
+         - kani
+         - workspace.metadata.kani
+         - package.metadata.kani
        The only field supported today is flags.
     """
     # Load the flag data from toml
     data = toml.load(path)
 
-    # Extract the rmc flags from the toml, if any of the supported tables are present
-    rmc_data = dict()
-    tables = ["workspace.metadata.rmc", "package.metadata.rmc", "rmc"]
+    # Extract the kani flags from the toml, if any of the supported tables are present
+    kani_data = dict()
+    tables = ["workspace.metadata.kani", "package.metadata.kani", "kani"]
     for table_name in tables:
         table = data
         for section in table_name.split("."):
             table = table.get(section, dict())
-        rmc_data.update(table)
+        kani_data.update(table)
 
-    if "flags" not in rmc_data:
+    if "flags" not in kani_data:
         return []
 
-    flag_data = rmc_data["flags"]
+    flag_data = kani_data["flags"]
 
     # Extract nested flags
     flags = dict()
@@ -338,7 +338,7 @@ def extract_flags_from_toml(path):
     for flag in flags:
         add_flag(flag, flags[flag])
 
-    rmc.ensure(success)
+    kani.ensure(success)
     return flag_list
 
 

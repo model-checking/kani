@@ -9,5 +9,5 @@ edition = "2018"
 
 [workspace]
 
-[package.metadata.rmc]
+[package.metadata.kani]
 flags = { unwind = "11" }

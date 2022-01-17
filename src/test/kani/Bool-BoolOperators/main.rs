@@ -12,6 +12,6 @@ fn main() {
     assert!(d && true);
     assert!(!b && d);
 
-    let e: bool = rmc::any();
+    let e: bool = kani::any();
     assert!(e || !e);
 }

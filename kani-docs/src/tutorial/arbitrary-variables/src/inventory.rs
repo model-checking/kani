@@ -22,19 +22,19 @@ impl Inventory {
 }
 // ANCHOR_END: inventory_lib
 
-#[cfg(rmc)]
+#[cfg(kani)]
 mod verification {
     use super::*;
 
     // ANCHOR: safe_update
-    #[rmc::proof]
+    #[kani::proof]
     pub fn safe_update() {
         // Create inventory variable.
         let mut inventory = Inventory { inner: VecMap::new() };
 
         // Create non-deterministic variables for id and quantity.
-        let id: ProductId = rmc::any();
-        let quantity: NonZeroU32 = rmc::any();
+        let id: ProductId = kani::any();
+        let quantity: NonZeroU32 = kani::any();
         assert!(quantity.get() != 0, "NonZeroU32 is internally a u32 but it should never be 0.");
 
         // Update the inventory and check the result.
@@ -44,14 +44,14 @@ mod verification {
     // ANCHOR_END: safe_update
 
     // ANCHOR: unsafe_update
-    #[rmc::proof]
+    #[kani::proof]
     pub fn unsafe_update() {
         // Create inventory variable.
         let mut inventory = Inventory { inner: VecMap::new() };
 
-        // Create non-deterministic variables for id and quantity with unsafe rmc::any_raw().
-        let id: ProductId = rmc::any();
-        let quantity: NonZeroU32 = unsafe { rmc::any_raw() };
+        // Create non-deterministic variables for id and quantity with unsafe kani::any_raw().
+        let id: ProductId = kani::any();
+        let quantity: NonZeroU32 = unsafe { kani::any_raw() };
 
         // The assert bellow would fail if we comment it out.
         // assert!(id.get() != 0, "NonZeroU32 is internally a u32 but it should never be 0.");

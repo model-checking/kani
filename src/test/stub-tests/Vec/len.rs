@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --use-abs --abs-type no-back
+// kani-flags: --use-abs --abs-type no-back
 fn main() {
     fn append_test() {
-        let mut vec = rmc_vec![1, 2, 3];
+        let mut vec = kani_vec![1, 2, 3];
         assert!(vec.len() == 3);
         vec.push(10);
         vec.push(15);

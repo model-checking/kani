@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that we can verify test harnesses using the --tests argument.
-// Note: We need to provide the compile-flags because compile test runs rustc directly and via rmc.
+// Note: We need to provide the compile-flags because compile test runs rustc directly and via kani.
 
 // compile-flags: --test
-// rmc-flags: --tests --function test_harness
+// kani-flags: --tests --function test_harness
 
 pub mod my_mod {
     pub fn fn_under_verification(a: i32) {
@@ -20,8 +20,8 @@ mod test {
     #[test]
     #[no_mangle]
     fn test_harness() {
-        let input: i32 = rmc::nondet();
-        rmc::assume(input > 1);
+        let input: i32 = kani::nondet();
+        kani::assume(input > 1);
         fn_under_verification(input);
     }
 }

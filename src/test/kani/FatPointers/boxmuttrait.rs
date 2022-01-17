@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // https://github.com/model-checking/rmc/issues/555
-// rmc-flags: --no-undefined-function-checks
+// kani-flags: --no-undefined-function-checks
 
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]

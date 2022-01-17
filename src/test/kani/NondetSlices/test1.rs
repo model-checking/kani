@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Test the RMC library's API for creating a non-det slice of a given array
+// Test the Kani library's API for creating a non-det slice of a given array
 
 fn check(slice: &[u8]) {
     let len = slice.len();
@@ -19,6 +19,6 @@ fn main() {
     let arr = [1, 2, 3];
     // The slice returned can be any of the following:
     // {[], [1], [2], [3], [1, 2], [2, 3], [1, 2, 3]}
-    let slice = rmc::slice::any_slice_of_array(&arr);
+    let slice = kani::slice::any_slice_of_array(&arr);
     check(slice);
 }

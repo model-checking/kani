@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// rmc-verify-fail
-// Check that rmc::raw_any for enums will generate invalid enums.
+// kani-verify-fail
+// Check that kani::raw_any for enums will generate invalid enums.
 // This code should fail due to unreachable code being reached.
 
 #[derive(Copy, Clone)]
@@ -13,9 +13,9 @@ enum Basic {
 }
 
 fn main() {
-    let e = unsafe { rmc::any_raw::<Basic>() };
+    let e = unsafe { kani::any_raw::<Basic>() };
     // This enum can be invalid and this code may actually not match any of the options below.
-    rmc::expect_fail(
+    kani::expect_fail(
         matches!(e, Basic::Variant1 | Basic::Variant2 | Basic::Variant3),
         "Invalid enum variant",
     );

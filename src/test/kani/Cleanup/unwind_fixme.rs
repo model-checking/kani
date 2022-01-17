@@ -7,12 +7,12 @@
 //
 // To run manually, execute:
 // ```
-// RUSTFLAGS="--C panic=unwind --crate-type lib" rmc unwind_fixme.rs  --function create
+// RUSTFLAGS="--C panic=unwind --crate-type lib" kani unwind_fixme.rs  --function create
 // ```
 //
 // compile-flags: --C panic=unwind --crate-type lib
-// rmc-flags: --function create
-// rmc-verify-fail
+// kani-flags: --function create
+// kani-verify-fail
 
 pub struct DummyResource {
     pub data: Option<String>,

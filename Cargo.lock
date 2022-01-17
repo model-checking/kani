@@ -3334,45 +3334,45 @@ dependencies = [
 ]
 
 [[package]]
-name = "rmc"
+name = "kani"
 version = "0.1.0"
 dependencies = [
- "rmc_macros",
+ "kani_macros",
 ]
 
 [[package]]
-name = "rmc-compiler"
+name = "kani-compiler"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rmc_queries",
- "rustc_codegen_rmc",
+ "kani_queries",
+ "rustc_codegen_kani",
  "tracing",
 ]
 
 [[package]]
-name = "rmc-link-restrictions"
+name = "kani-link-restrictions"
 version = "0.1.0"
 dependencies = [
  "cbmc",
- "rmc_restrictions",
+ "kani_restrictions",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "rmc_macros"
+name = "kani_macros"
 version = "0.1.0"
 
 [[package]]
-name = "rmc_queries"
+name = "kani_queries"
 version = "0.1.0"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
-name = "rmc_restrictions"
+name = "kani_restrictions"
 version = "0.1.0"
 dependencies = [
  "cbmc",

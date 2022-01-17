@@ -1,11 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // compile-flags: --crate-type lib
-// rmc-flags: --function match_bool
+// kani-flags: --function match_bool
 
-#[rmc::proof]
+#[kani::proof]
 pub fn match_bool() {
-    let arg: bool = rmc::nondet();
+    let arg: bool = kani::nondet();
     let var = match arg {
         true => !arg,
         _ => arg,

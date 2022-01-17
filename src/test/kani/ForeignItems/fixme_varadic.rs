@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! To run this test, do
-//! rmc fixme_varadic.rs -- lib.c
+//! kani fixme_varadic.rs -- lib.c
 
 use std::os::raw::c_int;
 

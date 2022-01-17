@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 fn main() {
-    let i: i32 = rmc::any();
-    rmc::assume(i < 10);
+    let i: i32 = kani::any();
+    kani::assume(i < 10);
     assert!(i < 20);
 }

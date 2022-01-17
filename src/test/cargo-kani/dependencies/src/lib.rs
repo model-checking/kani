@@ -3,7 +3,7 @@
 
 #[no_mangle]
 pub fn check_dummy() {
-    let x = rmc::any::<u8>();
-    rmc::assume(x > 10);
+    let x = kani::any::<u8>();
+    kani::assume(x > 10);
     assert!(x > 2);
 }

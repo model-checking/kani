@@ -3,12 +3,12 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::context::metadata::RmcMetadata;
+use crate::context::metadata::KaniMetadata;
 use crate::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::InternedString;
-use rmc_queries::{QueryDb, UserInput};
+use kani_queries::{QueryDb, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
@@ -83,7 +83,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     }
                     MonoItem::GlobalAsm(_) => {
                         warn!(
-                            "Crate {} contains global ASM, which is not handled by RMC",
+                            "Crate {} contains global ASM, which is not handled by Kani",
                             c.short_crate_name()
                         );
                     }
@@ -134,7 +134,7 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata = RmcMetadata { proof_harnesses: c.proof_harnesses };
+        let metadata = KaniMetadata { proof_harnesses: c.proof_harnesses };
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.debugging_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
@@ -142,7 +142,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filename = outputs.output_path(OutputType::Object);
             write_file(&base_filename, "symtab.json", &symtab);
             write_file(&base_filename, "type_map.json", &type_map);
-            write_file(&base_filename, "rmc-metadata.json", &metadata);
+            write_file(&base_filename, "kani-metadata.json", &metadata);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&base_filename, "restrictions.json", &restrictions);
@@ -185,18 +185,18 @@ impl CodegenBackend for GotocCodegenBackend {
 
 fn check_options(session: &Session, need_metadata_module: bool) {
     if !session.overflow_checks() {
-        session.err("RMC requires overflow checks in order to provide a sound analysis.");
+        session.err("Kani requires overflow checks in order to provide a sound analysis.");
     }
 
     if session.panic_strategy() != PanicStrategy::Abort {
         session.err(
-            "RMC can only handle abort panic strategy (-C panic=abort). See for more details \
+            "Kani can only handle abort panic strategy (-C panic=abort). See for more details \
         https://github.com/model-checking/rmc/issues/692",
         );
     }
 
     if need_metadata_module {
-        session.err("RMC cannot generate metadata module.")
+        session.err("Kani cannot generate metadata module.")
     }
 
     session.abort_if_errors();

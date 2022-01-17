@@ -1,22 +1,22 @@
-## RMC documentation development
+## Kani documentation development
 
-A good trick when developing RMC on a remote machine is to SSH forward to test documentation changes.
+A good trick when developing Kani on a remote machine is to SSH forward to test documentation changes.
 
 ```
-ssh -t -L 3000:127.0.0.1:3000 rmc-host 'cd rmc/rmc-docs/ && ./mdbook serve'
+ssh -t -L 3000:127.0.0.1:3000 kani-host 'cd kani/kani-docs/ && ./mdbook serve'
 ```
 
-This command will connect to `rmc-host` where it assumes RMC is checked out in `rmc/` and the documentation has been built once successfully.
+This command will connect to `kani-host` where it assumes Kani is checked out in `kani/` and the documentation has been built once successfully.
 It will automatically detect changes to the docs and rebuild, allowing you to quickly refresh in your local browser when you visit: `http://127.0.0.1:3000/`
 
 ## Documentation tests
 
 The code in `src/tutorial/` is tested with `compiletest`.
-This means each file should be buildable independently (i.e. you can run `rmc` on each `.rs` file).
-It also means the necessary `rmc-` flag-comments must appear in each file.
+This means each file should be buildable independently (i.e. you can run `kani` on each `.rs` file).
+It also means the necessary `kani-` flag-comments must appear in each file.
 
-To run just these tests, return to the RMC root directory and run:
+To run just these tests, return to the Kani root directory and run:
 
 ```
-COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 rmc-docs
+COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 kani-docs
 ```

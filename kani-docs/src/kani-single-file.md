@@ -1,47 +1,47 @@
-# RMC on a single file
+# Kani on a single file
 
-For small examples, or initial learning, it's very common to run RMC on just one source file.
-The command line format for invoking RMC directly has a few common formats:
+For small examples, or initial learning, it's very common to run Kani on just one source file.
+The command line format for invoking Kani directly has a few common formats:
 
 ```
-rmc filename.rs
+kani filename.rs
 # or
-rmc filename.rs [--rmc-flags]
+kani filename.rs [--kani-flags]
 # or
-rmc filename.rs [--rmc-flags] --cbmc-args [--cbmc-flags]
+kani filename.rs [--kani-flags] --cbmc-args [--cbmc-flags]
 ```
 
 For example,
 
 ```
-rmc filenames.rs --visualize --cbmc-args --object-bits 11 --unwind 15
+kani filenames.rs --visualize --cbmc-args --object-bits 11 --unwind 15
 ```
 
-## Common RMC arguments
+## Common Kani arguments
 
 **`--visualize`** will generate a report in the local directory accessible through `report/html/index.html`.
-This report will shows coverage information, as well as give traces for each failure RMC finds.
+This report will shows coverage information, as well as give traces for each failure Kani finds.
 
-**`--function <name>`** RMC defaults to assuming the starting function is called `main`.
+**`--function <name>`** Kani defaults to assuming the starting function is called `main`.
 You can change it to a different function with this argument.
 Note that to "find" the function given, it needs to be given the `#[no_mangle]` annotation.
 
 **`--gen-c`** will generate a C file that roughly corresponds to the input Rust file.
-This can sometimes be helpful when trying to debug a problem with RMC.
+This can sometimes be helpful when trying to debug a problem with Kani.
 
-**`--keep-temps`** will preserve generated files that RMC generates.
+**`--keep-temps`** will preserve generated files that Kani generates.
 In particular, this will include a `.json` file which is the "CBMC symbol table".
-This can be helpful in trying to diagnose bugs in RMC, and may sometimes be requested in RMC bug reports.
+This can be helpful in trying to diagnose bugs in Kani, and may sometimes be requested in Kani bug reports.
 
 ## Common CBMC arguments
 
-RMC invokes CBMC to do the underlying solving.
+Kani invokes CBMC to do the underlying solving.
 (CBMC is the "C Bounded Model Checker" but is actually a framework that supports model checking multiple languages.)
 CBMC arguments are sometimes necessary to get good results.
 
-To give arguments to CBMC, you pass `--cbmc-args` to RMC.
-This "switches modes" from RMC arguments to CBMC arguments.
-Everything else given on the command line will be assumed to be a CBMC argument, and so all RMC arguments should be provided before this flag.
+To give arguments to CBMC, you pass `--cbmc-args` to Kani.
+This "switches modes" from Kani arguments to CBMC arguments.
+Everything else given on the command line will be assumed to be a CBMC argument, and so all Kani arguments should be provided before this flag.
 
 **`--unwind <n>`** Give a global upper bound on all loops.
 This can force termination when CBMC tries to unwind loops indefinitely.

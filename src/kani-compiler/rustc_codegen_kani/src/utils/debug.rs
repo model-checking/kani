@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This file contains functionality that makes RMC easier to debug
+//! This file contains functionality that makes Kani easier to debug
 
 use crate::GotocCtx;
 use cbmc::goto_program::Location;
@@ -15,11 +15,11 @@ use std::panic;
 use tracing::debug;
 
 // Use a thread-local global variable to track the current codegen item for debugging.
-// If RMC panics during codegen, we can grab this item to include the problematic
+// If Kani panics during codegen, we can grab this item to include the problematic
 // codegen item in the panic trace.
 thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Location>)> = RefCell::new((None, None)));
 
-// Include RMC's bug reporting URL in our panics.
+// Include Kani's bug reporting URL in our panics.
 const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/rmc/issues/new?labels=bug&template=bug_report.md";
 
@@ -48,22 +48,22 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
             CURRENT_CODEGEN_ITEM.with(|cell| {
                 let t = cell.borrow().clone();
                 if let Some(current_item) = t.0 {
-                    eprintln!("[RMC] current codegen item: {}", current_item);
+                    eprintln!("[Kani] current codegen item: {}", current_item);
                 } else {
-                    eprintln!("[RMC] no current codegen item.");
+                    eprintln!("[Kani] no current codegen item.");
                 }
                 if let Some(current_loc) = t.1 {
-                    eprintln!("[RMC] current codegen location: {:?}", current_loc);
+                    eprintln!("[Kani] current codegen location: {:?}", current_loc);
                 } else {
-                    eprintln!("[RMC] no current codegen location.");
+                    eprintln!("[Kani] no current codegen location.");
                 }
             });
 
             // Separate the output with an empty line
             eprintln!();
 
-            // Print the RMC message
-            eprintln!("RMC unexpectedly panicked during code generation.\n");
+            // Print the Kani message
+            eprintln!("Kani unexpectedly panicked during code generation.\n");
             eprintln!(
                 "If you are seeing this message, please file an issue here instead of on the Rust compiler: {}",
                 BUG_REPORT_URL

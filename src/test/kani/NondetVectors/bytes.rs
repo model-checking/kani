@@ -4,19 +4,19 @@ use std::convert::TryInto;
 
 fn main() {
     let input: &[u8] = &vec![
-        rmc::any(),
-        rmc::any(),
-        rmc::any(),
-        rmc::any(),
-        rmc::any(),
-        rmc::any(),
-        rmc::any(),
-        rmc::any(),
+        kani::any(),
+        kani::any(),
+        kani::any(),
+        kani::any(),
+        kani::any(),
+        kani::any(),
+        kani::any(),
+        kani::any(),
     ];
     let buffer = input.as_ref();
     let bytes: [u8; 8] = buffer.try_into().unwrap();
     let value = u64::from_be_bytes(bytes);
-    let idx: usize = rmc::any();
+    let idx: usize = kani::any();
     if idx < 8 {
         assert!(u64::to_be_bytes(value)[idx] == input[idx]);
     }

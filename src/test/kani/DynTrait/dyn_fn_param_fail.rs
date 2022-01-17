@@ -10,16 +10,16 @@
 include!("../Helpers/vtable_utils_ignore.rs");
 fn takes_dyn_fun(fun: &dyn Fn() -> u32) {
     let x = fun();
-    if rmc::nondet() {
-        rmc::expect_fail(x != 5, "Wrong return");
+    if kani::nondet() {
+        kani::expect_fail(x != 5, "Wrong return");
     }
 
     /* The function dynamic object has no associated data */
-    rmc::expect_fail(size_from_vtable(vtable!(fun)) != 0, "Wrong size");
+    kani::expect_fail(size_from_vtable(vtable!(fun)) != 0, "Wrong size");
 }
 
 pub fn unit_to_u32() -> u32 {
-    if rmc::nondet() {
+    if kani::nondet() {
         assert!(false);
     }
     5 as u32

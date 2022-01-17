@@ -12,10 +12,10 @@ fn main() {
     x &= 15;
     assert!(x == 2);
 
-    let mut a: u32 = rmc::any();
+    let mut a: u32 = kani::any();
     a %= 8;
 
-    let mut b: u32 = rmc::any();
+    let mut b: u32 = kani::any();
     b %= 8;
 
     let mut c = a;

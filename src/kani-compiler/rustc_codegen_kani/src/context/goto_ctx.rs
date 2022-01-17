@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! RMC can be thought of as a translator from an MIR context to a goto context.
+//! Kani can be thought of as a translator from an MIR context to a goto context.
 //! This struct `GotocCtx<'tcx>` defined in this file, tracks both views of information.
 //! In particular
 //!   - `tcx` of the struct represents the MIR view
@@ -22,7 +22,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Symbol
 use cbmc::utils::aggr_tag;
 use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
 use cbmc::{MachineModel, RoundingMode};
-use rmc_queries::{QueryDb, UserInput};
+use kani_queries::{QueryDb, UserInput};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::stable_map::FxHashMap;
@@ -43,7 +43,7 @@ use std::rc::Rc;
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
-    /// the query system for rmc
+    /// the query system for kani
     pub queries: Rc<QueryDb>,
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
@@ -138,7 +138,7 @@ impl<'tcx> GotocCtx<'tcx> {
         symbol
     }
 
-    /// Generate a new function local variable that can be used as a temporary in RMC expressions.
+    /// Generate a new function local variable that can be used as a temporary in Kani expressions.
     pub fn gen_temp_variable(&mut self, t: Type, loc: Location) -> Symbol {
         let c = self.current_fn_mut().get_and_incr_counter();
         self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc)

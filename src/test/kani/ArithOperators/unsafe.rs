@@ -5,10 +5,10 @@
 
 macro_rules! verify_no_overflow {
     ($cf: ident, $uf: tt) => {{
-        let a: u8 = rmc::nondet();
-        let b: u8 = rmc::nondet();
+        let a: u8 = kani::nondet();
+        let b: u8 = kani::nondet();
         let checked = a.$cf(b);
-        rmc::assume(checked.is_some());
+        kani::assume(checked.is_some());
         let unchecked = unsafe { a $uf b };
         assert!(checked.unwrap() == unchecked);
     }};

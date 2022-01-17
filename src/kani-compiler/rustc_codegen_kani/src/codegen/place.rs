@@ -18,7 +18,7 @@ use rustc_middle::{
 use rustc_target::abi::{TagEncoding, Variants};
 use tracing::{debug, warn};
 
-/// A projection in RMC can either be to a type (the normal case),
+/// A projection in Kani can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
 #[derive(Debug)]
 pub enum TypeOrVariant<'tcx> {

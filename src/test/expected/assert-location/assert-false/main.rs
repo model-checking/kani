@@ -4,7 +4,7 @@
 // Check the location of the assert statement when using assert!(false);
 
 fn any_bool() -> bool {
-    rmc::nondet()
+    kani::nondet()
 }
 
 pub fn main() {

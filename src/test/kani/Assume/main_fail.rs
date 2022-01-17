@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 fn main() {
-    let i: i32 = rmc::any();
-    rmc::assume(i < 10);
-    rmc::expect_fail(i > 20, "Blocked by assumption above.");
+    let i: i32 = kani::any();
+    kani::assume(i < 10);
+    kani::expect_fail(i > 20, "Blocked by assumption above.");
 }

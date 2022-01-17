@@ -5,7 +5,7 @@
 
 // FIXME until the corresponding CBMC path lands:
 
-// rmc-flags: --restrict-vtable
+// kani-flags: --restrict-vtable
 
 struct Sheep {}
 struct Cow {}
@@ -46,7 +46,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 }
 
 pub fn main() {
-    let random_number = rmc::nondet();
+    let random_number = kani::nondet();
     let animal = random_animal(random_number);
     let s = animal.noise();
     if random_number < 5 {

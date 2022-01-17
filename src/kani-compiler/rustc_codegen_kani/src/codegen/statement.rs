@@ -468,7 +468,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         assert!(!fargs.is_empty(), "Panic requires a string message");
         let msg = extract_const_message(&fargs[0]).unwrap_or(String::from(
-            "This is a placeholder message; RMC doesn't support message formatted at runtime",
+            "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
         self.codegen_fatal_error(&msg, span)

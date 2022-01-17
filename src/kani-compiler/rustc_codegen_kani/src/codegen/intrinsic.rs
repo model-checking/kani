@@ -279,7 +279,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Note: Atomic arithmetic operations wrap around on overflow.
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
-                warn!("RMC does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
+                warn!("Kani does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
                 let loc = self.codegen_span_option(span);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
@@ -582,7 +582,7 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Stmt {
         warn!(
-            "RMC does not support concurrency for now. {} treated as a sequential operation.",
+            "Kani does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
         let var1_ref = fargs.remove(0);
@@ -613,7 +613,7 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Stmt {
         warn!(
-            "RMC does not support concurrency for now. {} treated as a sequential operation.",
+            "Kani does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
         let var1_ref = fargs.remove(0);
@@ -652,7 +652,7 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Stmt {
         warn!(
-            "RMC does not support concurrency for now. {} treated as a sequential operation.",
+            "Kani does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
         let var1_ref = fargs.remove(0);
@@ -668,7 +668,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
         warn!(
-            "RMC does not support concurrency for now. {} treated as a sequential operation.",
+            "Kani does not support concurrency for now. {} treated as a sequential operation.",
             intrinsic
         );
         let skip_stmt = Stmt::skip(loc.clone());
