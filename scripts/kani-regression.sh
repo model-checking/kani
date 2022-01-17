@@ -28,7 +28,7 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 (cd src/kani-compiler; cargo test)
 
 # Build tool for linking Kani pointer restrictions
-cargo build --release --manifest-path src/tools/kani-link-restrictions/Cargo.toml 
+cargo build --release --manifest-path src/tools/kani-link-restrictions/Cargo.toml
 
 # Standalone kani tests, expected tests, and cargo tests
 ./x.py build -i src/tools/compiletest --stage 0

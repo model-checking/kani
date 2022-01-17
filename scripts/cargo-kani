@@ -41,7 +41,7 @@ def main():
         out_files = kani.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
         kani.link_c_lib(out_files, cbmc_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
-                       args.dry_run, args.keep_temps)
+                        args.dry_run, args.keep_temps)
 
         if EXIT_CODE_SUCCESS != kani.goto_to_c(
                 cbmc_runnable_filename,
@@ -129,8 +129,8 @@ def main():
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
         retcode = kani.run_visualize(cbmc_filename, args.cbmc_args, cover_args,
-                                    args.verbose, args.quiet, args.keep_temps,
-                                    args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
+                                     args.verbose, args.quiet, args.keep_temps,
+                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
         retcode = kani.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
 
@@ -234,7 +234,7 @@ def parse_args():
     def validate(args):
         kani.ensure(not (args.crate and args.crate_flag), "Please provide a single crate to verify.")
         kani.ensure(not (args.no_config_toml and args.config_toml),
-                   "Incompatible flags: --config-toml, --no-config-toml")
+                    "Incompatible flags: --config-toml, --no-config-toml")
 
     # Fix up args before returning
     def post_process(args):

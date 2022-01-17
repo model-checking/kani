@@ -30,13 +30,14 @@ def main():
         c_runnable_filename = base + "_runnable.c"
         restrictions_runnable_filename = os.path.join(
             args.target_dir, "debug", "deps") if args.restrict_vtable else None
-        if EXIT_CODE_SUCCESS != kani.compile_single_rust_file(args.input, base, json_runnable_filename, args, ["gen-c"]):
+        if EXIT_CODE_SUCCESS != kani.compile_single_rust_file(
+                args.input, base, json_runnable_filename, args, ["gen-c"]):
             return 1
 
         out_files = kani.symbol_table_to_gotoc([json_runnable_filename], args.verbose, args.keep_temps, args.dry_run)
 
         kani.link_c_lib(out_files, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
-                       args.dry_run, args.keep_temps)
+                        args.dry_run, args.keep_temps)
 
         if EXIT_CODE_SUCCESS != kani.goto_to_c(
                 goto_runnable_filename,
@@ -72,7 +73,7 @@ def main():
         args.c_lib.append(str(KANI_C_HASHSET))
 
     kani.link_c_lib(out_files, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run,
-                   args.keep_temps)
+                    args.keep_temps)
 
     if args.gen_c:
         if EXIT_CODE_SUCCESS != kani.goto_to_c(
@@ -134,8 +135,8 @@ def main():
         # Use a separate set of flags for coverage checking (empty for now)
         cover_args = []
         retcode = kani.run_visualize(goto_filename, args.cbmc_args, cover_args,
-                                    args.verbose, args.quiet, args.keep_temps,
-                                    args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
+                                     args.verbose, args.quiet, args.keep_temps,
+                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
         retcode = kani.run_cbmc(
             goto_filename,

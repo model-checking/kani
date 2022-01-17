@@ -239,7 +239,7 @@ def compile_single_rust_file(
         atexit.register(delete_file, base + ".kani-metadata.json")
 
     build_cmd = [KANI_RUSTC_EXE] + compiler_flags(extra_args.mangler, symbol_table_passes,
-                                                 extra_args.restrict_vtable)
+                                                  extra_args.restrict_vtable)
 
     if extra_args.use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
