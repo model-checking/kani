@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::*;
 
-use crate::common::{Config, Mode, KaniFailStep};
+use crate::common::{Config, KaniFailStep, Mode};
 
 #[derive(Clone, Debug)]
 pub struct TestProps {

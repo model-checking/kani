@@ -7,7 +7,7 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, Expected, KaniFixme, Stub, Kani};
+use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
