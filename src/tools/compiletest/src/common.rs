@@ -14,9 +14,9 @@ use test::ColorConfig;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
-    RMC,
-    RmcFixme,
-    CargoRMC,
+    Kani,
+    KaniFixme,
+    CargoKani,
     Expected,
     Stub,
 }
@@ -25,9 +25,9 @@ impl FromStr for Mode {
     type Err = ();
     fn from_str(s: &str) -> Result<Mode, ()> {
         match s {
-            "rmc" => Ok(RMC),
-            "rmc-fixme" => Ok(RmcFixme),
-            "cargo-rmc" => Ok(CargoRMC),
+            "kani" => Ok(Kani),
+            "kani-fixme" => Ok(KaniFixme),
+            "cargo-kani" => Ok(CargoKani),
             "expected" => Ok(Expected),
             "stub-tests" => Ok(Stub),
             _ => Err(()),
@@ -38,9 +38,9 @@ impl FromStr for Mode {
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match *self {
-            RMC => "rmc",
-            RmcFixme => "rmc-fixme",
-            CargoRMC => "cargo-rmc",
+            Kani => "kani",
+            KaniFixme => "kani-fixme",
+            CargoKani => "cargo-kani",
             Expected => "expected",
             Stub => "stub-tests",
         };
@@ -48,17 +48,17 @@ impl fmt::Display for Mode {
     }
 }
 
-/// Step at which RMC test should fail.
+/// Step at which Kani test should fail.
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-pub enum RMCFailStep {
-    /// RMC panics before the codegen step (up to MIR generation). This step
+pub enum KaniFailStep {
+    /// Kani panics before the codegen step (up to MIR generation). This step
     /// runs the same checks on the test code as `cargo check` including syntax,
     /// type, name resolution, and borrow checks.
     Check,
-    /// RMC panics at the codegen step because the test code uses unimplemented
+    /// Kani panics at the codegen step because the test code uses unimplemented
     /// and/or unsupported features.
     Codegen,
-    /// RMC panics after the codegen step because of verification failures or
+    /// Kani panics after the codegen step because of verification failures or
     /// other CBMC errors.
     Verify,
 }
@@ -79,8 +79,8 @@ pub enum PanicStrategy {
 /// Configuration for compiletest
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The path to the directory where the RMC executable is located
-    pub rmc_dir_path: PathBuf,
+    /// The path to the directory where the Kani executable is located
+    pub kani_dir_path: PathBuf,
 
     /// The directory containing the tests to run
     pub src_base: PathBuf,

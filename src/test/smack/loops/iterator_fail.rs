@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --no-memory-splitting --unroll=10
 // @expect error
-// rmc-verify-fail
+// kani-verify-fail
 // cbmc-flags: --unwind 5
 
 fn fac(n: u64) -> u64 {
@@ -15,7 +15,7 @@ fn fac(n: u64) -> u64 {
 
 pub fn main() {
     let mut a = 1;
-    let n = rmc::any();
+    let n = kani::any();
     if n < 5 {
         for i in 1..n + 1 as u64 {
             a *= i;

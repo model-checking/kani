@@ -12,7 +12,7 @@ macro_rules! error {
 
 struct MyError {}
 
-unsafe impl rmc::Invariant for MyError {
+unsafe impl kani::Invariant for MyError {
     fn is_valid(&self) -> bool {
         true
     }
@@ -21,7 +21,7 @@ unsafe impl rmc::Invariant for MyError {
 #[derive(Default, Clone, Copy)]
 pub struct GuestAddress(pub u64);
 
-unsafe impl rmc::Invariant for GuestAddress {
+unsafe impl kani::Invariant for GuestAddress {
     fn is_valid(&self) -> bool {
         true
     }
@@ -35,7 +35,7 @@ pub struct GuestMemoryMmap {}
 impl GuestMemoryMmap {
     fn checked_offset(&self, base: GuestAddress, offset: usize) -> Option<GuestAddress> {
         let mut retval = None;
-        if rmc::any() {
+        if kani::any() {
             if let Some(sum) = base.0.checked_add(offset as u64) {
                 retval = Some(GuestAddress(sum))
             }
@@ -48,21 +48,21 @@ impl GuestMemoryMmap {
         return retval;
     }
 
-    fn read_obj<T: rmc::Invariant>(&self, addr: GuestAddress) -> Result<T, MyError> {
+    fn read_obj<T: kani::Invariant>(&self, addr: GuestAddress) -> Result<T, MyError> {
         // This assertion means that no descriptor is read more than once
         unsafe {
             if let Some(prev_addr) = TRACK_READ_OBJ {
                 assert!(prev_addr.0 != addr.0);
             }
-            if rmc::any() && TRACK_READ_OBJ.is_none() {
+            if kani::any() && TRACK_READ_OBJ.is_none() {
                 TRACK_READ_OBJ = Some(addr);
             }
         }
-        if rmc::any() { Ok(rmc::any::<T>()) } else { Err(rmc::any::<MyError>()) }
+        if kani::any() { Ok(kani::any::<T>()) } else { Err(kani::any::<MyError>()) }
     }
 
     fn read_obj_request_header(&self, addr: GuestAddress) -> Result<RequestHeader, Error> {
-        if rmc::any() { Ok(rmc::any::<RequestHeader>()) } else { Err(rmc::any::<Error>()) }
+        if kani::any() { Ok(kani::any::<RequestHeader>()) } else { Err(kani::any::<Error>()) }
     }
 }
 
@@ -79,7 +79,7 @@ struct Descriptor {
     next: u16,
 }
 
-unsafe impl rmc::Invariant for Descriptor {
+unsafe impl kani::Invariant for Descriptor {
     fn is_valid(&self) -> bool {
         true
     }
@@ -149,7 +149,7 @@ impl<'a> DescriptorChain<'a> {
         if chain.is_valid() { Some(chain) } else { None }
     }
 
-    // RMC change: add check to avoid self-loops
+    // Kani change: add check to avoid self-loops
     fn is_valid(&self) -> bool {
         !self.has_next() || (self.next < self.queue_size && self.next != self.index)
     }
@@ -193,7 +193,7 @@ pub struct RequestHeader {
     sector: u64,
 }
 
-unsafe impl rmc::Invariant for RequestHeader {
+unsafe impl kani::Invariant for RequestHeader {
     fn is_valid(&self) -> bool {
         true
     }
@@ -253,7 +253,7 @@ pub enum Error {
     UnexpectedWriteOnlyDescriptor,
 }
 
-unsafe impl rmc::Invariant for Error {
+unsafe impl kani::Invariant for Error {
     fn is_valid(&self) -> bool {
         matches!(
             *self,
@@ -303,7 +303,7 @@ impl Request {
             }
         } else {
             data_desc = desc;
-            // RMC change: add chain loop check
+            // Kani change: add chain loop check
             if data_desc.next == avail_desc.index {
                 return Err(Error::DescriptorChainTooShort);
             }
@@ -355,12 +355,12 @@ fn is_nonzero_pow2(x: u16) -> bool {
 
 fn main() {
     let mem = GuestMemoryMmap {};
-    let queue_size: u16 = rmc::any();
+    let queue_size: u16 = kani::any();
     if !is_nonzero_pow2(queue_size) {
         return;
     }
-    let index: u16 = rmc::any();
-    let desc_table = GuestAddress(rmc::any::<u64>() & 0xffff_ffff_ffff_fff0);
+    let index: u16 = kani::any();
+    let desc_table = GuestAddress(kani::any::<u64>() & 0xffff_ffff_ffff_fff0);
     let desc = DescriptorChain::checked_new(&mem, desc_table, queue_size, index);
     match desc {
         Some(x) => {

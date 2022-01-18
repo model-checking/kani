@@ -4,7 +4,7 @@
 
 """CBMC JSON Parser
 
-This script allows rmc to print to the console the final output displayed to the user
+This script allows kani to print to the console the final output displayed to the user
 after CBMC gives the response JSON object.
 
 This script accepts JSON files.
@@ -42,7 +42,7 @@ class GlobalMessages(str, Enum):
     MESSAGE_TEXT = 'messageText'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
-    UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by RMC"
+    UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
 
@@ -176,7 +176,7 @@ def postprocess_results(properties):
     Check for certain cases, e.g. a reachable unsupported construct or a failed
     unwinding assertion, and update the results of impacted checks accordingly.
     1. Change all "SUCCESS" results to "UNDETERMINED" if the reachability check
-    for a Rust construct that is not currently supported by RMC failed, since
+    for a Rust construct that is not currently supported by Kani failed, since
     the missing exploration of execution paths through the unsupported construct
     may hide failures
     2. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
@@ -200,7 +200,7 @@ def postprocess_results(properties):
     messages = ""
     if has_reachable_unsupported_constructs:
         messages += "** WARNING: A Rust construct that is not currently supported " \
-                    "by RMC was found to be reachable. Check the results for " \
+                    "by Kani was found to be reachable. Check the results for " \
                     "more details."
 
     return properties, messages

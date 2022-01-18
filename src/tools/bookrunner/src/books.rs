@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Utilities to extract examples from Rust books, run them through RMC, and
+//! Utilities to extract examples from Rust books, run them through Kani, and
 //! display their results.
 
 extern crate rustc_span;
@@ -387,7 +387,7 @@ fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<
             //specifying the fail step in the corresponding config file.
             props.fail_step = Some(FailStep::Check);
         } else if example.config.should_panic {
-            // RMC should catch run-time errors.
+            // Kani should catch run-time errors.
             props.fail_step = Some(FailStep::Verification);
         }
     }
@@ -518,7 +518,7 @@ fn litani_run_tests() {
     let bookrunner_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
     let stage_names = ["check", "codegen", "verification"];
 
-    util::add_rmc_and_litani_to_path();
+    util::add_kani_and_litani_to_path();
     let mut litani = Litani::init("Book Runner", &stage_names, &output_prefix, &output_symlink);
 
     // Run all tests under the `src/test/bookrunner` directory.
@@ -536,7 +536,7 @@ fn litani_run_tests() {
     litani.run_build();
 }
 
-/// Extracts examples from the Rust books, run them through RMC, and displays
+/// Extracts examples from the Rust books, run them through Kani, and displays
 /// their results in a HTML webpage.
 pub fn generate_run() {
     let litani_log: PathBuf = ["build", "output", "latest", "run.json"].iter().collect();

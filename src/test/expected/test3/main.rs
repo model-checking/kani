@@ -10,7 +10,7 @@ fn main() {
     }
 
     // at this point, a == 10.0 and i == 0
-    match rmc::nondet::<i8>() {
+    match kani::nondet::<i8>() {
         // should fail
         0 => assert!(a == 10.0 && i == 1),
         // should fail

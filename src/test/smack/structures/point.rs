@@ -37,10 +37,10 @@ impl AddAssign for Point {
 }
 
 pub fn main() {
-    let w = rmc::any();
-    let x = rmc::any();
-    let y = rmc::any();
-    let z = rmc::any();
+    let w = kani::any();
+    let x = kani::any();
+    let y = kani::any();
+    let z = kani::any();
 
     if w <= std::u64::MAX / 2 // avoid overflow
         && x <= std::u64::MAX / 2 // avoid overflow

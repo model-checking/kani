@@ -16,17 +16,17 @@ use std::{
     process::Command,
 };
 
-/// Step at which RMC should panic.
+/// Step at which Kani should panic.
 #[derive(PartialEq)]
 pub enum FailStep {
-    /// RMC panics before the codegen step (up to MIR generation). This step
+    /// Kani panics before the codegen step (up to MIR generation). This step
     /// runs the same checks on the test code as `cargo check` including syntax,
     /// type, name resolution, and borrow checks.
     Check,
-    /// RMC panics at the codegen step because the test code uses unimplemented
+    /// Kani panics at the codegen step because the test code uses unimplemented
     /// and/or unsupported features.
     Codegen,
-    /// RMC panics after the codegen step because of verification failures or
+    /// Kani panics after the codegen step because of verification failures or
     /// other CBMC errors.
     Verification,
 }
@@ -49,8 +49,8 @@ pub struct TestProps {
     pub fail_step: Option<FailStep>,
     /// Extra arguments to pass to `rustc`.
     pub rustc_args: Vec<String>,
-    /// Extra arguments to pass to RMC.
-    pub rmc_args: Vec<String>,
+    /// Extra arguments to pass to Kani.
+    pub kani_args: Vec<String>,
 }
 
 impl TestProps {
@@ -59,16 +59,16 @@ impl TestProps {
         path: PathBuf,
         fail_step: Option<FailStep>,
         rustc_args: Vec<String>,
-        rmc_args: Vec<String>,
+        kani_args: Vec<String>,
     ) -> Self {
-        Self { path, fail_step, rustc_args, rmc_args }
+        Self { path, fail_step, rustc_args, kani_args }
     }
 }
 
 impl Display for TestProps {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(fail_step) = &self.fail_step {
-            f.write_fmt(format_args!("// rmc-{}-fail\n", fail_step))?;
+            f.write_fmt(format_args!("// kani-{}-fail\n", fail_step))?;
         }
         if !self.rustc_args.is_empty() {
             f.write_str("// compile-flags:")?;
@@ -77,9 +77,9 @@ impl Display for TestProps {
             }
             f.write_char('\n')?;
         }
-        if !self.rmc_args.is_empty() {
-            f.write_str("// rmc-flags:")?;
-            for arg in &self.rmc_args {
+        if !self.kani_args.is_empty() {
+            f.write_str("// kani-flags:")?;
+            for arg in &self.kani_args {
                 f.write_fmt(format_args!(" {}", arg))?;
             }
             f.write_char('\n')?;
@@ -88,20 +88,20 @@ impl Display for TestProps {
     }
 }
 
-/// Parses strings of the form `rmc-*-fail` and returns the step at which RMC is
+/// Parses strings of the form `kani-*-fail` and returns the step at which Kani is
 /// expected to panic.
 fn try_parse_fail_step(cur_fail_step: Option<FailStep>, line: &str) -> Option<FailStep> {
-    let fail_step = if line.contains("rmc-check-fail") {
+    let fail_step = if line.contains("kani-check-fail") {
         Some(FailStep::Check)
-    } else if line.contains("rmc-codegen-fail") {
+    } else if line.contains("kani-codegen-fail") {
         Some(FailStep::Codegen)
-    } else if line.contains("rmc-verify-fail") {
+    } else if line.contains("kani-verify-fail") {
         Some(FailStep::Verification)
     } else {
         None
     };
     match (cur_fail_step.is_some(), fail_step.is_some()) {
-        (true, true) => panic!("Error: multiple `rmc-*-fail` headers in a single test."),
+        (true, true) => panic!("Error: multiple `kani-*-fail` headers in a single test."),
         (false, true) => fail_step,
         _ => cur_fail_step,
     }
@@ -128,7 +128,7 @@ fn try_parse_args(cur_args: Vec<String>, name: &str, line: &str) -> Vec<String> 
 pub fn parse_test_header(path: &Path) -> TestProps {
     let mut fail_step = None;
     let mut rustc_args = Vec::new();
-    let mut rmc_args = Vec::new();
+    let mut kani_args = Vec::new();
     let it = BufReader::new(File::open(path).unwrap());
     for line in it.lines() {
         let line = line.unwrap();
@@ -141,33 +141,33 @@ pub fn parse_test_header(path: &Path) -> TestProps {
         }
         fail_step = try_parse_fail_step(fail_step, line);
         rustc_args = try_parse_args(rustc_args, "compile", line);
-        rmc_args = try_parse_args(rmc_args, "rmc", line);
+        kani_args = try_parse_args(kani_args, "kani", line);
     }
-    TestProps::new(path.to_path_buf(), fail_step, rustc_args, rmc_args)
+    TestProps::new(path.to_path_buf(), fail_step, rustc_args, kani_args)
 }
 
-/// Adds RMC and Litani directories to the current `PATH` environment variable.
-pub fn add_rmc_and_litani_to_path() {
+/// Adds Kani and Litani directories to the current `PATH` environment variable.
+pub fn add_kani_and_litani_to_path() {
     let cwd = env::current_dir().unwrap();
-    let rmc_dir = cwd.join("scripts");
+    let kani_dir = cwd.join("scripts");
     let mut litani_dir = cwd.clone();
     litani_dir.extend(["src", "tools", "litani"].iter());
     env::set_var(
         "PATH",
-        format!("{}:{}:{}", rmc_dir.display(), litani_dir.display(), env::var("PATH").unwrap()),
+        format!("{}:{}:{}", kani_dir.display(), litani_dir.display(), env::var("PATH").unwrap()),
     );
 }
 
-/// Does RMC catch syntax, type, and borrow errors (if any)?
+/// Does Kani catch syntax, type, and borrow errors (if any)?
 pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Check) { 1 } else { 0 };
-    let mut rmc_rustc = Command::new("rmc-rustc");
-    rmc_rustc.args(&test_props.rustc_args).args(["-Z", "no-codegen"]).arg(&test_props.path);
+    let mut kani_rustc = Command::new("kani-rustc");
+    kani_rustc.args(&test_props.rustc_args).args(["-Z", "no-codegen"]).arg(&test_props.path);
 
     let mut phony_out = test_props.path.clone();
     phony_out.set_extension("check");
     litani.add_job(
-        &rmc_rustc,
+        &kani_rustc,
         &[&test_props.path],
         &[&phony_out],
         "Is this valid Rust code?",
@@ -178,21 +178,21 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
     );
 }
 
-/// Is RMC expected to codegen all the Rust features in the test?
+/// Is Kani expected to codegen all the Rust features in the test?
 pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Codegen) { 1 } else { 0 };
-    let mut rmc_rustc = Command::new("rmc-rustc");
-    rmc_rustc.args(&test_props.rustc_args).args(["--out-dir", "build/tmp"]).arg(&test_props.path);
+    let mut kani_rustc = Command::new("kani-rustc");
+    kani_rustc.args(&test_props.rustc_args).args(["--out-dir", "build/tmp"]).arg(&test_props.path);
 
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("check");
     let mut phony_out = test_props.path.clone();
     phony_out.set_extension("codegen");
     litani.add_job(
-        &rmc_rustc,
+        &kani_rustc,
         &[&phony_in],
         &[&phony_out],
-        "Does RMC support all the Rust features used in it?",
+        "Does Kani support all the Rust features used in it?",
         test_props.path.to_str().unwrap(),
         "codegen",
         exit_status,
@@ -203,19 +203,19 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
 // Does verification pass/fail as it is expected to?
 pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Verification) { 10 } else { 0 };
-    let mut rmc = Command::new("rmc");
-    rmc.arg(&test_props.path).args(&test_props.rmc_args);
+    let mut kani = Command::new("kani");
+    kani.arg(&test_props.path).args(&test_props.kani_args);
     if !test_props.rustc_args.is_empty() {
-        rmc.env("RUSTFLAGS", test_props.rustc_args.join(" "));
+        kani.env("RUSTFLAGS", test_props.rustc_args.join(" "));
     }
 
     let mut phony_in = test_props.path.clone();
     phony_in.set_extension("codegen");
     litani.add_job(
-        &rmc,
+        &kani,
         &[&phony_in],
         &[],
-        "Can RMC reason about it?",
+        "Ca Kani reason about it?",
         test_props.path.to_str().unwrap(),
         "verification",
         exit_status,
