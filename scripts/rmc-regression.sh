@@ -8,6 +8,16 @@ fi
 set -o pipefail
 set -o nounset
 
+# Test for platform
+PLATFORM=$(uname -sp)
+if [[ $PLATFORM == "Linux x86_64" ]]
+then
+  TARGET="x86_64-unknown-linux-gnu"
+elif [[ $PLATFORM == "Darwin i386" ]]
+then
+  TARGET="x86_64-apple-darwin"
+fi
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
@@ -30,10 +40,36 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Build tool for linking RMC pointer restrictions
 cargo build --release --manifest-path src/tools/rmc-link-restrictions/Cargo.toml 
 
-# Standalone rmc tests, expected tests, and cargo tests
-./x.py build -i src/tools/compiletest --stage 0
-export COMPILETEST_FORCE_STAGE0=1  # We don't care about the stage anymore. Remove this once we replace ./x.py test
-./x.py test -i --stage 0 rmc firecracker prusti smack expected cargo-rmc rmc-docs rmc-fixme
+# Build compiletest
+(cd "${RMC_DIR}/src/tools/compiletest"; cargo build --release)
+
+# Declare testing suite information (suite and mode)
+TESTS=(
+    "rmc rmc"
+    "firecracker rmc"
+    "prusti rmc"
+    "smack rmc"
+    "expected expected"
+    "cargo-rmc cargo-rmc"
+    "rmc-docs cargo-rmc"
+    "rmc-fixme rmc-fixme"
+)
+
+# Extract testing suite information and run compiletest
+for testp in "${TESTS[@]}"; do
+  testl=($testp)
+  suite=${testl[0]}
+  mode=${testl[1]}
+  echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
+  # Note: `cargo-rmc` tests fail if we do not add `$(pwd)` to `--build-base`
+  # Tracking issue: https://github.com/model-checking/rmc/issues/755
+  ./target/release/compiletest --rmc-dir-path scripts --src-base src/test/$suite \
+                               --build-base $(pwd)/build/$TARGET/test/$suite \
+                               --stage-id stage1-$TARGET \
+                               --suite $suite --mode $mode \
+                               --target $TARGET --host $TARGET \
+                               --quiet --channel dev
+done
 
 # Check codegen for the standard library
 time "$SCRIPT_DIR"/std-lib-regression.sh
