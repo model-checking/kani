@@ -51,7 +51,7 @@ TESTS=(
     "smack rmc"
     "expected expected"
     "cargo-rmc cargo-rmc"
-    "rmc-docs rmc"
+    "rmc-docs cargo-rmc"
     "rmc-fixme rmc-fixme"
 )
 
