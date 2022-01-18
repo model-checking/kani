@@ -2,13 +2,11 @@
 
 RMC must currently be built from source.
 
-In general, the following dependencies are required:
+In general, the following dependencies are required. Note: These dependencies may be installed by running the CI scripts shown below and there is no need to install them separately, for their respective OS.
 
 1. Cargo installed via rustup
 2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.48.0)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.6)
-
-Note: These dependencies may be installed by running the CI scripts shown below and there is no need to install them separately, for their respective OS.
 
 ## Installing on Ubuntu 20.04
 
@@ -23,6 +21,7 @@ git submodule update --init
 ./scripts/setup/ubuntu-20.04/install_cbmc.sh
 ./scripts/setup/install_viewer.sh 2.6
 ./scripts/setup/install_rustup.sh
+source $HOME/.cargo/env
 ```
 
 ## Installing on Mac OS
@@ -38,6 +37,7 @@ git submodule update --init
 ./scripts/setup/macos-10.15/install_cbmc.sh
 ./scripts/setup/install_viewer.sh 2.6
 ./scripts/setup/install_rustup.sh
+source $HOME/.cargo/env
 ```
 
 ## Building and testing RMC
@@ -57,8 +57,7 @@ Perform one-time build configuration:
 Then build rmc-compiler executable:
 
 ```
-cd src/rmc-compiler
-cargo build
+cd src/rmc-compiler && cargo build && cd ../..
 ```
 
 Then, optionally, run the regression tests:
