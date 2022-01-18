@@ -1,4 +1,4 @@
-# The Rust Model Checker
+# The Kani Rust Verifier
 
 - [Getting started with Kani](./getting-started.md)
   - [Installation](./install-guide.md)

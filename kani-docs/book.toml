@@ -1,8 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 [book]
-title = "The Rust Model Checker"
-description = "Documentation for the Rust Model Checker (Kani)"
+title = "The Kani Rust Verifier"
+description = "Documentation for the Kani Rust Verifier"
 authors = ["Kani Developers"]
 src = "src"
 language = "en"

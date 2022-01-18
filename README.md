@@ -1,5 +1,5 @@
-# Rust Model Checker (Kani)
-The Rust Model Checker (Kani) aims to be a bit-precise model-checker for Rust.
+# Kani Rust Verifier
+The Kani Rust Verifier aims to be a bit-precise model-checker for Rust.
 
 Check out the [Documentation](https://model-checking.github.io/kani) for
 instructions on installing and running Kani.
