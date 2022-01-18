@@ -351,7 +351,6 @@ pub enum Kind {
     Check,
     Clippy,
     Fix,
-    Format,
     Test,
     Bench,
     Dist,
@@ -400,7 +399,7 @@ impl<'a> Builder<'a> {
                 native::Lld,
                 native::CrtBeginEnd
             ),
-            Kind::Check | Kind::Clippy { .. } | Kind::Fix | Kind::Format => describe!(
+            Kind::Check | Kind::Clippy { .. } | Kind::Fix => describe!(
                 check::Std,
                 check::Rustc,
                 check::Rustdoc,
@@ -463,18 +462,18 @@ impl<'a> Builder<'a> {
                 test::HtmlCheck,
                 // Run bootstrap close to the end as it's unlikely to fail
                 test::Bootstrap,
-                // RMC regression tests
-                test::RMC,
+                // Kani regression tests
+                test::Kani,
                 test::Firecracker,
                 test::Prusti,
                 test::Serial,
                 test::SMACK,
-                test::CargoRMC,
+                test::CargoKani,
                 test::Expected,
                 test::BookRunner,
                 test::Stub,
-                test::RmcDocs,
-                test::RmcFixme,
+                test::KaniDocs,
+                test::KaniFixme,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),
@@ -1007,10 +1006,20 @@ impl<'a> Builder<'a> {
             }
         };
 
-        if use_new_symbol_mangling {
-            rustflags.arg("-Zsymbol-mangling-version=v0");
+        // cfg(bootstrap) -- drop the compiler.stage == 0 branch.
+        if compiler.stage == 0 {
+            if use_new_symbol_mangling {
+                rustflags.arg("-Zsymbol-mangling-version=v0");
+            } else {
+                rustflags.arg("-Zsymbol-mangling-version=legacy");
+            }
         } else {
-            rustflags.arg("-Zsymbol-mangling-version=legacy");
+            if use_new_symbol_mangling {
+                rustflags.arg("-Csymbol-mangling-version=v0");
+            } else {
+                rustflags.arg("-Csymbol-mangling-version=legacy");
+                rustflags.arg("-Zunstable-options");
+            }
         }
 
         // FIXME: It might be better to use the same value for both `RUSTFLAGS` and `RUSTDOCFLAGS`,

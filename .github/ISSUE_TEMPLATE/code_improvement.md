@@ -1,6 +1,6 @@
 ---
 name: Code Improvement
-about: Create a request for improving the code quality of RMC
+about: Create a request for improving the code quality of Kani
 labels: Cat: cleanup, Cat: enhancement 
 ---
 <!--
@@ -9,7 +9,7 @@ Please report security concerns to us on the
 -->
 
 <!--
-Thank you for requesting an RMC improvement!
+Thank you for requesting a Kani improvement!
 Please include the following information if it applies to your case:
 -->
 **Requested improvement:**

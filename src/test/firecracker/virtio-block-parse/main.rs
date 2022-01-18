@@ -12,8 +12,20 @@ macro_rules! error {
 
 struct MyError {}
 
+unsafe impl kani::Invariant for MyError {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
 #[derive(Default, Clone, Copy)]
 pub struct GuestAddress(pub u64);
+
+unsafe impl kani::Invariant for GuestAddress {
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
 
 static mut TRACK_CHECKED_OFFSET_NONE: bool = false;
 static mut TRACK_READ_OBJ: Option<GuestAddress> = None;
@@ -23,7 +35,7 @@ pub struct GuestMemoryMmap {}
 impl GuestMemoryMmap {
     fn checked_offset(&self, base: GuestAddress, offset: usize) -> Option<GuestAddress> {
         let mut retval = None;
-        if rmc::nondet() {
+        if kani::any() {
             if let Some(sum) = base.0.checked_add(offset as u64) {
                 retval = Some(GuestAddress(sum))
             }
@@ -36,21 +48,21 @@ impl GuestMemoryMmap {
         return retval;
     }
 
-    fn read_obj<T>(&self, addr: GuestAddress) -> Result<T, MyError> {
+    fn read_obj<T: kani::Invariant>(&self, addr: GuestAddress) -> Result<T, MyError> {
         // This assertion means that no descriptor is read more than once
         unsafe {
             if let Some(prev_addr) = TRACK_READ_OBJ {
                 assert!(prev_addr.0 != addr.0);
             }
-            if rmc::nondet() && TRACK_READ_OBJ.is_none() {
+            if kani::any() && TRACK_READ_OBJ.is_none() {
                 TRACK_READ_OBJ = Some(addr);
             }
         }
-        rmc::nondet()
+        if kani::any() { Ok(kani::any::<T>()) } else { Err(kani::any::<MyError>()) }
     }
 
     fn read_obj_request_header(&self, addr: GuestAddress) -> Result<RequestHeader, Error> {
-        rmc::nondet()
+        if kani::any() { Ok(kani::any::<RequestHeader>()) } else { Err(kani::any::<Error>()) }
     }
 }
 
@@ -65,6 +77,12 @@ struct Descriptor {
     len: u32,
     flags: u16,
     next: u16,
+}
+
+unsafe impl kani::Invariant for Descriptor {
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 /// A virtio descriptor chain.
@@ -131,7 +149,7 @@ impl<'a> DescriptorChain<'a> {
         if chain.is_valid() { Some(chain) } else { None }
     }
 
-    // RMC change: add check to avoid self-loops
+    // Kani change: add check to avoid self-loops
     fn is_valid(&self) -> bool {
         !self.has_next() || (self.next < self.queue_size && self.next != self.index)
     }
@@ -173,6 +191,12 @@ pub struct RequestHeader {
     request_type: u32,
     _reserved: u32,
     sector: u64,
+}
+
+unsafe impl kani::Invariant for RequestHeader {
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 impl RequestHeader {
@@ -229,6 +253,20 @@ pub enum Error {
     UnexpectedWriteOnlyDescriptor,
 }
 
+unsafe impl kani::Invariant for Error {
+    fn is_valid(&self) -> bool {
+        matches!(
+            *self,
+            Error::DescriptorChainTooShort
+                | Error::DescriptorLengthTooSmall
+                | Error::GuestMemory
+                | Error::InvalidOffset
+                | Error::UnexpectedReadOnlyDescriptor
+                | Error::UnexpectedWriteOnlyDescriptor
+        )
+    }
+}
+
 pub struct Request {
     pub request_type: RequestType,
     pub data_len: u32,
@@ -265,7 +303,7 @@ impl Request {
             }
         } else {
             data_desc = desc;
-            // RMC change: add chain loop check
+            // Kani change: add chain loop check
             if data_desc.next == avail_desc.index {
                 return Err(Error::DescriptorChainTooShort);
             }
@@ -317,12 +355,12 @@ fn is_nonzero_pow2(x: u16) -> bool {
 
 fn main() {
     let mem = GuestMemoryMmap {};
-    let queue_size: u16 = rmc::nondet();
+    let queue_size: u16 = kani::any();
     if !is_nonzero_pow2(queue_size) {
         return;
     }
-    let index: u16 = rmc::nondet();
-    let desc_table = GuestAddress(rmc::nondet::<u64>() & 0xffff_ffff_ffff_fff0);
+    let index: u16 = kani::any();
+    let desc_table = GuestAddress(kani::any::<u64>() & 0xffff_ffff_ffff_fff0);
     let desc = DescriptorChain::checked_new(&mem, desc_table, queue_size, index);
     match desc {
         Some(x) => {

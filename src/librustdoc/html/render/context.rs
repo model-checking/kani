@@ -13,8 +13,8 @@ use rustc_span::edition::Edition;
 use rustc_span::source_map::FileName;
 use rustc_span::symbol::sym;
 
-use super::cache::{build_index, ExternalLocation};
 use super::print_item::{full_path, item_path, print_item};
+use super::search_index::build_index;
 use super::templates;
 use super::write_shared::write_shared;
 use super::{
@@ -22,7 +22,7 @@ use super::{
     BASIC_KEYWORDS,
 };
 
-use crate::clean::{self, ExternalCrate};
+use crate::clean::{self, types::ExternalLocation, ExternalCrate};
 use crate::config::RenderOptions;
 use crate::docfs::{DocFS, PathError};
 use crate::error::Error;
@@ -65,7 +65,7 @@ crate struct Context<'tcx> {
     ///
     /// [#82381]: https://github.com/rust-lang/rust/issues/82381
     crate shared: Rc<SharedContext<'tcx>>,
-    /// This flag indicates whether `[src]` links should be generated or not. If
+    /// This flag indicates whether source links should be generated or not. If
     /// the source files are present in the html rendering, then this will be
     /// `true`.
     crate include_sources: bool,

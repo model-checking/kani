@@ -23,12 +23,12 @@ else
   exit 0
 fi
 
-# Get RMC root
+# Get Kani root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-RMC_DIR=$SCRIPT_DIR/..
+KANI_DIR=$SCRIPT_DIR/..
 
 echo
-echo "Starting RMC codegen for the Rust standard library..."
+echo "Starting Kani codegen for the Rust standard library..."
 echo
 
 cd /tmp
@@ -39,18 +39,16 @@ fi
 cargo new std_lib_test --lib
 cd std_lib_test
 
-# Check that we have the nighly toolchain, which is required for -Z build-std
-if ! rustup toolchain list | grep -q nightly; then
-  echo "Installing nightly toolchain"
-  rustup toolchain install nightly
-fi
+# Use same nightly toolchain used to build Kani
+cp ${KANI_DIR}/src/kani-compiler/rust-toolchain.toml .
 
-echo "Starting cargo build with RMC"
+echo "Starting cargo build with Kani"
 export RUSTC_LOG=error
-export RUSTFLAGS=$(${SCRIPT_DIR}/rmc-rustc --rmc-flags)
-export RUSTC=$(${SCRIPT_DIR}/rmc-rustc --rmc-path)
-$WRAPPER cargo +nightly build -Z build-std --lib --target $TARGET
+export KaniFLAGS="--goto-c"
+export RUSTFLAGS="--kani-flags"
+export RUSTC="${SCRIPT_DIR}/kani-rustc"
+$WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
 
 echo
-echo "Finished RMC codegen for the Rust standard library successfully..."
+echo "Finished Kani codegen for the Rust standard library successfully..."
 echo

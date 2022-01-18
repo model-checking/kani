@@ -4,8 +4,8 @@ members = [
   "compiler/rustc",
   "library/std",
   "library/test",
-  "library/rmc",
-  "library/rmc_restrictions",
+  "library/kani",
+  "library/kani_restrictions",
   "src/rustdoc-json-types",
   "src/tools/bookrunner",
   "src/tools/cargotest",
@@ -22,7 +22,7 @@ members = [
   "src/tools/build-manifest",
   "src/tools/remote-test-client",
   "src/tools/remote-test-server",
-  "src/tools/rmc-link-restrictions",
+  "src/tools/kani-link-restrictions",
   "src/tools/cargo-rmc",
   "src/tools/rust-installer",
   "src/tools/rust-demangler",
@@ -42,6 +42,7 @@ members = [
   "src/tools/html-checker",
   "src/tools/bump-stage0",
   "src/tools/lld-wrapper",
+  "src/kani-compiler",
 ]
 
 exclude = [
@@ -59,9 +60,9 @@ exclude = [
   # stdarch has its own Cargo workspace
   "library/stdarch",
   # dependency tests have their own workspace
-  "src/test/rmc-dependency-test/dependency3",
-  # cargo rmc tests should also have their own workspace
-  "src/test/cargo-rmc"
+  "src/test/kani-dependency-test/dependency3",
+  # cargo kani tests should also have their own workspace
+  "src/test/cargo-kani"
 ]
 
 [profile.release.package.compiler_builtins]

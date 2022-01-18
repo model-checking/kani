@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Try with: rmc ignore-main.rs -- --unwind 3 --unwinding-assertions --pointer-check --object-bits 11
+// Try with: kani ignore-main.rs -- --unwind 3 --unwinding-assertions --pointer-check --object-bits 11
 // With kissat as the solver (--external-sat-solver /path/to/kissat) this takes ~5mins
 
 pub const MAX_PAGE_COMPACT_BUFFER: usize = 2048;
@@ -56,7 +56,7 @@ fn expand(ranges: Vec<(u32, u32)>) -> Vec<u32> {
 fn main() {
     let mut input = vec![0; 2];
     for i in 0..input.len() {
-        input[i] = rmc::nondet();
+        input[i] = kani::any();
         if input[i] == u32::MAX {
             return;
         }
@@ -67,7 +67,7 @@ fn main() {
     }
     assert!(output.len() <= input.len());
     let expanded_output = expand(output);
-    let i: usize = rmc::nondet();
+    let i: usize = kani::any();
     if i < expanded_output.len() {
         assert!(expanded_output[i] == input[i]);
     }

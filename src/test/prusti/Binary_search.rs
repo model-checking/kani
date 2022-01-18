@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-verify-fail
+// kani-verify-fail
 // cbmc-flags: --unwind 4
 
 use std::cmp::Ordering::*;
@@ -49,7 +49,7 @@ fn get() -> [i32; 11] {
 
 fn main() {
     let x = get();
-    let y = rmc::nondet();
+    let y = kani::any();
     if 1 <= y && y <= 11 {
         assert!(binary_search_wrong(&x, &y) == Some(y as usize - 1)); // this fails
 

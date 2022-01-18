@@ -81,7 +81,7 @@ src/test/rustdoc-gui/src/**.lock
 /.ninja_log
 /src/test/bookrunner
 *Cargo.lock
-src/test/rmc-dependency-test/diamond-dependency/build
-src/test/rmc-multicrate/type-mismatch/mismatch/target
-/rmc-docs/book
-/rmc-docs/mdbook*
+src/test/kani-dependency-test/diamond-dependency/build
+src/test/kani-multicrate/type-mismatch/mismatch/target
+/kani-docs/book
+/kani-docs/mdbook*

@@ -467,9 +467,9 @@ impl Serial {
 fn main() {
     {
         let mut serial = Serial::new_sink(EventFd {});
-        let a: u8 = rmc::nondet();
-        let b: u8 = rmc::nondet();
-        let c: u8 = rmc::nondet();
+        let a: u8 = kani::any();
+        let b: u8 = kani::any();
+        let c: u8 = kani::any();
 
         serial.write(MCR as u64, &[MCR_LOOP_BIT as u8]);
         serial.write(DATA as u64, &[a]);

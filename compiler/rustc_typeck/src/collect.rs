@@ -21,7 +21,6 @@ use crate::constrained_generic_params as cgp;
 use crate::errors;
 use crate::middle::resolve_lifetime as rl;
 use rustc_ast as ast;
-use rustc_ast::Attribute;
 use rustc_ast::{MetaItemKind, NestedMetaItem};
 use rustc_attr::{list_contains_name, InlineAttr, InstructionSetAttr, OptimizeAttr};
 use rustc_data_structures::captures::Captures;
@@ -182,7 +181,7 @@ crate fn placeholder_type_error<'tcx>(
         sugg.push((span, format!(", {}", type_name)));
     }
 
-    let mut err = bad_placeholder_type(tcx, placeholder_types, kind);
+    let mut err = bad_placeholder(tcx, "type", placeholder_types, kind);
 
     // Suggest, but only if it is not a function in const or static
     if suggest {
@@ -295,7 +294,9 @@ impl<'tcx> Visitor<'tcx> for CollectItemTypesVisitor<'tcx> {
         if let hir::ExprKind::Closure(..) = expr.kind {
             let def_id = self.tcx.hir().local_def_id(expr.hir_id);
             self.tcx.ensure().generics_of(def_id);
-            self.tcx.ensure().type_of(def_id);
+            // We do not call `type_of` for closures here as that
+            // depends on typecheck and would therefore hide
+            // any further errors in case one typeck fails.
         }
         intravisit::walk_expr(self, expr);
     }
@@ -314,8 +315,9 @@ impl<'tcx> Visitor<'tcx> for CollectItemTypesVisitor<'tcx> {
 ///////////////////////////////////////////////////////////////////////////
 // Utility types and common code for the above passes.
 
-fn bad_placeholder_type<'tcx>(
+fn bad_placeholder<'tcx>(
     tcx: TyCtxt<'tcx>,
+    placeholder_kind: &'static str,
     mut spans: Vec<Span>,
     kind: &'static str,
 ) -> rustc_errors::DiagnosticBuilder<'tcx> {
@@ -326,7 +328,8 @@ fn bad_placeholder_type<'tcx>(
         tcx.sess,
         spans.clone(),
         E0121,
-        "the type placeholder `_` is not allowed within types on item signatures for {}",
+        "the {} placeholder `_` is not allowed within types on item signatures for {}",
+        placeholder_kind,
         kind
     );
     for span in spans {
@@ -393,7 +396,7 @@ impl<'tcx> AstConv<'tcx> for ItemCtxt<'tcx> {
         _: Option<&ty::GenericParamDef>,
         span: Span,
     ) -> &'tcx Const<'tcx> {
-        bad_placeholder_type(self.tcx(), vec![span], "generic").emit();
+        bad_placeholder(self.tcx(), "const", vec![span], "generic").emit();
         // Typeck doesn't expect erased regions to be returned from `type_of`.
         let ty = self.tcx.fold_regions(ty, &mut false, |r, _| match r {
             ty::ReErased => self.tcx.lifetimes.re_static,
@@ -991,7 +994,7 @@ fn convert_variant(
                 seen_fields.insert(f.ident.normalize_to_macros_2_0(), f.span);
             }
 
-            ty::FieldDef { did: fid.to_def_id(), ident: f.ident, vis: tcx.visibility(fid) }
+            ty::FieldDef { did: fid.to_def_id(), name: f.ident.name, vis: tcx.visibility(fid) }
         })
         .collect();
     let recovered = match def {
@@ -999,7 +1002,7 @@ fn convert_variant(
         _ => false,
     };
     ty::VariantDef::new(
-        ident,
+        ident.name,
         variant_did.map(LocalDefId::to_def_id),
         ctor_did.map(LocalDefId::to_def_id),
         discr,
@@ -1482,7 +1485,11 @@ fn generics_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::Generics {
                     // `enum` discriminants (i.e. `D` in `enum Foo { Bar = D }`),
                     // as they shouldn't be able to cause query cycle errors.
                     Node::Expr(&Expr { kind: ExprKind::Repeat(_, ref constant), .. })
-                    | Node::Variant(Variant { disr_expr: Some(ref constant), .. })
+                        if constant.hir_id() == hir_id =>
+                    {
+                        Some(parent_def_id.to_def_id())
+                    }
+                    Node::Variant(Variant { disr_expr: Some(ref constant), .. })
                         if constant.hir_id == hir_id =>
                     {
                         Some(parent_def_id.to_def_id())
@@ -1788,7 +1795,7 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: DefId) -> ty::PolyFnSig<'_> {
 
                     let mut visitor = PlaceholderHirTyCollector::default();
                     visitor.visit_ty(ty);
-                    let mut diag = bad_placeholder_type(tcx, visitor.0, "return type");
+                    let mut diag = bad_placeholder(tcx, "type", visitor.0, "return type");
                     let ret_ty = fn_sig.skip_binder().output();
                     if !ret_ty.references_error() {
                         if !ret_ty.is_closure() {
@@ -2894,7 +2901,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
                 }
             }
         } else if attr.has_name(sym::instruction_set) {
-            codegen_fn_attrs.instruction_set = match attr.meta().map(|i| i.kind) {
+            codegen_fn_attrs.instruction_set = match attr.meta_kind() {
                 Some(MetaItemKind::List(ref items)) => match items.as_slice() {
                     [NestedMetaItem::MetaItem(set)] => {
                         let segments =
@@ -2999,7 +3006,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
         if !attr.has_name(sym::inline) {
             return ia;
         }
-        match attr.meta().map(|i| i.kind) {
+        match attr.meta_kind() {
             Some(MetaItemKind::Word) => InlineAttr::Hint,
             Some(MetaItemKind::List(ref items)) => {
                 inline_span = Some(attr.span);
@@ -3038,7 +3045,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
             return ia;
         }
         let err = |sp, s| struct_span_err!(tcx.sess.diagnostic(), sp, E0722, "{}", s).emit();
-        match attr.meta().map(|i| i.kind) {
+        match attr.meta_kind() {
             Some(MetaItemKind::Word) => {
                 err(attr.span, "expected one argument");
                 ia
@@ -3112,8 +3119,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
     if tcx.is_weak_lang_item(id) {
         codegen_fn_attrs.flags |= CodegenFnAttrFlags::RUSTC_STD_INTERNAL_SYMBOL;
     }
-    let check_name = |attr: &Attribute, sym| attr.has_name(sym);
-    if let Some(name) = weak_lang_items::link_name(check_name, attrs) {
+    if let Some(name) = weak_lang_items::link_name(attrs) {
         codegen_fn_attrs.export_name = Some(name);
         codegen_fn_attrs.link_name = Some(name);
     }
@@ -3142,21 +3148,12 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, id: DefId) -> CodegenFnAttrs {
 /// applied to the method prototype.
 fn should_inherit_track_caller(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     if let Some(impl_item) = tcx.opt_associated_item(def_id) {
-        if let ty::AssocItemContainer::ImplContainer(impl_def_id) = impl_item.container {
-            if let Some(trait_def_id) = tcx.trait_id_of_impl(impl_def_id) {
-                if let Some(trait_item) = tcx
-                    .associated_items(trait_def_id)
-                    .filter_by_name_unhygienic(impl_item.ident.name)
-                    .find(move |trait_item| {
-                        trait_item.kind == ty::AssocKind::Fn
-                            && tcx.hygienic_eq(impl_item.ident, trait_item.ident, trait_def_id)
-                    })
-                {
-                    return tcx
-                        .codegen_fn_attrs(trait_item.def_id)
-                        .flags
-                        .intersects(CodegenFnAttrFlags::TRACK_CALLER);
-                }
+        if let ty::AssocItemContainer::ImplContainer(_) = impl_item.container {
+            if let Some(trait_item) = impl_item.trait_item_def_id {
+                return tcx
+                    .codegen_fn_attrs(trait_item)
+                    .flags
+                    .intersects(CodegenFnAttrFlags::TRACK_CALLER);
             }
         }
     }

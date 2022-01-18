@@ -16,13 +16,13 @@ impl Step for BookRunner {
     /// Runs the `bookrunner` tool.
     ///
     /// This tool in `src/tools` extracts examples from books, runs them through
-    /// RMC, and displays their results.
+    /// Kani, and displays their results.
     fn run(self, builder: &Builder<'_>) {
         // Before running `bookrunner`, we need to ensure that it is already
         // built.
         let book_runner = builder.ensure(tool::BookRunner { compiler: self.compiler });
         // We also need to ensure that stage n standard library is built for
-        // rmc-rustc.
+        // kani-rustc.
         builder.ensure(compile::Std { compiler: self.compiler, target: self.compiler.host });
         let target = builder.config.build.triple;
         builder.info("Launching book runner...");

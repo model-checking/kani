@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --use-abs --abs-type rmc
+// kani-flags: --use-abs --abs-type kani
 fn main() {
     fn as_mut_slice_test() {
-        let mut buffer = rmc_vec![1, 2, 3];
+        let mut buffer = kani_vec![1, 2, 3];
         buffer.as_mut_slice().reverse();
         assert!(buffer == [3, 2, 1]);
     }

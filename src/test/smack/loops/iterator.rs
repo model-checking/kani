@@ -15,7 +15,7 @@ fn fac(n: u64) -> u64 {
 
 pub fn main() {
     let mut a = 1;
-    let n = rmc::nondet();
+    let n = kani::any();
     if n < 5 {
         for i in 1..n + 1 as u64 {
             a *= i;

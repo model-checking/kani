@@ -14,6 +14,7 @@ use rustc_middle::mir::interpret::InterpError;
 use rustc_middle::ty;
 use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
 use rustc_span::symbol::{sym, Symbol};
+use rustc_span::DUMMY_SP;
 use rustc_target::abi::{Abi, Scalar as ScalarAbi, Size, VariantIdx, Variants, WrappingRange};
 
 use std::hash::Hash;
@@ -266,14 +267,14 @@ impl<'rt, 'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> ValidityVisitor<'rt, 'mir, '
                 match layout.variants {
                     Variants::Single { index } => {
                         // Inside a variant
-                        PathElem::Field(def.variants[index].fields[field].ident.name)
+                        PathElem::Field(def.variants[index].fields[field].name)
                     }
                     Variants::Multiple { .. } => bug!("we handled variants above"),
                 }
             }
 
             // other ADTs
-            ty::Adt(def, _) => PathElem::Field(def.non_enum_variant().fields[field].ident.name),
+            ty::Adt(def, _) => PathElem::Field(def.non_enum_variant().fields[field].name),
 
             // arrays/slices
             ty::Array(..) | ty::Slice(..) => PathElem::ArrayElem(field),
@@ -725,7 +726,7 @@ impl<'rt, 'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> ValueVisitor<'mir, 'tcx, M>
         new_op: &OpTy<'tcx, M::PointerTag>,
     ) -> InterpResult<'tcx> {
         let name = match old_op.layout.ty.kind() {
-            ty::Adt(adt, _) => PathElem::Variant(adt.variants[variant_id].ident.name),
+            ty::Adt(adt, _) => PathElem::Variant(adt.variants[variant_id].name),
             // Generators also have variants
             ty::Generator(..) => PathElem::GeneratorState(variant_id),
             _ => bug!("Unexpected type with variant: {:?}", old_op.layout.ty),
@@ -736,9 +737,15 @@ impl<'rt, 'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> ValueVisitor<'mir, 'tcx, M>
     #[inline(always)]
     fn visit_union(
         &mut self,
-        _op: &OpTy<'tcx, M::PointerTag>,
+        op: &OpTy<'tcx, M::PointerTag>,
         _fields: NonZeroUsize,
     ) -> InterpResult<'tcx> {
+        // Special check preventing `UnsafeCell` inside unions in the inner part of constants.
+        if matches!(self.ctfe_mode, Some(CtfeValidationMode::Const { inner: true, .. })) {
+            if !op.layout.ty.is_freeze(self.ecx.tcx.at(DUMMY_SP), self.ecx.param_env) {
+                throw_validation_failure!(self.path, { "`UnsafeCell` in a `const`" });
+            }
+        }
         Ok(())
     }
 

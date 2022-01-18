@@ -7,7 +7,7 @@ fn safe_div(x: u32, y: u32) -> Option<u32> {
 }
 
 pub fn main() {
-    let x = rmc::nondet();
+    let x = kani::any();
     if x > 0 && x <= 200 {
         // avoid overflow
         let a = safe_div(2 * x, x);
@@ -15,7 +15,7 @@ pub fn main() {
             Some(c) => assert!(c == 2),
             None => assert!(false),
         };
-        let y = rmc::nondet();
+        let y = kani::any();
         if y > 0 {
             let b = safe_div(x, y);
             match b {

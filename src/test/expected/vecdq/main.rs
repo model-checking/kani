@@ -3,8 +3,8 @@
 use std::collections::VecDeque;
 
 fn main() {
-    let x = rmc::nondet();
-    let y = rmc::nondet();
+    let x = kani::any();
+    let y = kani::any();
     let mut q: VecDeque<i32> = VecDeque::new();
     q.push_back(x);
     q.push_back(y);

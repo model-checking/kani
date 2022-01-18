@@ -13,8 +13,8 @@ fn eq2(a: i32, b: i32) {
 }
 
 fn main() {
-    let a = rmc::nondet();
-    let b = rmc::nondet();
+    let a = kani::any();
+    let b = kani::any();
     if a > -400 && a < 100 && b < 200 && b > 0 {
         eq1(a, b);
         eq2(a, b);

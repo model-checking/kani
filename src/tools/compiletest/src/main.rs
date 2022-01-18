@@ -48,7 +48,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
     opts.optopt("", "compile-lib-path", "path to host shared libraries", "PATH")
         .optopt("", "run-lib-path", "path to target shared libraries", "PATH")
         .optopt("", "rustc-path", "path to rustc to use for compiling", "PATH")
-        .optopt("", "rmc-dir-path", "path to directory where rmc is located", "PATH")
+        .optopt("", "kani-dir-path", "path to directory where kani is located", "PATH")
         .optopt("", "rustdoc-path", "path to rustdoc to use for compiling", "PATH")
         .optopt("", "rust-demangler-path", "path to rust-demangler to use in tests", "PATH")
         .optopt("", "lldb-python", "path to python to use for doc tests", "PATH")
@@ -66,7 +66,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
             "mode",
             "which sort of compile tests to run",
             "run-pass-valgrind | pretty | debug-info | codegen | rustdoc \
-            | rustdoc-json | codegen-units | incremental | run-make | ui | js-doc-test | mir-opt | assembly | rmc | cargo-rmc | expected",
+            | rustdoc-json | codegen-units | incremental | run-make | ui | js-doc-test | mir-opt | assembly | kani | cargo-kani | expected",
         )
         .optopt(
             "",
@@ -180,7 +180,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
 
     Config {
-        rmc_dir_path: opt_path(matches, "rmc-dir-path"),
+        kani_dir_path: opt_path(matches, "kani-dir-path"),
         src_base,
         build_base: opt_path(matches, "build-base"),
         stage_id: matches.opt_str("stage-id").unwrap(),
@@ -331,7 +331,7 @@ pub fn make_tests(config: &Config, tests: &mut Vec<test::TestDescAndFn>) {
 
 /// Returns a stamp constructed from input files common to all test cases.
 fn common_inputs_stamp(config: &Config) -> Stamp {
-    let mut stamp = Stamp::from_path(&config.rmc_dir_path);
+    let mut stamp = Stamp::from_path(&config.kani_dir_path);
 
     // Add compiletest itself.
     let rust_src_dir = config.find_rust_src_root().expect("Could not find Rust source root");
@@ -357,11 +357,11 @@ fn collect_tests_from_dir(
     fs::create_dir_all(&build_dir).unwrap();
 
     // If we find a `Cargo.toml` file in the current directory and we're in
-    // Cargo-rmc mode, we should look for `*.expected` files and create an
+    // Cargo-kani mode, we should look for `*.expected` files and create an
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    if config.mode == Mode::CargoRMC && dir.join("Cargo.toml").exists() {
+    if config.mode == Mode::CargoKani && dir.join("Cargo.toml").exists() {
         for file in fs::read_dir(dir)? {
             let file_path = file?.path();
             if file_path.to_str().unwrap().ends_with(".expected") {

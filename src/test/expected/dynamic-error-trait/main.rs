@@ -14,7 +14,7 @@ pub struct MemoryMapping {
 
 impl MemoryMapping {
     pub fn new(size: usize) -> Result<MemoryMapping> {
-        if rmc::nondet() {
+        if kani::any() {
             let mm = MemoryMapping { addr: std::ptr::null_mut(), size: size };
             Ok(mm)
         } else {
