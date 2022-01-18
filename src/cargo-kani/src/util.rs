@@ -54,8 +54,8 @@ mod tests {
         let p = PathBuf::from("./path/file.rs");
         assert_eq!(alter_extension(&p, "symtab.json"), PathBuf::from("./path/file.symtab.json"));
         assert_eq!(
-            alter_extension(&p, "rmc-metadata.json"),
-            PathBuf::from("./path/file.rmc-metadata.json")
+            alter_extension(&p, "kani-metadata.json"),
+            PathBuf::from("./path/file.kani-metadata.json")
         );
 
         let q = PathBuf::from("file.more.rs");

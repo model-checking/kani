@@ -6,9 +6,9 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
-use crate::context::RmcContext;
+use crate::context::KaniContext;
 
-impl RmcContext {
+impl KaniContext {
     /// Postprocess a goto binary (before cbmc) in-place by calling goto-instrument
     pub fn run_goto_instrument(&self, file: &Path) -> Result<()> {
         self.add_library(file)?;

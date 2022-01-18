@@ -397,6 +397,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo-kani"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "glob",
+ "serde",
+ "serde_json",
+ "structopt",
+]
+
+[[package]]
 name = "cargo-miri"
 version = "0.1.0"
 dependencies = [
@@ -422,18 +434,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "cargo-rmc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "glob",
- "serde",
- "serde_json",
- "structopt",
 ]
 
 [[package]]

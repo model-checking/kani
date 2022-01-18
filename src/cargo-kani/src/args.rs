@@ -6,7 +6,7 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "rmc",
+    name = "kani",
     about = "Verify a single Rust file. For more information, see https://github.com/model-checking/rmc"
 )]
 pub struct StandaloneArgs {
@@ -15,27 +15,27 @@ pub struct StandaloneArgs {
     pub input: PathBuf,
 
     #[structopt(flatten)]
-    pub common_opts: RmcArgs,
+    pub common_opts: KaniArgs,
 }
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "cargo-rmc",
+    name = "cargo-kani",
     about = "Verify a Rust crate. For more information, see https://github.com/model-checking/rmc"
 )]
-pub struct CargoRmcArgs {
+pub struct CargoKaniArgs {
     #[structopt(flatten)]
-    pub common_opts: RmcArgs,
+    pub common_opts: KaniArgs,
 }
 
-// Common arguments for invoking RMC. This gets put into RmcContext, whereas
+// Common arguments for invoking Kani. This gets put into KaniContext, whereas
 // anything above is "local" to "main"'s control flow.
 #[derive(Debug, StructOpt)]
-pub struct RmcArgs {
+pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Keep temporary files generated throughout RMC process
+    /// Keep temporary files generated throughout Kani process
     #[structopt(long)]
     pub keep_temps: bool,
 }

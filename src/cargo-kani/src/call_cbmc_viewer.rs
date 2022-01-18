@@ -7,10 +7,10 @@ use std::path::Path;
 use std::process::Command;
 use std::process::Stdio;
 
-use crate::context::RmcContext;
+use crate::context::KaniContext;
 use crate::util::alter_extension;
 
-impl RmcContext {
+impl KaniContext {
     /// Verify a goto binary that's been prepared with goto-instrument
     pub fn run_visualize(&self, file: &Path) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");

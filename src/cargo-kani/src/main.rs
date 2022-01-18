@@ -20,14 +20,14 @@ mod util;
 
 fn main() -> Result<()> {
     match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
-        InvocationType::CargoRmc(args) => cargormc_main(args),
+        InvocationType::CargoKani(args) => cargokani_main(args),
         InvocationType::Standalone => standalone_main(),
     }
 }
 
-fn cargormc_main(input_args: Vec<OsString>) -> Result<()> {
-    let args = args::CargoRmcArgs::from_iter(input_args);
-    let ctx = context::RmcContext::new(args.common_opts)?;
+fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
+    let args = args::CargoKaniArgs::from_iter(input_args);
+    let ctx = context::KaniContext::new(args.common_opts)?;
 
     let symtabs = ctx.cargo_build()?;
     let mut goto_objs: Vec<PathBuf> = Vec::new();
@@ -57,7 +57,7 @@ fn cargormc_main(input_args: Vec<OsString>) -> Result<()> {
 
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::from_args();
-    let ctx = context::RmcContext::new(args.common_opts)?;
+    let ctx = context::KaniContext::new(args.common_opts)?;
 
     let symtab_json = ctx.compile_single_rust_file(&args.input)?;
     let goto_obj = ctx.symbol_table_to_gotoc(&symtab_json)?;
@@ -80,30 +80,30 @@ fn standalone_main() -> Result<()> {
 
 #[derive(Debug, PartialEq)]
 enum InvocationType {
-    CargoRmc(Vec<OsString>),
+    CargoKani(Vec<OsString>),
     Standalone,
 }
 
-/// Peeks at command line arguments to determine if we're being invoked as 'rmc' or 'cargo-rmc'
+/// Peeks at command line arguments to determine if we're being invoked as 'kani' or 'cargo-kani'
 fn determine_invocation_type(mut args: Vec<OsString>) -> InvocationType {
     let exe = util::executable_basename(&args.get(0));
 
-    // Case 1: if 'rmc' is our first real argument, then we're being invoked as cargo-rmc
-    // 'cargo rmc ...' will cause cargo to run 'cargo-rmc rmc ...' preserving argv1
-    if Some(&OsString::from("rmc")) == args.get(1) {
-        // Recreate our command line, but with 'rmc' skipped
+    // Case 1: if 'kani' is our first real argument, then we're being invoked as cargo-kani
+    // 'cargo kani ...' will cause cargo to run 'cargo-kani kani ...' preserving argv1
+    if Some(&OsString::from("kani")) == args.get(1) {
+        // Recreate our command line, but with 'kani' skipped
         args.remove(1);
-        InvocationType::CargoRmc(args)
+        InvocationType::CargoKani(args)
     }
-    // Case 2: if 'rmc' is the name we're invoked as, then we're being invoked standalone
+    // Case 2: if 'kani' is the name we're invoked as, then we're being invoked standalone
     // Note: we care about argv0 here, NOT std::env::current_exe(), as the later will be resolved
-    else if Some("rmc".into()) == exe {
+    else if Some("kani".into()) == exe {
         InvocationType::Standalone
     }
-    // Case 3: if 'cargo-rmc' is the name we're invoked as, then the user is directly invoking
-    // 'cargo-rmc' instead of 'cargo rmc', and we shouldn't alter arguments.
-    else if Some("cargo-rmc".into()) == exe {
-        InvocationType::CargoRmc(args)
+    // Case 3: if 'cargo-kani' is the name we're invoked as, then the user is directly invoking
+    // 'cargo-kani' instead of 'cargo kani', and we shouldn't alter arguments.
+    else if Some("cargo-kani".into()) == exe {
+        InvocationType::CargoKani(args)
     }
     // Case 4: default fallback, act like standalone
     else {
@@ -122,18 +122,18 @@ mod tests {
             args.iter().map(|x| x.into()).collect()
         }
 
-        // Case 1: 'cargo rmc'
+        // Case 1: 'cargo kani'
         assert_eq!(
-            determine_invocation_type(x(vec!["bar", "rmc", "foo"])),
-            InvocationType::CargoRmc(x(vec!["bar", "foo"]))
+            determine_invocation_type(x(vec!["bar", "kani", "foo"])),
+            InvocationType::CargoKani(x(vec!["bar", "foo"]))
         );
-        // Case 3: 'cargo-rmc'
+        // Case 3: 'cargo-kani'
         assert_eq!(
-            determine_invocation_type(x(vec!["cargo-rmc", "foo"])),
-            InvocationType::CargoRmc(x(vec!["cargo-rmc", "foo"]))
+            determine_invocation_type(x(vec!["cargo-kani", "foo"])),
+            InvocationType::CargoKani(x(vec!["cargo-kani", "foo"]))
         );
-        // Case 2: 'rmc'
-        assert_eq!(determine_invocation_type(x(vec!["rmc", "foo"])), InvocationType::Standalone);
+        // Case 2: 'kani'
+        assert_eq!(determine_invocation_type(x(vec!["kani", "foo"])), InvocationType::Standalone);
         // default
         assert_eq!(determine_invocation_type(x(vec!["foo"])), InvocationType::Standalone);
         // weird case can be handled

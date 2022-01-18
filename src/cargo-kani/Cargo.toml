@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "cargo-rmc"
+name = "cargo-kani"
 version = "0.1.0"
 edition = "2021"
-description = "Build a project with RMC and run all proof harnesses"
+description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/model-checking/rmc"
 repository = "https://github.com/model-checking/rmc"
@@ -22,7 +22,7 @@ glob = "0.3"
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml
 # Here are a few notes I'm keeping after looking through these
 
-# string similarity, might be useful in suggesting fixes in 'cargo rmc mispeled_harness'
+# string similarity, might be useful in suggesting fixes in 'cargo kani mispeled_harness'
 # strsim = "0.10"
 
 # open a file (or url presumably?) with platform application for that file type

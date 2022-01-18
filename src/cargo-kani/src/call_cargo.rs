@@ -6,15 +6,15 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::context::RmcContext;
+use crate::context::KaniContext;
 
-impl RmcContext {
+impl KaniContext {
     /// Given a `file` (a .symtab.json), produce `{file}.out` by calling symtab2gb
     pub fn cargo_build(&self) -> Result<Vec<PathBuf>> {
-        let path = self.hack_rustc_path("--rmc-path")?;
+        let path = self.hack_rustc_path("--kani-path")?;
         let flag_env = {
-            let mut rustc_args = self.rmc_rustc_flags();
-            let additional = self.hack_rustc_path("--rmc-flags")?;
+            let mut rustc_args = self.kani_rustc_flags();
+            let additional = self.hack_rustc_path("--kani-flags")?;
             // We're going to join with spaces, so we can just put this whole string as the last element
             // of the Vec, since that will produce the correctly spaced string.
             rustc_args.push(additional);
@@ -47,15 +47,15 @@ impl RmcContext {
     }
 
     // This is surprisingly clumsy code, but it should be temporary.
-    // Equivalent of bash `VAR=$(rmc-rustc --arg)`
+    // Equivalent of bash `VAR=$(kani-rustc --arg)`
     fn hack_rustc_path(&self, arg: &str) -> Result<OsString> {
-        let result = Command::new(&self.rmc_rustc).args(&[arg]).output()?;
+        let result = Command::new(&self.kani_rustc).args(&[arg]).output()?;
         // Note the trim: necessary to remove trailing newline!
         let output = std::str::from_utf8(&result.stdout)?.trim();
 
         if !result.status.success() {
             println!("{}", output);
-            bail!("rmc-rustc exited with status {}", result.status);
+            bail!("kani-rustc exited with status {}", result.status);
         }
 
         // todo Non-portable to windows. We can trust "output" to be utf8 there?

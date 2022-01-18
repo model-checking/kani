@@ -6,9 +6,9 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
-use crate::context::RmcContext;
+use crate::context::KaniContext;
 
-impl RmcContext {
+impl KaniContext {
     /// Verify a goto binary that's been prepared with goto-instrument
     pub fn format_cbmc_output(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![self.cbmc_json_parser_py.clone().into(), file.into()];

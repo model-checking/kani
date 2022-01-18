@@ -6,9 +6,9 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::context::RmcContext;
+use crate::context::KaniContext;
 
-impl RmcContext {
+impl KaniContext {
     /// Verify a goto binary that's been prepared with goto-instrument
     pub fn run_cbmc(&self, file: &Path) -> Result<PathBuf> {
         let output_filename = crate::util::append_path(file, "cbmc_output");
