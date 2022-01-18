@@ -326,9 +326,9 @@ fn main() {
     {
         // test_serial_modem()
         let mut serial = Serial::new_sink(EventFd {});
-        let a: u8 = rmc::any();
-        let b: u8 = rmc::any();
-        let c: u8 = rmc::any();
+        let a: u8 = kani::any();
+        let b: u8 = kani::any();
+        let c: u8 = kani::any();
 
         serial.write(MCR as u64, &[MCR_LOOP_BIT as u8]);
         serial.write(DATA as u64, &[a]);
@@ -352,9 +352,9 @@ fn main() {
     //     // test_serial_data_len()
     //     const LEN: usize = 1;
     //     let mut serial = Serial::new_out(EventFd {}, OutWrapper::new());
-    //     let a: u8 = rmc::any();
-    //     let b: u8 = rmc::any();
-    //     let c: u8 = rmc::any();
+    //     let a: u8 = kani::any();
+    //     let b: u8 = kani::any();
+    //     let c: u8 = kani::any();
 
     //     // let missed_writes_before = METRICS.uart.missed_write_count.count();
     //     // Trying to write data of length different than the one that we initialized the device with

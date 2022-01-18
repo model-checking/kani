@@ -11,7 +11,7 @@ where
 }
 
 pub fn main() {
-    let mut num: i32 = rmc::any();
+    let mut num: i32 = kani::any();
     if num <= std::i32::MAX - 10 {
         let original_num = num;
         {

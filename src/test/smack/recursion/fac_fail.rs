@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --unroll=10
 // @expect error
-// rmc-verify-fail
+// kani-verify-fail
 
 fn fac(n: u64, acc: u64) -> u64 {
     match n {

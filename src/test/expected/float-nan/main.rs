@@ -6,7 +6,7 @@ fn main() {
         f -= 1.0;
     }
 
-    match rmc::nondet::<u8>() {
+    match kani::nondet::<u8>() {
         // at this point, f == 0.0
         // should succeed
         0 => assert!(1.0 / f != 0.0 / f),

@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --use-abs --abs-type rmc
+// kani-flags: --use-abs --abs-type kani
 fn main() {
     fn into_iter_test() {
-        let v = rmc_vec![1, 4, 5];
+        let v = kani_vec![1, 4, 5];
         let mut iter = v.into_iter();
 
         assert!(iter.next() == Some(1));

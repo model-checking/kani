@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --use-abs --abs-type rmc
+// kani-flags: --use-abs --abs-type kani
 fn main() {
     fn clear_test() {
-        let mut v = rmc_vec![1, 2, 3];
+        let mut v = kani_vec![1, 2, 3];
 
         v.clear();
 

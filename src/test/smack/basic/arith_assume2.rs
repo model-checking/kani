@@ -3,8 +3,8 @@
 // @expect verified
 
 pub fn main() {
-    let a = rmc::any();
-    let b = rmc::any();
+    let a = kani::any();
+    let b = kani::any();
     if 4 < a && a < 8 {
         // a in [5,7]
         if 5 < b && b < 9 {

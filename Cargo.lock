@@ -1971,6 +1971,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "kani"
+version = "0.1.0"
+dependencies = [
+ "kani_macros",
+]
+
+[[package]]
+name = "kani-compiler"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "kani_queries",
+ "rustc_codegen_kani",
+ "tracing",
+]
+
+[[package]]
+name = "kani-link-restrictions"
+version = "0.1.0"
+dependencies = [
+ "cbmc",
+ "kani_restrictions",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kani_macros"
+version = "0.1.0"
+
+[[package]]
+name = "kani_queries"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
+name = "kani_restrictions"
+version = "0.1.0"
+dependencies = [
+ "cbmc",
+ "serde",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3334,52 +3380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rmc"
-version = "0.1.0"
-dependencies = [
- "rmc_macros",
-]
-
-[[package]]
-name = "rmc-compiler"
-version = "0.1.0"
-dependencies = [
- "clap",
- "rmc_queries",
- "rustc_codegen_rmc",
- "tracing",
-]
-
-[[package]]
-name = "rmc-link-restrictions"
-version = "0.1.0"
-dependencies = [
- "cbmc",
- "rmc_restrictions",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rmc_macros"
-version = "0.1.0"
-
-[[package]]
-name = "rmc_queries"
-version = "0.1.0"
-dependencies = [
- "tracing",
-]
-
-[[package]]
-name = "rmc_restrictions"
-version = "0.1.0"
-dependencies = [
- "cbmc",
- "serde",
-]
-
-[[package]]
 name = "rust-demangler"
 version = "0.0.1"
 dependencies = [
@@ -3882,6 +3882,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_codegen_kani"
+version = "0.0.0"
+dependencies = [
+ "bitflags",
+ "cbmc",
+ "cstr",
+ "kani_queries",
+ "kani_restrictions",
+ "libc",
+ "measureme 9.1.2",
+ "num",
+ "rustc-demangle",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "snap",
+ "tracing",
+]
+
+[[package]]
 name = "rustc_codegen_llvm"
 version = "0.0.0"
 dependencies = [
@@ -3909,26 +3929,6 @@ dependencies = [
  "rustc_span",
  "rustc_target",
  "smallvec",
- "tracing",
-]
-
-[[package]]
-name = "rustc_codegen_rmc"
-version = "0.0.0"
-dependencies = [
- "bitflags",
- "cbmc",
- "cstr",
- "libc",
- "measureme 9.1.2",
- "num",
- "rmc_queries",
- "rmc_restrictions",
- "rustc-demangle",
- "serde",
- "serde_json",
- "smallvec",
- "snap",
  "tracing",
 ]
 
