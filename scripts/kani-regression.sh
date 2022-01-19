@@ -28,7 +28,7 @@ check-cbmc-version.py --major 5 --minor 48
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
-./x.py fmt --check
+${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build Kani compiler and Kani library
 (cd "${KANI_DIR}/src/kani-compiler"; cargo build)
