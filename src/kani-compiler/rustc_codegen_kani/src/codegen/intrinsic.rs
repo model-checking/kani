@@ -301,28 +301,9 @@ impl<'tcx> GotocCtx<'tcx> {
         match intrinsic {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
             "arith_offset" => codegen_wrapping_op!(plus),
-            "assert_inhabited" => {
-                let ty = instance.substs.type_at(0);
-                let layout = self.layout_of(ty);
-                if layout.abi.is_uninhabited() {
-                    let loc = self.codegen_span_option(span);
-                    Stmt::assert_false(&format!("type is uninhabited: {:?}", ty), loc)
-                } else {
-                    Stmt::skip(loc)
-                }
-            }
-            // https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html
-            // assert_uninit_valid is guard for unsafe functions that cannot ever be executed if T
-            // has invalid bit patterns: This will statically either panic, or do nothing. For now
-            // we map this into a no-op.
-            // TODO: https://github.com/model-checking/rmc/issues/6
-            "assert_uninit_valid" => Stmt::skip(loc),
-            // https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html
-            // assert_zero_valid is a guard for unsafe functions that cannot ever be executed if T
-            // does not permit zero-initialization: This will statically either panic, or do
-            // nothing. For now we map this into a no-op.
-            // TODO: https://github.com/model-checking/rmc/issues/7
-            "assert_zero_valid" => Stmt::skip(loc),
+            "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
+            "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
+            "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
@@ -565,6 +546,54 @@ impl<'tcx> GotocCtx<'tcx> {
             ],
             loc,
         )
+    }
+
+    /// Generates either a panic or no-op for `assert_*` intrinsics.
+    /// These are intrinsics that statically compile to panics if the type
+    /// layout is invalid so we get a message that mentions the offending type.
+    ///
+    /// https://doc.rust-lang.org/std/intrinsics/fn.assert_inhabited.html
+    /// https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html
+    /// https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html
+    fn codegen_assert_intrinsic(
+        &mut self,
+        instance: Instance<'tcx>,
+        intrinsic: &str,
+        span: Option<Span>,
+    ) -> Stmt {
+        let ty = instance.substs.type_at(0);
+        let layout = self.layout_of(ty);
+        // Note: We follow the pattern seen in `codegen_panic_intrinsic` from `rustc_codegen_ssa`
+        // https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/mir/block.rs
+
+        // For all intrinsics we first check `is_uninhabited` to give a more
+        // precise error message
+        if layout.abi.is_uninhabited() {
+            return self.codegen_fatal_error(
+                &format!("attempted to instantiate uninhabited type `{}`", ty),
+                span,
+            );
+        }
+
+        // Then we check if the type allows "raw" initialization for the cases
+        // where memory is zero-initialized or entirely uninitialized
+        if intrinsic == "assert_zero_valid" && !layout.might_permit_raw_init(self, true) {
+            return self.codegen_fatal_error(
+                &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
+                span,
+            );
+        }
+
+        if intrinsic == "assert_uninit_valid" && !layout.might_permit_raw_init(self, false) {
+            return self.codegen_fatal_error(
+                &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
+                span,
+            );
+        }
+
+        // Otherwise we generate a no-op statement
+        let loc = self.codegen_span_option(span);
+        return Stmt::skip(loc);
     }
 
     /// An atomic load simply returns the value referenced
