@@ -57,10 +57,7 @@ Perform one-time build configuration:
 Then build kani-compiler executable:
 
 ```
-(
-    cd src/rmc-compiler
-    cargo build
-)
+( cd src/kani-compiler && cargo build )
 ```
 
 Then, optionally, run the regression tests:
