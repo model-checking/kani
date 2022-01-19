@@ -14,12 +14,12 @@ ignore = [
     # tests for now are not formatted, as they are sometimes pretty-printing constrained
     # (and generally rustfmt can move around comments in UI-testing incompatible ways)
     "src/test/*",
-    "!src/test/cargo-rmc",
-    "!src/test/rmc",
+    "!src/test/cargo-kani",
+    "!src/test/kani",
     "!src/test/expected",
     "!src/test/firecracker",
     "!src/test/prusti",
-    "!src/test/rmc-prelude.rs",
+    "!src/test/kani-prelude.rs",
     "!src/test/serial",
     "!src/test/smack",
 

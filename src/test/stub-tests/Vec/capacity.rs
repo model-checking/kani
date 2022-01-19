@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// rmc-flags: --use-abs --abs-type rmc
+// kani-flags: --use-abs --abs-type kani
 fn main() {
     fn capacity_test() {
         let mut vec = Vec::with_capacity(10);

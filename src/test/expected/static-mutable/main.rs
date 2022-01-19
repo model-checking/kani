@@ -13,7 +13,7 @@ fn mutate_the_thing(new: i32) {
 }
 
 fn main() {
-    if rmc::nondet() {
+    if kani::nondet() {
         assert!(10 == foo());
     }
     assert!(12 == foo());

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // @flag --no-memory-splitting --unroll=3
 // @expect error
-// rmc-verify-fail
+// kani-verify-fail
 
 pub fn main() {
     let mut v1: Vec<u64> = vec![0];

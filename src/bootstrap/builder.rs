@@ -462,18 +462,18 @@ impl<'a> Builder<'a> {
                 test::HtmlCheck,
                 // Run bootstrap close to the end as it's unlikely to fail
                 test::Bootstrap,
-                // RMC regression tests
-                test::RMC,
+                // Kani regression tests
+                test::Kani,
                 test::Firecracker,
                 test::Prusti,
                 test::Serial,
                 test::SMACK,
-                test::CargoRMC,
+                test::CargoKani,
                 test::Expected,
                 test::BookRunner,
                 test::Stub,
-                test::RmcDocs,
-                test::RmcFixme,
+                test::KaniDocs,
+                test::KaniFixme,
                 // Run run-make last, since these won't pass without make on Windows
                 test::RunMake,
             ),
