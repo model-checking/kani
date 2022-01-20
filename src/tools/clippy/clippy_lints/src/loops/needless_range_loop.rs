@@ -8,10 +8,9 @@ use if_chain::if_chain;
 use rustc_ast::ast;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::intravisit::{walk_expr, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{walk_expr, Visitor};
 use rustc_hir::{BinOpKind, BorrowKind, Expr, ExprKind, HirId, Mutability, Pat, PatKind, QPath};
 use rustc_lint::LateContext;
-use rustc_middle::hir::map::Map;
 use rustc_middle::middle::region;
 use rustc_middle::ty::{self, Ty};
 use rustc_span::symbol::{sym, Symbol};
@@ -58,8 +57,7 @@ pub(super) fn check<'tcx>(
 
                 // ensure that the indexed variable was declared before the loop, see #601
                 if let Some(indexed_extent) = indexed_extent {
-                    let parent_id = cx.tcx.hir().get_parent_item(expr.hir_id);
-                    let parent_def_id = cx.tcx.hir().local_def_id(parent_id);
+                    let parent_def_id = cx.tcx.hir().get_parent_item(expr.hir_id);
                     let region_scope_tree = cx.tcx.region_scope_tree(parent_def_id);
                     let pat_extent = region_scope_tree.var_scope(pat.hir_id.local_id);
                     if region_scope_tree.is_subscope_of(indexed_extent, pat_extent) {
@@ -263,8 +261,7 @@ impl<'a, 'tcx> VarVisitor<'a, 'tcx> {
                 let res = self.cx.qpath_res(seqpath, seqexpr.hir_id);
                 match res {
                     Res::Local(hir_id) => {
-                        let parent_id = self.cx.tcx.hir().get_parent_item(expr.hir_id);
-                        let parent_def_id = self.cx.tcx.hir().local_def_id(parent_id);
+                        let parent_def_id = self.cx.tcx.hir().get_parent_item(expr.hir_id);
                         let extent = self.cx.tcx.region_scope_tree(parent_def_id).var_scope(hir_id.local_id);
                         if index_used_directly {
                             self.indexed_directly.insert(
@@ -296,8 +293,6 @@ impl<'a, 'tcx> VarVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> Visitor<'tcx> for VarVisitor<'a, 'tcx> {
-    type Map = Map<'tcx>;
-
     fn visit_expr(&mut self, expr: &'tcx Expr<'_>) {
         if_chain! {
             // a range index op
@@ -375,8 +370,5 @@ impl<'a, 'tcx> Visitor<'tcx> for VarVisitor<'a, 'tcx> {
             _ => walk_expr(self, expr),
         }
         self.prefer_mutable = old;
-    }
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
     }
 }

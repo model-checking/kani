@@ -28,7 +28,7 @@ use rustc_hir::itemlikevisit::ItemLikeVisitor;
 use rustc_hir::Node as HirNode;
 use rustc_hir::{ImplItemKind, ItemKind as HirItem, TraitItemKind};
 use rustc_middle::dep_graph::{label_strs, DepNode, DepNodeExt};
-use rustc_middle::hir::map::Map;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::symbol::{sym, Symbol};
 use rustc_span::Span;
@@ -223,8 +223,7 @@ impl<'tcx> DirtyCleanVisitor<'tcx> {
     /// Return all DepNode labels that should be asserted for this item.
     /// index=0 is the "name" used for error messages
     fn auto_labels(&mut self, item_id: LocalDefId, attr: &Attribute) -> (&'static str, Labels) {
-        let hir_id = self.tcx.hir().local_def_id_to_hir_id(item_id);
-        let node = self.tcx.hir().get(hir_id);
+        let node = self.tcx.hir().get_by_def_id(item_id);
         let (name, labels) = match node {
             HirNode::Item(item) => {
                 match item.kind {
@@ -473,10 +472,10 @@ impl<'tcx> FindAllAttrs<'tcx> {
 }
 
 impl<'tcx> intravisit::Visitor<'tcx> for FindAllAttrs<'tcx> {
-    type Map = Map<'tcx>;
+    type NestedFilter = nested_filter::All;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.tcx.hir()
     }
 
     fn visit_attribute(&mut self, _: hir::HirId, attr: &'tcx Attribute) {

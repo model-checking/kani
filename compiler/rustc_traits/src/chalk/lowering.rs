@@ -226,12 +226,25 @@ impl<'tcx> LowerInto<'tcx, chalk_ir::AliasEq<RustInterner<'tcx>>>
     for rustc_middle::ty::ProjectionPredicate<'tcx>
 {
     fn lower_into(self, interner: RustInterner<'tcx>) -> chalk_ir::AliasEq<RustInterner<'tcx>> {
+        // FIXME(associated_const_equality): teach chalk about terms for alias eq.
         chalk_ir::AliasEq {
-            ty: self.ty.lower_into(interner),
+            ty: self.term.ty().unwrap().lower_into(interner),
             alias: self.projection_ty.lower_into(interner),
         }
     }
 }
+
+/*
+// FIXME(...): Where do I add this to Chalk? I can't find it in the rustc repo anywhere.
+impl<'tcx> LowerInto<'tcx, chalk_ir::Term<RustInterner<'tcx>>> for rustc_middle::ty::Term<'tcx> {
+  fn lower_into(self, interner: RustInterner<'tcx>) -> chalk_ir::Term<RustInterner<'tcx>> {
+    match self {
+      ty::Term::Ty(ty) => ty.lower_into(interner).into(),
+      ty::Term::Const(c) => c.lower_into(interner).into(),
+    }
+  }
+}
+*/
 
 impl<'tcx> LowerInto<'tcx, chalk_ir::Ty<RustInterner<'tcx>>> for Ty<'tcx> {
     fn lower_into(self, interner: RustInterner<'tcx>) -> chalk_ir::Ty<RustInterner<'tcx>> {
@@ -651,7 +664,8 @@ impl<'tcx> LowerInto<'tcx, chalk_ir::Binders<chalk_ir::QuantifiedWhereClauses<Ru
                                 .mk_substs_trait(self_ty, predicate.substs)
                                 .lower_into(interner),
                         }),
-                        ty: predicate.ty.lower_into(interner),
+                        // FIXME(associated_const_equality): teach chalk about terms for alias eq.
+                        ty: predicate.term.ty().unwrap().lower_into(interner),
                     }),
                 ),
                 ty::ExistentialPredicate::AutoTrait(def_id) => chalk_ir::Binders::new(
@@ -787,7 +801,7 @@ impl<'tcx> LowerInto<'tcx, chalk_solve::rust_ir::AliasEqBound<RustInterner<'tcx>
             trait_bound: trait_ref.lower_into(interner),
             associated_ty_id: chalk_ir::AssocTypeId(self.projection_ty.item_def_id),
             parameters: own_substs.iter().map(|arg| arg.lower_into(interner)).collect(),
-            value: self.ty.lower_into(interner),
+            value: self.term.ty().unwrap().lower_into(interner),
         }
     }
 }
@@ -806,7 +820,7 @@ crate fn collect_bound_vars<'tcx, T: TypeFoldable<'tcx>>(
     tcx: TyCtxt<'tcx>,
     ty: Binder<'tcx, T>,
 ) -> (T, chalk_ir::VariableKinds<RustInterner<'tcx>>, BTreeMap<DefId, u32>) {
-    let mut bound_vars_collector = BoundVarsCollector::new(tcx);
+    let mut bound_vars_collector = BoundVarsCollector::new();
     ty.as_ref().skip_binder().visit_with(&mut bound_vars_collector);
     let mut parameters = bound_vars_collector.parameters;
     let named_parameters: BTreeMap<DefId, u32> = bound_vars_collector
@@ -836,16 +850,14 @@ crate fn collect_bound_vars<'tcx, T: TypeFoldable<'tcx>>(
 }
 
 crate struct BoundVarsCollector<'tcx> {
-    tcx: TyCtxt<'tcx>,
     binder_index: ty::DebruijnIndex,
     crate parameters: BTreeMap<u32, chalk_ir::VariableKind<RustInterner<'tcx>>>,
     crate named_parameters: Vec<DefId>,
 }
 
 impl<'tcx> BoundVarsCollector<'tcx> {
-    crate fn new(tcx: TyCtxt<'tcx>) -> Self {
+    crate fn new() -> Self {
         BoundVarsCollector {
-            tcx,
             binder_index: ty::INNERMOST,
             parameters: BTreeMap::new(),
             named_parameters: vec![],
@@ -854,10 +866,6 @@ impl<'tcx> BoundVarsCollector<'tcx> {
 }
 
 impl<'tcx> TypeVisitor<'tcx> for BoundVarsCollector<'tcx> {
-    fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-        Some(self.tcx)
-    }
-
     fn visit_binder<T: TypeFoldable<'tcx>>(
         &mut self,
         t: &Binder<'tcx, T>,
@@ -1076,11 +1084,6 @@ impl PlaceholdersCollector {
 }
 
 impl<'tcx> TypeVisitor<'tcx> for PlaceholdersCollector {
-    fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-        // Anon const substs do not contain placeholders by default.
-        None
-    }
-
     fn visit_ty(&mut self, t: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
         match t.kind() {
             ty::Placeholder(p) if p.universe == self.universe_index => {

@@ -435,10 +435,18 @@ fn check_region_bounds_on_impl_item<'tcx>(
     if trait_params != impl_params {
         let item_kind = assoc_item_kind_str(impl_m);
         let def_span = tcx.sess.source_map().guess_head_span(span);
-        let span = tcx.hir().get_generics(impl_m.def_id).map_or(def_span, |g| g.span);
+        let span = impl_m
+            .def_id
+            .as_local()
+            .and_then(|did| tcx.hir().get_generics(did))
+            .map_or(def_span, |g| g.span);
         let generics_span = tcx.hir().span_if_local(trait_m.def_id).map(|sp| {
             let def_sp = tcx.sess.source_map().guess_head_span(sp);
-            tcx.hir().get_generics(trait_m.def_id).map_or(def_sp, |g| g.span)
+            trait_m
+                .def_id
+                .as_local()
+                .and_then(|did| tcx.hir().get_generics(did))
+                .map_or(def_sp, |g| g.span)
         });
 
         tcx.sess.emit_err(LifetimesOrBoundsMismatchOnTrait {
@@ -872,13 +880,6 @@ fn compare_synthetic_generics<'tcx>(
                                         }
                                     }
                                 }
-                            }
-                            type Map = intravisit::ErasedMap<'v>;
-                            fn nested_visit_map(
-                                &mut self,
-                            ) -> intravisit::NestedVisitorMap<Self::Map>
-                            {
-                                intravisit::NestedVisitorMap::None
                             }
                         }
                         let mut visitor = Visitor(None, impl_def_id);
@@ -1352,7 +1353,7 @@ pub fn check_type_bounds<'tcx>(
                             item_def_id: trait_ty.def_id,
                             substs: rebased_substs,
                         },
-                        ty: impl_ty_value,
+                        term: impl_ty_value.into(),
                     },
                     bound_vars,
                 )

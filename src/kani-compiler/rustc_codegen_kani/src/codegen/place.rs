@@ -205,7 +205,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
                         let field = &def.variants.raw[0].fields[f.index()];
-                        res.member(&field.ident.name.to_string(), &self.symbol_table)
+                        res.member(&field.name.to_string(), &self.symbol_table)
                     }
                     ty::Closure(..) => res.member(&f.index().to_string(), &self.symbol_table),
                     ty::Generator(..) => self.codegen_unimplemented(
@@ -220,7 +220,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(v) => {
                 let field = &v.fields[f.index()];
-                res.member(&field.ident.name.to_string(), &self.symbol_table)
+                res.member(&field.name.to_string(), &self.symbol_table)
             }
         }
     }
@@ -431,7 +431,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             Variants::Single { .. } => before.goto_expr,
                             Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                                 TagEncoding::Direct => {
-                                    let case_name = variant.ident.name.to_string();
+                                    let case_name = variant.name.to_string();
                                     before
                                         .goto_expr
                                         .member("cases", &self.symbol_table)

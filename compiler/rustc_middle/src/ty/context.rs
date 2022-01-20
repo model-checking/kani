@@ -961,6 +961,7 @@ pub struct FreeRegionInfo {
 /// [rustc dev guide]: https://rustc-dev-guide.rust-lang.org/ty.html
 #[derive(Copy, Clone)]
 #[rustc_diagnostic_item = "TyCtxt"]
+#[cfg_attr(not(bootstrap), rustc_pass_by_value)]
 pub struct TyCtxt<'tcx> {
     gcx: &'tcx GlobalCtxt<'tcx>,
 }
@@ -1461,8 +1462,7 @@ impl<'tcx> TyCtxt<'tcx> {
             _ => return None, // not a free region
         };
 
-        let hir_id = self.hir().local_def_id_to_hir_id(suitable_region_binding_scope);
-        let is_impl_item = match self.hir().find(hir_id) {
+        let is_impl_item = match self.hir().find_by_def_id(suitable_region_binding_scope) {
             Some(Node::Item(..) | Node::TraitItem(..)) => false,
             Some(Node::ImplItem(..)) => {
                 self.is_bound_region_in_impl_item(suitable_region_binding_scope)
@@ -1495,8 +1495,7 @@ impl<'tcx> TyCtxt<'tcx> {
 
     pub fn return_type_impl_trait(self, scope_def_id: LocalDefId) -> Option<(Ty<'tcx>, Span)> {
         // `type_of()` will fail on these (#55796, #86483), so only allow `fn`s or closures.
-        let hir_id = self.hir().local_def_id_to_hir_id(scope_def_id);
-        match self.hir().get(hir_id) {
+        match self.hir().get_by_def_id(scope_def_id) {
             Node::Item(&hir::Item { kind: ItemKind::Fn(..), .. }) => {}
             Node::TraitItem(&hir::TraitItem { kind: TraitItemKind::Fn(..), .. }) => {}
             Node::ImplItem(&hir::ImplItem { kind: ImplItemKind::Fn(..), .. }) => {}
@@ -1510,6 +1509,7 @@ impl<'tcx> TyCtxt<'tcx> {
                 let sig = ret_ty.fn_sig(self);
                 let output = self.erase_late_bound_regions(sig.output());
                 if output.is_impl_trait() {
+                    let hir_id = self.hir().local_def_id_to_hir_id(scope_def_id);
                     let fn_decl = self.hir().fn_decl_by_hir_id(hir_id).unwrap();
                     Some((output, fn_decl.output.span()))
                 } else {
@@ -1661,7 +1661,7 @@ CloneLiftImpls! { for<'tcx> { Constness, traits::WellFormedLoc, } }
 pub mod tls {
     use super::{ptr_eq, GlobalCtxt, TyCtxt};
 
-    use crate::dep_graph::{DepKind, TaskDeps};
+    use crate::dep_graph::{DepKind, TaskDepsRef};
     use crate::ty::query;
     use rustc_data_structures::sync::{self, Lock};
     use rustc_data_structures::thin_vec::ThinVec;
@@ -1697,13 +1697,19 @@ pub mod tls {
 
         /// The current dep graph task. This is used to add dependencies to queries
         /// when executing them.
-        pub task_deps: Option<&'a Lock<TaskDeps>>,
+        pub task_deps: TaskDepsRef<'a>,
     }
 
     impl<'a, 'tcx> ImplicitCtxt<'a, 'tcx> {
         pub fn new(gcx: &'tcx GlobalCtxt<'tcx>) -> Self {
             let tcx = TyCtxt { gcx };
-            ImplicitCtxt { tcx, query: None, diagnostics: None, layout_depth: 0, task_deps: None }
+            ImplicitCtxt {
+                tcx,
+                query: None,
+                diagnostics: None,
+                layout_depth: 0,
+                task_deps: TaskDepsRef::Ignore,
+            }
         }
     }
 

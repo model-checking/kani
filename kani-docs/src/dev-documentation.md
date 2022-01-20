@@ -96,6 +96,29 @@ git log --graph --oneline origin/upstream-rustc..origin/main
 git diff --stat origin/upstream-rustc..origin/main
 ```
 
+## Set up `rust-analyzer` in VSCode
+
+Add the following to the `rust-analyzer` extension settings in `settings.json`:
+```
+    "rust-analyzer.updates.channel": "nightly",
+    "rust-analyzer.rustcSource": "discover",
+    "rust-analyzer.workspace.symbol.search.scope": "workspace_and_dependencies",
+```
+
+Ensure that any packages that use `rustc` data structures have the following line set in their `Cargo.toml`
+
+```
+[package.metadata.rust-analyzer]
+# This package uses rustc crates.
+rustc_private=true
+```
+
+You may also need to install the `rustc-dev` package using rustup
+
+```
+rustup toolchain install nightly --component rustc-dev   
+```
+
 ## Kani command cheat sheet
 
 These can help understand what Kani is generating or encountering on an example or test file:

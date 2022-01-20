@@ -961,7 +961,7 @@ extern "rust-intrinsic" {
     /// Below are common applications of `transmute` which can be replaced with safer
     /// constructs.
     ///
-    /// Turning raw bytes(`&[u8]`) to `u32`, `f64`, etc.:
+    /// Turning raw bytes (`&[u8]`) into `u32`, `f64`, etc.:
     ///
     /// ```
     /// let raw_bytes = [0x78, 0x56, 0x34, 0x12];
@@ -1893,7 +1893,7 @@ extern "rust-intrinsic" {
     pub fn nontemporal_store<T>(ptr: *mut T, val: T);
 
     /// See documentation of `<*const T>::offset_from` for details.
-    #[rustc_const_unstable(feature = "const_ptr_offset_from", issue = "41079")]
+    #[rustc_const_unstable(feature = "const_ptr_offset_from", issue = "92980")]
     pub fn ptr_offset_from<T>(ptr: *const T, base: *const T) -> isize;
 
     /// See documentation of `<*const T>::guaranteed_eq` for details.

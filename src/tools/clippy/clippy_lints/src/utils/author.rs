@@ -547,10 +547,6 @@ impl<'a, 'tcx> PrintVisitor<'a, 'tcx> {
                 kind!("InlineAsm(_)");
                 out!("// unimplemented: `ExprKind::InlineAsm` is not further destructured at the moment");
             },
-            ExprKind::LlvmInlineAsm(_) => {
-                kind!("LlvmInlineAsm(_)");
-                out!("// unimplemented: `ExprKind::LlvmInlineAsm` is not further destructured at the moment");
-            },
             ExprKind::Struct(qpath, fields, base) => {
                 bind!(self, qpath, fields);
                 opt_bind!(self, base);
@@ -573,7 +569,7 @@ impl<'a, 'tcx> PrintVisitor<'a, 'tcx> {
                         bind!(self, anon_const);
                         out!("if let ArrayLen::Body({anon_const}) = {length};");
                         self.body(field!(anon_const.body));
-                    }
+                    },
                 }
             },
             ExprKind::Err => kind!("Err"),

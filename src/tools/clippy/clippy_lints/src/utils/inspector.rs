@@ -304,19 +304,6 @@ fn print_expr(cx: &LateContext<'_>, expr: &hir::Expr<'_>, indent: usize) {
                 }
             }
         },
-        hir::ExprKind::LlvmInlineAsm(asm) => {
-            let inputs = &asm.inputs_exprs;
-            let outputs = &asm.outputs_exprs;
-            println!("{}LlvmInlineAsm", ind);
-            println!("{}inputs:", ind);
-            for e in inputs.iter() {
-                print_expr(cx, e, indent + 1);
-            }
-            println!("{}outputs:", ind);
-            for e in outputs.iter() {
-                print_expr(cx, e, indent + 1);
-            }
-        },
         hir::ExprKind::Struct(path, fields, ref base) => {
             println!("{}Struct", ind);
             println!("{}path: {:?}", ind, path);
@@ -342,8 +329,8 @@ fn print_expr(cx: &LateContext<'_>, expr: &hir::Expr<'_>, indent: usize) {
             match length {
                 hir::ArrayLen::Infer(_, _) => println!("{}repeat count: _", ind),
                 hir::ArrayLen::Body(anon_const) => {
-                    print_expr(cx, &cx.tcx.hir().body(anon_const.body).value, indent + 1)
-                }
+                    print_expr(cx, &cx.tcx.hir().body(anon_const.body).value, indent + 1);
+                },
             }
         },
         hir::ExprKind::Err => {

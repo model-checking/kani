@@ -12,7 +12,7 @@
 use crate::ty::{all_predicates_of, is_copy};
 use crate::visitors::is_const_evaluatable;
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::intravisit::{walk_expr, ErasedMap, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{walk_expr, Visitor};
 use rustc_hir::{def_id::DefId, Block, Expr, ExprKind, QPath, UnOp};
 use rustc_lint::LateContext;
 use rustc_middle::ty::{self, PredicateKind};
@@ -45,7 +45,12 @@ impl ops::BitOrAssign for EagernessSuggestion {
 }
 
 /// Determine the eagerness of the given function call.
-fn fn_eagerness(cx: &LateContext<'tcx>, fn_id: DefId, name: Symbol, args: &'tcx [Expr<'_>]) -> EagernessSuggestion {
+fn fn_eagerness<'tcx>(
+    cx: &LateContext<'tcx>,
+    fn_id: DefId,
+    name: Symbol,
+    args: &'tcx [Expr<'_>],
+) -> EagernessSuggestion {
     use EagernessSuggestion::{Eager, Lazy, NoChange};
     let name = name.as_str();
 
@@ -92,18 +97,13 @@ fn fn_eagerness(cx: &LateContext<'tcx>, fn_id: DefId, name: Symbol, args: &'tcx 
 }
 
 #[allow(clippy::too_many_lines)]
-fn expr_eagerness(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> EagernessSuggestion {
+fn expr_eagerness<'tcx>(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> EagernessSuggestion {
     struct V<'cx, 'tcx> {
         cx: &'cx LateContext<'tcx>,
         eagerness: EagernessSuggestion,
     }
 
     impl<'cx, 'tcx> Visitor<'tcx> for V<'cx, 'tcx> {
-        type Map = ErasedMap<'tcx>;
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::None
-        }
-
         fn visit_expr(&mut self, e: &'tcx Expr<'_>) {
             use EagernessSuggestion::{ForceNoChange, Lazy, NoChange};
             if self.eagerness == ForceNoChange {
@@ -175,7 +175,6 @@ fn expr_eagerness(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> EagernessSuggest
                 | ExprKind::Continue(_)
                 | ExprKind::Ret(_)
                 | ExprKind::InlineAsm(_)
-                | ExprKind::LlvmInlineAsm(_)
                 | ExprKind::Yield(..)
                 | ExprKind::Err => {
                     self.eagerness = ForceNoChange;
@@ -225,11 +224,11 @@ fn expr_eagerness(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> EagernessSuggest
 }
 
 /// Whether the given expression should be changed to evaluate eagerly
-pub fn switch_to_eager_eval(cx: &'_ LateContext<'tcx>, expr: &'tcx Expr<'_>) -> bool {
+pub fn switch_to_eager_eval<'tcx>(cx: &'_ LateContext<'tcx>, expr: &'tcx Expr<'_>) -> bool {
     expr_eagerness(cx, expr) == EagernessSuggestion::Eager
 }
 
 /// Whether the given expression should be changed to evaluate lazily
-pub fn switch_to_lazy_eval(cx: &'_ LateContext<'tcx>, expr: &'tcx Expr<'_>) -> bool {
+pub fn switch_to_lazy_eval<'tcx>(cx: &'_ LateContext<'tcx>, expr: &'tcx Expr<'_>) -> bool {
     expr_eagerness(cx, expr) == EagernessSuggestion::Lazy
 }

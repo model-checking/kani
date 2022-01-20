@@ -28,20 +28,20 @@ check-cbmc-version.py --major 5 --minor 48
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
-./x.py fmt --check
+${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build Kani compiler and Kani library
-(cd "${KANI_DIR}/src/kani-compiler"; cargo build)
+cargo build -p kani-compiler
 
 # Unit tests
-(cd src/kani-compiler/cbmc; cargo test)
-(cd src/kani-compiler; cargo test)
+cargo test -p cbmc
+cargo test -p kani-compiler
 
 # Build tool for linking Kani pointer restrictions
-cargo build --release --manifest-path src/tools/kani-link-restrictions/Cargo.toml
+cargo build --release -p kani-link-restrictions
 
 # Build compiletest
-(cd "${KANI_DIR}/src/tools/compiletest"; cargo build --release)
+cargo build --release -p compiletest
 
 # Declare testing suite information (suite and mode)
 TESTS=(

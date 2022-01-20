@@ -31,7 +31,6 @@ mod tests;
 mod context;
 mod print_item;
 mod span_map;
-mod templates;
 mod write_shared;
 
 crate use self::context::*;
@@ -70,8 +69,9 @@ use crate::formats::item_type::ItemType;
 use crate::formats::{AssocItemRender, Impl, RenderMode};
 use crate::html::escape::Escape;
 use crate::html::format::{
-    href, print_abi_with_space, print_constness_with_space, print_default_space,
-    print_generic_bounds, print_where_clause, Buffer, HrefError, PrintWithSpace,
+    href, join_with_double_colon, print_abi_with_space, print_constness_with_space,
+    print_default_space, print_generic_bounds, print_where_clause, Buffer, HrefError,
+    PrintWithSpace,
 };
 use crate::html::highlight;
 use crate::html::markdown::{HeadingOffset, Markdown, MarkdownHtml, MarkdownSummaryLine};
@@ -422,6 +422,12 @@ fn settings(root_path: &str, suffix: &str, theme_names: Vec<String>) -> Result<S
             "Theme preferences",
             vec![
                 Setting::from(("use-system-theme", "Use system theme", true)),
+                Setting::Select {
+                    js_data_name: "theme",
+                    description: "Theme",
+                    default_value: "light",
+                    options: theme_names.clone(),
+                },
                 Setting::Select {
                     js_data_name: "preferred-dark-theme",
                     description: "Preferred dark theme",
@@ -1191,11 +1197,9 @@ fn render_deref_methods(
             }
         }
         render_assoc_items_inner(w, cx, container_item, did, what, derefs);
-    } else {
-        if let Some(prim) = target.primitive_type() {
-            if let Some(&did) = cache.primitive_locations.get(&prim) {
-                render_assoc_items_inner(w, cx, container_item, did, what, derefs);
-            }
+    } else if let Some(prim) = target.primitive_type() {
+        if let Some(&did) = cache.primitive_locations.get(&prim) {
+            render_assoc_items_inner(w, cx, container_item, did, what, derefs);
         }
     }
 }
@@ -1738,7 +1742,7 @@ fn print_sidebar(cx: &Context<'_>, it: &clean::Item, buffer: &mut Buffer) {
     {
         write!(
             buffer,
-            "<h2 class=\"location\">{}{}</h2>",
+            "<h2 class=\"location\"><a href=\"#\">{}{}</a></h2>",
             match *it.kind {
                 clean::StructItem(..) => "Struct ",
                 clean::TraitItem(..) => "Trait ",
@@ -1827,7 +1831,11 @@ fn print_sidebar(cx: &Context<'_>, it: &clean::Item, buffer: &mut Buffer) {
         ty = it.type_(),
         path = relpath
     );
-    write!(buffer, "<script defer src=\"{}sidebar-items.js\"></script>", relpath);
+    write!(
+        buffer,
+        "<script defer src=\"{}sidebar-items{}.js\"></script>",
+        relpath, cx.shared.resource_suffix
+    );
     // Closes sidebar-elems div.
     buffer.write_str("</div>");
 }
@@ -2512,7 +2520,7 @@ fn collect_paths_for_type(first_ty: clean::Type, cache: &Cache) -> Vec<String> {
         let fqp = cache.exact_paths.get(&did).cloned().or_else(get_extern);
 
         if let Some(path) = fqp {
-            out.push(path.join("::"));
+            out.push(join_with_double_colon(&path));
         }
     };
 

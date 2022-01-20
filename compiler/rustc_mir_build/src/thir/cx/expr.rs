@@ -570,12 +570,6 @@ impl<'tcx> Cx<'tcx> {
                 line_spans: asm.line_spans,
             },
 
-            hir::ExprKind::LlvmInlineAsm(ref asm) => ExprKind::LlvmInlineAsm {
-                asm: &asm.inner,
-                outputs: self.mirror_exprs(asm.outputs_exprs),
-                inputs: self.mirror_exprs(asm.inputs_exprs),
-            },
-
             hir::ExprKind::ConstBlock(ref anon_const) => {
                 let anon_const_def_id = self.tcx.hir().local_def_id(anon_const.hir_id);
                 let value = ty::Const::from_inline_const(self.tcx, anon_const_def_id);
@@ -1108,9 +1102,9 @@ impl<'tcx> Cx<'tcx> {
         let temp_lifetime = self.region_scope_tree.temporary_scope(closure_expr.hir_id.local_id);
 
         match upvar_capture {
-            ty::UpvarCapture::ByValue(_) => captured_place_expr,
+            ty::UpvarCapture::ByValue => captured_place_expr,
             ty::UpvarCapture::ByRef(upvar_borrow) => {
-                let borrow_kind = match upvar_borrow.kind {
+                let borrow_kind = match upvar_borrow {
                     ty::BorrowKind::ImmBorrow => BorrowKind::Shared,
                     ty::BorrowKind::UniqueImmBorrow => BorrowKind::Unique,
                     ty::BorrowKind::MutBorrow => BorrowKind::Mut { allow_two_phase_borrow: false },

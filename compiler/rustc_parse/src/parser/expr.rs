@@ -682,7 +682,7 @@ impl<'a> Parser<'a> {
         // Save the state of the parser before parsing type normally, in case there is a
         // LessThan comparison after this cast.
         let parser_snapshot_before_type = self.clone();
-        let cast_expr = match self.parse_ty_no_plus() {
+        let cast_expr = match self.parse_as_cast_ty() {
             Ok(rhs) => mk_expr(self, lhs, rhs),
             Err(mut type_err) => {
                 // Rewind to before attempting to parse the type with generics, to recover
@@ -808,7 +808,7 @@ impl<'a> Parser<'a> {
                 "casts cannot be followed by {}",
                 match with_postfix.kind {
                     ExprKind::Index(_, _) => "indexing",
-                    ExprKind::Try(_) => "?",
+                    ExprKind::Try(_) => "`?`",
                     ExprKind::Field(_, _) => "a field access",
                     ExprKind::MethodCall(_, _, _) => "a method call",
                     ExprKind::Call(_, _) => "a function call",
@@ -1443,7 +1443,7 @@ impl<'a> Parser<'a> {
         &mut self,
         label: Label,
         attrs: AttrVec,
-        consume_colon: bool,
+        mut consume_colon: bool,
     ) -> PResult<'a, P<Expr>> {
         let lo = label.ident.span;
         let label = Some(label);
@@ -1456,6 +1456,12 @@ impl<'a> Parser<'a> {
             self.parse_loop_expr(label, lo, attrs)
         } else if self.check(&token::OpenDelim(token::Brace)) || self.token.is_whole_block() {
             self.parse_block_expr(label, lo, BlockCheckMode::Default, attrs)
+        } else if !ate_colon && (self.check(&TokenKind::Comma) || self.check(&TokenKind::Gt)) {
+            // We're probably inside of a `Path<'a>` that needs a turbofish, so suppress the
+            // "must be followed by a colon" error.
+            self.diagnostic().delay_span_bug(lo, "this label wasn't parsed correctly");
+            consume_colon = false;
+            Ok(self.mk_expr_err(lo))
         } else {
             let msg = "expected `while`, `for`, `loop` or `{` after a label";
             self.struct_span_err(self.token.span, msg).span_label(self.token.span, msg).emit();

@@ -4,19 +4,18 @@
 //! conflicts between multiple such attributes attached to the same
 //! item.
 
-use rustc_middle::hir::map::Map;
-use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::TyCtxt;
-
 use rustc_ast::{ast, AttrStyle, Attribute, Lit, LitKind, NestedMetaItem};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::{pluralize, struct_span_err, Applicability};
 use rustc_feature::{AttributeDuplicates, AttributeType, BuiltinAttribute, BUILTIN_ATTRIBUTE_MAP};
 use rustc_hir as hir;
-use rustc_hir::def_id::LocalDefId;
-use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
+use rustc_hir::def_id::{LocalDefId, CRATE_DEF_ID};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{self, FnSig, ForeignItem, HirId, Item, ItemKind, TraitItem, CRATE_HIR_ID};
 use rustc_hir::{MethodKind, Target};
+use rustc_middle::hir::nested_filter;
+use rustc_middle::ty::query::Providers;
+use rustc_middle::ty::TyCtxt;
 use rustc_session::lint::builtin::{
     CONFLICTING_REPR_HINTS, INVALID_DOC_ATTRIBUTES, UNUSED_ATTRIBUTES,
 };
@@ -32,7 +31,7 @@ pub(crate) fn target_from_impl_item<'tcx>(
     match impl_item.kind {
         hir::ImplItemKind::Const(..) => Target::AssocConst,
         hir::ImplItemKind::Fn(..) => {
-            let parent_hir_id = tcx.hir().get_parent_item(impl_item.hir_id()).expect_owner();
+            let parent_hir_id = tcx.hir().get_parent_item(impl_item.hir_id());
             let containing_item = tcx.hir().expect_item(parent_hir_id);
             let containing_impl_is_for_trait = match &containing_item.kind {
                 hir::ItemKind::Impl(impl_) => impl_.of_trait.is_some(),
@@ -114,6 +113,7 @@ impl CheckAttrVisitor<'_> {
                 }
                 sym::must_not_suspend => self.check_must_not_suspend(&attr, span, target),
                 sym::must_use => self.check_must_use(hir_id, &attr, span, target),
+                sym::rustc_pass_by_value => self.check_pass_by_value(&attr, span, target),
                 sym::rustc_const_unstable
                 | sym::rustc_const_stable
                 | sym::unstable
@@ -126,6 +126,7 @@ impl CheckAttrVisitor<'_> {
             // lint-only checks
             match attr.name_or_empty() {
                 sym::cold => self.check_cold(hir_id, attr, span, target),
+                sym::link => self.check_link(hir_id, attr, span, target),
                 sym::link_name => self.check_link_name(hir_id, attr, span, target),
                 sym::link_section => self.check_link_section(hir_id, attr, span, target),
                 sym::no_mangle => self.check_no_mangle(hir_id, attr, span, target),
@@ -134,7 +135,6 @@ impl CheckAttrVisitor<'_> {
                 }
                 sym::macro_use | sym::macro_escape => self.check_macro_use(hir_id, attr, target),
                 sym::path => self.check_generic_attr(hir_id, attr, target, &[Target::Mod]),
-                sym::cfg_attr => self.check_cfg_attr(hir_id, attr),
                 sym::plugin_registrar => self.check_plugin_registrar(hir_id, attr, target),
                 sym::macro_export => self.check_macro_export(hir_id, attr, target),
                 sym::ignore | sym::should_panic | sym::proc_macro_derive => {
@@ -582,7 +582,7 @@ impl CheckAttrVisitor<'_> {
             Target::Impl => Some("implementation block"),
             Target::ForeignMod => Some("extern block"),
             Target::AssocTy => {
-                let parent_hir_id = self.tcx.hir().get_parent_item(hir_id).expect_owner();
+                let parent_hir_id = self.tcx.hir().get_parent_item(hir_id);
                 let containing_item = self.tcx.hir().expect_item(parent_hir_id);
                 if Target::from_item(containing_item) == Target::Impl {
                     Some("type alias in implementation block")
@@ -591,7 +591,7 @@ impl CheckAttrVisitor<'_> {
                 }
             }
             Target::AssocConst => {
-                let parent_hir_id = self.tcx.hir().get_parent_item(hir_id).expect_owner();
+                let parent_hir_id = self.tcx.hir().get_parent_item(hir_id);
                 let containing_item = self.tcx.hir().expect_item(parent_hir_id);
                 // We can't link to trait impl's consts.
                 let err = "associated constant in trait implementation block";
@@ -832,7 +832,7 @@ impl CheckAttrVisitor<'_> {
                     let mut err = lint.build(
                         "this attribute can only be applied at the crate level",
                     );
-                    if attr.style == AttrStyle::Outer && self.tcx.hir().get_parent_item(hir_id) == CRATE_HIR_ID {
+                    if attr.style == AttrStyle::Outer && self.tcx.hir().get_parent_item(hir_id) == CRATE_DEF_ID {
                         if let Ok(mut src) =
                             self.tcx.sess.source_map().span_to_snippet(attr.span)
                         {
@@ -1066,6 +1066,24 @@ impl CheckAttrVisitor<'_> {
         is_valid
     }
 
+    /// Warns against some misuses of `#[pass_by_value]`
+    fn check_pass_by_value(&self, attr: &Attribute, span: &Span, target: Target) -> bool {
+        match target {
+            Target::Struct | Target::Enum | Target::TyAlias => true,
+            _ => {
+                self.tcx
+                    .sess
+                    .struct_span_err(
+                        attr.span,
+                        "`pass_by_value` attribute should be applied to a struct, enum or type alias.",
+                    )
+                    .span_label(*span, "is not a struct, enum or type alias")
+                    .emit();
+                false
+            }
+        }
+    }
+
     /// Warns against some misuses of `#[must_use]`
     fn check_must_use(
         &self,
@@ -1135,6 +1153,26 @@ impl CheckAttrVisitor<'_> {
                         )
                         .span_label(*span, "not a function")
                         .emit();
+                });
+            }
+        }
+    }
+
+    /// Checks if `#[link]` is applied to an item other than a foreign module.
+    fn check_link(&self, hir_id: HirId, attr: &Attribute, span: &Span, target: Target) {
+        match target {
+            Target::ForeignMod => {}
+            _ => {
+                self.tcx.struct_span_lint_hir(UNUSED_ATTRIBUTES, hir_id, attr.span, |lint| {
+                    let mut diag = lint.build("attribute should be applied to an `extern` block");
+                    diag.warn(
+                        "this was previously accepted by the compiler but is \
+                         being phased out; it will become a hard error in \
+                         a future release!",
+                    );
+
+                    diag.span_label(*span, "not an `extern` block");
+                    diag.emit();
                 });
             }
         }
@@ -1823,16 +1861,6 @@ impl CheckAttrVisitor<'_> {
         }
     }
 
-    fn check_cfg_attr(&self, hir_id: HirId, attr: &Attribute) {
-        if let Some((_, attrs)) = rustc_parse::parse_cfg_attr(&attr, &self.tcx.sess.parse_sess) {
-            if attrs.is_empty() {
-                self.tcx.struct_span_lint_hir(UNUSED_ATTRIBUTES, hir_id, attr.span, |lint| {
-                    lint.build("`#[cfg_attr]` does not expand to any attributes").emit();
-                });
-            }
-        }
-    }
-
     fn check_plugin_registrar(&self, hir_id: HirId, attr: &Attribute, target: Target) {
         if target != Target::Fn {
             self.tcx.struct_span_lint_hir(UNUSED_ATTRIBUTES, hir_id, attr.span, |lint| {
@@ -1843,10 +1871,10 @@ impl CheckAttrVisitor<'_> {
 }
 
 impl<'tcx> Visitor<'tcx> for CheckAttrVisitor<'tcx> {
-    type Map = Map<'tcx>;
+    type NestedFilter = nested_filter::OnlyBodies;
 
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.tcx.hir()
     }
 
     fn visit_item(&mut self, item: &'tcx Item<'tcx>) {

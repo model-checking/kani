@@ -6,6 +6,7 @@ use rustc_hir::intravisit;
 use rustc_hir::itemlikevisit::ItemLikeVisitor;
 use rustc_hir::{HirId, ItemLocalId};
 use rustc_middle::hir::map::Map;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::TyCtxt;
 
 pub fn check_crate(tcx: TyCtxt<'_>) {
@@ -57,22 +58,22 @@ impl<'a, 'hir> OuterVisitor<'a, 'hir> {
 impl<'a, 'hir> ItemLikeVisitor<'hir> for OuterVisitor<'a, 'hir> {
     fn visit_item(&mut self, i: &'hir hir::Item<'hir>) {
         let mut inner_visitor = self.new_inner_visitor(self.hir_map);
-        inner_visitor.check(i.hir_id(), |this| intravisit::walk_item(this, i));
+        inner_visitor.check(i.def_id, |this| intravisit::walk_item(this, i));
     }
 
     fn visit_trait_item(&mut self, i: &'hir hir::TraitItem<'hir>) {
         let mut inner_visitor = self.new_inner_visitor(self.hir_map);
-        inner_visitor.check(i.hir_id(), |this| intravisit::walk_trait_item(this, i));
+        inner_visitor.check(i.def_id, |this| intravisit::walk_trait_item(this, i));
     }
 
     fn visit_impl_item(&mut self, i: &'hir hir::ImplItem<'hir>) {
         let mut inner_visitor = self.new_inner_visitor(self.hir_map);
-        inner_visitor.check(i.hir_id(), |this| intravisit::walk_impl_item(this, i));
+        inner_visitor.check(i.def_id, |this| intravisit::walk_impl_item(this, i));
     }
 
     fn visit_foreign_item(&mut self, i: &'hir hir::ForeignItem<'hir>) {
         let mut inner_visitor = self.new_inner_visitor(self.hir_map);
-        inner_visitor.check(i.hir_id(), |this| intravisit::walk_foreign_item(this, i));
+        inner_visitor.check(i.def_id, |this| intravisit::walk_foreign_item(this, i));
     }
 }
 
@@ -83,9 +84,8 @@ impl<'a, 'hir> HirIdValidator<'a, 'hir> {
         self.errors.lock().push(f());
     }
 
-    fn check<F: FnOnce(&mut HirIdValidator<'a, 'hir>)>(&mut self, hir_id: HirId, walk: F) {
+    fn check<F: FnOnce(&mut HirIdValidator<'a, 'hir>)>(&mut self, owner: LocalDefId, walk: F) {
         assert!(self.owner.is_none());
-        let owner = self.hir_map.local_def_id(hir_id);
         self.owner = Some(owner);
         walk(self);
 
@@ -140,10 +140,10 @@ impl<'a, 'hir> HirIdValidator<'a, 'hir> {
 }
 
 impl<'a, 'hir> intravisit::Visitor<'hir> for HirIdValidator<'a, 'hir> {
-    type Map = Map<'hir>;
+    type NestedFilter = nested_filter::OnlyBodies;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::OnlyBodies(self.hir_map)
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.hir_map
     }
 
     fn visit_id(&mut self, hir_id: HirId) {

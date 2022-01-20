@@ -9,7 +9,7 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::itemlikevisit::ItemLikeVisitor;
 use rustc_hir::Node;
 use rustc_middle::middle::codegen_fn_attrs::{CodegenFnAttrFlags, CodegenFnAttrs};
@@ -52,7 +52,7 @@ fn method_might_be_inlined(
             return true;
         }
     }
-    match tcx.hir().find(tcx.hir().local_def_id_to_hir_id(impl_src)) {
+    match tcx.hir().find_by_def_id(impl_src) {
         Some(Node::Item(item)) => item_might_be_inlined(tcx, &item, codegen_fn_attrs),
         Some(..) | None => span_bug!(impl_item.span, "impl did is not an item"),
     }
@@ -74,12 +74,6 @@ struct ReachableContext<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for ReachableContext<'tcx> {
-    type Map = intravisit::ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_nested_body(&mut self, body: hir::BodyId) {
         let old_maybe_typeck_results =
             self.maybe_typeck_results.replace(self.tcx.typeck_body(body));
@@ -140,14 +134,11 @@ impl<'tcx> ReachableContext<'tcx> {
     // Returns true if the given def ID represents a local item that is
     // eligible for inlining and false otherwise.
     fn def_id_represents_local_inlined_item(&self, def_id: DefId) -> bool {
-        let hir_id = match def_id.as_local() {
-            Some(def_id) => self.tcx.hir().local_def_id_to_hir_id(def_id),
-            None => {
-                return false;
-            }
+        let Some(def_id) = def_id.as_local() else {
+            return false;
         };
 
-        match self.tcx.hir().find(hir_id) {
+        match self.tcx.hir().find_by_def_id(def_id) {
             Some(Node::Item(item)) => match item.kind {
                 hir::ItemKind::Fn(..) => {
                     item_might_be_inlined(self.tcx, &item, self.tcx.codegen_fn_attrs(def_id))
@@ -169,7 +160,8 @@ impl<'tcx> ReachableContext<'tcx> {
                         if generics.requires_monomorphization(self.tcx) || attrs.requests_inline() {
                             true
                         } else {
-                            let impl_did = self.tcx.hir().get_parent_did(hir_id);
+                            let hir_id = self.tcx.hir().local_def_id_to_hir_id(def_id);
+                            let impl_did = self.tcx.hir().get_parent_item(hir_id);
                             // Check the impl. If the generics on the self
                             // type of the impl require inlining, this method
                             // does too.
@@ -198,9 +190,7 @@ impl<'tcx> ReachableContext<'tcx> {
                 continue;
             }
 
-            if let Some(ref item) =
-                self.tcx.hir().find(self.tcx.hir().local_def_id_to_hir_id(search_item))
-            {
+            if let Some(ref item) = self.tcx.hir().find_by_def_id(search_item) {
                 self.propagate_node(item, search_item);
             }
         }

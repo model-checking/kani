@@ -1,6 +1,5 @@
 #![feature(box_patterns)]
 #![feature(control_flow_enum)]
-#![feature(in_band_lifetimes)]
 #![feature(let_else)]
 #![feature(once_cell)]
 #![feature(rustc_private)]
@@ -44,6 +43,7 @@ pub mod diagnostics;
 pub mod eager_or_lazy;
 pub mod higher;
 mod hir_utils;
+pub mod macros;
 pub mod msrvs;
 pub mod numeric_literal;
 pub mod paths;
@@ -70,19 +70,18 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::unhash::UnhashMap;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::DefId;
+use rustc_hir::def_id::{CrateNum, DefId, LocalDefId, CRATE_DEF_ID};
 use rustc_hir::hir_id::{HirIdMap, HirIdSet};
-use rustc_hir::intravisit::{walk_expr, ErasedMap, FnKind, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{walk_expr, FnKind, Visitor};
 use rustc_hir::itemlikevisit::ItemLikeVisitor;
 use rustc_hir::LangItem::{OptionNone, ResultErr, ResultOk};
 use rustc_hir::{
-    def, Arm, BindingAnnotation, Block, BlockCheckMode, Body, Constness, Destination, Expr, ExprKind, FnDecl,
-    ForeignItem, GenericArgs, HirId, Impl, ImplItem, ImplItemKind, IsAsync, Item, ItemKind, LangItem, Local,
-    MatchSource, Mutability, Node, Param, Pat, PatKind, Path, PathSegment, PrimTy, QPath, Stmt, StmtKind, TraitItem,
-    TraitItemKind, TraitRef, TyKind, UnOp, ArrayLen
+    def, lang_items, Arm, ArrayLen, BindingAnnotation, Block, BlockCheckMode, Body, Constness, Destination, Expr,
+    ExprKind, FnDecl, ForeignItem, GenericArgs, HirId, Impl, ImplItem, ImplItemKind, IsAsync, Item, ItemKind, LangItem,
+    Local, MatchSource, Mutability, Node, Param, Pat, PatKind, Path, PathSegment, PrimTy, QPath, Stmt, StmtKind,
+    Target, TraitItem, TraitItemKind, TraitRef, TyKind, UnOp,
 };
 use rustc_lint::{LateContext, Level, Lint, LintContext};
-use rustc_middle::hir::map::Map;
 use rustc_middle::hir::place::PlaceBase;
 use rustc_middle::ty as rustc_ty;
 use rustc_middle::ty::adjustment::{Adjust, Adjustment, AutoBorrow};
@@ -90,7 +89,6 @@ use rustc_middle::ty::binding::BindingMode;
 use rustc_middle::ty::{layout::IntegerExt, BorrowKind, DefIdTree, Ty, TyCtxt, TypeAndMut, TypeFoldable, UpvarCapture};
 use rustc_semver::RustcVersion;
 use rustc_session::Session;
-use rustc_span::def_id::LocalDefId;
 use rustc_span::hygiene::{ExpnKind, MacroKind};
 use rustc_span::source_map::original_sp;
 use rustc_span::sym;
@@ -126,7 +124,7 @@ macro_rules! extract_msrv_attr {
         extract_msrv_attr!(@EarlyContext);
     };
     (@$context:ident$(, $call:tt)?) => {
-        fn enter_lint_attrs(&mut self, cx: &rustc_lint::$context<'tcx>, attrs: &'tcx [rustc_ast::ast::Attribute]) {
+        fn enter_lint_attrs(&mut self, cx: &rustc_lint::$context<'_>, attrs: &[rustc_ast::ast::Attribute]) {
             use $crate::get_unique_inner_attr;
             match get_unique_inner_attr(cx.sess$($call)?, attrs, "msrv") {
                 Some(msrv_attr) => {
@@ -144,13 +142,6 @@ macro_rules! extract_msrv_attr {
             }
         }
     };
-}
-
-/// Returns `true` if the span comes from a macro expansion, no matter if from a
-/// macro by example or from a procedural macro
-#[must_use]
-pub fn in_macro(span: Span) -> bool {
-    span.from_expansion() && !matches!(span.ctxt().outer_expn_data().kind, ExpnKind::Desugaring(..))
 }
 
 /// Returns `true` if the two spans come from differing expansions (i.e., one is
@@ -223,7 +214,7 @@ pub fn find_binding_init<'tcx>(cx: &LateContext<'tcx>, hir_id: HirId) -> Option<
 /// ```
 pub fn in_constant(cx: &LateContext<'_>, id: HirId) -> bool {
     let parent_id = cx.tcx.hir().get_parent_item(id);
-    match cx.tcx.hir().get(parent_id) {
+    match cx.tcx.hir().get_by_def_id(parent_id) {
         Node::Item(&Item {
             kind: ItemKind::Const(..) | ItemKind::Static(..),
             ..
@@ -282,7 +273,11 @@ pub fn is_wild(pat: &Pat<'_>) -> bool {
 }
 
 /// Checks if the first type parameter is a lang item.
-pub fn is_ty_param_lang_item(cx: &LateContext<'_>, qpath: &QPath<'tcx>, item: LangItem) -> Option<&'tcx hir::Ty<'tcx>> {
+pub fn is_ty_param_lang_item<'tcx>(
+    cx: &LateContext<'_>,
+    qpath: &QPath<'tcx>,
+    item: LangItem,
+) -> Option<&'tcx hir::Ty<'tcx>> {
     let ty = get_qpath_generic_tys(qpath).next()?;
 
     if let TyKind::Path(qpath) = &ty.kind {
@@ -298,7 +293,7 @@ pub fn is_ty_param_lang_item(cx: &LateContext<'_>, qpath: &QPath<'tcx>, item: La
 }
 
 /// Checks if the first type parameter is a diagnostic item.
-pub fn is_ty_param_diagnostic_item(
+pub fn is_ty_param_diagnostic_item<'tcx>(
     cx: &LateContext<'_>,
     qpath: &QPath<'tcx>,
     item: Symbol,
@@ -375,7 +370,7 @@ pub fn last_path_segment<'tcx>(path: &QPath<'tcx>) -> &'tcx PathSegment<'tcx> {
     }
 }
 
-pub fn get_qpath_generics(path: &QPath<'tcx>) -> Option<&'tcx GenericArgs<'tcx>> {
+pub fn get_qpath_generics<'tcx>(path: &QPath<'tcx>) -> Option<&'tcx GenericArgs<'tcx>> {
     match path {
         QPath::Resolved(_, p) => p.segments.last().and_then(|s| s.args),
         QPath::TypeRelative(_, s) => s.args,
@@ -383,7 +378,7 @@ pub fn get_qpath_generics(path: &QPath<'tcx>) -> Option<&'tcx GenericArgs<'tcx>>
     }
 }
 
-pub fn get_qpath_generic_tys(path: &QPath<'tcx>) -> impl Iterator<Item = &'tcx hir::Ty<'tcx>> {
+pub fn get_qpath_generic_tys<'tcx>(path: &QPath<'tcx>) -> impl Iterator<Item = &'tcx hir::Ty<'tcx>> {
     get_qpath_generics(path)
         .map_or([].as_ref(), |a| a.args)
         .iter()
@@ -522,7 +517,7 @@ pub fn path_to_res(cx: &LateContext<'_>, path: &[&str]) -> Res {
             }
         };
     }
-    fn item_child_by_name<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, name: &str) -> Option<Res> {
+    fn item_child_by_name(tcx: TyCtxt<'_>, def_id: DefId, name: &str) -> Option<Res> {
         match tcx.def_kind(def_id) {
             DefKind::Mod | DefKind::Enum | DefKind::Trait => tcx
                 .module_children(def_id)
@@ -538,18 +533,34 @@ pub fn path_to_res(cx: &LateContext<'_>, path: &[&str]) -> Res {
             _ => None,
         }
     }
+    fn find_primitive(tcx: TyCtxt<'_>, name: &str) -> Option<DefId> {
+        if let Some(&(index, Target::Impl)) = lang_items::ITEM_REFS.get(&Symbol::intern(name)) {
+            tcx.lang_items().items()[index]
+        } else {
+            None
+        }
+    }
+    fn find_crate(tcx: TyCtxt<'_>, name: &str) -> Option<DefId> {
+        tcx.crates(())
+            .iter()
+            .find(|&&num| tcx.crate_name(num).as_str() == name)
+            .map(CrateNum::as_def_id)
+    }
 
-    let (krate, first, path) = match *path {
-        [krate, first, ref path @ ..] => (krate, first, path),
+    let (base, first, path) = match *path {
+        [base, first, ref path @ ..] => (base, first, path),
         [primitive] => {
             return PrimTy::from_name(Symbol::intern(primitive)).map_or(Res::Err, Res::PrimTy);
         },
         _ => return Res::Err,
     };
     let tcx = cx.tcx;
-    let crates = tcx.crates(());
-    let krate = try_res!(crates.iter().find(|&&num| tcx.crate_name(num).as_str() == krate));
-    let first = try_res!(item_child_by_name(tcx, krate.as_def_id(), first));
+    let first = try_res!(
+        find_primitive(tcx, base)
+            .or_else(|| find_crate(tcx, base))
+            .and_then(|id| item_child_by_name(tcx, id, first))
+    );
+
     let last = path
         .iter()
         .copied()
@@ -594,12 +605,13 @@ pub fn get_trait_def_id(cx: &LateContext<'_>, path: &[&str]) -> Option<DefId> {
 ///     }
 /// }
 /// ```
-pub fn trait_ref_of_method<'tcx>(cx: &LateContext<'tcx>, hir_id: HirId) -> Option<&'tcx TraitRef<'tcx>> {
+pub fn trait_ref_of_method<'tcx>(cx: &LateContext<'tcx>, def_id: LocalDefId) -> Option<&'tcx TraitRef<'tcx>> {
     // Get the implemented trait for the current function
+    let hir_id = cx.tcx.hir().local_def_id_to_hir_id(def_id);
     let parent_impl = cx.tcx.hir().get_parent_item(hir_id);
     if_chain! {
-        if parent_impl != hir::CRATE_HIR_ID;
-        if let hir::Node::Item(item) = cx.tcx.hir().get(parent_impl);
+        if parent_impl != CRATE_DEF_ID;
+        if let hir::Node::Item(item) = cx.tcx.hir().get_by_def_id(parent_impl);
         if let hir::ItemKind::Impl(impl_) = &item.kind;
         then { return impl_.of_trait.as_ref(); }
     }
@@ -628,6 +640,19 @@ fn projection_stack<'a, 'hir>(mut e: &'a Expr<'hir>) -> (Vec<&'a Expr<'hir>>, &'
     (result, root)
 }
 
+/// Gets the mutability of the custom deref adjustment, if any.
+pub fn expr_custom_deref_adjustment(cx: &LateContext<'_>, e: &Expr<'_>) -> Option<Mutability> {
+    cx.typeck_results()
+        .expr_adjustments(e)
+        .iter()
+        .find_map(|a| match a.kind {
+            Adjust::Deref(Some(d)) => Some(Some(d.mutbl)),
+            Adjust::Deref(None) => None,
+            _ => Some(None),
+        })
+        .and_then(|x| x)
+}
+
 /// Checks if two expressions can be mutably borrowed simultaneously
 /// and they aren't dependent on borrowing same thing twice
 pub fn can_mut_borrow_both(cx: &LateContext<'_>, e1: &Expr<'_>, e2: &Expr<'_>) -> bool {
@@ -636,7 +661,15 @@ pub fn can_mut_borrow_both(cx: &LateContext<'_>, e1: &Expr<'_>, e2: &Expr<'_>) -
     if !eq_expr_value(cx, r1, r2) {
         return true;
     }
+    if expr_custom_deref_adjustment(cx, r1).is_some() || expr_custom_deref_adjustment(cx, r2).is_some() {
+        return false;
+    }
+
     for (x1, x2) in s1.iter().zip(s2.iter()) {
+        if expr_custom_deref_adjustment(cx, x1).is_some() || expr_custom_deref_adjustment(cx, x2).is_some() {
+            return false;
+        }
+
         match (&x1.kind, &x2.kind) {
             (ExprKind::Field(_, i1), ExprKind::Field(_, i2)) => {
                 if i1 != i2 {
@@ -710,8 +743,7 @@ pub fn is_default_equivalent(cx: &LateContext<'_>, e: &Expr<'_>) -> bool {
             _ => false,
         },
         ExprKind::Tup(items) | ExprKind::Array(items) => items.iter().all(|x| is_default_equivalent(cx, x)),
-        ExprKind::Repeat(x, len) => if_chain! {
-            if let ArrayLen::Body(len) = len;
+        ExprKind::Repeat(x, ArrayLen::Body(len)) => if_chain! {
             if let ExprKind::Lit(ref const_lit) = cx.tcx.hir().body(len.body).value.kind;
             if let LitKind::Int(v, _) = const_lit.node;
             if v <= 32 && is_default_equivalent(cx, x);
@@ -760,7 +792,7 @@ pub fn is_default_equivalent(cx: &LateContext<'_>, e: &Expr<'_>) -> bool {
 ///
 /// Note that this check is not recursive, so passing the `if` expression will always return true
 /// even though sub-expressions might return false.
-pub fn can_move_expr_to_closure_no_visit(
+pub fn can_move_expr_to_closure_no_visit<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &'tcx Expr<'_>,
     loop_ids: &[HirId],
@@ -777,8 +809,7 @@ pub fn can_move_expr_to_closure_no_visit(
         | ExprKind::Continue(_)
         | ExprKind::Ret(_)
         | ExprKind::Yield(..)
-        | ExprKind::InlineAsm(_)
-        | ExprKind::LlvmInlineAsm(_) => false,
+        | ExprKind::InlineAsm(_) => false,
         // Accessing a field of a local value can only be done if the type isn't
         // partially moved.
         ExprKind::Field(
@@ -835,7 +866,7 @@ impl std::ops::BitOrAssign for CaptureKind {
 /// Note as this will walk up to parent expressions until the capture can be determined it should
 /// only be used while making a closure somewhere a value is consumed. e.g. a block, match arm, or
 /// function argument (other than a receiver).
-pub fn capture_local_usage(cx: &LateContext<'tcx>, e: &Expr<'_>) -> CaptureKind {
+pub fn capture_local_usage<'tcx>(cx: &LateContext<'tcx>, e: &Expr<'_>) -> CaptureKind {
     fn pat_capture_kind(cx: &LateContext<'_>, pat: &Pat<'_>) -> CaptureKind {
         let mut capture = CaptureKind::Ref(Mutability::Not);
         pat.each_binding_or_first(&mut |_, id, span, _| match cx
@@ -935,7 +966,7 @@ pub fn capture_local_usage(cx: &LateContext<'tcx>, e: &Expr<'_>) -> CaptureKind 
 
 /// Checks if the expression can be moved into a closure as is. This will return a list of captures
 /// if so, otherwise, `None`.
-pub fn can_move_expr_to_closure(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) -> Option<HirIdMap<CaptureKind>> {
+pub fn can_move_expr_to_closure<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) -> Option<HirIdMap<CaptureKind>> {
     struct V<'cx, 'tcx> {
         cx: &'cx LateContext<'tcx>,
         // Stack of potential break targets contained in the expression.
@@ -948,12 +979,7 @@ pub fn can_move_expr_to_closure(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) ->
         /// mutable reference.
         captures: HirIdMap<CaptureKind>,
     }
-    impl Visitor<'tcx> for V<'_, 'tcx> {
-        type Map = ErasedMap<'tcx>;
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::None
-        }
-
+    impl<'tcx> Visitor<'tcx> for V<'_, 'tcx> {
         fn visit_expr(&mut self, e: &'tcx Expr<'_>) {
             if !self.allow_closure {
                 return;
@@ -976,8 +1002,8 @@ pub fn can_move_expr_to_closure(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) ->
                         };
                         if !self.locals.contains(&local_id) {
                             let capture = match capture.info.capture_kind {
-                                UpvarCapture::ByValue(_) => CaptureKind::Value,
-                                UpvarCapture::ByRef(borrow) => match borrow.kind {
+                                UpvarCapture::ByValue => CaptureKind::Value,
+                                UpvarCapture::ByRef(kind) => match kind {
                                     BorrowKind::ImmBorrow => CaptureKind::Ref(Mutability::Not),
                                     BorrowKind::UniqueImmBorrow | BorrowKind::MutBorrow => {
                                         CaptureKind::Ref(Mutability::Mut)
@@ -1089,14 +1115,13 @@ pub fn is_entrypoint_fn(cx: &LateContext<'_>, def_id: DefId) -> bool {
 /// Returns `true` if the expression is in the program's `#[panic_handler]`.
 pub fn is_in_panic_handler(cx: &LateContext<'_>, e: &Expr<'_>) -> bool {
     let parent = cx.tcx.hir().get_parent_item(e.hir_id);
-    let def_id = cx.tcx.hir().local_def_id(parent).to_def_id();
-    Some(def_id) == cx.tcx.lang_items().panic_impl()
+    Some(parent.to_def_id()) == cx.tcx.lang_items().panic_impl()
 }
 
 /// Gets the name of the item the expression is in, if available.
 pub fn get_item_name(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<Symbol> {
     let parent_id = cx.tcx.hir().get_parent_item(expr.hir_id);
-    match cx.tcx.hir().find(parent_id) {
+    match cx.tcx.hir().find_by_def_id(parent_id) {
         Some(
             Node::Item(Item { ident, .. })
             | Node::TraitItem(TraitItem { ident, .. })
@@ -1112,15 +1137,10 @@ pub struct ContainsName {
 }
 
 impl<'tcx> Visitor<'tcx> for ContainsName {
-    type Map = Map<'tcx>;
-
     fn visit_name(&mut self, _: Span, name: Symbol) {
         if self.name == name {
             self.result = true;
         }
-    }
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
     }
 }
 
@@ -1144,19 +1164,6 @@ pub fn contains_return(expr: &hir::Expr<'_>) -> bool {
     })
     .visit_expr(expr);
     found
-}
-
-/// Finds calls of the specified macros in a function body.
-pub fn find_macro_calls(names: &[&str], body: &Body<'_>) -> Vec<Span> {
-    let mut result = Vec::new();
-    expr_visitor_no_bodies(|expr| {
-        if names.iter().any(|fun| is_expn_of(expr.span, fun).is_some()) {
-            result.push(expr.span);
-        }
-        true
-    })
-    .visit_expr(&body.value);
-    result
 }
 
 /// Extends the span to the beginning of the spans line, incl. whitespaces.
@@ -1218,7 +1225,7 @@ pub fn get_enclosing_block<'tcx>(cx: &LateContext<'tcx>, hir_id: HirId) -> Optio
 }
 
 /// Gets the loop or closure enclosing the given expression, if any.
-pub fn get_enclosing_loop_or_closure(tcx: TyCtxt<'tcx>, expr: &Expr<'_>) -> Option<&'tcx Expr<'tcx>> {
+pub fn get_enclosing_loop_or_closure<'tcx>(tcx: TyCtxt<'tcx>, expr: &Expr<'_>) -> Option<&'tcx Expr<'tcx>> {
     for (_, node) in tcx.hir().parent_iter(expr.hir_id) {
         match node {
             Node::Expr(
@@ -1619,7 +1626,7 @@ pub fn any_parent_has_attr(tcx: TyCtxt<'_>, node: HirId, symbol: Symbol) -> bool
             return true;
         }
         prev_enclosing_node = Some(enclosing_node);
-        enclosing_node = map.get_parent_item(enclosing_node);
+        enclosing_node = map.local_def_id_to_hir_id(map.get_parent_item(enclosing_node));
     }
 
     false
@@ -1687,32 +1694,6 @@ pub fn match_libc_symbol(cx: &LateContext<'_>, did: DefId, name: &str) -> bool {
     path.first().map_or(false, |s| s.as_str() == "libc") && path.last().map_or(false, |s| s.as_str() == name)
 }
 
-pub fn match_panic_call(cx: &LateContext<'_>, expr: &'tcx Expr<'_>) -> Option<&'tcx Expr<'tcx>> {
-    if let ExprKind::Call(func, [arg]) = expr.kind {
-        expr_path_res(cx, func)
-            .opt_def_id()
-            .map_or(false, |id| match_panic_def_id(cx, id))
-            .then(|| arg)
-    } else {
-        None
-    }
-}
-
-pub fn match_panic_def_id(cx: &LateContext<'_>, did: DefId) -> bool {
-    match_any_def_paths(
-        cx,
-        did,
-        &[
-            &paths::BEGIN_PANIC,
-            &paths::PANIC_ANY,
-            &paths::PANICKING_PANIC,
-            &paths::PANICKING_PANIC_FMT,
-            &paths::PANICKING_PANIC_STR,
-        ],
-    )
-    .is_some()
-}
-
 /// Returns the list of condition expressions and the list of blocks in a
 /// sequence of `if/else`.
 /// E.g., this returns `([a, b], [c, d, e])` for the expression
@@ -1752,7 +1733,7 @@ pub fn is_async_fn(kind: FnKind<'_>) -> bool {
 }
 
 /// Peels away all the compiler generated code surrounding the body of an async function,
-pub fn get_async_fn_body(tcx: TyCtxt<'tcx>, body: &Body<'_>) -> Option<&'tcx Expr<'tcx>> {
+pub fn get_async_fn_body<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'_>) -> Option<&'tcx Expr<'tcx>> {
     if let ExprKind::Call(
         _,
         &[
@@ -1856,7 +1837,7 @@ pub fn is_expr_identity_function(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool 
 }
 
 /// Gets the node where an expression is either used, or it's type is unified with another branch.
-pub fn get_expr_use_or_unification_node(tcx: TyCtxt<'tcx>, expr: &Expr<'_>) -> Option<Node<'tcx>> {
+pub fn get_expr_use_or_unification_node<'tcx>(tcx: TyCtxt<'tcx>, expr: &Expr<'_>) -> Option<Node<'tcx>> {
     let mut child_id = expr.hir_id;
     let mut iter = tcx.hir().parent_iter(child_id);
     loop {
@@ -1962,7 +1943,7 @@ pub fn fn_has_unsatisfiable_preds(cx: &LateContext<'_>, did: DefId) -> bool {
         .predicates_of(did)
         .predicates
         .iter()
-        .filter_map(|(p, _)| if p.is_global(cx.tcx) { Some(*p) } else { None });
+        .filter_map(|(p, _)| if p.is_global() { Some(*p) } else { None });
     traits::impossible_predicates(
         cx.tcx,
         traits::elaborate_predicates(cx.tcx, predicates)
@@ -2008,7 +1989,7 @@ pub fn is_slice_of_primitives(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<S
     if is_primitive {
         // if we have wrappers like Array, Slice or Tuple, print these
         // and get the type enclosed in the slice ref
-        match expr_type.peel_refs().walk(cx.tcx).nth(1).unwrap().expect_ty().kind() {
+        match expr_type.peel_refs().walk().nth(1).unwrap().expect_ty().kind() {
             rustc_ty::Slice(..) => return Some("slice".into()),
             rustc_ty::Array(..) => return Some("array".into()),
             rustc_ty::Tuple(..) => return Some("tuple".into()),
@@ -2016,7 +1997,7 @@ pub fn is_slice_of_primitives(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<S
                 // is_recursively_primitive_type() should have taken care
                 // of the rest and we can rely on the type that is found
                 let refs_peeled = expr_type.peel_refs();
-                return Some(refs_peeled.walk(cx.tcx).last().unwrap().to_string());
+                return Some(refs_peeled.walk().last().unwrap().to_string());
             },
         }
     }
@@ -2062,8 +2043,8 @@ where
 
 /// Peels off all references on the pattern. Returns the underlying pattern and the number of
 /// references removed.
-pub fn peel_hir_pat_refs(pat: &'a Pat<'a>) -> (&'a Pat<'a>, usize) {
-    fn peel(pat: &'a Pat<'a>, count: usize) -> (&'a Pat<'a>, usize) {
+pub fn peel_hir_pat_refs<'a>(pat: &'a Pat<'a>) -> (&'a Pat<'a>, usize) {
+    fn peel<'a>(pat: &'a Pat<'a>, count: usize) -> (&'a Pat<'a>, usize) {
         if let PatKind::Ref(pat, _) = pat.kind {
             peel(pat, count + 1)
         } else {
@@ -2086,7 +2067,7 @@ pub fn peel_hir_expr_while<'tcx>(
 
 /// Peels off up to the given number of references on the expression. Returns the underlying
 /// expression and the number of references removed.
-pub fn peel_n_hir_expr_refs(expr: &'a Expr<'a>, count: usize) -> (&'a Expr<'a>, usize) {
+pub fn peel_n_hir_expr_refs<'a>(expr: &'a Expr<'a>, count: usize) -> (&'a Expr<'a>, usize) {
     let mut remaining = count;
     let e = peel_hir_expr_while(expr, |e| match e.kind {
         ExprKind::AddrOf(ast::BorrowKind::Ref, _, e) if remaining != 0 => {
@@ -2100,7 +2081,7 @@ pub fn peel_n_hir_expr_refs(expr: &'a Expr<'a>, count: usize) -> (&'a Expr<'a>, 
 
 /// Peels off all references on the expression. Returns the underlying expression and the number of
 /// references removed.
-pub fn peel_hir_expr_refs(expr: &'a Expr<'a>) -> (&'a Expr<'a>, usize) {
+pub fn peel_hir_expr_refs<'a>(expr: &'a Expr<'a>) -> (&'a Expr<'a>, usize) {
     let mut count = 0;
     let e = peel_hir_expr_while(expr, |e| match e.kind {
         ExprKind::AddrOf(ast::BorrowKind::Ref, _, e) => {
@@ -2183,7 +2164,7 @@ impl<'hir> ItemLikeVisitor<'hir> for TestItemNamesVisitor<'hir> {
 
 static TEST_ITEM_NAMES_CACHE: SyncOnceCell<Mutex<FxHashMap<LocalDefId, Vec<Symbol>>>> = SyncOnceCell::new();
 
-fn with_test_item_names(tcx: TyCtxt<'tcx>, module: LocalDefId, f: impl Fn(&[Symbol]) -> bool) -> bool {
+fn with_test_item_names<'tcx>(tcx: TyCtxt<'tcx>, module: LocalDefId, f: impl Fn(&[Symbol]) -> bool) -> bool {
     let cache = TEST_ITEM_NAMES_CACHE.get_or_init(|| Mutex::new(FxHashMap::default()));
     let mut map: MutexGuard<'_, FxHashMap<LocalDefId, Vec<Symbol>>> = cache.lock().unwrap();
     match map.entry(module) {

@@ -138,10 +138,10 @@ impl<'a> AstValidator<'a> {
         self.outer_impl_trait = old;
     }
 
-    fn visit_assoc_ty_constraint_from_generic_args(&mut self, constraint: &'a AssocTyConstraint) {
+    fn visit_assoc_constraint_from_generic_args(&mut self, constraint: &'a AssocConstraint) {
         match constraint.kind {
-            AssocTyConstraintKind::Equality { .. } => {}
-            AssocTyConstraintKind::Bound { .. } => {
+            AssocConstraintKind::Equality { .. } => {}
+            AssocConstraintKind::Bound { .. } => {
                 if self.is_assoc_ty_bound_banned {
                     self.err_handler().span_err(
                         constraint.span,
@@ -150,7 +150,7 @@ impl<'a> AstValidator<'a> {
                 }
             }
         }
-        self.visit_assoc_ty_constraint(constraint);
+        self.visit_assoc_constraint(constraint);
     }
 
     // Mirrors `visit::walk_ty`, but tracks relevant state.
@@ -960,15 +960,6 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                 return;
             }
             ExprKind::Let(..) if !let_allowed => this.ban_let_expr(expr),
-            ExprKind::LlvmInlineAsm(..) if !this.session.target.allow_asm => {
-                struct_span_err!(
-                    this.session,
-                    expr.span,
-                    E0472,
-                    "llvm_asm! is unsupported on this target"
-                )
-                .emit();
-            }
             ExprKind::Match(expr, arms) => {
                 this.visit_expr(expr);
                 for arm in arms {
@@ -1286,7 +1277,7 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                         // are allowed to contain nested `impl Trait`.
                         AngleBracketedArg::Constraint(constraint) => {
                             self.with_impl_trait(None, |this| {
-                                this.visit_assoc_ty_constraint_from_generic_args(constraint);
+                                this.visit_assoc_constraint_from_generic_args(constraint);
                             });
                         }
                     }
@@ -1595,12 +1586,12 @@ fn deny_equality_constraints(
                                     let len = assoc_path.segments.len() - 1;
                                     let gen_args = args.as_ref().map(|p| (**p).clone());
                                     // Build `<Bar = RhsTy>`.
-                                    let arg = AngleBracketedArg::Constraint(AssocTyConstraint {
+                                    let arg = AngleBracketedArg::Constraint(AssocConstraint {
                                         id: rustc_ast::node_id::DUMMY_NODE_ID,
                                         ident: *ident,
                                         gen_args,
-                                        kind: AssocTyConstraintKind::Equality {
-                                            ty: predicate.rhs_ty.clone(),
+                                        kind: AssocConstraintKind::Equality {
+                                            term: predicate.rhs_ty.clone().into(),
                                         },
                                         span: ident.span,
                                     });

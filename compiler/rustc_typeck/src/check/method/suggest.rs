@@ -5,7 +5,6 @@ use crate::check::FnCtxt;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_errors::{pluralize, struct_span_err, Applicability, DiagnosticBuilder};
 use rustc_hir as hir;
-use rustc_hir::def::Namespace;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::lang_items::LangItem;
 use rustc_hir::{ExprKind, Node, QPath};
@@ -15,7 +14,7 @@ use rustc_middle::ty::print::with_crate_prefix;
 use rustc_middle::ty::{self, DefIdTree, ToPredicate, Ty, TyCtxt, TypeFoldable};
 use rustc_span::lev_distance;
 use rustc_span::symbol::{kw, sym, Ident};
-use rustc_span::{source_map, FileName, MultiSpan, Span, Symbol};
+use rustc_span::{source_map, FileName, MultiSpan, Span};
 use rustc_trait_selection::traits::query::evaluate_obligation::InferCtxtExt;
 use rustc_trait_selection::traits::{
     FulfillmentError, Obligation, ObligationCause, ObligationCauseCode,
@@ -99,16 +98,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     CandidateSource::ImplSource(impl_did) => {
                         // Provide the best span we can. Use the item, if local to crate, else
                         // the impl, if local to crate (item may be defaulted), else nothing.
-                        let item = match self
-                            .associated_item(impl_did, item_name, Namespace::ValueNS)
-                            .or_else(|| {
-                                let impl_trait_ref = self.tcx.impl_trait_ref(impl_did)?;
-                                self.associated_item(
-                                    impl_trait_ref.def_id,
-                                    item_name,
-                                    Namespace::ValueNS,
-                                )
-                            }) {
+                        let item = match self.associated_value(impl_did, item_name).or_else(|| {
+                            let impl_trait_ref = self.tcx.impl_trait_ref(impl_did)?;
+                            self.associated_value(impl_trait_ref.def_id, item_name)
+                        }) {
                             Some(item) => item,
                             None => continue,
                         };
@@ -187,11 +180,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         }
                     }
                     CandidateSource::TraitSource(trait_did) => {
-                        let item =
-                            match self.associated_item(trait_did, item_name, Namespace::ValueNS) {
-                                Some(item) => item,
-                                None => continue,
-                            };
+                        let item = match self.associated_value(trait_did, item_name) {
+                            Some(item) => item,
+                            None => continue,
+                        };
                         let item_span = self
                             .tcx
                             .sess
@@ -271,16 +263,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     // Suggest clamping down the type if the method that is being attempted to
                     // be used exists at all, and the type is an ambiguous numeric type
                     // ({integer}/{float}).
-                    let mut candidates = all_traits(self.tcx).into_iter().filter_map(|info| {
-                        self.associated_item(info.def_id, item_name, Namespace::ValueNS)
-                    });
+                    let mut candidates = all_traits(self.tcx)
+                        .into_iter()
+                        .filter_map(|info| self.associated_value(info.def_id, item_name));
                     // There are methods that are defined on the primitive types and won't be
                     // found when exploring `all_traits`, but we also need them to be acurate on
                     // our suggestions (#47759).
                     let fund_assoc = |opt_def_id: Option<DefId>| {
-                        opt_def_id
-                            .and_then(|id| self.associated_item(id, item_name, Namespace::ValueNS))
-                            .is_some()
+                        opt_def_id.and_then(|id| self.associated_value(id, item_name)).is_some()
                     };
                     let lang_items = tcx.lang_items();
                     let found_candidate = candidates.next().is_some()
@@ -398,11 +388,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                             .inherent_impls(adt_deref.did)
                                             .iter()
                                             .filter_map(|def_id| {
-                                                self.associated_item(
-                                                    *def_id,
-                                                    item_name,
-                                                    Namespace::ValueNS,
-                                                )
+                                                self.associated_value(*def_id, item_name)
                                             })
                                             .count()
                                             >= 1
@@ -515,9 +501,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 .iter()
                                 .copied()
                                 .filter(|def_id| {
-                                    if let Some(assoc) =
-                                        self.associated_item(*def_id, item_name, Namespace::ValueNS)
-                                    {
+                                    if let Some(assoc) = self.associated_value(*def_id, item_name) {
                                         // Check for both mode is the same so we avoid suggesting
                                         // incorrect associated item.
                                         match (mode, assoc.fn_has_self_parameter, source) {
@@ -805,10 +789,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                     item_def_id: projection_ty.item_def_id,
                                 };
 
-                                let ty = pred.skip_binder().ty;
+                                let term = pred.skip_binder().term;
 
-                                let obligation = format!("{} = {}", projection_ty, ty);
-                                let quiet = format!("{} = {}", quiet_projection_ty, ty);
+                                let obligation = format!("{} = {}", projection_ty, term);
+                                let quiet = format!("{} = {}", quiet_projection_ty, term);
 
                                 bound_span_label(projection_ty.self_ty(), &obligation, &quiet);
                                 Some((obligation, projection_ty.self_ty()))
@@ -1524,8 +1508,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             // Explicitly ignore the `Pin::as_ref()` method as `Pin` does not
                             // implement the `AsRef` trait.
                             let skip = skippable.contains(&did)
-                                || (("Pin::new" == *pre)
-                                    && (Symbol::intern("as_ref") == item_name.name));
+                                || (("Pin::new" == *pre) && (sym::as_ref == item_name.name));
                             // Make sure the method is defined for the *actual* receiver: we don't
                             // want to treat `Box<Self>` as a receiver if it only works because of
                             // an autoderef to `&self`
@@ -1588,7 +1571,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     }
                 }) && (type_is_local || info.def_id.is_local())
                     && self
-                        .associated_item(info.def_id, item_name, Namespace::ValueNS)
+                        .associated_value(info.def_id, item_name)
                         .filter(|item| {
                             if let ty::AssocKind::Fn = item.kind {
                                 let id = item

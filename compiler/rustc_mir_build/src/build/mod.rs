@@ -244,10 +244,10 @@ fn mir_build(tcx: TyCtxt<'_>, def: ty::WithOptConstParam<LocalDefId>) -> Body<'_
         // The exception is `body.user_type_annotations`, which is used unmodified
         // by borrow checking.
         debug_assert!(
-            !(body.local_decls.has_free_regions(tcx)
-                || body.basic_blocks().has_free_regions(tcx)
-                || body.var_debug_info.has_free_regions(tcx)
-                || body.yield_ty().has_free_regions(tcx)),
+            !(body.local_decls.has_free_regions()
+                || body.basic_blocks().has_free_regions()
+                || body.var_debug_info.has_free_regions()
+                || body.yield_ty().has_free_regions()),
             "Unexpected free regions in MIR: {:?}",
             body,
         );
@@ -760,7 +760,6 @@ fn construct_error<'a, 'tcx>(
     cfg.terminate(START_BLOCK, source_info, TerminatorKind::Unreachable);
 
     let mut body = Body::new(
-        tcx,
         MirSource::item(def.did.to_def_id()),
         cfg.basic_blocks,
         source_scopes,
@@ -849,7 +848,6 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         }
 
         Body::new(
-            self.tcx,
             MirSource::item(self.def_id),
             self.cfg.basic_blocks,
             self.source_scopes,
@@ -930,7 +928,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     let mut projs = closure_env_projs.clone();
                     projs.push(ProjectionElem::Field(Field::new(i), ty));
                     match capture {
-                        ty::UpvarCapture::ByValue(_) => {}
+                        ty::UpvarCapture::ByValue => {}
                         ty::UpvarCapture::ByRef(..) => {
                             projs.push(ProjectionElem::Deref);
                         }

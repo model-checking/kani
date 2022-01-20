@@ -13,7 +13,7 @@ use rustc_middle::ty::adjustment::AllowTwoPhase;
 use rustc_middle::ty::error::{ExpectedFound, TypeError};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, AssocItem, Ty, TypeAndMut};
-use rustc_span::symbol::sym;
+use rustc_span::symbol::{sym, Symbol};
 use rustc_span::{BytePos, Span};
 
 use super::method::probe;
@@ -24,16 +24,15 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     pub fn emit_coerce_suggestions(
         &self,
         err: &mut DiagnosticBuilder<'_>,
-        expr: &hir::Expr<'_>,
+        expr: &hir::Expr<'tcx>,
         expr_ty: Ty<'tcx>,
         expected: Ty<'tcx>,
         expected_ty_expr: Option<&'tcx hir::Expr<'tcx>>,
         error: TypeError<'tcx>,
     ) {
         self.annotate_expected_due_to_let_ty(err, expr, error);
-        self.suggest_box_deref(err, expr, expected, expr_ty);
-        self.suggest_compatible_variants(err, expr, expected, expr_ty);
         self.suggest_deref_ref_or_into(err, expr, expected, expr_ty, expected_ty_expr);
+        self.suggest_compatible_variants(err, expr, expected, expr_ty);
         if self.suggest_calling_boxed_future_when_appropriate(err, expr, expected, expr_ty) {
             return;
         }
@@ -110,7 +109,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     pub fn demand_coerce(
         &self,
-        expr: &hir::Expr<'_>,
+        expr: &hir::Expr<'tcx>,
         checked_ty: Ty<'tcx>,
         expected: Ty<'tcx>,
         expected_ty_expr: Option<&'tcx hir::Expr<'tcx>>,
@@ -130,7 +129,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     /// will be permitted if the diverges flag is currently "always".
     pub fn demand_coerce_diag(
         &self,
-        expr: &hir::Expr<'_>,
+        expr: &hir::Expr<'tcx>,
         checked_ty: Ty<'tcx>,
         expected: Ty<'tcx>,
         expected_ty_expr: Option<&'tcx hir::Expr<'tcx>>,
@@ -259,23 +258,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
-    fn suggest_box_deref(
-        &self,
-        err: &mut DiagnosticBuilder<'_>,
-        expr: &hir::Expr<'_>,
-        expected: Ty<'tcx>,
-        expr_ty: Ty<'tcx>,
-    ) {
-        if expr_ty.is_box() && expr_ty.boxed_ty() == expected {
-            err.span_suggestion_verbose(
-                expr.span.shrink_to_lo(),
-                "try dereferencing the `Box`",
-                "*".to_string(),
-                Applicability::MachineApplicable,
-            );
-        }
-    }
-
     /// If the expected type is an enum (Issue #55250) with any variants whose
     /// sole field is of the found type, suggest such variants. (Issue #42764)
     fn suggest_compatible_variants(
@@ -356,31 +338,40 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 })
                 .collect();
 
-            if let [variant] = &compatible_variants[..] {
-                // Just a single matching variant.
-                err.multipart_suggestion(
-                    &format!("try wrapping the expression in `{}`", variant),
-                    vec![
-                        (expr.span.shrink_to_lo(), format!("{}(", variant)),
-                        (expr.span.shrink_to_hi(), ")".to_string()),
-                    ],
-                    Applicability::MaybeIncorrect,
-                );
-            } else if compatible_variants.len() > 1 {
-                // More than one matching variant.
-                err.multipart_suggestions(
-                    &format!(
-                        "try wrapping the expression in a variant of `{}`",
-                        self.tcx.def_path_str(expected_adt.did)
-                    ),
-                    compatible_variants.into_iter().map(|variant| {
+            let prefix = match self.maybe_get_struct_pattern_shorthand_field(expr) {
+                Some(ident) => format!("{}: ", ident),
+                None => format!(""),
+            };
+
+            match &compatible_variants[..] {
+                [] => { /* No variants to format */ }
+                [variant] => {
+                    // Just a single matching variant.
+                    err.multipart_suggestion_verbose(
+                        &format!("try wrapping the expression in `{}`", variant),
                         vec![
-                            (expr.span.shrink_to_lo(), format!("{}(", variant)),
+                            (expr.span.shrink_to_lo(), format!("{}{}(", prefix, variant)),
                             (expr.span.shrink_to_hi(), ")".to_string()),
-                        ]
-                    }),
-                    Applicability::MaybeIncorrect,
-                );
+                        ],
+                        Applicability::MaybeIncorrect,
+                    );
+                }
+                _ => {
+                    // More than one matching variant.
+                    err.multipart_suggestions(
+                        &format!(
+                            "try wrapping the expression in a variant of `{}`",
+                            self.tcx.def_path_str(expected_adt.did)
+                        ),
+                        compatible_variants.into_iter().map(|variant| {
+                            vec![
+                                (expr.span.shrink_to_lo(), format!("{}{}(", prefix, variant)),
+                                (expr.span.shrink_to_hi(), ")".to_string()),
+                            ]
+                        }),
+                        Applicability::MaybeIncorrect,
+                    );
+                }
             }
         }
     }
@@ -501,33 +492,45 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
-    crate fn is_hir_id_from_struct_pattern_shorthand_field(
+    crate fn maybe_get_struct_pattern_shorthand_field(
         &self,
-        hir_id: hir::HirId,
-        sp: Span,
-    ) -> bool {
-        let sm = self.sess().source_map();
-        let parent_id = self.tcx.hir().get_parent_node(hir_id);
-        if let Some(parent) = self.tcx.hir().find(parent_id) {
-            // Account for fields
-            if let Node::Expr(hir::Expr { kind: hir::ExprKind::Struct(_, fields, ..), .. }) = parent
-            {
-                if let Ok(src) = sm.span_to_snippet(sp) {
-                    for field in *fields {
-                        if field.ident.as_str() == src && field.is_shorthand {
-                            return true;
-                        }
+        expr: &hir::Expr<'_>,
+    ) -> Option<Symbol> {
+        let hir = self.tcx.hir();
+        let local = match expr {
+            hir::Expr {
+                kind:
+                    hir::ExprKind::Path(hir::QPath::Resolved(
+                        None,
+                        hir::Path {
+                            res: hir::def::Res::Local(_),
+                            segments: [hir::PathSegment { ident, .. }],
+                            ..
+                        },
+                    )),
+                ..
+            } => Some(ident),
+            _ => None,
+        }?;
+
+        match hir.find(hir.get_parent_node(expr.hir_id))? {
+            Node::Expr(hir::Expr { kind: hir::ExprKind::Struct(_, fields, ..), .. }) => {
+                for field in *fields {
+                    if field.ident.name == local.name && field.is_shorthand {
+                        return Some(local.name);
                     }
                 }
             }
+            _ => {}
         }
-        false
+
+        None
     }
 
     /// If the given `HirId` corresponds to a block with a trailing expression, return that expression
-    crate fn maybe_get_block_expr(&self, hir_id: hir::HirId) -> Option<&'tcx hir::Expr<'tcx>> {
-        match self.tcx.hir().find(hir_id)? {
-            Node::Expr(hir::Expr { kind: hir::ExprKind::Block(block, ..), .. }) => block.expr,
+    crate fn maybe_get_block_expr(&self, expr: &hir::Expr<'tcx>) -> Option<&'tcx hir::Expr<'tcx>> {
+        match expr {
+            hir::Expr { kind: hir::ExprKind::Block(block, ..), .. } => block.expr,
             _ => None,
         }
     }
@@ -565,7 +568,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     /// `&mut`!".
     pub fn check_ref(
         &self,
-        expr: &hir::Expr<'_>,
+        expr: &hir::Expr<'tcx>,
         checked_ty: Ty<'tcx>,
         expected: Ty<'tcx>,
     ) -> Option<(Span, &'static str, String, Applicability, bool /* verbose */)> {
@@ -582,9 +585,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let replace_prefix = |s: &str, old: &str, new: &str| {
             s.strip_prefix(old).map(|stripped| new.to_string() + stripped)
         };
-
-        let is_struct_pat_shorthand_field =
-            self.is_hir_id_from_struct_pattern_shorthand_field(expr.hir_id, sp);
 
         // `ExprKind::DropTemps` is semantically irrelevant for these suggestions.
         let expr = expr.peel_drop_temps();
@@ -679,11 +679,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 false,
                             ));
                         }
-                        let field_name = if is_struct_pat_shorthand_field {
-                            format!("{}: ", sugg_expr)
-                        } else {
-                            String::new()
+
+                        let prefix = match self.maybe_get_struct_pattern_shorthand_field(expr) {
+                            Some(ident) => format!("{}: ", ident),
+                            None => format!(""),
                         };
+
                         if let Some(hir::Node::Expr(hir::Expr {
                             kind: hir::ExprKind::Assign(left_expr, ..),
                             ..
@@ -713,14 +714,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             hir::Mutability::Mut => (
                                 sp,
                                 "consider mutably borrowing here",
-                                format!("{}&mut {}", field_name, sugg_expr),
+                                format!("{}&mut {}", prefix, sugg_expr),
                                 Applicability::MachineApplicable,
                                 false,
                             ),
                             hir::Mutability::Not => (
                                 sp,
                                 "consider borrowing here",
-                                format!("{}&{}", field_name, sugg_expr),
+                                format!("{}&{}", prefix, sugg_expr),
                                 Applicability::MachineApplicable,
                                 false,
                             ),
@@ -857,36 +858,40 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                                 Applicability::MachineApplicable,
                                 false,
                             ));
-                        } else if self.infcx.type_is_copy_modulo_regions(
-                            self.param_env,
-                            expected,
-                            sp,
-                        ) {
-                            // For this suggestion to make sense, the type would need to be `Copy`.
-                            if let Ok(code) = sm.span_to_snippet(expr.span) {
-                                let message = if checked_ty.is_region_ptr() {
-                                    "consider dereferencing the borrow"
-                                } else {
-                                    "consider dereferencing the type"
-                                };
-                                let (span, suggestion) = if is_struct_pat_shorthand_field {
-                                    (expr.span, format!("{}: *{}", code, code))
-                                } else if self.is_else_if_block(expr) {
-                                    // Don't suggest nonsense like `else *if`
-                                    return None;
-                                } else if let Some(expr) = self.maybe_get_block_expr(expr.hir_id) {
-                                    (expr.span.shrink_to_lo(), "*".to_string())
-                                } else {
-                                    (expr.span.shrink_to_lo(), "*".to_string())
-                                };
-                                return Some((
-                                    span,
-                                    message,
-                                    suggestion,
-                                    Applicability::MachineApplicable,
-                                    true,
-                                ));
-                            }
+                        }
+
+                        // For this suggestion to make sense, the type would need to be `Copy`,
+                        // or we have to be moving out of a `Box<T>`
+                        if self.infcx.type_is_copy_modulo_regions(self.param_env, expected, sp)
+                            || checked_ty.is_box()
+                        {
+                            let message = if checked_ty.is_box() {
+                                "consider unboxing the value"
+                            } else if checked_ty.is_region_ptr() {
+                                "consider dereferencing the borrow"
+                            } else {
+                                "consider dereferencing the type"
+                            };
+                            let prefix = match self.maybe_get_struct_pattern_shorthand_field(expr) {
+                                Some(ident) => format!("{}: ", ident),
+                                None => format!(""),
+                            };
+                            let (span, suggestion) = if self.is_else_if_block(expr) {
+                                // Don't suggest nonsense like `else *if`
+                                return None;
+                            } else if let Some(expr) = self.maybe_get_block_expr(expr) {
+                                // prefix should be empty here..
+                                (expr.span.shrink_to_lo(), "*".to_string())
+                            } else {
+                                (expr.span.shrink_to_lo(), format!("{}*", prefix))
+                            };
+                            return Some((
+                                span,
+                                message,
+                                suggestion,
+                                Applicability::MachineApplicable,
+                                true,
+                            ));
                         }
                     }
                 }

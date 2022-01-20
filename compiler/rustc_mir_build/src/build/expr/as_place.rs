@@ -217,10 +217,6 @@ fn to_upvars_resolved_place_builder<'a, 'tcx>(
                 ty::ClosureKind::FnOnce => {}
             }
 
-            // We won't be building MIR if the closure wasn't local
-            let closure_hir_id = tcx.hir().local_def_id_to_hir_id(closure_def_id.expect_local());
-            let closure_span = tcx.hir().span(closure_hir_id);
-
             let Some((capture_index, capture)) =
                 find_capture_matching_projections(
                     typeck_results,
@@ -228,6 +224,7 @@ fn to_upvars_resolved_place_builder<'a, 'tcx>(
                     closure_def_id,
                     &from_builder.projection,
                 ) else {
+                let closure_span = tcx.def_span(closure_def_id);
                 if !enable_precise_capture(tcx, closure_span) {
                     bug!(
                         "No associated capture found for {:?}[{:#?}] even though \
@@ -244,6 +241,8 @@ fn to_upvars_resolved_place_builder<'a, 'tcx>(
                 return Err(from_builder);
             };
 
+            // We won't be building MIR if the closure wasn't local
+            let closure_hir_id = tcx.hir().local_def_id_to_hir_id(closure_def_id.expect_local());
             let closure_ty = typeck_results.node_type(closure_hir_id);
 
             let substs = match closure_ty.kind() {
@@ -266,7 +265,7 @@ fn to_upvars_resolved_place_builder<'a, 'tcx>(
             // we need to deref it
             upvar_resolved_place_builder = match capture.info.capture_kind {
                 ty::UpvarCapture::ByRef(_) => upvar_resolved_place_builder.deref(),
-                ty::UpvarCapture::ByValue(_) => upvar_resolved_place_builder,
+                ty::UpvarCapture::ByValue => upvar_resolved_place_builder,
             };
 
             let next_projection = capture.place.projections.len();
@@ -570,7 +569,6 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::ConstBlock { .. }
             | ExprKind::StaticRef { .. }
             | ExprKind::InlineAsm { .. }
-            | ExprKind::LlvmInlineAsm { .. }
             | ExprKind::Yield { .. }
             | ExprKind::ThreadLocalRef(_)
             | ExprKind::Call { .. } => {
