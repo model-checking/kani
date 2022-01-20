@@ -1372,9 +1372,12 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     /// Note: Because this shifts over the remaining elements, it has a
     /// worst-case performance of *O*(*n*). If you don't need the order of elements
-    /// to be preserved, use [`swap_remove`] instead.
+    /// to be preserved, use [`swap_remove`] instead. If you'd like to remove
+    /// elements from the beginning of the `Vec`, consider using
+    /// [`VecDeque::pop_front`] instead.
     ///
     /// [`swap_remove`]: Vec::swap_remove
+    /// [`VecDeque::pop_front`]: crate::collections::VecDeque::pop_front
     ///
     /// # Panics
     ///
@@ -1735,6 +1738,11 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Removes the last element from a vector and returns it, or [`None`] if it
     /// is empty.
     ///
+    /// If you'd like to pop the first element, consider using
+    /// [`VecDeque::pop_front`] instead.
+    ///
+    /// [`VecDeque::pop_front`]: crate::collections::VecDeque::pop_front
+    ///
     /// # Examples
     ///
     /// ```
@@ -2043,8 +2051,6 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Examples
     ///
     /// ```
-    /// #![feature(vec_spare_capacity)]
-    ///
     /// // Allocate vector big enough for 10 elements.
     /// let mut v = Vec::with_capacity(10);
     ///
@@ -2061,7 +2067,7 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     /// assert_eq!(&v, &[0, 1, 2]);
     /// ```
-    #[unstable(feature = "vec_spare_capacity", issue = "75017")]
+    #[stable(feature = "vec_spare_capacity", since = "1.60.0")]
     #[inline]
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
         // Note:

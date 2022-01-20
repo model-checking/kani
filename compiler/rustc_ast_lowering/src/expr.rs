@@ -11,7 +11,7 @@ use rustc_hir::def::Res;
 use rustc_hir::definitions::DefPathData;
 use rustc_span::hygiene::ExpnId;
 use rustc_span::source_map::{respan, DesugaringKind, Span, Spanned};
-use rustc_span::symbol::{sym, Ident, Symbol};
+use rustc_span::symbol::{sym, Ident};
 use rustc_span::DUMMY_SP;
 
 impl<'hir> LoweringContext<'_, 'hir> {
@@ -226,7 +226,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 ExprKind::InlineAsm(ref asm) => {
                     hir::ExprKind::InlineAsm(self.lower_inline_asm(e.span, asm))
                 }
-                ExprKind::LlvmInlineAsm(ref asm) => self.lower_expr_llvm_asm(asm),
                 ExprKind::Struct(ref se) => {
                     let rest = match &se.rest {
                         StructRest::Base(e) => Some(self.lower_expr(e)),
@@ -1204,11 +1203,13 @@ impl<'hir> LoweringContext<'_, 'hir> {
         };
 
         let fields = self.arena.alloc_from_iter(
-            e1.iter().map(|e| ("start", e)).chain(e2.iter().map(|e| ("end", e))).map(|(s, e)| {
-                let expr = self.lower_expr(&e);
-                let ident = Ident::new(Symbol::intern(s), self.lower_span(e.span));
-                self.expr_field(ident, expr, e.span)
-            }),
+            e1.iter().map(|e| (sym::start, e)).chain(e2.iter().map(|e| (sym::end, e))).map(
+                |(s, e)| {
+                    let expr = self.lower_expr(&e);
+                    let ident = Ident::new(s, self.lower_span(e.span));
+                    self.expr_field(ident, expr, e.span)
+                },
+            ),
         );
 
         hir::ExprKind::Struct(
@@ -1282,38 +1283,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
         self.is_in_loop_condition = was_in_loop_condition;
 
         result
-    }
-
-    fn lower_expr_llvm_asm(&mut self, asm: &LlvmInlineAsm) -> hir::ExprKind<'hir> {
-        let inner = hir::LlvmInlineAsmInner {
-            inputs: asm.inputs.iter().map(|&(c, _)| c).collect(),
-            outputs: asm
-                .outputs
-                .iter()
-                .map(|out| hir::LlvmInlineAsmOutput {
-                    constraint: out.constraint,
-                    is_rw: out.is_rw,
-                    is_indirect: out.is_indirect,
-                    span: self.lower_span(out.expr.span),
-                })
-                .collect(),
-            asm: asm.asm,
-            asm_str_style: asm.asm_str_style,
-            clobbers: asm.clobbers.clone(),
-            volatile: asm.volatile,
-            alignstack: asm.alignstack,
-            dialect: asm.dialect,
-        };
-        let hir_asm = hir::LlvmInlineAsm {
-            inner,
-            inputs_exprs: self.arena.alloc_from_iter(
-                asm.inputs.iter().map(|&(_, ref input)| self.lower_expr_mut(input)),
-            ),
-            outputs_exprs: self
-                .arena
-                .alloc_from_iter(asm.outputs.iter().map(|out| self.lower_expr_mut(&out.expr))),
-        };
-        hir::ExprKind::LlvmInlineAsm(self.arena.alloc(hir_asm))
     }
 
     fn lower_expr_field(&mut self, f: &ExprField) -> hir::ExprField<'hir> {

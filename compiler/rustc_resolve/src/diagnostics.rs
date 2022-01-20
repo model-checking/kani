@@ -602,6 +602,25 @@ impl<'a> Resolver<'a> {
 
                 err
             }
+            ResolutionError::TraitImplMismatch {
+                name,
+                kind,
+                code,
+                trait_item_span,
+                trait_path,
+            } => {
+                let mut err = self.session.struct_span_err_with_code(
+                    span,
+                    &format!(
+                        "item `{}` is an associated {}, which doesn't match its trait `{}`",
+                        name, kind, trait_path,
+                    ),
+                    code,
+                );
+                err.span_label(span, "does not match trait");
+                err.span_label(trait_item_span, "item in trait");
+                err
+            }
         }
     }
 
@@ -895,11 +914,8 @@ impl<'a> Resolver<'a> {
                             // a note about editions
                             let note = if let Some(did) = did {
                                 let requires_note = !did.is_local()
-                                    && this
-                                        .cstore()
-                                        .item_attrs_untracked(did, this.session)
-                                        .iter()
-                                        .any(|attr| {
+                                    && this.cstore().item_attrs_untracked(did, this.session).any(
+                                        |attr| {
                                             if attr.has_name(sym::rustc_diagnostic_item) {
                                                 [sym::TryInto, sym::TryFrom, sym::FromIterator]
                                                     .map(|x| Some(x))
@@ -907,7 +923,8 @@ impl<'a> Resolver<'a> {
                                             } else {
                                                 false
                                             }
-                                        });
+                                        },
+                                    );
 
                                 requires_note.then(|| {
                                     format!(

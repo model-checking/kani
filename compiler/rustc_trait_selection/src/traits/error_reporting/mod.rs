@@ -616,8 +616,6 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                             self.tcx.sess.source_map().guess_head_span(
                                 self.tcx.hir().span_if_local(closure_def_id).unwrap(),
                             );
-                        let hir_id =
-                            self.tcx.hir().local_def_id_to_hir_id(closure_def_id.expect_local());
                         let mut err = struct_span_err!(
                             self.tcx.sess,
                             closure_span,
@@ -640,6 +638,10 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                         // Additional context information explaining why the closure only implements
                         // a particular trait.
                         if let Some(typeck_results) = self.in_progress_typeck_results {
+                            let hir_id = self
+                                .tcx
+                                .hir()
+                                .local_def_id_to_hir_id(closure_def_id.expect_local());
                             let typeck_results = typeck_results.borrow();
                             match (found_kind, typeck_results.closure_kind_origins().get(hir_id)) {
                                 (ty::ClosureKind::FnOnce, Some((span, place))) => {
@@ -1302,7 +1304,7 @@ impl<'a, 'tcx> InferCtxtPrivExt<'a, 'tcx> for InferCtxt<'a, 'tcx> {
 
                 debug!(
                     "report_projection_error normalized_ty={:?} data.ty={:?}",
-                    normalized_ty, data.ty
+                    normalized_ty, data.term,
                 );
 
                 let is_normalized_ty_expected = !matches!(
@@ -1312,16 +1314,17 @@ impl<'a, 'tcx> InferCtxtPrivExt<'a, 'tcx> for InferCtxt<'a, 'tcx> {
                         | ObligationCauseCode::ObjectCastObligation(_)
                         | ObligationCauseCode::OpaqueType
                 );
-
+                // FIXME(associated_const_equality): Handle Consts here
+                let data_ty = data.term.ty().unwrap();
                 if let Err(error) = self.at(&obligation.cause, obligation.param_env).eq_exp(
                     is_normalized_ty_expected,
                     normalized_ty,
-                    data.ty,
+                    data_ty,
                 ) {
                     values = Some(infer::ValuePairs::Types(ExpectedFound::new(
                         is_normalized_ty_expected,
                         normalized_ty,
-                        data.ty,
+                        data_ty,
                     )));
 
                     err_buf = error;
@@ -1801,11 +1804,11 @@ impl<'a, 'tcx> InferCtxtPrivExt<'a, 'tcx> for InferCtxt<'a, 'tcx> {
             }
             ty::PredicateKind::Projection(data) => {
                 let self_ty = data.projection_ty.self_ty();
-                let ty = data.ty;
+                let term = data.term;
                 if predicate.references_error() || self.is_tainted_by_errors() {
                     return;
                 }
-                if self_ty.needs_infer() && ty.needs_infer() {
+                if self_ty.needs_infer() && term.needs_infer() {
                     // We do this for the `foo.collect()?` case to produce a suggestion.
                     let mut err = self.emit_inference_failure_err(
                         body_id,
@@ -2182,12 +2185,6 @@ struct FindTypeParam {
 }
 
 impl<'v> Visitor<'v> for FindTypeParam {
-    type Map = rustc_hir::intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-        hir::intravisit::NestedVisitorMap::None
-    }
-
     fn visit_where_predicate(&mut self, _: &'v hir::WherePredicate<'v>) {
         // Skip where-clauses, to avoid suggesting indirection for type parameters found there.
     }

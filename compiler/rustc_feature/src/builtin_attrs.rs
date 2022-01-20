@@ -352,7 +352,7 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
 
     // Runtime
     ungated!(
-        windows_subsystem, Normal,
+        windows_subsystem, CrateLevel,
         template!(NameValueStr: "windows|console"), FutureWarnFollowing
     ),
     ungated!(panic_handler, Normal, template!(Word), WarnFollowing), // RFC 2070
@@ -360,7 +360,7 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
     // Code generation:
     ungated!(inline, Normal, template!(Word, List: "always|never"), FutureWarnFollowing),
     ungated!(cold, Normal, template!(Word), WarnFollowing),
-    ungated!(no_builtins, Normal, template!(Word), WarnFollowing),
+    ungated!(no_builtins, CrateLevel, template!(Word), WarnFollowing),
     ungated!(target_feature, Normal, template!(List: r#"enable = "name""#), DuplicatesOk),
     ungated!(track_caller, Normal, template!(Word), WarnFollowing),
     gated!(
@@ -623,6 +623,11 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         lang, Normal, template!(NameValueStr: "name"), DuplicatesOk, lang_items,
         "language items are subject to change",
     ),
+    rustc_attr!(
+        rustc_pass_by_value, Normal,
+        template!(Word), WarnFollowing,
+        "#[rustc_pass_by_value] is used to mark types that must be passed by value instead of reference."
+    ),
     BuiltinAttribute {
         name: sym::rustc_diagnostic_item,
         type_: Normal,
@@ -676,6 +681,12 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         rustc_skip_array_during_method_dispatch, Normal, template!(Word), WarnFollowing,
         "the `#[rustc_skip_array_during_method_dispatch]` attribute is used to exclude a trait \
         from method dispatch when the receiver is an array, for compatibility in editions < 2021."
+    ),
+    rustc_attr!(
+        rustc_must_implement_one_of, Normal, template!(List: "function1, function2, ..."), ErrorFollowing,
+        "the `#[rustc_must_implement_one_of]` attribute is used to change minimal complete \
+        definition of a trait, it's currently in experimental form and should be changed before \
+        being exposed outside of the std"
     ),
 
     // ==========================================================================

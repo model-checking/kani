@@ -1,12 +1,13 @@
 use crate::path_to_local_id;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::intravisit::{self, walk_block, walk_expr, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{self, walk_block, walk_expr, Visitor};
 use rustc_hir::{
     Arm, Block, BlockCheckMode, Body, BodyId, Expr, ExprKind, HirId, ItemId, ItemKind, Stmt, UnOp, Unsafety,
 };
 use rustc_lint::LateContext;
 use rustc_middle::hir::map::Map;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::ty;
 
 /// Convenience method for creating a `Visitor` with just `visit_expr` overridden and nested
@@ -19,9 +20,9 @@ pub fn expr_visitor<'tcx>(cx: &LateContext<'tcx>, f: impl FnMut(&'tcx Expr<'tcx>
         f: F,
     }
     impl<'tcx, F: FnMut(&'tcx Expr<'tcx>) -> bool> Visitor<'tcx> for V<'tcx, F> {
-        type Map = Map<'tcx>;
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::OnlyBodies(self.hir)
+        type NestedFilter = nested_filter::OnlyBodies;
+        fn nested_visit_map(&mut self) -> Self::Map {
+            self.hir
         }
 
         fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
@@ -40,11 +41,6 @@ pub fn expr_visitor<'tcx>(cx: &LateContext<'tcx>, f: impl FnMut(&'tcx Expr<'tcx>
 pub fn expr_visitor_no_bodies<'tcx>(f: impl FnMut(&'tcx Expr<'tcx>) -> bool) -> impl Visitor<'tcx> {
     struct V<F>(F);
     impl<'tcx, F: FnMut(&'tcx Expr<'tcx>) -> bool> Visitor<'tcx> for V<F> {
-        type Map = intravisit::ErasedMap<'tcx>;
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::None
-        }
-
         fn visit_expr(&mut self, e: &'tcx Expr<'_>) {
             if (self.0)(e) {
                 walk_expr(self, e);
@@ -113,12 +109,6 @@ where
     }
 
     impl<'hir, F: FnMut(&'hir hir::Expr<'hir>) -> bool> intravisit::Visitor<'hir> for RetFinder<F> {
-        type Map = Map<'hir>;
-
-        fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-            intravisit::NestedVisitorMap::None
-        }
-
         fn visit_stmt(&mut self, stmt: &'hir hir::Stmt<'_>) {
             intravisit::walk_stmt(&mut *self.inside_stmt(true), stmt);
         }
@@ -173,7 +163,7 @@ pub trait Visitable<'tcx> {
 }
 macro_rules! visitable_ref {
     ($t:ident, $f:ident) => {
-        impl Visitable<'tcx> for &'tcx $t<'tcx> {
+        impl<'tcx> Visitable<'tcx> for &'tcx $t<'tcx> {
             fn visit<V: Visitor<'tcx>>(self, visitor: &mut V) {
                 visitor.$f(self);
             }
@@ -217,7 +207,7 @@ pub fn is_res_used(cx: &LateContext<'_>, res: Res, body: BodyId) -> bool {
 }
 
 /// Checks if the given local is used.
-pub fn is_local_used(cx: &LateContext<'tcx>, visitable: impl Visitable<'tcx>, id: HirId) -> bool {
+pub fn is_local_used<'tcx>(cx: &LateContext<'tcx>, visitable: impl Visitable<'tcx>, id: HirId) -> bool {
     let mut is_used = false;
     let mut visitor = expr_visitor(cx, |expr| {
         if !is_used {
@@ -231,15 +221,15 @@ pub fn is_local_used(cx: &LateContext<'tcx>, visitable: impl Visitable<'tcx>, id
 }
 
 /// Checks if the given expression is a constant.
-pub fn is_const_evaluatable(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> bool {
+pub fn is_const_evaluatable<'tcx>(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> bool {
     struct V<'a, 'tcx> {
         cx: &'a LateContext<'tcx>,
         is_const: bool,
     }
     impl<'tcx> Visitor<'tcx> for V<'_, 'tcx> {
-        type Map = Map<'tcx>;
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::OnlyBodies(self.cx.tcx.hir())
+        type NestedFilter = nested_filter::OnlyBodies;
+        fn nested_visit_map(&mut self) -> Self::Map {
+            self.cx.tcx.hir()
         }
 
         fn visit_expr(&mut self, e: &'tcx Expr<'_>) {
@@ -321,15 +311,15 @@ pub fn is_const_evaluatable(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> bool {
 }
 
 /// Checks if the given expression performs an unsafe operation outside of an unsafe block.
-pub fn is_expr_unsafe(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> bool {
+pub fn is_expr_unsafe<'tcx>(cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) -> bool {
     struct V<'a, 'tcx> {
         cx: &'a LateContext<'tcx>,
         is_unsafe: bool,
     }
     impl<'tcx> Visitor<'tcx> for V<'_, 'tcx> {
-        type Map = Map<'tcx>;
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::OnlyBodies(self.cx.tcx.hir())
+        type NestedFilter = nested_filter::OnlyBodies;
+        fn nested_visit_map(&mut self) -> Self::Map {
+            self.cx.tcx.hir()
         }
         fn visit_expr(&mut self, e: &'tcx Expr<'_>) {
             if self.is_unsafe {

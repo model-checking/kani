@@ -16,13 +16,13 @@ use rustc_target::asm::InlineAsmArch;
 use smallvec::smallvec;
 
 pub struct AsmArgs {
-    templates: Vec<P<ast::Expr>>,
-    operands: Vec<(ast::InlineAsmOperand, Span)>,
+    pub templates: Vec<P<ast::Expr>>,
+    pub operands: Vec<(ast::InlineAsmOperand, Span)>,
     named_args: FxHashMap<Symbol, usize>,
     reg_args: FxHashSet<usize>,
-    clobber_abis: Vec<(Symbol, Span)>,
+    pub clobber_abis: Vec<(Symbol, Span)>,
     options: ast::InlineAsmOptions,
-    options_spans: Vec<Span>,
+    pub options_spans: Vec<Span>,
 }
 
 fn parse_args<'a>(
@@ -48,15 +48,6 @@ pub fn parse_asm_args<'a>(
 
     if p.token == token::Eof {
         return Err(diag.struct_span_err(sp, "requires at least a template string argument"));
-    }
-
-    // Detect use of the legacy llvm_asm! syntax (which used to be called asm!)
-    if !is_global_asm && p.look_ahead(1, |t| *t == token::Colon || *t == token::ModSep) {
-        let mut err =
-            diag.struct_span_err(sp, "the legacy LLVM-style asm! syntax is no longer supported");
-        err.note("consider migrating to the new asm! syntax specified in RFC 2873");
-        err.note("alternatively, switch to llvm_asm! to keep your code working as it is");
-        return Err(err);
     }
 
     let first_template = p.parse_expr()?;

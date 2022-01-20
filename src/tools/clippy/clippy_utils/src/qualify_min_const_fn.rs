@@ -19,7 +19,7 @@ use std::borrow::Cow;
 
 type McfResult = Result<(), (Span, Cow<'static, str>)>;
 
-pub fn is_min_const_fn(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, msrv: Option<&RustcVersion>) -> McfResult {
+pub fn is_min_const_fn<'a, 'tcx>(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, msrv: Option<&RustcVersion>) -> McfResult {
     let def_id = body.source.def_id();
     let mut current = def_id;
     loop {
@@ -85,8 +85,8 @@ pub fn is_min_const_fn(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, msrv: Option<&Ru
     Ok(())
 }
 
-fn check_ty(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, span: Span) -> McfResult {
-    for arg in ty.walk(tcx) {
+fn check_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, span: Span) -> McfResult {
+    for arg in ty.walk() {
         let ty = match arg.unpack() {
             GenericArgKind::Type(ty) => ty,
 
@@ -133,7 +133,13 @@ fn check_ty(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, span: Span) -> McfResult {
     Ok(())
 }
 
-fn check_rvalue(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, def_id: DefId, rvalue: &Rvalue<'tcx>, span: Span) -> McfResult {
+fn check_rvalue<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    def_id: DefId,
+    rvalue: &Rvalue<'tcx>,
+    span: Span,
+) -> McfResult {
     match rvalue {
         Rvalue::ThreadLocalRef(_) => Err((span, "cannot access thread local storage in const fn".into())),
         Rvalue::Repeat(operand, _) | Rvalue::Use(operand) => check_operand(tcx, operand, span, body),
@@ -210,7 +216,12 @@ fn check_rvalue(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, def_id: DefId, rvalue: &Rv
     }
 }
 
-fn check_statement(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, def_id: DefId, statement: &Statement<'tcx>) -> McfResult {
+fn check_statement<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    def_id: DefId,
+    statement: &Statement<'tcx>,
+) -> McfResult {
     let span = statement.source_info.span;
     match &statement.kind {
         StatementKind::Assign(box (place, rval)) => {
@@ -221,8 +232,6 @@ fn check_statement(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, def_id: DefId, statemen
         StatementKind::FakeRead(box (_, place)) => check_place(tcx, *place, span, body),
         // just an assignment
         StatementKind::SetDiscriminant { place, .. } => check_place(tcx, **place, span, body),
-
-        StatementKind::LlvmInlineAsm { .. } => Err((span, "cannot use inline assembly in const fn".into())),
 
         StatementKind::CopyNonOverlapping(box rustc_middle::mir::CopyNonOverlapping { dst, src, count }) => {
             check_operand(tcx, dst, span, body)?;
@@ -239,7 +248,7 @@ fn check_statement(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, def_id: DefId, statemen
     }
 }
 
-fn check_operand(tcx: TyCtxt<'tcx>, operand: &Operand<'tcx>, span: Span, body: &Body<'tcx>) -> McfResult {
+fn check_operand<'tcx>(tcx: TyCtxt<'tcx>, operand: &Operand<'tcx>, span: Span, body: &Body<'tcx>) -> McfResult {
     match operand {
         Operand::Move(place) | Operand::Copy(place) => check_place(tcx, *place, span, body),
         Operand::Constant(c) => match c.check_static_ptr(tcx) {
@@ -249,7 +258,7 @@ fn check_operand(tcx: TyCtxt<'tcx>, operand: &Operand<'tcx>, span: Span, body: &
     }
 }
 
-fn check_place(tcx: TyCtxt<'tcx>, place: Place<'tcx>, span: Span, body: &Body<'tcx>) -> McfResult {
+fn check_place<'tcx>(tcx: TyCtxt<'tcx>, place: Place<'tcx>, span: Span, body: &Body<'tcx>) -> McfResult {
     let mut cursor = place.projection.as_ref();
     while let [ref proj_base @ .., elem] = *cursor {
         cursor = proj_base;
@@ -274,7 +283,7 @@ fn check_place(tcx: TyCtxt<'tcx>, place: Place<'tcx>, span: Span, body: &Body<'t
     Ok(())
 }
 
-fn check_terminator(
+fn check_terminator<'a, 'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &'a Body<'tcx>,
     terminator: &Terminator<'tcx>,

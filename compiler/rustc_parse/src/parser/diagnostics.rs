@@ -1,5 +1,5 @@
 use super::pat::Expected;
-use super::ty::AllowPlus;
+use super::ty::{AllowPlus, IsAsCast};
 use super::{
     BlockMode, Parser, PathStyle, RecoverColon, RecoverComma, Restrictions, SemiColonMode, SeqSep,
     TokenExpectType, TokenType,
@@ -27,7 +27,7 @@ use std::mem::take;
 use tracing::{debug, trace};
 
 const TURBOFISH_SUGGESTION_STR: &str =
-    "use `::<...>` instead of `<...>` to specify type or const arguments";
+    "use `::<...>` instead of `<...>` to specify lifetime, type, or const arguments";
 
 /// Creates a placeholder argument.
 pub(super) fn dummy_arg(ident: Ident) -> Param {
@@ -731,21 +731,28 @@ impl<'a> Parser<'a> {
                     match x {
                         Ok((_, _, false)) => {
                             if self.eat(&token::Gt) {
-                                match self.parse_expr() {
-                                    Ok(_) => {
-                                        e.span_suggestion_verbose(
-                                            binop.span.shrink_to_lo(),
-                                            TURBOFISH_SUGGESTION_STR,
-                                            "::".to_string(),
-                                            Applicability::MaybeIncorrect,
-                                        );
-                                        e.emit();
-                                        *expr =
-                                            self.mk_expr_err(expr.span.to(self.prev_token.span));
-                                        return Ok(());
-                                    }
-                                    Err(mut err) => {
-                                        err.cancel();
+                                let turbo_err = e.span_suggestion_verbose(
+                                    binop.span.shrink_to_lo(),
+                                    TURBOFISH_SUGGESTION_STR,
+                                    "::".to_string(),
+                                    Applicability::MaybeIncorrect,
+                                );
+                                if self.check(&TokenKind::Semi) {
+                                    turbo_err.emit();
+                                    *expr = self.mk_expr_err(expr.span);
+                                    return Ok(());
+                                } else {
+                                    match self.parse_expr() {
+                                        Ok(_) => {
+                                            turbo_err.emit();
+                                            *expr = self
+                                                .mk_expr_err(expr.span.to(self.prev_token.span));
+                                            return Ok(());
+                                        }
+                                        Err(mut err) => {
+                                            turbo_err.cancel();
+                                            err.cancel();
+                                        }
                                     }
                                 }
                             }
@@ -1029,6 +1036,34 @@ impl<'a> Parser<'a> {
                     Applicability::MachineApplicable,
                 )
                 .emit();
+        }
+    }
+
+    /// Swift lets users write `Ty?` to mean `Option<Ty>`. Parse the construct and recover from it.
+    pub(super) fn maybe_recover_from_question_mark(
+        &mut self,
+        ty: P<Ty>,
+        is_as_cast: IsAsCast,
+    ) -> P<Ty> {
+        if let IsAsCast::Yes = is_as_cast {
+            return ty;
+        }
+        if self.token == token::Question {
+            self.bump();
+            self.struct_span_err(self.prev_token.span, "invalid `?` in type")
+                .span_label(self.prev_token.span, "`?` is only allowed on expressions, not types")
+                .multipart_suggestion(
+                    "if you meant to express that the type might not contain a value, use the `Option` wrapper type",
+                    vec![
+                        (ty.span.shrink_to_lo(), "Option<".to_string()),
+                        (self.prev_token.span, ">".to_string()),
+                    ],
+                    Applicability::MachineApplicable,
+                )
+                .emit();
+            self.mk_ty(ty.span.to(self.prev_token.span), TyKind::Err)
+        } else {
+            ty
         }
     }
 

@@ -1,6 +1,6 @@
 use crate::mir::interpret::{AllocRange, ConstValue, GlobalAlloc, Pointer, Provenance, Scalar};
 use crate::ty::subst::{GenericArg, GenericArgKind, Subst};
-use crate::ty::{self, ConstInt, DefIdTree, ParamConst, ScalarInt, Ty, TyCtxt, TypeFoldable};
+use crate::ty::{self, ConstInt, DefIdTree, ParamConst, ScalarInt, Term, Ty, TyCtxt, TypeFoldable};
 use rustc_apfloat::ieee::{Double, Single};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::sso::SsoHashSet;
@@ -671,8 +671,7 @@ pub trait PrettyPrinter<'tcx>:
                     p!("generator");
                     // FIXME(eddyb) should use `def_span`.
                     if let Some(did) = did.as_local() {
-                        let hir_id = self.tcx().hir().local_def_id_to_hir_id(did);
-                        let span = self.tcx().hir().span(hir_id);
+                        let span = self.tcx().def_span(did);
                         p!(write(
                             "@{}",
                             // This may end up in stderr diagnostics but it may also be emitted
@@ -708,11 +707,10 @@ pub trait PrettyPrinter<'tcx>:
                     p!(write("closure"));
                     // FIXME(eddyb) should use `def_span`.
                     if let Some(did) = did.as_local() {
-                        let hir_id = self.tcx().hir().local_def_id_to_hir_id(did);
                         if self.tcx().sess.opts.debugging_opts.span_free_formats {
                             p!("@", print_def_path(did.to_def_id(), substs));
                         } else {
-                            let span = self.tcx().hir().span(hir_id);
+                            let span = self.tcx().def_span(did);
                             p!(write(
                                 "@{}",
                                 // This may end up in stderr diagnostics but it may also be emitted
@@ -801,7 +799,7 @@ pub trait PrettyPrinter<'tcx>:
                     let trait_ref = proj_ref.required_poly_trait_ref(self.tcx());
 
                     // Projection type entry -- the def-id for naming, and the ty.
-                    let proj_ty = (proj_ref.projection_def_id(), proj_ref.ty());
+                    let proj_ty = (proj_ref.projection_def_id(), proj_ref.term());
 
                     self.insert_trait_and_projection(
                         trait_ref,
@@ -852,8 +850,10 @@ pub trait PrettyPrinter<'tcx>:
                     }
 
                     p!(")");
-                    if !return_ty.skip_binder().is_unit() {
-                        p!("-> ", print(return_ty));
+                    if let Term::Ty(ty) = return_ty.skip_binder() {
+                        if !ty.is_unit() {
+                            p!("-> ", print(return_ty));
+                        }
                     }
                     p!(write("{}", if paren_needed { ")" } else { "" }));
 
@@ -904,23 +904,28 @@ pub trait PrettyPrinter<'tcx>:
                     first = false;
                 }
 
-                for (assoc_item_def_id, ty) in assoc_items {
+                for (assoc_item_def_id, term) in assoc_items {
                     if !first {
                         p!(", ");
                     }
                     p!(write("{} = ", self.tcx().associated_item(assoc_item_def_id).ident));
 
-                    // Skip printing `<[generator@] as Generator<_>>::Return` from async blocks
-                    match ty.skip_binder().kind() {
-                        ty::Projection(ty::ProjectionTy { item_def_id, .. })
-                            if Some(*item_def_id) == self.tcx().lang_items().generator_return() =>
-                        {
-                            p!("[async output]")
+                    match term.skip_binder() {
+                        Term::Ty(ty) => {
+                            // Skip printing `<[generator@] as Generator<_>>::Return` from async blocks
+                            if matches!(
+                              ty.kind(), ty::Projection(ty::ProjectionTy { item_def_id, .. })
+                              if Some(*item_def_id) == self.tcx().lang_items().generator_return()
+                            ) {
+                                p!("[async output]")
+                            } else {
+                                p!(print(ty))
+                            }
                         }
-                        _ => {
-                            p!(print(ty))
+                        Term::Const(c) => {
+                            p!(print(c));
                         }
-                    }
+                    };
 
                     first = false;
                 }
@@ -945,8 +950,11 @@ pub trait PrettyPrinter<'tcx>:
     fn insert_trait_and_projection(
         &mut self,
         trait_ref: ty::PolyTraitRef<'tcx>,
-        proj_ty: Option<(DefId, ty::Binder<'tcx, Ty<'tcx>>)>,
-        traits: &mut BTreeMap<ty::PolyTraitRef<'tcx>, BTreeMap<DefId, ty::Binder<'tcx, Ty<'tcx>>>>,
+        proj_ty: Option<(DefId, ty::Binder<'tcx, Term<'tcx>>)>,
+        traits: &mut BTreeMap<
+            ty::PolyTraitRef<'tcx>,
+            BTreeMap<DefId, ty::Binder<'tcx, Term<'tcx>>>,
+        >,
         fn_traits: &mut BTreeMap<ty::PolyTraitRef<'tcx>, OpaqueFnEntry<'tcx>>,
     ) {
         let trait_def_id = trait_ref.def_id();
@@ -1021,7 +1029,11 @@ pub trait PrettyPrinter<'tcx>:
                         let mut projections = predicates.projection_bounds();
                         if let (Some(proj), None) = (projections.next(), projections.next()) {
                             let tys: Vec<_> = args.iter().map(|k| k.expect_ty()).collect();
-                            p!(pretty_fn_sig(&tys, false, proj.skip_binder().ty));
+                            p!(pretty_fn_sig(
+                                &tys,
+                                false,
+                                proj.skip_binder().term.ty().expect("Return type was a const")
+                            ));
                             resugared = true;
                         }
                     }
@@ -1153,28 +1165,29 @@ pub trait PrettyPrinter<'tcx>:
         }
 
         match ct.val {
-            ty::ConstKind::Unevaluated(uv) => {
-                if let Some(promoted) = uv.promoted {
-                    let substs = uv.substs_.unwrap();
-                    p!(print_value_path(uv.def.did, substs));
-                    p!(write("::{:?}", promoted));
-                } else {
-                    let tcx = self.tcx();
-                    match tcx.def_kind(uv.def.did) {
-                        DefKind::Static | DefKind::Const | DefKind::AssocConst => {
-                            p!(print_value_path(uv.def.did, uv.substs(tcx)))
-                        }
-                        _ => {
-                            if uv.def.is_local() {
-                                let span = tcx.def_span(uv.def.did);
-                                if let Ok(snip) = tcx.sess.source_map().span_to_snippet(span) {
-                                    p!(write("{}", snip))
-                                } else {
-                                    print_underscore!()
-                                }
+            ty::ConstKind::Unevaluated(ty::Unevaluated {
+                def,
+                substs,
+                promoted: Some(promoted),
+            }) => {
+                p!(print_value_path(def.did, substs));
+                p!(write("::{:?}", promoted));
+            }
+            ty::ConstKind::Unevaluated(ty::Unevaluated { def, substs, promoted: None }) => {
+                match self.tcx().def_kind(def.did) {
+                    DefKind::Static | DefKind::Const | DefKind::AssocConst => {
+                        p!(print_value_path(def.did, substs))
+                    }
+                    _ => {
+                        if def.is_local() {
+                            let span = self.tcx().def_span(def.did);
+                            if let Ok(snip) = self.tcx().sess.source_map().span_to_snippet(span) {
+                                p!(write("{}", snip))
                             } else {
                                 print_underscore!()
                             }
+                        } else {
+                            print_underscore!()
                         }
                     }
                 }
@@ -1419,7 +1432,7 @@ pub trait PrettyPrinter<'tcx>:
 
             // Aggregates, printed as array/tuple/struct/variant construction syntax.
             //
-            // NB: the `potentially_has_param_types_or_consts` check ensures that we can use
+            // NB: the `has_param_types_or_consts` check ensures that we can use
             // the `destructure_const` query with an empty `ty::ParamEnv` without
             // introducing ICEs (e.g. via `layout_of`) from missing bounds.
             // E.g. `transmute([0usize; 2]): (u8, *mut T)` needs to know `T: Sized`
@@ -1427,9 +1440,7 @@ pub trait PrettyPrinter<'tcx>:
             //
             // FIXME(eddyb) for `--emit=mir`/`-Z dump-mir`, we should provide the
             // correct `ty::ParamEnv` to allow printing *all* constant values.
-            (_, ty::Array(..) | ty::Tuple(..) | ty::Adt(..))
-                if !ty.potentially_has_param_types_or_consts() =>
-            {
+            (_, ty::Array(..) | ty::Tuple(..) | ty::Adt(..)) if !ty.has_param_types_or_consts() => {
                 let contents = self.tcx().destructure_const(
                     ty::ParamEnv::reveal_all()
                         .and(self.tcx().mk_const(ty::Const { val: ty::ConstKind::Value(ct), ty })),
@@ -1784,10 +1795,11 @@ impl<'tcx, F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
         self = print_prefix(self)?;
 
         // Don't print `'_` if there's no unerased regions.
-        let print_regions = args.iter().any(|arg| match arg.unpack() {
-            GenericArgKind::Lifetime(r) => *r != ty::ReErased,
-            _ => false,
-        });
+        let print_regions = self.tcx.sess.verbose()
+            || args.iter().any(|arg| match arg.unpack() {
+                GenericArgKind::Lifetime(r) => *r != ty::ReErased,
+                _ => false,
+            });
         let args = args.iter().cloned().filter(|arg| match arg.unpack() {
             GenericArgKind::Lifetime(_) => print_regions,
             _ => true,
@@ -2246,17 +2258,12 @@ impl<'tcx, F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
         T: TypeFoldable<'tcx>,
     {
         struct LateBoundRegionNameCollector<'a, 'tcx> {
-            tcx: TyCtxt<'tcx>,
             used_region_names: &'a mut FxHashSet<Symbol>,
             type_collector: SsoHashSet<Ty<'tcx>>,
         }
 
         impl<'tcx> ty::fold::TypeVisitor<'tcx> for LateBoundRegionNameCollector<'_, 'tcx> {
             type BreakTy = ();
-
-            fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-                Some(self.tcx)
-            }
 
             #[instrument(skip(self), level = "trace")]
             fn visit_region(&mut self, r: ty::Region<'tcx>) -> ControlFlow<Self::BreakTy> {
@@ -2288,7 +2295,6 @@ impl<'tcx, F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
 
         self.used_region_names.clear();
         let mut collector = LateBoundRegionNameCollector {
-            tcx: self.tcx,
             used_region_names: &mut self.used_region_names,
             type_collector: SsoHashSet::new(),
         };
@@ -2450,7 +2456,7 @@ define_print_and_forward_display! {
 
     ty::ExistentialProjection<'tcx> {
         let name = cx.tcx().associated_item(self.item_def_id).ident;
-        p!(write("{} = ", name), print(self.ty))
+        p!(write("{} = ", name), print(self.term))
     }
 
     ty::ExistentialPredicate<'tcx> {
@@ -2507,7 +2513,14 @@ define_print_and_forward_display! {
     }
 
     ty::ProjectionPredicate<'tcx> {
-        p!(print(self.projection_ty), " == ", print(self.ty))
+        p!(print(self.projection_ty), " == ", print(self.term))
+    }
+
+    ty::Term<'tcx> {
+      match self {
+        ty::Term::Ty(ty) => p!(print(ty)),
+        ty::Term::Const(c) => p!(print(c)),
+      }
     }
 
     ty::ProjectionTy<'tcx> {
@@ -2547,7 +2560,7 @@ define_print_and_forward_display! {
                 write("` implements the trait `{}`", kind))
             }
             ty::PredicateKind::ConstEvaluatable(uv) => {
-                p!("the constant `", print_value_path(uv.def.did, uv.substs_.map_or(&[], |x| x)), "` can be evaluated")
+                p!("the constant `", print_value_path(uv.def.did, uv.substs), "` can be evaluated")
             }
             ty::PredicateKind::ConstEquate(c1, c2) => {
                 p!("the constant `", print(c1), "` equals `", print(c2), "`")
@@ -2717,5 +2730,5 @@ pub struct OpaqueFnEntry<'tcx> {
     has_fn_once: bool,
     fn_mut_trait_ref: Option<ty::PolyTraitRef<'tcx>>,
     fn_trait_ref: Option<ty::PolyTraitRef<'tcx>>,
-    return_ty: Option<ty::Binder<'tcx, Ty<'tcx>>>,
+    return_ty: Option<ty::Binder<'tcx, Term<'tcx>>>,
 }

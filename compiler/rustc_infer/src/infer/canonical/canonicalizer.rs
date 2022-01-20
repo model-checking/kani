@@ -425,7 +425,7 @@ impl<'cx, 'tcx> TypeFolder<'tcx> for Canonicalizer<'cx, 'tcx> {
                         // FIXME: perf problem described in #55921.
                         ui = ty::UniverseIndex::ROOT;
                         return self.canonicalize_const_var(
-                            CanonicalVarInfo { kind: CanonicalVarKind::Const(ui) },
+                            CanonicalVarInfo { kind: CanonicalVarKind::Const(ui, ct.ty) },
                             ct,
                         );
                     }
@@ -470,7 +470,7 @@ impl<'cx, 'tcx> Canonicalizer<'cx, 'tcx> {
     {
         let needs_canonical_flags = if canonicalize_region_mode.any() {
             TypeFlags::NEEDS_INFER |
-            TypeFlags::HAS_POTENTIAL_FREE_REGIONS | // `HAS_RE_PLACEHOLDER` implies `HAS_POTENTIAL_FREE_REGIONS`
+            TypeFlags::HAS_FREE_REGIONS | // `HAS_RE_PLACEHOLDER` implies `HAS_FREE_REGIONS`
             TypeFlags::HAS_TY_PLACEHOLDER |
             TypeFlags::HAS_CT_PLACEHOLDER
         } else {

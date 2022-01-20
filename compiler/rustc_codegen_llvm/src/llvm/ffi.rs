@@ -423,20 +423,11 @@ pub enum MetadataType {
 }
 
 /// LLVMRustAsmDialect
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum AsmDialect {
     Att,
     Intel,
-}
-
-impl AsmDialect {
-    pub fn from_generic(asm: rustc_ast::LlvmAsmDialect) -> Self {
-        match asm {
-            rustc_ast::LlvmAsmDialect::Att => AsmDialect::Att,
-            rustc_ast::LlvmAsmDialect::Intel => AsmDialect::Intel,
-        }
-    }
 }
 
 /// LLVMRustCodeGenOptLevel
@@ -2329,7 +2320,6 @@ extern "C" {
     pub fn LLVMRustSetNormalizedTarget(M: &Module, triple: *const c_char);
     pub fn LLVMRustAddAlwaysInlinePass(P: &PassManagerBuilder, AddLifetimes: bool);
     pub fn LLVMRustRunRestrictionPass(M: &Module, syms: *const *const c_char, len: size_t);
-    pub fn LLVMRustMarkAllFunctionsNounwind(M: &Module);
 
     pub fn LLVMRustOpenArchive(path: *const c_char) -> Option<&'static mut Archive>;
     pub fn LLVMRustArchiveIteratorNew(AR: &Archive) -> &mut ArchiveIterator<'_>;

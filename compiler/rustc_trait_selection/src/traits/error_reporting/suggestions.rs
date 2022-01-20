@@ -481,7 +481,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                 _ => {}
             }
 
-            hir_id = self.tcx.hir().get_parent_item(hir_id);
+            hir_id = self.tcx.hir().local_def_id_to_hir_id(self.tcx.hir().get_parent_item(hir_id));
         }
     }
 
@@ -2301,7 +2301,7 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                 {
                     let in_progress_typeck_results =
                         self.in_progress_typeck_results.map(|t| t.borrow());
-                    let parent_id = hir.local_def_id(hir.get_parent_item(arg_hir_id));
+                    let parent_id = hir.get_parent_item(arg_hir_id);
                     let typeck_results: &TypeckResults<'tcx> = match &in_progress_typeck_results {
                         Some(t) if t.hir_owner == parent_id => t,
                         _ => self.tcx.typeck(parent_id),
@@ -2519,12 +2519,6 @@ pub struct ReturnsVisitor<'v> {
 }
 
 impl<'v> Visitor<'v> for ReturnsVisitor<'v> {
-    type Map = hir::intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-        hir::intravisit::NestedVisitorMap::None
-    }
-
     fn visit_expr(&mut self, ex: &'v hir::Expr<'v>) {
         // Visit every expression to detect `return` paths, either through the function's tail
         // expression or `return` statements. We walk all nodes to find `return` statements, but
@@ -2581,12 +2575,6 @@ struct AwaitsVisitor {
 }
 
 impl<'v> Visitor<'v> for AwaitsVisitor {
-    type Map = hir::intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-        hir::intravisit::NestedVisitorMap::None
-    }
-
     fn visit_expr(&mut self, ex: &'v hir::Expr<'v>) {
         if let hir::ExprKind::Yield(_, hir::YieldSource::Await { expr: Some(id) }) = ex.kind {
             self.awaits.push(id)

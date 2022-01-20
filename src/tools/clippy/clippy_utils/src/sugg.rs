@@ -147,7 +147,6 @@ impl<'a> Sugg<'a> {
             | hir::ExprKind::Field(..)
             | hir::ExprKind::Index(..)
             | hir::ExprKind::InlineAsm(..)
-            | hir::ExprKind::LlvmInlineAsm(..)
             | hir::ExprKind::ConstBlock(..)
             | hir::ExprKind::Lit(..)
             | hir::ExprKind::Loop(..)
@@ -205,7 +204,6 @@ impl<'a> Sugg<'a> {
             | ast::ExprKind::ForLoop(..)
             | ast::ExprKind::Index(..)
             | ast::ExprKind::InlineAsm(..)
-            | ast::ExprKind::LlvmInlineAsm(..)
             | ast::ExprKind::ConstBlock(..)
             | ast::ExprKind::Lit(..)
             | ast::ExprKind::Loop(..)
@@ -461,7 +459,7 @@ impl Neg for Sugg<'_> {
     }
 }
 
-impl Not for Sugg<'a> {
+impl<'a> Not for Sugg<'a> {
     type Output = Sugg<'a>;
     fn not(self) -> Sugg<'a> {
         use AssocOp::{Equal, Greater, GreaterEqual, Less, LessEqual, NotEqual};
@@ -846,7 +844,7 @@ struct DerefDelegate<'a, 'tcx> {
     applicability: Applicability,
 }
 
-impl DerefDelegate<'_, 'tcx> {
+impl<'tcx> DerefDelegate<'_, 'tcx> {
     /// build final suggestion:
     /// - create the ending part of suggestion
     /// - concatenate starting and ending parts

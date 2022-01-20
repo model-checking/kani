@@ -167,8 +167,9 @@ declare_clippy_lint! {
     /// Check the [Box documentation](https://doc.rust-lang.org/std/boxed/index.html) for more information.
     ///
     /// ### Why is this bad?
-    /// Any `&Box<T>` can also be a `&T`, which is more
-    /// general.
+    /// A `&Box<T>` parameter requires the function caller to box `T` first before passing it to a function.
+    /// Using `&T` defines a concrete type for the parameter and generalizes the function, this would also
+    /// auto-deref to `&T` at the function call site if passed a `&Box<T>`.
     ///
     /// ### Example
     /// ```rust,ignore
@@ -311,12 +312,12 @@ impl_lint_pass!(Types => [BOX_COLLECTION, VEC_BOX, OPTION_OPTION, LINKEDLIST, BO
 
 impl<'tcx> LateLintPass<'tcx> for Types {
     fn check_fn(&mut self, cx: &LateContext<'_>, _: FnKind<'_>, decl: &FnDecl<'_>, _: &Body<'_>, _: Span, id: HirId) {
-        let is_in_trait_impl = if let Some(hir::Node::Item(item)) = cx.tcx.hir().find(cx.tcx.hir().get_parent_item(id))
-        {
-            matches!(item.kind, ItemKind::Impl(hir::Impl { of_trait: Some(_), .. }))
-        } else {
-            false
-        };
+        let is_in_trait_impl =
+            if let Some(hir::Node::Item(item)) = cx.tcx.hir().find_by_def_id(cx.tcx.hir().get_parent_item(id)) {
+                matches!(item.kind, ItemKind::Impl(hir::Impl { of_trait: Some(_), .. }))
+            } else {
+                false
+            };
 
         let is_exported = cx.access_levels.is_exported(cx.tcx.hir().local_def_id(id));
 
@@ -352,7 +353,7 @@ impl<'tcx> LateLintPass<'tcx> for Types {
         match item.kind {
             ImplItemKind::Const(ty, _) => {
                 let is_in_trait_impl = if let Some(hir::Node::Item(item)) =
-                    cx.tcx.hir().find(cx.tcx.hir().get_parent_item(item.hir_id()))
+                    cx.tcx.hir().find_by_def_id(cx.tcx.hir().get_parent_item(item.hir_id()))
                 {
                     matches!(item.kind, ItemKind::Impl(hir::Impl { of_trait: Some(_), .. }))
                 } else {

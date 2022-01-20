@@ -28,11 +28,11 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexSet};
 use rustc_errors::{struct_span_err, Applicability};
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, DefKind};
-use rustc_hir::def_id::{DefId, LocalDefId, LOCAL_CRATE};
-use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
+use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_ID, LOCAL_CRATE};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::weak_lang_items;
 use rustc_hir::{GenericParamKind, HirId, Node};
-use rustc_middle::hir::map::Map;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::middle::codegen_fn_attrs::{CodegenFnAttrFlags, CodegenFnAttrs};
 use rustc_middle::mir::mono::Linkage;
 use rustc_middle::ty::query::Providers;
@@ -67,7 +67,6 @@ fn collect_mod_item_types(tcx: TyCtxt<'_>, module_def_id: LocalDefId) {
 pub fn provide(providers: &mut Providers) {
     *providers = Providers {
         opt_const_param_of: type_of::opt_const_param_of,
-        default_anon_const_substs: type_of::default_anon_const_substs,
         type_of: type_of::type_of,
         item_bounds: item_bounds::item_bounds,
         explicit_item_bounds: item_bounds::explicit_item_bounds,
@@ -116,11 +115,6 @@ pub struct ItemCtxt<'tcx> {
 crate struct PlaceholderHirTyCollector(crate Vec<Span>);
 
 impl<'v> Visitor<'v> for PlaceholderHirTyCollector {
-    type Map = intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
     fn visit_ty(&mut self, t: &'v hir::Ty<'v>) {
         if let hir::TyKind::Infer = t.kind {
             self.0.push(t.span);
@@ -254,10 +248,10 @@ fn reject_placeholder_type_signatures_in_item<'tcx>(
 }
 
 impl<'tcx> Visitor<'tcx> for CollectItemTypesVisitor<'tcx> {
-    type Map = Map<'tcx>;
+    type NestedFilter = nested_filter::OnlyBodies;
 
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.tcx.hir()
     }
 
     fn visit_item(&mut self, item: &'tcx hir::Item<'tcx>) {
@@ -435,7 +429,7 @@ impl<'tcx> AstConv<'tcx> for ItemCtxt<'tcx> {
             match self.node() {
                 hir::Node::Field(_) | hir::Node::Ctor(_) | hir::Node::Variant(_) => {
                     let item =
-                        self.tcx.hir().expect_item(self.tcx.hir().get_parent_did(self.hir_id()));
+                        self.tcx.hir().expect_item(self.tcx.hir().get_parent_item(self.hir_id()));
                     match &item.kind {
                         hir::ItemKind::Enum(_, generics)
                         | hir::ItemKind::Struct(_, generics)
@@ -569,13 +563,12 @@ fn type_param_predicates(
 
     let param_id = tcx.hir().local_def_id_to_hir_id(def_id);
     let param_owner = tcx.hir().ty_param_owner(param_id);
-    let param_owner_def_id = tcx.hir().local_def_id(param_owner);
-    let generics = tcx.generics_of(param_owner_def_id);
+    let generics = tcx.generics_of(param_owner);
     let index = generics.param_def_id_to_index[&def_id.to_def_id()];
     let ty = tcx.mk_ty_param(index, tcx.hir().ty_param_name(param_id));
 
     // Don't look for bounds where the type parameter isn't in scope.
-    let parent = if item_def_id == param_owner_def_id.to_def_id() {
+    let parent = if item_def_id == param_owner.to_def_id() {
         None
     } else {
         tcx.generics_of(item_def_id).parent
@@ -666,7 +659,11 @@ impl<'tcx> ItemCtxt<'tcx> {
             .params
             .iter()
             .filter_map(|param| match param.kind {
-                GenericParamKind::Type { .. } if param.hir_id == param_id => Some(&param.bounds),
+                GenericParamKind::Type { .. } | GenericParamKind::Const { .. }
+                    if param.hir_id == param_id =>
+                {
+                    Some(&param.bounds)
+                }
                 _ => None,
             })
             .flat_map(|bounds| bounds.iter())
@@ -1197,9 +1194,11 @@ fn super_predicates_that_define_assoc_type(
 fn trait_def(tcx: TyCtxt<'_>, def_id: DefId) -> ty::TraitDef {
     let item = tcx.hir().expect_item(def_id.expect_local());
 
-    let (is_auto, unsafety) = match item.kind {
-        hir::ItemKind::Trait(is_auto, unsafety, ..) => (is_auto == hir::IsAuto::Yes, unsafety),
-        hir::ItemKind::TraitAlias(..) => (false, hir::Unsafety::Normal),
+    let (is_auto, unsafety, items) = match item.kind {
+        hir::ItemKind::Trait(is_auto, unsafety, .., items) => {
+            (is_auto == hir::IsAuto::Yes, unsafety, items)
+        }
+        hir::ItemKind::TraitAlias(..) => (false, hir::Unsafety::Normal, &[][..]),
         _ => span_bug!(item.span, "trait_def_of_item invoked on non-trait"),
     };
 
@@ -1226,6 +1225,103 @@ fn trait_def(tcx: TyCtxt<'_>, def_id: DefId) -> ty::TraitDef {
         ty::trait_def::TraitSpecializationKind::None
     };
     let def_path_hash = tcx.def_path_hash(def_id);
+
+    let must_implement_one_of = tcx
+        .get_attrs(def_id)
+        .iter()
+        .find(|attr| attr.has_name(sym::rustc_must_implement_one_of))
+        // Check that there are at least 2 arguments of `#[rustc_must_implement_one_of]`
+        // and that they are all identifiers
+        .and_then(|attr| match attr.meta_item_list() {
+            Some(items) if items.len() < 2 => {
+                tcx.sess
+                    .struct_span_err(
+                        attr.span,
+                        "the `#[rustc_must_implement_one_of]` attribute must be \
+                        used with at least 2 args",
+                    )
+                    .emit();
+
+                None
+            }
+            Some(items) => items
+                .into_iter()
+                .map(|item| item.ident().ok_or(item.span()))
+                .collect::<Result<Box<[_]>, _>>()
+                .map_err(|span| {
+                    tcx.sess
+                        .struct_span_err(span, "must be a name of an associated function")
+                        .emit();
+                })
+                .ok()
+                .zip(Some(attr.span)),
+            // Error is reported by `rustc_attr!`
+            None => None,
+        })
+        // Check that all arguments of `#[rustc_must_implement_one_of]` reference
+        // functions in the trait with default implementations
+        .and_then(|(list, attr_span)| {
+            let errors = list.iter().filter_map(|ident| {
+                let item = items.iter().find(|item| item.ident == *ident);
+
+                match item {
+                    Some(item) if matches!(item.kind, hir::AssocItemKind::Fn { .. }) => {
+                        if !item.defaultness.has_value() {
+                            tcx.sess
+                                .struct_span_err(
+                                    item.span,
+                                    "This function doesn't have a default implementation",
+                                )
+                                .span_note(attr_span, "required by this annotation")
+                                .emit();
+
+                            return Some(());
+                        }
+
+                        return None;
+                    }
+                    Some(item) => tcx
+                        .sess
+                        .struct_span_err(item.span, "Not a function")
+                        .span_note(attr_span, "required by this annotation")
+                        .note(
+                            "All `#[rustc_must_implement_one_of]` arguments \
+                            must be associated function names",
+                        )
+                        .emit(),
+                    None => tcx
+                        .sess
+                        .struct_span_err(ident.span, "Function not found in this trait")
+                        .emit(),
+                }
+
+                Some(())
+            });
+
+            (errors.count() == 0).then_some(list)
+        })
+        // Check for duplicates
+        .and_then(|list| {
+            let mut set: FxHashMap<Symbol, Span> = FxHashMap::default();
+            let mut no_dups = true;
+
+            for ident in &*list {
+                if let Some(dup) = set.insert(ident.name, ident.span) {
+                    tcx.sess
+                        .struct_span_err(vec![dup, ident.span], "Functions names are duplicated")
+                        .note(
+                            "All `#[rustc_must_implement_one_of]` arguments \
+                            must be unique",
+                        )
+                        .emit();
+
+                    no_dups = false;
+                }
+            }
+
+            no_dups.then_some(list)
+        });
+
     ty::TraitDef::new(
         def_id,
         unsafety,
@@ -1235,6 +1331,7 @@ fn trait_def(tcx: TyCtxt<'_>, def_id: DefId) -> ty::TraitDef {
         skip_array_during_method_dispatch,
         spec_kind,
         def_path_hash,
+        must_implement_one_of,
     )
 }
 
@@ -1246,12 +1343,6 @@ fn has_late_bound_regions<'tcx>(tcx: TyCtxt<'tcx>, node: Node<'tcx>) -> Option<S
     }
 
     impl<'tcx> Visitor<'tcx> for LateBoundRegionsDetector<'tcx> {
-        type Map = intravisit::ErasedMap<'tcx>;
-
-        fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::None
-        }
-
         fn visit_ty(&mut self, ty: &'tcx hir::Ty<'tcx>) {
             if self.has_late_bound_regions.is_some() {
                 return;
@@ -1359,12 +1450,6 @@ struct AnonConstInParamTyDetector {
 }
 
 impl<'v> Visitor<'v> for AnonConstInParamTyDetector {
-    type Map = intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_generic_param(&mut self, p: &'v hir::GenericParam<'v>) {
         if let GenericParamKind::Const { ty, default: _ } = p.kind {
             let prev = self.in_param_ty;
@@ -1396,13 +1481,12 @@ fn generics_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::Generics {
         | Node::Ctor(..)
         | Node::Field(_) => {
             let parent_id = tcx.hir().get_parent_item(hir_id);
-            Some(tcx.hir().local_def_id(parent_id).to_def_id())
+            Some(parent_id.to_def_id())
         }
         // FIXME(#43408) always enable this once `lazy_normalization` is
         // stable enough and does not need a feature gate anymore.
         Node::AnonConst(_) => {
-            let parent_id = tcx.hir().get_parent_item(hir_id);
-            let parent_def_id = tcx.hir().local_def_id(parent_id);
+            let parent_def_id = tcx.hir().get_parent_item(hir_id);
 
             let mut in_param_ty = false;
             for (_parent, node) in tcx.hir().parent_iter(hir_id) {
@@ -1512,11 +1596,11 @@ fn generics_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::Generics {
             }) => Some(fn_def_id.to_def_id()),
             ItemKind::OpaqueTy(hir::OpaqueTy { origin: hir::OpaqueTyOrigin::TyAlias, .. }) => {
                 let parent_id = tcx.hir().get_parent_item(hir_id);
-                assert!(parent_id != hir_id && parent_id != CRATE_HIR_ID);
+                assert_ne!(parent_id, CRATE_DEF_ID);
                 debug!("generics_of: parent of opaque ty {:?} is {:?}", def_id, parent_id);
                 // Opaque types are always nested within another item, and
                 // inherit the generics of the item.
-                Some(tcx.hir().local_def_id(parent_id).to_def_id())
+                Some(parent_id.to_def_id())
             }
             _ => None,
         },
@@ -1861,7 +1945,7 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: DefId) -> ty::PolyFnSig<'_> {
         }
 
         Ctor(data) | Variant(hir::Variant { data, .. }) if data.ctor_hir_id().is_some() => {
-            let ty = tcx.type_of(tcx.hir().get_parent_did(hir_id).to_def_id());
+            let ty = tcx.type_of(tcx.hir().get_parent_item(hir_id));
             let inputs =
                 data.fields().iter().map(|f| tcx.type_of(tcx.hir().local_def_id(f.hir_id)));
             ty::Binder::dummy(tcx.mk_fn_sig(
@@ -2279,7 +2363,7 @@ fn gather_explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericP
             tcx,
             &mut predicates,
             trait_ref,
-            &mut cgp::parameters_for_impl(tcx, self_ty, trait_ref),
+            &mut cgp::parameters_for_impl(self_ty, trait_ref),
         );
     }
 
@@ -2301,12 +2385,6 @@ fn const_evaluatable_predicates_of<'tcx>(
     }
 
     impl<'tcx> intravisit::Visitor<'tcx> for ConstCollector<'tcx> {
-        type Map = Map<'tcx>;
-
-        fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-            intravisit::NestedVisitorMap::None
-        }
-
         fn visit_anon_const(&mut self, c: &'tcx hir::AnonConst) {
             let def_id = self.tcx.hir().local_def_id(c.hir_id);
             let ct = ty::Const::from_anon_const(self.tcx, def_id);
@@ -2431,8 +2509,7 @@ fn explicit_predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericPredicat
                 //        parent of generics returned by `generics_of`
                 //
                 // In the above code we want the anon const to have predicates in its param env for `T: Trait`
-                let item_id = tcx.hir().get_parent_item(hir_id);
-                let item_def_id = tcx.hir().local_def_id(item_id).to_def_id();
+                let item_def_id = tcx.hir().get_parent_item(hir_id);
                 // In the above code example we would be calling `explicit_predicates_of(Foo)` here
                 return tcx.explicit_predicates_of(item_def_id);
             }
@@ -2454,7 +2531,7 @@ fn predicates_from_bound<'tcx>(
 ) -> Vec<(ty::Predicate<'tcx>, Span)> {
     let mut bounds = Bounds::default();
     astconv.add_bounds(param_ty, [bound].into_iter(), &mut bounds, bound_vars);
-    bounds.predicates(astconv.tcx(), param_ty)
+    bounds.predicates(astconv.tcx(), param_ty).collect()
 }
 
 fn compute_sig_of_foreign_fn_decl<'tcx>(
@@ -3230,7 +3307,7 @@ fn check_target_feature_trait_unsafe(tcx: TyCtxt<'_>, id: LocalDefId, attr_span:
     let hir_id = tcx.hir().local_def_id_to_hir_id(id);
     let node = tcx.hir().get(hir_id);
     if let Node::ImplItem(hir::ImplItem { kind: hir::ImplItemKind::Fn(..), .. }) = node {
-        let parent_id = tcx.hir().get_parent_did(hir_id);
+        let parent_id = tcx.hir().get_parent_item(hir_id);
         let parent_item = tcx.hir().expect_item(parent_id);
         if let hir::ItemKind::Impl(hir::Impl { of_trait: Some(_), .. }) = parent_item.kind {
             tcx.sess

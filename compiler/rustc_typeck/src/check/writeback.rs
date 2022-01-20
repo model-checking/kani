@@ -8,7 +8,7 @@ use rustc_data_structures::stable_map::FxHashMap;
 use rustc_errors::ErrorReported;
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
-use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_infer::infer::error_reporting::TypeAnnotationNeeded::E0282;
 use rustc_infer::infer::InferCtxt;
 use rustc_middle::hir::place::Place as HirPlace;
@@ -130,7 +130,7 @@ impl<'cx, 'tcx> WritebackCx<'cx, 'tcx> {
 
     fn write_ty_to_typeck_results(&mut self, hir_id: hir::HirId, ty: Ty<'tcx>) {
         debug!("write_ty_to_typeck_results({:?}, {:?})", hir_id, ty);
-        assert!(!ty.needs_infer() && !ty.has_placeholders() && !ty.has_free_regions(self.tcx()));
+        assert!(!ty.needs_infer() && !ty.has_placeholders() && !ty.has_free_regions());
         self.typeck_results.node_types_mut().insert(hir_id, ty);
     }
 
@@ -253,12 +253,6 @@ impl<'cx, 'tcx> WritebackCx<'cx, 'tcx> {
 // traffic in node-ids or update typeck results in the type context etc.
 
 impl<'cx, 'tcx> Visitor<'tcx> for WritebackCx<'cx, 'tcx> {
-    type Map = intravisit::ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_expr(&mut self, e: &'tcx hir::Expr<'tcx>) {
         self.fix_scalar_builtin_expr(e);
         self.fix_index_builtin_expr(e);
@@ -750,7 +744,7 @@ impl<'tcx> TypeFolder<'tcx> for EraseEarlyRegions<'tcx> {
         self.tcx
     }
     fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
-        if ty.has_type_flags(ty::TypeFlags::HAS_POTENTIAL_FREE_REGIONS) {
+        if ty.has_type_flags(ty::TypeFlags::HAS_FREE_REGIONS) {
             ty.super_fold_with(self)
         } else {
             ty

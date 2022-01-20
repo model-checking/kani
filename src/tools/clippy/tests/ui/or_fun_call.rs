@@ -2,7 +2,7 @@
 
 #![warn(clippy::or_fun_call)]
 #![allow(dead_code)]
-#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::unnecessary_wraps, clippy::borrow_as_ptr)]
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -173,6 +173,56 @@ mod issue6675 {
         None.unwrap_or(unsafe { ptr_to_ref(s) });
         #[rustfmt::skip]
         None.unwrap_or( unsafe { ptr_to_ref(s) }    );
+    }
+}
+
+mod issue8239 {
+    fn more_than_max_suggestion_highest_lines_0() {
+        let frames = Vec::new();
+        frames
+            .iter()
+            .map(|f: &String| f.to_lowercase())
+            .reduce(|mut acc, f| {
+                acc.push_str(&f);
+                acc
+            })
+            .unwrap_or(String::new());
+    }
+
+    fn more_to_max_suggestion_highest_lines_1() {
+        let frames = Vec::new();
+        let iter = frames.iter();
+        iter.map(|f: &String| f.to_lowercase())
+            .reduce(|mut acc, f| {
+                let _ = "";
+                let _ = "";
+                acc.push_str(&f);
+                acc
+            })
+            .unwrap_or(String::new());
+    }
+
+    fn equal_to_max_suggestion_highest_lines() {
+        let frames = Vec::new();
+        let iter = frames.iter();
+        iter.map(|f: &String| f.to_lowercase())
+            .reduce(|mut acc, f| {
+                let _ = "";
+                acc.push_str(&f);
+                acc
+            })
+            .unwrap_or(String::new());
+    }
+
+    fn less_than_max_suggestion_highest_lines() {
+        let frames = Vec::new();
+        let iter = frames.iter();
+        let map = iter.map(|f: &String| f.to_lowercase());
+        map.reduce(|mut acc, f| {
+            acc.push_str(&f);
+            acc
+        })
+        .unwrap_or(String::new());
     }
 }
 

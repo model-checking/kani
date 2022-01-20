@@ -12,6 +12,7 @@ use rustc_hir::lang_items::LangItem;
 use rustc_hir::{def::Res, ItemKind, Node, PathSegment};
 use rustc_infer::infer::type_variable::{TypeVariableOrigin, TypeVariableOriginKind};
 use rustc_infer::infer::{RegionVariableOrigin, TyCtxtInferExt};
+use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::fold::TypeFoldable;
 use rustc_middle::ty::layout::MAX_SIMD_LANES;
 use rustc_middle::ty::subst::GenericArgKind;
@@ -462,17 +463,14 @@ pub(super) fn check_opaque_for_inheriting_lifetimes<'tcx>(
     debug!(?item, ?span);
 
     struct FoundParentLifetime;
-    struct FindParentLifetimeVisitor<'tcx>(TyCtxt<'tcx>, &'tcx ty::Generics);
+    struct FindParentLifetimeVisitor<'tcx>(&'tcx ty::Generics);
     impl<'tcx> ty::fold::TypeVisitor<'tcx> for FindParentLifetimeVisitor<'tcx> {
         type BreakTy = FoundParentLifetime;
-        fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-            Some(self.0)
-        }
 
         fn visit_region(&mut self, r: ty::Region<'tcx>) -> ControlFlow<Self::BreakTy> {
             debug!("FindParentLifetimeVisitor: r={:?}", r);
             if let RegionKind::ReEarlyBound(ty::EarlyBoundRegion { index, .. }) = r {
-                if *index < self.1.parent_count as u32 {
+                if *index < self.0.parent_count as u32 {
                     return ControlFlow::Break(FoundParentLifetime);
                 } else {
                     return ControlFlow::CONTINUE;
@@ -502,26 +500,23 @@ pub(super) fn check_opaque_for_inheriting_lifetimes<'tcx>(
 
     impl<'tcx> ty::fold::TypeVisitor<'tcx> for ProhibitOpaqueVisitor<'tcx> {
         type BreakTy = Ty<'tcx>;
-        fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-            Some(self.tcx)
-        }
 
         fn visit_ty(&mut self, t: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
             debug!("check_opaque_for_inheriting_lifetimes: (visit_ty) t={:?}", t);
             if t == self.opaque_identity_ty {
                 ControlFlow::CONTINUE
             } else {
-                t.super_visit_with(&mut FindParentLifetimeVisitor(self.tcx, self.generics))
+                t.super_visit_with(&mut FindParentLifetimeVisitor(self.generics))
                     .map_break(|FoundParentLifetime| t)
             }
         }
     }
 
     impl<'tcx> Visitor<'tcx> for ProhibitOpaqueVisitor<'tcx> {
-        type Map = rustc_middle::hir::map::Map<'tcx>;
+        type NestedFilter = nested_filter::OnlyBodies;
 
-        fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-            hir::intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
+        fn nested_visit_map(&mut self) -> Self::Map {
+            self.tcx.hir()
         }
 
         fn visit_ty(&mut self, arg: &'tcx hir::Ty<'tcx>) {
@@ -983,6 +978,10 @@ fn check_impl_items_against_trait<'tcx>(
     if let Ok(ancestors) = trait_def.ancestors(tcx, impl_id.to_def_id()) {
         // Check for missing items from trait
         let mut missing_items = Vec::new();
+
+        let mut must_implement_one_of: Option<&[Ident]> =
+            trait_def.must_implement_one_of.as_deref();
+
         for &trait_item_id in tcx.associated_item_def_ids(impl_trait_ref.def_id) {
             let is_implemented = ancestors
                 .leaf_def(tcx, trait_item_id)
@@ -991,11 +990,36 @@ fn check_impl_items_against_trait<'tcx>(
             if !is_implemented && tcx.impl_defaultness(impl_id).is_final() {
                 missing_items.push(tcx.associated_item(trait_item_id));
             }
+
+            if let Some(required_items) = &must_implement_one_of {
+                // true if this item is specifically implemented in this impl
+                let is_implemented_here = ancestors
+                    .leaf_def(tcx, trait_item_id)
+                    .map_or(false, |node_item| !node_item.defining_node.is_from_trait());
+
+                if is_implemented_here {
+                    let trait_item = tcx.associated_item(trait_item_id);
+                    if required_items.contains(&trait_item.ident) {
+                        must_implement_one_of = None;
+                    }
+                }
+            }
         }
 
         if !missing_items.is_empty() {
             let impl_span = tcx.sess.source_map().guess_head_span(full_impl_span);
             missing_items_err(tcx, impl_span, &missing_items, full_impl_span);
+        }
+
+        if let Some(missing_items) = must_implement_one_of {
+            let impl_span = tcx.sess.source_map().guess_head_span(full_impl_span);
+            let attr_span = tcx
+                .get_attrs(impl_trait_ref.def_id)
+                .iter()
+                .find(|attr| attr.has_name(sym::rustc_must_implement_one_of))
+                .map(|attr| attr.span);
+
+            missing_items_must_implement_one_of_err(tcx, impl_span, missing_items, attr_span);
         }
     }
 }
@@ -1314,7 +1338,7 @@ fn check_enum<'tcx>(
             let variant_i = tcx.hir().expect_variant(variant_i_hir_id);
             let i_span = match variant_i.disr_expr {
                 Some(ref expr) => tcx.hir().span(expr.hir_id),
-                None => tcx.hir().span(variant_i_hir_id),
+                None => tcx.def_span(variant_did),
             };
             let span = match v.disr_expr {
                 Some(ref expr) => tcx.hir().span(expr.hir_id),
@@ -1381,7 +1405,7 @@ pub(super) fn check_type_params_are_used<'tcx>(
         return;
     }
 
-    for leaf in ty.walk(tcx) {
+    for leaf in ty.walk() {
         if let GenericArgKind::Type(leaf_ty) = leaf.unpack() {
             if let ty::Param(param) = leaf_ty.kind() {
                 debug!("found use of ty param {:?}", param);
@@ -1440,8 +1464,8 @@ fn opaque_type_cycle_error(tcx: TyCtxt<'_>, def_id: LocalDefId, span: Span) {
     let mut err = struct_span_err!(tcx.sess, span, E0720, "cannot resolve opaque type");
 
     let mut label = false;
-    if let Some((hir_id, visitor)) = get_owner_return_paths(tcx, def_id) {
-        let typeck_results = tcx.typeck(tcx.hir().local_def_id(hir_id));
+    if let Some((def_id, visitor)) = get_owner_return_paths(tcx, def_id) {
+        let typeck_results = tcx.typeck(def_id);
         if visitor
             .returns
             .iter()
@@ -1479,10 +1503,6 @@ fn opaque_type_cycle_error(tcx: TyCtxt<'_>, def_id: LocalDefId, span: Span) {
             {
                 struct OpaqueTypeCollector(Vec<DefId>);
                 impl<'tcx> ty::fold::TypeVisitor<'tcx> for OpaqueTypeCollector {
-                    fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-                        // Default anon const substs cannot contain opaque types.
-                        None
-                    }
                     fn visit_ty(&mut self, t: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
                         match *t.kind() {
                             ty::Opaque(def, _) => {

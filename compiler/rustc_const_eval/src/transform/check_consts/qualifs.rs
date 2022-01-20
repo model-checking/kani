@@ -210,8 +210,7 @@ impl Qualif for CustomEq {
         // because that component may be part of an enum variant (e.g.,
         // `Option::<NonStructuralMatchTy>::Some`), in which case some values of this type may be
         // structural-match (`Option::None`).
-        let id = cx.tcx.hir().local_def_id_to_hir_id(cx.def_id());
-        traits::search_for_structural_match_violation(id, cx.body.span, cx.tcx, ty).is_some()
+        traits::search_for_structural_match_violation(cx.body.span, cx.tcx, ty).is_some()
     }
 
     fn in_adt_inherently<'tcx>(
@@ -338,7 +337,7 @@ where
 
     // Check the qualifs of the value of `const` items.
     if let Some(ct) = constant.literal.const_for_ty() {
-        if let ty::ConstKind::Unevaluated(ty::Unevaluated { def, substs_: _, promoted }) = ct.val {
+        if let ty::ConstKind::Unevaluated(ty::Unevaluated { def, substs: _, promoted }) = ct.val {
             // Use qualifs of the type for the promoted. Promoteds in MIR body should be possible
             // only for `NeedsNonConstDrop` with precise drop checking. This is the only const
             // check performed after the promotion. Verify that with an assertion.

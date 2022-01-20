@@ -165,8 +165,8 @@ pub trait MutVisitor: Sized {
         noop_visit_lifetime(l, self);
     }
 
-    fn visit_ty_constraint(&mut self, t: &mut AssocTyConstraint) {
-        noop_visit_ty_constraint(t, self);
+    fn visit_constraint(&mut self, t: &mut AssocConstraint) {
+        noop_visit_constraint(t, self);
     }
 
     fn visit_foreign_mod(&mut self, nm: &mut ForeignMod) {
@@ -430,8 +430,8 @@ pub fn noop_flat_map_arm<T: MutVisitor>(mut arm: Arm, vis: &mut T) -> SmallVec<[
     smallvec![arm]
 }
 
-pub fn noop_visit_ty_constraint<T: MutVisitor>(
-    AssocTyConstraint { id, ident, gen_args, kind, span }: &mut AssocTyConstraint,
+pub fn noop_visit_constraint<T: MutVisitor>(
+    AssocConstraint { id, ident, gen_args, kind, span }: &mut AssocConstraint,
     vis: &mut T,
 ) {
     vis.visit_id(id);
@@ -440,12 +440,11 @@ pub fn noop_visit_ty_constraint<T: MutVisitor>(
         vis.visit_generic_args(gen_args);
     }
     match kind {
-        AssocTyConstraintKind::Equality { ref mut ty } => {
-            vis.visit_ty(ty);
-        }
-        AssocTyConstraintKind::Bound { ref mut bounds } => {
-            visit_bounds(bounds, vis);
-        }
+        AssocConstraintKind::Equality { ref mut term } => match term {
+            Term::Ty(ty) => vis.visit_ty(ty),
+            Term::Const(c) => vis.visit_anon_const(c),
+        },
+        AssocConstraintKind::Bound { ref mut bounds } => visit_bounds(bounds, vis),
     }
     vis.visit_span(span);
 }
@@ -555,7 +554,7 @@ pub fn noop_visit_angle_bracketed_parameter_data<T: MutVisitor>(
     let AngleBracketedArgs { args, span } = data;
     visit_vec(args, |arg| match arg {
         AngleBracketedArg::Arg(arg) => vis.visit_generic_arg(arg),
-        AngleBracketedArg::Constraint(constraint) => vis.visit_ty_constraint(constraint),
+        AngleBracketedArg::Constraint(constraint) => vis.visit_constraint(constraint),
     });
     vis.visit_span(span);
 }
@@ -1350,23 +1349,6 @@ pub fn noop_visit_expr<T: MutVisitor>(
             visit_opt(expr, |expr| vis.visit_expr(expr));
         }
         ExprKind::InlineAsm(asm) => noop_visit_inline_asm(asm, vis),
-        ExprKind::LlvmInlineAsm(asm) => {
-            let LlvmInlineAsm {
-                asm: _,
-                asm_str_style: _,
-                outputs,
-                inputs,
-                clobbers: _,
-                volatile: _,
-                alignstack: _,
-                dialect: _,
-            } = asm.deref_mut();
-            for out in outputs {
-                let LlvmInlineAsmOutput { constraint: _, expr, is_rw: _, is_indirect: _ } = out;
-                vis.visit_expr(expr);
-            }
-            visit_vec(inputs, |(_c, expr)| vis.visit_expr(expr));
-        }
         ExprKind::MacCall(mac) => vis.visit_mac_call(mac),
         ExprKind::Struct(se) => {
             let StructExpr { qself, path, fields, rest } = se.deref_mut();

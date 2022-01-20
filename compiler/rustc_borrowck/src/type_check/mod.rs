@@ -312,6 +312,7 @@ fn translate_outlives_facts(typeck: &mut TypeChecker<'_, '_>) {
     }
 }
 
+#[track_caller]
 fn mirbug(tcx: TyCtxt<'_>, span: Span, msg: &str) {
     // We sometimes see MIR failures (notably predicate failures) due to
     // the fact that we check rvalue sized predicates here. So use `delay_span_bug`
@@ -425,7 +426,7 @@ impl<'a, 'b, 'tcx> Visitor<'tcx> for TypeVerifier<'a, 'b, 'tcx> {
                         self.cx.param_env.and(type_op::ascribe_user_type::AscribeUserType::new(
                             constant.literal.ty(),
                             uv.def.did,
-                            UserSubsts { substs: uv.substs(self.tcx()), user_self_ty: None },
+                            UserSubsts { substs: uv.substs, user_self_ty: None },
                         )),
                     ) {
                         span_mirbug!(
@@ -1477,7 +1478,6 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
             StatementKind::FakeRead(..)
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)
-            | StatementKind::LlvmInlineAsm { .. }
             | StatementKind::Retag { .. }
             | StatementKind::Coverage(..)
             | StatementKind::Nop => {}
@@ -1969,7 +1969,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                         let predicates = self.prove_closure_bounds(
                             tcx,
                             def_id.expect_local(),
-                            uv.substs(tcx),
+                            uv.substs,
                             location,
                         );
                         self.normalize_and_prove_instantiated_predicates(

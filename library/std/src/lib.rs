@@ -294,10 +294,8 @@
 #![feature(intra_doc_pointers)]
 #![feature(lang_items)]
 #![feature(linkage)]
-#![feature(llvm_asm)]
 #![feature(log_syntax)]
 #![feature(map_try_insert)]
-#![feature(maybe_uninit_extra)]
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(maybe_uninit_write_slice)]
@@ -342,7 +340,6 @@
 #![feature(unboxed_closures)]
 #![feature(unwrap_infallible)]
 #![feature(vec_into_raw_parts)]
-#![feature(vec_spare_capacity)]
 // NB: the above list is sorted to minimize merge conflicts.
 #![default_lib_allocator]
 
@@ -572,8 +569,8 @@ pub use core::{
 #[allow(deprecated)]
 pub use core::{
     assert, assert_matches, cfg, column, compile_error, concat, concat_idents, const_format_args,
-    env, file, format_args, format_args_nl, include, include_bytes, include_str, line, llvm_asm,
-    log_syntax, module_path, option_env, stringify, trace_macros,
+    env, file, format_args, format_args_nl, include, include_bytes, include_str, line, log_syntax,
+    module_path, option_env, stringify, trace_macros,
 };
 
 #[unstable(
