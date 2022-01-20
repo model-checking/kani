@@ -96,16 +96,16 @@ git log --graph --oneline origin/upstream-rustc..origin/main
 git diff --stat origin/upstream-rustc..origin/main
 ```
 
-## Setup RustAnalyzer in VSCode
+## Set up `rust-analyzer` in VSCode
 
-Add the following to your `settings.json`
+Add the following to the `rust-analyzer` extension settings in `settings.json`:
 ```
     "rust-analyzer.updates.channel": "nightly",
     "rust-analyzer.rustcSource": "discover",
     "rust-analyzer.workspace.symbol.search.scope": "workspace_and_dependencies",
 ```
 
-Ensure that any packages that use rustc data-structures have the following line set in their `cargo.toml`
+Ensure that any packages that use `rustc` data structures have the following line set in their `Cargo.toml`
 
 ```
 [package.metadata.rust-analyzer]
