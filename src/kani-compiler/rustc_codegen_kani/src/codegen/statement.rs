@@ -572,14 +572,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::StorageLive(_) => Stmt::skip(Location::none()), // TODO: fix me
             StatementKind::StorageDead(_) => Stmt::skip(Location::none()), // TODO: fix me
-            StatementKind::LlvmInlineAsm(_) => self
-                .codegen_unimplemented(
-                    "InlineAsm",
-                    Type::empty(),
-                    Location::none(),
-                    "https://github.com/model-checking/rmc/issues/2",
-                )
-                .as_stmt(Location::none()),
             StatementKind::CopyNonOverlapping(box mir::CopyNonOverlapping {
                 ref src,
                 ref dst,
