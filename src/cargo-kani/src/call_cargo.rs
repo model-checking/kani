@@ -11,13 +11,8 @@ use crate::context::KaniContext;
 impl KaniContext {
     /// Given a `file` (a .symtab.json), produce `{file}.out` by calling symtab2gb
     pub fn cargo_build(&self) -> Result<Vec<PathBuf>> {
-        let path = self.hack_rustc_path("--kani-path")?;
         let flag_env = {
-            let mut rustc_args = self.kani_rustc_flags();
-            let additional = self.hack_rustc_path("--kani-flags")?;
-            // We're going to join with spaces, so we can just put this whole string as the last element
-            // of the Vec, since that will produce the correctly spaced string.
-            rustc_args.push(additional);
+            let rustc_args = self.kani_rustc_flags();
             crate::util::join_osstring(&rustc_args, " ")
         };
 
@@ -27,8 +22,9 @@ impl KaniContext {
 
         let result = Command::new("cargo")
             .args(args)
-            .env("RUSTC", path)
-            .env("RUSTFLAGS", flag_env)
+            .env("RUSTC", &self.kani_rustc)
+            .env("RUSTFLAGS", "--kani-flags")
+            .env("KaniFLAGS", flag_env)
             .status()
             .context("Failed to invoke cargo")?;
 
@@ -44,21 +40,5 @@ impl KaniContext {
         let symtabs: core::result::Result<Vec<PathBuf>, glob::GlobError> = results.collect();
 
         Ok(symtabs?)
-    }
-
-    // This is surprisingly clumsy code, but it should be temporary.
-    // Equivalent of bash `VAR=$(kani-rustc --arg)`
-    fn hack_rustc_path(&self, arg: &str) -> Result<OsString> {
-        let result = Command::new(&self.kani_rustc).args(&[arg]).output()?;
-        // Note the trim: necessary to remove trailing newline!
-        let output = std::str::from_utf8(&result.stdout)?.trim();
-
-        if !result.status.success() {
-            println!("{}", output);
-            bail!("kani-rustc exited with status {}", result.status);
-        }
-
-        // todo Non-portable to windows. We can trust "output" to be utf8 there?
-        Ok(output.into())
     }
 }

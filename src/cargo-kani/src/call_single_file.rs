@@ -38,11 +38,7 @@ impl KaniContext {
     }
 
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let flags = vec![
-            "--cfg=kani", // not actually necessary it's in kani-rustc
-                          //"-Z", "human_readable_cgu_names",
-                          //"-Z", "symbol-mangling-version=v0", // todo
-        ];
+        let flags = vec!["--goto-c"];
         flags.iter().map(|x| x.into()).collect()
     }
 }
