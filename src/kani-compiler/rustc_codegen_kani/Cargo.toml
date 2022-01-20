@@ -25,3 +25,6 @@ kani_queries = { path = "../kani_queries" }
 kani_restrictions = { path = "../../../library/kani_restrictions" }
 rustc-demangle = "0.1.21"
 smallvec = { version = "1.6.1", features = ["union", "may_dangle"] }
+
+[package.metadata.rust-analyzer]
+rustc_private=true
