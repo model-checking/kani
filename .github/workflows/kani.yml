@@ -32,14 +32,6 @@ jobs:
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
 
-      - name: Set config.toml file
-        run: |
-          ./configure \
-            --enable-debug \
-            --set=llvm.download-ci-llvm=true \
-            --set=rust.debug-assertions-std=false \
-            --set=rust.deny-warnings=false
-
       - name: Update submodules
         run: |
           # Since we download cached artifacts, we can skip checking out llvm locally in CI
@@ -49,8 +41,7 @@ jobs:
       - name: Build Kani and Kani Library
         run: |
           export RUST_BACKTRACE=1
-          cd src/kani-compiler
-          cargo build
+          cargo build -p kani-compiler
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -61,7 +52,9 @@ jobs:
 
       - name: Generate book runner report
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./x.py run -i --stage 1 bookrunner
+        run: cargo run -p bookrunner
+        env:
+            DOC_RUST_LANG_ORG_CHANNEL: nightly
 
       - name: Print book runner text results
         if: ${{ matrix.os == 'ubuntu-20.04' }}
