@@ -95,12 +95,6 @@ impl<'v> hir_visit::Visitor<'v> for StatCollector<'v> {
         hir_visit::walk_param(self, param)
     }
 
-    type Map = Map<'v>;
-
-    fn nested_visit_map(&mut self) -> hir_visit::NestedVisitorMap<Self::Map> {
-        panic!("visit_nested_xxx must be manually implemented in this visitor")
-    }
-
     fn visit_nested_item(&mut self, id: hir::ItemId) {
         let nested_item = self.krate.unwrap().item(id);
         self.visit_item(nested_item)
@@ -338,9 +332,9 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
         ast_visit::walk_path_segment(self, path_span, path_segment)
     }
 
-    fn visit_assoc_ty_constraint(&mut self, constraint: &'v ast::AssocTyConstraint) {
-        self.record("AssocTyConstraint", Id::None, constraint);
-        ast_visit::walk_assoc_ty_constraint(self, constraint)
+    fn visit_assoc_constraint(&mut self, constraint: &'v ast::AssocConstraint) {
+        self.record("AssocConstraint", Id::None, constraint);
+        ast_visit::walk_assoc_constraint(self, constraint)
     }
 
     fn visit_attribute(&mut self, attr: &'v ast::Attribute) {

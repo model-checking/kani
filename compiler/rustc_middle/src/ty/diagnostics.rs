@@ -4,7 +4,7 @@ use crate::ty::subst::{GenericArg, GenericArgKind};
 use crate::ty::TyKind::*;
 use crate::ty::{
     ConstKind, ExistentialPredicate, ExistentialProjection, ExistentialTraitRef, InferTy,
-    ProjectionTy, TyCtxt, TyS, TypeAndMut,
+    ProjectionTy, Term, TyCtxt, TyS, TypeAndMut,
 };
 
 use rustc_errors::{Applicability, DiagnosticBuilder};
@@ -105,8 +105,14 @@ impl<'tcx> TyS<'tcx> {
                 ExistentialPredicate::Trait(ExistentialTraitRef { substs, .. }) => {
                     substs.iter().all(generic_arg_is_suggestible)
                 }
-                ExistentialPredicate::Projection(ExistentialProjection { substs, ty, .. }) => {
-                    ty.is_suggestable() && substs.iter().all(generic_arg_is_suggestible)
+                ExistentialPredicate::Projection(ExistentialProjection {
+                    substs, term, ..
+                }) => {
+                    let term_is_suggestable = match term {
+                        Term::Ty(ty) => ty.is_suggestable(),
+                        Term::Const(c) => const_is_suggestable(c.val),
+                    };
+                    term_is_suggestable && substs.iter().all(generic_arg_is_suggestible)
                 }
                 _ => true,
             }),
@@ -448,12 +454,6 @@ pub fn suggest_constraining_type_param(
 pub struct TraitObjectVisitor<'tcx>(pub Vec<&'tcx hir::Ty<'tcx>>, pub crate::hir::map::Map<'tcx>);
 
 impl<'v> hir::intravisit::Visitor<'v> for TraitObjectVisitor<'v> {
-    type Map = rustc_hir::intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-        hir::intravisit::NestedVisitorMap::None
-    }
-
     fn visit_ty(&mut self, ty: &'v hir::Ty<'v>) {
         match ty.kind {
             hir::TyKind::TraitObject(
@@ -482,12 +482,6 @@ impl<'v> hir::intravisit::Visitor<'v> for TraitObjectVisitor<'v> {
 pub struct StaticLifetimeVisitor<'tcx>(pub Vec<Span>, pub crate::hir::map::Map<'tcx>);
 
 impl<'v> hir::intravisit::Visitor<'v> for StaticLifetimeVisitor<'v> {
-    type Map = rustc_hir::intravisit::ErasedMap<'v>;
-
-    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-        hir::intravisit::NestedVisitorMap::None
-    }
-
     fn visit_lifetime(&mut self, lt: &'v hir::Lifetime) {
         if let hir::LifetimeName::ImplicitObjectLifetimeDefault | hir::LifetimeName::Static =
             lt.name

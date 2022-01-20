@@ -9,6 +9,7 @@ use rustc_hir as hir;
 use rustc_hir::def::Res;
 use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::Visitor;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::print::RegionHighlightMode;
 use rustc_middle::ty::{self, Ty, TyCtxt, TypeFoldable, TypeVisitor};
 
@@ -80,26 +81,21 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
 
         // Mark all unnamed regions in the type with a number.
         // This diagnostic is called in response to lifetime errors, so be informative.
-        struct HighlightBuilder<'tcx> {
+        struct HighlightBuilder {
             highlight: RegionHighlightMode,
-            tcx: TyCtxt<'tcx>,
             counter: usize,
         }
 
-        impl<'tcx> HighlightBuilder<'tcx> {
-            fn build(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> RegionHighlightMode {
+        impl HighlightBuilder {
+            fn build(ty: Ty<'_>) -> RegionHighlightMode {
                 let mut builder =
-                    HighlightBuilder { highlight: RegionHighlightMode::default(), counter: 1, tcx };
+                    HighlightBuilder { highlight: RegionHighlightMode::default(), counter: 1 };
                 builder.visit_ty(ty);
                 builder.highlight
             }
         }
 
-        impl<'tcx> ty::fold::TypeVisitor<'tcx> for HighlightBuilder<'tcx> {
-            fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-                Some(self.tcx)
-            }
-
+        impl<'tcx> ty::fold::TypeVisitor<'tcx> for HighlightBuilder {
             fn visit_region(&mut self, r: ty::Region<'tcx>) -> ControlFlow<Self::BreakTy> {
                 if !r.has_name() && self.counter <= 3 {
                     self.highlight.highlighting_region(r, self.counter);
@@ -109,12 +105,12 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
             }
         }
 
-        let expected_highlight = HighlightBuilder::build(self.tcx(), expected);
+        let expected_highlight = HighlightBuilder::build(expected);
         let expected = self
             .infcx
             .extract_inference_diagnostics_data(expected.into(), Some(expected_highlight))
             .name;
-        let found_highlight = HighlightBuilder::build(self.tcx(), found);
+        let found_highlight = HighlightBuilder::build(found);
         let found =
             self.infcx.extract_inference_diagnostics_data(found.into(), Some(found_highlight)).name;
 
@@ -187,10 +183,10 @@ struct TypeParamSpanVisitor<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for TypeParamSpanVisitor<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type NestedFilter = nested_filter::OnlyBodies;
 
-    fn nested_visit_map(&mut self) -> hir::intravisit::NestedVisitorMap<Self::Map> {
-        hir::intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.tcx.hir()
     }
 
     fn visit_ty(&mut self, arg: &'tcx hir::Ty<'tcx>) {

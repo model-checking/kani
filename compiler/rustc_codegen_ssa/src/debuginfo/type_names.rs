@@ -203,8 +203,9 @@ fn push_debuginfo_type_name<'tcx>(
                 let projection_bounds: SmallVec<[_; 4]> = trait_data
                     .projection_bounds()
                     .map(|bound| {
-                        let ExistentialProjection { item_def_id, ty, .. } = bound.skip_binder();
-                        (item_def_id, ty)
+                        let ExistentialProjection { item_def_id, term, .. } = bound.skip_binder();
+                        // FIXME(associated_const_equality): allow for consts here
+                        (item_def_id, term.ty().unwrap())
                     })
                     .collect();
 
@@ -519,12 +520,18 @@ fn push_unqualified_item_name(
             output.push_str(tcx.crate_name(def_id.krate).as_str());
         }
         DefPathData::ClosureExpr if tcx.generator_kind(def_id).is_some() => {
+            let key = match tcx.generator_kind(def_id).unwrap() {
+                hir::GeneratorKind::Async(hir::AsyncGeneratorKind::Block) => "async_block",
+                hir::GeneratorKind::Async(hir::AsyncGeneratorKind::Closure) => "async_closure",
+                hir::GeneratorKind::Async(hir::AsyncGeneratorKind::Fn) => "async_fn",
+                hir::GeneratorKind::Gen => "generator",
+            };
             // Generators look like closures, but we want to treat them differently
             // in the debug info.
             if cpp_like_debuginfo(tcx) {
-                write!(output, "generator${}", disambiguated_data.disambiguator).unwrap();
+                write!(output, "{}${}", key, disambiguated_data.disambiguator).unwrap();
             } else {
-                write!(output, "{{generator#{}}}", disambiguated_data.disambiguator).unwrap();
+                write!(output, "{{{}#{}}}", key, disambiguated_data.disambiguator).unwrap();
             }
         }
         _ => match disambiguated_data.data.name() {

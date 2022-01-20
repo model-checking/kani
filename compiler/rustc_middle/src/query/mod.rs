@@ -110,10 +110,6 @@ rustc_queries! {
         separate_provide_extern
     }
 
-    query default_anon_const_substs(key: DefId) -> SubstsRef<'tcx> {
-        desc { |tcx| "computing the default generic arguments for `{}`", tcx.def_path_str(key) }
-    }
-
     /// Records the type of every item.
     query type_of(key: DefId) -> Ty<'tcx> {
         desc { |tcx|
@@ -384,16 +380,6 @@ rustc_queries! {
     query coverageinfo(key: ty::InstanceDef<'tcx>) -> mir::CoverageInfo {
         desc { |tcx| "retrieving coverage info from MIR for `{}`", tcx.def_path_str(key.def_id()) }
         storage(ArenaCacheSelector<'tcx>)
-    }
-
-    /// Returns the name of the file that contains the function body, if instrumented for coverage.
-    query covered_file_name(key: DefId) -> Option<Symbol> {
-        desc {
-            |tcx| "retrieving the covered file name, if instrumented, for `{}`",
-            tcx.def_path_str(key)
-        }
-        storage(ArenaCacheSelector<'tcx>)
-        cache_on_disk_if { key.is_local() }
     }
 
     /// Returns the `CodeRegions` for a function that has instrumented coverage, in case the
@@ -1569,8 +1555,7 @@ rustc_queries! {
         desc { "calculating the missing lang items in a crate" }
         separate_provide_extern
     }
-    query visible_parent_map(_: ()) -> DefIdMap<DefId> {
-        storage(ArenaCacheSelector<'tcx>)
+    query visible_parent_map(_: ()) -> Lrc<DefIdMap<DefId>> {
         desc { "calculating the visible parent map" }
     }
     query trimmed_def_paths(_: ()) -> FxHashMap<DefId, Symbol> {

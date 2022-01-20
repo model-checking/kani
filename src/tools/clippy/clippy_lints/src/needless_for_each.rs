@@ -1,10 +1,9 @@
 use rustc_errors::Applicability;
 use rustc_hir::{
-    intravisit::{walk_expr, NestedVisitorMap, Visitor},
+    intravisit::{walk_expr, Visitor},
     Expr, ExprKind, Stmt, StmtKind,
 };
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_middle::hir::map::Map;
 use rustc_session::{declare_lint_pass, declare_tool_lint};
 use rustc_span::{source_map::Span, sym, Symbol};
 
@@ -48,7 +47,7 @@ declare_clippy_lint! {
 
 declare_lint_pass!(NeedlessForEach => [NEEDLESS_FOR_EACH]);
 
-impl LateLintPass<'_> for NeedlessForEach {
+impl<'tcx> LateLintPass<'tcx> for NeedlessForEach {
     fn check_stmt(&mut self, cx: &LateContext<'tcx>, stmt: &'tcx Stmt<'_>) {
         let expr = match stmt.kind {
             StmtKind::Expr(expr) | StmtKind::Semi(expr) => expr,
@@ -136,8 +135,6 @@ struct RetCollector {
 }
 
 impl<'tcx> Visitor<'tcx> for RetCollector {
-    type Map = Map<'tcx>;
-
     fn visit_expr(&mut self, expr: &Expr<'_>) {
         match expr.kind {
             ExprKind::Ret(..) => {
@@ -159,9 +156,5 @@ impl<'tcx> Visitor<'tcx> for RetCollector {
         }
 
         walk_expr(self, expr);
-    }
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
     }
 }

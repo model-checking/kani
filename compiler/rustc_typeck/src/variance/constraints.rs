@@ -308,11 +308,14 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
                 }
 
                 for projection in data.projection_bounds() {
-                    self.add_constraints_from_ty(
-                        current,
-                        projection.skip_binder().ty,
-                        self.invariant,
-                    );
+                    match projection.skip_binder().term {
+                        ty::Term::Ty(ty) => {
+                            self.add_constraints_from_ty(current, ty, self.invariant);
+                        }
+                        ty::Term::Const(c) => {
+                            self.add_constraints_from_const(current, c, self.invariant)
+                        }
+                    }
                 }
             }
 
@@ -405,8 +408,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
 
         match &val.val {
             ty::ConstKind::Unevaluated(uv) => {
-                let substs = uv.substs(self.tcx());
-                self.add_constraints_from_invariant_substs(current, substs, variance);
+                self.add_constraints_from_invariant_substs(current, uv.substs, variance);
             }
             _ => {}
         }

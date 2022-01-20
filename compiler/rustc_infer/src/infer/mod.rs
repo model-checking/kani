@@ -10,7 +10,6 @@ pub(crate) use self::undo_log::{InferCtxtUndoLogs, Snapshot, UndoLog};
 
 use crate::traits::{self, ObligationCause, PredicateObligations, TraitEngine};
 
-use hir::def_id::CRATE_DEF_ID;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::Lrc;
 use rustc_data_structures::undo_log::Rollback;
@@ -291,7 +290,12 @@ pub struct InferCtxt<'a, 'tcx> {
 
     /// The `DefId` of the item in whose context we are performing inference or typeck.
     /// It is used to check whether an opaque type use is a defining use.
-    pub defining_use_anchor: LocalDefId,
+    ///
+    /// If it is `None`, we can't resolve opaque types here and need to bubble up
+    /// the obligation. This frequently happens for
+    /// short lived InferCtxt within queries. The opaque type obligations are forwarded
+    /// to the outside until the end up in an `InferCtxt` for typeck or borrowck.
+    pub defining_use_anchor: Option<LocalDefId>,
 
     /// During type-checking/inference of a body, `in_progress_typeck_results`
     /// contains a reference to the typeck results being built up, which are
@@ -547,7 +551,7 @@ impl<'tcx> fmt::Display for FixupError<'tcx> {
 pub struct InferCtxtBuilder<'tcx> {
     tcx: TyCtxt<'tcx>,
     fresh_typeck_results: Option<RefCell<ty::TypeckResults<'tcx>>>,
-    defining_use_anchor: LocalDefId,
+    defining_use_anchor: Option<LocalDefId>,
 }
 
 pub trait TyCtxtInferExt<'tcx> {
@@ -556,11 +560,7 @@ pub trait TyCtxtInferExt<'tcx> {
 
 impl<'tcx> TyCtxtInferExt<'tcx> for TyCtxt<'tcx> {
     fn infer_ctxt(self) -> InferCtxtBuilder<'tcx> {
-        InferCtxtBuilder {
-            tcx: self,
-            defining_use_anchor: CRATE_DEF_ID,
-            fresh_typeck_results: None,
-        }
+        InferCtxtBuilder { tcx: self, defining_use_anchor: None, fresh_typeck_results: None }
     }
 }
 
@@ -580,7 +580,7 @@ impl<'tcx> InferCtxtBuilder<'tcx> {
     /// (via `with_fresh_in_progress_typeck_results`) and for the inference context used
     /// in mir borrowck.
     pub fn with_opaque_type_inference(mut self, defining_use_anchor: LocalDefId) -> Self {
-        self.defining_use_anchor = defining_use_anchor;
+        self.defining_use_anchor = Some(defining_use_anchor);
         self
     }
 
@@ -1585,8 +1585,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         unevaluated: ty::Unevaluated<'tcx>,
         span: Option<Span>,
     ) -> EvalToConstValueResult<'tcx> {
-        let mut substs = unevaluated.substs(self.tcx);
-        substs = self.resolve_vars_if_possible(substs);
+        let substs = self.resolve_vars_if_possible(unevaluated.substs);
 
         // Postpone the evaluation of constants whose substs depend on inference
         // variables
@@ -1599,7 +1598,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 
         let unevaluated = ty::Unevaluated {
             def: unevaluated.def,
-            substs_: Some(substs_erased),
+            substs: substs_erased,
             promoted: unevaluated.promoted,
         };
 

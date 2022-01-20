@@ -960,7 +960,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
     /// returns a `hir::TypeBinding` representing `Item`.
     fn lower_assoc_ty_constraint(
         &mut self,
-        constraint: &AssocTyConstraint,
+        constraint: &AssocConstraint,
         mut itctx: ImplTraitContext<'_, 'hir>,
     ) -> hir::TypeBinding<'hir> {
         debug!("lower_assoc_ty_constraint(constraint={:?}, itctx={:?})", constraint, itctx);
@@ -997,10 +997,14 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         };
 
         let kind = match constraint.kind {
-            AssocTyConstraintKind::Equality { ref ty } => {
-                hir::TypeBindingKind::Equality { ty: self.lower_ty(ty, itctx) }
+            AssocConstraintKind::Equality { ref term } => {
+                let term = match term {
+                    Term::Ty(ref ty) => self.lower_ty(ty, itctx).into(),
+                    Term::Const(ref c) => self.lower_anon_const(c).into(),
+                };
+                hir::TypeBindingKind::Equality { term }
             }
-            AssocTyConstraintKind::Bound { ref bounds } => {
+            AssocConstraintKind::Bound { ref bounds } => {
                 let mut capturable_lifetimes;
                 let mut parent_def_id = self.current_hir_id_owner;
                 // Piggy-back on the `impl Trait` context to figure out the correct behavior.
@@ -1078,7 +1082,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                             itctx,
                         );
 
-                        hir::TypeBindingKind::Equality { ty }
+                        hir::TypeBindingKind::Equality { term: ty.into() }
                     })
                 } else {
                     // Desugar `AssocTy: Bounds` into a type binding where the
@@ -2436,12 +2440,6 @@ fn lifetimes_from_impl_trait_bounds(
     }
 
     impl<'r, 'v> intravisit::Visitor<'v> for ImplTraitLifetimeCollector<'r> {
-        type Map = intravisit::ErasedMap<'v>;
-
-        fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-            intravisit::NestedVisitorMap::None
-        }
-
         fn visit_generic_args(&mut self, span: Span, parameters: &'v hir::GenericArgs<'v>) {
             // Don't collect elided lifetimes used inside of `Fn()` syntax.
             if parameters.parenthesized {

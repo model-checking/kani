@@ -190,8 +190,8 @@ pub trait Visitor<'ast>: Sized {
     fn visit_generic_arg(&mut self, generic_arg: &'ast GenericArg) {
         walk_generic_arg(self, generic_arg)
     }
-    fn visit_assoc_ty_constraint(&mut self, constraint: &'ast AssocTyConstraint) {
-        walk_assoc_ty_constraint(self, constraint)
+    fn visit_assoc_constraint(&mut self, constraint: &'ast AssocConstraint) {
+        walk_assoc_constraint(self, constraint)
     }
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         walk_attribute(self, attr)
@@ -464,7 +464,7 @@ where
             for arg in &data.args {
                 match arg {
                     AngleBracketedArg::Arg(a) => visitor.visit_generic_arg(a),
-                    AngleBracketedArg::Constraint(c) => visitor.visit_assoc_ty_constraint(c),
+                    AngleBracketedArg::Constraint(c) => visitor.visit_assoc_constraint(c),
                 }
             }
         }
@@ -486,19 +486,17 @@ where
     }
 }
 
-pub fn walk_assoc_ty_constraint<'a, V: Visitor<'a>>(
-    visitor: &mut V,
-    constraint: &'a AssocTyConstraint,
-) {
+pub fn walk_assoc_constraint<'a, V: Visitor<'a>>(visitor: &mut V, constraint: &'a AssocConstraint) {
     visitor.visit_ident(constraint.ident);
     if let Some(ref gen_args) = constraint.gen_args {
         visitor.visit_generic_args(gen_args.span(), gen_args);
     }
     match constraint.kind {
-        AssocTyConstraintKind::Equality { ref ty } => {
-            visitor.visit_ty(ty);
-        }
-        AssocTyConstraintKind::Bound { ref bounds } => {
+        AssocConstraintKind::Equality { ref term } => match term {
+            Term::Ty(ty) => visitor.visit_ty(ty),
+            Term::Const(c) => visitor.visit_anon_const(c),
+        },
+        AssocConstraintKind::Bound { ref bounds } => {
             walk_list!(visitor, visit_param_bound, bounds);
         }
     }
@@ -864,14 +862,6 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expression: &'a Expr) {
         ExprKind::MacCall(ref mac) => visitor.visit_mac_call(mac),
         ExprKind::Paren(ref subexpression) => visitor.visit_expr(subexpression),
         ExprKind::InlineAsm(ref asm) => walk_inline_asm(visitor, asm),
-        ExprKind::LlvmInlineAsm(ref ia) => {
-            for &(_, ref input) in &ia.inputs {
-                visitor.visit_expr(input)
-            }
-            for output in &ia.outputs {
-                visitor.visit_expr(&output.expr)
-            }
-        }
         ExprKind::Yield(ref optional_expression) => {
             walk_list!(visitor, visit_expr, optional_expression);
         }

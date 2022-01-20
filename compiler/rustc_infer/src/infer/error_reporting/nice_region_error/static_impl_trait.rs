@@ -7,7 +7,7 @@ use crate::traits::{ObligationCauseCode, UnifyReceiverContext};
 use rustc_data_structures::stable_set::FxHashSet;
 use rustc_errors::{struct_span_err, Applicability, DiagnosticBuilder, ErrorReported};
 use rustc_hir::def_id::DefId;
-use rustc_hir::intravisit::{walk_ty, ErasedMap, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{walk_ty, Visitor};
 use rustc_hir::{self as hir, GenericBound, Item, ItemKind, Lifetime, LifetimeName, Node, TyKind};
 use rustc_middle::ty::{
     self, AssocItemContainer, RegionKind, StaticLifetimeVisitor, Ty, TyCtxt, TypeFoldable,
@@ -187,6 +187,7 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
             | ObligationCauseCode::BlockTailExpression(hir_id) = cause.code()
             {
                 let parent_id = tcx.hir().get_parent_item(*hir_id);
+                let parent_id = tcx.hir().local_def_id_to_hir_id(parent_id);
                 if let Some(fn_decl) = tcx.hir().fn_decl_by_hir_id(parent_id) {
                     let mut span: MultiSpan = fn_decl.output.span().into();
                     let mut add_label = true;
@@ -425,7 +426,7 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
         let tcx = self.tcx();
         match tcx.hir().get_if_local(def_id) {
             Some(Node::ImplItem(impl_item)) => {
-                match tcx.hir().find(tcx.hir().get_parent_item(impl_item.hir_id())) {
+                match tcx.hir().find_by_def_id(tcx.hir().get_parent_item(impl_item.hir_id())) {
                     Some(Node::Item(Item {
                         kind: ItemKind::Impl(hir::Impl { self_ty, .. }),
                         ..
@@ -434,13 +435,13 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
                 }
             }
             Some(Node::TraitItem(trait_item)) => {
-                let parent_id = tcx.hir().get_parent_item(trait_item.hir_id());
-                match tcx.hir().find(parent_id) {
+                let trait_did = tcx.hir().get_parent_item(trait_item.hir_id());
+                match tcx.hir().find_by_def_id(trait_did) {
                     Some(Node::Item(Item { kind: ItemKind::Trait(..), .. })) => {
                         // The method being called is defined in the `trait`, but the `'static`
                         // obligation comes from the `impl`. Find that `impl` so that we can point
                         // at it in the suggestion.
-                        let trait_did = tcx.hir().local_def_id(parent_id).to_def_id();
+                        let trait_did = trait_did.to_def_id();
                         match tcx
                             .hir()
                             .trait_impls(trait_did)
@@ -557,12 +558,6 @@ impl<'a, 'tcx> NiceRegionError<'a, 'tcx> {
 pub(super) struct TraitObjectVisitor(pub(super) FxHashSet<DefId>);
 
 impl<'tcx> TypeVisitor<'tcx> for TraitObjectVisitor {
-    fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-        // The default anon const substs cannot include
-        // trait objects, so we don't have to bother looking.
-        None
-    }
-
     fn visit_ty(&mut self, t: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
         match t.kind() {
             ty::Dynamic(preds, RegionKind::ReStatic) => {
@@ -580,12 +575,6 @@ impl<'tcx> TypeVisitor<'tcx> for TraitObjectVisitor {
 pub(super) struct HirTraitObjectVisitor<'a>(pub(super) &'a mut Vec<Span>, pub(super) DefId);
 
 impl<'a, 'tcx> Visitor<'tcx> for HirTraitObjectVisitor<'a> {
-    type Map = ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_ty(&mut self, t: &'tcx hir::Ty<'tcx>) {
         if let TyKind::TraitObject(
             poly_trait_refs,

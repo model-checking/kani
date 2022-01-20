@@ -4,21 +4,22 @@ use clippy_utils::source::snippet_opt;
 use clippy_utils::ty::{get_associated_type, get_iterator_item_ty, implements_trait};
 use clippy_utils::{fn_def_id, get_parent_expr, path_to_local_id, usage};
 use rustc_errors::Applicability;
-use rustc_hir::intravisit::{walk_expr, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{walk_expr, Visitor};
 use rustc_hir::{def_id::DefId, BorrowKind, Expr, ExprKind, HirId, LangItem, Mutability, Pat};
 use rustc_lint::LateContext;
-use rustc_middle::{hir::map::Map, ty};
+use rustc_middle::hir::nested_filter;
+use rustc_middle::ty;
 use rustc_span::{sym, Symbol};
 
 use super::UNNECESSARY_TO_OWNED;
 
-pub fn check(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>, method_name: Symbol, receiver: &'tcx Expr<'tcx>) -> bool {
+pub fn check(cx: &LateContext<'_>, expr: &Expr<'_>, method_name: Symbol, receiver: &Expr<'_>) -> bool {
     if_chain! {
         if let Some(parent) = get_parent_expr(cx, expr);
         if let Some(callee_def_id) = fn_def_id(cx, parent);
         if is_into_iter(cx, callee_def_id);
         then {
-            check_for_loop_iter(cx, parent, method_name, receiver)
+            check_for_loop_iter(cx, parent, method_name, receiver, false)
         } else {
             false
         }
@@ -30,10 +31,11 @@ pub fn check(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>, method_name: Symbol
 /// include this code directly is so that it can be called from
 /// `unnecessary_into_owned::check_into_iter_call_arg`.
 pub fn check_for_loop_iter(
-    cx: &LateContext<'tcx>,
-    expr: &'tcx Expr<'tcx>,
+    cx: &LateContext<'_>,
+    expr: &Expr<'_>,
     method_name: Symbol,
-    receiver: &'tcx Expr<'tcx>,
+    receiver: &Expr<'_>,
+    cloned_before_iter: bool,
 ) -> bool {
     if_chain! {
         if let Some(grandparent) = get_parent_expr(cx, expr).and_then(|parent| get_parent_expr(cx, parent));
@@ -70,12 +72,22 @@ pub fn check_for_loop_iter(
                 expr.span,
                 &format!("unnecessary use of `{}`", method_name),
                 |diag| {
-                    diag.span_suggestion(expr.span, "use", snippet, Applicability::MachineApplicable);
+                    // If `check_into_iter_call_arg` called `check_for_loop_iter` because a call to
+                    // a `to_owned`-like function was removed, then the next suggestion may be
+                    // incorrect. This is because the iterator that results from the call's removal
+                    // could hold a reference to a resource that is used mutably. See
+                    // https://github.com/rust-lang/rust-clippy/issues/8148.
+                    let applicability = if cloned_before_iter {
+                        Applicability::MaybeIncorrect
+                    } else {
+                        Applicability::MachineApplicable
+                    };
+                    diag.span_suggestion(expr.span, "use", snippet, applicability);
                     for addr_of_expr in addr_of_exprs {
                         match addr_of_expr.kind {
                             ExprKind::AddrOf(_, _, referent) => {
                                 let span = addr_of_expr.span.with_hi(referent.span.lo());
-                                diag.span_suggestion(span, "remove this `&`", String::new(), Applicability::MachineApplicable);
+                                diag.span_suggestion(span, "remove this `&`", String::new(), applicability);
                             }
                             _ => unreachable!(),
                         }
@@ -90,7 +102,7 @@ pub fn check_for_loop_iter(
 
 /// The core logic of `check_for_loop_iter` above, this function wraps a use of
 /// `CloneOrCopyVisitor`.
-fn clone_or_copy_needed(
+fn clone_or_copy_needed<'tcx>(
     cx: &LateContext<'tcx>,
     pat: &Pat<'tcx>,
     body: &'tcx Expr<'tcx>,
@@ -128,10 +140,10 @@ struct CloneOrCopyVisitor<'cx, 'tcx> {
 }
 
 impl<'cx, 'tcx> Visitor<'tcx> for CloneOrCopyVisitor<'cx, 'tcx> {
-    type Map = Map<'tcx>;
+    type NestedFilter = nested_filter::OnlyBodies;
 
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::OnlyBodies(self.cx.tcx.hir())
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.cx.tcx.hir()
     }
 
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {

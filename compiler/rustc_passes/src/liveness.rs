@@ -90,10 +90,10 @@ use rustc_errors::Applicability;
 use rustc_hir as hir;
 use rustc_hir::def::*;
 use rustc_hir::def_id::LocalDefId;
-use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Expr, HirId, HirIdMap, HirIdSet};
 use rustc_index::vec::IndexVec;
-use rustc_middle::hir::map::Map;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, DefIdTree, RootVariableMinCaptureList, Ty, TyCtxt};
 use rustc_session::lint;
@@ -103,7 +103,6 @@ use rustc_span::Span;
 use std::collections::VecDeque;
 use std::io;
 use std::io::prelude::*;
-use std::iter;
 use std::rc::Rc;
 
 mod rwu_table;
@@ -317,10 +316,10 @@ impl<'tcx> IrMaps<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
-    type Map = Map<'tcx>;
+    type NestedFilter = nested_filter::OnlyBodies;
 
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    fn nested_visit_map(&mut self) -> Self::Map {
+        self.tcx.hir()
     }
 
     fn visit_body(&mut self, body: &'tcx hir::Body<'tcx>) {
@@ -470,7 +469,6 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             | hir::ExprKind::Struct(..)
             | hir::ExprKind::Repeat(..)
             | hir::ExprKind::InlineAsm(..)
-            | hir::ExprKind::LlvmInlineAsm(..)
             | hir::ExprKind::Box(..)
             | hir::ExprKind::Type(..)
             | hir::ExprKind::Err
@@ -726,7 +724,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                             );
                             self.acc(self.exit_ln, var, ACC_READ | ACC_USE);
                         }
-                        ty::UpvarCapture::ByValue(_) => {}
+                        ty::UpvarCapture::ByValue => {}
                     }
                 }
             }
@@ -1091,26 +1089,6 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                 succ
             }
 
-            hir::ExprKind::LlvmInlineAsm(ref asm) => {
-                let ia = &asm.inner;
-                let outputs = asm.outputs_exprs;
-                let inputs = asm.inputs_exprs;
-                let succ = iter::zip(&ia.outputs, outputs).rev().fold(succ, |succ, (o, output)| {
-                    // see comment on places
-                    // in propagate_through_place_components()
-                    if o.is_indirect {
-                        self.propagate_through_expr(output, succ)
-                    } else {
-                        let acc = if o.is_rw { ACC_WRITE | ACC_READ } else { ACC_WRITE };
-                        let succ = self.write_place(output, succ, acc);
-                        self.propagate_through_place_components(output, succ)
-                    }
-                });
-
-                // Inputs are executed first. Propagate last because of rev order
-                self.propagate_through_exprs(inputs, succ)
-            }
-
             hir::ExprKind::Lit(..)
             | hir::ExprKind::ConstBlock(..)
             | hir::ExprKind::Err
@@ -1327,12 +1305,6 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
 // Checking for error conditions
 
 impl<'a, 'tcx> Visitor<'tcx> for Liveness<'a, 'tcx> {
-    type Map = intravisit::ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_local(&mut self, local: &'tcx hir::Local<'tcx>) {
         self.check_unused_vars_in_pat(&local.pat, None, |spans, hir_id, ln, var| {
             if local.init.is_some() {
@@ -1384,20 +1356,6 @@ fn check_expr<'tcx>(this: &mut Liveness<'_, 'tcx>, expr: &'tcx Expr<'tcx>) {
                     }
                     _ => {}
                 }
-            }
-        }
-
-        hir::ExprKind::LlvmInlineAsm(ref asm) => {
-            for input in asm.inputs_exprs {
-                this.visit_expr(input);
-            }
-
-            // Output operands must be places
-            for (o, output) in iter::zip(&asm.inner.outputs, asm.outputs_exprs) {
-                if !o.is_indirect {
-                    this.check_place(output);
-                }
-                this.visit_expr(output);
             }
         }
 
@@ -1481,7 +1439,7 @@ impl<'tcx> Liveness<'_, 'tcx> {
         for (&var_hir_id, min_capture_list) in closure_min_captures {
             for captured_place in min_capture_list {
                 match captured_place.info.capture_kind {
-                    ty::UpvarCapture::ByValue(_) => {}
+                    ty::UpvarCapture::ByValue => {}
                     ty::UpvarCapture::ByRef(..) => continue,
                 };
                 let span = captured_place.get_capture_kind_span(self.ir.tcx);

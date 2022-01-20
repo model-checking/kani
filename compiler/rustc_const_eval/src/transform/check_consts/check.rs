@@ -221,8 +221,7 @@ impl<'mir, 'tcx> Checker<'mir, 'tcx> {
             // Prevent const trait methods from being annotated as `stable`.
             // FIXME: Do this as part of stability checking.
             if self.is_const_stable_const_fn() {
-                let hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
-                if crate::const_eval::is_parent_const_impl_raw(tcx, hir_id) {
+                if crate::const_eval::is_parent_const_impl_raw(tcx, def_id) {
                     self.ccx
                         .tcx
                         .sess
@@ -348,7 +347,7 @@ impl<'mir, 'tcx> Checker<'mir, 'tcx> {
     fn check_local_or_return_ty(&mut self, ty: Ty<'tcx>, local: Local) {
         let kind = self.body.local_kind(local);
 
-        for ty in ty.walk(self.tcx) {
+        for ty in ty.walk() {
             let ty = match ty.unpack() {
                 GenericArgKind::Type(ty) => ty,
 
@@ -752,10 +751,6 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
         self.super_statement(statement, location);
 
         match statement.kind {
-            StatementKind::LlvmInlineAsm { .. } => {
-                self.check_op(ops::InlineAsm);
-            }
-
             StatementKind::Assign(..)
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::FakeRead(..)
@@ -810,7 +805,7 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
                         param_env,
                         Binder::dummy(TraitPredicate {
                             trait_ref,
-                            constness: ty::BoundConstness::ConstIfConst,
+                            constness: ty::BoundConstness::NotConst,
                             polarity: ty::ImplPolarity::Positive,
                         }),
                     );
@@ -829,6 +824,10 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
                             return;
                         }
                         Ok(Some(ImplSource::UserDefined(data))) => {
+                            if let hir::Constness::NotConst = tcx.impl_constness(data.impl_def_id) {
+                                self.check_op(ops::FnCallNonConst(None));
+                                return;
+                            }
                             let callee_name = tcx.item_name(callee);
                             if let Some(&did) = tcx
                                 .associated_item_def_ids(data.impl_def_id)

@@ -3,6 +3,7 @@
 //! [rustc dev guide]: https://rustc-dev-guide.rust-lang.org/hir.html
 
 pub mod map;
+pub mod nested_filter;
 pub mod place;
 
 use crate::ty::query::Providers;
@@ -58,13 +59,13 @@ impl<'tcx> TyCtxt<'tcx> {
 pub fn provide(providers: &mut Providers) {
     providers.parent_module_from_def_id = |tcx, id| {
         let hir = tcx.hir();
-        hir.local_def_id(hir.get_module_parent_node(hir.local_def_id_to_hir_id(id)))
+        hir.get_module_parent_node(hir.local_def_id_to_hir_id(id))
     };
     providers.hir_crate = |tcx, ()| tcx.untracked_crate;
     providers.crate_hash = map::crate_hash;
     providers.hir_module_items = map::hir_module_items;
     providers.hir_owner = |tcx, id| {
-        let owner = tcx.hir_crate(()).owners[id].as_ref()?;
+        let owner = tcx.hir_crate(()).owners.get(id)?.as_ref()?;
         let node = owner.node();
         Some(Owner { node, hash_without_bodies: owner.nodes.hash_without_bodies })
     };

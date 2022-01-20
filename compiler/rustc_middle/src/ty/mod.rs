@@ -57,8 +57,8 @@ pub use self::binding::BindingMode::*;
 pub use self::closure::{
     is_ancestor_or_same_capture, place_to_string_for_capture, BorrowKind, CaptureInfo,
     CapturedPlace, ClosureKind, MinCaptureInformationMap, MinCaptureList,
-    RootVariableMinCaptureList, UpvarBorrow, UpvarCapture, UpvarCaptureMap, UpvarId, UpvarListMap,
-    UpvarPath, CAPTURE_STRUCT_LOCAL,
+    RootVariableMinCaptureList, UpvarCapture, UpvarCaptureMap, UpvarId, UpvarListMap, UpvarPath,
+    CAPTURE_STRUCT_LOCAL,
 };
 pub use self::consts::{Const, ConstInt, ConstKind, InferConst, ScalarInt, Unevaluated, ValTree};
 pub use self::context::{
@@ -464,6 +464,7 @@ impl<'a, 'tcx> HashStable<StableHashingContext<'a>> for TyS<'tcx> {
 }
 
 #[rustc_diagnostic_item = "Ty"]
+#[cfg_attr(not(bootstrap), rustc_pass_by_value)]
 pub type Ty<'tcx> = &'tcx TyS<'tcx>;
 
 impl ty::EarlyBoundRegion {
@@ -483,7 +484,7 @@ crate struct PredicateInner<'tcx> {
 }
 
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-static_assert_size!(PredicateInner<'_>, 48);
+static_assert_size!(PredicateInner<'_>, 56);
 
 #[derive(Clone, Copy, Lift)]
 pub struct Predicate<'tcx> {
@@ -794,6 +795,31 @@ pub struct CoercePredicate<'tcx> {
 }
 pub type PolyCoercePredicate<'tcx> = ty::Binder<'tcx, CoercePredicate<'tcx>>;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, TyEncodable, TyDecodable)]
+#[derive(HashStable, TypeFoldable)]
+pub enum Term<'tcx> {
+    Ty(Ty<'tcx>),
+    Const(&'tcx Const<'tcx>),
+}
+
+impl<'tcx> From<Ty<'tcx>> for Term<'tcx> {
+    fn from(ty: Ty<'tcx>) -> Self {
+        Term::Ty(ty)
+    }
+}
+
+impl<'tcx> From<&'tcx Const<'tcx>> for Term<'tcx> {
+    fn from(c: &'tcx Const<'tcx>) -> Self {
+        Term::Const(c)
+    }
+}
+
+impl<'tcx> Term<'tcx> {
+    pub fn ty(&self) -> Option<Ty<'tcx>> {
+        if let Term::Ty(ty) = self { Some(ty) } else { None }
+    }
+}
+
 /// This kind of predicate has no *direct* correspondent in the
 /// syntax, but it roughly corresponds to the syntactic forms:
 ///
@@ -810,7 +836,7 @@ pub type PolyCoercePredicate<'tcx> = ty::Binder<'tcx, CoercePredicate<'tcx>>;
 #[derive(HashStable, TypeFoldable)]
 pub struct ProjectionPredicate<'tcx> {
     pub projection_ty: ProjectionTy<'tcx>,
-    pub ty: Ty<'tcx>,
+    pub term: Term<'tcx>,
 }
 
 pub type PolyProjectionPredicate<'tcx> = Binder<'tcx, ProjectionPredicate<'tcx>>;
@@ -835,8 +861,8 @@ impl<'tcx> PolyProjectionPredicate<'tcx> {
         self.map_bound(|predicate| predicate.projection_ty.trait_ref(tcx))
     }
 
-    pub fn ty(&self) -> Binder<'tcx, Ty<'tcx>> {
-        self.map_bound(|predicate| predicate.ty)
+    pub fn term(&self) -> Binder<'tcx, Term<'tcx>> {
+        self.map_bound(|predicate| predicate.term)
     }
 
     /// The `DefId` of the `TraitItem` for the associated type.
@@ -1417,7 +1443,7 @@ impl<'tcx> ParamEnv<'tcx> {
             Reveal::UserFacing => ParamEnvAnd { param_env: self, value },
 
             Reveal::All => {
-                if value.is_known_global() {
+                if value.is_global() {
                     ParamEnvAnd { param_env: self.without_caller_bounds(), value }
                 } else {
                     ParamEnvAnd { param_env: self, value }
@@ -2082,8 +2108,7 @@ impl<'tcx> TyCtxt<'tcx> {
     /// with the name of the crate containing the impl.
     pub fn span_of_impl(self, impl_did: DefId) -> Result<Span, Symbol> {
         if let Some(impl_did) = impl_did.as_local() {
-            let hir_id = self.hir().local_def_id_to_hir_id(impl_did);
-            Ok(self.hir().span(hir_id))
+            Ok(self.def_span(impl_did))
         } else {
             Err(self.crate_name(impl_did.krate))
         }
@@ -2130,7 +2155,7 @@ impl<'tcx> TyCtxt<'tcx> {
 /// Yields the parent function's `LocalDefId` if `def_id` is an `impl Trait` definition.
 pub fn is_impl_trait_defn(tcx: TyCtxt<'_>, def_id: DefId) -> Option<LocalDefId> {
     let def_id = def_id.as_local()?;
-    if let Node::Item(item) = tcx.hir().get(tcx.hir().local_def_id_to_hir_id(def_id)) {
+    if let Node::Item(item) = tcx.hir().get_by_def_id(def_id) {
         if let hir::ItemKind::OpaqueTy(ref opaque_ty) = item.kind {
             return match opaque_ty.origin {
                 hir::OpaqueTyOrigin::FnReturn(parent) | hir::OpaqueTyOrigin::AsyncFn(parent) => {

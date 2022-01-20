@@ -3,7 +3,7 @@ use rustc_data_structures::sorted_map::SortedMap;
 use rustc_hir as hir;
 use rustc_hir::def_id::LocalDefId;
 use rustc_hir::definitions;
-use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::*;
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_session::Session;
@@ -101,15 +101,9 @@ impl<'a, 'hir> NodeCollector<'a, 'hir> {
 }
 
 impl<'a, 'hir> Visitor<'hir> for NodeCollector<'a, 'hir> {
-    type Map = !;
-
     /// Because we want to track parent items and so forth, enable
     /// deep walking so that we walk nested items in the context of
     /// their outer items.
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        panic!("`visit_nested_xxx` must be manually implemented in this visitor");
-    }
 
     fn visit_nested_item(&mut self, item: ItemId) {
         debug!("visit_nested_item: {:?}", item);
@@ -335,7 +329,8 @@ impl<'a, 'hir> Visitor<'hir> for NodeCollector<'a, 'hir> {
     fn visit_impl_item_ref(&mut self, ii: &'hir ImplItemRef) {
         // Do not visit the duplicate information in ImplItemRef. We want to
         // map the actual nodes, not the duplicate ones in the *Ref.
-        let ImplItemRef { id, ident: _, kind: _, span: _, defaultness: _ } = *ii;
+        let ImplItemRef { id, ident: _, kind: _, span: _, defaultness: _, trait_item_def_id: _ } =
+            *ii;
 
         self.visit_nested_impl_item(id);
     }

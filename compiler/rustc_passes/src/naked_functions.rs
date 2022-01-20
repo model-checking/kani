@@ -3,7 +3,7 @@
 use rustc_ast::{Attribute, InlineAsmOptions};
 use rustc_hir as hir;
 use rustc_hir::def_id::LocalDefId;
-use rustc_hir::intravisit::{ErasedMap, FnKind, NestedVisitorMap, Visitor};
+use rustc_hir::intravisit::{FnKind, Visitor};
 use rustc_hir::{ExprKind, HirId, InlineAsmOperand, StmtKind};
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::TyCtxt;
@@ -29,12 +29,6 @@ struct CheckNakedFunctions<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for CheckNakedFunctions<'tcx> {
-    type Map = ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_fn(
         &mut self,
         fk: FnKind<'_>,
@@ -129,12 +123,6 @@ struct CheckParameters<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for CheckParameters<'tcx> {
-    type Map = ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         if let hir::ExprKind::Path(hir::QPath::Resolved(
             _,
@@ -236,22 +224,6 @@ impl<'tcx> CheckInlineAssembly<'tcx> {
                 self.check_inline_asm(expr.hir_id, asm, span);
             }
 
-            ExprKind::LlvmInlineAsm(..) => {
-                self.items.push((ItemKind::Asm, span));
-                self.tcx.struct_span_lint_hir(
-                    UNSUPPORTED_NAKED_FUNCTIONS,
-                    expr.hir_id,
-                    span,
-                    |lint| {
-                        lint.build(
-                            "the LLVM-style inline assembly is unsupported in naked functions",
-                        )
-                        .help("use the new asm! syntax specified in RFC 2873")
-                        .emit();
-                    },
-                );
-            }
-
             ExprKind::DropTemps(..) | ExprKind::Block(..) | ExprKind::Err => {
                 hir::intravisit::walk_expr(self, expr);
             }
@@ -312,12 +284,6 @@ impl<'tcx> CheckInlineAssembly<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for CheckInlineAssembly<'tcx> {
-    type Map = ErasedMap<'tcx>;
-
-    fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-        NestedVisitorMap::None
-    }
-
     fn visit_stmt(&mut self, stmt: &'tcx hir::Stmt<'tcx>) {
         match stmt.kind {
             StmtKind::Item(..) => {}

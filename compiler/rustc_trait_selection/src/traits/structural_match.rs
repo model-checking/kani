@@ -48,7 +48,6 @@ pub enum NonStructuralMatchTy<'tcx> {
 /// that arose when the requirement was not enforced completely, see
 /// Rust RFC 1445, rust-lang/rust#61188, and rust-lang/rust#62307.
 pub fn search_for_structural_match_violation<'tcx>(
-    _id: hir::HirId,
     span: Span,
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
@@ -131,9 +130,6 @@ impl<'a, 'tcx> Search<'a, 'tcx> {
 
 impl<'a, 'tcx> TypeVisitor<'tcx> for Search<'a, 'tcx> {
     type BreakTy = NonStructuralMatchTy<'tcx>;
-    fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-        Some(self.tcx())
-    }
 
     fn visit_ty(&mut self, ty: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
         debug!("Search visiting ty: {:?}", ty);

@@ -316,7 +316,6 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         );
 
         concrete_ty.visit_with(&mut ConstrainOpaqueTypeRegionVisitor {
-            tcx: self.tcx,
             op: |r| {
                 self.member_constraint(
                     opaque_type_key.def_id,
@@ -327,6 +326,31 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 )
             },
         });
+    }
+
+    fn opaque_type_origin(&self, def_id: LocalDefId) -> Option<hir::OpaqueTyOrigin> {
+        let tcx = self.tcx;
+        let opaque_hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
+        let parent_def_id = self.defining_use_anchor?;
+        let item_kind = &tcx.hir().expect_item(def_id).kind;
+        let hir::ItemKind::OpaqueTy(hir::OpaqueTy { origin, ..  }) = item_kind else {
+            span_bug!(
+                tcx.def_span(def_id),
+                "weird opaque type: {:#?}",
+                item_kind
+            )
+        };
+        let in_definition_scope = match *origin {
+            // Async `impl Trait`
+            hir::OpaqueTyOrigin::AsyncFn(parent) => parent == parent_def_id,
+            // Anonymous `impl Trait`
+            hir::OpaqueTyOrigin::FnReturn(parent) => parent == parent_def_id,
+            // Named `type Foo = impl Bar;`
+            hir::OpaqueTyOrigin::TyAlias => {
+                may_define_opaque_type(tcx, parent_def_id, opaque_hir_id)
+            }
+        };
+        in_definition_scope.then_some(*origin)
     }
 }
 
@@ -343,19 +367,14 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 //
 // We ignore any type parameters because impl trait values are assumed to
 // capture all the in-scope type parameters.
-struct ConstrainOpaqueTypeRegionVisitor<'tcx, OP> {
-    tcx: TyCtxt<'tcx>,
+struct ConstrainOpaqueTypeRegionVisitor<OP> {
     op: OP,
 }
 
-impl<'tcx, OP> TypeVisitor<'tcx> for ConstrainOpaqueTypeRegionVisitor<'tcx, OP>
+impl<'tcx, OP> TypeVisitor<'tcx> for ConstrainOpaqueTypeRegionVisitor<OP>
 where
     OP: FnMut(ty::Region<'tcx>),
 {
-    fn tcx_for_anon_const_substs(&self) -> Option<TyCtxt<'tcx>> {
-        Some(self.tcx)
-    }
-
     fn visit_binder<T: TypeFoldable<'tcx>>(
         &mut self,
         t: &ty::Binder<'tcx, T>,
@@ -377,7 +396,7 @@ where
 
     fn visit_ty(&mut self, ty: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
         // We're only interested in types involving regions
-        if !ty.flags().intersects(ty::TypeFlags::HAS_POTENTIAL_FREE_REGIONS) {
+        if !ty.flags().intersects(ty::TypeFlags::HAS_FREE_REGIONS) {
             return ControlFlow::CONTINUE;
         }
 
@@ -459,31 +478,10 @@ impl<'a, 'tcx> Instantiator<'a, 'tcx> {
                     // }
                     // ```
                     if let Some(def_id) = def_id.as_local() {
-                        let opaque_hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
-                        let parent_def_id = self.infcx.defining_use_anchor;
-                        let item_kind = &tcx.hir().expect_item(def_id).kind;
-                        let hir::ItemKind::OpaqueTy(hir::OpaqueTy { origin, ..  }) = item_kind else {
-                            span_bug!(
-                                self.value_span,
-                                "weird opaque type: {:#?}, {:#?}",
-                                ty.kind(),
-                                item_kind
-                            )
-                        };
-                        let in_definition_scope = match *origin {
-                            // Async `impl Trait`
-                            hir::OpaqueTyOrigin::AsyncFn(parent) => parent == parent_def_id,
-                            // Anonymous `impl Trait`
-                            hir::OpaqueTyOrigin::FnReturn(parent) => parent == parent_def_id,
-                            // Named `type Foo = impl Bar;`
-                            hir::OpaqueTyOrigin::TyAlias => {
-                                may_define_opaque_type(tcx, parent_def_id, opaque_hir_id)
-                            }
-                        };
-                        if in_definition_scope {
+                        if let Some(origin) = self.infcx.opaque_type_origin(def_id) {
                             let opaque_type_key =
                                 OpaqueTypeKey { def_id: def_id.to_def_id(), substs };
-                            return self.fold_opaque_ty(ty, opaque_type_key, *origin);
+                            return self.fold_opaque_ty(ty, opaque_type_key, origin);
                         }
 
                         debug!(
@@ -551,6 +549,22 @@ impl<'a, 'tcx> Instantiator<'a, 'tcx> {
             let predicate = predicate.subst(tcx, substs);
             debug!(?predicate);
 
+            let predicate = predicate.fold_with(&mut BottomUpFolder {
+                tcx,
+                ty_op: |ty| match *ty.kind() {
+                    // Replace all other mentions of the same opaque type with the hidden type,
+                    // as the bounds must hold on the hidden type after all.
+                    ty::Opaque(def_id2, substs2) if def_id == def_id2 && substs == substs2 => {
+                        ty_var
+                    }
+                    // Instantiate nested instances of `impl Trait`.
+                    ty::Opaque(..) => self.instantiate_opaque_types_in_map(ty),
+                    _ => ty,
+                },
+                lt_op: |lt| lt,
+                ct_op: |ct| ct,
+            });
+
             // We can't normalize associated types from `rustc_infer`, but we can eagerly register inference variables for them.
             let predicate = predicate.fold_with(&mut BottomUpFolder {
                 tcx,
@@ -570,15 +584,10 @@ impl<'a, 'tcx> Instantiator<'a, 'tcx> {
             debug!(?predicate);
 
             if let ty::PredicateKind::Projection(projection) = predicate.kind().skip_binder() {
-                if projection.ty.references_error() {
-                    // No point on adding these obligations since there's a type error involved.
+                if projection.term.references_error() {
                     return tcx.ty_error();
                 }
             }
-            // Change the predicate to refer to the type variable,
-            // which will be the concrete type instead of the opaque type.
-            // This also instantiates nested instances of `impl Trait`.
-            let predicate = self.instantiate_opaque_types_in_map(predicate);
 
             let cause =
                 traits::ObligationCause::new(self.value_span, self.body_id, traits::OpaqueType);
@@ -619,7 +628,7 @@ fn may_define_opaque_type(tcx: TyCtxt<'_>, def_id: LocalDefId, opaque_hir_id: hi
     let scope = tcx.hir().get_defining_scope(opaque_hir_id);
     // We walk up the node tree until we hit the root or the scope of the opaque type.
     while hir_id != scope && hir_id != hir::CRATE_HIR_ID {
-        hir_id = tcx.hir().get_parent_item(hir_id);
+        hir_id = tcx.hir().local_def_id_to_hir_id(tcx.hir().get_parent_item(hir_id));
     }
     // Syntactically, we are allowed to define the concrete type if:
     let res = hir_id == scope;

@@ -5,8 +5,8 @@ use crate::intravisit::FnKind;
 use crate::LangItem;
 
 use rustc_ast::util::parser::ExprPrecedence;
-use rustc_ast::{self as ast, CrateSugar, LlvmAsmDialect};
-use rustc_ast::{Attribute, FloatTy, IntTy, Label, LitKind, StrStyle, TraitObjectSyntax, UintTy};
+use rustc_ast::{self as ast, CrateSugar};
+use rustc_ast::{Attribute, FloatTy, IntTy, Label, LitKind, TraitObjectSyntax, UintTy};
 pub use rustc_ast::{BorrowKind, ImplPolarity, IsAuto};
 pub use rustc_ast::{CaptureBy, Movability, Mutability};
 use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
@@ -293,10 +293,6 @@ impl GenericArg<'_> {
         }
     }
 
-    pub fn is_const(&self) -> bool {
-        matches!(self, GenericArg::Const(_))
-    }
-
     pub fn is_synthetic(&self) -> bool {
         matches!(self, GenericArg::Lifetime(lifetime) if lifetime.name.ident() == Ident::empty())
     }
@@ -316,6 +312,13 @@ impl GenericArg<'_> {
             GenericArg::Type(_) => ast::ParamKindOrd::Type,
             GenericArg::Const(_) => ast::ParamKindOrd::Const,
             GenericArg::Infer(_) => ast::ParamKindOrd::Infer,
+        }
+    }
+
+    pub fn is_ty_or_const(&self) -> bool {
+        match self {
+            GenericArg::Lifetime(_) => false,
+            GenericArg::Type(_) | GenericArg::Const(_) | GenericArg::Infer(_) => true,
         }
     }
 }
@@ -374,7 +377,7 @@ impl GenericArgs<'_> {
             GenericArg::Type(ty) => matches!(ty.kind, TyKind::Err),
             _ => false,
         }) || self.bindings.iter().any(|arg| match arg.kind {
-            TypeBindingKind::Equality { ty } => matches!(ty.kind, TyKind::Err),
+            TypeBindingKind::Equality { term: Term::Ty(ty) } => matches!(ty.kind, TyKind::Err),
             _ => false,
         })
     }
@@ -1471,7 +1474,6 @@ impl Expr<'_> {
             ExprKind::Continue(..) => ExprPrecedence::Continue,
             ExprKind::Ret(..) => ExprPrecedence::Ret,
             ExprKind::InlineAsm(..) => ExprPrecedence::InlineAsm,
-            ExprKind::LlvmInlineAsm(..) => ExprPrecedence::InlineAsm,
             ExprKind::Struct(..) => ExprPrecedence::Struct,
             ExprKind::Repeat(..) => ExprPrecedence::Repeat,
             ExprKind::Yield(..) => ExprPrecedence::Yield,
@@ -1531,7 +1533,6 @@ impl Expr<'_> {
             | ExprKind::Loop(..)
             | ExprKind::Assign(..)
             | ExprKind::InlineAsm(..)
-            | ExprKind::LlvmInlineAsm(..)
             | ExprKind::AssignOp(..)
             | ExprKind::Lit(_)
             | ExprKind::ConstBlock(..)
@@ -1614,7 +1615,6 @@ impl Expr<'_> {
             | ExprKind::Loop(..)
             | ExprKind::Assign(..)
             | ExprKind::InlineAsm(..)
-            | ExprKind::LlvmInlineAsm(..)
             | ExprKind::AssignOp(..)
             | ExprKind::ConstBlock(..)
             | ExprKind::Box(..)
@@ -1755,8 +1755,6 @@ pub enum ExprKind<'hir> {
 
     /// Inline assembly (from `asm!`), with its outputs and inputs.
     InlineAsm(&'hir InlineAsm<'hir>),
-    /// Inline assembly (from `llvm_asm!`), with its outputs and inputs.
-    LlvmInlineAsm(&'hir LlvmInlineAsm<'hir>),
 
     /// A struct or struct-like variant literal expression.
     ///
@@ -2131,19 +2129,37 @@ pub struct TypeBinding<'hir> {
     pub span: Span,
 }
 
+#[derive(Debug, HashStable_Generic)]
+pub enum Term<'hir> {
+    Ty(&'hir Ty<'hir>),
+    Const(AnonConst),
+}
+
+impl<'hir> From<&'hir Ty<'hir>> for Term<'hir> {
+    fn from(ty: &'hir Ty<'hir>) -> Self {
+        Term::Ty(ty)
+    }
+}
+
+impl<'hir> From<AnonConst> for Term<'hir> {
+    fn from(c: AnonConst) -> Self {
+        Term::Const(c)
+    }
+}
+
 // Represents the two kinds of type bindings.
 #[derive(Debug, HashStable_Generic)]
 pub enum TypeBindingKind<'hir> {
     /// E.g., `Foo<Bar: Send>`.
     Constraint { bounds: &'hir [GenericBound<'hir>] },
-    /// E.g., `Foo<Bar = ()>`.
-    Equality { ty: &'hir Ty<'hir> },
+    /// E.g., `Foo<Bar = ()>`, `Foo<Bar = ()>`
+    Equality { term: Term<'hir> },
 }
 
 impl TypeBinding<'_> {
     pub fn ty(&self) -> &Ty<'_> {
         match self.kind {
-            TypeBindingKind::Equality { ref ty } => ty,
+            TypeBindingKind::Equality { term: Term::Ty(ref ty) } => ty,
             _ => panic!("expected equality type binding for parenthesized generic args"),
         }
     }
@@ -2366,36 +2382,6 @@ pub struct InlineAsm<'hir> {
     pub operands: &'hir [(InlineAsmOperand<'hir>, Span)],
     pub options: InlineAsmOptions,
     pub line_spans: &'hir [Span],
-}
-
-#[derive(Copy, Clone, Encodable, Decodable, Debug, Hash, HashStable_Generic, PartialEq)]
-pub struct LlvmInlineAsmOutput {
-    pub constraint: Symbol,
-    pub is_rw: bool,
-    pub is_indirect: bool,
-    pub span: Span,
-}
-
-// NOTE(eddyb) This is used within MIR as well, so unlike the rest of the HIR,
-// it needs to be `Clone` and `Decodable` and use plain `Vec<T>` instead of
-// arena-allocated slice.
-#[derive(Clone, Encodable, Decodable, Debug, Hash, HashStable_Generic, PartialEq)]
-pub struct LlvmInlineAsmInner {
-    pub asm: Symbol,
-    pub asm_str_style: StrStyle,
-    pub outputs: Vec<LlvmInlineAsmOutput>,
-    pub inputs: Vec<Symbol>,
-    pub clobbers: Vec<Symbol>,
-    pub volatile: bool,
-    pub alignstack: bool,
-    pub dialect: LlvmAsmDialect,
-}
-
-#[derive(Debug, HashStable_Generic)]
-pub struct LlvmInlineAsm<'hir> {
-    pub inner: LlvmInlineAsmInner,
-    pub outputs_exprs: &'hir [Expr<'hir>],
-    pub inputs_exprs: &'hir [Expr<'hir>],
 }
 
 /// Represents a parameter in a function header.
@@ -2878,6 +2864,8 @@ pub struct ImplItemRef {
     pub kind: AssocItemKind,
     pub span: Span,
     pub defaultness: Defaultness,
+    /// When we are in a trait impl, link to the trait-item's id.
+    pub trait_item_def_id: Option<DefId>,
 }
 
 #[derive(Copy, Clone, PartialEq, Encodable, Debug, HashStable_Generic)]
