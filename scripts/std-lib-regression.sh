@@ -40,7 +40,7 @@ cargo new std_lib_test --lib
 cd std_lib_test
 
 # Use same nightly toolchain used to build Kani
-cp ${KANI_DIR}/src/kani-compiler/rust-toolchain.toml .
+cp ${KANI_DIR}/rust-toolchain.toml .
 
 echo "Starting cargo build with Kani"
 export RUSTC_LOG=error
