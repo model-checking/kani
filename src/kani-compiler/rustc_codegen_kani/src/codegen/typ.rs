@@ -446,7 +446,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     #[allow(dead_code)]
     pub fn enum_case_struct_name(&self, ty: Ty<'tcx>, case: &VariantDef) -> String {
-        format!("{}::{}", self.ty_mangled_name(ty), case.ident.name)
+        format!("{}::{}", self.ty_mangled_name(ty), case.name)
     }
 
     pub fn codegen_ty_raw_array(&mut self, ty: Ty<'tcx>) -> Type {
@@ -913,11 +913,8 @@ impl<'tcx> GotocCtx<'tcx> {
         layout: &Layout,
         initial_offset: usize,
     ) -> Vec<DatatypeComponent> {
-        let flds: Vec<_> = variant
-            .fields
-            .iter()
-            .map(|f| (f.ident.name.to_string(), f.ty(self.tcx, subst)))
-            .collect();
+        let flds: Vec<_> =
+            variant.fields.iter().map(|f| (f.name.to_string(), f.ty(self.tcx, subst))).collect();
         self.codegen_struct_fields(flds, layout, initial_offset)
     }
 
@@ -934,7 +931,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .iter()
                 .map(|f| {
                     Type::datatype_component(
-                        &f.ident.name.to_string(),
+                        &f.name.to_string(),
                         ctx.codegen_ty(f.ty(ctx.tcx, subst)),
                     )
                 })
@@ -1142,7 +1139,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .iter_enumerated()
                 .map(|(i, case)| {
                     Type::datatype_component(
-                        &case.ident.name.to_string(),
+                        &case.name.to_string(),
                         ctx.codegen_enum_case_struct(
                             name,
                             case,
@@ -1164,7 +1161,7 @@ impl<'tcx> GotocCtx<'tcx> {
         variant: &Layout,
         initial_offset: usize,
     ) -> Type {
-        let case_name = format!("{}::{}", name.to_string(), case.ident.name);
+        let case_name = format!("{}::{}", name.to_string(), case.name);
         debug!("handling variant {}: {:?}", case_name, case);
         self.ensure_struct(&case_name, NO_PRETTY_NAME, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)
@@ -1260,9 +1257,11 @@ impl<'tcx> GotocCtx<'tcx> {
         match struct_type.kind() {
             ty::Adt(adt_def, adt_substs) if adt_def.variants.len() == 1 => {
                 let fields = &adt_def.variants.get(VariantIdx::from_u32(0)).unwrap().fields;
-                BTreeMap::from_iter(fields.iter().map(|field| {
-                    (field.ident.name.to_string().into(), field.ty(self.tcx, adt_substs))
-                }))
+                BTreeMap::from_iter(
+                    fields.iter().map(|field| {
+                        (field.name.to_string().into(), field.ty(self.tcx, adt_substs))
+                    }),
+                )
             }
             _ => unreachable!("Expected a single-variant ADT. Found {:?}", struct_type),
         }
