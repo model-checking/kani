@@ -213,14 +213,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     v.eq(Expr::int_constant(first_target.0, self.codegen_ty(switch_ty)))
                         .if_then_else(
                             Stmt::goto(
-                                self.current_fn().labels()[first_target.1.index()].clone(),
+                                self.current_fn().find_label(&first_target.1),
                                 Location::none(),
                             ),
                             None,
                             Location::none(),
                         ),
                     Stmt::goto(
-                        self.current_fn().labels()[targets.otherwise().index()].clone(),
+                        self.current_fn().find_label(&targets.otherwise()),
                         Location::none(),
                     ),
                 ],
@@ -233,15 +233,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 .iter()
                 .map(|(c, bb)| {
                     Expr::int_constant(c, self.codegen_ty(switch_ty)).switch_case(Stmt::goto(
-                        self.current_fn().labels()[bb.index()].clone(),
+                        self.current_fn().find_label(&bb),
                         Location::none(),
                     ))
                 })
                 .collect();
-            let default = Stmt::goto(
-                self.current_fn().labels()[targets.otherwise().index()].clone(),
-                Location::none(),
-            );
+            let default =
+                Stmt::goto(self.current_fn().find_label(&targets.otherwise()), Location::none());
             v.switch(cases, Some(default), Location::none())
         }
     }
