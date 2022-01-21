@@ -116,7 +116,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Crate-based naming scheme for labels
         let full_crate_name = self.full_crate_name().to_string().replace("::", "_");
         let label: InternedString = format!(
-            "restricted_call_{}_{}",
+            "restricted_call_label_{}_{}",
             full_crate_name,
             self.vtable_ctx.get_call_site_global_idx()
         )
