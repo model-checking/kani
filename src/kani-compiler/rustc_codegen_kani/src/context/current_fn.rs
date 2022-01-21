@@ -33,12 +33,12 @@ pub struct CurrentFnCtx<'tcx> {
 
 /// Constructor
 impl CurrentFnCtx<'tcx> {
-    pub fn new(instance: Instance<'tcx>, gcx: &GotocCtx<'tcx>) -> Self {
+    pub fn new(instance: Instance<'tcx>, gcx: &GotocCtx<'tcx>, labels: Vec<String>) -> Self {
         Self {
             block: vec![],
             current_bb: None,
             instance,
-            labels: vec![],
+            labels,
             mir: gcx.tcx.instance_mir(instance.def),
             name: gcx.symbol_name(instance),
             readable_name: gcx.readable_instance_name(instance),
@@ -72,11 +72,6 @@ impl CurrentFnCtx<'tcx> {
     pub fn set_current_bb(&mut self, bb: BasicBlock) {
         self.current_bb = Some(bb);
     }
-
-    pub fn set_labels(&mut self, labels: Vec<String>) {
-        assert!(self.labels.is_empty());
-        self.labels = labels;
-    }
 }
 
 /// Getters
@@ -89,11 +84,6 @@ impl CurrentFnCtx<'tcx> {
     /// The function we are currently compiling
     pub fn instance(&self) -> Instance<'tcx> {
         self.instance
-    }
-
-    /// The labels in the function we are currently compiling
-    pub fn labels(&self) -> &Vec<String> {
-        &self.labels
     }
 
     /// The MIR for the function we are currently compiling
