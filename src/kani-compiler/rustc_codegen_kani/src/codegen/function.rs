@@ -85,14 +85,6 @@ impl<'tcx> GotocCtx<'tcx> {
             assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
             self.print_instance(instance, mir);
-            let labels = self
-                .current_fn()
-                .mir()
-                .basic_blocks()
-                .indices()
-                .map(|bb| format!("{:?}", bb))
-                .collect();
-            self.current_fn_mut().set_labels(labels);
             self.codegen_function_prelude();
             self.codegen_declare_variables();
 

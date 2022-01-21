@@ -3,7 +3,7 @@
 use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::{GotocCtx, VtableCtx};
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::{aggr_tag, BUG_REPORT_URL};
 use cbmc::MachineModel;
 use cbmc::NO_PRETTY_NAME;
