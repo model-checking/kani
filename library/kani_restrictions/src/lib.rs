@@ -19,6 +19,7 @@ pub struct TraitDefinedMethod {
 pub struct CallSite {
     pub trait_method: TraitDefinedMethod,
     pub function_name: InternedString,
+    pub label: InternedString,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
