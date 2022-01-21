@@ -1,9 +1,0 @@
-error[E0015]: calls in constants are limited to constant functions, tuple structs and tuple variants
-  --> $DIR/issue-68542-closure-in-array-len.rs:6:13
-   |
-LL |     a: [(); (|| { 0 })()]
-   |             ^^^^^^^^^^^^
-
-error: aborting due to previous error
-
-For more information about this error, try `rustc --explain E0015`.
