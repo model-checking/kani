@@ -476,6 +476,7 @@ pub trait Transformer: Sized {
         let transformed_e = self.transform_expr(e);
         match op {
             UnaryOperand::Bitnot => transformed_e.bitnot(),
+            UnaryOperand::BitReverse => transformed_e.bitreverse(),
             UnaryOperand::Bswap => transformed_e.bswap(),
             UnaryOperand::IsDynamicObject => transformed_e.dynamic_object(),
             UnaryOperand::Not => transformed_e.not(),
