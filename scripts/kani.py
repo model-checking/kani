@@ -281,7 +281,7 @@ def cargo_build(
     # kani-compiler expects the kani flags to precede rustc flags but cargo is unpredictable. Use this to allow us to
     # separate them programmatically.
     build_env.update({"RUSTFLAGS": "--kani-flags",
-                      "KaniFLAGS": " ".join(rustflags),
+                      "KANIFLAGS": " ".join(rustflags),
                       "RUSTC": KANI_RUSTC_EXE
                       })
     if extra_args.debug:

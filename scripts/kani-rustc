@@ -4,8 +4,8 @@
 
 
 # Usage:
-# KaniFLAGS="[<KANI_OPTIONS>]*" kani-rustc --kani-flags [<RUSTC_OPTIONS>]*
-#   - This will run kani-compiler with Kani options provided via KaniFLAGS
+# KANIFLAGS="[<KANI_OPTIONS>]*" kani-rustc --kani-flags [<RUSTC_OPTIONS>]*
+#   - This will run kani-compiler with Kani options provided via KANIFLAGS
 #     environment variable + the given RUSTC_OPTIONS.
 # kani-rustc [<KANI_OPTIONS>]* [<RUSTC_OPTIONS>]*
 #   - This will run kani-compiler with Kani options + the given RUSTC_OPTIONS
@@ -44,12 +44,19 @@ set_paths
 # For cargo kani, cargo sometimes adds flags before the custom RUSTFLAGS, hence,
 # we use a special environment variable to set Kani specific flags. These flags
 # should only be enabled if --kani-flags is present.
-args="${*#--kani-flags}"
-if [ "$args" != "$*" ]
+if [ "${*#--kani-flags}" != "$*" ]
 then
-    FLAGS=("${KaniFLAGS} $args")
+    # Collect arguments and remove --kani-flags
+    args=()
+    for arg in $@;
+    do
+        if [ "${arg#--kani-flags}" == "${arg}" ]
+        then
+            args+=("${arg}")
+        fi
+    done
+    "${KANI_PATH}" ${KANIFLAGS} "${args[@]}"
 else
-    FLAGS=("$args")
+    # Just pass the arguments to the compiler.
+    "${KANI_PATH}" "$@"
 fi
-
-"${KANI_PATH}" ${FLAGS}

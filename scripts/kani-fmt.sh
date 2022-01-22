@@ -30,7 +30,7 @@ CRATES=(
 error=0
 for crate in ${CRATES[@]}; do
     # Check all crates. Only fail at the end.
-    cargo fmt $@ -p ${crate} || error=1
+    cargo fmt "$@" -p ${crate} || error=1
 done
 
 # Check test source files.
@@ -42,8 +42,12 @@ TESTS=("src/test/kani"
     "kani-docs/src/tutorial")
 
 for suite in "${TESTS[@]}"; do
-    files=$(find "${suite}" -name "*.rs")
-    rustfmt --unstable-features $@ ${files} || error=1
+    # Find uses breakline to split between files. This ensures that we can
+    # handle files with space in their path.
+    set -f; IFS=$'\n'
+    files=($(find "${suite}" -name "*.rs"))
+    set +f; unset IFS
+    rustfmt --unstable-features "$@" "${files[@]}" || error=1
 done
 
 exit $error
