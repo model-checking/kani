@@ -8,7 +8,7 @@ In this section, we're going to expand on these additional checks, to give you a
 ## Bounds checking and pointers
 
 Rust is safe by default, and so includes dynamic (run-time) bounds checking where needed.
-Consider this Rust code (which can be found under [`kani-docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/kani/tree/main/kani-docs/src/tutorial/kinds-of-failure/)):
+Consider this Rust code (which can be found under [`docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kinds-of-failure/)):
 
 ```rust
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:code}}

@@ -181,7 +181,7 @@ impl Config {
     /// checking if it can find the compiletest `Cargo.toml` file in the path relative to the root.
     pub fn find_rust_src_root(&self) -> Option<PathBuf> {
         let mut path = self.src_base.clone();
-        let path_postfix = Path::new("src/tools/compiletest/Cargo.toml");
+        let path_postfix = Path::new("tools/compiletest/Cargo.toml");
 
         while path.pop() {
             if path.join(&path_postfix).is_file() {

@@ -56,7 +56,7 @@ jobs:
       # On one OS only, build the documentation, too.
       - name: Build Documentation
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: ./kani-docs/build-docs.sh
+        run: ./docs/build-docs.sh
 
       # When we're pushed to main branch, only then actually publish the docs.
       - name: Publish Documentation
@@ -64,4 +64,4 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@4.1.4
         with:
           branch: gh-pages
-          folder: kani-docs/book/
+          folder: docs/book/

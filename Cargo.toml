@@ -2,21 +2,21 @@
 members = [
   "library/kani",
   "library/kani_restrictions",
-  "src/tools/bookrunner",
-  "src/tools/compiletest",
-  "src/tools/kani-link-restrictions",
+  "tools/bookrunner",
+  "tools/compiletest",
+  "tools/kani-link-restrictions",
   "src/kani-compiler",
   # These are still needed by bookrunner.
-  "src/rustdoc-json-types",
-  "src/librustdoc",
+  "tools/bookrunner/rustdoc-json-types",
+  "tools/bookrunner/librustdoc",
 ]
 
 exclude = [
   "build",
   "target",
   # dependency tests have their own workspace
-  "src/test/kani-dependency-test/dependency3",
+  "test/kani-dependency-test/dependency3",
   # cargo kani tests should also have their own workspace
-  "src/test/cargo-kani"
+  "test/cargo-kani"
 ]
 

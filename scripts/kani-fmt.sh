@@ -39,7 +39,7 @@ TESTS=("src/test/kani"
     "src/test/smack"
     "src/test/expected"
     "src/test/cargo-kani"
-    "kani-docs/src/tutorial")
+    "docs/src/tutorial")
 
 for suite in "${TESTS[@]}"; do
     # Find uses breakline to split between files. This ensures that we can

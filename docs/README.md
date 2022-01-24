@@ -3,7 +3,7 @@
 A good trick when developing Kani on a remote machine is to SSH forward to test documentation changes.
 
 ```
-ssh -t -L 3000:127.0.0.1:3000 kani-host 'cd kani/kani-docs/ && ./mdbook serve'
+ssh -t -L 3000:127.0.0.1:3000 kani-host 'cd kani/docs/ && ./mdbook serve'
 ```
 
 This command will connect to `kani-host` where it assumes Kani is checked out in `kani/` and the documentation has been built once successfully.
