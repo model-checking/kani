@@ -23,10 +23,8 @@ fn link_function_pointer_restrictions(data_per_crate: Vec<VtableCtxResults>) -> 
     // Iterate call sites
     for crate_data in data_per_crate {
         for call_site in crate_data.call_sites {
-            // CBMC index is 1-indexed:
-            // http://cprover.diffblue.com/md__home_travis_build_diffblue_cbmc_doc_architectural_restrict-function-pointer.html
             let cbmc_call_site_name =
-                format!("{}.function_pointer_call.1", call_site.function_name);
+                format!("{}.AVH.{}", call_site.function_name, call_site.label);
             let trait_def = call_site.trait_method;
 
             // Look up all possibilities, defaulting to the empty set

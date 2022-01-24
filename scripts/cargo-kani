@@ -36,7 +36,7 @@ def main():
         cbmc_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.out")
         c_runnable_filename = os.path.join(args.target_dir, "cbmc_runnable.c")
         restrictions_runnable_filename = os.path.join(
-            args.target_dir, "debug", "deps") if args.restrict_vtable else None
+            args.target_dir, "restrictions.json") if args.restrict_vtable else None
 
         out_files = kani.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
@@ -75,7 +75,7 @@ def main():
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
     out_files = kani.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
-    restrictions_filename = os.path.join(args.target_dir, "debug", "deps") if args.restrict_vtable else None
+    restrictions_filename = os.path.join(args.target_dir, "restrictions.json") if args.restrict_vtable else None
 
     args.c_lib.append(str(KANI_C_LIB))
 
