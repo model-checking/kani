@@ -4,7 +4,7 @@
 //!
 //! TODO: The types and procedures in this modules are similar to the ones in
 //! `compiletest`. Consider using `Litani` to run the test suites (see
-//! [issue #390](https://github.com/model-checking/rmc/issues/390)).
+//! [issue #390](https://github.com/model-checking/kani/issues/390)).
 
 use crate::litani::Litani;
 use std::{

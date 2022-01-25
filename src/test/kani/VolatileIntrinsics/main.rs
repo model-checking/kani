@@ -19,7 +19,7 @@ fn test_volatile_store() {
 // https://doc.redox-os.org/std/std/intrinsics/fn.volatile_copy_memory.html
 fn test_copy_volatile() {
     // TODO: make an overlapping set of locations, and check that it does the right thing for the overlapping region too.
-    // https://github.com/model-checking/rmc/issues/12
+    // https://github.com/model-checking/kani/issues/12
     let mut expected_val = 42;
     let src: *mut i32 = &mut expected_val as *mut i32;
     let mut old_val = 99;
@@ -103,7 +103,7 @@ fn test_swap() {
 /// https://doc.redox-os.org/std/std/intrinsics/fn.volatile_copy_nonoverlapping_memory.html
 fn test_copy_volatile_nonoverlapping() {
     // TODO: make an overlapping set of locations, and check that it does the right thing for the overlapping region too.
-    // https://github.com/model-checking/rmc/issues/12
+    // https://github.com/model-checking/kani/issues/12
     let mut expected_val = 42;
     let src: *mut i32 = &mut expected_val as *mut i32;
     let mut old_val = 99;

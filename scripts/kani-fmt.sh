@@ -14,7 +14,7 @@ cd ${ROOT_FOLDER}
 
 # Verify crates.
 # TODO: We should be able to use workspace once we unfork from rustc.
-# https://github.com/model-checking/rmc/issues/719
+# https://github.com/model-checking/kani/issues/719
 CRATES=(
     "bookrunner"
     "cbmc"

@@ -3,7 +3,7 @@
 
 // Check that we can codegen code that has a Generator type present,
 // as long as the path is not dynamically used. Full Generator support
-// tracked in: https://github.com/model-checking/rmc/issues/416
+// tracked in: https://github.com/model-checking/kani/issues/416
 
 #![feature(generators, generator_trait)]
 

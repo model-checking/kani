@@ -37,7 +37,7 @@ extern "C" {
     // Some(&x) => &x;
     // None => NULL;
     // FIXME: we need to notice when this happens and do a bitcast, or C is unhappy
-    // https://github.com/model-checking/rmc/issues/3
+    // https://github.com/model-checking/kani/issues/3
     fn takes_ptr_option(p: Option<&u32>) -> u32;
     fn mutates_ptr(p: &mut u32);
     #[link_name = "name_in_c"]

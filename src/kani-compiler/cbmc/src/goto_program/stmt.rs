@@ -152,7 +152,7 @@ macro_rules! stmt {
 impl Stmt {
     /// `lhs = rhs;`
     pub fn assign(lhs: Expr, rhs: Expr, loc: Location) -> Self {
-        //Temporarily work around https://github.com/model-checking/rmc/issues/95
+        //Temporarily work around https://github.com/model-checking/kani/issues/95
         //by disabling the assert and soundly assigning nondet
         //assert_eq!(lhs.typ(), rhs.typ());
         if lhs.typ() != rhs.typ() {

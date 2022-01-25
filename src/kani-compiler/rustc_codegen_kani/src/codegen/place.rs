@@ -80,7 +80,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 let type_from_mir = ctx.codegen_ty(t);
                 if expr_ty != type_from_mir { Some((expr_ty, type_from_mir)) } else { None }
             }
-            // TODO: handle Variant https://github.com/model-checking/rmc/issues/448
+            // TODO: handle Variant https://github.com/model-checking/kani/issues/448
             TypeOrVariant::Variant(_) => None,
         }
     }
@@ -117,7 +117,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
         }
         // TODO: these assertions fail on a few regressions. Figure out why.
         // I think it may have to do with boxed fat pointers.
-        // https://github.com/model-checking/rmc/issues/277
+        // https://github.com/model-checking/kani/issues/277
         if let Some((expr_ty, ty_from_mir)) =
             Self::check_expr_typ_mismatch(&goto_expr, &mir_typ_or_variant, ctx)
         {
@@ -212,7 +212,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         "ty::Generator",
                         Type::code(vec![], Type::empty()),
                         res.location().clone(),
-                        "https://github.com/model-checking/rmc/issues/416",
+                        "https://github.com/model-checking/kani/issues/416",
                     ),
                     _ => unimplemented!(),
                 }
@@ -383,7 +383,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Best effort to codegen subslice projection.
             // This is known to fail with a CBMC invariant violation
             // in some cases. Full support to be added in
-            // https://github.com/model-checking/rmc/issues/357
+            // https://github.com/model-checking/kani/issues/357
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {

@@ -10,7 +10,7 @@ But Kani is also useful for finding panics in safe Rust, and it can check user-d
 Kani is currently in the initial development phase, and has not yet made an official release.
 It is under active development, but it does not yet support all Rust language features.
 (The [Book runner](./bookrunner.md) can help you understand our current progress.)
-If you encounter issues when using Kani we encourage you to [report them to us](https://github.com/model-checking/rmc/issues/new/choose).
+If you encounter issues when using Kani we encourage you to [report them to us](https://github.com/model-checking/kani/issues/new/choose).
 
 Kani usually syncs with the main branch of Rust every week, and so is generally up-to-date with the latest Rust language features.
 

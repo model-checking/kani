@@ -372,7 +372,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             Some(self.trait_method_vtable_field_type(instance, idx))
                         }
                         // TODO: trait upcasting
-                        // https://github.com/model-checking/rmc/issues/358
+                        // https://github.com/model-checking/kani/issues/358
                         VtblEntry::TraitVPtr(..) => None,
                         VtblEntry::MetadataDropInPlace
                         | VtblEntry::MetadataSize
@@ -402,7 +402,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// TODO: to handle trait upcasting, this will need to use a
     /// poly existential trait type as a part of the key as well.
     /// See compiler/rustc_middle/src/ty/vtable.rs
-    /// https://github.com/model-checking/rmc/issues/358
+    /// https://github.com/model-checking/kani/issues/358
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
         format!("{}::vtable", self.normalized_trait_name(t))
     }
@@ -429,7 +429,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // as the C name, so don't mangle in that case.
         // TODO: this is likely insufficient if a dependent crate has two versions of
         // linked C libraries
-        // https://github.com/model-checking/rmc/issues/450
+        // https://github.com/model-checking/kani/issues/450
         if is_repr_c_adt(t) {
             self.ty_pretty_name(t)
         } else {
@@ -815,12 +815,12 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Uint(_) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types were blocking firecracker. Doing the default thing to unblock.
-            // https://github.com/model-checking/rmc/issues/215
-            // https://github.com/model-checking/rmc/issues/216
+            // https://github.com/model-checking/kani/issues/215
+            // https://github.com/model-checking/kani/issues/216
             ty::FnDef(_, _) | ty::Never => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types were blocking stdlib. Doing the default thing to unblock.
-            // https://github.com/model-checking/rmc/issues/214
+            // https://github.com/model-checking/kani/issues/214
             ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
@@ -1294,7 +1294,7 @@ pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
 /// This is a place holder function that should normalize the given type.
 ///
 /// TODO: We should normalize the type projection here. For more details, see
-/// https://github.com/model-checking/rmc/issues/752
+/// https://github.com/model-checking/kani/issues/752
 fn normalize_type(ty: Ty<'tcx>) -> Ty<'tcx> {
     ty
 }
