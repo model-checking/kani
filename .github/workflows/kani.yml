@@ -14,11 +14,6 @@ jobs:
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v2
-        # https://github.com/rust-lang/rust/issues/87890
-        # A non-shallow clone is unfortunately necessary, as bootstrap.py searches commit history
-        # to find the correct LLVM artifacts to download. (0 below indicates non-shallow)
-        with:
-          fetch-depth: 0
 
       - name: Install dependencies
         run: ./scripts/setup/${{ matrix.os }}/install_deps.sh
@@ -34,8 +29,6 @@ jobs:
 
       - name: Update submodules
         run: |
-          # Since we download cached artifacts, we can skip checking out llvm locally in CI
-          git config submodule."src/llvm-project".update none
           git submodule update --init --depth 1
 
       - name: Build Kani and Kani Library
