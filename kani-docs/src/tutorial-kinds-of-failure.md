@@ -8,7 +8,7 @@ In this section, we're going to expand on these additional checks, to give you a
 ## Bounds checking and pointers
 
 Rust is safe by default, and so includes dynamic (run-time) bounds checking where needed.
-Consider this Rust code (which can be found under [`kani-docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/rmc/tree/main/kani-docs/src/tutorial/kinds-of-failure/)):
+Consider this Rust code (which can be found under [`kani-docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/kani/tree/main/kani-docs/src/tutorial/kinds-of-failure/)):
 
 ```rust
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:code}}
@@ -179,7 +179,7 @@ Notice the two failures: the Rust-inserted overflow check (`simple_addition.asse
 > **NOTE:** You could attempt to fix this issue by using Rust's alternative mathematical functions with explicit overflow behavior.
 For instance, instead of `a + b` write `a.wrapping_add(b)`.
 >
-> However, [at the present time](https://github.com/model-checking/rmc/issues/480), while this disables the dynamic assertion that Rust inserts, it does not disable the additional Kani overflow check.
+> However, [at the present time](https://github.com/model-checking/kani/issues/480), while this disables the dynamic assertion that Rust inserts, it does not disable the additional Kani overflow check.
 > As a result, this currently still fails in Kani.
 
 ### Exercise: Classic overflow failure

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// https://github.com/model-checking/rmc/issues/555
+// https://github.com/model-checking/kani/issues/555
 // kani-flags: --no-undefined-function-checks
 
 // Casts boxed array to boxed slice (example taken from rust documentation)

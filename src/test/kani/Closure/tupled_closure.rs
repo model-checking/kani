@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! When a closure is put inside a `Fn` trait, the Rustc backend injects a shim that converts
 //! between calling conventions.  This test ensures that the shim works correctly.
-//! https://github.com/model-checking/rmc/issues/678
+//! https://github.com/model-checking/kani/issues/678
 
 fn h(x: u8, y: usize, o: Option<std::num::NonZeroUsize>) -> usize {
     x as usize + y

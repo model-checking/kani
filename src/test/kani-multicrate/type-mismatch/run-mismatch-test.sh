@@ -15,7 +15,7 @@ rm -rf /tmp/type_mismatch_test_build
 cd mismatch
 RESULT="/tmp/dependency_test_result.txt"
 
-# Disable warnings until https://github.com/model-checking/rmc/issues/573 is fixed
+# Disable warnings until https://github.com/model-checking/kani/issues/573 is fixed
 export RUSTC_LOG=error
 export CARGO_TARGET_DIR=/tmp/type_mismatch_test_build
 export RUST_BACKTRACE=1

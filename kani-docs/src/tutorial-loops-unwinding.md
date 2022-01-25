@@ -16,7 +16,7 @@ We can try to find this bug with a proof harness like this:
 When we run Kani on this, we run into an unfortunate result: non-termination.
 This non-termination is caused by the model checker trying to unroll the loop an unbounded number of times.
 
-> **NOTE:** Presently, [due to a bug](https://github.com/model-checking/rmc/issues/493), this is especially bad: we don't see any output at all.
+> **NOTE:** Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
 > You are supposed to see some log lines that might give some clue that an infinite loop is occurring.
 > If Kani doesn't terminate, it's almost always the problem that this section is covering, however.
 

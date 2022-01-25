@@ -28,7 +28,7 @@
 //       * value: 1
 //
 // This issue is captured in:
-// https://github.com/model-checking/rmc/issues/708
+// https://github.com/model-checking/kani/issues/708
 
 fn main() {
     let arr = [1, 2, 3];

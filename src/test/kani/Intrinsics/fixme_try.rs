@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// See discussion on https://github.com/model-checking/rmc/issues/267
+// See discussion on https://github.com/model-checking/kani/issues/267
 #![feature(core_intrinsics)]
 use std::intrinsics::r#try;
 
