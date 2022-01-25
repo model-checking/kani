@@ -11,14 +11,14 @@ def update_path(run, path):
 
     By default, the path to an example follows this pattern:
 
-    `src/test/bookrunner/books/<book>/<chapter>/<section>/<subsection>/<line>.rs`
+    `tests/bookrunner/books/<book>/<chapter>/<section>/<subsection>/<line>.rs`
 
     However, only the first part is shown since these paths are enclosed
     in paragraph markers (`<p>` and `</p>`). So they are often rendered as:
 
-    `src/test/bookrunner/books/<book>/<chapter>/...
+    `tests/bookrunner/books/<book>/<chapter>/...
 
-    This update removes `src/test/bookrunner/books/` from the path (common to
+    This update removes `tests/bookrunner/books/` from the path (common to
     all examples) and transforms them into anchor elements with a link to
     the example, so the path to the example is shown as:
 

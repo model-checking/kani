@@ -15,8 +15,8 @@ exclude = [
   "build",
   "target",
   # dependency tests have their own workspace
-  "test/kani-dependency-test/dependency3",
+  "tests/kani-dependency-test/dependency3",
   # cargo kani tests should also have their own workspace
-  "test/cargo-kani"
+  "tests/cargo-kani"
 ]
 

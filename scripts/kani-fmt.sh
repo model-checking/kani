@@ -34,11 +34,11 @@ for crate in ${CRATES[@]}; do
 done
 
 # Check test source files.
-TESTS=("src/test/kani"
-    "src/test/prusti"
-    "src/test/smack"
-    "src/test/expected"
-    "src/test/cargo-kani"
+TESTS=("tests/kani"
+    "tests/prusti"
+    "tests/smack"
+    "tests/expected"
+    "tests/cargo-kani"
     "docs/src/tutorial")
 
 for suite in "${TESTS[@]}"; do

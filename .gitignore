@@ -73,15 +73,15 @@ node_modules
 package-lock.json
 
 ## Rustdoc GUI tests
-test/rustdoc-gui/src/**.lock
+tests/rustdoc-gui/src/**.lock
 
 # Before adding new lines, see the comment at the top.
 /.litani_cache_dir
 /.ninja_deps
 /.ninja_log
-/test/bookrunner
+/docs/bookrunner
 *Cargo.lock
-test/kani-dependency-test/diamond-dependency/build
-test/kani-multicrate/type-mismatch/mismatch/target
+tests/kani-dependency-test/diamond-dependency/build
+tests/kani-multicrate/type-mismatch/mismatch/target
 /docs/book
 /docs/mdbook*

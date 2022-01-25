@@ -217,7 +217,7 @@ pub fn make_test_description<R: Read>(
     if config.mode == Mode::KaniFixme {
         let file_path = path.to_str().unwrap();
 
-        // `file_path` is going to be `src/test/kani-fixme/...` so we
+        // `file_path` is going to be `tests/kani-fixme/...` so we
         // need to extract the base name if we want to ignore it
         let test_name: Vec<&str> = file_path.rsplit('/').collect();
         let base_name = test_name[0];
