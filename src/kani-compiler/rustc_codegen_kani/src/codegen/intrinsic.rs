@@ -361,7 +361,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "breakpoint" => Stmt::skip(loc),
             "bswap" => self.codegen_expr_to_place(p, fargs.remove(0).bswap()),
             "caller_location" => {
-                codegen_unimplemented_intrinsic!("https://github.com/model-checking/kani/issues/374")
+                codegen_unimplemented_intrinsic!(
+                    "https://github.com/model-checking/kani/issues/374"
+                )
             }
             "ceilf32" => codegen_simple_intrinsic!(Ceilf),
             "ceilf64" => codegen_simple_intrinsic!(Ceil),
@@ -469,7 +471,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
             "try" => {
-                codegen_unimplemented_intrinsic!("https://github.com/model-checking/kani/issues/267")
+                codegen_unimplemented_intrinsic!(
+                    "https://github.com/model-checking/kani/issues/267"
+                )
             }
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
