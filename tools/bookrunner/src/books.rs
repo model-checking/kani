@@ -222,15 +222,19 @@ impl Book {
 fn setup_reference_book() -> Book {
     let summary_data = SummaryData {
         summary_start: "# The Rust Reference\n\n[Introduction](introduction.md)".to_string(),
-        summary_path: ["src", "doc", "reference", "src", "SUMMARY.md"].iter().collect(),
+        summary_path: ["tools", "bookrunner", "rust-doc", "reference", "src", "SUMMARY.md"]
+            .iter()
+            .collect(),
     };
     Book {
         name: "The Rust Reference".to_string(),
         summary_data: Some(summary_data),
         directory_data: None,
-        toml_path: ["src", "doc", "reference", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "reference", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
-            ["src", "doc", "reference", "src", "introduction.md"].iter().collect(),
+            ["tools", "bookrunner", "rust-doc", "reference", "src", "introduction.md"]
+                .iter()
+                .collect(),
             ["tests", "bookrunner", "books", "The Rust Reference", "Introduction"].iter().collect(),
         )]),
         default_edition: Edition::Edition2015,
@@ -240,16 +244,18 @@ fn setup_reference_book() -> Book {
 /// Set up [The Rustonomicon](https://doc.rust-lang.org/nightly/nomicon) book.
 fn setup_nomicon_book() -> Book {
     let summary_data = SummaryData {
-        summary_path: ["src", "doc", "nomicon", "src", "SUMMARY.md"].iter().collect(),
+        summary_path: ["tools", "bookrunner", "rust-doc", "nomicon", "src", "SUMMARY.md"]
+            .iter()
+            .collect(),
         summary_start: "# Summary\n\n[Introduction](intro.md)".to_string(),
     };
     Book {
         name: "The Rustonomicon".to_string(),
         summary_data: Some(summary_data),
         directory_data: None,
-        toml_path: ["src", "doc", "nomicon", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "nomicon", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
-            ["src", "doc", "nomicon", "src", "intro.md"].iter().collect(),
+            ["tools", "bookrunner", "rust-doc", "nomicon", "src", "intro.md"].iter().collect(),
             ["tests", "bookrunner", "books", "The Rustonomicon", "Introduction"].iter().collect(),
         )]),
         default_edition: Edition::Edition2015,
@@ -260,14 +266,16 @@ fn setup_nomicon_book() -> Book {
 /// [Rust Unstable Book](https://doc.rust-lang.org/beta/unstable-book/).
 fn setup_unstable_book() -> Book {
     let directory_data = DirectoryData {
-        src: ["src", "doc", "unstable-book", "src"].iter().collect(),
+        src: ["tools", "bookrunner", "rust-doc", "unstable-book", "src"].iter().collect(),
         dest: ["tests", "bookrunner", "books", "The Unstable Book"].iter().collect(),
     };
     Book {
         name: "The Rust Unstable Book".to_string(),
         summary_data: None,
         directory_data: Some(directory_data),
-        toml_path: ["src", "doc", "unstable-book", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "unstable-book", "book.toml"]
+            .iter()
+            .collect(),
         hierarchy: HashMap::new(),
         default_edition: Edition::Edition2015,
     }
@@ -277,16 +285,22 @@ fn setup_unstable_book() -> Book {
 /// [Rust by Example](https://doc.rust-lang.org/nightly/rust-by-example) book.
 fn setup_rust_by_example_book() -> Book {
     let summary_data = SummaryData {
-        summary_path: ["src", "doc", "rust-by-example", "src", "SUMMARY.md"].iter().collect(),
+        summary_path: ["tools", "bookrunner", "rust-doc", "rust-by-example", "src", "SUMMARY.md"]
+            .iter()
+            .collect(),
         summary_start: "# Summary\n\n[Introduction](index.md)".to_string(),
     };
     Book {
         name: "Rust by Example".to_string(),
         summary_data: Some(summary_data),
         directory_data: None,
-        toml_path: ["src", "doc", "rust-by-example", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "rust-by-example", "book.toml"]
+            .iter()
+            .collect(),
         hierarchy: HashMap::from_iter([(
-            ["src", "doc", "rust-by-example", "src", "index.md"].iter().collect(),
+            ["tools", "bookrunner", "rust-doc", "rust-by-example", "src", "index.md"]
+                .iter()
+                .collect(),
             ["tests", "bookrunner", "books", "Rust by Example", "Introduction"].iter().collect(),
         )]),
         default_edition: Edition::Edition2015,
