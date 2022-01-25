@@ -49,7 +49,7 @@ So you don't have to worry about a series of "oops typo fix" messages while fixi
 
 ```bash
 # Set up your git fork
-git remote add fork git@github.com:${USER}/rmc.git
+git remote add fork git@github.com:${USER}/kani.git
 ```
 ```bash
 # Reset everything. Don't have any uncommitted changes!

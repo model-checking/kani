@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Testcase for https://github.com/model-checking/rmc/issues/558.
+// Testcase for https://github.com/model-checking/kani/issues/558.
 // See https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html for information on the
 // layout.
 pub enum MyEnum {

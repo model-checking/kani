@@ -32,7 +32,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // we need to pull off the fat pointer. In that case, the rustc kind() on
                 // both the operand and the inner type are Dynamic.
                 // Consider moving this check elsewhere in:
-                // https://github.com/model-checking/rmc/issues/277
+                // https://github.com/model-checking/kani/issues/277
                 match self.operand_ty(o).kind() {
                     ty::Dynamic(..) => projection.fat_ptr_goto_expr.unwrap(),
                     _ => projection.goto_expr,
@@ -362,11 +362,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     // we believe rlinkage being `Some` means the static not extern
                     // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
-                    // see https://github.com/model-checking/rmc/issues/388
+                    // see https://github.com/model-checking/kani/issues/388
                     //
                     // Update: The assertion below may fail in similar environments.
                     // We are disabling it until we find out the root cause, see
-                    // https://github.com/model-checking/rmc/issues/400
+                    // https://github.com/model-checking/kani/issues/400
                     //
                     // assert!(rlinkage.is_none());
 

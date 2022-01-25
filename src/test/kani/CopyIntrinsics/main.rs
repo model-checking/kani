@@ -7,7 +7,7 @@ use std::ptr;
 
 fn test_copy() {
     // TODO: make an overlapping set of locations, and check that it does the right thing for the overlapping region too.
-    // https://github.com/model-checking/rmc/issues/12
+    // https://github.com/model-checking/kani/issues/12
     let mut expected_val = 42;
     let src: *mut i32 = &mut expected_val as *mut i32;
     let mut old_val = 99;

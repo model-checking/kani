@@ -12,7 +12,7 @@
 /// ```
 /// This test will succeed.
 ///
-/// Issue: https://github.com/model-checking/rmc/issues/729
+/// Issue: https://github.com/model-checking/kani/issues/729
 
 enum Error {
     Error1,

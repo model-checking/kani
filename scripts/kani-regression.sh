@@ -62,7 +62,7 @@ for testp in "${TESTS[@]}"; do
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
   # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
-  # Tracking issue: https://github.com/model-checking/rmc/issues/755
+  # Tracking issue: https://github.com/model-checking/kani/issues/755
   ./target/release/compiletest --kani-dir-path scripts --src-base src/test/$suite \
                                --build-base $(pwd)/build/$TARGET/test/$suite \
                                --stage-id stage1-$TARGET \

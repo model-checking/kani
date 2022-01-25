@@ -74,7 +74,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let pretty = self.readable_instance_name(instance);
 
         // Make main function a special case for easy CBMC entry
-        // TODO: probably need to edit for https://github.com/model-checking/rmc/issues/169
+        // TODO: probably need to edit for https://github.com/model-checking/kani/issues/169
         if pretty == "main" {
             "main".to_string()
         } else {
@@ -106,7 +106,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     Example: 3_vol
     pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> InternedString {
         // format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.item_name(def_id)))
-        // TODO: use def_id https://github.com/model-checking/rmc/issues/364
+        // TODO: use def_id https://github.com/model-checking/kani/issues/364
         idx.to_string().into()
     }
 }
@@ -129,7 +129,7 @@ pub fn full_crate_name(tcx: TyCtxt<'tcx>) -> String {
 //TODO: These were moved from hooks.rs, where they didn't have a goto context. Normalize them.
 
 /// Helper function to determine if the function name starts with `expected`
-// TODO: rationalize how we match the hooks https://github.com/model-checking/rmc/issues/130
+// TODO: rationalize how we match the hooks https://github.com/model-checking/kani/issues/130
 pub fn instance_name_starts_with(
     tcx: TyCtxt<'tcx>,
     instance: Instance<'tcx>,

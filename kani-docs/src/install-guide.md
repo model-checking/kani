@@ -13,8 +13,8 @@ In general, the following dependencies are required. Note: These dependencies ma
 The simplest way to install (especially if you're using a fresh VM) is following our CI scripts:
 
 ```
-# git clone git@github.com:model-checking/rmc.git
-git clone https://github.com/model-checking/rmc.git
+# git clone git@github.com:model-checking/kani.git
+git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
 ./scripts/setup/ubuntu-20.04/install_deps.sh
@@ -29,8 +29,8 @@ source $HOME/.cargo/env
 You need to have [Homebrew](https://brew.sh/) installed already.
 
 ```
-# git clone git@github.com:model-checking/rmc.git
-git clone https://github.com/model-checking/rmc.git
+# git clone git@github.com:model-checking/kani.git
+git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
 ./scripts/setup/macos-10.15/install_deps.sh
