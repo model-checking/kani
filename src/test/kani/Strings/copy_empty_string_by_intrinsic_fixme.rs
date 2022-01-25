@@ -3,7 +3,7 @@
 
 // Make sure we can handle explicit copy_nonoverlapping on empty string
 
-// TODO: https://github.com/model-checking/rmc/issues/241
+// TODO: https://github.com/model-checking/kani/issues/241
 // The copy_nonoverlapping succeeds, but the final copy back to a slice
 // fails:
 // [...copy_empty_string_by_intrinsic.assertion.2] line 1035 unreachable code: FAILURE

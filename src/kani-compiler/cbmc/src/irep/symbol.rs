@@ -19,7 +19,7 @@ pub struct Symbol {
     /// Almost always the same as base_name, but with name mangling can be relevant
     pub pretty_name: InternedString,
     /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
-    /// https://github.com/model-checking/rmc/issues/1
+    /// https://github.com/model-checking/kani/issues/1
     pub mode: InternedString,
 
     // global properties

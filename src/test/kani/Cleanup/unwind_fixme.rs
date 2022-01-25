@@ -3,7 +3,7 @@
 //
 // We currently do not support stack unwinding panic strategy. Once we do, this testcase should
 // fail during the verification with both the panic and the assertion failing.
-// https://github.com/model-checking/rmc/issues/692
+// https://github.com/model-checking/kani/issues/692
 //
 // To run manually, execute:
 // ```

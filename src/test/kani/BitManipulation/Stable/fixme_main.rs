@@ -12,7 +12,7 @@ fn main() {
     let num_leading = x.leading_zeros();
     let rotated_num = x.rotate_left(3);
 
-    assert!(num_trailing == 3); // fails because of https://github.com/model-checking/rmc/issues/26
+    assert!(num_trailing == 3); // fails because of https://github.com/model-checking/kani/issues/26
     assert!(num_leading == 2);
     assert!(rotated_num == 0b1100_0001_u8);
 }

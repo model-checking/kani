@@ -1,6 +1,6 @@
 # Kani on a package
 
-Kani currently ships with a `cargo-kani` script, but this support is limited. If you find any issue, please [filed a bug report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md).
+Kani currently ships with a `cargo-kani` script, but this support is limited. If you find any issue, please [filed a bug report](https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md).
 
 To run `cargo-kani` in your crate, execute from the crate directory:
 

@@ -424,7 +424,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "Rvalue::ThreadLocalRef",
                     typ,
                     Location::none(),
-                    "https://github.com/model-checking/rmc/issues/541",
+                    "https://github.com/model-checking/kani/issues/541",
                 )
             }
         }
@@ -630,7 +630,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "PointerCast::ClosureFnPointer",
                     dest_typ,
                     Location::none(),
-                    "https://github.com/model-checking/rmc/issues/274",
+                    "https://github.com/model-checking/kani/issues/274",
                 )
             }
             PointerCast::MutToConstPointer => self.codegen_operand(o),
@@ -774,7 +774,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         format!("drop_in_place for {}", drop_sym_name).as_str(),
                         Type::empty(),
                         Location::none(),
-                        "https://github.com/model-checking/rmc/issues/281",
+                        "https://github.com/model-checking/kani/issues/281",
                     )
                     .as_stmt(Location::none());
 
@@ -904,7 +904,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
                         VtblEntry::Vacant => None,
                         // TODO: trait upcasting
-                        // https://github.com/model-checking/rmc/issues/358
+                        // https://github.com/model-checking/kani/issues/358
                         VtblEntry::TraitVPtr(_trait_ref) => None,
                         VtblEntry::Method(instance) => {
                             Some(ctx.codegen_vtable_method_field(*instance, trait_type, idx))

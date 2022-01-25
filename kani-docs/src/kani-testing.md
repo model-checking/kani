@@ -171,9 +171,9 @@ These tests follow the
 style.
 
 At present, Kani only uses unit tests in the
-[cbmc crate](https://github.com/model-checking/rmc/tree/main/compiler/cbmc)
+[cbmc crate](https://github.com/model-checking/kani/tree/main/compiler/cbmc)
 to test the
-[identity symbol table transformer](https://github.com/model-checking/rmc/blob/main/compiler/cbmc/src/goto_program/symtab_transformer/identity_transformer.rs).
+[identity symbol table transformer](https://github.com/model-checking/kani/blob/main/compiler/cbmc/src/goto_program/symtab_transformer/identity_transformer.rs).
 
 ## Script-based tests
 

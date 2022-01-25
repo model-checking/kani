@@ -11,7 +11,7 @@ We use the following values to indicate the level of support:
  * **No**: The feature is not supported. Some support may be available but analyses should not be trusted.
 
 As with all software, bugs may be found anywhere regardless of the level of support. In such cases, we
-would greatly appreciate that you [filed a bug report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md).
+would greatly appreciate that you [filed a bug report](https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md).
 
 Reference | Feature | Support | Notes |
 --- | --- | --- | --- |
@@ -129,8 +129,8 @@ Kani does not support assembly code for now. We may add it in the future but at
 present there are no plans to do so.
 
 Check out the tracking issues for [inline assembly (`asm!`
-macro)](https://github.com/model-checking/rmc/issues/2) and [global assembly
-(`asm_global!` macro)](https://github.com/model-checking/rmc/issues/316) to know
+macro)](https://github.com/model-checking/kani/issues/2) and [global assembly
+(`asm_global!` macro)](https://github.com/model-checking/kani/issues/316) to know
 more about the current status.
 
 ### Concurrency
@@ -153,7 +153,7 @@ example, includes a reachable `println!` statement.
 We have done some experiments to embed the standard library into the generated
 code, but this causes verification times to increase significantly. As of now,
 we have not been able to find a simple solution for [this
-issue](https://github.com/model-checking/rmc/issues/581), but we have some ideas
+issue](https://github.com/model-checking/kani/issues/581), but we have some ideas
 for future work in this direction.
 
 ### Advanced features
@@ -164,19 +164,19 @@ all their use cases.
 
 In particular, there are some outstanding issues to note here:
  * Unimplemented `PointerCast::ClosureFnPointer` in
-   [#274](https://github.com/model-checking/rmc/issues/274) and `Variant` case
+   [#274](https://github.com/model-checking/kani/issues/274) and `Variant` case
    in projections type in
-   [#448](https://github.com/model-checking/rmc/issues/448).
+   [#448](https://github.com/model-checking/kani/issues/448).
  * Unexpected fat pointer results in
-   [#82](https://github.com/model-checking/rmc/issues/82),
-   [#277](https://github.com/model-checking/rmc/issues/277),
-   [#327](https://github.com/model-checking/rmc/issues/327),
-   [#378](https://github.com/model-checking/rmc/issues/378) and
-   [#676](https://github.com/model-checking/rmc/issues/676).
+   [#82](https://github.com/model-checking/kani/issues/82),
+   [#277](https://github.com/model-checking/kani/issues/277),
+   [#327](https://github.com/model-checking/kani/issues/327),
+   [#378](https://github.com/model-checking/kani/issues/378) and
+   [#676](https://github.com/model-checking/kani/issues/676).
 
 We are particularly interested in bug reports concerning
 these features, so please [file a bug
-report](https://github.com/model-checking/rmc/issues/new?assignees=&labels=bug&template=bug_report.md)
+report](https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md)
 if you are aware of one.
 
 ### Panic strategies
@@ -189,7 +189,7 @@ Rust has two different strategies when a panic occurs:
 Currently, Kani does not support stack unwinding. This has some implications
 regarding memory safety since programs sometimes rely on the unwinding logic to
 ensure there is no resource leak or persistent data inconsistency. Check out
-[this issue](https://github.com/model-checking/rmc/issues/692) for updates on
+[this issue](https://github.com/model-checking/kani/issues/692) for updates on
 stack unwinding support.
 
 ### Destructors

@@ -50,7 +50,7 @@ To kick off the book runner process use
 ```
 
 The main function of the bookrunner is `generate_run()` in
-[`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/rmc/blob/main/src/tools/bookrunner/src/books.rs),
+[`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/kani/blob/main/src/tools/bookrunner/src/books.rs),
 which follows these steps:
  * First, it calls the different `parse_..._hierarchy()` functions which parse
    the summary files for each book.
