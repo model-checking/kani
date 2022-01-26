@@ -26,7 +26,7 @@ COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 kani firecracker prusti smac
 ```
 ```bash
 # Documentation build
-cd kani-docs
+cd docs
 ./build-docs.sh
 ```
 

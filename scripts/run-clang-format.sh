@@ -24,6 +24,6 @@ export PATH=$SCRIPT_DIR:$PATH
 KANI_DIR=$SCRIPT_DIR/..
 
 find $KANI_DIR/library/kani -name "*.c" | xargs clang-format $FLAGS
-find $KANI_DIR/src/test/kani -name "*.c" | xargs clang-format $FLAGS
-find $KANI_DIR/src/test/cargo-kani -name "*.c" | xargs clang-format $FLAGS
+find $KANI_DIR/tests/kani -name "*.c" | xargs clang-format $FLAGS
+find $KANI_DIR/tests/cargo-kani -name "*.c" | xargs clang-format $FLAGS
 

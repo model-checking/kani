@@ -11,4 +11,4 @@ multilingual = false
 [output.html]
 site-url = "/kani/"
 git-repository-url = "https://github.com/model-checking/kani"
-edit-url-template = "https://github.com/model-checking/kani/edit/main/kani-docs/{path}"
+edit-url-template = "https://github.com/model-checking/kani/edit/main/docs/{path}"

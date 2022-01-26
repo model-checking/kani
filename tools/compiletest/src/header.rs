@@ -181,7 +181,7 @@ impl Config {
     /// checking if it can find the compiletest `Cargo.toml` file in the path relative to the root.
     pub fn find_rust_src_root(&self) -> Option<PathBuf> {
         let mut path = self.src_base.clone();
-        let path_postfix = Path::new("src/tools/compiletest/Cargo.toml");
+        let path_postfix = Path::new("tools/compiletest/Cargo.toml");
 
         while path.pop() {
             if path.join(&path_postfix).is_file() {
@@ -217,7 +217,7 @@ pub fn make_test_description<R: Read>(
     if config.mode == Mode::KaniFixme {
         let file_path = path.to_str().unwrap();
 
-        // `file_path` is going to be `src/test/kani-fixme/...` so we
+        // `file_path` is going to be `tests/kani-fixme/...` so we
         // need to extract the base name if we want to ignore it
         let test_name: Vec<&str> = file_path.rsplit('/').collect();
         let base_name = test_name[0];
