@@ -112,14 +112,14 @@ def main():
         if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
                 cbmc_filename, cbmc_filename,
                 ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
-                args.verbose, dry_run=args.dry_run, restrictions_filename=restrictions_filename):
+                args.verbose, dry_run=args.dry_run):
             return 1
     else:
         # Apply --drop-unused-functions if undefined-function-checks was turned off
         if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
                 cbmc_filename, cbmc_filename,
                 ['--drop-unused-functions'],
-                args.verbose, dry_run=args.dry_run):
+                args.verbose, dry_run=args.dry_run, restrictions_filename=restrictions_filename):
             return 1
 
     if "--function" not in args.cbmc_args:

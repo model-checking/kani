@@ -431,7 +431,7 @@ def run_goto_instrument(
 
 # Processes vtable restrictions to the format CBMC expects
 def process_vtable_restrictions(restrictions_filename, verbose=False, dry_run=False):
-    cmd = ["./target/release/kani-link-restrictions"]
+    cmd = ["/home/ubuntu/rmc/target/release/kani-link-restrictions"]
     outname = os.path.abspath(restrictions_filename) + ".linked-restrictions.json"
     cmd += [restrictions_filename, outname]
     if (run_cmd(cmd, label="kani-link-restrictions", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS):
