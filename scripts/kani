@@ -101,15 +101,15 @@ def main():
                 goto_filename, goto_filename,
                 ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
                 args.verbose,
-                dry_run=args.dry_run,
-                restrictions_filename=restrictions_filename):
+                dry_run=args.dry_run):
             return 1
     else:
         # Apply --drop-unused-functions if undefined-function-checks was turned off
         if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
                 goto_filename, goto_filename,
                 ['--drop-unused-functions'],
-                args.verbose, dry_run=args.dry_run):
+                args.verbose, dry_run=args.dry_run,
+                restrictions_filename=restrictions_filename):
             return 1
 
     # The argument args.output_format's value is set as kani_flags.OutputStyle.DEFAULT by default. This DEFAULT
