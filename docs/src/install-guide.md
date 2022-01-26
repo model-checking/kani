@@ -42,19 +42,7 @@ source $HOME/.cargo/env
 
 ## Building and testing Kani
 
-Perform one-time build configuration:
-
-```
-./configure \
-    --enable-debug \
-    --set=llvm.download-ci-llvm=true \
-    --set=rust.debug-assertions-std=false \
-    --set=rust.deny-warnings=false
-```
-
-**NOTE: If you skip the above (`llvm.download-ci-llvm=true` specifically), builds may take a long time as all of LLVM would need to be built from scratch.**
-
-Then build kani-compiler executable:
+Build kani-compiler executable:
 
 ```
 ( cd src/kani-compiler && cargo build )
