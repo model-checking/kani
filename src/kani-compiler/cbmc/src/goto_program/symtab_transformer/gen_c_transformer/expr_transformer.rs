@@ -142,7 +142,7 @@ impl Transformer for ExprTransformer {
     /// When indexing into a SIMD vector, cast to a pointer first to make legal indexing in C.
     /// `typ __attribute__((vector_size (size * sizeof(typ)))) var;`
     /// `((typ*) &var)[index]`
-    /// Tracking issue: https://github.com/model-checking/rmc/issues/444
+    /// Tracking issue: https://github.com/model-checking/kani/issues/444
     fn transform_expr_index(&mut self, _typ: &Type, array: &Expr, index: &Expr) -> Expr {
         let transformed_array = self.transform_expr(array);
         let transformed_index = self.transform_expr(index);

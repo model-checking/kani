@@ -181,7 +181,7 @@ def postprocess_results(properties):
     may hide failures
     2. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
     assertion failed, since the insufficient unwinding may cause some execution
-    paths to be left unexplored (https://github.com/model-checking/rmc/issues/746)
+    paths to be left unexplored (https://github.com/model-checking/kani/issues/746)
 
     Additionally, print a message at the end of the output that indicates if any
     of the special cases above was hit.

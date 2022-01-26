@@ -446,7 +446,7 @@ impl goto_program::Symbol {
             /// Almost always the same as base_name, but with name mangling can be relevant
             pretty_name: self.pretty_name.unwrap_or("".into()),
             /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
-            /// https://github.com/model-checking/rmc/issues/1
+            /// https://github.com/model-checking/kani/issues/1
             mode: self.mode.to_string().into(),
 
             // global properties

@@ -23,10 +23,10 @@ echo
 
 # At the moment, we only test codegen for the virtio module
 cd $KANI_DIR/firecracker/src/devices/src/virtio/
-# Disable warnings until https://github.com/model-checking/rmc/issues/573 is fixed
+# Disable warnings until https://github.com/model-checking/kani/issues/573 is fixed
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-# Kani cannot locate Cargo.toml correctly: https://github.com/model-checking/rmc/issues/717
+# Kani cannot locate Cargo.toml correctly: https://github.com/model-checking/kani/issues/717
 cargo kani --only-codegen --target x86_64-unknown-linux-gnu --no-config-toml
 
 echo

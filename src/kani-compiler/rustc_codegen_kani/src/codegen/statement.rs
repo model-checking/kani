@@ -99,14 +99,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     "InlineAsm",
                     Type::empty(),
                     loc.clone(),
-                    "https://github.com/model-checking/rmc/issues/2",
+                    "https://github.com/model-checking/kani/issues/2",
                 )
                 .as_stmt(loc),
         }
     }
 
     // TODO: this function doesn't handle unwinding which begins if the destructor panics
-    // https://github.com/model-checking/rmc/issues/221
+    // https://github.com/model-checking/kani/issues/221
     fn codegen_drop(&mut self, location: &Place<'tcx>, target: &BasicBlock) -> Stmt {
         let loc_ty = self.place_ty(location);
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
@@ -170,8 +170,8 @@ impl<'tcx> GotocCtx<'tcx> {
                             // drop entirely causes unsound verification results in common cases
                             // like vector extend, so for now, add a sound special case workaround
                             // for calls that fail the typecheck.
-                            // https://github.com/model-checking/rmc/issues/426
-                            // Unblocks: https://github.com/model-checking/rmc/issues/435
+                            // https://github.com/model-checking/kani/issues/426
+                            // Unblocks: https://github.com/model-checking/kani/issues/435
                             if Expr::typecheck_call(&func, &args) {
                                 func.call(args)
                             } else {
@@ -179,7 +179,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                     format!("drop_in_place call for {:?}", func).as_str(),
                                     func.typ().return_type().unwrap().clone(),
                                     Location::none(),
-                                    "https://github.com/model-checking/rmc/issues/426",
+                                    "https://github.com/model-checking/kani/issues/426",
                                 )
                             }
                             .as_stmt(Location::none())
@@ -518,7 +518,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 "ty::Generator",
                                 Type::code(vec![], Type::empty()),
                                 Location::none(),
-                                "https://github.com/model-checking/rmc/issues/416",
+                                "https://github.com/model-checking/kani/issues/416",
                             )
                             .as_stmt(Location::none());
                     }

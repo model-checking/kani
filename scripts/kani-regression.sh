@@ -62,9 +62,9 @@ for testp in "${TESTS[@]}"; do
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
   # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
-  # Tracking issue: https://github.com/model-checking/rmc/issues/755
-  ./target/release/compiletest --kani-dir-path scripts --src-base src/test/$suite \
-                               --build-base $(pwd)/build/$TARGET/test/$suite \
+  # Tracking issue: https://github.com/model-checking/kani/issues/755
+  ./target/release/compiletest --kani-dir-path scripts --src-base tests/$suite \
+                               --build-base $(pwd)/build/$TARGET/tests/$suite \
                                --stage-id stage1-$TARGET \
                                --suite $suite --mode $mode \
                                --target $TARGET --host $TARGET \
@@ -93,10 +93,10 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 #   main             dependency3
 #        \           / v0.1.1
 #         dependency2
-time "$KANI_DIR"/src/test/kani-dependency-test/diamond-dependency/run-dependency-test.sh
+time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
 
 # Check that we don't have type mismatches across different crates
-time "$KANI_DIR"/src/test/kani-multicrate/type-mismatch/run-mismatch-test.sh
+time "$KANI_DIR"/tests/kani-multicrate/type-mismatch/run-mismatch-test.sh
 
 echo
 echo "All Kani regression tests completed successfully."
