@@ -1,7 +1,7 @@
 
 ### Description of changes: 
 
-Describe RMC's current behavior and how your code changes that behavior. If there are no issues this PR is resolving, explain why this change is necessary.
+Describe Kani's current behavior and how your code changes that behavior. If there are no issues this PR is resolving, explain why this change is necessary.
 
 ### Resolved issues:
 

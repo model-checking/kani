@@ -1,4 +1,0 @@
-line 12 assertion failed: false: FAILURE
-line 17 This is a placeholder message; RMC doesn't support message formatted at runtime: FAILURE
-line 21 Fail with custom static message: FAILURE
-

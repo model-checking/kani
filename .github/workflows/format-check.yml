@@ -1,16 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-name: RMC CI
+name: Kani CI
 on: pull_request
 
 jobs:
   format-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout RMC
+      - name: Checkout Kani
         uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
 
       - name: Get paths for files added
         id: git-diff

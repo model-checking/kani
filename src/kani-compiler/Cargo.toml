@@ -1,0 +1,18 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "kani-compiler"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+clap = "2.33.0"
+kani_queries = {path = "kani_queries"}
+rustc_codegen_kani = {path = "rustc_codegen_kani"}
+tracing = {version = "0.1", features = ["max_level_debug", "release_max_level_info"]}
+
+[package.metadata.rust-analyzer]
+# This package uses rustc crates.
+rustc_private=true

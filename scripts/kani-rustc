@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+
+# Usage:
+# KANIFLAGS="[<KANI_OPTIONS>]*" kani-rustc --kani-flags [<RUSTC_OPTIONS>]*
+#   - This will run kani-compiler with Kani options provided via KANIFLAGS
+#     environment variable + the given RUSTC_OPTIONS.
+# kani-rustc [<KANI_OPTIONS>]* [<RUSTC_OPTIONS>]*
+#   - This will run kani-compiler with Kani options + the given RUSTC_OPTIONS
+set -eu
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+REPO_DIR="$(dirname $SCRIPT_DIR)"
+
+KANI_PATH=${KANI_PATH:-""}
+
+shopt -s nullglob
+set_paths() {
+    # TODO: We should build into a specific folder.
+    local KANI_CANDIDATES=("$REPO_DIR"/target/*/kani-compiler)
+
+    if [ -z "${KANI_PATH}" ]
+    then
+        if [[ -z ${KANI_CANDIDATES:-""} ]] || [[ ${#KANI_CANDIDATES[@]} -ne 1 ]]
+        then
+            echo "ERROR: Could not find Kani binary."
+            echo "Looked for: '$REPO_DIR/target/*/kani-compiler'"
+            echo "Was Kani successfully built first?"
+            exit 1
+        fi
+        KANI_PATH=${KANI_CANDIDATES[0]}
+    fi
+}
+
+set_paths
+
+# Hack to enable cargo kani
+#
+# The kani-compiler requires the flags related to the kani libraries to be
+# in front of the ones that control rustc.
+#
+# For cargo kani, cargo sometimes adds flags before the custom RUSTFLAGS, hence,
+# we use a special environment variable to set Kani specific flags. These flags
+# should only be enabled if --kani-flags is present.
+if [ "${*#--kani-flags}" != "$*" ]
+then
+    # Collect arguments and remove --kani-flags
+    args=()
+    for arg in $@;
+    do
+        if [ "${arg#--kani-flags}" == "${arg}" ]
+        then
+            args+=("${arg}")
+        fi
+    done
+    "${KANI_PATH}" ${KANIFLAGS} "${args[@]}"
+else
+    # Just pass the arguments to the compiler.
+    "${KANI_PATH}" "$@"
+fi

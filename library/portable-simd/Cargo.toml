@@ -1,6 +1,0 @@
-[workspace]
-
-members = [
-    "crates/core_simd",
-    "crates/test_helpers",
-]

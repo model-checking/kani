@@ -1,6 +1,6 @@
 ---
 name: Performance Issue
-about: Create a performance issue for RMC
+about: Create a performance issue for Kani
 labels: bug
 ---
 <!--
@@ -29,7 +29,7 @@ using the following command line invocation:
 <command>
 ```
 
-with RMC version:
+with Kani version:
 
 If this is a performance regression, how long did it use to take?
 Otherwise how much did you expect it to take?

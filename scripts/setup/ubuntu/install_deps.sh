@@ -50,7 +50,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --ye
 # Add Python package dependencies
 PYTHON_DEPS=(
   autopep8
-  toml # Used for parsing `cargo-rmc` config toml
+  toml # Used for parsing `cargo-kani` config toml
   colorama # Used for introducing colors into terminal output
 )
 

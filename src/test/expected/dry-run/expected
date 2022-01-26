@@ -1,4 +1,0 @@
-rmc-rustc --goto-c -Z symbol-mangling-version=v0
-symtab2gb
-goto-cc --function main
-cbmc --bounds-check --pointer-check --pointer-primitive-check --conversion-check --div-by-zero-check --float-overflow-check --nan-check --pointer-overflow-check --undefined-shift-check --unwinding-assertions --object-bits 16 --function main

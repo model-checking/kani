@@ -13,21 +13,21 @@ if [[ $PLATFORM != "Linux x86_64" ]]; then
   exit 0
 fi
 
-# Get RMC root
+# Get Kani root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-RMC_DIR=$SCRIPT_DIR/..
+KANI_DIR=$SCRIPT_DIR/..
 
 echo
 echo "Starting Firecracker codegen regression..."
 echo
 
 # At the moment, we only test codegen for the virtio module
-cd $RMC_DIR/firecracker/src/devices/src/virtio/
-# Disable warnings until https://github.com/model-checking/rmc/issues/573 is fixed
+cd $KANI_DIR/firecracker/src/devices/src/virtio/
+# Disable warnings until https://github.com/model-checking/kani/issues/573 is fixed
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-# RMC cannot locate Cargo.toml correctly: https://github.com/model-checking/rmc/issues/717
-cargo rmc --only-codegen --target x86_64-unknown-linux-gnu --no-config-toml
+# Kani cannot locate Cargo.toml correctly: https://github.com/model-checking/kani/issues/717
+cargo kani --only-codegen --target x86_64-unknown-linux-gnu --no-config-toml
 
 echo
 echo "Finished Firecracker codegen regression successfully..."

@@ -1,0 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[toolchain]
+channel = "nightly-2022-01-19"
+components = ["llvm-tools-preview", "rustc-dev", "rust-src", "rustfmt"]

@@ -21,9 +21,9 @@ done
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
-RMC_DIR=$SCRIPT_DIR/..
+KANI_DIR=$SCRIPT_DIR/..
 
-find $RMC_DIR/library/rmc -name "*.c" | xargs clang-format $FLAGS
-find $RMC_DIR/src/test/rmc -name "*.c" | xargs clang-format $FLAGS
-find $RMC_DIR/src/test/cargo-rmc -name "*.c" | xargs clang-format $FLAGS
+find $KANI_DIR/library/kani -name "*.c" | xargs clang-format $FLAGS
+find $KANI_DIR/tests/kani -name "*.c" | xargs clang-format $FLAGS
+find $KANI_DIR/tests/cargo-kani -name "*.c" | xargs clang-format $FLAGS
 
