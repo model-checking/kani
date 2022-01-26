@@ -233,6 +233,15 @@ impl Stmt {
         stmt!(Continue, loc)
     }
 
+    /// `__CPROVER_cover(cond);`
+    /// This has the same semantics as `__CPROVER_assert(!cond)`, but the
+    /// difference is in how CBMC reports their results: instead of
+    /// SUCCESS/FAILURE, it uses SATISFIED/FAILED
+    pub fn cover(cond: Expr, loc: Location) -> Self {
+        assert!(cond.typ().is_bool());
+        BuiltinFn::CProverCover.call(vec![cond], loc.clone()).as_stmt(loc)
+    }
+
     /// `lhs.typ lhs = value;` or `lhs.typ lhs;`
     pub fn decl(lhs: Expr, value: Option<Expr>, loc: Location) -> Self {
         assert!(lhs.is_symbol());
