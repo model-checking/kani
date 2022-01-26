@@ -56,12 +56,6 @@ git remote add fork git@github.com:${USER}/kani.git
 git clean -xffd
 git submodule foreach --recursive git clean -xffd
 git submodule update --init
-# Don't forget to re-configure your Kani build:
-./configure \
-    --enable-debug \
-    --set=llvm.download-ci-llvm=true \
-    --set=rust.debug-assertions-std=false \
-    --set=rust.deny-warnings=false
 ```
 ```bash
 # Done with that PR, time for a new one?
@@ -116,7 +110,7 @@ rustc_private=true
 You may also need to install the `rustc-dev` package using rustup
 
 ```
-rustup toolchain install nightly --component rustc-dev   
+rustup toolchain install nightly --component rustc-dev
 ```
 
 ## Kani command cheat sheet
