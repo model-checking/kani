@@ -24,7 +24,7 @@ fn link_function_pointer_restrictions(data_per_crate: Vec<VtableCtxResults>) -> 
     for crate_data in data_per_crate {
         for call_site in crate_data.call_sites {
             let cbmc_call_site_name =
-                format!("{}.AVH.{}", call_site.function_name, call_site.label);
+                format!("{}.{}", call_site.function_name, call_site.label);
             let trait_def = call_site.trait_method;
 
             // Look up all possibilities, defaulting to the empty set
