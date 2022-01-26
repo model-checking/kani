@@ -151,7 +151,7 @@ pub fn add_kani_and_litani_to_path() {
     let cwd = env::current_dir().unwrap();
     let kani_dir = cwd.join("scripts");
     let mut litani_dir = cwd.clone();
-    litani_dir.extend(["src", "tools", "litani"].iter());
+    litani_dir.extend(["tools", "litani"].iter());
     env::set_var(
         "PATH",
         format!("{}:{}:{}", kani_dir.display(), litani_dir.display(), env::var("PATH").unwrap()),

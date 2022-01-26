@@ -99,7 +99,7 @@ impl Book {
         let parser = Parser::new(&summary).skip(n);
         // Set `self.name` as the root of the hierarchical path.
         let mut hierarchy_path: PathBuf =
-            ["src", "test", "bookrunner", "books", self.name.as_str()].iter().collect();
+            ["tests", "bookrunner", "books", self.name.as_str()].iter().collect();
         let mut prev_event_is_text_or_code = false;
         for event in parser {
             match event {
@@ -222,18 +222,20 @@ impl Book {
 fn setup_reference_book() -> Book {
     let summary_data = SummaryData {
         summary_start: "# The Rust Reference\n\n[Introduction](introduction.md)".to_string(),
-        summary_path: ["src", "doc", "reference", "src", "SUMMARY.md"].iter().collect(),
+        summary_path: ["tools", "bookrunner", "rust-doc", "reference", "src", "SUMMARY.md"]
+            .iter()
+            .collect(),
     };
     Book {
         name: "The Rust Reference".to_string(),
         summary_data: Some(summary_data),
         directory_data: None,
-        toml_path: ["src", "doc", "reference", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "reference", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
-            ["src", "doc", "reference", "src", "introduction.md"].iter().collect(),
-            ["src", "test", "bookrunner", "books", "The Rust Reference", "Introduction"]
+            ["tools", "bookrunner", "rust-doc", "reference", "src", "introduction.md"]
                 .iter()
                 .collect(),
+            ["tests", "bookrunner", "books", "The Rust Reference", "Introduction"].iter().collect(),
         )]),
         default_edition: Edition::Edition2015,
     }
@@ -242,19 +244,19 @@ fn setup_reference_book() -> Book {
 /// Set up [The Rustonomicon](https://doc.rust-lang.org/nightly/nomicon) book.
 fn setup_nomicon_book() -> Book {
     let summary_data = SummaryData {
-        summary_path: ["src", "doc", "nomicon", "src", "SUMMARY.md"].iter().collect(),
+        summary_path: ["tools", "bookrunner", "rust-doc", "nomicon", "src", "SUMMARY.md"]
+            .iter()
+            .collect(),
         summary_start: "# Summary\n\n[Introduction](intro.md)".to_string(),
     };
     Book {
         name: "The Rustonomicon".to_string(),
         summary_data: Some(summary_data),
         directory_data: None,
-        toml_path: ["src", "doc", "nomicon", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "nomicon", "book.toml"].iter().collect(),
         hierarchy: HashMap::from_iter([(
-            ["src", "doc", "nomicon", "src", "intro.md"].iter().collect(),
-            ["src", "test", "bookrunner", "books", "The Rustonomicon", "Introduction"]
-                .iter()
-                .collect(),
+            ["tools", "bookrunner", "rust-doc", "nomicon", "src", "intro.md"].iter().collect(),
+            ["tests", "bookrunner", "books", "The Rustonomicon", "Introduction"].iter().collect(),
         )]),
         default_edition: Edition::Edition2015,
     }
@@ -264,14 +266,16 @@ fn setup_nomicon_book() -> Book {
 /// [Rust Unstable Book](https://doc.rust-lang.org/beta/unstable-book/).
 fn setup_unstable_book() -> Book {
     let directory_data = DirectoryData {
-        src: ["src", "doc", "unstable-book", "src"].iter().collect(),
-        dest: ["src", "test", "bookrunner", "books", "The Unstable Book"].iter().collect(),
+        src: ["tools", "bookrunner", "rust-doc", "unstable-book", "src"].iter().collect(),
+        dest: ["tests", "bookrunner", "books", "The Unstable Book"].iter().collect(),
     };
     Book {
         name: "The Rust Unstable Book".to_string(),
         summary_data: None,
         directory_data: Some(directory_data),
-        toml_path: ["src", "doc", "unstable-book", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "unstable-book", "book.toml"]
+            .iter()
+            .collect(),
         hierarchy: HashMap::new(),
         default_edition: Edition::Edition2015,
     }
@@ -281,19 +285,23 @@ fn setup_unstable_book() -> Book {
 /// [Rust by Example](https://doc.rust-lang.org/nightly/rust-by-example) book.
 fn setup_rust_by_example_book() -> Book {
     let summary_data = SummaryData {
-        summary_path: ["src", "doc", "rust-by-example", "src", "SUMMARY.md"].iter().collect(),
+        summary_path: ["tools", "bookrunner", "rust-doc", "rust-by-example", "src", "SUMMARY.md"]
+            .iter()
+            .collect(),
         summary_start: "# Summary\n\n[Introduction](index.md)".to_string(),
     };
     Book {
         name: "Rust by Example".to_string(),
         summary_data: Some(summary_data),
         directory_data: None,
-        toml_path: ["src", "doc", "rust-by-example", "book.toml"].iter().collect(),
+        toml_path: ["tools", "bookrunner", "rust-doc", "rust-by-example", "book.toml"]
+            .iter()
+            .collect(),
         hierarchy: HashMap::from_iter([(
-            ["src", "doc", "rust-by-example", "src", "index.md"].iter().collect(),
-            ["src", "test", "bookrunner", "books", "Rust by Example", "Introduction"]
+            ["tools", "bookrunner", "rust-doc", "rust-by-example", "src", "index.md"]
                 .iter()
                 .collect(),
+            ["tests", "bookrunner", "books", "Rust by Example", "Introduction"].iter().collect(),
         )]),
         default_edition: Edition::Edition2015,
     }
@@ -323,13 +331,13 @@ impl Tester for Examples {
 
 /// Applies the diff corresponding to `example` with parent `path` (if it exists).
 fn apply_diff(path: &Path, example: &mut Example, config_paths: &mut HashSet<PathBuf>) {
-    let config_dir: PathBuf = ["src", "tools", "bookrunner", "configs"].iter().collect();
-    let test_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
+    let config_dir: PathBuf = ["tools", "bookrunner", "configs"].iter().collect();
+    let test_dir: PathBuf = ["tests", "bookrunner"].iter().collect();
     // `path` has the following form:
-    // `src/test/bookrunner/books/<hierarchy>
+    // `tests/bookrunner/books/<hierarchy>
     // If `example` has a custom diff file, the path to the diff file will have
     // the following form:
-    // `src/tools/bookrunner/configs/books/<hierarchy>/<example.line>.diff`
+    // `tools/bookrunner/configs/books/<hierarchy>/<example.line>.diff`
     // where <hierarchy> is the same for both paths.
     let mut diff_path = config_dir.join(path.strip_prefix(&test_dir).unwrap());
     diff_path.extend_one(format!("{}.diff", example.line));
@@ -359,13 +367,13 @@ fn apply_diff(path: &Path, example: &mut Example, config_paths: &mut HashSet<Pat
 
 /// Prepends example properties in `example.config` to the code in `example.code`.
 fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<PathBuf>) {
-    let config_dir: PathBuf = ["src", "tools", "bookrunner", "configs"].iter().collect();
-    let test_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
+    let config_dir: PathBuf = ["tools", "bookrunner", "configs"].iter().collect();
+    let test_dir: PathBuf = ["tests", "bookrunner"].iter().collect();
     // `path` has the following form:
-    // `src/test/bookrunner/books/<hierarchy>
+    // `tests/bookrunner/books/<hierarchy>
     // If `example` has a custom props file, the path to the props file will
     // have the following form:
-    // `src/tools/bookrunner/configs/books/<hierarchy>/<example.line>.props`
+    // `tools/bookrunner/configs/books/<hierarchy>/<example.line>.props`
     // where <hierarchy> is the same for both paths.
     let mut props_path = config_dir.join(path.strip_prefix(&test_dir).unwrap());
     props_path.extend_one(format!("{}.props", example.line));
@@ -428,7 +436,7 @@ fn extract(
 /// Returns a set of paths to the config files for examples in the Rust books.
 fn get_config_paths(book_name: &str) -> HashSet<PathBuf> {
     let config_dir: PathBuf =
-        ["src", "tools", "bookrunner", "configs", "books", book_name].iter().collect();
+        ["tools", "bookrunner", "configs", "books", book_name].iter().collect();
     let mut config_paths = HashSet::new();
     if config_dir.exists() {
         for entry in WalkDir::new(config_dir) {
@@ -515,13 +523,13 @@ fn generate_text_bookrunner(bookrunner: bookrunner::Tree, path: &Path) {
 fn litani_run_tests() {
     let output_prefix: PathBuf = ["build", "output"].iter().collect();
     let output_symlink: PathBuf = output_prefix.join("latest");
-    let bookrunner_dir: PathBuf = ["src", "test", "bookrunner"].iter().collect();
+    let bookrunner_dir: PathBuf = ["tests", "bookrunner"].iter().collect();
     let stage_names = ["check", "codegen", "verification"];
 
     util::add_kani_and_litani_to_path();
     let mut litani = Litani::init("Book Runner", &stage_names, &output_prefix, &output_symlink);
 
-    // Run all tests under the `src/test/bookrunner` directory.
+    // Run all tests under the `tests/bookrunner` directory.
     for entry in WalkDir::new(bookrunner_dir) {
         let entry = entry.unwrap().into_path();
         if entry.is_file() {
