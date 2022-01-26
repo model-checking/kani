@@ -335,7 +335,7 @@ fn common_inputs_stamp(config: &Config) -> Stamp {
 
     // Add compiletest itself.
     let rust_src_dir = config.find_rust_src_root().expect("Could not find Rust source root");
-    stamp.add_dir(&rust_src_dir.join("src/tools/compiletest/"));
+    stamp.add_dir(&rust_src_dir.join("tools/compiletest/"));
 
     stamp
 }

@@ -432,7 +432,7 @@ def run_goto_instrument(
 # Processes vtable restrictions to the format CBMC expects
 # TODO: once restrictions are on by default, we should build release ahead of time
 def process_vtable_restrictions(restrictions_filename, verbose=False, dry_run=False):
-    cmd = ["cargo", "run", "--release", "--manifest-path", "src/tools/kani-link-restrictions/Cargo.toml"]
+    cmd = ["cargo", "run", "--release", "-p", "kani-link-restrictions"]
     outname = os.path.join(os.path.dirname(os.path.abspath(restrictions_filename)), "linked-restrictions.json")
     cmd += ["--", restrictions_filename, outname]
     if (run_cmd(cmd, label="kani-link-restrictions", verbose=verbose, dry_run=dry_run) != EXIT_CODE_SUCCESS):

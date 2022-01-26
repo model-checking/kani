@@ -1,28 +1,28 @@
 [submodule "src/doc/nomicon"]
-	path = src/doc/nomicon
+	path = tools/bookrunner/rust-doc/nomicon
 	url = https://github.com/rust-lang/nomicon.git
 [submodule "src/doc/reference"]
-	path = src/doc/reference
+	path = tools/bookrunner/rust-doc/reference
 	url = https://github.com/rust-lang/reference.git
 [submodule "src/doc/book"]
-	path = src/doc/book
+	path = tools/bookrunner/rust-doc/book
 	url = https://github.com/rust-lang/book.git
 [submodule "src/doc/rust-by-example"]
-	path = src/doc/rust-by-example
+	path = tools/bookrunner/rust-doc/rust-by-example
 	url = https://github.com/rust-lang/rust-by-example.git
 [submodule "src/doc/rustc-dev-guide"]
-	path = src/doc/rustc-dev-guide
+	path = tools/bookrunner/rust-doc/rustc-dev-guide
 	url = https://github.com/rust-lang/rustc-dev-guide.git
 [submodule "src/doc/edition-guide"]
-	path = src/doc/edition-guide
+	path = tools/bookrunner/rust-doc/edition-guide
 	url = https://github.com/rust-lang/edition-guide.git
 [submodule "src/doc/embedded-book"]
-	path = src/doc/embedded-book
+	path = tools/bookrunner/rust-doc/embedded-book
 	url = https://github.com/rust-embedded/book.git
 [submodule "firecracker"]
 	path = firecracker
 	url = https://github.com/firecracker-microvm/firecracker.git
 [submodule "src/tools/litani"]
-	path = src/tools/litani
+	path = tools/litani
 	url = https://github.com/awslabs/aws-build-accumulator.git
 	branch = develop

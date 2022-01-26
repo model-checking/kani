@@ -25,7 +25,7 @@ if [ -d $HTML_DIR ]; then
     # Litani run is copied into `src` to avoid deletion by `mdbook`
     cp -r $HTML_DIR src/bookrunner/
     # Replace artifacts by examples under test
-    BOOKS_DIR=$KANI_DIR/src/test/bookrunner/books
+    BOOKS_DIR=$KANI_DIR/tests/bookrunner/books
     rm -r src/bookrunner/artifacts
     cp -r $BOOKS_DIR src/bookrunner/artifacts
     # Update paths in HTML report
