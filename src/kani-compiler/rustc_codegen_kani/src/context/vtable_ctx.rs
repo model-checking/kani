@@ -113,11 +113,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         assert!(self.vtable_ctx.emit_vtable_restrictions);
 
-        let label: InternedString = format!(
-            "restricted_call_label_{}",
-            self.vtable_ctx.get_call_site_global_idx()
-        )
-        .into();
+        let label: InternedString =
+            format!("restricted_call_label_{}", self.vtable_ctx.get_call_site_global_idx()).into();
 
         // We only have the Gotoc type, we need to normalize to match the MIR type.
         assert!(trait_ty.is_struct_tag());
