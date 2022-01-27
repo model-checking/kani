@@ -75,7 +75,8 @@ def main():
     symbols_filename = os.path.join(args.target_dir, "cbmc.symbols")
     out_files = kani.symbol_table_to_gotoc(symbol_table_jsons, args.verbose, args.keep_temps, args.dry_run)
 
-    restrictions_filename = os.path.join(args.target_dir, "restrictions.json") if args.restrict_vtable else None
+    # TODO: we need a cargo-kani test that tests if these restrictions are working
+    restrictions_filename = os.path.join(args.target_dir, args.build_target, "debug", "deps") if args.restrict_vtable else None
 
     args.c_lib.append(str(KANI_C_LIB))
 
