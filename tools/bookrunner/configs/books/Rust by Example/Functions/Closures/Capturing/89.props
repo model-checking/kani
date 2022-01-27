@@ -1,1 +1,1 @@
-// rmc-flags: --cbmc-args --unwind 4
+// kani-flags: --cbmc-args --unwind 4
