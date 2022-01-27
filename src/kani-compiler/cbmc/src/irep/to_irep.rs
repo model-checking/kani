@@ -98,6 +98,7 @@ impl ToIrepId for UnaryOperand {
     fn to_irep_id(&self) -> IrepId {
         match self {
             UnaryOperand::Bitnot => IrepId::Bitnot,
+            UnaryOperand::BitReverse => IrepId::BitReverse,
             UnaryOperand::Bswap => IrepId::Bswap,
             UnaryOperand::CountLeadingZeros { .. } => IrepId::CountLeadingZeros,
             UnaryOperand::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
@@ -277,6 +278,9 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm)],
                 named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8))],
             },
+            ExprValue::UnOp { op: UnaryOperand::BitReverse, e } => {
+                Irep { id: IrepId::BitReverse, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
+            }
             ExprValue::UnOp { op: UnaryOperand::CountLeadingZeros { allow_zero }, e } => Irep {
                 id: IrepId::CountLeadingZeros,
                 sub: vec![e.to_irep(mm)],
