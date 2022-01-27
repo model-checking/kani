@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-verify-fail
+
+// kani-flags: --no-restrict-vtable
+// TODO: Create a github issue about this?
 
 use std::any::Any;
 
