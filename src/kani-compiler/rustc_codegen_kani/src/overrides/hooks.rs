@@ -12,6 +12,7 @@ use crate::utils::instance_name_starts_with;
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
+use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -209,6 +210,37 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         span: Option<Span>,
     ) -> Stmt {
         tcx.codegen_panic(span, fargs)
+    }
+}
+
+struct OptionalCover;
+
+impl<'tcx> GotocHook<'tcx> for OptionalCover {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniOptionalCover")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        fargs: Vec<Expr>,
+        _assign_to: Option<Place<'tcx>>,
+        _target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        if tcx.queries.get_check_assertion_reachability() {
+            assert!(fargs.is_empty());
+            let loc = tcx.codegen_caller_span(&span);
+            let msg = format!(
+                "__kani reach check for assert in file {} line {}",
+                loc.filename().unwrap(),
+                loc.line().unwrap()
+            );
+            Stmt::assert_false(&msg, loc)
+        } else {
+            Stmt::skip(Location::none())
+        }
     }
 }
 
@@ -654,6 +686,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(MemSwap),
             Rc::new(Nevers),
             Rc::new(Nondet),
+            Rc::new(OptionalCover),
             Rc::new(PtrRead),
             Rc::new(PtrWrite),
             Rc::new(RustAlloc),

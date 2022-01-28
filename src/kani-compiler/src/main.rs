@@ -25,6 +25,7 @@ use std::rc::Rc;
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     let kani_deps = lib_path.clone().to_owned() + "/deps";
+    let kani_rlib = format!("noprelude:std={}/libkani.rlib", lib_path);
     let args = vec![
         "-C",
         "overflow-checks=on",
@@ -36,6 +37,8 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "trim-diagnostic-paths=no",
         "-Z",
         "human_readable_cgu_names",
+        "-Z",
+        "unstable-options",
         "--cfg=kani",
         "-Z",
         "crate-attr=feature(register_tool)",
@@ -44,7 +47,7 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "-L",
         lib_path,
         "--extern",
-        "kani",
+        kani_rlib.as_str(),
         "-L",
         kani_deps.as_str(),
     ];
@@ -81,6 +84,11 @@ fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name("restrict-vtable-fn-ptrs")
                 .long("--restrict-vtable-fn-ptrs")
                 .help("Restrict the targets of virtual table function pointer calls."),
+        )
+        .arg(
+            Arg::with_name("assertion-reach-checks")
+                .long("--assertion-reach-checks")
+                .help("Check the reachability of every assertion."),
         )
         .arg(
             Arg::with_name("sysroot")
@@ -122,6 +130,7 @@ fn main() -> Result<(), &'static str> {
         queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
     }
     queries.set_emit_vtable_restrictions(matches.is_present("restrict-vtable-fn-ptrs"));
+    queries.set_check_assertion_reachability(matches.is_present("assertion-reach-checks"));
 
     // Configure and run compiler.
     let mut callbacks = KaniCallbacks {};

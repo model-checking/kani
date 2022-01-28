@@ -100,3 +100,54 @@ pub fn expect_fail(_cond: bool, _message: &str) {}
 
 /// Kani proc macros must be in a separate crate
 pub use kani_macros::*;
+
+pub use std::*;
+
+#[rustc_diagnostic_item = "KaniOptionalCover"]
+#[inline(never)]
+#[doc(hidden)]
+pub fn __optional_cover() {
+    unimplemented!("Kani optional_cover")
+}
+
+#[macro_export]
+macro_rules! assert {
+    ($cond:expr $(,)?) => {
+        //core::assert!($crate::any::<bool>());
+        //$crate::__optional_cover(concat!("reachability check for assert in file ", file!(), " line ", line!()));
+        $crate::__optional_cover();
+        core::assert!($cond);
+    };
+}
+
+#[macro_export]
+macro_rules! assert_eq {
+    ($left:expr, $right:expr $(,)?) => {{
+        assert!($left == $right);
+    }};
+    ($left:expr, $right:expr, $($arg:tt)+) => {{
+        assert!($left == $right);
+    }};
+}
+
+#[macro_export]
+macro_rules! assert_ne {
+    ($left:expr, $right:expr $(,)?) => {{
+        assert!(!($left == $right));
+    }};
+    ($left:expr, $right:expr, $($arg:tt)+) => {{
+        assert!(!($left == $right));
+    }};
+}
+
+#[macro_export]
+macro_rules! format_args {
+    ($fmt:expr) => {};
+    ($fmt:expr, $($args:tt)*) => {};
+}
+
+//#[macro_export]
+//macro_rules! println {
+//    () => ();
+//    ($($arg:tt)*) => ()
+//}

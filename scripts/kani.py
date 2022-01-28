@@ -211,13 +211,16 @@ def run_cmd(
     return process.returncode
 
 
-def compiler_flags(mangler, symbol_table_passes, restrict_vtable):
+def compiler_flags(mangler, symbol_table_passes, restrict_vtable, assertion_reach_checks):
     kani_flags = ["--goto-c"]
     if symbol_table_passes:
         kani_flags.append(f"--symbol-table-passes={','.join(symbol_table_passes)}")
 
     if restrict_vtable:
         kani_flags.append("--restrict-vtable-fn-ptrs")
+
+    if assertion_reach_checks:
+        kani_flags.append("--assertion-reach-checks")
 
     rustc_flags = ["-Z", f"symbol-mangling-version={mangler}"]
 
@@ -239,7 +242,8 @@ def compile_single_rust_file(
         atexit.register(delete_file, base + ".kani-metadata.json")
 
     build_cmd = [KANI_RUSTC_EXE] + compiler_flags(extra_args.mangler, symbol_table_passes,
-                                                  extra_args.restrict_vtable)
+                                                  extra_args.restrict_vtable,
+                                                  extra_args.assertion_reach_checks)
 
     if extra_args.use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
@@ -272,7 +276,8 @@ def cargo_build(
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     rustflags = compiler_flags(extra_args.mangler, symbol_table_passes,
-                               extra_args.restrict_vtable)
+                               extra_args.restrict_vtable,
+                               extra_args.assertion_reach_checks)
     cargo_cmd = ["cargo", "build"] if not extra_args.tests else ["cargo", "test", "--no-run"]
     build_cmd = cargo_cmd + ["--target-dir", str(target_dir)]
     if extra_args.build_target:
