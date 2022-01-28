@@ -129,6 +129,13 @@ impl Stmt {
             _ => None,
         }
     }
+
+    pub fn get_stmts(&self) -> Option<&Vec<Stmt>> {
+        match self.body() {
+            Block(stmts) => Some(stmts),
+            _ => None,
+        }
+    }
 }
 
 /// Fluent builders

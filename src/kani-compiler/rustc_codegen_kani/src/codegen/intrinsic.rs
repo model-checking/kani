@@ -391,11 +391,36 @@ impl<'tcx> GotocCtx<'tcx> {
             "expf64" => codegen_simple_intrinsic!(Exp),
             "fabsf32" => codegen_simple_intrinsic!(Fabsf),
             "fabsf64" => codegen_simple_intrinsic!(Fabs),
+            "fadd_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_block = codegen_op_with_overflow_check!(add_overflow);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+            }
+            "fdiv_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_block = codegen_intrinsic_binop!(div);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+            }
             "floorf32" => codegen_simple_intrinsic!(Floorf),
             "floorf64" => codegen_simple_intrinsic!(Floor),
             "fmaf32" => codegen_simple_intrinsic!(Fmaf),
             "fmaf64" => codegen_simple_intrinsic!(Fma),
+            "fmul_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_block = codegen_op_with_overflow_check!(mul_overflow);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+            }
             "forget" => Stmt::skip(loc),
+            "frem_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_block = codegen_intrinsic_binop!(rem);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+            }
+            "fsub_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_block = codegen_op_with_overflow_check!(sub_overflow);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+            }
             "likely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "log10f32" => codegen_simple_intrinsic!(Log10f),
             "log10f64" => codegen_simple_intrinsic!(Log10),
@@ -518,6 +543,31 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/new/choose"
             ),
         }
+    }
+
+    // Fast math intrinsics for floating point operations like `fadd_fast`
+    // assume that their inputs are finite:
+    // https://doc.rust-lang.org/std/intrinsics/fn.fadd_fast.html
+    // This function adds assertions to the block statement which performs the
+    // operation and checks for overflow failures.
+    fn add_finite_args_checks(
+        &mut self,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        block: Stmt,
+        span: Option<Span>,
+    ) -> Stmt {
+        let arg1 = fargs.remove(0);
+        let arg2 = fargs.remove(0);
+        let msg1 = format!("first argument for {} is finite", intrinsic);
+        let msg2 = format!("second argument for {} is finite", intrinsic);
+        let loc = self.codegen_span_option(span);
+        let finite_check1 = Stmt::assert(arg1.is_finite(), msg1.as_str(), loc.clone());
+        let finite_check2 = Stmt::assert(arg2.is_finite(), msg2.as_str(), loc.clone());
+        let mut finite_checks = vec![finite_check1, finite_check2];
+        let mut block_stmts = block.get_stmts().unwrap().clone();
+        finite_checks.append(&mut block_stmts);
+        Stmt::block(finite_checks, loc)
     }
 
     fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
