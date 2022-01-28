@@ -18,13 +18,13 @@ use tracing::{debug, warn};
 impl<'tcx> GotocCtx<'tcx> {
     fn should_skip_current_fn(&self) -> bool {
         match self.current_fn().readable_name() {
-            // https://github.com/model-checking/rmc/issues/202
+            // https://github.com/model-checking/kani/issues/202
             "fmt::ArgumentV1::<'a>::as_usize" => true,
-            // https://github.com/model-checking/rmc/issues/204
+            // https://github.com/model-checking/kani/issues/204
             name if name.ends_with("__getit") => true,
-            // https://github.com/model-checking/rmc/issues/281
+            // https://github.com/model-checking/kani/issues/281
             name if name.starts_with("bridge::client") => true,
-            // https://github.com/model-checking/rmc/issues/282
+            // https://github.com/model-checking/kani/issues/282
             "bridge::closure::Closure::<'a, A, R>::call" => true,
             // Generators
             name if name.starts_with("<std::future::from_generator::GenFuture<T>") => true,
@@ -85,14 +85,6 @@ impl<'tcx> GotocCtx<'tcx> {
             assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
             self.print_instance(instance, mir);
-            let labels = self
-                .current_fn()
-                .mir()
-                .basic_blocks()
-                .indices()
-                .map(|bb| format!("{:?}", bb))
-                .collect();
-            self.current_fn_mut().set_labels(labels);
             self.codegen_function_prelude();
             self.codegen_declare_variables();
 
@@ -206,7 +198,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
-                // https://github.com/model-checking/rmc/issues/686 to track a better solution.
+                // https://github.com/model-checking/kani/issues/686 to track a better solution.
                 self.symbol_table.insert(sym.clone());
                 // As discussed above, fields are named like `0: t1`.
                 // Follow that pattern for the marshalled data.

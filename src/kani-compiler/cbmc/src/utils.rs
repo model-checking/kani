@@ -7,7 +7,7 @@ use num::bigint::BigInt;
 
 /// Kani bug report URL, for asserts/errors
 pub const BUG_REPORT_URL: &str =
-    "https://github.com/model-checking/rmc/issues/new?template=bug_report.md";
+    "https://github.com/model-checking/kani/issues/new?template=bug_report.md";
 
 /// The aggregate name used in CBMC for aggregates of type `n`.
 pub fn aggr_tag<T: Into<InternedString>>(n: T) -> InternedString {

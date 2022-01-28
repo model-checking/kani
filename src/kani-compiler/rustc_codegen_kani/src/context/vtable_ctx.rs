@@ -114,7 +114,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the naming unambiguous.
     ///
     /// This can be simplified if CBMC implemented label-based restrictions.
-    /// Kani tracking: https://github.com/model-checking/rmc/issues/651
+    /// Kani tracking: https://github.com/model-checking/kani/issues/651
     /// CBMC tracking: https://github.com/diffblue/cbmc/issues/6464
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,

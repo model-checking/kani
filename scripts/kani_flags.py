@@ -173,7 +173,7 @@ def add_artifact_flags(make_group, add_flag, config):
     default_target = config["default-target"]
     assert default_target is not None, \
         f"Missing item in parser config: \"default-target\".\n" \
-        "This is a bug; please report this to https://github.com/model-checking/rmc/issues."
+        "This is a bug; please report this to https://github.com/model-checking/kani/issues."
 
     group = make_group(
         "Artifact flags", "Produce artifacts in addition to a basic Kani report.")
@@ -317,4 +317,4 @@ def add_flags(parser, config, exclude_flags=[], exclude_groups=[]):
     extra_groups = set(exclude_groups) - excluded_groups
     assert len(extra_flags.union(extra_groups)) == 0, \
         f"Attempt to exclude parser options which don't exist: {extra_groups.union(extra_flags)}\n" \
-        "This is a bug; please report this to https://github.com/model-checking/rmc/issues."
+        "This is a bug; please report this to https://github.com/model-checking/kani/issues."

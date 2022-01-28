@@ -21,7 +21,7 @@ thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Locat
 
 // Include Kani's bug reporting URL in our panics.
 const BUG_REPORT_URL: &str =
-    "https://github.com/model-checking/rmc/issues/new?labels=bug&template=bug_report.md";
+    "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
 
 pub fn init() {
     // Install panic hook

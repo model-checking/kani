@@ -117,7 +117,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         //  To solve this, we need to store the `self.get_sqrt()` into a temporary variable.
         //  Using the macro form allows us to keep the call as a oneliner, while still making rust happy.
-        //  TODO: https://github.com/model-checking/rmc/issues/5
+        //  TODO: https://github.com/model-checking/kani/issues/5
         macro_rules! codegen_simple_intrinsic {
             ($f:ident) => {{
                 let mm = self.symbol_table.machine_model();
@@ -355,13 +355,16 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_xsub_acqrel" => codegen_atomic_binop!(sub),
             "atomic_xsub_rel" => codegen_atomic_binop!(sub),
             "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
+            "bitreverse" => self.codegen_expr_to_place(p, fargs.remove(0).bitreverse()),
             // black_box is an identity function that hints to the compiler
             // to be maximally pessimistic to limit optimizations
             "black_box" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "breakpoint" => Stmt::skip(loc),
             "bswap" => self.codegen_expr_to_place(p, fargs.remove(0).bswap()),
             "caller_location" => {
-                codegen_unimplemented_intrinsic!("https://github.com/model-checking/rmc/issues/374")
+                codegen_unimplemented_intrinsic!(
+                    "https://github.com/model-checking/kani/issues/374"
+                )
             }
             "ceilf32" => codegen_simple_intrinsic!(Ceilf),
             "ceilf64" => codegen_simple_intrinsic!(Ceil),
@@ -469,7 +472,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
             "try" => {
-                codegen_unimplemented_intrinsic!("https://github.com/model-checking/rmc/issues/267")
+                codegen_unimplemented_intrinsic!(
+                    "https://github.com/model-checking/kani/issues/267"
+                )
             }
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
@@ -510,7 +515,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // Unimplemented
             _ => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/rmc/issues/new/choose"
+                "https://github.com/model-checking/kani/issues/new/choose"
             ),
         }
     }

@@ -152,7 +152,7 @@ macro_rules! stmt {
 impl Stmt {
     /// `lhs = rhs;`
     pub fn assign(lhs: Expr, rhs: Expr, loc: Location) -> Self {
-        //Temporarily work around https://github.com/model-checking/rmc/issues/95
+        //Temporarily work around https://github.com/model-checking/kani/issues/95
         //by disabling the assert and soundly assigning nondet
         //assert_eq!(lhs.typ(), rhs.typ());
         if lhs.typ() != rhs.typ() {
@@ -231,6 +231,15 @@ impl Stmt {
     /// `continue;`
     pub fn continue_stmt(loc: Location) -> Self {
         stmt!(Continue, loc)
+    }
+
+    /// `__CPROVER_cover(cond);`
+    /// This has the same semantics as `__CPROVER_assert(!cond)`, but the
+    /// difference is in how CBMC reports their results: instead of
+    /// SUCCESS/FAILURE, it uses SATISFIED/FAILED
+    pub fn cover(cond: Expr, loc: Location) -> Self {
+        assert!(cond.typ().is_bool());
+        BuiltinFn::CProverCover.call(vec![cond], loc.clone()).as_stmt(loc)
     }
 
     /// `lhs.typ lhs = value;` or `lhs.typ lhs;`

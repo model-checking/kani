@@ -98,6 +98,7 @@ impl ToIrepId for UnaryOperand {
     fn to_irep_id(&self) -> IrepId {
         match self {
             UnaryOperand::Bitnot => IrepId::Bitnot,
+            UnaryOperand::BitReverse => IrepId::BitReverse,
             UnaryOperand::Bswap => IrepId::Bswap,
             UnaryOperand::CountLeadingZeros { .. } => IrepId::CountLeadingZeros,
             UnaryOperand::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
@@ -277,6 +278,9 @@ impl ToIrep for ExprValue {
                 sub: vec![e.to_irep(mm)],
                 named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8))],
             },
+            ExprValue::UnOp { op: UnaryOperand::BitReverse, e } => {
+                Irep { id: IrepId::BitReverse, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
+            }
             ExprValue::UnOp { op: UnaryOperand::CountLeadingZeros { allow_zero }, e } => Irep {
                 id: IrepId::CountLeadingZeros,
                 sub: vec![e.to_irep(mm)],
@@ -446,7 +450,7 @@ impl goto_program::Symbol {
             /// Almost always the same as base_name, but with name mangling can be relevant
             pretty_name: self.pretty_name.unwrap_or("".into()),
             /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
-            /// https://github.com/model-checking/rmc/issues/1
+            /// https://github.com/model-checking/kani/issues/1
             mode: self.mode.to_string().into(),
 
             // global properties

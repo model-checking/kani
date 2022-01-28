@@ -31,7 +31,7 @@ typedef bool __CPROVER_bool;
 // POINTER_OBJECT is used by Rust's offset_from to ensure
 // the two pointers are from the same object.
 // We can't do this in C.
-// Tracking issue: https://github.com/model-checking/rmc/issues/440
+// Tracking issue: https://github.com/model-checking/kani/issues/440
 #define POINTER_OBJECT(value) 0
 
 // Use built-in overflow operators

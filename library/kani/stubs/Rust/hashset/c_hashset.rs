@@ -40,7 +40,7 @@
 //
 // But it important to note here that Kani currently does not support unbounded
 // structures and arrays;
-// Tracking issue: https://github.com/model-checking/rmc/issues/311
+// Tracking issue: https://github.com/model-checking/kani/issues/311
 #[repr(C)]
 pub struct c_hashset {
     domain: *mut int16_t,

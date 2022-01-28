@@ -45,7 +45,7 @@ pub struct Symbol {
 }
 
 /// Currently, only C is understood by CBMC.
-// TODO: https://github.com/model-checking/rmc/issues/1
+// TODO: https://github.com/model-checking/kani/issues/1
 #[derive(Clone, Debug)]
 pub enum SymbolModes {
     C,

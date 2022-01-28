@@ -25,8 +25,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If it is not used, we the assertion will pass.
     /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
     ///
-    /// TODO: https://github.com/model-checking/rmc/issues/8 assume the required validity constraints for the nondet return
-    /// TODO: https://github.com/model-checking/rmc/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
+    /// TODO: https://github.com/model-checking/kani/issues/8 assume the required validity constraints for the nondet return
+    /// TODO: https://github.com/model-checking/kani/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
     pub fn codegen_unimplemented(
         &mut self,
         operation_name: &str,

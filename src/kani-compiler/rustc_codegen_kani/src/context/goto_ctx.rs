@@ -271,7 +271,16 @@ impl<'tcx> GotocCtx<'tcx> {
 /// Mutators
 impl<'tcx> GotocCtx<'tcx> {
     pub fn set_current_fn(&mut self, instance: Instance<'tcx>) {
-        self.current_fn = Some(CurrentFnCtx::new(instance, self));
+        self.current_fn = Some(CurrentFnCtx::new(
+            instance,
+            self,
+            self.tcx
+                .instance_mir(instance.def)
+                .basic_blocks()
+                .indices()
+                .map(|bb| format!("{:?}", bb))
+                .collect(),
+        ));
     }
 
     pub fn reset_current_fn(&mut self) {

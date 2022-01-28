@@ -1,14 +1,14 @@
 # Kani Rust Verifier
 The Kani Rust Verifier aims to be a bit-precise model-checker for Rust.
 
-Check out the [Documentation](https://model-checking.github.io/rmc) for
+Check out the [Documentation](https://model-checking.github.io/kani) for
 instructions on installing and running Kani.
 
 ## Security
-See [SECURITY](https://github.com/model-checking/rmc/security/policy) for more information.
+See [SECURITY](https://github.com/model-checking/kani/security/policy) for more information.
 
 ## Developer guide
-See [Kani developer documentation](https://model-checking.github.io/rmc/dev-documentation.html).
+See [Kani developer documentation](https://model-checking.github.io/kani/dev-documentation.html).
 
 ## License
 ### Rust compiler

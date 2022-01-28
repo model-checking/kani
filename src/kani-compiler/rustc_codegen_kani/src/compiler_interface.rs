@@ -191,7 +191,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
     if session.panic_strategy() != PanicStrategy::Abort {
         session.err(
             "Kani can only handle abort panic strategy (-C panic=abort). See for more details \
-        https://github.com/model-checking/rmc/issues/692",
+        https://github.com/model-checking/kani/issues/692",
         );
     }
 

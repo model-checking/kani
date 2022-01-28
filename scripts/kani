@@ -156,7 +156,7 @@ def parse_args():
     # Create parser
     def create_parser():
         parser = argparse.ArgumentParser(
-            description="Verify a single Rust file. For more information, see https://github.com/model-checking/rmc.")
+            description="Verify a single Rust file. For more information, see https://github.com/model-checking/kani.")
 
         input_group = parser.add_argument_group(
             "Input", "You can pass in the rust file positionally or with the --input flag.")
