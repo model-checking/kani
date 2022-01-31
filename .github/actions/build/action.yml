@@ -1,0 +1,39 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Build Kani
+description: Install dependencies and build kani binaries
+inputs:
+  os:
+    description: In which Operating System is this running
+    required: true
+    default: ubuntu-20.04
+runs:
+  using: composite
+  steps:
+      - name: Install dependencies
+        run: ./scripts/setup/${{ inputs.os }}/install_deps.sh
+        shell: bash
+
+      - name: Install CBMC
+        run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh
+        shell: bash
+
+      - name: Install cbmc-viewer
+        run: ./scripts/setup/install_viewer.sh 2.6
+        shell: bash
+
+      - name: Install Rust toolchain
+        run: ./scripts/setup/install_rustup.sh
+        shell: bash
+
+      - name: Update submodules
+        run: |
+          git submodule update --init --depth 1
+        shell: bash
+
+      - name: Build Kani and Kani Library
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build -p kani-compiler
+        shell: bash
+
