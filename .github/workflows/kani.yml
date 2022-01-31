@@ -9,58 +9,49 @@ jobs:
     strategy:
       matrix:
         os: [macos-10.15, ubuntu-18.04, ubuntu-20.04]
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Build Kani
+        uses: ./.github/actions/build
+        with:
+            os: ${{ matrix.os }}
+
+      - name: Execute Kani regression
+        run: ./scripts/kani-regression.sh
+
+  bookrunner:
+    runs-on: ubuntu-20.04
     permissions:
       contents: write
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v2
 
-      - name: Install dependencies
-        run: ./scripts/setup/${{ matrix.os }}/install_deps.sh
-
-      - name: Install CBMC
-        run: ./scripts/setup/${{ matrix.os }}/install_cbmc.sh
-
-      - name: Install cbmc-viewer
-        run: ./scripts/setup/install_viewer.sh 2.6
-
-      - name: Install Rust toolchain
-        run: ./scripts/setup/install_rustup.sh
-
-      - name: Update submodules
-        run: |
-          git submodule update --init --depth 1
-
-      - name: Build Kani and Kani Library
-        run: |
-          export RUST_BACKTRACE=1
-          cargo build -p kani-compiler
-
-      - name: Execute Kani regression
-        run: ./scripts/kani-regression.sh
+      - name: Build Kani
+        uses: ./.github/actions/build
+        with:
+            os: ubuntu-20.04
 
       - name: Install book runner dependencies
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: ./scripts/setup/install_bookrunner_deps.sh
 
       - name: Generate book runner report
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: cargo run -p bookrunner
         env:
             DOC_RUST_LANG_ORG_CHANNEL: nightly
 
       - name: Print book runner text results
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: cat build/output/latest/html/bookrunner.txt
 
       # On one OS only, build the documentation, too.
       - name: Build Documentation
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: ./docs/build-docs.sh
 
       # When we're pushed to main branch, only then actually publish the docs.
       - name: Publish Documentation
-        if: ${{ matrix.os == 'ubuntu-20.04' && github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
+        if: ${{ github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
         uses: JamesIves/github-pages-deploy-action@4.1.4
         with:
           branch: gh-pages
