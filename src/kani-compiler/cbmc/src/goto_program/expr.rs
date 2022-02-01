@@ -9,6 +9,7 @@ use crate::InternedString;
 use num::bigint::BigInt;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use tracing::warn;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// Datatypes
@@ -813,8 +814,8 @@ impl Expr {
         match op {
             // Arithmetic which can include pointers
             Minus => {
-                (lhs.typ == rhs.typ)
-                    && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector())
+                ((lhs.typ == rhs.typ)
+                    && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             Plus => {
@@ -851,13 +852,10 @@ impl Expr {
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
-            OverflowMinus => {
-                (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
-                    || (lhs.typ.is_pointer() && rhs.typ.is_integer())
-            }
-            OverflowMult | OverflowPlus => {
-                (lhs.typ == rhs.typ && lhs.typ.is_integer())
-                    || (lhs.typ.is_pointer() && rhs.typ.is_integer())
+            // While one can technically use these on pointers, the result is treated as an integer.
+            // This is almost never what you actually want.
+            OverflowMinus | OverflowMult | OverflowPlus => {
+                lhs.typ.is_integer() && rhs.typ.is_integer()
             }
         }
     }
@@ -1205,7 +1203,18 @@ impl Expr {
     /// `ArithmeticOverflowResult r; >>>r.overflowed = builtin_add_overflow(self, e, &r.result)<<<`
     pub fn add_overflow(self, e: Expr) -> ArithmeticOverflowResult {
         let result = self.clone().plus(e.clone());
-        let overflowed = self.add_overflow_p(e);
+        // FIXME: https://github.com/model-checking/kani/issues/786
+        // Overflow checking on pointers is hard to do at the IREP level.
+        // Instead, we rely on `--pointer-overflow-check` in CBMC.
+        let overflowed = if self.typ.is_pointer() {
+            warn!(
+                "Overflow operations are not properly supported on pointer types {:?} {:?}",
+                self, e
+            );
+            Expr::bool_false()
+        } else {
+            self.add_overflow_p(e)
+        };
         ArithmeticOverflowResult { result, overflowed }
     }
 
