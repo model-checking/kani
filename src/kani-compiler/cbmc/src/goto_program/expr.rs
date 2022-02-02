@@ -855,7 +855,7 @@ impl Expr {
             // While one can technically use these on pointers, the result is treated as an integer.
             // This is almost never what you actually want.
             OverflowMinus | OverflowMult | OverflowPlus => {
-                lhs.typ.is_integer() && rhs.typ.is_integer()
+                lhs.typ == rhs.typ && lhs.typ.is_integer()
             }
         }
     }
@@ -1206,7 +1206,7 @@ impl Expr {
         // FIXME: https://github.com/model-checking/kani/issues/786
         // Overflow checking on pointers is hard to do at the IREP level.
         // Instead, we rely on `--pointer-overflow-check` in CBMC.
-        let overflowed = if self.typ.is_pointer() {
+        let overflowed = if self.typ.is_pointer() || e.typ.is_pointer() {
             warn!(
                 "Overflow operations are not properly supported on pointer types {:?} {:?}",
                 self, e
