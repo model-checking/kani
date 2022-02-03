@@ -854,6 +854,12 @@ impl Expr {
             // Overflow flags
             // While one can technically use these on pointers, the result is treated as an integer.
             // This is almost never what you actually want.
+            // In particular, this check can unsoundly report no overflow on pointer operations:
+            // ```
+            //     uint32_t *p = (SIZE_MAX-4);
+            //     uint32_t *q = p+1; //overflows
+            //     OverflowPlus(p,1); //calculates SIZE_MAX-3, reports NO OVERFLOW
+            // ```
             OverflowMinus | OverflowMult | OverflowPlus => {
                 lhs.typ == rhs.typ && lhs.typ.is_integer()
             }
@@ -1205,7 +1211,9 @@ impl Expr {
         let result = self.clone().plus(e.clone());
         // FIXME: https://github.com/model-checking/kani/issues/786
         // Overflow checking on pointers is hard to do at the IREP level.
-        // Instead, we rely on `--pointer-overflow-check` in CBMC.
+        // In particular, the `__overflow` primitives check INTEGER (not pointer) arithmatic.
+        // So the `__add_overflow_p` value really only makes sense for integer arithmatic.
+        // For pointers, we rely on `--pointer-overflow-check` in CBMC.
         let overflowed = if self.typ.is_pointer() || e.typ.is_pointer() {
             warn!(
                 "Overflow operations are not properly supported on pointer types {:?} {:?}",
