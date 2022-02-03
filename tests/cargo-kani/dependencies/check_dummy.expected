@@ -1,1 +1,1 @@
-[check_dummy.assertion.1] line 8 assertion failed: x > 2: SUCCESS
+[check_dummy.assertion.1] line 8 assertion: x > 2: SUCCESS

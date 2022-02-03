@@ -1,4 +1,4 @@
-line 23 assertion failed: false: SUCCESS
-line 27 assertion failed: x == 10: SUCCESS
-line 28 assertion failed: false: SUCCESS
-line 33 assertion failed: false: SUCCESS
+line 23 assertion: false: SUCCESS
+line 27 assertion: x == 10: SUCCESS
+line 28 assertion: false: SUCCESS
+line 33 assertion: false: SUCCESS

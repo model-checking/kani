@@ -1,4 +1,4 @@
-[rating::verification::check_rating.assertion.1] line 38 assertion failed: rating.get() <= 5: SUCCESS
-[rating::verification::check_rating.assertion.2] line 39 assertion failed: Rating::from(rating.get()).is_some(): SUCCESS
+[rating::verification::check_rating.assertion.1] line 38 assertion: rating.get() <= 5: SUCCESS
+[rating::verification::check_rating.assertion.2] line 39 assertion: Rating::from(rating.get()).is_some(): SUCCESS
 VERIFICATION SUCCESSFUL
 
