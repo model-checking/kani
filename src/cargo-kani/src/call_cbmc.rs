@@ -1,10 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use crate::context::KaniContext;
 
@@ -18,18 +18,15 @@ impl KaniContext {
             temps.push(output_filename.clone());
         }
 
-        let output_file = std::fs::File::create(&output_filename)?;
-
         let args: Vec<OsString> = self.cbmc_flags(file)?;
 
         // TODO get cbmc path from self
-        let result = Command::new("cbmc")
-            .args(args)
-            .stdout(Stdio::from(output_file))
-            .status()
-            .context("Failed to invoke cbmc")?;
+        let mut cmd = Command::new("cbmc");
+        cmd.args(args);
 
-        // regardless of success or failure, first:
+        let result = self.run_redirect(cmd, &output_filename)?;
+
+        // regardless of success or failure, first we need to print:
         self.format_cbmc_output(&output_filename)?;
 
         if !result.success() {
@@ -40,13 +37,12 @@ impl KaniContext {
     }
 
     /// used by call_cbmc_viewer, needs refactor TODO
-    pub fn call_cbmc(&self, args: Vec<OsString>, output: Stdio) -> Result<()> {
+    pub fn call_cbmc(&self, args: Vec<OsString>, output: &Path) -> Result<()> {
         // TODO get cbmc path from self
-        let result = Command::new("cbmc")
-            .args(args)
-            .stdout(output)
-            .status()
-            .context("Failed to invoke cbmc")?;
+        let mut cmd = Command::new("cbmc");
+        cmd.args(args);
+
+        let result = self.run_redirect(cmd, output)?;
 
         if !result.success() {
             bail!("cbmc exited with status {}", result);

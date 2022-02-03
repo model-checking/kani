@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
@@ -13,14 +13,10 @@ impl KaniContext {
     pub fn format_cbmc_output(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![self.cbmc_json_parser_py.clone().into(), file.into()];
 
-        let result = Command::new("python")
-            .args(args)
-            .status()
-            .context("Failed to invoke cbmc_json_parser.py")?;
+        let mut cmd = Command::new("python");
+        cmd.args(args);
 
-        if !result.success() {
-            bail!("cbmc_json_parser.py exited with status {}", result);
-        }
+        self.run_terminal(cmd)?;
 
         Ok(())
     }

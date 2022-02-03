@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::Command;
@@ -17,20 +17,23 @@ impl KaniContext {
         };
 
         let build_target = "x86_64-unknown-linux-gnu";
-        let args: Vec<OsString> =
-            vec!["build".into(), "--target".into(), build_target.into(), "-v".into()]; // todo -v (only with --verbose)
+        let mut args: Vec<OsString> = vec!["build".into(), "--target".into(), build_target.into()];
 
-        let result = Command::new("cargo")
-            .args(args)
+        if self.args.verbose {
+            args.push("-v".into());
+        }
+
+        let mut cmd = Command::new("cargo");
+        cmd.args(args)
             .env("RUSTC", &self.kani_rustc)
             .env("RUSTFLAGS", "--kani-flags")
-            .env("KaniFLAGS", flag_env)
-            .status()
-            .context("Failed to invoke cargo")?;
+            .env("KaniFLAGS", flag_env);
 
-        if !result.success() {
-            bail!("cargo exited with status {}", result);
+        if self.args.debug {
+            cmd.env("KANI_LOG", "rustc_codegen_kani");
         }
+
+        self.run_terminal(cmd)?;
 
         let build_glob = format!("target/{}/debug/deps/*.symtab.json", build_target);
         let results = glob::glob(&build_glob)?;

@@ -4,6 +4,7 @@
 use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Replace an extension with another one, in a new PathBuf. (See tests for examples)
 pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
@@ -42,6 +43,35 @@ pub fn join_osstring(elems: &[OsString], joiner: &str) -> OsString {
         }
         str.push(arg);
     }
+    str
+}
+
+/// Render a Command as a string, to log it (e.g. in dry runs)
+pub fn render_command(cmd: &Command) -> OsString {
+    let mut str = OsString::new();
+
+    for (k, v) in cmd.get_envs() {
+        if let Some(v) = v {
+            str.push(k);
+            str.push("=\"");
+            str.push(v);
+            str.push("\" ");
+        }
+    }
+
+    str.push(cmd.get_program());
+
+    for a in cmd.get_args() {
+        str.push(" ");
+        if a.to_string_lossy().contains(' ') {
+            str.push("\"");
+            str.push(a);
+            str.push("\"");
+        } else {
+            str.push(a);
+        }
+    }
+
     str
 }
 
@@ -94,5 +124,16 @@ mod tests {
             join_osstring(&["a".into(), "b".into(), "cd".into()], ", "),
             OsString::from("a, b, cd")
         );
+    }
+
+    #[test]
+    fn check_render_command() {
+        let mut c1 = Command::new("a");
+        c1.arg("b");
+        assert_eq!(render_command(&c1), OsString::from("a b"));
+        c1.arg("/c d/");
+        assert_eq!(render_command(&c1), OsString::from("a b \"/c d/\""));
+        c1.env("PARAM", "VALUE");
+        assert_eq!(render_command(&c1), OsString::from("PARAM=\"VALUE\" a b \"/c d/\""));
     }
 }

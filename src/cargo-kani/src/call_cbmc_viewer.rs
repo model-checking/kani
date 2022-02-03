@@ -1,11 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
-use std::process::Stdio;
 
 use crate::context::KaniContext;
 use crate::util::alter_extension;
@@ -46,14 +45,10 @@ impl KaniContext {
         ];
 
         // TODO get cbmc-viewer path from self
-        let result = Command::new("cbmc-viewer")
-            .args(args)
-            .status()
-            .context("Failed to invoke cbmc-viewer")?;
+        let mut cmd = Command::new("cbmc-viewer");
+        cmd.args(args);
 
-        if !result.success() {
-            bail!("cbmc-viewer exited with status {}", result);
-        }
+        self.run_suppress(cmd)?;
 
         Ok(())
     }
@@ -69,10 +64,8 @@ impl KaniContext {
             }
         }
 
-        let file = std::fs::File::create(output)?;
-
         // Expect and allow failures... maybe we should do better here somehow
-        let _result = self.call_cbmc(args, Stdio::from(file));
+        let _result = self.call_cbmc(args, output);
 
         Ok(())
     }

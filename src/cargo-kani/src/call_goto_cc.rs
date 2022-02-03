@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,12 +26,10 @@ impl KaniContext {
         args.push(output.to_owned().into_os_string());
 
         // TODO get goto-cc path from self
-        let result =
-            Command::new("goto-cc").args(args).status().context("Failed to invoke goto-cc")?;
+        let mut cmd = Command::new("goto-cc");
+        cmd.args(args);
 
-        if !result.success() {
-            bail!("goto-cc exited with status {}", result);
-        }
+        self.run_suppress(cmd)?;
 
         Ok(())
     }

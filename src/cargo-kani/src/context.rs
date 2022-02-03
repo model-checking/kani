@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::KaniArgs;
+use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus};
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniContext {
@@ -53,6 +56,79 @@ impl KaniContext {
             }
         }
     }
+
+    // The below suite of helper functions for executing Commands are meant to be a common handler
+    // for various cmdline flags like 'dry-run' and 'quiet'. These functions are temporary: in the
+    // longer run we'll switch to a graph-interpreter style of constructing and executing jobs.
+    // (In other words: higher-level data structures, rather than passing around Commands.)
+    // (e.g. to support emitting Litani build graphs, or to better parallelize our work)
+
+    // We basically have three different output policies:
+    //               No error                  Error                     Notes
+    //               Default  Quiet  Verbose   Default  Quiet  Verbose
+    // run_terminal  Y        N      Y         Y        N      Y         (inherits terminal)
+    // run_suppress  N        N      Y         Y        N      Y         (buffered text only)
+    // run_redirect  (not applicable, always to the file)                (only option where error is acceptable)
+
+    /// Run a job, leave it outputting to terminal (unless --quiet), and fail if there's a problem.
+    pub fn run_terminal(&self, mut cmd: Command) -> Result<()> {
+        if self.args.quiet {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
+        if self.args.verbose || self.args.dry_run {
+            println!("{}", render_command(&cmd).to_string_lossy());
+            if self.args.dry_run {
+                // Short circuit
+                return Ok(());
+            }
+        }
+        let result = cmd
+            .status()
+            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
+        if !result.success() {
+            bail!("{} exited with status {}", cmd.get_program().to_string_lossy(), result);
+        }
+        Ok(())
+    }
+
+    /// Run a job, but only output (unless --quiet) if it fails, and fail if there's a problem.
+    pub fn run_suppress(&self, mut cmd: Command) -> Result<()> {
+        if self.args.quiet || self.args.debug || self.args.verbose || self.args.dry_run {
+            return self.run_terminal(cmd);
+        }
+        let result = cmd
+            .output()
+            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
+        if !result.status.success() {
+            // Don't suppress the output. There doesn't seem to be a way to easily get Command
+            // to give one output stream of both out/err with interleaving correct, it seems
+            // you'd have to resort to some lower-level interface.
+            let stdout = std::io::stdout();
+            let mut handle = stdout.lock();
+            handle.write_all(&result.stdout)?;
+            handle.write_all(&result.stderr)?;
+            bail!("{} exited with status {}", cmd.get_program().to_string_lossy(), result.status);
+        }
+        Ok(())
+    }
+
+    /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
+    pub fn run_redirect(&self, mut cmd: Command, stdout: &Path) -> Result<ExitStatus> {
+        if self.args.verbose || self.args.dry_run {
+            println!("{} > {}", render_command(&cmd).to_string_lossy(), stdout.display());
+            if self.args.dry_run {
+                // Short circuit. Difficult to mock an ExitStatus :(
+                return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
+            }
+        }
+        let output_file = std::fs::File::create(&stdout)?;
+        cmd.stdout(output_file);
+
+        return cmd
+            .status()
+            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()));
+    }
 }
 
 impl InstallType {
@@ -61,8 +137,6 @@ impl InstallType {
             .context("cargo-kani was unable to determine where its executable was located")?;
         // Remove the executable name, so we're in the directory we care about
         exe.pop();
-
-        println!("{:?}", exe);
 
         // Case 1: We've checked out the development repo and we're built under `target/`
         if exe.ends_with("target/debug") {

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,13 +25,14 @@ impl KaniContext {
         let mut args = self.kani_rustc_flags();
         args.push(file.to_owned().into_os_string());
 
-        let result = Command::new(&self.kani_rustc)
-            .args(args)
-            .status()
-            .context("Failed to invoke kani-rustc")?;
+        let mut cmd = Command::new(&self.kani_rustc);
+        cmd.args(args);
 
-        if !result.success() {
-            bail!("kani-rustc exited with status {}", result);
+        if self.args.debug && !self.args.quiet {
+            cmd.env("KANI_LOG", "rustc_codegen_kani");
+            self.run_terminal(cmd)?;
+        } else {
+            self.run_suppress(cmd)?;
         }
 
         Ok(output_filename)

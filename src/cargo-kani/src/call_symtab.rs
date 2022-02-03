@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -23,12 +23,10 @@ impl KaniContext {
             output_filename.clone().into_os_string(),
         ];
         // TODO get symtab2gb path from self
-        let result =
-            Command::new("symtab2gb").args(args).status().context("Failed to invoke symtab2gb")?;
+        let mut cmd = Command::new("symtab2gb");
+        cmd.args(args);
 
-        if !result.success() {
-            bail!("symtab2gb exited with status {}", result);
-        }
+        self.run_suppress(cmd)?;
 
         Ok(output_filename)
     }
