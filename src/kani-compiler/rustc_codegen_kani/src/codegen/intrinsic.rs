@@ -519,6 +519,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_memory" => codegen_intrinsic_copy!(Memmove),
             "volatile_copy_nonoverlapping_memory" => codegen_intrinsic_copy!(Memcpy),
             "volatile_load" => self.codegen_expr_to_place(p, fargs.remove(0).dereference()),
+            "volatile_store" => self.codegen_volatile_store(instance, intrinsic, fargs, loc),
             "wrapping_add" => codegen_wrapping_op!(plus),
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
@@ -1004,5 +1005,31 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
+    }
+
+    /// A volatile write of a memory location:
+    /// https://doc.rust-lang.org/std/ptr/fn.write_volatile.html
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `dst` must be valid for writes (done by `--pointer-check`)
+    ///  * `dst` must be properly aligned (done by `align_check` below)
+    fn codegen_volatile_store(
+        &mut self,
+        instance: Instance<'tcx>,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        loc: Location,
+    ) -> Stmt {
+        warn!(
+            "Kani does not support concurrency for now. {} treated as a sequential operation.",
+            intrinsic
+        );
+        let dst = fargs.remove(0);
+        let src = fargs.remove(0);
+        let typ = instance.substs.type_at(0);
+        let align = self.is_aligned(typ, dst.clone());
+        let align_check = Stmt::assert(align, "`dst` is properly aligned", loc.clone());
+        let expr = dst.dereference().assign(src, loc.clone());
+        Stmt::block(vec![align_check, expr], loc)
     }
 }
