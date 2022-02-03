@@ -11,8 +11,12 @@ use crate::context::KaniContext;
 impl KaniContext {
     /// Postprocess a goto binary (before cbmc) in-place by calling goto-instrument
     pub fn run_goto_instrument(&self, file: &Path) -> Result<()> {
-        self.add_library(file)?;
-        self.undefined_functions(file)?;
+        if self.args.checks.undefined_function_on() {
+            self.add_library(file)?;
+            self.undefined_functions(file)?;
+        } else {
+            self.just_drop_unused_functions(file)?;
+        }
 
         Ok(())
     }
@@ -39,6 +43,22 @@ impl KaniContext {
             "assert-false".into(),
             "--generate-function-body".into(),
             ".*".into(),
+            "--drop-unused-functions".into(),
+            file.to_owned().into_os_string(), // input
+            file.to_owned().into_os_string(), // output
+        ];
+
+        // TODO get goto-instrument path from self
+        let mut cmd = Command::new("goto-instrument");
+        cmd.args(args);
+
+        self.run_suppress(cmd)?;
+
+        Ok(())
+    }
+
+    fn just_drop_unused_functions(&self, file: &Path) -> Result<()> {
+        let args: Vec<OsString> = vec![
             "--drop-unused-functions".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output

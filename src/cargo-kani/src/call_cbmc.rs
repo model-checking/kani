@@ -53,24 +53,37 @@ impl KaniContext {
 
     /// "Internal," but also used by call_cbmc_viewer
     pub fn cbmc_flags(&self, file: &Path) -> Result<Vec<OsString>> {
-        let args: Vec<OsString> = vec![
-            "--bounds-check".into(),
-            "--pointer-check".into(),
-            "--pointer-primitive-check".into(),
-            "--conversion-check".into(),
-            "--div-by-zero-check".into(),
-            "--float-overflow-check".into(),
-            "--nan-check".into(),
-            "--pointer-overflow-check".into(),
-            "--undefined-shift-check".into(),
-            "--unwinding-assertions".into(),
-            "--object-bits".into(),
-            "16".into(),
-            "--json-ui".into(), // todo unconditional, we always redirect output
-            // but todo: we're appending --xml-ui for viewer, which works because it seems to override, but that's unclean
-            file.to_owned().into_os_string(),
-        ];
+        let mut args = self.cbmc_check_flags();
+
+        args.push("--object-bits".into());
+        args.push("16".into());
+        args.push("--json-ui".into()); // todo unconditional, we always redirect output
+        // but todo: we're appending --xml-ui for viewer, which works because it seems to override, but that's unclean
+        args.push(file.to_owned().into_os_string());
 
         Ok(args)
+    }
+
+    pub fn cbmc_check_flags(&self) -> Vec<OsString> {
+        let mut args = Vec::new();
+
+        if self.args.checks.memory_safety_on() {
+            args.push("--bounds-check".into());
+            args.push("--pointer-check".into());
+            args.push("--pointer-primitive-check".into());
+        }
+        if self.args.checks.overflow_on() {
+            args.push("--conversion-check".into());
+            args.push("--div-by-zero-check".into());
+            args.push("--float-overflow-check".into());
+            args.push("--nan-check".into());
+            args.push("--pointer-overflow-check".into());
+            args.push("--undefined-shift-check".into());
+        }
+        if self.args.checks.unwinding_on() {
+            args.push("--unwinding-assertions".into());
+        }
+
+        args
     }
 }

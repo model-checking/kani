@@ -38,6 +38,7 @@ pub struct KaniArgs {
     /// Keep temporary files generated throughout Kani process
     #[structopt(long)]
     pub keep_temps: bool,
+
     /// Produce full debug information
     #[structopt(long)]
     pub debug: bool,
@@ -50,6 +51,9 @@ pub struct KaniArgs {
     /// Print commands instead of running them
     #[structopt(long)]
     pub dry_run: bool,
+
+    #[structopt(flatten)]
+    pub checks: CheckArgs,
     /*
     # Add flags which specify configurations for the proof.
     def add_linking_flags(make_group, add_flag, config):
@@ -83,19 +87,6 @@ pub struct KaniArgs {
         add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
                  help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
-    # Add flags to turn off default checks.
-    def add_check_flags(make_group, add_flag, config):
-        group = make_group("Check flags", "Disable some or all default checks.")
-        add_flag(group, "--default-checks", default=True, action=BooleanOptionalAction,
-                 help="Turn on all default checks")
-        add_flag(group, "--memory-safety-checks", default=True, action=BooleanOptionalAction,
-                 help="Turn on default memory safety checks")
-        add_flag(group, "--overflow-checks", default=True, action=BooleanOptionalAction,
-                 help="Turn on default overflow checks")
-        add_flag(group, "--undefined-function-checks", default=True, action=BooleanOptionalAction,
-                 help="Turn on undefined function checks")
-        add_flag(group, "--unwinding-checks", default=True, action=BooleanOptionalAction,
-                 help="Turn on default unwinding checks")
 
     # Add flags for common CBMC flags
     def add_common_flags(make_group, add_flag, config):
@@ -162,4 +153,60 @@ pub struct KaniArgs {
                  help="Restrict the targets of virtual table function pointer calls")
 
         */
+}
+
+#[derive(Debug, StructOpt)]
+pub struct CheckArgs {
+    // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
+    // We're put both here then create helper functions to "intepret"
+    /// Turn on all default checks
+    #[structopt(long)]
+    pub default_checks: bool,
+    /// Turn off all default checks
+    #[structopt(long)]
+    pub no_default_checks: bool,
+
+    /// Turn on default memory safety checks
+    #[structopt(long)]
+    pub memory_safety_checks: bool,
+    /// Turn off default memory safety checks
+    #[structopt(long)]
+    pub no_memory_safety_checks: bool,
+
+    /// Turn on default overflow checks
+    #[structopt(long)]
+    pub overflow_checks: bool,
+    /// Turn off default overflow checks
+    #[structopt(long)]
+    pub no_overflow_checks: bool,
+
+    /// Turn on undefined function checks
+    #[structopt(long)]
+    pub undefined_function_checks: bool,
+    /// Turn off undefined function checks
+    #[structopt(long)]
+    pub no_undefined_function_checks: bool,
+
+    /// Turn on default unwinding checks
+    #[structopt(long)]
+    pub unwinding_checks: bool,
+    /// Turn off default unwinding checks
+    #[structopt(long)]
+    pub no_unwinding_checks: bool,
+}
+
+impl CheckArgs {
+    pub fn memory_safety_on(&self) -> bool {
+        !self.no_default_checks && !self.no_memory_safety_checks || self.memory_safety_checks
+    }
+    pub fn overflow_on(&self) -> bool {
+        !self.no_default_checks && !self.no_overflow_checks || self.overflow_checks
+    }
+    pub fn undefined_function_on(&self) -> bool {
+        !self.no_default_checks && !self.no_undefined_function_checks
+            || self.undefined_function_checks
+    }
+    pub fn unwinding_on(&self) -> bool {
+        !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
+    }
 }
