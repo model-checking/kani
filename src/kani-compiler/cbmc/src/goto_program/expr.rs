@@ -858,7 +858,7 @@ impl Expr {
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             OverflowMult | OverflowPlus => {
-                (lhs.typ == rhs.typ && lhs.typ.is_numeric())
+                (lhs.typ == rhs.typ && lhs.typ.is_integer())
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
         }
