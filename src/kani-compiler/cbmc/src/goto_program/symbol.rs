@@ -90,7 +90,7 @@ impl Symbol {
             is_state_var: false,
             is_type: false,
             // ansi-C properties
-            is_auxiliary: false,
+            is_auxiliary: true,
             is_extern: false,
             is_file_local: false,
             is_lvalue: false,
@@ -295,6 +295,11 @@ impl Symbol {
 
     pub fn with_pretty_name<T: Into<InternedString>>(mut self, pretty_name: T) -> Symbol {
         self.pretty_name = Some(pretty_name.into());
+        self
+    }
+
+    pub fn with_is_hidden(mut self, hidden: bool) -> Symbol {
+        self.is_auxiliary = hidden;
         self
     }
 }
