@@ -12,6 +12,7 @@ use crate::utils;
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
+use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -169,18 +170,24 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         let loc = tcx.codegen_span_option(span);
         let caller_loc = tcx.codegen_caller_span(&span);
 
+        let mut stmts: Vec<Stmt> = Vec::new();
+
+        if tcx.queries.get_check_assertion_reachability() {
+            // inject a reachability (cover) check to the current location
+            let reach_msg = format!("kani_reachability_check for {}", msg);
+            stmts.push(tcx.codegen_cover_loc(&reach_msg, span));
+        }
+
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
         let tmp = tcx.gen_temp_variable(cond.typ().clone(), loc.clone()).to_expr();
-        Stmt::block(
-            vec![
-                Stmt::decl(tmp.clone(), Some(cond), loc.clone()),
-                Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
-                Stmt::assume(tmp, loc.clone()),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-            ],
-            loc,
-        )
+        stmts.append(&mut vec![
+            Stmt::decl(tmp.clone(), Some(cond), loc.clone()),
+            Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
+            Stmt::assume(tmp, loc.clone()),
+            Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
+        ]);
+        Stmt::block(stmts, loc)
     }
 }
 

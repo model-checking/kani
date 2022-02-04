@@ -486,6 +486,21 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
+    /// Generate code to cover the given condition
+    pub fn codegen_cover(&self, cond: Expr, msg: &str, span: Option<Span>) -> Stmt {
+        let loc = self.codegen_caller_span(&span);
+        // Should use Stmt::cover, but currently this doesn't work with CBMC
+        // unless it is run with '--cover cover' (see
+        // https://github.com/diffblue/cbmc/issues/6613). So for now use
+        // assert(!cond).
+        Stmt::assert(cond.not(), msg, loc)
+    }
+
+    /// Generate code to cover the current location
+    pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
+        self.codegen_cover(Expr::bool_true(), msg, span)
+    }
+
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
         debug!("handling statement {:?}", stmt);
         match &stmt.kind {

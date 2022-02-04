@@ -92,6 +92,11 @@ fn parser<'a, 'b>() -> App<'a, 'b> {
                 .help("Restrict the targets of virtual table function pointer calls."),
         )
         .arg(
+            Arg::with_name("assertion-reach-checks")
+                .long("--assertion-reach-checks")
+                .help("Check the reachability of every assertion."),
+        )
+        .arg(
             Arg::with_name("sysroot")
                 .long("--sysroot")
                 .help("Override the system root.")
@@ -131,6 +136,7 @@ fn main() -> Result<(), &'static str> {
         queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
     }
     queries.set_emit_vtable_restrictions(matches.is_present("restrict-vtable-fn-ptrs"));
+    queries.set_check_assertion_reachability(matches.is_present("assertion-reach-checks"));
 
     // Configure and run compiler.
     let mut callbacks = KaniCallbacks {};

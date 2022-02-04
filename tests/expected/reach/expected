@@ -1,0 +1,9 @@
+line 8 kani_reachability_check for assertion: x < 4: FAILURE
+line 8 assertion: x < 4: FAILURE
+line 10 kani_reachability_check for assertion: x == 2: SUCCESS
+line 10 assertion: x == 2: SUCCESS
+line 13 kani_reachability_check for assertion: x <= 5: FAILURE
+line 13 assertion: x <= 5: SUCCESS
+
+** 3 of 8 failed (3 iterations)
+VERIFICATION FAILED
