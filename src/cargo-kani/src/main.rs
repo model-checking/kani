@@ -41,7 +41,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     };
 
     // here on almost identical to below
-    ctx.link_c_lib(&goto_objs, &linked_obj, "main")?;
+    ctx.link_c_lib(&goto_objs, &linked_obj, &ctx.args.function)?;
     ctx.run_goto_instrument(&linked_obj)?;
 
     if ctx.args.visualize {
@@ -64,7 +64,7 @@ fn standalone_main() -> Result<()> {
     let linked_obj = util::alter_extension(&args.input, "out");
 
     // almost identical to above below this line
-    ctx.link_c_lib(&[goto_obj], &linked_obj, "main")?;
+    ctx.link_c_lib(&[goto_obj], &linked_obj, &ctx.args.function)?;
     ctx.run_goto_instrument(&linked_obj)?;
 
     if ctx.args.visualize {

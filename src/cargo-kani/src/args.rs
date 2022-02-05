@@ -54,19 +54,20 @@ pub struct KaniArgs {
 
     #[structopt(flatten)]
     pub checks: CheckArgs,
-    /*
-    # Add flags which specify configurations for the proof.
-    def add_linking_flags(make_group, add_flag, config):
-        group = make_group("Linking flags",
-                           "Provide information about how to link the prover for Kani.")
-        add_flag(group, "--c-lib", type=pl.Path, nargs="*", default=[],
-                 action=ExtendAction,
-                 help="Link external C files referenced by Rust code")
-        add_flag(group, "--function", default="main",
-                 help="Entry point for verification")
-        add_flag(group, "--tests", default=False, action=BooleanOptionalAction,
-                 help="Enable test function verification. Only use this option when the entry point is a test function.")
 
+    /// Entry point for verification
+    #[structopt(long, default_value = "main")]
+    pub function: String,
+    /// Link external C files referenced by Rust code
+    #[structopt(long, parse(from_os_str))]
+    pub c_lib: Vec<PathBuf>,
+    /// Enable test function verification. Only use this option when the entry point is a test function.
+    #[structopt(long)]
+    pub tests: bool,
+    /// Do not produce error return code on CBMC verification failure
+    #[structopt(long)]
+    pub allow_cbmc_verification_failure: bool,
+    /*
     # Add flags that produce extra artifacts.
     def add_artifact_flags(make_group, add_flag, config):
         default_target = config["default-target"]
@@ -82,8 +83,6 @@ pub struct KaniArgs {
                  help="Generate C file equivalent to inputted program; "
                       "performs additional processing to produce valid C code "
                       "at the cost of some readability")
-        add_flag(group, "--gen-symbols", default=False, action=BooleanOptionalAction,
-                 help="Generate a goto symbol table")
         add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
                  help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
@@ -104,21 +103,6 @@ pub struct KaniArgs {
         add_flag(group, "--auto-unwind", default=False, action=BooleanOptionalAction,
                  help="Turn on automatic loop unwinding")
 
-    # Add flags needed only for visualizer.
-    def add_visualizer_flags(make_group, add_flag, config):
-        group = make_group(
-            "Visualizer flags",
-            "Generate an HTML-based UI for the generated Kani report.\nSee https://github.com/awslabs/aws-viewer-for-cbmc.")
-        add_flag(group, "--srcdir", type=pl.Path, default=".",
-                 help="The source directory: the root of the source tree")
-        add_flag(group, "--visualize", default=False, action=BooleanOptionalAction,
-                 help="Generate visualizer report to <target-dir>/report/html/index.html")
-        add_flag(group, "--wkdir", type=pl.Path, default=".",
-                 help="""
-                  The working directory: used to determine source locations in output;
-                  this is generally the location from which kani is currently being invoked
-                  """)
-
     # Add flags needed for toggling and switching between outputs.
     def add_output_flags(make_group, add_flag, config):
 
@@ -130,12 +114,6 @@ pub struct KaniArgs {
             type=OutputStyle,
             action=EnumAction,
             help="Select the format for output")
-
-    # Add flags for ad-hoc features.
-    def add_other_flags(make_group, add_flag, config):
-        group = make_group("Other flags")
-        add_flag(group, "--allow-cbmc-verification-failure", default=False, action=BooleanOptionalAction,
-                 help="Do not produce error return code on CBMC verification failure")
 
     # Add flags we don't expect end-users to use.
     def add_developer_flags(make_group, add_flag, config):

@@ -29,7 +29,7 @@ impl KaniContext {
         // regardless of success or failure, first we need to print:
         self.format_cbmc_output(&output_filename)?;
 
-        if !result.success() {
+        if !result.success() && !self.args.allow_cbmc_verification_failure {
             bail!("cbmc exited with status {}", result);
         }
 
@@ -47,6 +47,7 @@ impl KaniContext {
         if !result.success() {
             bail!("cbmc exited with status {}", result);
         }
+        // TODO: We 'bail' above, but then ignore it in 'call_cbmc_viewer' ...
 
         Ok(())
     }

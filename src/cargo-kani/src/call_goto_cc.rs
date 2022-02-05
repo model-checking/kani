@@ -18,8 +18,9 @@ impl KaniContext {
 
         let mut args: Vec<OsString> = vec!["--function".into(), function.into()];
         args.extend(inputs.iter().map(|x| x.clone().into_os_string()));
+        args.extend(self.args.c_lib.iter().map(|x| x.clone().into_os_string()));
 
-        // TODO think about this
+        // TODO think about this: just an empty file
         args.push(self.kani_lib_c.clone().into_os_string());
 
         args.push("-o".into());

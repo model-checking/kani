@@ -17,7 +17,17 @@ impl KaniContext {
         };
 
         let build_target = "x86_64-unknown-linux-gnu";
-        let mut args: Vec<OsString> = vec!["build".into(), "--target".into(), build_target.into()];
+        let mut args: Vec<OsString> = Vec::new();
+
+        if self.args.tests {
+            args.push("test".into());
+            args.push("--no-run".into());
+        } else {
+            args.push("build".into());
+        }
+
+        args.push("--target".into());
+        args.push(build_target.into());
 
         if self.args.verbose {
             args.push("-v".into());

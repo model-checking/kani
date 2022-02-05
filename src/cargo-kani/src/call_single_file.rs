@@ -25,6 +25,10 @@ impl KaniContext {
         let mut args = self.kani_rustc_flags();
         args.push(file.to_owned().into_os_string());
 
+        if self.args.tests {
+            args.push("--test".into());
+        }
+
         let mut cmd = Command::new(&self.kani_rustc);
         cmd.args(args);
 
@@ -38,6 +42,8 @@ impl KaniContext {
         Ok(output_filename)
     }
 
+    /// These arguments are passed directly here for single file runs,
+    /// but are also used by call_cargo to pass as the env var KaniFLAGS.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let flags = vec!["--goto-c"];
         flags.iter().map(|x| x.into()).collect()
