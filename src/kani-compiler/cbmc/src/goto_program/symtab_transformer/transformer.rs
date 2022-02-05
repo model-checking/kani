@@ -496,6 +496,7 @@ pub trait Transformer: Sized {
     fn transform_stmt(&mut self, stmt: &Stmt) -> Stmt {
         match stmt.body() {
             StmtBody::Assign { lhs, rhs } => self.transform_stmt_assign(lhs, rhs),
+            StmtBody::Assert { cond } => self.transform_stmt_assert(cond),
             StmtBody::Assume { cond } => self.transform_stmt_assume(cond),
             StmtBody::AtomicBlock(block) => self.transform_stmt_atomic_block(block),
             StmtBody::Block(block) => self.transform_stmt_block(block),
@@ -527,6 +528,14 @@ pub trait Transformer: Sized {
         let transformed_lhs = self.transform_expr(lhs);
         let transformed_rhs = self.transform_expr(rhs);
         transformed_lhs.assign(transformed_rhs, Location::none())
+    }
+
+    /// Transforms a CPROVER assume stmt (`__CPROVER_assert(cond);`)
+    fn transform_stmt_assert(&mut self, cond: &Expr) -> Stmt {
+        let transformed_cond = self.transform_expr(cond);
+        let msg = "test_message";
+        let property_class = "test_property_class";
+        Stmt::assert_stmt(transformed_cond, property_class, msg, Location::none())
     }
 
     /// Transforms a CPROVER assume stmt (`__CPROVER_assume(cond);`)

@@ -40,6 +40,10 @@ pub enum StmtBody {
         lhs: Expr,
         rhs: Expr,
     },
+    /// `assert(cond)`
+    Assert {
+        cond: Expr,
+    },
     /// `__CPROVER_assume(cond);`
     Assume {
         cond: Expr,
@@ -174,6 +178,22 @@ impl Stmt {
             return Stmt::block(vec![assert_stmt, nondet_assign_stmt], loc);
         }
         stmt!(Assign { lhs, rhs }, loc)
+    }
+
+    /// `assert(cond);`
+    pub fn assert_stmt(cond: Expr, prop_class: &str, msg: &str, loc: Location) -> Self {
+        assert!(cond.typ().is_bool());
+
+        let file = loc.filename().unwrap();
+        let line = loc.line().unwrap();
+        let function = loc.function_name();
+        let col = loc.get_column_number().unwrap();
+        let comment = msg.to_string();
+        let property_class = prop_class.to_string();
+
+        let loc = Location::new(file, function, line, Some(col), comment, property_class);
+
+        stmt!(Assert { cond }, loc)
     }
 
     /// `__CPROVER_assert(cond, msg);`
