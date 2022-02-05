@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -67,6 +68,19 @@ pub struct KaniArgs {
     /// Do not produce error return code on CBMC verification failure
     #[structopt(long)]
     pub allow_cbmc_verification_failure: bool,
+
+    /// Specify the number of bits used for representing object IDs in CBMC
+    #[structopt(long, default_value = "16")]
+    pub object_bits: u32,
+    /// Specify the value used for loop unwinding in CBMC
+    #[structopt(long)]
+    pub unwind: Option<u32>,
+    /// Turn on automatic loop unwinding
+    #[structopt(long)]
+    pub auto_unwind: bool,
+    /// Pass through directly to CBMC; must be the last flag
+    #[structopt(long, allow_hyphen_values = true)] // consumes everything
+    pub cbmc_args: Vec<OsString>,
     /*
     # Add flags that produce extra artifacts.
     def add_artifact_flags(make_group, add_flag, config):
@@ -86,23 +100,6 @@ pub struct KaniArgs {
         add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
                  help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
-
-    # Add flags for common CBMC flags
-    def add_common_flags(make_group, add_flag, config):
-        # Note: The code for handling common CBMC flags is more complex than usual,
-        # since the flag may have been set via `--cbmc-args`. Here, we print the
-        # default values here but we set them later using `process_common_cbmc_flags`
-        default_unwind_value = DEFAULT_UNWIND_VALUE if DEFAULT_UNWIND_VALUE else "None"
-        group = make_group("Common flags", "Common CBMC flags handled by Kani.")
-        add_flag(group, "--object-bits", type=str,
-                 help="Specify the number of bits used for representing object IDs in CBMC"
-                      " (default: " + DEFAULT_OBJECT_BITS_VALUE + ")")
-        add_flag(group, "--unwind", type=str,
-                 help="Specify the value used for loop unwinding in CBMC"
-                      " (default: " + default_unwind_value + ")")
-        add_flag(group, "--auto-unwind", default=False, action=BooleanOptionalAction,
-                 help="Turn on automatic loop unwinding")
-
     # Add flags needed for toggling and switching between outputs.
     def add_output_flags(make_group, add_flag, config):
 
@@ -119,8 +116,6 @@ pub struct KaniArgs {
     def add_developer_flags(make_group, add_flag, config):
         group = make_group(
             "Developer flags", "These are generally meant for use by Kani developers, and are not stable.")
-        add_flag(group, "--cbmc-args", nargs=argparse.REMAINDER, default=[],
-                 help="Pass through directly to CBMC; must be the last flag")
         add_flag(group, "--mangler", default="v0", choices=["v0", "legacy"],
                  help="Change what mangler is used by the Rust compiler")
         add_flag(group, "--use-abs", default=False, action=BooleanOptionalAction,
@@ -186,5 +181,16 @@ impl CheckArgs {
     }
     pub fn unwinding_on(&self) -> bool {
         !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_arg_parsing() {
+        let a = StandaloneArgs::from_iter(vec!["kani", "file.rs", "--cbmc-args", "--multiple", "args", "--here"]);
+        assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
     }
 }

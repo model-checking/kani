@@ -57,7 +57,17 @@ impl KaniContext {
         let mut args = self.cbmc_check_flags();
 
         args.push("--object-bits".into());
-        args.push("16".into());
+        args.push(self.args.object_bits.to_string().into());
+
+        if let Some(unwind) = self.args.unwind {
+            args.push("--unwind".into());
+            args.push(unwind.to_string().into());
+        } else if self.args.auto_unwind {
+            args.push("--auto-unwind".into());
+        }
+
+        args.extend(self.args.cbmc_args.iter().cloned());
+
         args.push("--json-ui".into()); // todo unconditional, we always redirect output
         // but todo: we're appending --xml-ui for viewer, which works because it seems to override, but that's unclean
         args.push(file.to_owned().into_os_string());
