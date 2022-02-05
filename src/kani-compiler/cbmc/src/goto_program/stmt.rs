@@ -184,6 +184,7 @@ impl Stmt {
     pub fn assert_stmt(cond: Expr, prop_class: &str, msg: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
 
+        // TODO: Extract location metadata in a safer manner
         let file = loc.filename().unwrap();
         let line = loc.line().unwrap();
         let function = loc.function_name();
