@@ -38,6 +38,10 @@ macro_rules! assert {
         kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
     };
     ($cond:expr, $($arg:tt)+) => {
+        // Note that by stringifying the arguments to the custom message, any
+        // compile-time checks on those arguments (e.g. checking that the symbol
+        // is defined and that it implements the Display trait) are bypassed:
+        // https://github.com/model-checking/kani/issues/803
         kani::assert($cond, concat!(stringify!($($arg)+)));
     };
 }
