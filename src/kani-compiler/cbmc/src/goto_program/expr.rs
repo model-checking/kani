@@ -203,6 +203,8 @@ pub enum SelfOperand {
 pub enum UnaryOperand {
     /// `~self`
     Bitnot,
+    /// `__builtin_bitreverse<n>(self)`
+    BitReverse,
     /// `__builtin_bswap<n>(self)`
     Bswap,
     /// `__CPROVER_DYNAMIC_OBJECT(self)`
@@ -1086,7 +1088,7 @@ impl Expr {
 impl Expr {
     fn typecheck_unop_arg(op: UnaryOperand, arg: &Expr) -> bool {
         match op {
-            Bitnot | Bswap | Popcount => arg.typ.is_integer(),
+            Bitnot | BitReverse | Bswap | Popcount => arg.typ.is_integer(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.is_integer(),
             IsDynamicObject | ObjectSize | PointerObject => arg.typ().is_pointer(),
             PointerOffset => arg.typ == Type::void_pointer(),
@@ -1097,7 +1099,7 @@ impl Expr {
 
     fn unop_return_type(op: UnaryOperand, arg: &Expr) -> Type {
         match op {
-            Bitnot | Bswap | UnaryMinus => arg.typ.clone(),
+            Bitnot | BitReverse | Bswap | UnaryMinus => arg.typ.clone(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
@@ -1120,6 +1122,11 @@ impl Expr {
     ///  `__builtin_bswap<n>(self)`
     pub fn bswap(self) -> Expr {
         self.unop(Bswap)
+    }
+
+    /// `__builtin_bitreverse<n>(self)`
+    pub fn bitreverse(self) -> Expr {
+        self.unop(BitReverse)
     }
 
     /// `__CPROVER_DYNAMIC_OBJECT(self)`
