@@ -267,7 +267,7 @@ def add_developer_flags(make_group, add_flag, config):
              help="Use abstractions for the standard library")
     add_flag(group, "--abs-type", default="std", choices=["std", "kani", "c-ffi", "no-back"],
              help="Choose abstraction for modules of standard library if available")
-    add_flag(group, "--restrict-vtable", default=True, action=BooleanOptionalAction,
+    add_flag(group, "--restrict-vtable", default=False, action=BooleanOptionalAction,
              help="Restrict the targets of virtual table function pointer calls")
 
 # Adds the flags common to both kani and cargo-kani.
