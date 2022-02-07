@@ -166,20 +166,19 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         let msg = fargs.remove(0);
         let msg = utils::extract_const_message(&msg).unwrap();
         let target = target.unwrap();
-        let loc = tcx.codegen_span_option(span);
         let caller_loc = tcx.codegen_caller_span(&span);
 
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
-        let tmp = tcx.gen_temp_variable(cond.typ().clone(), loc.clone()).to_expr();
+        let tmp = tcx.gen_temp_variable(cond.typ().clone(), caller_loc.clone()).to_expr();
         Stmt::block(
             vec![
-                Stmt::decl(tmp.clone(), Some(cond), loc.clone()),
+                Stmt::decl(tmp.clone(), Some(cond), caller_loc.clone()),
                 Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
-                Stmt::assume(tmp, loc.clone()),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
+                Stmt::assume(tmp, caller_loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), caller_loc.clone()),
             ],
-            loc,
+            caller_loc,
         )
     }
 }
