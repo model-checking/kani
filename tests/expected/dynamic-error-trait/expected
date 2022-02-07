@@ -1,2 +1,2 @@
-assertion: mm.size == 2: SUCCESS
-assertion: mm.size == 3: FAILURE
+assertion failed: mm.size == 2: SUCCESS
+assertion failed: mm.size == 3: FAILURE

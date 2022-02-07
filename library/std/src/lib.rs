@@ -16,13 +16,13 @@ pub use std::*;
 /// as well as a message that will be used when reporting the assertion result.
 ///
 /// For the first form that does not involve a message, the macro will generate the following message:
-/// assertion "cond"
+/// assertion failed: cond
 /// where `cond` is the stringified condition. For example, for
 /// ```rust
 /// assert!(1 + 1 == 2);
 /// ```
 /// the message will be:
-/// assertion: 1 + 1 == 2
+/// assertion failed: 1 + 1 == 2
 ///
 /// For the second form that involves a custom message possibly with arguments,
 /// the macro will generate a message that is a concat of the custom message
@@ -31,13 +31,13 @@ pub use std::*;
 /// assert!(a + b == c, "The sum of {} and {} is {}", a, b, c);
 /// ```
 /// the assert message will be:
-/// assertion "The sum of {} and {} is {}", 1, 1, 2
+/// "The sum of {} and {} is {}", 1, 1, 2
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {
-        kani::assert($cond, concat!("assertion: ", stringify!($cond)));
+        kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
     };
     ($cond:expr, $($arg:tt)+) => {
-        kani::assert($cond, concat!("assertion: ", stringify!($($arg)+)));
+        kani::assert($cond, concat!(stringify!($($arg)+)));
     };
 }

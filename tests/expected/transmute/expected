@@ -1,2 +1,2 @@
-line 5 assertion: bitpattern == 0x3F800000: SUCCESS
-line 11 assertion: f == 1.0: SUCCESS
+line 5 assertion failed: bitpattern == 0x3F800000: SUCCESS
+line 11 assertion failed: f == 1.0: SUCCESS

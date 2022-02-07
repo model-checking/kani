@@ -1,1 +1,1 @@
-[pair::kani_tests::test_one_plus_two.assertion.1] line 31 assertion: p.sum() == 3: SUCCESS
+[pair::kani_tests::test_one_plus_two.assertion.1] line 31 assertion failed: p.sum() == 3: SUCCESS
