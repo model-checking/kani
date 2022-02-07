@@ -393,13 +393,13 @@ impl<'tcx> GotocCtx<'tcx> {
             "fabsf64" => codegen_simple_intrinsic!(Fabs),
             "fadd_fast" => {
                 let fargs_clone = fargs.clone();
-                let binop_block = codegen_op_with_overflow_check!(add_overflow);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+                let binop_stmt = codegen_intrinsic_binop!(plus);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
             "fdiv_fast" => {
                 let fargs_clone = fargs.clone();
-                let binop_block = codegen_intrinsic_binop!(div);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+                let binop_stmt = codegen_intrinsic_binop!(div);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
             "floorf32" => codegen_simple_intrinsic!(Floorf),
             "floorf64" => codegen_simple_intrinsic!(Floor),
@@ -407,19 +407,19 @@ impl<'tcx> GotocCtx<'tcx> {
             "fmaf64" => codegen_simple_intrinsic!(Fma),
             "fmul_fast" => {
                 let fargs_clone = fargs.clone();
-                let binop_block = codegen_op_with_overflow_check!(mul_overflow);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+                let binop_stmt = codegen_intrinsic_binop!(mul);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
             "forget" => Stmt::skip(loc),
             "frem_fast" => {
                 let fargs_clone = fargs.clone();
-                let binop_block = codegen_intrinsic_binop!(rem);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+                let binop_stmt = codegen_intrinsic_binop!(rem);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
             "fsub_fast" => {
                 let fargs_clone = fargs.clone();
-                let binop_block = codegen_op_with_overflow_check!(sub_overflow);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_block, span)
+                let binop_stmt = codegen_intrinsic_binop!(sub);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
             "likely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "log10f32" => codegen_simple_intrinsic!(Log10f),
@@ -548,13 +548,13 @@ impl<'tcx> GotocCtx<'tcx> {
     // Fast math intrinsics for floating point operations like `fadd_fast`
     // assume that their inputs are finite:
     // https://doc.rust-lang.org/std/intrinsics/fn.fadd_fast.html
-    // This function adds assertions to the block statement which performs the
+    // This function adds assertions to the statement which performs the
     // operation and checks for overflow failures.
     fn add_finite_args_checks(
         &mut self,
         intrinsic: &str,
         mut fargs: Vec<Expr>,
-        block: Stmt,
+        stmt: Stmt,
         span: Option<Span>,
     ) -> Stmt {
         let arg1 = fargs.remove(0);
@@ -564,10 +564,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc = self.codegen_span_option(span);
         let finite_check1 = Stmt::assert(arg1.is_finite(), msg1.as_str(), loc.clone());
         let finite_check2 = Stmt::assert(arg2.is_finite(), msg2.as_str(), loc.clone());
-        let mut finite_checks = vec![finite_check1, finite_check2];
-        let mut block_stmts = block.get_stmts().unwrap().clone();
-        finite_checks.append(&mut block_stmts);
-        Stmt::block(finite_checks, loc)
+        Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
     fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
