@@ -13,7 +13,7 @@ cargo build
 ```
 ```bash
 # Delete regression test caches
-rm -r build/x86_64-unknown-linux-gnu/test/
+rm -r build/x86_64-unknown-linux-gnu/tests/
 ```
 ```bash
 # Test suite run (to run a specific suite from src/test/, just remove the others)
