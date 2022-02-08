@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
+use crate::utils;
 use crate::{GotocCtx, VtableCtx};
-use cbmc::goto_program::{BuiltinFn, Expr, ExprValue, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -465,7 +466,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         assert!(!fargs.is_empty(), "Panic requires a string message");
-        let msg = extract_const_message(&fargs[0]).unwrap_or(String::from(
+        let msg = utils::extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
@@ -604,24 +605,5 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
-    }
-}
-
-/// Tries to extract a string message from an `Expr`.
-/// If the expression represents a pointer to a string constant, this will return the string
-/// constant. Otherwise, return `None`.
-fn extract_const_message(arg: &Expr) -> Option<String> {
-    match arg.value() {
-        ExprValue::Struct { values } => match &values[0].value() {
-            ExprValue::AddressOf(address) => match address.value() {
-                ExprValue::Index { array, .. } => match array.value() {
-                    ExprValue::StringConstant { s } => Some(s.to_string()),
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
     }
 }
