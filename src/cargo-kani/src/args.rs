@@ -52,6 +52,9 @@ pub struct KaniArgs {
     /// Print commands instead of running them
     #[structopt(long)]
     pub dry_run: bool,
+    /// Generate C file equivalent to inputted program
+    #[structopt(long)]
+    pub gen_c: bool,
 
     #[structopt(flatten)]
     pub checks: CheckArgs,
@@ -91,8 +94,6 @@ pub struct KaniArgs {
 
         group = make_group(
             "Artifact flags", "Produce artifacts in addition to a basic Kani report.")
-        add_flag(group, "--gen-c", default=False, action=BooleanOptionalAction,
-                 help="Generate C file equivalent to inputted program")
         add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
                  help="Generate C file equivalent to inputted program; "
                       "performs additional processing to produce valid C code "
@@ -190,7 +191,14 @@ mod tests {
 
     #[test]
     fn check_arg_parsing() {
-        let a = StandaloneArgs::from_iter(vec!["kani", "file.rs", "--cbmc-args", "--multiple", "args", "--here"]);
+        let a = StandaloneArgs::from_iter(vec![
+            "kani",
+            "file.rs",
+            "--cbmc-args",
+            "--multiple",
+            "args",
+            "--here",
+        ]);
         assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
     }
 }

@@ -18,6 +18,10 @@ impl KaniContext {
             self.just_drop_unused_functions(file)?;
         }
 
+        if self.args.gen_c {
+            self.gen_c(file)?;
+        }
+
         Ok(())
     }
 
@@ -62,6 +66,26 @@ impl KaniContext {
             "--drop-unused-functions".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output
+        ];
+
+        // TODO get goto-instrument path from self
+        let mut cmd = Command::new("goto-instrument");
+        cmd.args(args);
+
+        self.run_suppress(cmd)?;
+
+        Ok(())
+    }
+
+    /// Generate a .c file from a goto binary (i.e. --gen-c)
+    pub fn gen_c(&self, file: &Path) -> Result<()> {
+        let output_filename = crate::util::alter_extension(file, "c");
+        // We don't put the C file into temporaries to be deleted.
+
+        let args: Vec<OsString> = vec![
+            "--dump-c".into(),
+            file.to_owned().into_os_string(),
+            output_filename.into_os_string(),
         ];
 
         // TODO get goto-instrument path from self
