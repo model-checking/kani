@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use clap::arg_enum;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -56,6 +57,10 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub gen_c: bool,
 
+    /// Toggle between different styles of output
+    #[structopt(long, default_value = "old", possible_values = &OutputFormat::variants(), case_insensitive = true)]
+    pub output_format: OutputFormat,
+
     #[structopt(flatten)]
     pub checks: CheckArgs,
 
@@ -85,6 +90,8 @@ pub struct KaniArgs {
     #[structopt(long, allow_hyphen_values = true)] // consumes everything
     pub cbmc_args: Vec<OsString>,
     /*
+    The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
+
     # Add flags that produce extra artifacts.
     def add_artifact_flags(make_group, add_flag, config):
         default_target = config["default-target"]
@@ -101,18 +108,6 @@ pub struct KaniArgs {
         add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
                  help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
 
-    # Add flags needed for toggling and switching between outputs.
-    def add_output_flags(make_group, add_flag, config):
-
-        group = make_group("Output flags", "Toggle between different styles of output")
-        add_flag(
-            group,
-            "--output-format",
-            default=OutputStyle.OLD,
-            type=OutputStyle,
-            action=EnumAction,
-            help="Select the format for output")
-
     # Add flags we don't expect end-users to use.
     def add_developer_flags(make_group, add_flag, config):
         group = make_group(
@@ -127,6 +122,15 @@ pub struct KaniArgs {
                  help="Restrict the targets of virtual table function pointer calls")
 
         */
+}
+
+arg_enum! {
+    #[derive(Debug)]
+    pub enum OutputFormat {
+        Regular,
+        Terse,
+        Old,
+    }
 }
 
 #[derive(Debug, StructOpt)]
