@@ -30,18 +30,12 @@ check-cbmc-viewer-version.py --major 2 --minor 5
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build Kani compiler and Kani library
-cargo build -p kani-compiler
+# Build all packages in the workspace
+cargo build
 
 # Unit tests
 cargo test -p cbmc
 cargo test -p kani-compiler
-
-# Build tool for linking Kani pointer restrictions
-cargo build --release -p kani-link-restrictions
-
-# Build compiletest
-cargo build --release -p compiletest
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -63,7 +57,7 @@ for testp in "${TESTS[@]}"; do
   echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
   # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
   # Tracking issue: https://github.com/model-checking/kani/issues/755
-  ./target/release/compiletest --kani-dir-path scripts --src-base tests/$suite \
+  cargo run -p compiletest --  --kani-dir-path scripts --src-base tests/$suite \
                                --build-base $(pwd)/build/$TARGET/tests/$suite \
                                --stage-id stage1-$TARGET \
                                --suite $suite --mode $mode \
