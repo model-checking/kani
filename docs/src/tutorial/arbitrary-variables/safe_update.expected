@@ -1,4 +1,3 @@
-[inventory::verification::safe_update.assertion.1] line 38 NonZeroU32 is internally a u32 but it should never be 0.: SUCCESS
+[inventory::verification::safe_update.assertion.1] line 38 "NonZeroU32 is internally a u32 but it should never be 0.": SUCCESS
 [inventory::verification::safe_update.assertion.2] line 42 assertion failed: inventory.get(&id).unwrap() == quantity: SUCCESS
 VERIFICATION SUCCESSFUL
-

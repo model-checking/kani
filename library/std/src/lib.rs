@@ -11,3 +11,37 @@
 
 // re-export all std symbols
 pub use std::*;
+
+/// This assert macro calls kani's assert function passing it down the condition
+/// as well as a message that will be used when reporting the assertion result.
+///
+/// For the first form that does not involve a message, the macro will generate the following message:
+/// assertion failed: cond
+/// where `cond` is the stringified condition. For example, for
+/// ```rust
+/// assert!(1 + 1 == 2);
+/// ```
+/// the message will be:
+/// assertion failed: 1 + 1 == 2
+///
+/// For the second form that involves a custom message possibly with arguments,
+/// the macro will generate a message that is a concat of the custom message
+/// along with all the arguments. For example, for
+/// ```rust
+/// assert!(a + b == c, "The sum of {} and {} is {}", a, b, c);
+/// ```
+/// the assert message will be:
+/// "The sum of {} and {} is {}", 1, 1, 2
+#[macro_export]
+macro_rules! assert {
+    ($cond:expr $(,)?) => {
+        kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
+    };
+    ($cond:expr, $($arg:tt)+) => {
+        // Note that by stringifying the arguments to the custom message, any
+        // compile-time checks on those arguments (e.g. checking that the symbol
+        // is defined and that it implements the Display trait) are bypassed:
+        // https://github.com/model-checking/kani/issues/803
+        kani::assert($cond, concat!(stringify!($($arg)+)));
+    };
+}
