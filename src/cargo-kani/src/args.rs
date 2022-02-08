@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use anyhow::bail;
 use clap::arg_enum;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -89,6 +90,13 @@ pub struct KaniArgs {
     /// Pass through directly to CBMC; must be the last flag
     #[structopt(long, allow_hyphen_values = true)] // consumes everything
     pub cbmc_args: Vec<OsString>,
+
+    /// Use abstractions for the standard library
+    #[structopt(long)]
+    pub use_abs: bool,
+    /// Choose abstraction for modules of standard library if available
+    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true)]
+    pub abs_type: AbstractionType,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -112,12 +120,6 @@ pub struct KaniArgs {
     def add_developer_flags(make_group, add_flag, config):
         group = make_group(
             "Developer flags", "These are generally meant for use by Kani developers, and are not stable.")
-        add_flag(group, "--mangler", default="v0", choices=["v0", "legacy"],
-                 help="Change what mangler is used by the Rust compiler")
-        add_flag(group, "--use-abs", default=False, action=BooleanOptionalAction,
-                 help="Use abstractions for the standard library")
-        add_flag(group, "--abs-type", default="std", choices=["std", "kani", "c-ffi", "no-back"],
-                 help="Choose abstraction for modules of standard library if available")
         add_flag(group, "--restrict-vtable", default=False, action=BooleanOptionalAction,
                  help="Restrict the targets of virtual table function pointer calls")
 
@@ -130,6 +132,43 @@ arg_enum! {
         Regular,
         Terse,
         Old,
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum AbstractionType {
+    Std,
+    Kani,
+    CFfi,
+    NoBack,
+}
+// We need customization to support dashes like 'no-back'
+impl std::str::FromStr for AbstractionType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_string().to_lowercase().as_ref() {
+            "std" => Ok(Self::Std),
+            "kani" => Ok(Self::Kani),
+            "c-ffi" => Ok(Self::CFfi),
+            "no-back" => Ok(Self::NoBack),
+            _ => bail!("Unkown abs_stype {}", s),
+        }
+    }
+}
+impl std::fmt::Display for AbstractionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Std => f.write_str("std"),
+            Self::Kani => f.write_str("kani"),
+            Self::CFfi => f.write_str("c-ffi"),
+            Self::NoBack => f.write_str("no-back"),
+        }
+    }
+}
+impl AbstractionType {
+    pub fn variants() -> Vec<&'static str> {
+        vec!["std", "kani", "c-ffi", "no-back"]
     }
 }
 
@@ -191,6 +230,8 @@ impl CheckArgs {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -204,5 +245,13 @@ mod tests {
             "--here",
         ]);
         assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
+    }
+
+    #[test]
+    fn check_abs_type() {
+        // Since we manually implemented this, consistency check it
+        for t in AbstractionType::variants() {
+            assert_eq!(t, format!("{}", AbstractionType::from_str(t).unwrap()));
+        }
     }
 }

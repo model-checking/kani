@@ -45,7 +45,16 @@ impl KaniContext {
     /// These arguments are passed directly here for single file runs,
     /// but are also used by call_cargo to pass as the env var KaniFLAGS.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let flags = vec!["--goto-c"];
+        let mut flags = vec!["--goto-c".to_string()];
+
+        if self.args.use_abs {
+            flags.push("-Z".into());
+            flags.push("force-unstable-if-unmarked=yes".into()); // ??
+            flags.push("--cfg=use_abs".into());
+            flags.push("--cfg".into());
+            flags.push(format!("abs_type={}", self.args.abs_type.to_string().to_lowercase()));
+        }
+
         flags.iter().map(|x| x.into()).collect()
     }
 }
