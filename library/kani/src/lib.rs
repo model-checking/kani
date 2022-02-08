@@ -36,6 +36,19 @@ pub use invariant::Invariant;
 #[rustc_diagnostic_item = "KaniAssume"]
 pub fn assume(_cond: bool) {}
 
+/// Creates an assertion of the specified condition and message.
+///
+/// # Example:
+///
+/// ```rust
+/// let x: bool = kani::any();
+/// let y = !x;
+/// kani::assert(x || y, "ORing a boolean variable with its negation must be true")
+/// ```
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniAssert"]
+pub fn assert(_cond: bool, _msg: &'static str) {}
+
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
 ///

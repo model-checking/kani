@@ -8,7 +8,7 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use crate::utils::instance_name_starts_with;
+use crate::utils;
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
@@ -76,7 +76,7 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
+        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
             warn!(
                 "The function __VERIFIER_expect_fail is deprecated. Use kani::expect_fail instead"
             );
@@ -115,7 +115,7 @@ impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
+        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
             warn!("The function __VERIFIER_assume is deprecated. Use kani::assume instead");
             return true;
         }
@@ -146,13 +146,50 @@ impl<'tcx> GotocHook<'tcx> for Assume {
     }
 }
 
+struct Assert;
+impl<'tcx> GotocHook<'tcx> for Assert {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniAssert")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        _assign_to: Option<Place<'tcx>>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = utils::extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = tcx.codegen_caller_span(&span);
+
+        // Since `cond` might have side effects, assign it to a temporary
+        // variable so that it's evaluated once, then assert and assume it
+        let tmp = tcx.gen_temp_variable(cond.typ().clone(), caller_loc.clone()).to_expr();
+        Stmt::block(
+            vec![
+                Stmt::decl(tmp.clone(), Some(cond), caller_loc.clone()),
+                Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
+                Stmt::assume(tmp, caller_loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), caller_loc.clone()),
+            ],
+            caller_loc,
+        )
+    }
+}
+
 struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // Deprecate old __nondet since it doesn't match rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if instance_name_starts_with(tcx, instance, "__nondet") {
+        if utils::instance_name_starts_with(tcx, instance, "__nondet") {
             warn!("The function __nondet is deprecated. Use kani::any instead");
             return true;
         }
@@ -648,6 +685,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
         hooks: vec![
             Rc::new(Panic), //Must go first, so it overrides Nevers
             Rc::new(Assume),
+            Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Intrinsic),
             Rc::new(MemReplace),
