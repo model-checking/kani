@@ -33,7 +33,6 @@ impl KaniContext {
         cmd.args(args);
 
         if self.args.debug && !self.args.quiet {
-            cmd.env("KANI_LOG", "rustc_codegen_kani");
             self.run_terminal(cmd)?;
         } else {
             self.run_suppress(cmd)?;
@@ -53,6 +52,10 @@ impl KaniContext {
             flags.push("--cfg=use_abs".into());
             flags.push("--cfg".into());
             flags.push(format!("abs_type={}", self.args.abs_type.to_string().to_lowercase()));
+        }
+
+        if self.args.debug {
+            flags.push("--log-level=debug".into());
         }
 
         flags.iter().map(|x| x.into()).collect()
