@@ -165,7 +165,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
-        let msg = utils::extract_const_message(&msg).unwrap();
+        let mut msg = utils::extract_const_message(&msg).unwrap();
         let target = target.unwrap();
         let loc = tcx.codegen_span_option(span);
         let caller_loc = tcx.codegen_caller_span(&span);
@@ -174,7 +174,10 @@ impl<'tcx> GotocHook<'tcx> for Assert {
 
         if tcx.queries.get_check_assertion_reachability() {
             // inject a reachability (cover) check to the current location
-            let reach_msg = format!("kani_reachability_check for {}", msg);
+            // generate an ID for the assert
+            let assert_id = tcx.next_check_id();
+            msg = format!("[{}] {}", assert_id, msg);
+            let reach_msg = format!("[KANI_REACHABILITY_CHECK] {}", assert_id);
             stmts.push(tcx.codegen_cover_loc(&reach_msg, span));
         }
 

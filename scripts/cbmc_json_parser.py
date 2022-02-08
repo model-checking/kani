@@ -21,6 +21,7 @@ functions:
 
 import json
 from colorama import Fore, Style
+import re
 import sys
 from enum import Enum
 
@@ -42,6 +43,8 @@ class GlobalMessages(str, Enum):
     MESSAGE_TEXT = 'messageText'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
+    REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
+    CHECK_ID = "KANI_CHECK_ID_"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -189,12 +192,16 @@ def postprocess_results(properties):
 
     has_reachable_unsupported_constructs = has_check_failure(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
     has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
+    properties, reach_checks = filter_reach_checks(properties)
+    annotate_properties_with_reach_results(properties, reach_checks)
 
     for property in properties:
         if has_reachable_unsupported_constructs:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
+        elif "reach_check_result" in property and property["reach_check_result"] == "SUCCESS":
+            property["status"] = "UNREACHABLE"
         # TODO: Handle unwinding assertion failure
 
     messages = ""
@@ -214,6 +221,41 @@ def has_check_failure(properties, message):
         if message in property["description"] and property["status"] == "FAILURE":
             return True
     return False
+
+
+def filter_reach_checks(properties):
+    return filter_properties(properties, GlobalMessages.REACH_CHECK_DESC)
+
+
+def filter_properties(properties, message):
+    filtered_properties = []
+    removed_properties = []
+    for property in properties:
+        if message in property["description"]:
+            removed_properties.append(property)
+        else:
+            filtered_properties.append(property)
+    return filtered_properties, removed_properties
+
+
+def annotate_properties_with_reach_results(properties, reach_checks):
+    for reach_check in reach_checks:
+        description = reach_check["description"]
+        str = GlobalMessages.CHECK_ID + r"([0-9]+)"
+        assert_id_obj = re.search(GlobalMessages.CHECK_ID + r"([0-9])*", description)
+        if not assert_id_obj:
+            raise Exception("Error: failed to extract check ID for reachability check \"" + body + "\"")
+        assert_id = assert_id_obj.group(0)
+        prop = get_matching_property(properties, assert_id)
+        prop["reach_check_result"] = reach_check["status"]
+        prop["description"] = prop["description"].replace("[" + assert_id + "] ", "", 1)
+
+
+def get_matching_property(properties, assert_id):
+    for property in properties:
+        if assert_id in property["description"]:
+            return property
+    raise Exception("Error: failed to find matching property for reachability check \"" + body + "\"")
 
 
 def construct_solver_information_message(solver_information):
@@ -355,7 +397,7 @@ def construct_property_message(properties):
 
         if status == "SUCCESS":
             message = Fore.GREEN + f"{status}" + Style.RESET_ALL
-        elif status == "UNDETERMINED":
+        elif status == "UNDETERMINED" or status == "UNREACHABLE":
             message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
         else:
             number_tests_failed += 1
