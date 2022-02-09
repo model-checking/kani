@@ -241,8 +241,7 @@ def filter_properties(properties, message):
 def annotate_properties_with_reach_results(properties, reach_checks):
     for reach_check in reach_checks:
         description = reach_check["description"]
-        str = GlobalMessages.CHECK_ID + r"([0-9]+)"
-        assert_id_obj = re.search(GlobalMessages.CHECK_ID + r"([0-9])*", description)
+        assert_id_obj = re.search(GlobalMessages.CHECK_ID + r".*_([0-9])*", description)
         if not assert_id_obj:
             raise Exception("Error: failed to extract check ID for reachability check \"" + body + "\"")
         assert_id = assert_id_obj.group(0)
@@ -384,7 +383,7 @@ def construct_property_message(properties):
     index = 0
     verification_status = GlobalMessages.FAILED
 
-    output_message = "RESULT:\n"
+    output_message = "RESULTS:\n"
 
     # for property_instance in properties:
     for index, property_instance in enumerate(properties):
