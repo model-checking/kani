@@ -15,5 +15,4 @@ fn main() {
     assert!(v[2] == 3);
     assert!(v[3] == 4);
     assert!(v[4] == 5);
-
 }
