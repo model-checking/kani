@@ -479,6 +479,7 @@ pub trait Transformer: Sized {
             UnaryOperand::BitReverse => transformed_e.bitreverse(),
             UnaryOperand::Bswap => transformed_e.bswap(),
             UnaryOperand::IsDynamicObject => transformed_e.dynamic_object(),
+            UnaryOperand::IsFinite => transformed_e.is_finite(),
             UnaryOperand::Not => transformed_e.not(),
             UnaryOperand::ObjectSize => transformed_e.object_size(),
             UnaryOperand::PointerObject => transformed_e.pointer_object(),

@@ -209,6 +209,8 @@ pub enum UnaryOperand {
     Bswap,
     /// `__CPROVER_DYNAMIC_OBJECT(self)`
     IsDynamicObject,
+    /// `isfinite(self)`
+    IsFinite,
     /// `!self`
     Not,
     /// `__CPROVER_OBJECT_SIZE(self)`
@@ -1091,6 +1093,7 @@ impl Expr {
             Bitnot | BitReverse | Bswap | Popcount => arg.typ.is_integer(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.is_integer(),
             IsDynamicObject | ObjectSize | PointerObject => arg.typ().is_pointer(),
+            IsFinite => arg.typ().is_floating_point(),
             PointerOffset => arg.typ == Type::void_pointer(),
             Not => arg.typ.is_bool(),
             UnaryMinus => arg.typ().is_numeric(),
@@ -1103,7 +1106,7 @@ impl Expr {
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
-            IsDynamicObject | Not => Type::bool(),
+            IsDynamicObject | IsFinite | Not => Type::bool(),
             Popcount => arg.typ.clone(),
         }
     }
@@ -1132,6 +1135,11 @@ impl Expr {
     /// `__CPROVER_DYNAMIC_OBJECT(self)`
     pub fn dynamic_object(self) -> Self {
         self.unop(IsDynamicObject)
+    }
+
+    /// `isfinite(self)`
+    pub fn is_finite(self) -> Self {
+        self.unop(IsFinite)
     }
 
     /// `-self`
