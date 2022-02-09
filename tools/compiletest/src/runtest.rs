@@ -327,7 +327,7 @@ impl<'test> TestCx<'test> {
         cargo
             .arg("kani")
             .args(["--function", function_name])
-            .arg("--target")
+            .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
             .arg("--crate")
             .arg(&parent_dir);

@@ -174,7 +174,8 @@ def parse_args():
     def create_parser():
         parser = argparse.ArgumentParser(
             prog="cargo kani",
-            description="Verify a Rust crate. For more information, see https://github.com/model-checking/kani.")
+            description="Verify a Rust crate. For more information, see https://github.com/model-checking/kani.",
+            allow_abbrev=False)
 
         crate_group = parser.add_argument_group(
             "Crate", "You can pass in the rust crate positionally or with the --crate flag.")
