@@ -338,8 +338,8 @@ fn common_inputs_stamp(config: &Config) -> Stamp {
     let mut stamp = Stamp::from_path(&kani_bin_path);
 
     // Add source and script directories
+    stamp.add_dir(&rust_src_dir.join("src/"));
     stamp.add_dir(&rust_src_dir.join("scripts/"));
-    stamp.add_dir(&rust_src_dir.join("src/kani-compiler/"));
 
     // Add relevant tools directories
     stamp.add_dir(&rust_src_dir.join("tools/compiletest/"));
