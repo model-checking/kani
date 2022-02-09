@@ -3,7 +3,7 @@
 use super::super::codegen::TypeExt;
 use crate::GotocCtx;
 use cbmc::btree_string_map;
-use cbmc::goto_program::{Expr, Location, Stmt, SymbolTable, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use tracing::debug;
 
 // Should move into rvalue
@@ -14,6 +14,25 @@ pub fn slice_fat_ptr(typ: Type, data: Expr, len: Expr, symbol_table: &SymbolTabl
 
 pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &SymbolTable) -> Expr {
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
+}
+
+/// Tries to extract a string message from an `Expr`.
+/// If the expression represents a pointer to a string constant, this will return the string
+/// constant. Otherwise, return `None`.
+pub fn extract_const_message(arg: &Expr) -> Option<String> {
+    match arg.value() {
+        ExprValue::Struct { values } => match &values[0].value() {
+            ExprValue::AddressOf(address) => match address.value() {
+                ExprValue::Index { array, .. } => match array.value() {
+                    ExprValue::StringConstant { s } => Some(s.to_string()),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 impl<'tcx> GotocCtx<'tcx> {
