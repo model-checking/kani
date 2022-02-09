@@ -1,6 +1,6 @@
-assertion: q.len() == 2: SUCCESS
-assertion: q.pop_front().unwrap() == x: SUCCESS
-assertion: q.pop_front().unwrap() == y: SUCCESS
+assertion failed: q.len() == 2: SUCCESS
+assertion failed: q.pop_front().unwrap() == x: SUCCESS
+assertion failed: q.pop_front().unwrap() == y: SUCCESS
 max allocation size exceeded: SUCCESS
 max allocation may fail: SUCCESS
 max allocation size exceeded: SUCCESS

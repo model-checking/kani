@@ -1,1 +1,1 @@
-[kani_tests::test_sum.assertion.1] line 24 assertion: p.sum() == a.wrapping_add(b): SUCCESS
+[kani_tests::test_sum.assertion.1] line 24 assertion failed: p.sum() == a.wrapping_add(b): SUCCESS
