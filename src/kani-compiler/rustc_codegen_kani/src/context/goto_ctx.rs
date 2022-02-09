@@ -297,9 +297,10 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn next_check_id(&mut self) -> String {
+        // check id is KANI_CHECK_ID_<crate_name>_<counter>
         let c = self.global_checks_count;
         self.global_checks_count += 1;
-        format!("KANI_CHECK_ID_{}", c)
+        format!("KANI_CHECK_ID_{}_{}", self.full_crate_name, c)
     }
 }
 
