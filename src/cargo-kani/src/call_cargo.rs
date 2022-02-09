@@ -45,6 +45,13 @@ impl KaniContext {
 
         self.run_terminal(cmd)?;
 
+        if self.args.dry_run {
+            // mock an answer
+            return Ok(vec![
+                format!("target/{}/debug/deps/dry-run.symtab.json", build_target).into(),
+            ]);
+        }
+
         let build_glob = format!("target/{}/debug/deps/*.symtab.json", build_target);
         let results = glob::glob(&build_glob)?;
 

@@ -5,6 +5,7 @@ use anyhow::Result;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use util::alter_extension;
 
 mod args;
 mod call_cargo;
@@ -34,14 +35,19 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     for symtab in &symtabs {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
     }
+    // Look where the symtabs are generated to find the `target/$TARGET/debug/deps` directory we're generating things in
+    let discovered_outdir = symtabs.get(0).unwrap().parent().unwrap().to_path_buf();
     let linked_obj = {
-        let mut outdir = symtabs.get(0).unwrap().parent().unwrap().to_path_buf(); // todo: replace this hack
+        let mut outdir = discovered_outdir.clone();
         outdir.push("cbmc.out");
         outdir
     };
 
     // here on almost identical to below
     ctx.link_c_lib(&goto_objs, &linked_obj, &ctx.args.function)?;
+    if ctx.args.restrict_vtable() {
+        ctx.apply_vtable_restrictions(&linked_obj, &discovered_outdir)?;
+    }
     ctx.run_goto_instrument(&linked_obj)?;
 
     if ctx.args.visualize {
@@ -65,6 +71,12 @@ fn standalone_main() -> Result<()> {
 
     // almost identical to above below this line
     ctx.link_c_lib(&[goto_obj], &linked_obj, &ctx.args.function)?;
+    if ctx.args.restrict_vtable() {
+        ctx.apply_vtable_restrictions(
+            &linked_obj,
+            &alter_extension(&args.input, "restrictions.json"),
+        )?;
+    }
     ctx.run_goto_instrument(&linked_obj)?;
 
     if ctx.args.visualize {

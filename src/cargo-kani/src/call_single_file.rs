@@ -14,12 +14,13 @@ impl KaniContext {
         let output_filename = alter_extension(file, "symtab.json");
 
         {
-            let type_map_filename = alter_extension(file, "type_map.json");
-            let metadata_filename = alter_extension(file, "kani-metadata.json");
             let mut temps = self.temporaries.borrow_mut();
             temps.push(output_filename.clone());
-            temps.push(type_map_filename);
-            temps.push(metadata_filename);
+            temps.push(alter_extension(file, "type_map.json"));
+            temps.push(alter_extension(file, "kani-metadata.json"));
+            if self.args.restrict_vtable() {
+                temps.push(alter_extension(file, "restrictions.json"));
+            }
         }
 
         let mut args = self.kani_rustc_flags();
@@ -56,6 +57,10 @@ impl KaniContext {
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
+        }
+
+        if self.args.restrict_vtable() {
+            flags.push("--restrict-vtable-fn-ptrs".into());
         }
 
         flags.iter().map(|x| x.into()).collect()

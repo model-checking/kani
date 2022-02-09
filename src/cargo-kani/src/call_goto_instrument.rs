@@ -7,6 +7,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::context::KaniContext;
+use crate::util::alter_extension;
 
 impl KaniContext {
     /// Postprocess a goto binary (before cbmc) in-place by calling goto-instrument
@@ -21,6 +22,39 @@ impl KaniContext {
         if self.args.gen_c {
             self.gen_c(file)?;
         }
+
+        Ok(())
+    }
+
+    /// Apply --restrict-vtable to a goto binary.
+    /// `source` is either a `*.restrictions.json` file or a directory containing mutiple such files.
+    pub fn apply_vtable_restrictions(&self, file: &Path, source: &Path) -> Result<()> {
+        let linked_restrictions = alter_extension(file, "linked-restrictions.json");
+
+        {
+            let mut temps = self.temporaries.borrow_mut();
+            temps.push(linked_restrictions.clone());
+        }
+
+        {
+            let mut cmd = Command::new(&self.kani_link_restrictions);
+            cmd.args(vec![source.as_os_str(), linked_restrictions.as_os_str()]);
+
+            self.run_suppress(cmd)?;
+        }
+
+        let args: Vec<OsString> = vec![
+            "--function-pointer-restrictions-file".into(),
+            linked_restrictions.into(),
+            file.to_owned().into_os_string(), // input
+            file.to_owned().into_os_string(), // output
+        ];
+
+        // TODO get goto-instrument path from self
+        let mut cmd = Command::new("goto-instrument");
+        cmd.args(args);
+
+        self.run_suppress(cmd)?;
 
         Ok(())
     }
@@ -79,7 +113,7 @@ impl KaniContext {
 
     /// Generate a .c file from a goto binary (i.e. --gen-c)
     pub fn gen_c(&self, file: &Path) -> Result<()> {
-        let output_filename = crate::util::alter_extension(file, "c");
+        let output_filename = alter_extension(file, "c");
         // We don't put the C file into temporaries to be deleted.
 
         let args: Vec<OsString> = vec![

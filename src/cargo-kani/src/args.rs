@@ -97,6 +97,13 @@ pub struct KaniArgs {
     /// Choose abstraction for modules of standard library if available
     #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true)]
     pub abs_type: AbstractionType,
+
+    /// Restrict the targets of virtual table function pointer calls
+    #[structopt(long)]
+    pub restrict_vtable: bool,
+    /// Disable restricting the targets of virtual table function pointer calls
+    #[structopt(long)]
+    pub no_restrict_vtable: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -115,15 +122,14 @@ pub struct KaniArgs {
                       "at the cost of some readability")
         add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
                  help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
-
-    # Add flags we don't expect end-users to use.
-    def add_developer_flags(make_group, add_flag, config):
-        group = make_group(
-            "Developer flags", "These are generally meant for use by Kani developers, and are not stable.")
-        add_flag(group, "--restrict-vtable", default=False, action=BooleanOptionalAction,
-                 help="Restrict the targets of virtual table function pointer calls")
-
         */
+}
+
+impl KaniArgs {
+    pub fn restrict_vtable(&self) -> bool {
+        self.restrict_vtable
+        // if we flip the default, this will become: !self.no_restrict_vtable
+    }
 }
 
 arg_enum! {
