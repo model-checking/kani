@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Failing example from https://github.com/model-checking/kani/issues/702
+// Push 5 elements to force the vector to resize, then check that the values were correctly copied.
 fn main() {
     let mut v = Vec::new();
     v.push(72);
@@ -13,4 +14,6 @@ fn main() {
     assert!(v[1] == 2);
     assert!(v[2] == 3);
     assert!(v[3] == 4);
+    assert!(v[4] == 5);
+
 }
