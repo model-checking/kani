@@ -4,6 +4,5 @@
 // Failing example from https://github.com/model-checking/kani/issues/763
 fn main() {
     let x = Vec::<i32>::new();
-    for i in x {
-    }
+    for i in x {}
 }
