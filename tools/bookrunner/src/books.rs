@@ -28,7 +28,6 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use toml::Value;
 use walkdir::WalkDir;
 
 // Books may include a `SUMMARY.md` file or not. If they do, the info in
@@ -551,7 +550,7 @@ pub fn generate_run() {
     let text_dash: PathBuf =
         ["build", "output", "latest", "html", "bookrunner.txt"].iter().collect();
     // Set up books
-    let mut books: Vec<Book> = vec![
+    let books: Vec<Book> = vec![
         setup_reference_book(),
         setup_nomicon_book(),
         setup_unstable_book(),
