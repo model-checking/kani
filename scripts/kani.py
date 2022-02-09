@@ -139,10 +139,6 @@ def process_common_cbmc_flags(args):
     process_object_bits_flag(args)
     process_unwind_flag(args)
 
-# Updates environment to use gotoc backend debugging
-def add_kani_rustc_debug_to_env(env):
-    env["KANI_LOG"] = env.get("RUSTC_LOG", "rustc_codegen_kani")
-
 # Prints info about the Kani process
 def print_kani_step_status(step_name, completed_process, verbose=False):
     status = "PASS"
@@ -211,13 +207,16 @@ def run_cmd(
     return process.returncode
 
 
-def compiler_flags(mangler, symbol_table_passes, restrict_vtable, assertion_reach_checks):
+def compiler_flags(mangler, symbol_table_passes, restrict_vtable, debug, assertion_reach_checks):
     kani_flags = ["--goto-c"]
     if symbol_table_passes:
         kani_flags.append(f"--symbol-table-passes={','.join(symbol_table_passes)}")
 
     if restrict_vtable:
         kani_flags.append("--restrict-vtable-fn-ptrs")
+
+    if debug:
+        kani_flags.append("--log-level=debug")
 
     if assertion_reach_checks:
         kani_flags.append("--assertion-reach-checks")
@@ -241,8 +240,10 @@ def compile_single_rust_file(
         atexit.register(delete_file, base + ".type_map.json")
         atexit.register(delete_file, base + ".kani-metadata.json")
 
-    build_cmd = [KANI_RUSTC_EXE] + compiler_flags(extra_args.mangler, symbol_table_passes,
+    build_cmd = [KANI_RUSTC_EXE] + compiler_flags(extra_args.mangler,
+                                                  symbol_table_passes,
                                                   extra_args.restrict_vtable,
+                                                  extra_args.debug,
                                                   extra_args.assertion_reach_checks)
 
     if extra_args.use_abs:
@@ -256,9 +257,6 @@ def compile_single_rust_file(
     build_cmd += ["-o", base + ".o", input_filename]
 
     build_env = os.environ
-    if extra_args.debug:
-        add_kani_rustc_debug_to_env(build_env)
-
     return run_cmd(
         build_cmd,
         env=build_env,
@@ -276,8 +274,7 @@ def cargo_build(
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     rustflags = compiler_flags(extra_args.mangler, symbol_table_passes,
-                               extra_args.restrict_vtable,
-                               extra_args.assertion_reach_checks)
+                               extra_args.restrict_vtable, extra_args.debug, extra_args.assertion_reach_checks)
     cargo_cmd = ["cargo", "build"] if not extra_args.tests else ["cargo", "test", "--no-run"]
     build_cmd = cargo_cmd + ["--target-dir", str(target_dir)]
     if extra_args.build_target:
@@ -289,8 +286,6 @@ def cargo_build(
                       "KANIFLAGS": " ".join(rustflags),
                       "RUSTC": KANI_RUSTC_EXE
                       })
-    if extra_args.debug:
-        add_kani_rustc_debug_to_env(build_env)
     if extra_args.verbose:
         build_cmd.append("-v")
     if extra_args.dry_run:
