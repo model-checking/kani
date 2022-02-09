@@ -129,6 +129,14 @@ impl Stmt {
             _ => None,
         }
     }
+
+    // If self has a body of type `Block(stmts)`, return `stmts`; otherwise, None
+    pub fn get_stmts(&self) -> Option<&Vec<Stmt>> {
+        match self.body() {
+            Block(stmts) => Some(stmts),
+            _ => None,
+        }
+    }
 }
 
 /// Fluent builders
