@@ -5,7 +5,7 @@ Kani must currently be built from source.
 In general, the following dependencies are required. Note: These dependencies may be installed by running the CI scripts shown below and there is no need to install them separately, for their respective OS.
 
 1. Cargo installed via rustup
-2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.48.0)
+2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.50.0)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.6)
 
 ## Installing on Ubuntu 20.04

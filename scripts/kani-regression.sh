@@ -24,7 +24,7 @@ EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 KANI_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 48
+check-cbmc-version.py --major 5 --minor 50
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
