@@ -172,11 +172,14 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         let mut stmts: Vec<Stmt> = Vec::new();
 
         if tcx.queries.get_check_assertion_reachability() {
-            // inject a reachability (cover) check to the current location
-            // generate an ID for the assert
+            // Generate a unique ID for the assert
             let assert_id = tcx.next_check_id();
+            // Use a description of the form:
+            // [KANI_REACHABILITY_CHECK] <check ID>
+            // for reachability checks
             msg = format!("[{}] {}", assert_id, msg);
             let reach_msg = format!("[KANI_REACHABILITY_CHECK] {}", assert_id);
+            // inject a reachability (cover) check to the current location
             stmts.push(tcx.codegen_cover_loc(&reach_msg, span));
         }
 

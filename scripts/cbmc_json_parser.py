@@ -44,7 +44,8 @@ class GlobalMessages(str, Enum):
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
-    CHECK_ID = "KANI_CHECK_ID_"
+    REACH_CHECK_KEY = "reachCheckResult"
+    CHECK_ID = "KANI_CHECK_ID"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -182,7 +183,9 @@ def postprocess_results(properties):
     for a Rust construct that is not currently supported by Kani failed, since
     the missing exploration of execution paths through the unsupported construct
     may hide failures
-    2. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
+    2. Change a check's result from "SUCCESS" to "UNREACHABLE" if its
+    reachability check's result was "SUCCESS"
+    3. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
     assertion failed, since the insufficient unwinding may cause some execution
     paths to be left unexplored (https://github.com/model-checking/kani/issues/746)
 
@@ -200,7 +203,9 @@ def postprocess_results(properties):
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
-        elif "reach_check_result" in property and property["reach_check_result"] == "SUCCESS":
+        elif GlobalMessages.REACH_CHECK_KEY in property and property[GlobalMessages.REACH_CHECK_KEY] == "SUCCESS":
+            # Change SUCCESS to UNREACHABLE
+            assert property["status"] == "SUCCESS", "** ERROR: Expecting an unreachable property to have a status of \"SUCCESS\""
             property["status"] = "UNREACHABLE"
         # TODO: Handle unwinding assertion failure
 
@@ -228,6 +233,10 @@ def filter_reach_checks(properties):
 
 
 def filter_properties(properties, message):
+    """
+    Move properties that have "message" in their description out of "properties"
+    into "removed_properties"
+    """
     filtered_properties = []
     removed_properties = []
     for property in properties:
@@ -239,22 +248,46 @@ def filter_properties(properties, message):
 
 
 def annotate_properties_with_reach_results(properties, reach_checks):
+    """
+    When assertion reachability checks are turned on, kani prefixes each
+    assert's description with an "ID" of the following form:
+    [KANI_CHECK_ID_<crate-name>_<index-of-check>]
+    e.g.:
+    [KANI_CHECK_ID_foo.6875c808::foo_0] assertion failed: x % 2 == 0
+    In addition, the description of each reachability check that it generates
+    includes the ID of the assert that we want to check its reachability. The
+    description of a reachability check uses the following template:
+    [KANI_REACHABILITY_CHECK] <ID of original assert>
+    e.g.:
+    [KANI_REACHABILITY_CHECK] KANI_CHECK_ID_foo.6875c808::foo_0
+    This function iterates over the reachability checks, and for each:
+    1. It finds the corresponding assert through matching the ID
+    2. It annotates the assert's data with the result of the reachability check
+    under the GlobalMessages.REACH_CHECK_KEY key
+    """
     for reach_check in reach_checks:
         description = reach_check["description"]
-        assert_id_obj = re.search(GlobalMessages.CHECK_ID + r".*_([0-9])*", description)
-        if not assert_id_obj:
-            raise Exception("Error: failed to extract check ID for reachability check \"" + body + "\"")
-        assert_id = assert_id_obj.group(0)
-        prop = get_matching_property(properties, assert_id)
-        prop["reach_check_result"] = reach_check["status"]
-        prop["description"] = prop["description"].replace("[" + assert_id + "] ", "", 1)
+        # Extract the ID of the assert from the description
+        match_obj = re.search(GlobalMessages.CHECK_ID + r"_.*_([0-9])*", description)
+        if not match_obj:
+            raise Exception("Error: failed to extract check ID for reachability check \"" + description + "\"")
+        check_id = match_obj.group(0)
+        prop = get_matching_property(properties, check_id)
+        # Attach the result of the reachability check to this property
+        prop[GlobalMessages.REACH_CHECK_KEY] = reach_check["status"]
+        # Remove the ID from the property's description so that it's not shown
+        # to the user
+        prop["description"] = prop["description"].replace("[" + check_id + "] ", "", 1)
 
 
-def get_matching_property(properties, assert_id):
+def get_matching_property(properties, check_id):
+    """
+    Find the property with the given ID
+    """
     for property in properties:
-        if assert_id in property["description"]:
+        if check_id in property["description"]:
             return property
-    raise Exception("Error: failed to find matching property for reachability check \"" + body + "\"")
+    raise Exception("Error: failed to find a property with ID \"" + check_id + "\"")
 
 
 def construct_solver_information_message(solver_information):

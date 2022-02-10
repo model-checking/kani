@@ -1,10 +1,10 @@
 pub fn foo(x: u32) -> u32 {
     let y = x / 2;
     let z = y * 2;
-    if z == x {
-        assert!(x % 2 == 0);
+    if x % 2 == 0 {
+        assert!(z == x);
     } else {
-        assert!(x % 2 == 1)
+        assert!(z == x - 1);
     }
     z
 }

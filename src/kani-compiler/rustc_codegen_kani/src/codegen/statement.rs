@@ -486,7 +486,7 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    /// Generate code to cover the given condition
+    /// Generate code to cover the given condition at the current location
     pub fn codegen_cover(&self, cond: Expr, msg: &str, span: Option<Span>) -> Stmt {
         let loc = self.codegen_caller_span(&span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
