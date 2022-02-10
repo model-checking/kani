@@ -331,11 +331,20 @@ pub fn make_tests(config: &Config, tests: &mut Vec<test::TestDescAndFn>) {
 
 /// Returns a stamp constructed from input files common to all test cases.
 fn common_inputs_stamp(config: &Config) -> Stamp {
-    let mut stamp = Stamp::from_path(&config.kani_dir_path);
-
-    // Add compiletest itself.
     let rust_src_dir = config.find_rust_src_root().expect("Could not find Rust source root");
+    let kani_bin_path = &rust_src_dir.join("target/debug/kani-compiler");
+
+    // Create stamp based on the `kani-compiler` binary
+    let mut stamp = Stamp::from_path(&kani_bin_path);
+
+    // Add source, library and script directories
+    stamp.add_dir(&rust_src_dir.join("src/"));
+    stamp.add_dir(&rust_src_dir.join("library/"));
+    stamp.add_dir(&rust_src_dir.join("scripts/"));
+
+    // Add relevant tools directories
     stamp.add_dir(&rust_src_dir.join("tools/compiletest/"));
+    stamp.add_dir(&rust_src_dir.join("tools/kani-link-restrictions/"));
 
     stamp
 }
