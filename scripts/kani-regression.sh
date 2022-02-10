@@ -89,9 +89,6 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 #         dependency2
 time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
 
-# Check that we don't have type mismatches across different crates
-time "$KANI_DIR"/tests/kani-multicrate/type-mismatch/run-mismatch-test.sh
-
 echo
 echo "All Kani regression tests completed successfully."
 echo
