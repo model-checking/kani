@@ -24,7 +24,7 @@ EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 KANI_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 48
+check-cbmc-version.py --major 5 --minor 50
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
@@ -88,9 +88,6 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 #        \           / v0.1.1
 #         dependency2
 time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
-
-# Check that we don't have type mismatches across different crates
-time "$KANI_DIR"/tests/kani-multicrate/type-mismatch/run-mismatch-test.sh
 
 echo
 echo "All Kani regression tests completed successfully."
