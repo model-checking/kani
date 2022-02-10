@@ -123,6 +123,12 @@ def main():
                 args.verbose, dry_run=args.dry_run, restrictions_filename=restrictions_filename):
             return 1
 
+    # See comment in kani script for details
+    if(args.output_format == kani_flags.OutputStyle.REGULAR) or (args.output_format == kani_flags.OutputStyle.TERSE):
+        # This gives us the json output from CBMC which is passed into the parser
+        if "--json-ui" not in args.cbmc_args:
+            args.cbmc_args.extend(["--json-ui"])
+
     if "--function" not in args.cbmc_args:
         args.cbmc_args.extend(["--function", args.function])
 
@@ -133,7 +139,13 @@ def main():
                                      args.verbose, args.quiet, args.keep_temps,
                                      args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
     else:
-        retcode = kani.run_cbmc(cbmc_filename, args.cbmc_args, args.verbose, args.quiet, args.dry_run)
+        retcode = kani.run_cbmc(
+            cbmc_filename,
+            args.cbmc_args,
+            args.verbose,
+            args.quiet,
+            args.dry_run,
+            args.output_format)
 
     if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
         retcode = EXIT_CODE_SUCCESS
@@ -163,7 +175,8 @@ def parse_args():
     def create_parser():
         parser = argparse.ArgumentParser(
             prog="cargo kani",
-            description="Verify a Rust crate. For more information, see https://github.com/model-checking/kani.")
+            description="Verify a Rust crate. For more information, see https://github.com/model-checking/kani.",
+            allow_abbrev=False)
 
         crate_group = parser.add_argument_group(
             "Crate", "You can pass in the rust crate positionally or with the --crate flag.")
