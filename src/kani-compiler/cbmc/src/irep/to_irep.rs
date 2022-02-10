@@ -103,6 +103,7 @@ impl ToIrepId for UnaryOperand {
             UnaryOperand::CountLeadingZeros { .. } => IrepId::CountLeadingZeros,
             UnaryOperand::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
             UnaryOperand::IsDynamicObject => IrepId::IsDynamicObject,
+            UnaryOperand::IsFinite => IrepId::IsFinite,
             UnaryOperand::Not => IrepId::Not,
             UnaryOperand::ObjectSize => IrepId::ObjectSize,
             UnaryOperand::PointerObject => IrepId::PointerObject,
