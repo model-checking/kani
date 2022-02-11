@@ -45,3 +45,38 @@ macro_rules! assert {
         kani::assert($cond, concat!(stringify!($($arg)+)));
     };
 }
+
+#[macro_export]
+macro_rules! evaluate_print_args {
+    () => { /* do nothing */ };
+    ($x:expr $(, $arg:expr)* $(,)?) => {
+        // Evaluate each of the arguments since they may have side effects
+        {
+            $(
+                $arg;
+            )*
+        }
+    };
+}
+
+// Override the print macros to skip all the formatting functionality (which
+/// is not relevant for verification)
+#[macro_export]
+macro_rules! print {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
+
+#[macro_export]
+macro_rules! eprint {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
+
+#[macro_export]
+macro_rules! println {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
+
+#[macro_export]
+macro_rules! eprintln {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
