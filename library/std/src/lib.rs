@@ -45,3 +45,23 @@ macro_rules! assert {
         kani::assert($cond, concat!(stringify!($($arg)+)));
     };
 }
+
+#[macro_export]
+macro_rules! assert_eq {
+    ($left:expr, $right:expr $(,)?) => ({
+        assert!($left == $right);
+    });
+    ($left:expr, $right:expr, $($arg:tt)+) => ({
+        assert!($left == $right, $($arg)+);
+    });
+}
+
+#[macro_export]
+macro_rules! assert_ne {
+    ($left:expr, $right:expr $(,)?) => ({
+        assert!($left != $right);
+    });
+    ($left:expr, $right:expr, $($arg:tt)+) => ({
+        assert!($left != $right, $($arg)+);
+    });
+}
