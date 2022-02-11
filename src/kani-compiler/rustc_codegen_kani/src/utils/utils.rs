@@ -6,7 +6,7 @@ use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::TyS;
-use tracing::{debug, warn};
+use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -16,14 +16,6 @@ pub fn slice_fat_ptr(typ: Type, data: Expr, len: Expr, symbol_table: &SymbolTabl
 
 pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &SymbolTable) -> Expr {
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
-}
-
-pub fn emit_concurrency_warning(intrinsic: &str, loc: Location) {
-    warn!(
-        "Kani does not support concurrency for now. `{}` in {} treated as a sequential operation.",
-        intrinsic,
-        loc.short_string()
-    );
 }
 
 /// Tries to extract a string message from an `Expr`.
