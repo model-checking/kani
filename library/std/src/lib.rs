@@ -80,7 +80,10 @@ macro_rules! assert_ne {
 #[macro_export]
 macro_rules! evaluate_print_args {
     () => { /* do nothing */ };
-    ($x:expr $(, $arg:expr)* $(,)?) => {
+    // For println!("Some message {} {} ...", arg1, arg2, ...)
+    // $msg is "Some message {} {} ..."
+    // and $arg has arg1, arg2, ...
+    ($msg:expr $(, $arg:expr)* $(,)?) => {
         // Evaluate each of the arguments since they may have side effects
         {
             $(
@@ -91,7 +94,7 @@ macro_rules! evaluate_print_args {
 }
 
 // Override the print macros to skip all the formatting functionality (which
-/// is not relevant for verification)
+// is not relevant for verification)
 #[macro_export]
 macro_rules! print {
     ($($x:tt)*) => { evaluate_print_args!($($x)*); };
