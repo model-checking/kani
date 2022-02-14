@@ -1,8 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks that println! and eprintln! do not result in verification
-// failure
+// This test checks that the print macros do not result in verification failure
 
 fn main() {
     println!("Hello, world!");
