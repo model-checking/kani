@@ -392,7 +392,11 @@ impl<'tcx> GotocCtx<'tcx> {
         base_addr
             .cast_to(Type::unsigned_int(8).to_pointer())
             .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
-            .cast_to(res_t)
+            // The `cast_to` operation causes https://github.com/model-checking/kani/issues/822
+            // FIXME: Changing to a transmute to temporarily unblock, proper fix is to
+            // unwrap the transparent struct.
+            .transmute_to(res_t, &self.symbol_table)
+        //.cast_to(res_t)
     }
 
     pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
