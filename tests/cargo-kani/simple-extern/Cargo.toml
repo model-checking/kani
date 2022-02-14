@@ -11,3 +11,6 @@ edition = "2018"
 
 [kani.flags.linking]
 c-lib = ["src/helper.c"]
+
+[kani.flags]
+output-format = "old"
