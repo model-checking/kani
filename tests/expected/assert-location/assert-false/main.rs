@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Check the location of the assert statement when using assert!(false);
+// kani-flags: --output-format old
 
 fn any_bool() -> bool {
     kani::nondet()
