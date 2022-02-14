@@ -191,7 +191,7 @@ def run_cmd(
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
         # By Default, the flag passed is the old output style
-        if (output_style != kani_flags.OutputStyle.OLD):
+        if (output_style != kani_flags.OutputStyle.OLD and not dry_run):
             try:
                 cbmc_json_parser.transform_cbmc_output(stdout, output_style)
             except BaseException:
