@@ -64,7 +64,7 @@ pub struct KaniArgs {
     pub target_dir: Option<PathBuf>,
 
     /// Toggle between different styles of output
-    #[structopt(long, default_value = "old", possible_values = &OutputFormat::variants(), case_insensitive = true)]
+    #[structopt(long, default_value = "regular", possible_values = &OutputFormat::variants(), case_insensitive = true)]
     pub output_format: OutputFormat,
 
     #[structopt(flatten)]
