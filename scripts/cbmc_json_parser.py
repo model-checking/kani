@@ -27,7 +27,7 @@ from enum import Enum
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
-    'default': 'old',
+    'default': 'regular',
     'regular': 'regular',
     'terse': 'terse',
     'old': 'old'

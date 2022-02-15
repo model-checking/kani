@@ -12,4 +12,4 @@ edition = "2021"
 kani_restrictions = { path = "../../library/kani_restrictions" }
 serde = {version = "1", features = ["derive"]}
 serde_json = {version = "1"}
-cbmc = { path = "../../src/kani-compiler/cbmc" }
+cbmc = { path = "../../cprover_bindings", package = "cprover_bindings" }

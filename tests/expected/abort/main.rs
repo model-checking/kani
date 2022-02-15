@@ -1,5 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// kani-flags: --output-format old
 //
 // Test that the abort() function is respected and nothing beyond it will execute.
 

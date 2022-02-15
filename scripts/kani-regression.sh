@@ -34,7 +34,7 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 cargo build
 
 # Unit tests
-cargo test -p cbmc
+cargo test -p cprover_bindings
 cargo test -p kani-compiler
 
 # Declare testing suite information (suite and mode)
@@ -47,6 +47,7 @@ TESTS=(
     "cargo-kani cargo-kani"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
+    "ui expected"
 )
 
 # Extract testing suite information and run compiletest
