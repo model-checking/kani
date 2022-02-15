@@ -137,7 +137,7 @@ class OutputStyle(str, Enum):
     Allows user to pass flags and for kani to change the UI based on the
     flag that is passed. Ex - kani test.rs --output-format new
     """
-    DEFAULT = 'old'
+    DEFAULT = 'regular'
     REGULAR = 'regular'
     TERSE = 'terse'
     OLD = 'old'
@@ -242,7 +242,7 @@ def add_output_flags(make_group, add_flag, config):
     add_flag(
         group,
         "--output-format",
-        default=OutputStyle.OLD,
+        default=OutputStyle.DEFAULT,
         type=OutputStyle,
         action=EnumAction,
         help="Select the format for output")

@@ -5,6 +5,8 @@
 // function definition. Expected to fail because we are comparing
 // to an incorrect value.
 
+// kani-flags: --output-format old
+
 fn takes_dyn_fun(fun: Box<dyn FnOnce() -> u32>) -> u32 {
     fun()
 }

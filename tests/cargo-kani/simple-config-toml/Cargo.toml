@@ -18,4 +18,5 @@ gen-c = true
 [kani.flags]
 visualize = false
 mangler = "v0"
+output-format = "old"
 cbmc-args = []
