@@ -76,3 +76,41 @@ macro_rules! assert_ne {
         assert!($left != $right, $($arg)+);
     });
 }
+
+#[macro_export]
+macro_rules! evaluate_print_args {
+    () => { /* do nothing */ };
+    // For println!("Some message {} {} ...", arg1, arg2, ...)
+    // $msg is "Some message {} {} ..."
+    // and $arg has arg1, arg2, ...
+    ($msg:expr $(, $arg:expr)* $(,)?) => {
+        // Evaluate each of the arguments since they may have side effects
+        {
+            $(
+                $arg;
+            )*
+        }
+    };
+}
+
+// Override the print macros to skip all the formatting functionality (which
+// is not relevant for verification)
+#[macro_export]
+macro_rules! print {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
+
+#[macro_export]
+macro_rules! eprint {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
+
+#[macro_export]
+macro_rules! println {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
+
+#[macro_export]
+macro_rules! eprintln {
+    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+}
