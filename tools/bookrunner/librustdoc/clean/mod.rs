@@ -297,6 +297,10 @@ impl<'a> Clean<Option<WherePredicate>> for ty::Predicate<'a> {
             | ty::PredicateKind::ClosureKind(..)
             | ty::PredicateKind::ConstEquate(..)
             | ty::PredicateKind::TypeWellFormedFromEnv(..) => panic!("not user writable"),
+
+            _ => unimplemented!(
+                "We do not keep this list up to date. TODO: Clean up dependency code"
+            ),
         }
     }
 }
@@ -387,7 +391,7 @@ impl<'tcx> Clean<Type> for ty::ProjectionTy<'tcx> {
         let trait_ = lifted.trait_ref(cx.tcx).clean(cx);
         let self_type = self.self_ty().clean(cx);
         Type::QPath {
-            name: cx.tcx.associated_item(self.item_def_id).ident.name,
+            name: cx.tcx.associated_item(self.item_def_id).ident(cx.tcx).name,
             self_def_id: self_type.def_id(&cx.cache),
             self_type: box self_type,
             trait_,
@@ -1131,7 +1135,7 @@ impl Clean<Item> for ty::AssocItem {
                 }
             }
             ty::AssocKind::Type => {
-                let my_name = self.ident.name;
+                let my_name = self.ident(tcx).name;
 
                 if let ty::TraitContainer(_) = self.container {
                     let bounds = tcx.explicit_item_bounds(self.def_id);
@@ -1197,7 +1201,7 @@ impl Clean<Item> for ty::AssocItem {
             }
         };
 
-        Item::from_def_id_and_parts(self.def_id, Some(self.ident.name), kind, cx)
+        Item::from_def_id_and_parts(self.def_id, Some(self.ident(tcx).name), kind, cx)
     }
 }
 
@@ -1521,7 +1525,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
                 let mut bindings = vec![];
                 for pb in obj.projection_bounds() {
                     bindings.push(TypeBinding {
-                        name: cx.tcx.associated_item(pb.item_def_id()).ident.name,
+                        name: cx.tcx.associated_item(pb.item_def_id()).ident(cx.tcx).name,
                         kind: TypeBindingKind::Equality {
                             term: pb.skip_binder().term.clean(cx).into(),
                         },
@@ -1592,7 +1596,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
                                             name: cx
                                                 .tcx
                                                 .associated_item(proj.projection_ty.item_def_id)
-                                                .ident
+                                                .ident(cx.tcx)
                                                 .name,
                                             kind: TypeBindingKind::Equality {
                                                 term: proj.term.clean(cx),
