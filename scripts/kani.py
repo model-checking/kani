@@ -188,12 +188,13 @@ def run_cmd(
         if scanner.match(stdout):
             stdout = scanner.edit_output(stdout)
 
+    returncode = process.returncode
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
         # By Default, the flag passed is the old output style
         if (output_style != kani_flags.OutputStyle.OLD):
             try:
-                cbmc_json_parser.transform_cbmc_output(stdout, output_style)
+                returncode = cbmc_json_parser.transform_cbmc_output(stdout, output_style)
             except BaseException:
                 raise Exception("JSON Parsing Error")
         else:
@@ -204,7 +205,7 @@ def run_cmd(
         with open(output_to, "w") as f:
             f.write(stdout)
 
-    return process.returncode
+    return returncode
 
 
 def compiler_flags(mangler, symbol_table_passes, restrict_vtable, debug, assertion_reach_checks):
