@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
-use tracing::{debug, warn};
-
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::mir::Place;
@@ -10,6 +8,17 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Instance;
 use rustc_middle::ty::{self, Ty, TyS};
 use rustc_span::Span;
+use tracing::{debug, warn};
+
+macro_rules! emit_concurrency_warning {
+    ($intrinsic: expr, $loc: expr) => {{
+        warn!(
+            "Kani does not support concurrency for now. `{}` in {} treated as a sequential operation.",
+            $intrinsic,
+            $loc.short_string()
+        );
+    }};
+}
 
 struct SizeAlign {
     size: Expr,
@@ -279,8 +288,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // Note: Atomic arithmetic operations wrap around on overflow.
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
-                warn!("Kani does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
                 let loc = self.codegen_span_option(span);
+                emit_concurrency_warning!(intrinsic, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -519,6 +528,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_memory" => codegen_intrinsic_copy!(Memmove),
             "volatile_copy_nonoverlapping_memory" => codegen_intrinsic_copy!(Memcpy),
             "volatile_load" => self.codegen_expr_to_place(p, fargs.remove(0).dereference()),
+            "volatile_store" => {
+                assert!(self.place_ty(p).is_unit());
+                self.codegen_volatile_store(instance, intrinsic, fargs, loc)
+            }
             "wrapping_add" => codegen_wrapping_op!(plus),
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
@@ -657,10 +670,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc.clone());
         let res_stmt = self.codegen_expr_to_place(p, var1);
@@ -688,10 +698,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc.clone());
         let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -727,10 +734,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc.clone());
         let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -743,10 +747,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc.clone());
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
@@ -1004,5 +1005,28 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
+    }
+
+    /// A volatile write of a memory location:
+    /// https://doc.rust-lang.org/std/ptr/fn.write_volatile.html
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `dst` must be valid for writes (done by `--pointer-check`)
+    ///  * `dst` must be properly aligned (done by `align_check` below)
+    fn codegen_volatile_store(
+        &mut self,
+        instance: Instance<'tcx>,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        loc: Location,
+    ) -> Stmt {
+        emit_concurrency_warning!(intrinsic, loc);
+        let dst = fargs.remove(0);
+        let src = fargs.remove(0);
+        let typ = instance.substs.type_at(0);
+        let align = self.is_aligned(typ, dst.clone());
+        let align_check = Stmt::assert(align, "`dst` is properly aligned", loc.clone());
+        let expr = dst.dereference().assign(src, loc.clone());
+        Stmt::block(vec![align_check, expr], loc)
     }
 }
