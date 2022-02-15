@@ -66,7 +66,7 @@ where
 macro_rules! declare_rustdoc_lint {
     ($(#[$attr:meta])* $name: ident, $level: ident, $descr: literal $(,)?) => {
         declare_tool_lint! {
-            $(#[$attr])* pub rustdoc::$name, $level, $descr
+            $(#[$attr])* pub(crate) rustdoc::$name, $level, $descr
         }
     }
 }

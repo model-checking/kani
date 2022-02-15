@@ -125,7 +125,7 @@ mod visit;
 mod visit_ast;
 mod visit_lib;
 
-pub fn main() {
+pub(crate) fn main() {
     // See docs in https://github.com/rust-lang/rust/blob/master/compiler/rustc/src/main.rs
     // about jemalloc.
     #[cfg(feature = "jemalloc")]

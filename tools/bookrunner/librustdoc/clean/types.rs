@@ -429,7 +429,7 @@ impl Item {
 
     /// Convenience wrapper around [`Self::from_def_id_and_parts`] which converts
     /// `hir_id` to a [`DefId`]
-    pub fn from_hir_id_and_parts(
+    pub(crate) fn from_hir_id_and_parts(
         hir_id: hir::HirId,
         name: Option<Symbol>,
         kind: ItemKind,
@@ -438,7 +438,7 @@ impl Item {
         Item::from_def_id_and_parts(cx.tcx.hir().local_def_id(hir_id).to_def_id(), name, kind, cx)
     }
 
-    pub fn from_def_id_and_parts(
+    pub(crate) fn from_def_id_and_parts(
         def_id: DefId,
         name: Option<Symbol>,
         kind: ItemKind,
@@ -456,7 +456,7 @@ impl Item {
         )
     }
 
-    pub fn from_def_id_and_attrs_and_parts(
+    pub(crate) fn from_def_id_and_attrs_and_parts(
         def_id: DefId,
         name: Option<Symbol>,
         kind: ItemKind,
@@ -994,7 +994,7 @@ crate struct ItemLink {
     pub(crate) fragment: Option<UrlFragment>,
 }
 
-pub struct RenderedLink {
+pub(crate) struct RenderedLink {
     /// The text the link was original written as.
     ///
     /// This could potentially include disambiguators and backticks.
@@ -1196,7 +1196,7 @@ impl GenericBound {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-crate struct Lifetime(pub Symbol);
+crate struct Lifetime(pub(crate) Symbol);
 
 impl Lifetime {
     crate fn statik() -> Lifetime {

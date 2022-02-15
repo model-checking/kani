@@ -363,7 +363,7 @@ struct DiagnosticInfo<'a> {
 
 #[derive(Clone, Debug, Hash)]
 struct CachedLink {
-    pub res: (Res, Option<UrlFragment>),
+    pub(crate) res: (Res, Option<UrlFragment>),
 }
 
 struct LinkCollector<'a, 'tcx> {
