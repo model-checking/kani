@@ -4,6 +4,8 @@ use super::super::codegen::TypeExt;
 use crate::GotocCtx;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
+use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::TyS;
 use tracing::debug;
 
 // Should move into rvalue
@@ -65,6 +67,16 @@ impl<'tcx> GotocCtx<'tcx> {
         ];
 
         Expr::statement_expression(body, t).with_location(loc)
+    }
+
+    /// Generates an expression `((dst as usize) % align_of(T) == 0`
+    /// to determine if `dst` is aligned.
+    pub fn is_aligned(&mut self, typ: &'tcx TyS<'_>, dst: Expr) -> Expr {
+        let layout = self.layout_of(typ);
+        let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+        let cast_dst = dst.cast_to(Type::size_t());
+        let zero = Type::size_t().zero();
+        cast_dst.rem(align).eq(zero)
     }
 
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
