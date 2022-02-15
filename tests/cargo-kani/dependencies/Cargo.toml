@@ -10,3 +10,6 @@ edition = "2021"
 [dependencies]
 memchr = { version = "2", default-features = false }
 rand = "0.8.4"
+
+[kani.flags]
+output-format = "old"
