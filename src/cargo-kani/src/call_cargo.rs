@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use toml::Value;
 
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 
-impl KaniContext {
+impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<Vec<PathBuf>> {
         let flag_env = {

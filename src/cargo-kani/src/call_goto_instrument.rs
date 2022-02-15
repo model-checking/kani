@@ -6,10 +6,10 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 use crate::util::alter_extension;
 
-impl KaniContext {
+impl KaniSession {
     /// Postprocess a goto binary (before cbmc, after linking) in-place by calling goto-instrument
     pub fn run_goto_instrument(&self, file: &Path) -> Result<()> {
         if self.args.checks.undefined_function_on() {

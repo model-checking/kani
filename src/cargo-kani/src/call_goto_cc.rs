@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::args::AbstractionType;
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 
-impl KaniContext {
+impl KaniSession {
     /// Given a set of goto binaries (`inputs`), produce `output` by linking everything
     /// together (including essential libraries) and also specializing to the proof harness
     /// `function`.

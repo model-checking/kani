@@ -6,9 +6,9 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 
-impl KaniContext {
+impl KaniSession {
     /// Invoke our python-based formatter for CBMC output.
     pub fn format_cbmc_output(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![

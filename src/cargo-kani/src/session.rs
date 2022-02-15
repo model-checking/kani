@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
 /// Contains information about the execution environment and arguments that affect operations
-pub struct KaniContext {
+pub struct KaniSession {
     /// The common command-line arguments
     pub args: KaniArgs,
 
@@ -37,11 +37,11 @@ enum InstallType {
     //Installed,
 }
 
-impl KaniContext {
+impl KaniSession {
     pub fn new(args: KaniArgs) -> Result<Self> {
         let install = InstallType::new()?;
 
-        Ok(KaniContext {
+        Ok(KaniSession {
             args,
             kani_rustc: install.kani_rustc()?,
             kani_lib_c: install.kani_lib_c()?,
@@ -53,7 +53,7 @@ impl KaniContext {
     }
 }
 
-impl Drop for KaniContext {
+impl Drop for KaniSession {
     fn drop(&mut self) {
         if !self.args.keep_temps {
             let temporaries = self.temporaries.borrow();
@@ -66,7 +66,7 @@ impl Drop for KaniContext {
     }
 }
 
-impl KaniContext {
+impl KaniSession {
     // The below suite of helper functions for executing Commands are meant to be a common handler
     // for various cmdline flags like 'dry-run' and 'quiet'. These functions are temporary: in the
     // longer run we'll switch to a graph-interpreter style of constructing and executing jobs.

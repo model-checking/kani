@@ -6,10 +6,10 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 use crate::util::alter_extension;
 
-impl KaniContext {
+impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
     pub fn run_visualize(&self, file: &Path) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");

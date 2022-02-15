@@ -5,9 +5,9 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 
-impl KaniContext {
+impl KaniSession {
     /// Given a `file` (a .symtab.json), produce `{file}.out` by calling symtab2gb
     pub fn symbol_table_to_gotoc(&self, file: &Path) -> Result<PathBuf> {
         let output_filename = crate::util::append_path(file, "out");

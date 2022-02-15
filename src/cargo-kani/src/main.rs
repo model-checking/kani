@@ -17,7 +17,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
-mod context;
+mod session;
 mod util;
 
 fn main() -> Result<()> {
@@ -31,7 +31,7 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
     input_args.extend(config_toml_to_args()?);
     let args = args::CargoKaniArgs::from_iter(input_args);
     args.validate();
-    let ctx = context::KaniContext::new(args.common_opts)?;
+    let ctx = session::KaniSession::new(args.common_opts)?;
 
     let symtabs = ctx.cargo_build()?;
     if ctx.args.only_codegen {
@@ -68,7 +68,7 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::from_args();
     args.validate();
-    let ctx = context::KaniContext::new(args.common_opts)?;
+    let ctx = session::KaniSession::new(args.common_opts)?;
 
     let symtab_json = ctx.compile_single_rust_file(&args.input)?;
     let goto_obj = ctx.symbol_table_to_gotoc(&symtab_json)?;

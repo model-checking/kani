@@ -6,10 +6,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::context::KaniContext;
+use crate::session::KaniSession;
 use crate::util::alter_extension;
 
-impl KaniContext {
+impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
     pub fn compile_single_rust_file(&self, file: &Path) -> Result<PathBuf> {
         let output_filename = alter_extension(file, "symtab.json");
