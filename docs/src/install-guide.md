@@ -42,10 +42,10 @@ source $HOME/.cargo/env
 
 ## Building and testing Kani
 
-Build kani-compiler executable:
+Build Kani's packages:
 
 ```
-( cd src/kani-compiler && cargo build )
+cargo build
 ```
 
 Then, optionally, run the regression tests:
