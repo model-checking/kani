@@ -185,8 +185,10 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let name = name.into();
         if !self.symbol_table.contains(name) {
+            tracing::debug!(?name, "Ensure global variable");
             let sym = Symbol::static_variable(name, name, t.clone(), loc)
-                .with_is_file_local(is_file_local);
+                .with_is_file_local(is_file_local)
+                .with_is_hidden(false);
             let var = sym.to_expr();
             self.symbol_table.insert(sym);
             if let Some(body) = init_fn(self, var) {

@@ -45,3 +45,34 @@ macro_rules! assert {
         kani::assert($cond, concat!(stringify!($($arg)+)));
     };
 }
+
+// Override the assert_eq and assert_ne macros to
+// 1. Bypass the formatting-related code in the standard library implementation,
+//    which is not relevant for verification (see
+//    https://github.com/model-checking/kani/issues/14)
+// 2. Generate a suitable message for the assert of the form:
+//        assertion failed: $left == $right
+//    instead of the uninformative:
+//        a panicking function core::panicking::assert_failed is invoked
+//    (see https://github.com/model-checking/kani/issues/13)
+// 3. Call kani::assert so that any instrumentation that it does (e.g. injecting
+//    reachability checks) is done for assert_eq and assert_ne
+#[macro_export]
+macro_rules! assert_eq {
+    ($left:expr, $right:expr $(,)?) => ({
+        assert!($left == $right);
+    });
+    ($left:expr, $right:expr, $($arg:tt)+) => ({
+        assert!($left == $right, $($arg)+);
+    });
+}
+
+#[macro_export]
+macro_rules! assert_ne {
+    ($left:expr, $right:expr $(,)?) => ({
+        assert!($left != $right);
+    });
+    ($left:expr, $right:expr, $($arg:tt)+) => ({
+        assert!($left != $right, $($arg)+);
+    });
+}

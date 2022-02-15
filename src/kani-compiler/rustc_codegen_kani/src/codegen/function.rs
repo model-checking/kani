@@ -53,7 +53,8 @@ impl<'tcx> GotocCtx<'tcx> {
             let t = self.codegen_ty(t);
             let loc = self.codegen_span(&ldata.source_info.span);
             let sym =
-                Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span));
+                Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span))
+                    .with_is_hidden(!ldata.is_user_variable());
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -194,7 +195,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 // This follows the naming convention defined in `typ.rs`.
                 let lc = Local::from_usize(arg_i + starting_idx);
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
-                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone());
+                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone())
+                    .with_is_hidden(false);
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
