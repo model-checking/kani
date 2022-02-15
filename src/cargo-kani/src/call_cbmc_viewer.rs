@@ -10,7 +10,7 @@ use crate::context::KaniContext;
 use crate::util::alter_extension;
 
 impl KaniContext {
-    /// Verify a goto binary that's been prepared with goto-instrument
+    /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
     pub fn run_visualize(&self, file: &Path) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
         let coverage_filename = alter_extension(file, "coverage.xml");

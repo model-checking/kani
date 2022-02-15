@@ -10,7 +10,7 @@ use crate::context::KaniContext;
 use crate::util::alter_extension;
 
 impl KaniContext {
-    /// Postprocess a goto binary (before cbmc) in-place by calling goto-instrument
+    /// Postprocess a goto binary (before cbmc, after linking) in-place by calling goto-instrument
     pub fn run_goto_instrument(&self, file: &Path) -> Result<()> {
         if self.args.checks.undefined_function_on() {
             self.add_library(file)?;

@@ -11,14 +11,14 @@ use toml::Value;
 use crate::context::KaniContext;
 
 impl KaniContext {
-    /// Given a `file` (a .symtab.json), produce `{file}.out` by calling symtab2gb
+    /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<Vec<PathBuf>> {
         let flag_env = {
             let rustc_args = self.kani_rustc_flags();
             crate::util::join_osstring(&rustc_args, " ")
         };
 
-        let build_target = env!("TARGET");
+        let build_target = env!("TARGET"); // see build.rs
         let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
         let mut args: Vec<OsString> = Vec::new();
 
@@ -78,6 +78,7 @@ impl KaniContext {
     }
 }
 
+/// Produces a set of arguments to pass to "self" (cargo-kani) from a Cargo.toml project file
 pub fn config_toml_to_args() -> Result<Vec<OsString>> {
     // TODO: `cargo locate-project` maybe?
     let file = std::fs::read_to_string("Cargo.toml");
@@ -89,7 +90,7 @@ pub fn config_toml_to_args() -> Result<Vec<OsString>> {
     }
 }
 
-/// Parse a config toml and extract the kani arguments we should try injecting
+/// Parse a config toml and extract the cargo-kani arguments we should try injecting
 fn toml_to_args(file: &str) -> Result<Vec<OsString>> {
     let config = file.parse::<Value>()?;
     // We specifically rely on BTreeMap here to get a stable iteration order for unit testing
@@ -97,7 +98,7 @@ fn toml_to_args(file: &str) -> Result<Vec<OsString>> {
     let keys = ["workspace.metadata.kani.flags", "package.metadata.kani.flags", "kani.flags"];
 
     for key in keys {
-        if let Ok(val) = descend(&config, key) {
+        if let Some(val) = descend(&config, key) {
             if let Some(val) = val.as_table() {
                 map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
             }
@@ -155,16 +156,12 @@ fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> 
 }
 
 /// Take 'a.b.c' and turn it into 'start['a']['b']['c']' reliably.
-fn descend<'a>(start: &'a Value, table: &str) -> Result<&'a Value> {
+fn descend<'a>(start: &'a Value, table: &str) -> Option<&'a Value> {
     let mut current = start;
     for key in table.split('.') {
-        let next = current.get(key);
-        if next.is_none() {
-            bail!("no key");
-        }
-        current = next.unwrap();
+        current = current.get(key)?;
     }
-    Ok(current)
+    Some(current)
 }
 
 #[cfg(test)]
@@ -174,8 +171,10 @@ mod tests {
     #[test]
     fn check_toml_parsing() {
         let a = "[workspace.metadata.kani]
-                      flags = { default-checks = false, unwind = \"2\" }";
+                      flags = { default-checks = false, unwind = \"2\", cbmc-args = [\"--fake\"] }";
         let b = toml_to_args(a).unwrap();
-        assert_eq!(b, vec!["--no-default-checks", "--unwind", "2"]);
+        // default first, then unwind thanks to btree ordering.
+        // cbmc-args always last.
+        assert_eq!(b, vec!["--no-default-checks", "--unwind", "2", "--cbmc-args", "--fake"]);
     }
 }

@@ -10,7 +10,9 @@ use crate::args::AbstractionType;
 use crate::context::KaniContext;
 
 impl KaniContext {
-    /// Given a `file` (a .symtab.json), produce `{file}.out` by calling symtab2gb
+    /// Given a set of goto binaries (`inputs`), produce `output` by linking everything
+    /// together (including essential libraries) and also specializing to the proof harness
+    /// `function`.
     pub fn link_c_lib(&self, inputs: &[PathBuf], output: &Path, function: &str) -> Result<()> {
         {
             let mut temps = self.temporaries.borrow_mut();
@@ -34,7 +36,8 @@ impl KaniContext {
             args.push(hashset.into_os_string());
         }
 
-        // TODO think about this: just an empty file
+        // TODO think about this: kani_lib_c is just an empty c file. Maybe we could just
+        // create such an empty file ourselves instead of having to look up this path.
         args.push(self.kani_lib_c.clone().into_os_string());
 
         args.push("-o".into());

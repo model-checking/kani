@@ -45,7 +45,8 @@ impl KaniContext {
         Ok(output_filename)
     }
 
-    /// used by call_cbmc_viewer, needs refactor TODO
+    /// used by call_cbmc_viewer, invokes different variants of CBMC.
+    // TODO: this could use some cleanup and refactoring.
     pub fn call_cbmc(&self, args: Vec<OsString>, output: &Path) -> Result<()> {
         // TODO get cbmc path from self
         let mut cmd = Command::new("cbmc");
@@ -77,12 +78,12 @@ impl KaniContext {
 
         args.extend(self.args.cbmc_args.iter().cloned());
 
-        // but todo: we're appending --xml-ui for viewer, which works because it seems to override, but that's unclean
         args.push(file.to_owned().into_os_string());
 
         Ok(args)
     }
 
+    /// Just the flags to CBMC that enable property checking of any sort.
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 

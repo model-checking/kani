@@ -9,7 +9,7 @@ use std::process::Command;
 use crate::context::KaniContext;
 
 impl KaniContext {
-    /// Verify a goto binary that's been prepared with goto-instrument
+    /// Invoke our python-based formatter for CBMC output.
     pub fn format_cbmc_output(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             self.cbmc_json_parser_py.clone().into(),

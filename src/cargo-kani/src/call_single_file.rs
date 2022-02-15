@@ -10,6 +10,7 @@ use crate::context::KaniContext;
 use crate::util::alter_extension;
 
 impl KaniContext {
+    /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
     pub fn compile_single_rust_file(&self, file: &Path) -> Result<PathBuf> {
         let output_filename = alter_extension(file, "symtab.json");
 
@@ -57,7 +58,7 @@ impl KaniContext {
     }
 
     /// These arguments are passed directly here for single file runs,
-    /// but are also used by call_cargo to pass as the env var KaniFLAGS.
+    /// but are also used by call_cargo to pass as the env var KANIFLAGS.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let mut flags = vec!["--goto-c".to_string()];
 
