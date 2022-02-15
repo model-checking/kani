@@ -18,7 +18,7 @@ impl KaniContext {
             crate::util::join_osstring(&rustc_args, " ")
         };
 
-        let build_target = "x86_64-unknown-linux-gnu"; // TODO
+        let build_target = env!("TARGET");
         let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
         let mut args: Vec<OsString> = Vec::new();
 
