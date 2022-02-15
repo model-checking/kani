@@ -65,7 +65,7 @@ impl IntraLinkCrateLoader<'_, '_> {
             let all_trait_impls = self.resolver.cstore().trait_impls_in_crate_untracked(cnum);
 
             self.all_traits.extend(all_traits);
-            self.all_trait_impls.extend(all_trait_impls.into_iter().map(|(def_id, _)| def_id));
+            self.all_trait_impls.extend(all_trait_impls.into_iter().map(|(def_id, _, _)| def_id));
         }
     }
 
