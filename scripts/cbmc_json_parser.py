@@ -84,9 +84,6 @@ def transform_cbmc_output(cbmc_response_string, output_style):
     # Output Message is the final output that is printed to the user
     output_message = ""
 
-    # Return non-zero if there are failures
-    returncode = 0
-
     # Check if the output given by CBMC is in Json format or not
     is_json_bool, cbmc_json_array = is_json(cbmc_response_string)
     if is_json_bool:
@@ -96,8 +93,6 @@ def transform_cbmc_output(cbmc_response_string, output_style):
 
         properties, messages = postprocess_results(properties)
 
-        returncode = count_failures(properties) > 0
-
         # Using Case Switching to Toggle between various output styles
         # For now, the two options provided are default and terse
         if output_style == output_style_switcher["regular"]:
@@ -106,13 +101,14 @@ def transform_cbmc_output(cbmc_response_string, output_style):
             output_message += construct_solver_information_message(solver_information)
 
             # Extract property messages from the json file
+            property_message, num_failed = construct_property_message(properties)
             # Combine both messages to give as final output
-            output_message += construct_property_message(properties)
+            output_message += property_message
 
         elif output_style == output_style_switcher["terse"]:
 
             # Construct only summarized result and display output
-            output_message = construct_terse_property_message(properties)
+            output_message, num_failed = construct_terse_property_message(properties)
 
         # Print using an Interface function
         print(output_message)
@@ -124,7 +120,7 @@ def transform_cbmc_output(cbmc_response_string, output_style):
         # TODO: Parse these non json outputs from CBMC
         raise Exception("CBMC Crashed - Unable to present Result")
 
-    return returncode
+    return num_failed > 0
 
 # Check if the blob is in json format for parsing
 def is_json(cbmc_output_string):
@@ -391,7 +387,7 @@ def construct_terse_property_message(properties):
     # TODO: Get final status from the cprover status
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
-    return output_message
+    return output_message, number_tests_failed
 
 def construct_property_message(properties):
     """
@@ -472,14 +468,7 @@ def construct_property_message(properties):
     # TODO: Extract information from CBMC about iterations
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
-    return output_message
-
-def count_failures(properties):
-    num_failures = 0
-    for property in properties:
-        if property["status"] == "FAILURE":
-            num_failures += 1
-    return num_failures
+    return output_message, number_tests_failed
 
 
 if __name__ == "__main__":
