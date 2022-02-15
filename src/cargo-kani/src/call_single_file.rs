@@ -61,6 +61,19 @@ impl KaniContext {
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let mut flags = vec!["--goto-c".to_string()];
 
+        if self.args.debug {
+            flags.push("--log-level=debug".into());
+        }
+
+        if self.args.restrict_vtable() {
+            flags.push("--restrict-vtable-fn-ptrs".into());
+        }
+
+        // Stratification point!
+        // Above are arguments that should be parsed by kani-compiler
+        // Below are arguments that should be parsed by the rustc call
+        // We need to ensure these are in-order due to the way kani-compiler parses arguments. :(
+
         if self.args.use_abs {
             flags.push("-Z".into());
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
@@ -69,13 +82,8 @@ impl KaniContext {
             flags.push(format!("abs_type={}", self.args.abs_type.to_string().to_lowercase()));
         }
 
-        if self.args.debug {
-            flags.push("--log-level=debug".into());
-        }
-
-        if self.args.restrict_vtable() {
-            flags.push("--restrict-vtable-fn-ptrs".into());
-        }
+        flags.push("-C".into());
+        flags.push("symbol-mangling-version=v0".into());
 
         // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
         // and we fail in `tests/kani/Match/match_bool.rs`
