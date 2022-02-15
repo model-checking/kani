@@ -17,7 +17,7 @@ impl KaniContext {
             self.args.output_format.to_string().to_lowercase().into(),
         ];
 
-        let mut cmd = Command::new("python");
+        let mut cmd = Command::new("python3");
         cmd.args(args);
 
         self.run_terminal(cmd)?;
