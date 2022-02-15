@@ -461,10 +461,8 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
         let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
         name == "core::ptr::write"
             || name == "core::ptr::write_unaligned"
-            || name == "core::ptr::write_volatile"
             || name == "std::ptr::write"
             || name == "std::ptr::write_unaligned"
-            || name == "std::ptr::write_volatile"
     }
 
     fn handle(
