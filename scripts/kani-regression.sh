@@ -36,6 +36,7 @@ cargo build
 # Unit tests
 cargo test -p cbmc
 cargo test -p kani-compiler
+cargo test -p cargo-kani
 
 # Declare testing suite information (suite and mode)
 TESTS=(

@@ -51,8 +51,10 @@ impl KaniContext {
             temporaries: RefCell::new(vec![]),
         })
     }
+}
 
-    pub fn cleanup(self) {
+impl Drop for KaniContext {
+    fn drop(&mut self) {
         if !self.args.keep_temps {
             let temporaries = self.temporaries.borrow();
 
@@ -62,7 +64,9 @@ impl KaniContext {
             }
         }
     }
+}
 
+impl KaniContext {
     // The below suite of helper functions for executing Commands are meant to be a common handler
     // for various cmdline flags like 'dry-run' and 'quiet'. These functions are temporary: in the
     // longer run we'll switch to a graph-interpreter style of constructing and executing jobs.
@@ -204,7 +208,7 @@ impl InstallType {
         match self {
             Self::DevRepo(repo) => {
                 let mut path = repo.clone();
-                path.push("target/release/kani-link-restrictions");
+                path.push("target/debug/kani-link-restrictions");
                 if path.as_path().exists() {
                     Ok(path)
                 } else {

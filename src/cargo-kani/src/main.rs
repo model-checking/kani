@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use call_cargo::config_toml_to_args;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -26,11 +27,16 @@ fn main() -> Result<()> {
     }
 }
 
-fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
+fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
+    input_args.extend(config_toml_to_args()?);
     let args = args::CargoKaniArgs::from_iter(input_args);
+    args.validate();
     let ctx = context::KaniContext::new(args.common_opts)?;
 
     let symtabs = ctx.cargo_build()?;
+    if ctx.args.only_codegen {
+        return Ok(());
+    }
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &symtabs {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
@@ -56,13 +62,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         ctx.run_cbmc(&linked_obj)?;
     }
 
-    ctx.cleanup();
-
     Ok(())
 }
 
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::from_args();
+    args.validate();
     let ctx = context::KaniContext::new(args.common_opts)?;
 
     let symtab_json = ctx.compile_single_rust_file(&args.input)?;
@@ -84,8 +89,6 @@ fn standalone_main() -> Result<()> {
     } else {
         ctx.run_cbmc(&linked_obj)?;
     }
-
-    ctx.cleanup();
 
     Ok(())
 }

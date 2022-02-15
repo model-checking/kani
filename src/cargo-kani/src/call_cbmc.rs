@@ -24,13 +24,22 @@ impl KaniContext {
         let mut cmd = Command::new("cbmc");
         cmd.args(args);
 
-        let result = self.run_redirect(cmd, &output_filename)?;
+        if self.args.output_format == crate::args::OutputFormat::Old {
+            let result = self.run_terminal(cmd);
+            if !self.args.allow_cbmc_verification_failure {
+                result?;
+            }
+        } else {
+            // extra argument
+            cmd.arg("--json-ui");
+            let result = self.run_redirect(cmd, &output_filename)?;
 
-        // regardless of success or failure, first we need to print:
-        self.format_cbmc_output(&output_filename)?;
+            // regardless of success or failure, first we need to print:
+            self.format_cbmc_output(&output_filename)?;
 
-        if !result.success() && !self.args.allow_cbmc_verification_failure {
-            bail!("cbmc exited with status {}", result);
+            if !result.success() && !self.args.allow_cbmc_verification_failure {
+                bail!("cbmc exited with status {}", result);
+            }
         }
 
         Ok(output_filename)
@@ -68,7 +77,6 @@ impl KaniContext {
 
         args.extend(self.args.cbmc_args.iter().cloned());
 
-        args.push("--json-ui".into()); // todo unconditional, we always redirect output
         // but todo: we're appending --xml-ui for viewer, which works because it seems to override, but that's unclean
         args.push(file.to_owned().into_os_string());
 

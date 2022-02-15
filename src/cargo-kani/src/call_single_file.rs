@@ -24,14 +24,28 @@ impl KaniContext {
         }
 
         let mut args = self.kani_rustc_flags();
-        args.push(file.to_owned().into_os_string());
+
+        // kani-compiler workaround: *.symtab.json gets generated in the local
+        // directory, instead of based on file name like we expect.
+        // So we'll `cd` to that directory and only pass filename here.
+        args.push(file.file_name().unwrap().into());
 
         if self.args.tests {
-            args.push("--test".into());
+            // e.g. `tests/kani/Options/check_tests.rs` will fail because it already has it
+            // so this is a hacky workaround
+            let t = "--test".into();
+            if !args.contains(&t) {
+                args.push(t);
+            }
         }
 
         let mut cmd = Command::new(&self.kani_rustc);
         cmd.args(args);
+
+        // kani-compiler workaround: part 2: change directory for the subcommand
+        if let Some(p) = file.canonicalize()?.parent() {
+            cmd.current_dir(p);
+        }
 
         if self.args.debug && !self.args.quiet {
             self.run_terminal(cmd)?;
@@ -61,6 +75,12 @@ impl KaniContext {
 
         if self.args.restrict_vtable() {
             flags.push("--restrict-vtable-fn-ptrs".into());
+        }
+
+        // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
+        // and we fail in `tests/kani/Match/match_bool.rs`
+        if let Ok(str) = std::env::var("RUSTFLAGS") {
+            flags.extend(str.split(' ').map(|x| x.to_string()));
         }
 
         flags.iter().map(|x| x.into()).collect()

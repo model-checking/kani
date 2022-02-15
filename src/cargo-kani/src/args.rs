@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::bail;
-use clap::arg_enum;
+use clap::{arg_enum, Error, ErrorKind};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -58,6 +58,11 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub gen_c: bool,
 
+    // TODO: currently only cargo-kani pays attention to this.
+    /// Directory for all generated artifacts
+    #[structopt(long, parse(from_os_str))]
+    pub target_dir: Option<PathBuf>,
+
     /// Toggle between different styles of output
     #[structopt(long, default_value = "old", possible_values = &OutputFormat::variants(), case_insensitive = true)]
     pub output_format: OutputFormat,
@@ -77,6 +82,9 @@ pub struct KaniArgs {
     /// Do not produce error return code on CBMC verification failure
     #[structopt(long)]
     pub allow_cbmc_verification_failure: bool,
+    /// Kani will only compile the crate
+    #[structopt(long)]
+    pub only_codegen: bool,
 
     /// Specify the number of bits used for representing object IDs in CBMC
     #[structopt(long, default_value = "16")]
@@ -88,7 +96,7 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub auto_unwind: bool,
     /// Pass through directly to CBMC; must be the last flag
-    #[structopt(long, allow_hyphen_values = true)] // consumes everything
+    #[structopt(long, allow_hyphen_values = true, min_values(0))] // consumes everything
     pub cbmc_args: Vec<OsString>,
 
     /// Use abstractions for the standard library
@@ -107,21 +115,10 @@ pub struct KaniArgs {
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
-    # Add flags that produce extra artifacts.
-    def add_artifact_flags(make_group, add_flag, config):
-        default_target = config["default-target"]
-        assert default_target is not None, \
-            f"Missing item in parser config: \"default-target\".\n" \
-            "This is a bug; please report this to https://github.com/model-checking/rmc/issues."
-
-        group = make_group(
-            "Artifact flags", "Produce artifacts in addition to a basic Kani report.")
         add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
                  help="Generate C file equivalent to inputted program; "
                       "performs additional processing to produce valid C code "
                       "at the cost of some readability")
-        add_flag(group, "--target-dir", type=pl.Path, default=default_target, metavar="DIR",
-                 help=f"Directory for all generated artifacts; defaults to \"{default_target}\"")
         */
 }
 
@@ -133,7 +130,7 @@ impl KaniArgs {
 }
 
 arg_enum! {
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     pub enum OutputFormat {
         Regular,
         Terse,
@@ -234,6 +231,54 @@ impl CheckArgs {
     }
 }
 
+impl StandaloneArgs {
+    pub fn validate(&self) {
+        self.common_opts.validate();
+    }
+}
+impl CargoKaniArgs {
+    pub fn validate(&self) {
+        self.common_opts.validate();
+    }
+}
+impl KaniArgs {
+    pub fn validate(&self) {
+        let extra_unwind = self.cbmc_args.contains(&OsString::from("--unwind"));
+        let extra_auto_unwind = self.cbmc_args.contains(&OsString::from("--auto-unwind"));
+        let extras = extra_auto_unwind || extra_unwind;
+        let natives = self.auto_unwind || self.unwind.is_some();
+        let any_auto_unwind = extra_auto_unwind || self.auto_unwind;
+        let any_unwind = self.unwind.is_some() || extra_unwind;
+
+        // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
+        // We should consider improving the error messages slightly in a later pull request.
+        if any_auto_unwind && any_unwind {
+            Error::with_description(
+                "Conflicting flags: `--auto-unwind` is not compatible with other `--unwind` flags.",
+                ErrorKind::ArgumentConflict,
+            )
+            .exit();
+        }
+        if natives && extras {
+            Error::with_description(
+                "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
+                ErrorKind::ArgumentConflict,
+            )
+            .exit();
+        }
+
+        let extra_object_bits = self.cbmc_args.contains(&OsString::from("--object-bits"));
+
+        if self.object_bits != 16 && extra_object_bits {
+            Error::with_description(
+                "Conflicting flags: `--object-bits` was specified twice.",
+                ErrorKind::ArgumentConflict,
+            )
+            .exit();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -251,6 +296,8 @@ mod tests {
             "--here",
         ]);
         assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
+        let _b = StandaloneArgs::from_iter(vec!["kani", "file.rs", "--cbmc-args"]);
+        // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
 
     #[test]

@@ -20,8 +20,6 @@ Cargo kani supports the kani standalone arguments described in the [Kani single 
 
 **`--config-toml`** Location of a configuration file in toml format for your project. This defaults to the crate's Cargo.toml.
 
-**`--no-config-toml`** Do not use any configuration TOML file.
-
 **`--build-target`** Build for the target triple.
 
 # Package configuration
