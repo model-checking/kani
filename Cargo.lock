@@ -131,24 +131,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cbmc"
-version = "0.0.0"
-dependencies = [
- "bitflags",
- "cstr",
- "lazy_static",
- "libc",
- "measureme",
- "num",
- "serde",
- "serde_test",
- "snap",
- "string-interner",
- "tracing",
- "vector-map",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -211,6 +193,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "cprover_bindings"
+version = "0.0.0"
+dependencies = [
+ "bitflags",
+ "cstr",
+ "lazy_static",
+ "libc",
+ "measureme",
+ "num",
+ "serde",
+ "serde_test",
+ "snap",
+ "string-interner",
+ "tracing",
+ "vector-map",
 ]
 
 [[package]]
@@ -407,7 +407,7 @@ dependencies = [
 name = "kani-link-restrictions"
 version = "0.1.0"
 dependencies = [
- "cbmc",
+ "cprover_bindings",
  "kani_restrictions",
  "serde",
  "serde_json",
@@ -428,7 +428,7 @@ dependencies = [
 name = "kani_restrictions"
 version = "0.1.0"
 dependencies = [
- "cbmc",
+ "cprover_bindings",
  "serde",
 ]
 
@@ -855,7 +855,7 @@ name = "rustc_codegen_kani"
 version = "0.0.0"
 dependencies = [
  "bitflags",
- "cbmc",
+ "cprover_bindings",
  "cstr",
  "kani_queries",
  "kani_restrictions",

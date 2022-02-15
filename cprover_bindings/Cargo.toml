@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "cbmc"
+name = "cprover_bindings"
 version = "0.0.0"
 edition = "2018"
 
