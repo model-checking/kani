@@ -10,7 +10,6 @@ use rustc_span::{hygiene::AstPass, ExpnData, ExpnKind, FileName, InnerSpan, DUMM
 use crate::clean;
 use crate::core::DocContext;
 use crate::html::markdown::{self, RustCodeBlock};
-use crate::passes::Pass;
 use crate::visit::DocVisitor;
 
 struct SyntaxChecker<'a, 'tcx> {

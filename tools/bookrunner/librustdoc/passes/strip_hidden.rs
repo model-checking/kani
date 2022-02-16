@@ -4,9 +4,7 @@ use std::mem;
 
 use crate::clean;
 use crate::clean::{Item, ItemIdSet, NestedAttributesExt};
-use crate::core::DocContext;
 use crate::fold::{strip_item, DocFolder};
-use crate::passes::{ImplStripper, Pass};
 
 struct Stripper<'a> {
     retained: &'a mut ItemIdSet,

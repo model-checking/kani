@@ -3,7 +3,6 @@ use crate::clean;
 use crate::core::DocContext;
 use crate::html::markdown::{find_testable_code, ErrorCodes};
 use crate::passes::check_doc_test_visibility::{should_have_doc_example, Tests};
-use crate::passes::Pass;
 use crate::visit::DocVisitor;
 use rustc_hir as hir;
 use rustc_lint::builtin::MISSING_DOCS;

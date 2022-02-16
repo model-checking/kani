@@ -5,7 +5,6 @@
 //! - MISSING_DOC_CODE_EXAMPLES: this lint is **UNSTABLE** and looks for public items missing doctests.
 //! - PRIVATE_DOC_TESTS: this lint is **STABLE** and looks for private items with doctests.
 
-use super::Pass;
 use crate::clean;
 use crate::clean::*;
 use crate::core::DocContext;

@@ -33,7 +33,6 @@ use crate::clean::{self, utils::find_nearest_parent_module, Crate, Item, ItemLin
 use crate::core::DocContext;
 use crate::html::markdown::{markdown_links, MarkdownLink};
 use crate::lint::{BROKEN_INTRA_DOC_LINKS, PRIVATE_INTRA_DOC_LINKS};
-use crate::passes::Pass;
 use crate::visit::DocVisitor;
 
 mod early;

@@ -6,7 +6,6 @@ use crate::clean::{
 };
 use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
-use crate::visit_lib::LibEmbargoVisitor;
 
 use rustc_ast as ast;
 use rustc_ast::tokenstream::TokenTree;

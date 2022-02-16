@@ -1,5 +1,4 @@
 //! Detects invalid HTML (like an unclosed `<span>`) in doc comments.
-use super::Pass;
 use crate::clean::*;
 use crate::core::DocContext;
 use crate::html::markdown::main_body_opts;

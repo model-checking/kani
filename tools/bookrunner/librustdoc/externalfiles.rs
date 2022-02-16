@@ -1,9 +1,3 @@
-use crate::html::markdown::{ErrorCodes, HeadingOffset, IdMap, Markdown, Playground};
-use crate::rustc_span::edition::Edition;
-use std::fs;
-use std::path::Path;
-use std::str;
-
 use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize)]
@@ -20,9 +14,4 @@ crate struct ExternalHtml {
 }
 
 impl ExternalHtml {
-}
-
-crate enum LoadStringError {
-    ReadFail,
-    BadUtf8,
 }

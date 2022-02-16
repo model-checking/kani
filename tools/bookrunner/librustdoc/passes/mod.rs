@@ -5,20 +5,14 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::{InnerSpan, Span, DUMMY_SP};
 use std::ops::Range;
 
-use self::Condition::*;
 use crate::clean::{self, DocFragmentKind};
 use crate::core::DocContext;
 
 mod stripper;
-crate use stripper::*;
 
 mod bare_urls;
 
 mod strip_hidden;
-
-mod strip_private;
-
-mod strip_priv_imports;
 
 mod unindent_comments;
 
@@ -35,45 +29,6 @@ mod check_code_block_syntax;
 mod calculate_doc_coverage;
 
 mod html_tags;
-
-/// A single pass over the cleaned documentation.
-///
-/// Runs in the compiler context, so it has access to types and traits and the like.
-#[derive(Copy, Clone)]
-crate struct Pass {
-    crate name: &'static str,
-    crate run: fn(clean::Crate, &mut DocContext<'_>) -> clean::Crate,
-    crate description: &'static str,
-}
-
-/// In a list of passes, a pass that may or may not need to be run depending on options.
-#[derive(Copy, Clone)]
-crate struct ConditionalPass {
-    crate pass: Pass,
-    crate condition: Condition,
-}
-
-/// How to decide whether to run a conditional pass.
-#[derive(Copy, Clone)]
-crate enum Condition {
-    Always,
-    /// When `--document-private-items` is passed.
-    WhenDocumentPrivate,
-    /// When `--document-private-items` is not passed.
-    WhenNotDocumentPrivate,
-    /// When `--document-hidden-items` is not passed.
-    WhenNotDocumentHidden,
-}
-
-impl ConditionalPass {
-    crate const fn always(pass: Pass) -> Self {
-        Self::new(pass, Always)
-    }
-
-    crate const fn new(pass: Pass, condition: Condition) -> Self {
-        ConditionalPass { pass, condition }
-    }
-}
 
 /// Returns a span encompassing all the given attributes.
 crate fn span_of_attrs(attrs: &clean::Attributes) -> Option<Span> {

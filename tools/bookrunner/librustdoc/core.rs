@@ -28,7 +28,6 @@ use crate::clean::inline::build_external_trait;
 use crate::clean::{self, ItemId, TraitWithExtraInfo};
 use crate::config::{Options as RustdocOptions, OutputFormat, RenderOptions};
 use crate::formats::cache::Cache;
-use crate::passes::{self, Condition::*};
 
 crate use rustc_session::config::{DebuggingOptions, Input, Options};
 

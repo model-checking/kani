@@ -16,9 +16,7 @@ use std::cmp;
 use rustc_span::symbol::kw;
 
 use crate::clean::{self, DocFragment, DocFragmentKind, Item};
-use crate::core::DocContext;
 use crate::fold::{self, DocFolder};
-use crate::passes::Pass;
 
 #[cfg(test)]
 mod tests;
