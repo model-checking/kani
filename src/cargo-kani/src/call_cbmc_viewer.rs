@@ -11,7 +11,7 @@ use crate::util::alter_extension;
 
 impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
-    pub fn run_visualize(&self, file: &Path) -> Result<()> {
+    pub fn run_visualize(&self, file: &Path, default_reportdir: &str) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
         let coverage_filename = alter_extension(file, "coverage.xml");
         let property_filename = alter_extension(file, "property.xml");
@@ -27,6 +27,12 @@ impl KaniSession {
         self.cbmc_variant(file, &["--xml-ui", "--cover", "location"], &coverage_filename)?;
         self.cbmc_variant(file, &["--xml-ui", "--show-properties"], &property_filename)?;
 
+        let reportdir = if let Some(pb) = &self.args.target_dir {
+            pb.join("report").into_os_string()
+        } else {
+            default_reportdir.into()
+        };
+
         let args: Vec<OsString> = vec![
             "--result".into(),
             results_filename.into(),
@@ -41,7 +47,7 @@ impl KaniSession {
             "--goto".into(),
             file.into(),
             "--reportdir".into(),
-            "report".into(), //reportdir,
+            reportdir.clone(),
         ];
 
         // TODO get cbmc-viewer path from self
@@ -49,6 +55,11 @@ impl KaniSession {
         cmd.args(args);
 
         self.run_suppress(cmd)?;
+
+        // Let the user know
+        if !self.args.quiet {
+            println!("Report written to: {}/html/index.html", reportdir.to_string_lossy());
+        }
 
         Ok(())
     }

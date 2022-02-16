@@ -57,7 +57,7 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
     ctx.run_goto_instrument(&linked_obj)?;
 
     if ctx.args.visualize {
-        ctx.run_visualize(&linked_obj)?;
+        ctx.run_visualize(&linked_obj, "target/report")?;
     } else {
         ctx.run_cbmc(&linked_obj)?;
     }
@@ -85,7 +85,7 @@ fn standalone_main() -> Result<()> {
     ctx.run_goto_instrument(&linked_obj)?;
 
     if ctx.args.visualize {
-        ctx.run_visualize(&linked_obj)?;
+        ctx.run_visualize(&linked_obj, "report")?;
     } else {
         ctx.run_cbmc(&linked_obj)?;
     }
