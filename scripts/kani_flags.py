@@ -193,6 +193,8 @@ def add_artifact_flags(make_group, add_flag, config):
 # Add flags to turn off default checks.
 def add_check_flags(make_group, add_flag, config):
     group = make_group("Check flags", "Disable some or all default checks.")
+    add_flag(group, "--assertion-reach-checks", default=False, action=BooleanOptionalAction,
+             help="Turn on assertion reachability checks")
     add_flag(group, "--default-checks", default=True, action=BooleanOptionalAction,
              help="Turn on all default checks")
     add_flag(group, "--memory-safety-checks", default=True, action=BooleanOptionalAction,

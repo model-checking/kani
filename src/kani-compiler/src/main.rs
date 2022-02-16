@@ -74,6 +74,7 @@ fn main() -> Result<(), &'static str> {
         queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
     }
     queries.set_emit_vtable_restrictions(matches.is_present(parser::RESTRICT_FN_PTRS));
+    queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
 
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
