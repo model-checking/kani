@@ -158,7 +158,7 @@ impl std::str::FromStr for AbstractionType {
             "kani" => Ok(Self::Kani),
             "c-ffi" => Ok(Self::CFfi),
             "no-back" => Ok(Self::NoBack),
-            _ => bail!("Unkown abs_stype {}", s),
+            _ => bail!("Unknown abs_type {}", s),
         }
     }
 }
