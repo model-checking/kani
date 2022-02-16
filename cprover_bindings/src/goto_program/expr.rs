@@ -1323,6 +1323,53 @@ impl Expr {
         let s = s.into();
         expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
     }
+
+    // Creates an rvalue wrapping the expression value.
+    pub fn wrap_in_transparent_type(self, wrapper_typ: &Type, st: &SymbolTable) -> Expr {
+        assert!(wrapper_typ.is_transparent_type(st));
+        match wrapper_typ {
+            // Follow tags to get the underlying structure
+            Type::StructTag(tag) | Type::UnionTag(tag) => {
+                let wrapper_typ = &st.lookup(*tag).unwrap().typ;
+                self.wrap_in_transparent_type(wrapper_typ, st)
+            }
+
+            // Recurse
+            Type::Struct { components, .. } | Type::Union { components, .. } => {
+                assert_eq!(components.len(), 1);
+                if let DatatypeComponent::Field { typ, .. } = &components[0] {
+                    Expr::struct_expr_from_values(
+                        wrapper_typ.clone(),
+                        vec![self.wrap_in_transparent_type(typ, st)],
+                        st,
+                    )
+                } else {
+                    unreachable!()
+                }
+            }
+
+            // Base types
+            Type::Bool
+            | Type::CBitField { .. }
+            | Type::CInteger(_)
+            | Type::Double
+            | Type::Empty
+            | Type::Float
+            | Type::Pointer { .. }
+            | Type::Signedbv { .. }
+            | Type::Unsignedbv { .. } => self,
+
+            Type::Array { .. }
+            | Type::Code { .. }
+            | Type::Constructor
+            | Type::FlexibleArray { .. }
+            | Type::IncompleteStruct { .. }
+            | Type::IncompleteUnion { .. }
+            | Type::InfiniteArray { .. }
+            | Type::VariadicCode { .. }
+            | Type::Vector { .. } => unreachable!(),
+        }
+    }
 }
 /// Conversions to statements
 /// The statement constructors do typechecking, so we don't redundantly do that here.

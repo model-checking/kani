@@ -570,6 +570,78 @@ impl Type {
         }
     }
 
+    pub fn is_transparent_type(&self, st: &SymbolTable) -> bool {
+        match self {
+            // Follow tags to get the underlying structure
+            StructTag(tag) | UnionTag(tag) => st.lookup(*tag).unwrap().typ.is_transparent_type(st),
+
+            // Recursively check: does this only have one field, which is either a wrapper or base type.
+            Struct { .. } | Union { .. } => self.unwrap_transparent_type(st).is_some(),
+
+            // Base types
+            Array { .. }
+            | Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Code { .. }
+            | Constructor
+            | Double
+            | Empty
+            | FlexibleArray { .. }
+            | Float
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. }
+            | VariadicCode { .. }
+            | Vector { .. } => false,
+        }
+    }
+
+    pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
+        match self {
+            Array { .. }
+            | Code { .. }
+            | Constructor
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | VariadicCode { .. }
+            | Vector { .. } => None,
+
+            // Base types
+            Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Empty
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. } => Some(self.clone()),
+
+            // Follow tags to get the underlying structure
+            StructTag(tag) | UnionTag(tag) => {
+                st.lookup(*tag).unwrap().typ.unwrap_transparent_type(st)
+            }
+
+            // Recursively check: does this only have one field, which is either a wrapper or base type.
+            Struct { components, .. } | Union { components, .. } => {
+                if components.len() != 1 {
+                    None
+                } else {
+                    match &components[0] {
+                        Padding { .. } => None,
+                        Field { typ, .. } => typ.unwrap_transparent_type(st),
+                    }
+                }
+            }
+        }
+    }
+
     /// This is a struct or union that completes an incomplete struct or union.
     pub fn completes(&self, old: &Type) -> bool {
         match (old, self) {

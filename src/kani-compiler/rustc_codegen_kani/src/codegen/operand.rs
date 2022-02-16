@@ -392,6 +392,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))
             }
         };
+        assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
         base_addr
             .cast_to(Type::unsigned_int(8).to_pointer())
             .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
