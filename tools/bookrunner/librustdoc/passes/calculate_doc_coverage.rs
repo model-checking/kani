@@ -74,8 +74,7 @@ struct CoverageCalculator<'a, 'b> {
     ctx: &'a mut DocContext<'b>,
 }
 
-impl<'a, 'b> CoverageCalculator<'a, 'b> {
-}
+impl<'a, 'b> CoverageCalculator<'a, 'b> {}
 
 impl<'a, 'b> DocVisitor for CoverageCalculator<'a, 'b> {
     fn visit_item(&mut self, i: &clean::Item) {

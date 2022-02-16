@@ -7,9 +7,7 @@ use rustc_span::edition::Edition;
 use crate::config::RenderOptions;
 use crate::html::escape::Escape;
 use crate::html::markdown;
-use crate::html::markdown::{
-    ErrorCodes, HeadingOffset, IdMap, Markdown, MarkdownWithToc,
-};
+use crate::html::markdown::{ErrorCodes, HeadingOffset, IdMap, Markdown, MarkdownWithToc};
 
 /// Separate any lines at the start of the file that begin with `# ` or `%`.
 fn extract_leading_metadata(s: &str) -> (Vec<&str>, &str) {

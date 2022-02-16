@@ -26,8 +26,7 @@ crate struct ScrapeExamplesOptions {
     target_crates: Vec<String>,
 }
 
-impl ScrapeExamplesOptions {
-}
+impl ScrapeExamplesOptions {}
 
 #[derive(Encodable, Decodable, Debug, Clone)]
 crate struct SyntaxRange {

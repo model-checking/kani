@@ -594,8 +594,7 @@ crate enum ItemKind {
     KeywordItem(Symbol),
 }
 
-impl ItemKind {
-}
+impl ItemKind {}
 
 #[derive(Clone, Debug)]
 crate struct Module {

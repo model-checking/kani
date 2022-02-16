@@ -129,8 +129,7 @@ struct CacheBuilder<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl Cache {
-}
+impl Cache {}
 
 impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
     fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {

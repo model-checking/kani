@@ -120,8 +120,7 @@ struct EmitIgnoredResolutionErrors<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'tcx> EmitIgnoredResolutionErrors<'tcx> {
-}
+impl<'tcx> EmitIgnoredResolutionErrors<'tcx> {}
 
 impl<'tcx> Visitor<'tcx> for EmitIgnoredResolutionErrors<'tcx> {
     type NestedFilter = nested_filter::OnlyBodies;

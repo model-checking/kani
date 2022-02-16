@@ -1,8 +1,8 @@
 use crate::clean::auto_trait::AutoTraitFinder;
 use crate::clean::blanket_impl::BlanketImplFinder;
 use crate::clean::{
-    inline, Clean, Generic, GenericArg, GenericArgs, ImportSource, Item,
-    ItemKind, Lifetime, Path, PathSegment, Primitive, PrimitiveType, Type, TypeBinding, Visibility,
+    inline, Clean, Generic, GenericArg, GenericArgs, ImportSource, Item, ItemKind, Lifetime, Path,
+    PathSegment, Primitive, PrimitiveType, Type, TypeBinding, Visibility,
 };
 use crate::core::DocContext;
 use crate::formats::item_type::ItemType;

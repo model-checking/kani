@@ -27,8 +27,7 @@ impl Default for OutputFormat {
     }
 }
 
-impl OutputFormat {
-}
+impl OutputFormat {}
 
 impl TryFrom<&str> for OutputFormat {
     type Error = String;
@@ -274,5 +273,4 @@ impl RenderOptions {
     }
 }
 
-impl Options {
-}
+impl Options {}

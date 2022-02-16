@@ -31,8 +31,7 @@ struct ItemCollector {
     items: FxHashSet<ItemId>,
 }
 
-impl ItemCollector {
-}
+impl ItemCollector {}
 
 impl DocVisitor for ItemCollector {
     fn visit_item(&mut self, i: &Item) {

@@ -10,7 +10,6 @@ use std::iter::Peekable;
 use std::ops::Range;
 use std::str::CharIndices;
 
-
 struct InvalidHtmlTagsLinter<'a, 'tcx> {
     cx: &'a mut DocContext<'tcx>,
 }

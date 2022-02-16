@@ -13,5 +13,4 @@ crate struct ExternalHtml {
     crate after_content: String,
 }
 
-impl ExternalHtml {
-}
+impl ExternalHtml {}
