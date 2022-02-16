@@ -32,9 +32,6 @@ struct ItemCollector {
 }
 
 impl ItemCollector {
-    fn new() -> Self {
-        Self::default()
-    }
 }
 
 impl DocVisitor for ItemCollector {

@@ -1,22 +1,12 @@
 //! The Rust AST Visitor. Extracts useful information and massages it into a form
 //! usable for `clean`.
 
-use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir as hir;
-use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::DefId;
-use rustc_hir::Node;
-use rustc_hir::CRATE_HIR_ID;
-use rustc_middle::middle::privacy::AccessLevel;
 use rustc_middle::ty::TyCtxt;
-use rustc_span::def_id::{CRATE_DEF_ID, LOCAL_CRATE};
-use rustc_span::symbol::{kw, sym, Symbol};
+use rustc_span::symbol::{sym, Symbol};
 use rustc_span::Span;
 
-use std::mem;
-
-use crate::clean::{self, cfg::Cfg, AttributesExt, NestedAttributesExt};
-use crate::core;
+use crate::clean::{AttributesExt, NestedAttributesExt};
 
 /// This module is used to store stuff from Rust's AST in a more convenient
 /// manner (and with prettier names) before cleaning.
@@ -32,10 +22,6 @@ crate struct Module<'hir> {
 }
 
 impl Module<'_> {
-    crate fn new(name: Symbol, id: hir::HirId, where_inner: Span) -> Self {
-        Module { name, id, where_inner, mods: Vec::new(), items: Vec::new(), foreigns: Vec::new() }
-    }
-
     crate fn where_outer(&self, tcx: TyCtxt<'_>) -> Span {
         tcx.hir().span(self.id)
     }

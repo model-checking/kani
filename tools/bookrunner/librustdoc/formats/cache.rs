@@ -6,8 +6,7 @@ use rustc_middle::middle::privacy::AccessLevels;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::{sym, Symbol};
 
-use crate::clean::{self, types::ExternalLocation, ExternalCrate, ItemId, PrimitiveType};
-use crate::core::DocContext;
+use crate::clean::{self, types::ExternalLocation, ItemId};
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
 use crate::formats::Impl;
@@ -131,9 +130,6 @@ struct CacheBuilder<'a, 'tcx> {
 }
 
 impl Cache {
-    crate fn new(access_levels: AccessLevels<DefId>, document_private: bool) -> Self {
-        Cache { access_levels, document_private, ..Cache::default() }
-    }
 }
 
 impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {

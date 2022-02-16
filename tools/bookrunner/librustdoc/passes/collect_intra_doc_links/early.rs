@@ -1,5 +1,4 @@
 use crate::clean;
-use crate::core::ResolverCaches;
 use crate::html::markdown::markdown_links;
 use crate::passes::collect_intra_doc_links::preprocess_link;
 
@@ -7,10 +6,9 @@ use rustc_ast::visit::{self, AssocCtxt, Visitor};
 use rustc_ast::{self as ast, ItemKind};
 use rustc_ast_lowering::ResolverAstLowering;
 use rustc_hir::def::Namespace::TypeNS;
-use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_ID};
+use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_resolve::Resolver;
-use rustc_session::config::Externs;
-use rustc_span::{Span, DUMMY_SP};
+use rustc_span::Span;
 
 use std::mem;
 
@@ -22,16 +20,6 @@ struct IntraLinkCrateLoader<'r, 'ra> {
 }
 
 impl IntraLinkCrateLoader<'_, '_> {
-    fn fill_resolver_caches(&mut self) {
-        for cnum in self.resolver.cstore().crates_untracked() {
-            let all_traits = self.resolver.cstore().traits_in_crate_untracked(cnum);
-            let all_trait_impls = self.resolver.cstore().trait_impls_in_crate_untracked(cnum);
-
-            self.all_traits.extend(all_traits);
-            self.all_trait_impls.extend(all_trait_impls.into_iter().map(|(def_id, _, _)| def_id));
-        }
-    }
-
     fn load_links_in_attrs(&mut self, attrs: &[ast::Attribute], span: Span) {
         // FIXME: this needs to consider export inlining.
         let attrs = clean::Attributes::from_ast(attrs, None);

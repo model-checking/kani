@@ -1,15 +1,15 @@
 use rustc_ast as ast;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{ColorConfig, ErrorReported, FatalError};
+use rustc_errors::{ColorConfig, ErrorReported};
 use rustc_hir as hir;
 use rustc_hir::intravisit;
-use rustc_hir::{HirId, CRATE_HIR_ID};
+use rustc_hir::HirId;
 use rustc_middle::hir::map::Map;
 use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::TyCtxt;
-use rustc_session::config::{self, CrateType, ErrorOutputType};
-use rustc_session::{lint, DiagnosticOutput, Session};
+use rustc_session::config::ErrorOutputType;
+use rustc_session::Session;
 use rustc_span::edition::Edition;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::sym;
@@ -613,32 +613,6 @@ crate struct Collector {
 }
 
 impl Collector {
-    crate fn new(
-        crate_name: Symbol,
-        rustdoc_options: RustdocOptions,
-        use_headers: bool,
-        opts: GlobalTestOptions,
-        source_map: Option<Lrc<SourceMap>>,
-        filename: Option<PathBuf>,
-        enable_per_target_ignores: bool,
-    ) -> Collector {
-        Collector {
-            tests: Vec::new(),
-            names: Vec::new(),
-            rustdoc_options,
-            use_headers,
-            enable_per_target_ignores,
-            crate_name,
-            opts,
-            position: DUMMY_SP,
-            source_map,
-            filename,
-            visited_tests: FxHashMap::default(),
-            unused_extern_reports: Default::default(),
-            compiling_test_count: AtomicUsize::new(0),
-        }
-    }
-
     fn generate_name(&self, line: usize, filename: &FileName) -> String {
         let mut item_path = self.names.join("::");
         item_path.retain(|c| c != ' ');

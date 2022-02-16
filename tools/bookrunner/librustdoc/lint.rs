@@ -1,7 +1,6 @@
-use rustc_data_structures::fx::FxHashMap;
 use rustc_lint::LintStore;
 use rustc_lint_defs::{declare_tool_lint, Lint, LintId};
-use rustc_session::{lint, Session};
+use rustc_session::Session;
 
 use std::lazy::SyncLazy as Lazy;
 

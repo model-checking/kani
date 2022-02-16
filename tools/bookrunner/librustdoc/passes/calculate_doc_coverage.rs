@@ -45,22 +45,6 @@ impl ItemCount {
             self.with_examples += 1;
         }
     }
-
-    fn percentage(&self) -> Option<f64> {
-        if self.total > 0 {
-            Some((self.with_docs as f64 * 100.0) / self.total as f64)
-        } else {
-            None
-        }
-    }
-
-    fn examples_percentage(&self) -> Option<f64> {
-        if self.total_examples > 0 {
-            Some((self.with_examples as f64 * 100.0) / self.total_examples as f64)
-        } else {
-            None
-        }
-    }
 }
 
 impl ops::Sub for ItemCount {
@@ -90,81 +74,7 @@ struct CoverageCalculator<'a, 'b> {
     ctx: &'a mut DocContext<'b>,
 }
 
-fn limit_filename_len(filename: String) -> String {
-    let nb_chars = filename.chars().count();
-    if nb_chars > 35 {
-        "...".to_string()
-            + &filename[filename.char_indices().nth(nb_chars - 32).map(|x| x.0).unwrap_or(0)..]
-    } else {
-        filename
-    }
-}
-
 impl<'a, 'b> CoverageCalculator<'a, 'b> {
-    fn to_json(&self) -> String {
-        serde_json::to_string(
-            &self
-                .items
-                .iter()
-                .map(|(k, v)| (k.prefer_local().to_string(), v))
-                .collect::<BTreeMap<String, &ItemCount>>(),
-        )
-        .expect("failed to convert JSON data to string")
-    }
-
-    fn print_results(&self) {
-        let output_format = self.ctx.output_format;
-        if output_format.is_json() {
-            println!("{}", self.to_json());
-            return;
-        }
-        let mut total = ItemCount::default();
-
-        fn print_table_line() {
-            println!("+-{0:->35}-+-{0:->10}-+-{0:->10}-+-{0:->10}-+-{0:->10}-+", "");
-        }
-
-        fn print_table_record(
-            name: &str,
-            count: ItemCount,
-            percentage: f64,
-            examples_percentage: f64,
-        ) {
-            println!(
-                "| {:<35} | {:>10} | {:>9.1}% | {:>10} | {:>9.1}% |",
-                name, count.with_docs, percentage, count.with_examples, examples_percentage,
-            );
-        }
-
-        print_table_line();
-        println!(
-            "| {:<35} | {:>10} | {:>10} | {:>10} | {:>10} |",
-            "File", "Documented", "Percentage", "Examples", "Percentage",
-        );
-        print_table_line();
-
-        for (file, &count) in &self.items {
-            if let Some(percentage) = count.percentage() {
-                print_table_record(
-                    &limit_filename_len(file.prefer_local().to_string_lossy().into()),
-                    count,
-                    percentage,
-                    count.examples_percentage().unwrap_or(0.),
-                );
-
-                total += count;
-            }
-        }
-
-        print_table_line();
-        print_table_record(
-            "Total",
-            total,
-            total.percentage().unwrap_or(0.0),
-            total.examples_percentage().unwrap_or(0.0),
-        );
-        print_table_line();
-    }
 }
 
 impl<'a, 'b> DocVisitor for CoverageCalculator<'a, 'b> {

@@ -479,9 +479,6 @@ impl Item {
     crate fn is_import(&self) -> bool {
         self.type_() == ItemType::Import
     }
-    crate fn is_extern_crate(&self) -> bool {
-        self.type_() == ItemType::ExternCrate
-    }
     crate fn is_keyword(&self) -> bool {
         self.type_() == ItemType::Keyword
     }

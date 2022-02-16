@@ -1,39 +1,24 @@
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use rustc_data_structures::sync::{self, Lrc};
-use rustc_errors::emitter::{Emitter, EmitterWriter};
-use rustc_errors::json::JsonEmitter;
-use rustc_feature::UnstableFeatures;
 use rustc_hir::def::Res;
-use rustc_hir::def_id::{DefId, LocalDefId};
+use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{HirId, Path};
 use rustc_interface::interface;
 use rustc_middle::hir::nested_filter;
-use rustc_middle::middle::privacy::AccessLevels;
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_resolve as resolve;
-use rustc_session::config::{self, CrateType, ErrorOutputType};
-use rustc_session::lint;
-use rustc_session::DiagnosticOutput;
 use rustc_session::Session;
-use rustc_span::symbol::sym;
-use rustc_span::{source_map, Span};
 
 use std::cell::RefCell;
-use std::lazy::SyncLazy;
 use std::mem;
 use std::rc::Rc;
 
-use crate::clean::inline::build_external_trait;
-use crate::clean::{self, ItemId, TraitWithExtraInfo};
-use crate::config::{Options as RustdocOptions, OutputFormat, RenderOptions};
+use crate::clean::{self, ItemId};
+use crate::config::RenderOptions;
 use crate::formats::cache::Cache;
-
-crate use rustc_session::config::{DebuggingOptions, Input, Options};
 
 crate struct ResolverCaches {
     pub(crate) all_traits: Option<Vec<DefId>>,
-    pub(crate) all_trait_impls: Option<Vec<DefId>>,
 }
 
 crate struct DocContext<'tcx> {
@@ -75,8 +60,6 @@ crate struct DocContext<'tcx> {
     crate cache: Cache,
     /// Used by [`clean::inline`] to tell if an item has already been inlined.
     crate inlined: FxHashSet<ItemId>,
-    /// Used by `calculate_doc_coverage`.
-    crate output_format: OutputFormat,
 }
 
 impl<'tcx> DocContext<'tcx> {
@@ -127,12 +110,6 @@ impl<'tcx> DocContext<'tcx> {
         f(self, all_traits.as_ref().expect("`all_traits` are already borrowed"));
         self.resolver_caches.all_traits = all_traits;
     }
-
-    crate fn with_all_trait_impls(&mut self, f: impl FnOnce(&mut Self, &[DefId])) {
-        let all_trait_impls = self.resolver_caches.all_trait_impls.take();
-        f(self, all_trait_impls.as_ref().expect("`all_trait_impls` are already borrowed"));
-        self.resolver_caches.all_trait_impls = all_trait_impls;
-    }
 }
 
 /// Due to <https://github.com/rust-lang/rust/pull/73566>,
@@ -144,9 +121,6 @@ struct EmitIgnoredResolutionErrors<'tcx> {
 }
 
 impl<'tcx> EmitIgnoredResolutionErrors<'tcx> {
-    fn new(tcx: TyCtxt<'tcx>) -> Self {
-        Self { tcx }
-    }
 }
 
 impl<'tcx> Visitor<'tcx> for EmitIgnoredResolutionErrors<'tcx> {

@@ -1,9 +1,5 @@
 //! This module analyzes crates to find call sites that can serve as examples in the documentation.
 
-use crate::clean;
-use crate::config;
-use crate::formats;
-use crate::formats::renderer::FormatRenderer;
 use crate::html::render::Context;
 
 use rustc_data_structures::fx::FxHashMap;
@@ -11,18 +7,12 @@ use rustc_hir::{
     self as hir,
     intravisit::{self, Visitor},
 };
-use rustc_interface::interface;
 use rustc_macros::{Decodable, Encodable};
 use rustc_middle::hir::map::Map;
 use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::{self, TyCtxt};
-use rustc_serialize::{
-    opaque::{Decoder, FileEncoder},
-    Decodable, Encodable,
-};
-use rustc_session::getopts;
 use rustc_span::{
-    def_id::{CrateNum, DefPathHash, LOCAL_CRATE},
+    def_id::{CrateNum, DefPathHash},
     edition::Edition,
     BytePos, FileName, SourceFile,
 };
@@ -37,24 +27,6 @@ crate struct ScrapeExamplesOptions {
 }
 
 impl ScrapeExamplesOptions {
-    crate fn new(
-        matches: &getopts::Matches,
-        diag: &rustc_errors::Handler,
-    ) -> Result<Option<Self>, i32> {
-        let output_path = matches.opt_str("scrape-examples-output-path");
-        let target_crates = matches.opt_strs("scrape-examples-target-crate");
-        match (output_path, !target_crates.is_empty()) {
-            (Some(output_path), true) => Ok(Some(ScrapeExamplesOptions {
-                output_path: PathBuf::from(output_path),
-                target_crates,
-            })),
-            (Some(_), false) | (None, true) => {
-                diag.err("must use --scrape-examples-output-path and --scrape-examples-target-crate together");
-                Err(1)
-            }
-            (None, false) => Ok(None),
-        }
-    }
 }
 
 #[derive(Encodable, Decodable, Debug, Clone)]

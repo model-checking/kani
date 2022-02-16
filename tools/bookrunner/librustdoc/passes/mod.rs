@@ -6,7 +6,6 @@ use rustc_span::{InnerSpan, Span, DUMMY_SP};
 use std::ops::Range;
 
 use crate::clean::{self, DocFragmentKind};
-use crate::core::DocContext;
 
 mod stripper;
 

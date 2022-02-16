@@ -63,28 +63,7 @@ extern crate rustc_trait_selection;
 extern crate rustc_typeck;
 extern crate test;
 
-// See docs in https://github.com/rust-lang/rust/blob/master/compiler/rustc/src/main.rs
-// about jemalloc.
-#[cfg(feature = "jemalloc")]
-extern crate tikv_jemalloc_sys;
-#[cfg(feature = "jemalloc")]
-use tikv_jemalloc_sys as jemalloc_sys;
-
-use std::default::Default;
-use std::env::{self, VarError};
-use std::io;
-use std::process;
-
-use rustc_driver::{abort_on_err, describe_lints};
-use rustc_errors::ErrorReported;
-use rustc_interface::interface;
-use rustc_middle::ty::TyCtxt;
-use rustc_session::config::{make_crate_type_option, ErrorOutputType, RustcOptGroup};
-use rustc_session::getopts;
-use rustc_session::{early_error, early_warn};
-
 use crate::clean::utils::DOC_RUST_LANG_ORG_CHANNEL;
-use crate::passes::collect_intra_doc_links;
 
 /// A macro to create a FxHashMap.
 ///
@@ -120,7 +99,5 @@ crate mod lint;
 mod markdown;
 mod passes;
 mod scrape_examples;
-mod theme;
 mod visit;
 mod visit_ast;
-mod visit_lib;

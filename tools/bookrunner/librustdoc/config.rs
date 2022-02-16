@@ -1,14 +1,10 @@
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::ffi::OsStr;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use rustc_data_structures::fx::FxHashMap;
-use rustc_session::config::{get_cmd_lint_options, nightly_options};
-use rustc_session::config::{CodegenOptions, DebuggingOptions, ErrorOutputType, Externs};
-use rustc_session::getopts;
+use rustc_session::config::{ErrorOutputType, Externs};
 use rustc_session::lint::Level;
 use rustc_session::search_paths::SearchPath;
 use rustc_span::edition::Edition;
@@ -18,7 +14,6 @@ use crate::externalfiles::ExternalHtml;
 use crate::html::markdown::IdMap;
 use crate::html::render::StylePath;
 use crate::scrape_examples::{AllCallLocations, ScrapeExamplesOptions};
-use crate::theme;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 crate enum OutputFormat {
@@ -33,9 +28,6 @@ impl Default for OutputFormat {
 }
 
 impl OutputFormat {
-    crate fn is_json(&self) -> bool {
-        matches!(self, OutputFormat::Json)
-    }
 }
 
 impl TryFrom<&str> for OutputFormat {
@@ -72,12 +64,8 @@ crate struct Options {
     crate extern_strs: Vec<String>,
     /// List of `cfg` flags to hand to the compiler. Always includes `rustdoc`.
     crate cfgs: Vec<String>,
-    /// Codegen options to hand to the compiler.
-    crate codegen_options: CodegenOptions,
     /// Codegen options strings to hand to the compiler.
     crate codegen_options_strs: Vec<String>,
-    /// Debugging (`-Z`) options to pass to the compiler.
-    crate debugging_opts: DebuggingOptions,
     /// Debugging (`-Z`) options strings to pass to the compiler.
     crate debugging_opts_strs: Vec<String>,
     /// The target used to compile the crate against.
@@ -129,10 +117,6 @@ crate struct Options {
     crate crate_version: Option<String>,
     /// Collected options specific to outputting final pages.
     crate render_options: RenderOptions,
-    /// The format that we output when rendering.
-    ///
-    /// Currently used only for the `--show-coverage` option.
-    crate output_format: OutputFormat,
     /// If this option is set to `true`, rustdoc will only run checks and not generate
     /// documentation.
     crate run_check: bool,
@@ -215,10 +199,6 @@ crate struct RenderOptions {
     crate themes: Vec<StylePath>,
     /// If present, CSS file that contains rules to add to the default CSS.
     crate extension_css: Option<PathBuf>,
-    /// A map of crate names to the URL to use instead of querying the crate's `html_root_url`.
-    crate extern_html_root_urls: BTreeMap<String, String>,
-    /// Whether to give precedence to `html_root_url` or `--exten-html-root-url`.
-    crate extern_html_root_takes_precedence: bool,
     /// A map of the default settings (values are as for DOM storage API). Keys should lack the
     /// `rustdoc-` prefix.
     crate default_settings: FxHashMap<String, String>,
@@ -295,8 +275,4 @@ impl RenderOptions {
 }
 
 impl Options {
-    /// Returns `true` if the file given as `self.input` is a Markdown file.
-    crate fn markdown_input(&self) -> bool {
-        self.input.extension().map_or(false, |e| e == "md" || e == "markdown")
-    }
 }
