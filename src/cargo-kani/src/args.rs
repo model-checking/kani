@@ -10,7 +10,7 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "kani",
-    about = "Verify a single Rust file. For more information, see https://github.com/model-checking/rmc"
+    about = "Verify a single Rust file. For more information, see https://github.com/model-checking/kani"
 )]
 pub struct StandaloneArgs {
     /// Rust file to verify
