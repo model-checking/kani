@@ -595,42 +595,6 @@ crate enum ItemKind {
 }
 
 impl ItemKind {
-    /// Some items contain others such as structs (for their fields) and Enums
-    /// (for their variants). This method returns those contained items.
-    crate fn inner_items(&self) -> impl Iterator<Item = &Item> {
-        match self {
-            StructItem(s) => s.fields.iter(),
-            UnionItem(u) => u.fields.iter(),
-            VariantItem(Variant::Struct(v)) => v.fields.iter(),
-            VariantItem(Variant::Tuple(v)) => v.iter(),
-            EnumItem(e) => e.variants.iter(),
-            TraitItem(t) => t.items.iter(),
-            ImplItem(i) => i.items.iter(),
-            ModuleItem(m) => m.items.iter(),
-            ExternCrateItem { .. }
-            | ImportItem(_)
-            | FunctionItem(_)
-            | TypedefItem(_, _)
-            | OpaqueTyItem(_)
-            | StaticItem(_)
-            | ConstantItem(_)
-            | TraitAliasItem(_)
-            | TyMethodItem(_)
-            | MethodItem(_, _)
-            | StructFieldItem(_)
-            | VariantItem(_)
-            | ForeignFunctionItem(_)
-            | ForeignStaticItem(_)
-            | ForeignTypeItem
-            | MacroItem(_)
-            | ProcMacroItem(_)
-            | PrimitiveItem(_)
-            | AssocConstItem(_, _)
-            | AssocTypeItem(_, _)
-            | StrippedItem(_)
-            | KeywordItem(_) => [].iter(),
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -1906,14 +1870,6 @@ impl Path {
 
     crate fn last(&self) -> Symbol {
         self.segments.last().expect("segments were empty").name
-    }
-
-    crate fn whole_name(&self) -> String {
-        self.segments
-            .iter()
-            .map(|s| if s.name == kw::PathRoot { String::new() } else { s.name.to_string() })
-            .intersperse("::".into())
-            .collect()
     }
 
     /// Checks if this is a `T::Name` path for an associated type.
