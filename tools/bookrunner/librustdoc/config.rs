@@ -6,9 +6,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use rustc_data_structures::fx::FxHashMap;
-use rustc_session::config::{
-    self, parse_crate_types_from_list, parse_externs, parse_target_triple, CrateType,
-};
 use rustc_session::config::{get_cmd_lint_options, nightly_options};
 use rustc_session::config::{CodegenOptions, DebuggingOptions, ErrorOutputType, Externs};
 use rustc_session::getopts;
@@ -17,13 +14,9 @@ use rustc_session::search_paths::SearchPath;
 use rustc_span::edition::Edition;
 use rustc_target::spec::TargetTriple;
 
-use crate::core::new_handler;
 use crate::externalfiles::ExternalHtml;
-use crate::html;
 use crate::html::markdown::IdMap;
 use crate::html::render::StylePath;
-use crate::html::static_files;
-use crate::passes::{self, Condition};
 use crate::scrape_examples::{AllCallLocations, ScrapeExamplesOptions};
 use crate::theme;
 
