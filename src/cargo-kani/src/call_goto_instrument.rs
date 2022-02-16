@@ -50,13 +50,7 @@ impl KaniSession {
             file.to_owned().into_os_string(), // output
         ];
 
-        // TODO get goto-instrument path from self
-        let mut cmd = Command::new("goto-instrument");
-        cmd.args(args);
-
-        self.run_suppress(cmd)?;
-
-        Ok(())
+        self.call_goto_instrument(args)
     }
 
     fn add_library(&self, file: &Path) -> Result<()> {
@@ -66,13 +60,7 @@ impl KaniSession {
             file.to_owned().into_os_string(), // output
         ];
 
-        // TODO get goto-instrument path from self
-        let mut cmd = Command::new("goto-instrument");
-        cmd.args(args);
-
-        self.run_suppress(cmd)?;
-
-        Ok(())
+        self.call_goto_instrument(args)
     }
 
     fn undefined_functions(&self, file: &Path) -> Result<()> {
@@ -86,13 +74,7 @@ impl KaniSession {
             file.to_owned().into_os_string(), // output
         ];
 
-        // TODO get goto-instrument path from self
-        let mut cmd = Command::new("goto-instrument");
-        cmd.args(args);
-
-        self.run_suppress(cmd)?;
-
-        Ok(())
+        self.call_goto_instrument(args)
     }
 
     fn just_drop_unused_functions(&self, file: &Path) -> Result<()> {
@@ -102,13 +84,7 @@ impl KaniSession {
             file.to_owned().into_os_string(), // output
         ];
 
-        // TODO get goto-instrument path from self
-        let mut cmd = Command::new("goto-instrument");
-        cmd.args(args);
-
-        self.run_suppress(cmd)?;
-
-        Ok(())
+        self.call_goto_instrument(args)
     }
 
     /// Generate a .c file from a goto binary (i.e. --gen-c)
@@ -122,12 +98,15 @@ impl KaniSession {
             output_filename.into_os_string(),
         ];
 
+        self.call_goto_instrument(args)
+    }
+
+    /// Non-public helper function to actually do the run of goto-instrument
+    fn call_goto_instrument(&self, args: Vec<OsString>) -> Result<()> {
         // TODO get goto-instrument path from self
         let mut cmd = Command::new("goto-instrument");
         cmd.args(args);
 
-        self.run_suppress(cmd)?;
-
-        Ok(())
+        self.run_suppress(cmd)
     }
 }
