@@ -34,7 +34,7 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 cargo build
 
 # Unit tests
-cargo test -p cbmc
+cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p cargo-kani
 
