@@ -55,15 +55,10 @@ for testp in "${TESTS[@]}"; do
   testl=($testp)
   suite=${testl[0]}
   mode=${testl[1]}
-  echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
+  echo "Check compiletest suite=$suite mode=$mode"
   # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
   # Tracking issue: https://github.com/model-checking/kani/issues/755
-  cargo run -p compiletest --  --kani-dir-path scripts --src-base tests/$suite \
-                               --build-base $(pwd)/build/$TARGET/tests/$suite \
-                               --stage-id stage1-$TARGET \
-                               --suite $suite --mode $mode \
-                               --target $TARGET --host $TARGET \
-                               --quiet --channel dev
+  cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
 done
 
 # Check codegen for the standard library

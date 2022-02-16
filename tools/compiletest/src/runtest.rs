@@ -15,10 +15,8 @@ use crate::read2::read2_abbreviated;
 use crate::util::logv;
 use regex::Regex;
 
-use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs::{self, create_dir_all};
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
@@ -47,13 +45,6 @@ pub fn run(config: Config, testpaths: &TestPaths, revision: Option<&str>) {
     create_dir_all(&cx.output_base_dir()).unwrap();
     cx.run_revision();
     cx.create_stamp();
-}
-
-pub fn compute_stamp_hash(config: &Config) -> String {
-    let mut hash = DefaultHasher::new();
-    config.stage_id.hash(&mut hash);
-
-    format!("{:x}", hash.finish())
 }
 
 #[derive(Copy, Clone)]
@@ -411,7 +402,7 @@ impl<'test> TestCx<'test> {
 
     fn create_stamp(&self) {
         let stamp = crate::stamp(&self.config, self.testpaths, self.revision);
-        fs::write(&stamp, compute_stamp_hash(&self.config)).unwrap();
+        fs::write(&stamp, "we only support one configuration").unwrap();
     }
 }
 
