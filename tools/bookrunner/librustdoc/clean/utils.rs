@@ -26,58 +26,6 @@ use std::mem;
 #[cfg(test)]
 mod tests;
 
-crate fn krate(cx: &mut DocContext<'_>) -> Crate {
-    let module = crate::visit_ast::RustdocVisitor::new(cx).visit();
-
-    for &cnum in cx.tcx.crates(()) {
-        // Analyze doc-reachability for extern items
-        LibEmbargoVisitor::new(cx).visit_lib(cnum);
-    }
-
-    // Clean the crate, translating the entire librustc_ast AST to one that is
-    // understood by rustdoc.
-    let mut module = module.clean(cx);
-
-    match *module.kind {
-        ItemKind::ModuleItem(ref module) => {
-            for it in &module.items {
-                // `compiler_builtins` should be masked too, but we can't apply
-                // `#[doc(masked)]` to the injected `extern crate` because it's unstable.
-                if it.is_extern_crate()
-                    && (it.attrs.has_doc_flag(sym::masked)
-                        || cx.tcx.is_compiler_builtins(it.def_id.krate()))
-                {
-                    cx.cache.masked_crates.insert(it.def_id.krate());
-                }
-            }
-        }
-        _ => unreachable!(),
-    }
-
-    let local_crate = ExternalCrate { crate_num: LOCAL_CRATE };
-    let primitives = local_crate.primitives(cx.tcx);
-    let keywords = local_crate.keywords(cx.tcx);
-    {
-        let m = match *module.kind {
-            ItemKind::ModuleItem(ref mut m) => m,
-            _ => unreachable!(),
-        };
-        m.items.extend(primitives.iter().map(|&(def_id, prim)| {
-            Item::from_def_id_and_parts(
-                def_id,
-                Some(prim.as_sym()),
-                ItemKind::PrimitiveItem(prim),
-                cx,
-            )
-        }));
-        m.items.extend(keywords.into_iter().map(|(def_id, kw)| {
-            Item::from_def_id_and_parts(def_id, Some(kw), ItemKind::KeywordItem(kw), cx)
-        }));
-    }
-
-    Crate { module, primitives, external_traits: cx.external_traits.clone() }
-}
-
 fn external_generic_args(
     cx: &mut DocContext<'_>,
     did: DefId,

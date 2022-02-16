@@ -37,7 +37,6 @@ use crate::passes::Pass;
 use crate::visit::DocVisitor;
 
 mod early;
-crate use early::early_resolve_intra_doc_links;
 
 /// Top-level errors emitted by this pass.
 enum ErrorKind<'a> {

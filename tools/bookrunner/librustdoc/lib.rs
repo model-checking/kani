@@ -124,38 +124,3 @@ mod theme;
 mod visit;
 mod visit_ast;
 mod visit_lib;
-
-/// A result type used by several functions under `main()`.
-type MainResult = Result<(), ErrorReported>;
-
-fn wrap_return(diag: &rustc_errors::Handler, res: Result<(), String>) -> MainResult {
-    match res {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            diag.struct_err(&err).emit();
-            Err(ErrorReported)
-        }
-    }
-}
-
-fn run_renderer<'tcx, T: formats::FormatRenderer<'tcx>>(
-    krate: clean::Crate,
-    renderopts: config::RenderOptions,
-    cache: formats::cache::Cache,
-    tcx: TyCtxt<'tcx>,
-) -> MainResult {
-    match formats::run_format::<T>(krate, renderopts, cache, tcx) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            let mut msg =
-                tcx.sess.struct_err(&format!("couldn't generate documentation: {}", e.error));
-            let file = e.file.display().to_string();
-            if file.is_empty() {
-                msg.emit()
-            } else {
-                msg.note(&format!("failed to create or modify \"{}\"", file)).emit()
-            }
-            Err(ErrorReported)
-        }
-    }
-}

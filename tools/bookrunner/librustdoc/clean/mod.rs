@@ -43,7 +43,7 @@ use crate::visit_ast::Module as DocModule;
 use utils::*;
 
 crate use self::types::*;
-crate use self::utils::{get_auto_trait_and_blanket_impls, krate, register_res};
+crate use self::utils::{get_auto_trait_and_blanket_impls, register_res};
 
 crate trait Clean<T> {
     fn clean(&self, cx: &mut DocContext<'_>) -> T;

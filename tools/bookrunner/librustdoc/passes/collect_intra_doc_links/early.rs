@@ -14,43 +14,6 @@ use rustc_span::{Span, DUMMY_SP};
 
 use std::mem;
 
-crate fn early_resolve_intra_doc_links(
-    resolver: &mut Resolver<'_>,
-    krate: &ast::Crate,
-    externs: Externs,
-) -> ResolverCaches {
-    let mut loader = IntraLinkCrateLoader {
-        resolver,
-        current_mod: CRATE_DEF_ID,
-        all_traits: Default::default(),
-        all_trait_impls: Default::default(),
-    };
-
-    // Overridden `visit_item` below doesn't apply to the crate root,
-    // so we have to visit its attributes and exports separately.
-    loader.load_links_in_attrs(&krate.attrs, krate.span);
-    visit::walk_crate(&mut loader, krate);
-    loader.fill_resolver_caches();
-
-    // FIXME: somehow rustdoc is still missing crates even though we loaded all
-    // the known necessary crates. Load them all unconditionally until we find a way to fix this.
-    // DO NOT REMOVE THIS without first testing on the reproducer in
-    // https://github.com/jyn514/objr/commit/edcee7b8124abf0e4c63873e8422ff81beb11ebb
-    for (extern_name, _) in externs.iter().filter(|(_, entry)| entry.add_prelude) {
-        let _ = loader.resolver.resolve_str_path_error(
-            DUMMY_SP,
-            extern_name,
-            TypeNS,
-            CRATE_DEF_ID.to_def_id(),
-        );
-    }
-
-    ResolverCaches {
-        all_traits: Some(loader.all_traits),
-        all_trait_impls: Some(loader.all_trait_impls),
-    }
-}
-
 struct IntraLinkCrateLoader<'r, 'ra> {
     resolver: &'r mut Resolver<'ra>,
     current_mod: LocalDefId,
