@@ -39,19 +39,6 @@ use crate::visit::DocVisitor;
 mod early;
 crate use early::early_resolve_intra_doc_links;
 
-crate const COLLECT_INTRA_DOC_LINKS: Pass = Pass {
-    name: "collect-intra-doc-links",
-    run: collect_intra_doc_links,
-    description: "resolves intra-doc links",
-};
-
-fn collect_intra_doc_links(krate: Crate, cx: &mut DocContext<'_>) -> Crate {
-    let mut collector =
-        LinkCollector { cx, mod_ids: Vec::new(), visited_links: FxHashMap::default() };
-    collector.visit_crate(&krate);
-    krate
-}
-
 /// Top-level errors emitted by this pass.
 enum ErrorKind<'a> {
     Resolve(Box<ResolutionFailure<'a>>),

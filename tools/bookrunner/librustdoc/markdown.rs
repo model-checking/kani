@@ -124,27 +124,3 @@ crate fn render<P: AsRef<Path>>(
         Ok(_) => Ok(()),
     }
 }
-
-/// Runs any tests/code examples in the markdown file `input`.
-crate fn test(options: Options) -> Result<(), String> {
-    let input_str = read_to_string(&options.input)
-        .map_err(|err| format!("{}: {}", options.input.display(), err))?;
-    let mut opts = GlobalTestOptions::default();
-    opts.no_crate_inject = true;
-    let mut collector = Collector::new(
-        Symbol::intern(&options.input.display().to_string()),
-        options.clone(),
-        true,
-        opts,
-        None,
-        Some(options.input),
-        options.enable_per_target_ignores,
-    );
-    collector.set_position(DUMMY_SP);
-    let codes = ErrorCodes::from(options.render_options.unstable_features.is_nightly_build());
-
-    find_testable_code(&input_str, &mut collector, codes, options.enable_per_target_ignores, None);
-
-    crate::doctest::run_tests(options.test_args, options.nocapture, collector.tests);
-    Ok(())
-}

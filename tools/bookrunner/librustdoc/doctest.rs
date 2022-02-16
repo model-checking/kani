@@ -3,10 +3,8 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::Lrc;
 use rustc_errors::{ColorConfig, ErrorReported, FatalError};
 use rustc_hir as hir;
-use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::intravisit;
 use rustc_hir::{HirId, CRATE_HIR_ID};
-use rustc_interface::interface;
 use rustc_middle::hir::map::Map;
 use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::TyCtxt;
@@ -32,7 +30,6 @@ use std::sync::{Arc, Mutex};
 use crate::clean::{types::AttributesExt, Attributes};
 use crate::config::Options as RustdocOptions;
 use crate::html::markdown::{self, ErrorCodes, Ignore, LangString};
-use crate::lint::init_lints;
 use crate::passes::span_of_attrs;
 
 /// Options that apply to all doctests in a crate or Markdown file (for `rustdoc foo.md`).
@@ -42,207 +39,6 @@ pub struct GlobalTestOptions {
     crate no_crate_inject: bool,
     /// Additional crate-level attributes to add to doctests.
     crate attrs: Vec<String>,
-}
-
-crate fn run(options: RustdocOptions) -> Result<(), ErrorReported> {
-    let input = config::Input::File(options.input.clone());
-
-    let invalid_codeblock_attributes_name = crate::lint::INVALID_CODEBLOCK_ATTRIBUTES.name;
-
-    // See core::create_config for what's going on here.
-    let allowed_lints = vec![
-        invalid_codeblock_attributes_name.to_owned(),
-        lint::builtin::UNKNOWN_LINTS.name.to_owned(),
-        lint::builtin::RENAMED_AND_REMOVED_LINTS.name.to_owned(),
-    ];
-
-    let (lint_opts, lint_caps) = init_lints(allowed_lints, options.lint_opts.clone(), |lint| {
-        if lint.name == invalid_codeblock_attributes_name {
-            None
-        } else {
-            Some((lint.name_lower(), lint::Allow))
-        }
-    });
-
-    debug!(?lint_opts);
-
-    let crate_types =
-        if options.proc_macro_crate { vec![CrateType::ProcMacro] } else { vec![CrateType::Rlib] };
-
-    let sessopts = config::Options {
-        maybe_sysroot: options.maybe_sysroot.clone(),
-        search_paths: options.libs.clone(),
-        crate_types,
-        lint_opts,
-        lint_cap: Some(options.lint_cap.unwrap_or(lint::Forbid)),
-        cg: options.codegen_options.clone(),
-        externs: options.externs.clone(),
-        unstable_features: options.render_options.unstable_features,
-        actually_rustdoc: true,
-        edition: options.edition,
-        target_triple: options.target.clone(),
-        crate_name: options.crate_name.clone(),
-        ..config::Options::default()
-    };
-
-    let mut cfgs = options.cfgs.clone();
-    cfgs.push("doc".to_owned());
-    cfgs.push("doctest".to_owned());
-    let config = interface::Config {
-        opts: sessopts,
-        crate_cfg: interface::parse_cfgspecs(cfgs),
-        input,
-        input_path: None,
-        output_file: None,
-        output_dir: None,
-        file_loader: None,
-        diagnostic_output: DiagnosticOutput::Default,
-        stderr: None,
-        lint_caps,
-        parse_sess_created: None,
-        register_lints: Some(box crate::lint::register_lints),
-        override_queries: None,
-        make_codegen_backend: None,
-        registry: rustc_driver::diagnostics_registry(),
-    };
-
-    let test_args = options.test_args.clone();
-    let nocapture = options.nocapture;
-    let externs = options.externs.clone();
-    let json_unused_externs = options.json_unused_externs;
-
-    let res = interface::run_compiler(config, |compiler| {
-        compiler.enter(|queries| {
-            let mut global_ctxt = queries.global_ctxt()?.take();
-
-            let collector = global_ctxt.enter(|tcx| {
-                let crate_attrs = tcx.hir().attrs(CRATE_HIR_ID);
-
-                let opts = scrape_test_config(crate_attrs);
-                let enable_per_target_ignores = options.enable_per_target_ignores;
-                let mut collector = Collector::new(
-                    tcx.crate_name(LOCAL_CRATE),
-                    options,
-                    false,
-                    opts,
-                    Some(compiler.session().parse_sess.clone_source_map()),
-                    None,
-                    enable_per_target_ignores,
-                );
-
-                let mut hir_collector = HirCollector {
-                    sess: compiler.session(),
-                    collector: &mut collector,
-                    map: tcx.hir(),
-                    codes: ErrorCodes::from(
-                        compiler.session().opts.unstable_features.is_nightly_build(),
-                    ),
-                    tcx,
-                };
-                hir_collector.visit_testable(
-                    "".to_string(),
-                    CRATE_HIR_ID,
-                    tcx.hir().span(CRATE_HIR_ID),
-                    |this| tcx.hir().walk_toplevel_module(this),
-                );
-
-                collector
-            });
-            if compiler.session().diagnostic().has_errors_or_lint_errors() {
-                FatalError.raise();
-            }
-
-            let unused_extern_reports = collector.unused_extern_reports.clone();
-            let compiling_test_count = collector.compiling_test_count.load(Ordering::SeqCst);
-            let ret: Result<_, ErrorReported> =
-                Ok((collector.tests, unused_extern_reports, compiling_test_count));
-            ret
-        })
-    });
-    let (tests, unused_extern_reports, compiling_test_count) = match res {
-        Ok(res) => res,
-        Err(ErrorReported) => return Err(ErrorReported),
-    };
-
-    run_tests(test_args, nocapture, tests);
-
-    // Collect and warn about unused externs, but only if we've gotten
-    // reports for each doctest
-    if json_unused_externs {
-        let unused_extern_reports: Vec<_> =
-            std::mem::take(&mut unused_extern_reports.lock().unwrap());
-        if unused_extern_reports.len() == compiling_test_count {
-            let extern_names = externs.iter().map(|(name, _)| name).collect::<FxHashSet<&String>>();
-            let mut unused_extern_names = unused_extern_reports
-                .iter()
-                .map(|uexts| uexts.unused_extern_names.iter().collect::<FxHashSet<&String>>())
-                .fold(extern_names, |uextsa, uextsb| {
-                    uextsa.intersection(&uextsb).copied().collect::<FxHashSet<&String>>()
-                })
-                .iter()
-                .map(|v| (*v).clone())
-                .collect::<Vec<String>>();
-            unused_extern_names.sort();
-            // Take the most severe lint level
-            let lint_level = unused_extern_reports
-                .iter()
-                .map(|uexts| uexts.lint_level.as_str())
-                .max_by_key(|v| match *v {
-                    "warn" => 1,
-                    "deny" => 2,
-                    "forbid" => 3,
-                    // The allow lint level is not expected,
-                    // as if allow is specified, no message
-                    // is to be emitted.
-                    v => unreachable!("Invalid lint level '{}'", v),
-                })
-                .unwrap_or("warn")
-                .to_string();
-            let uext = UnusedExterns { lint_level, unused_extern_names };
-            let unused_extern_json = serde_json::to_string(&uext).unwrap();
-            eprintln!("{}", unused_extern_json);
-        }
-    }
-
-    Ok(())
-}
-
-crate fn run_tests(mut test_args: Vec<String>, nocapture: bool, tests: Vec<test::TestDescAndFn>) {
-    test_args.insert(0, "rustdoctest".to_string());
-    if nocapture {
-        test_args.push("--nocapture".to_string());
-    }
-    test::test_main(&test_args, tests, None);
-}
-
-// Look for `#![doc(test(no_crate_inject))]`, used by crates in the std facade.
-fn scrape_test_config(attrs: &[ast::Attribute]) -> GlobalTestOptions {
-    use rustc_ast_pretty::pprust;
-
-    let mut opts = GlobalTestOptions { no_crate_inject: false, attrs: Vec::new() };
-
-    let test_attrs: Vec<_> = attrs
-        .iter()
-        .filter(|a| a.has_name(sym::doc))
-        .flat_map(|a| a.meta_item_list().unwrap_or_else(Vec::new))
-        .filter(|a| a.has_name(sym::test))
-        .collect();
-    let attrs = test_attrs.iter().flat_map(|a| a.meta_item_list().unwrap_or(&[]));
-
-    for attr in attrs {
-        if attr.has_name(sym::no_crate_inject) {
-            opts.no_crate_inject = true;
-        }
-        if attr.has_name(sym::attr) {
-            if let Some(l) = attr.meta_item_list() {
-                for item in l {
-                    opts.attrs.push(pprust::meta_list_item_to_string(item));
-                }
-            }
-        }
-    }
-
-    opts
 }
 
 /// Documentation test failure modes.

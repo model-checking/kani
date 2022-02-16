@@ -16,21 +16,6 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ops;
 
-crate const CALCULATE_DOC_COVERAGE: Pass = Pass {
-    name: "calculate-doc-coverage",
-    run: calculate_doc_coverage,
-    description: "counts the number of items with and without documentation",
-};
-
-fn calculate_doc_coverage(krate: clean::Crate, ctx: &mut DocContext<'_>) -> clean::Crate {
-    let mut calc = CoverageCalculator { items: Default::default(), ctx };
-    calc.visit_crate(&krate);
-
-    calc.print_results();
-
-    krate
-}
-
 #[derive(Default, Copy, Clone, Serialize, Debug)]
 struct ItemCount {
     total: u64,

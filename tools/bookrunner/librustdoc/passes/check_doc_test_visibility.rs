@@ -17,20 +17,8 @@ use rustc_middle::lint::LintLevelSource;
 use rustc_session::lint;
 use rustc_span::symbol::sym;
 
-crate const CHECK_DOC_TEST_VISIBILITY: Pass = Pass {
-    name: "check_doc_test_visibility",
-    run: check_doc_test_visibility,
-    description: "run various visibility-related lints on doctests",
-};
-
 struct DocTestVisibilityLinter<'a, 'tcx> {
     cx: &'a mut DocContext<'tcx>,
-}
-
-crate fn check_doc_test_visibility(krate: Crate, cx: &mut DocContext<'_>) -> Crate {
-    let mut coll = DocTestVisibilityLinter { cx };
-    coll.visit_crate(&krate);
-    krate
 }
 
 impl<'a, 'tcx> DocVisitor for DocTestVisibilityLinter<'a, 'tcx> {
