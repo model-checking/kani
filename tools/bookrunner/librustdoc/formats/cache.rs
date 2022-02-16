@@ -134,54 +134,6 @@ impl Cache {
     crate fn new(access_levels: AccessLevels<DefId>, document_private: bool) -> Self {
         Cache { access_levels, document_private, ..Cache::default() }
     }
-
-    /// Populates the `Cache` with more data. The returned `Crate` will be missing some data that was
-    /// in `krate` due to the data being moved into the `Cache`.
-    crate fn populate(cx: &mut DocContext<'_>, mut krate: clean::Crate) -> clean::Crate {
-        let tcx = cx.tcx;
-
-        // Crawl the crate to build various caches used for the output
-        debug!(?cx.cache.crate_version);
-        cx.cache.traits = krate.external_traits.take();
-
-        // Cache where all our extern crates are located
-        // FIXME: this part is specific to HTML so it'd be nice to remove it from the common code
-        for &crate_num in cx.tcx.crates(()) {
-            let e = ExternalCrate { crate_num };
-
-            let name = e.name(tcx);
-            let render_options = &cx.render_options;
-            let extern_url = render_options.extern_html_root_urls.get(name.as_str()).map(|u| &**u);
-            let extern_url_takes_precedence = render_options.extern_html_root_takes_precedence;
-            let dst = &render_options.output;
-            let location = e.location(extern_url, extern_url_takes_precedence, dst, tcx);
-            cx.cache.extern_locations.insert(e.crate_num, location);
-            cx.cache.external_paths.insert(e.def_id(), (vec![name], ItemType::Module));
-        }
-
-        // FIXME: avoid this clone (requires implementing Default manually)
-        cx.cache.primitive_locations = PrimitiveType::primitive_locations(tcx).clone();
-        for (prim, &def_id) in &cx.cache.primitive_locations {
-            let crate_name = tcx.crate_name(def_id.krate);
-            // Recall that we only allow primitive modules to be at the root-level of the crate.
-            // If that restriction is ever lifted, this will have to include the relative paths instead.
-            cx.cache
-                .external_paths
-                .insert(def_id, (vec![crate_name, prim.as_sym()], ItemType::Primitive));
-        }
-
-        krate = CacheBuilder { tcx, cache: &mut cx.cache }.fold_crate(krate);
-
-        for (trait_did, dids, impl_) in cx.cache.orphan_trait_impls.drain(..) {
-            if cx.cache.traits.contains_key(&trait_did) {
-                for did in dids {
-                    cx.cache.impls.entry(did).or_default().push(impl_.clone());
-                }
-            }
-        }
-
-        krate
-    }
 }
 
 impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {

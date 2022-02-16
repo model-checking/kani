@@ -3,15 +3,12 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use rustc_span::edition::Edition;
-use rustc_span::source_map::DUMMY_SP;
-use rustc_span::Symbol;
 
-use crate::config::{Options, RenderOptions};
-use crate::doctest::{Collector, GlobalTestOptions};
+use crate::config::RenderOptions;
 use crate::html::escape::Escape;
 use crate::html::markdown;
 use crate::html::markdown::{
-    find_testable_code, ErrorCodes, HeadingOffset, IdMap, Markdown, MarkdownWithToc,
+    ErrorCodes, HeadingOffset, IdMap, Markdown, MarkdownWithToc,
 };
 
 /// Separate any lines at the start of the file that begin with `# ` or `%`.
