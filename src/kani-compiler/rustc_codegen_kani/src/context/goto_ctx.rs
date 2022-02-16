@@ -59,6 +59,8 @@ pub struct GotocCtx<'tcx> {
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
     pub proof_harnesses: Vec<HarnessMetadata>,
+    /// a global counter for generating unique IDs for checks
+    pub global_checks_count: u64,
 }
 
 /// Constructor
@@ -80,6 +82,7 @@ impl<'tcx> GotocCtx<'tcx> {
             current_fn: None,
             type_map: FxHashMap::default(),
             proof_harnesses: vec![],
+            global_checks_count: 0,
         }
     }
 }
@@ -293,6 +296,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let c = self.global_var_count;
         self.global_var_count += 1;
         format!("{}::global::{}::", self.full_crate_name(), c)
+    }
+
+    pub fn next_check_id(&mut self) -> String {
+        // check id is KANI_CHECK_ID_<crate_name>_<counter>
+        let c = self.global_checks_count;
+        self.global_checks_count += 1;
+        format!("KANI_CHECK_ID_{}_{}", self.full_crate_name, c)
     }
 }
 

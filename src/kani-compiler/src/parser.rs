@@ -24,6 +24,9 @@ pub const JSON_OUTPUT: &'static str = "json-output";
 /// Option name used to dump function pointer restrictions.
 pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
 
+/// Option name used to enable assertion reachability checks
+pub const ASSERTION_REACH_CHECKS: &'static str = "assertion-reach-checks";
+
 /// Option name used to override the sysroot.
 pub const SYSROOT: &'static str = "sysroot";
 
@@ -96,5 +99,10 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
                 .help("Arguments to be passed down to rustc.")
                 .multiple(true)
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(ASSERTION_REACH_CHECKS)
+                .long("--assertion-reach-checks")
+                .help("Check the reachability of every assertion."),
         )
 }

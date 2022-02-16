@@ -188,12 +188,13 @@ def run_cmd(
         if scanner.match(stdout):
             stdout = scanner.edit_output(stdout)
 
+    returncode = process.returncode
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
         # By Default, the flag passed is the old output style
         if (output_style != kani_flags.OutputStyle.OLD and not dry_run):
             try:
-                cbmc_json_parser.transform_cbmc_output(stdout, output_style)
+                returncode = cbmc_json_parser.transform_cbmc_output(stdout, output_style)
             except BaseException:
                 raise Exception("JSON Parsing Error")
         else:
@@ -204,10 +205,10 @@ def run_cmd(
         with open(output_to, "w") as f:
             f.write(stdout)
 
-    return process.returncode
+    return returncode
 
 
-def compiler_flags(mangler, symbol_table_passes, restrict_vtable, debug):
+def compiler_flags(mangler, symbol_table_passes, restrict_vtable, debug, assertion_reach_checks):
     kani_flags = ["--goto-c"]
     if symbol_table_passes:
         kani_flags.append(f"--symbol-table-passes={','.join(symbol_table_passes)}")
@@ -217,6 +218,9 @@ def compiler_flags(mangler, symbol_table_passes, restrict_vtable, debug):
 
     if debug:
         kani_flags.append("--log-level=debug")
+
+    if assertion_reach_checks:
+        kani_flags.append("--assertion-reach-checks")
 
     rustc_flags = ["-Z", f"symbol-mangling-version={mangler}"]
 
@@ -240,7 +244,8 @@ def compile_single_rust_file(
     build_cmd = [KANI_RUSTC_EXE] + compiler_flags(extra_args.mangler,
                                                   symbol_table_passes,
                                                   extra_args.restrict_vtable,
-                                                  extra_args.debug)
+                                                  extra_args.debug,
+                                                  extra_args.assertion_reach_checks)
 
     if extra_args.use_abs:
         build_cmd += ["-Z", "force-unstable-if-unmarked=yes",
@@ -270,7 +275,7 @@ def cargo_build(
     ensure(os.path.isdir(crate), f"Invalid path to crate: {crate}")
 
     rustflags = compiler_flags(extra_args.mangler, symbol_table_passes,
-                               extra_args.restrict_vtable, extra_args.debug)
+                               extra_args.restrict_vtable, extra_args.debug, extra_args.assertion_reach_checks)
     cargo_cmd = ["cargo", "build"] if not extra_args.tests else ["cargo", "test", "--no-run"]
     build_cmd = cargo_cmd + ["--target-dir", str(target_dir)]
     if extra_args.build_target:
