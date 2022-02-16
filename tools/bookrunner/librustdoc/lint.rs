@@ -1,8 +1,4 @@
-use rustc_lint::LintStore;
-use rustc_lint_defs::{declare_tool_lint, Lint, LintId};
-use rustc_session::Session;
-
-use std::lazy::SyncLazy as Lazy;
+use rustc_lint_defs::declare_tool_lint;
 
 macro_rules! declare_rustdoc_lint {
     ($(#[$attr:meta])* $name: ident, $level: ident, $descr: literal $(,)?) => {
@@ -108,36 +104,4 @@ declare_rustdoc_lint! {
    INVALID_RUST_CODEBLOCKS,
    Warn,
    "codeblock could not be parsed as valid Rust or is empty"
-}
-
-crate static RUSTDOC_LINTS: Lazy<Vec<&'static Lint>> = Lazy::new(|| {
-    vec![
-        BROKEN_INTRA_DOC_LINKS,
-        PRIVATE_INTRA_DOC_LINKS,
-        MISSING_DOC_CODE_EXAMPLES,
-        PRIVATE_DOC_TESTS,
-        INVALID_CODEBLOCK_ATTRIBUTES,
-        INVALID_RUST_CODEBLOCKS,
-        INVALID_HTML_TAGS,
-        BARE_URLS,
-        MISSING_CRATE_LEVEL_DOCS,
-    ]
-});
-
-crate fn register_lints(_sess: &Session, lint_store: &mut LintStore) {
-    lint_store.register_lints(&**RUSTDOC_LINTS);
-    lint_store.register_group(
-        true,
-        "rustdoc::all",
-        Some("rustdoc"),
-        RUSTDOC_LINTS.iter().map(|&lint| LintId::of(lint)).collect(),
-    );
-    for lint in &*RUSTDOC_LINTS {
-        let name = lint.name_lower();
-        lint_store.register_renamed(&name.replace("rustdoc::", ""), &name);
-    }
-    lint_store
-        .register_renamed("intra_doc_link_resolution_failure", "rustdoc::broken_intra_doc_links");
-    lint_store.register_renamed("non_autolinks", "rustdoc::bare_urls");
-    lint_store.register_renamed("rustdoc::non_autolinks", "rustdoc::bare_urls");
 }
