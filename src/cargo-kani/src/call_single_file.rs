@@ -65,9 +65,11 @@ impl KaniSession {
         if self.args.debug {
             flags.push("--log-level=debug".into());
         }
-
         if self.args.restrict_vtable() {
             flags.push("--restrict-vtable-fn-ptrs".into());
+        }
+        if self.args.assertion_reach_checks {
+            flags.push("--assertion-reach-checks".into());
         }
 
         // Stratification point!

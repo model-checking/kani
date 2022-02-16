@@ -112,6 +112,9 @@ pub struct KaniArgs {
     /// Disable restricting the targets of virtual table function pointer calls
     #[structopt(long)]
     pub no_restrict_vtable: bool,
+    /// Turn on assertion reachability checks
+    #[structopt(long)]
+    pub assertion_reach_checks: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
