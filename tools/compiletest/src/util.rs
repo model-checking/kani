@@ -7,6 +7,7 @@ use crate::common::Config;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
+use std::process::Command;
 use tracing::*;
 
 pub fn logv(config: &Config, s: String) {
@@ -33,5 +34,14 @@ impl PathBufExt for PathBuf {
             fname.push(extension);
             self.with_file_name(fname)
         }
+    }
+}
+
+pub(crate) fn top_level() -> Option<PathBuf> {
+    match Command::new("git").arg("rev-parse").arg("--show-toplevel").output() {
+        Ok(out) if out.status.success() => {
+            Some(PathBuf::from(String::from_utf8(out.stdout).unwrap().trim()))
+        }
+        _ => None,
     }
 }

@@ -6,7 +6,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tracing::*;
 
@@ -174,22 +174,6 @@ impl Config {
         } else {
             None
         }
-    }
-
-    /// This function finds the root source of the repository by starting at the source base for
-    /// compiletest. It will then visit its parent folder and check if we found the root by
-    /// checking if it can find the compiletest `Cargo.toml` file in the path relative to the root.
-    pub fn find_rust_src_root(&self) -> Option<PathBuf> {
-        let mut path = self.src_base.clone();
-        let path_postfix = Path::new("tools/compiletest/Cargo.toml");
-
-        while path.pop() {
-            if path.join(&path_postfix).is_file() {
-                return Some(path);
-            }
-        }
-
-        None
     }
 
     fn parse_edition(&self, line: &str) -> Option<String> {
