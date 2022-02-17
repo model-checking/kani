@@ -10,19 +10,7 @@ use rustc_span::{hygiene::AstPass, ExpnData, ExpnKind, FileName, InnerSpan, DUMM
 use crate::clean;
 use crate::core::DocContext;
 use crate::html::markdown::{self, RustCodeBlock};
-use crate::passes::Pass;
 use crate::visit::DocVisitor;
-
-crate const CHECK_CODE_BLOCK_SYNTAX: Pass = Pass {
-    name: "check-code-block-syntax",
-    run: check_code_block_syntax,
-    description: "validates syntax inside Rust code blocks",
-};
-
-crate fn check_code_block_syntax(krate: clean::Crate, cx: &mut DocContext<'_>) -> clean::Crate {
-    SyntaxChecker { cx }.visit_crate(&krate);
-    krate
-}
 
 struct SyntaxChecker<'a, 'tcx> {
     cx: &'a DocContext<'tcx>,

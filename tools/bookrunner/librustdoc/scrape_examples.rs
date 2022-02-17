@@ -1,9 +1,5 @@
 //! This module analyzes crates to find call sites that can serve as examples in the documentation.
 
-use crate::clean;
-use crate::config;
-use crate::formats;
-use crate::formats::renderer::FormatRenderer;
 use crate::html::render::Context;
 
 use rustc_data_structures::fx::FxHashMap;
@@ -11,18 +7,12 @@ use rustc_hir::{
     self as hir,
     intravisit::{self, Visitor},
 };
-use rustc_interface::interface;
 use rustc_macros::{Decodable, Encodable};
 use rustc_middle::hir::map::Map;
 use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::{self, TyCtxt};
-use rustc_serialize::{
-    opaque::{Decoder, FileEncoder},
-    Decodable, Encodable,
-};
-use rustc_session::getopts;
 use rustc_span::{
-    def_id::{CrateNum, DefPathHash, LOCAL_CRATE},
+    def_id::{CrateNum, DefPathHash},
     edition::Edition,
     BytePos, FileName, SourceFile,
 };
@@ -36,26 +26,7 @@ crate struct ScrapeExamplesOptions {
     target_crates: Vec<String>,
 }
 
-impl ScrapeExamplesOptions {
-    crate fn new(
-        matches: &getopts::Matches,
-        diag: &rustc_errors::Handler,
-    ) -> Result<Option<Self>, i32> {
-        let output_path = matches.opt_str("scrape-examples-output-path");
-        let target_crates = matches.opt_strs("scrape-examples-target-crate");
-        match (output_path, !target_crates.is_empty()) {
-            (Some(output_path), true) => Ok(Some(ScrapeExamplesOptions {
-                output_path: PathBuf::from(output_path),
-                target_crates,
-            })),
-            (Some(_), false) | (None, true) => {
-                diag.err("must use --scrape-examples-output-path and --scrape-examples-target-crate together");
-                Err(1)
-            }
-            (None, false) => Ok(None),
-        }
-    }
-}
+impl ScrapeExamplesOptions {}
 
 #[derive(Encodable, Decodable, Debug, Clone)]
 crate struct SyntaxRange {
@@ -222,88 +193,4 @@ where
             }
         }
     }
-}
-
-crate fn run(
-    krate: clean::Crate,
-    mut renderopts: config::RenderOptions,
-    cache: formats::cache::Cache,
-    tcx: TyCtxt<'_>,
-    options: ScrapeExamplesOptions,
-) -> interface::Result<()> {
-    let inner = move || -> Result<(), String> {
-        // Generates source files for examples
-        renderopts.no_emit_shared = true;
-        let (cx, _) = Context::init(krate, renderopts, cache, tcx).map_err(|e| e.to_string())?;
-
-        // Collect CrateIds corresponding to provided target crates
-        // If two different versions of the crate in the dependency tree, then examples will be collcted from both.
-        let all_crates = tcx
-            .crates(())
-            .iter()
-            .chain([&LOCAL_CRATE])
-            .map(|crate_num| (crate_num, tcx.crate_name(*crate_num)))
-            .collect::<Vec<_>>();
-        let target_crates = options
-            .target_crates
-            .into_iter()
-            .map(|target| all_crates.iter().filter(move |(_, name)| name.as_str() == target))
-            .flatten()
-            .map(|(crate_num, _)| **crate_num)
-            .collect::<Vec<_>>();
-
-        debug!("All crates in TyCtxt: {:?}", all_crates);
-        debug!("Scrape examples target_crates: {:?}", target_crates);
-
-        // Run call-finder on all items
-        let mut calls = FxHashMap::default();
-        let mut finder = FindCalls { calls: &mut calls, tcx, map: tcx.hir(), cx, target_crates };
-        tcx.hir().visit_all_item_likes(&mut finder.as_deep_visitor());
-
-        // Sort call locations within a given file in document order
-        for fn_calls in calls.values_mut() {
-            for file_calls in fn_calls.values_mut() {
-                file_calls.locations.sort_by_key(|loc| loc.call_expr.byte_span.0);
-            }
-        }
-
-        // Save output to provided path
-        let mut encoder = FileEncoder::new(options.output_path).map_err(|e| e.to_string())?;
-        calls.encode(&mut encoder).map_err(|e| e.to_string())?;
-        encoder.flush().map_err(|e| e.to_string())?;
-
-        Ok(())
-    };
-
-    if let Err(e) = inner() {
-        tcx.sess.fatal(&e);
-    }
-
-    Ok(())
-}
-
-// Note: the Handler must be passed in explicitly because sess isn't available while parsing options
-crate fn load_call_locations(
-    with_examples: Vec<String>,
-    diag: &rustc_errors::Handler,
-) -> Result<AllCallLocations, i32> {
-    let inner = || {
-        let mut all_calls: AllCallLocations = FxHashMap::default();
-        for path in with_examples {
-            let bytes = fs::read(&path).map_err(|e| format!("{} (for path {})", e, path))?;
-            let mut decoder = Decoder::new(&bytes, 0);
-            let calls = AllCallLocations::decode(&mut decoder);
-
-            for (function, fn_calls) in calls.into_iter() {
-                all_calls.entry(function).or_default().extend(fn_calls.into_iter());
-            }
-        }
-
-        Ok(all_calls)
-    };
-
-    inner().map_err(|e: String| {
-        diag.err(&format!("failed to load examples: {}", e));
-        1
-    })
 }
