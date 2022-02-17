@@ -1,72 +1,9 @@
-use rustc_data_structures::fx::FxHashMap;
-use rustc_lint::LintStore;
-use rustc_lint_defs::{declare_tool_lint, Lint, LintId};
-use rustc_session::{lint, Session};
-
-use std::lazy::SyncLazy as Lazy;
-
-/// This function is used to setup the lint initialization. By default, in rustdoc, everything
-/// is "allowed". Depending if we run in test mode or not, we want some of them to be at their
-/// default level. For example, the "INVALID_CODEBLOCK_ATTRIBUTES" lint is activated in both
-/// modes.
-///
-/// A little detail easy to forget is that there is a way to set the lint level for all lints
-/// through the "WARNINGS" lint. To prevent this to happen, we set it back to its "normal" level
-/// inside this function.
-///
-/// It returns a tuple containing:
-///  * Vector of tuples of lints' name and their associated "max" level
-///  * HashMap of lint id with their associated "max" level
-pub(crate) fn init_lints<F>(
-    mut allowed_lints: Vec<String>,
-    lint_opts: Vec<(String, lint::Level)>,
-    filter_call: F,
-) -> (Vec<(String, lint::Level)>, FxHashMap<lint::LintId, lint::Level>)
-where
-    F: Fn(&lint::Lint) -> Option<(String, lint::Level)>,
-{
-    let warnings_lint_name = lint::builtin::WARNINGS.name;
-
-    allowed_lints.push(warnings_lint_name.to_owned());
-    allowed_lints.extend(lint_opts.iter().map(|(lint, _)| lint).cloned());
-
-    let lints = || {
-        lint::builtin::HardwiredLints::get_lints()
-            .into_iter()
-            .chain(rustc_lint::SoftLints::get_lints().into_iter())
-    };
-
-    let lint_opts = lints()
-        .filter_map(|lint| {
-            // Permit feature-gated lints to avoid feature errors when trying to
-            // allow all lints.
-            if lint.feature_gate.is_some() || allowed_lints.iter().any(|l| lint.name == l) {
-                None
-            } else {
-                filter_call(lint)
-            }
-        })
-        .chain(lint_opts.into_iter())
-        .collect::<Vec<_>>();
-
-    let lint_caps = lints()
-        .filter_map(|lint| {
-            // We don't want to allow *all* lints so let's ignore
-            // those ones.
-            if allowed_lints.iter().any(|l| lint.name == l) {
-                None
-            } else {
-                Some((lint::LintId::of(lint), lint::Allow))
-            }
-        })
-        .collect();
-    (lint_opts, lint_caps)
-}
+use rustc_lint_defs::declare_tool_lint;
 
 macro_rules! declare_rustdoc_lint {
     ($(#[$attr:meta])* $name: ident, $level: ident, $descr: literal $(,)?) => {
         declare_tool_lint! {
-            $(#[$attr])* pub rustdoc::$name, $level, $descr
+            $(#[$attr])* pub(crate) rustdoc::$name, $level, $descr
         }
     }
 }
@@ -167,36 +104,4 @@ declare_rustdoc_lint! {
    INVALID_RUST_CODEBLOCKS,
    Warn,
    "codeblock could not be parsed as valid Rust or is empty"
-}
-
-crate static RUSTDOC_LINTS: Lazy<Vec<&'static Lint>> = Lazy::new(|| {
-    vec![
-        BROKEN_INTRA_DOC_LINKS,
-        PRIVATE_INTRA_DOC_LINKS,
-        MISSING_DOC_CODE_EXAMPLES,
-        PRIVATE_DOC_TESTS,
-        INVALID_CODEBLOCK_ATTRIBUTES,
-        INVALID_RUST_CODEBLOCKS,
-        INVALID_HTML_TAGS,
-        BARE_URLS,
-        MISSING_CRATE_LEVEL_DOCS,
-    ]
-});
-
-crate fn register_lints(_sess: &Session, lint_store: &mut LintStore) {
-    lint_store.register_lints(&**RUSTDOC_LINTS);
-    lint_store.register_group(
-        true,
-        "rustdoc::all",
-        Some("rustdoc"),
-        RUSTDOC_LINTS.iter().map(|&lint| LintId::of(lint)).collect(),
-    );
-    for lint in &*RUSTDOC_LINTS {
-        let name = lint.name_lower();
-        lint_store.register_renamed(&name.replace("rustdoc::", ""), &name);
-    }
-    lint_store
-        .register_renamed("intra_doc_link_resolution_failure", "rustdoc::broken_intra_doc_links");
-    lint_store.register_renamed("non_autolinks", "rustdoc::bare_urls");
-    lint_store.register_renamed("rustdoc::non_autolinks", "rustdoc::bare_urls");
 }

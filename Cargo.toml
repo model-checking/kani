@@ -7,8 +7,7 @@ members = [
   "tools/compiletest",
   "tools/kani-link-restrictions",
   "src/kani-compiler",
-  # These are still needed by bookrunner.
-  "tools/bookrunner/rustdoc-json-types",
+  # `librustdoc` is still needed by bookrunner.
   "tools/bookrunner/librustdoc",
 ]
 

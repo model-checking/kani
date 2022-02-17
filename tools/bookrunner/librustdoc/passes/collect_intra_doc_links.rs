@@ -29,28 +29,13 @@ use std::fmt::Write;
 use std::mem;
 use std::ops::Range;
 
-use crate::clean::{self, utils::find_nearest_parent_module, Crate, Item, ItemLink, PrimitiveType};
+use crate::clean::{self, utils::find_nearest_parent_module, Item, ItemLink, PrimitiveType};
 use crate::core::DocContext;
 use crate::html::markdown::{markdown_links, MarkdownLink};
 use crate::lint::{BROKEN_INTRA_DOC_LINKS, PRIVATE_INTRA_DOC_LINKS};
-use crate::passes::Pass;
 use crate::visit::DocVisitor;
 
 mod early;
-crate use early::early_resolve_intra_doc_links;
-
-crate const COLLECT_INTRA_DOC_LINKS: Pass = Pass {
-    name: "collect-intra-doc-links",
-    run: collect_intra_doc_links,
-    description: "resolves intra-doc links",
-};
-
-fn collect_intra_doc_links(krate: Crate, cx: &mut DocContext<'_>) -> Crate {
-    let mut collector =
-        LinkCollector { cx, mod_ids: Vec::new(), visited_links: FxHashMap::default() };
-    collector.visit_crate(&krate);
-    krate
-}
 
 /// Top-level errors emitted by this pass.
 enum ErrorKind<'a> {
