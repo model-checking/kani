@@ -3,12 +3,12 @@ Kani is developed on the top of the rust compiler, which is not distributed on c
 bootstrapping mechanisms to properly build its components.
 Thus, our dependency on `rustc` crates are not declared in our `Cargo.toml`.
 
-Bellow are a few hacks that will make it easier to develop on the top of rustc.
+Bellow are a few hacks that will make it easier to develop on the top of `rustc`.
 
 ## Code analysis for rustc definitions
 
-IDEs rely on the cargo project to find dependencies and sources to provide proper code analysis and code completion.
-In order to get these features working for rustc crates, you can do the following:
+IDEs rely on `cargo` to find dependencies and sources to provide proper code analysis and code completion.
+In order to get these features working for `rustc` crates, you can do the following:
 
 ### VSCode
 
@@ -36,7 +36,7 @@ rustup toolchain install nightly --component rustc-dev
 ### CLion / IntelliJ
 This is not a great solution, but it works for now (see <https://github.com/intellij-rust/intellij-rust/issues/1618>
 for more details).
-Edit the `Cargo.toml` of the package that you are working on and add artificial dependencies on the rustc packages that you would like to explore.
+Edit the `Cargo.toml` of the package that you are working on and add artificial dependencies on the `rustc` packages that you would like to explore.
 
 ```toml
 # This configuration doesn't exist so it shouldn't affect your build.
@@ -67,8 +67,8 @@ rustc --version # This will print the commit id. Something like:
 # rustc 1.60.0-nightly (0c292c966 2022-02-08)
 ```
 
-First you need to clone and build the stage 2 of the compiler.
-You should tweak with the configuration to satisfy your use case.
+First you need to clone and build stage 2 of the compiler.
+You should tweak the configuration to satisfy your use case.
 For more details, see <https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html> and <https://rustc-dev-guide.rust-lang.org/building/suggested.html>.
 
 ```bash
@@ -97,6 +97,6 @@ cargo build
 
 # Enable RUSTC logs
 
-In order to enable logs, you can just define RUSTC_LOG variable, as documented here: <https://rustc-dev-guide.rust-lang.org/tracing.html>.
+In order to enable logs, you can just define the `RUSTC_LOG` variable, as documented here: <https://rustc-dev-guide.rust-lang.org/tracing.html>.
 
 Note that depending on the level of logs you would like to enable, you will need to build your own version of `rustc` as described above.
