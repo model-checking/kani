@@ -1324,9 +1324,11 @@ impl Expr {
         expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
     }
 
-    // Creates an rvalue wrapping the expression value.
+    /// Given a value `self` with type `t`, and a structurally idential transparent wrapper with
+    /// type `wrapper_typ`, generate a struct rvalue that contains `self`.
+    // Addresses the issue found in https://github.com/model-checking/kani/issues/822
     pub fn wrap_in_transparent_type(self, wrapper_typ: &Type, st: &SymbolTable) -> Expr {
-        assert!(wrapper_typ.is_transparent_type(st));
+        assert!(wrapper_typ.is_transparent_type(st) || self.typ() == wrapper_typ);
         match wrapper_typ {
             // Follow tags to get the underlying structure
             Type::StructTag(tag) | Type::UnionTag(tag) => {
@@ -1339,7 +1341,7 @@ impl Expr {
                 assert_eq!(components.len(), 1);
                 if let DatatypeComponent::Field { typ, .. } = &components[0] {
                     Expr::struct_expr_from_values(
-                        wrapper_typ.clone(),
+                        wrapper_typ.aggr_tag().unwrap(),
                         vec![self.wrap_in_transparent_type(typ, st)],
                         st,
                     )
@@ -1359,6 +1361,8 @@ impl Expr {
             | Type::Signedbv { .. }
             | Type::Unsignedbv { .. } => self,
 
+            // We don't expect these types to appear in a transparent type.
+            // See comment on Type::is_transparent_type()
             Type::Array { .. }
             | Type::Code { .. }
             | Type::Constructor

@@ -570,6 +570,13 @@ impl Type {
         }
     }
 
+    /// A transparent type wraps a base type inside a struct, and has the same in-memory layout.
+    /// For example,
+    /// ```rust
+    ///     struct TransparentWrapper { int x };
+    /// ```
+    /// We define it recursively as a type which has exactly one field, which it itself either
+    /// a transparent type, or is a scalar type.
     pub fn is_transparent_type(&self, st: &SymbolTable) -> bool {
         match self {
             // Follow tags to get the underlying structure
@@ -600,6 +607,8 @@ impl Type {
         }
     }
 
+    /// Given a transparent type (see comment on `Type::is_transparent_type()`),
+    /// extract the type it wraps.
     pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
         match self {
             Array { .. }
