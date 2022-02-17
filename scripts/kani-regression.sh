@@ -8,16 +8,6 @@ fi
 set -o pipefail
 set -o nounset
 
-# Test for platform
-PLATFORM=$(uname -sp)
-if [[ $PLATFORM == "Linux x86_64" ]]
-then
-  TARGET="x86_64-unknown-linux-gnu"
-elif [[ $PLATFORM == "Darwin i386" ]]
-then
-  TARGET="x86_64-apple-darwin"
-fi
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
