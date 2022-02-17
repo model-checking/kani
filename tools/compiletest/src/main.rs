@@ -12,7 +12,7 @@ extern crate test;
 
 use crate::common::{output_base_dir, output_relative_path, PanicStrategy};
 use crate::common::{Config, Mode, TestPaths};
-use crate::util::logv;
+use crate::util::{logv, top_level};
 use getopts::Options;
 use std::env;
 use std::ffi::OsString;
@@ -161,7 +161,13 @@ pub fn parse_config(args: Vec<String>) -> Config {
     fn opt_path(m: &getopts::Matches, nm: &str, default: &[&str]) -> PathBuf {
         match m.opt_str(nm) {
             Some(s) => PathBuf::from(&s),
-            None => default.into_iter().collect::<PathBuf>(),
+            None => {
+                let mut root_folder = top_level().expect(
+                    format!("Cannot find root directory. Please provide --{} option.", nm).as_str(),
+                );
+                default.into_iter().for_each(|f| root_folder.push(f));
+                root_folder
+            }
         }
     }
 
@@ -181,11 +187,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
     Config {
         kani_dir_path: opt_path(matches, "kani-dir-path", &["scripts"]),
         src_base,
-        build_base: opt_path(
-            matches,
-            "build-base",
-            &[std::env::current_dir().unwrap().to_str().unwrap(), "build", "tests", suite.as_str()],
-        ),
+        build_base: opt_path(matches, "build-base", &["build", "tests", suite.as_str()]),
         mode,
         suite,
         run_ignored,
@@ -324,14 +326,14 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
 
 pub fn make_tests(config: &Config, tests: &mut Vec<test::TestDescAndFn>) {
     debug!("making tests from {:?}", config.src_base.display());
-    let inputs = common_inputs_stamp(config);
+    let inputs = common_inputs_stamp();
     collect_tests_from_dir(config, &config.src_base, &PathBuf::new(), &inputs, tests)
         .unwrap_or_else(|_| panic!("Could not read tests from {}", config.src_base.display()));
 }
 
 /// Returns a stamp constructed from input files common to all test cases.
-fn common_inputs_stamp(config: &Config) -> Stamp {
-    let rust_src_dir = config.find_rust_src_root().expect("Could not find Rust source root");
+fn common_inputs_stamp() -> Stamp {
+    let rust_src_dir = top_level().expect("Could not find Rust source root");
     let kani_bin_path = &rust_src_dir.join("target/debug/kani-compiler");
 
     // Create stamp based on the `kani-compiler` binary
