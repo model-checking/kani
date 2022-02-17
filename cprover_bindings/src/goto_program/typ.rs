@@ -499,6 +499,35 @@ impl Type {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        match self {
+            // Base types
+            Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Empty
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. } => true,
+
+            Array { .. }
+            | Code { .. }
+            | Constructor
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | Struct { .. }
+            | StructTag(_)
+            | Union { .. }
+            | UnionTag(_)
+            | VariadicCode { .. }
+            | Vector { .. } => false,
+        }
+    }
+
     /// Is this a signed integer
     pub fn is_signed(&self, mm: &MachineModel) -> bool {
         match self {
@@ -535,6 +564,13 @@ impl Type {
     pub fn is_union(&self) -> bool {
         match self {
             Union { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_union_like(&self) -> bool {
+        match self {
+            IncompleteUnion { .. } | Union { .. } | UnionTag(_) => true,
             _ => false,
         }
     }
@@ -578,76 +614,30 @@ impl Type {
     /// We define it recursively as a type which has exactly one field, which it itself either
     /// a transparent type, or is a scalar type.
     pub fn is_transparent_type(&self, st: &SymbolTable) -> bool {
-        match self {
-            // Follow tags to get the underlying structure
-            StructTag(tag) | UnionTag(tag) => st.lookup(*tag).unwrap().typ.is_transparent_type(st),
-
-            // Recursively check: does this only have one field, which is either a wrapper or base type.
-            Struct { .. } | Union { .. } => self.unwrap_transparent_type(st).is_some(),
-
-            // Base types
-            Array { .. }
-            | Bool
-            | CBitField { .. }
-            | CInteger(_)
-            | Code { .. }
-            | Constructor
-            | Double
-            | Empty
-            | FlexibleArray { .. }
-            | Float
-            | IncompleteStruct { .. }
-            | IncompleteUnion { .. }
-            | InfiniteArray { .. }
-            | Pointer { .. }
-            | Signedbv { .. }
-            | Unsignedbv { .. }
-            | VariadicCode { .. }
-            | Vector { .. } => false,
-        }
+        (self.is_struct_like() || self.is_union_like())
+            && self.unwrap_transparent_type(st).is_some()
     }
 
     /// Given a transparent type (see comment on `Type::is_transparent_type()`),
     /// extract the type it wraps.
     pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
-        match self {
-            Array { .. }
-            | Code { .. }
-            | Constructor
-            | FlexibleArray { .. }
-            | IncompleteStruct { .. }
-            | IncompleteUnion { .. }
-            | InfiniteArray { .. }
-            | VariadicCode { .. }
-            | Vector { .. } => None,
-
-            // Base types
-            Bool
-            | CBitField { .. }
-            | CInteger(_)
-            | Double
-            | Empty
-            | Float
-            | Pointer { .. }
-            | Signedbv { .. }
-            | Unsignedbv { .. } => Some(self.clone()),
-
-            // Follow tags to get the underlying structure
-            StructTag(tag) | UnionTag(tag) => {
-                st.lookup(*tag).unwrap().typ.unwrap_transparent_type(st)
-            }
-
-            // Recursively check: does this only have one field, which is either a wrapper or base type.
-            Struct { components, .. } | Union { components, .. } => {
-                if components.len() != 1 {
-                    None
-                } else {
-                    match &components[0] {
-                        Padding { .. } => None,
-                        Field { typ, .. } => typ.unwrap_transparent_type(st),
-                    }
+        // If the type has components, i.e. is either a union or a
+        if self.is_struct_like() || self.is_union_like() {
+            let components = st.lookup_components_in_type(self).unwrap();
+            // For now, only handle the case of transparent structs with one field.
+            // TODO ticket for this
+            if components.len() != 1 {
+                None
+            } else {
+                match &components[0] {
+                    Padding { .. } => None,
+                    Field { typ, .. } => typ.unwrap_transparent_type(st),
                 }
             }
+        } else if self.is_scalar() {
+            Some(self.clone())
+        } else {
+            None
         }
     }
 
