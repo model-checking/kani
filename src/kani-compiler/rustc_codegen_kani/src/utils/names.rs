@@ -109,6 +109,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // TODO: use def_id https://github.com/model-checking/kani/issues/364
         idx.to_string().into()
     }
+
+    pub fn reach_check_msg(check_id: &str) -> String {
+        format!("[KANI_REACHABILITY_CHECK] {}", check_id)
+    }
 }
 
 /// The full crate name should use the Codegen Unit builder to include full name resolution,

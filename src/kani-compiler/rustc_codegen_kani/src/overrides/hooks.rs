@@ -178,7 +178,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
             // [KANI_REACHABILITY_CHECK] <check ID>
             // for reachability checks
             msg = format!("[{}] {}", assert_id, msg);
-            let reach_msg = format!("[KANI_REACHABILITY_CHECK] {}", assert_id);
+            let reach_msg = GotocCtx::reach_check_msg(&assert_id);
             // inject a reachability (cover) check to the current location
             stmts.push(tcx.codegen_cover_loc(&reach_msg, span));
         }

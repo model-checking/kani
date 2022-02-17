@@ -5,6 +5,7 @@ use super::typ::FN_RETURN_VOID_VAR_NAME;
 use crate::utils;
 use crate::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -78,18 +79,24 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                Stmt::block(
-                    vec![
-                        cond.cast_to(Type::bool()).if_then_else(
-                            Stmt::goto(self.current_fn().find_label(target), loc.clone()),
-                            None,
-                            loc.clone(),
-                        ),
-                        Stmt::assert_false(&format!("{:?}", msg), loc.clone()),
+                let mut msg_str = format!("{:?}", msg);
+                let mut stmts: Vec<Stmt> = Vec::new();
+                if self.queries.get_check_assertion_reachability() {
+                    let check_id = self.next_check_id();
+                    msg_str = format!("[{}] {}", check_id, msg_str);
+                    let reach_msg = GotocCtx::reach_check_msg(&check_id);
+                    stmts.push(self.codegen_cover_loc(&reach_msg, Some(term.source_info.span)));
+                }
+                stmts.append(&mut vec![
+                    cond.cast_to(Type::bool()).if_then_else(
                         Stmt::goto(self.current_fn().find_label(target), loc.clone()),
-                    ],
-                    loc,
-                )
+                        None,
+                        loc.clone(),
+                    ),
+                    Stmt::assert_false(&msg_str, loc.clone()),
+                    Stmt::goto(self.current_fn().find_label(target), loc.clone()),
+                ]);
+                Stmt::block(stmts, loc)
             }
             TerminatorKind::Yield { .. }
             | TerminatorKind::GeneratorDrop
