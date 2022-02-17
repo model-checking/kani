@@ -621,11 +621,11 @@ impl Type {
     /// Given a transparent type (see comment on `Type::is_transparent_type()`),
     /// extract the type it wraps.
     pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
-        // If the type has components, i.e. is either a union or a
+        // If the type has components, i.e. is either a union or a struct, recurse into them
         if self.is_struct_like() || self.is_union_like() {
             let components = st.lookup_components_in_type(self).unwrap();
             // For now, only handle the case of transparent structs with one field.
-            // TODO ticket for this
+            // TODO https://github.com/model-checking/kani/issues/837
             if components.len() != 1 {
                 None
             } else {

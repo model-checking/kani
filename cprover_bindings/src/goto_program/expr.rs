@@ -1329,49 +1329,24 @@ impl Expr {
     // Addresses the issue found in https://github.com/model-checking/kani/issues/822
     pub fn wrap_in_transparent_type(self, wrapper_typ: &Type, st: &SymbolTable) -> Expr {
         assert!(wrapper_typ.is_transparent_type(st) || self.typ() == wrapper_typ);
-        match wrapper_typ {
-            // Follow tags to get the underlying structure
-            Type::StructTag(tag) | Type::UnionTag(tag) => {
-                let wrapper_typ = &st.lookup(*tag).unwrap().typ;
-                self.wrap_in_transparent_type(wrapper_typ, st)
+        if wrapper_typ.is_struct_like() || wrapper_typ.is_union_like() {
+            let components = st.lookup_components_in_type(wrapper_typ).unwrap();
+            // TODO: handle the case where there are zero sized fields.
+            // https://github.com/model-checking/kani/issues/837
+            assert_eq!(components.len(), 1);
+            if let DatatypeComponent::Field { typ, .. } = &components[0] {
+                Expr::struct_expr_from_values(
+                    wrapper_typ.aggr_tag().unwrap(),
+                    vec![self.wrap_in_transparent_type(typ, st)],
+                    st,
+                )
+            } else {
+                unreachable!()
             }
-
-            // Recurse
-            Type::Struct { components, .. } | Type::Union { components, .. } => {
-                assert_eq!(components.len(), 1);
-                if let DatatypeComponent::Field { typ, .. } = &components[0] {
-                    Expr::struct_expr_from_values(
-                        wrapper_typ.aggr_tag().unwrap(),
-                        vec![self.wrap_in_transparent_type(typ, st)],
-                        st,
-                    )
-                } else {
-                    unreachable!()
-                }
-            }
-
-            // Base types
-            Type::Bool
-            | Type::CBitField { .. }
-            | Type::CInteger(_)
-            | Type::Double
-            | Type::Empty
-            | Type::Float
-            | Type::Pointer { .. }
-            | Type::Signedbv { .. }
-            | Type::Unsignedbv { .. } => self,
-
-            // We don't expect these types to appear in a transparent type.
-            // See comment on Type::is_transparent_type()
-            Type::Array { .. }
-            | Type::Code { .. }
-            | Type::Constructor
-            | Type::FlexibleArray { .. }
-            | Type::IncompleteStruct { .. }
-            | Type::IncompleteUnion { .. }
-            | Type::InfiniteArray { .. }
-            | Type::VariadicCode { .. }
-            | Type::Vector { .. } => unreachable!(),
+        } else if wrapper_typ.is_scalar() {
+            self
+        } else {
+            unreachable!("Unexpected typ {:?}", wrapper_typ);
         }
     }
 }
