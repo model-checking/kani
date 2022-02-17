@@ -9,7 +9,7 @@ use std::process::Command;
 use crate::session::KaniSession;
 
 impl KaniSession {
-    /// Invoke our python-based formatter for CBMC output.
+    /// Display the results of a CBMC run in a user-friendly manner.
     pub fn format_cbmc_output(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             self.cbmc_json_parser_py.clone().into(),
