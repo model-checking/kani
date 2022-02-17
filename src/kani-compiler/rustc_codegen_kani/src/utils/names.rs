@@ -110,6 +110,18 @@ impl<'tcx> GotocCtx<'tcx> {
         idx.to_string().into()
     }
 
+    /// Add a prefix of the form:
+    /// [<prefix>]
+    /// to the provided message
+    pub fn add_prefix_to_msg(msg: &str, prefix: &str) -> String {
+        format!("[{}] {}", prefix, msg)
+    }
+
+    /// Generate a message for the reachability check of an assert with ID
+    /// `check_id`. The message is of the form:
+    /// [KANI_REACHABILITY_CHECK] <ID of assert>
+    /// The check_id is generated using the GotocCtx::next_check_id method and
+    /// is a unique string identifier for that check.
     pub fn reach_check_msg(check_id: &str) -> String {
         format!("[KANI_REACHABILITY_CHECK] {}", check_id)
     }

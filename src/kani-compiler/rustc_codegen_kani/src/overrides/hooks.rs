@@ -174,10 +174,9 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         if tcx.queries.get_check_assertion_reachability() {
             // Generate a unique ID for the assert
             let assert_id = tcx.next_check_id();
-            // Use a description of the form:
-            // [KANI_REACHABILITY_CHECK] <check ID>
-            // for reachability checks
-            msg = format!("[{}] {}", assert_id, msg);
+            // Add this ID as a prefix to the assert message so that it can be
+            // easily paired with the reachability check
+            msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
             let reach_msg = GotocCtx::reach_check_msg(&assert_id);
             // inject a reachability (cover) check to the current location
             stmts.push(tcx.codegen_cover_loc(&reach_msg, span));

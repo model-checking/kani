@@ -83,18 +83,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 let mut stmts: Vec<Stmt> = Vec::new();
                 if self.queries.get_check_assertion_reachability() {
                     let check_id = self.next_check_id();
-                    msg_str = format!("[{}] {}", check_id, msg_str);
+                    msg_str = GotocCtx::add_prefix_to_msg(&msg_str, &check_id);
                     let reach_msg = GotocCtx::reach_check_msg(&check_id);
                     stmts.push(self.codegen_cover_loc(&reach_msg, Some(term.source_info.span)));
                 }
                 stmts.append(&mut vec![
                     cond.cast_to(Type::bool()).if_then_else(
-                        Stmt::goto(self.current_fn().find_label(target), loc.clone()),
+                        Stmt::goto(self.current_fn().find_label(target), loc),
                         None,
-                        loc.clone(),
+                        loc,
                     ),
-                    Stmt::assert_false(&msg_str, loc.clone()),
-                    Stmt::goto(self.current_fn().find_label(target), loc.clone()),
+                    Stmt::assert_false(&msg_str, loc),
+                    Stmt::goto(self.current_fn().find_label(target), loc),
                 ]);
                 Stmt::block(stmts, loc)
             }
