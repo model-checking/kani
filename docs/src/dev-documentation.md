@@ -13,7 +13,8 @@ cargo build
 ```
 ```bash
 # Delete regression test caches
-rm -r build
+# Use build/x86_64-apple-darwin/tests for MacOs
+rm -r build/x86_64-unknown-linux-gnu/tests/
 ```
 ```bash
 # Test suite run (we can only run one at a time)

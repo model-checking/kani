@@ -1,11 +1,11 @@
-# Working with RUSTC
+# Working with `rustc`
 Kani is developed on the top of the rust compiler, which is not distributed on crates.io and it depends on
 bootstrapping mechanisms to properly build its components.
 Thus, our dependency on `rustc` crates are not declared in our `Cargo.toml`.
 
 Bellow are a few hacks that will make it easier to develop on the top of `rustc`.
 
-## Code analysis for rustc definitions
+## Code analysis for `rustc` definitions
 
 IDEs rely on `cargo` to find dependencies and sources to provide proper code analysis and code completion.
 In order to get these features working for `rustc` crates, you can do the following:
@@ -50,16 +50,16 @@ rustc_interface = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-s
 
 **Don't forget to rollback the changes before you create your PR.**
 
-## Custom RUSTC
+## Custom `rustc`
 
-There are a few reasons why you may want to use your own copy of RUSTC. E.g.:
+There are a few reasons why you may want to use your own copy of `rustc`. E.g.:
 - Enable more verbose logs.
 - Use a debug build to allow you to step through `rustc` code.
 - Test changes to `rustc`.
 
 We will assume that you already have a Kani setup and that the variable `KANI_WORKSPACE` contains the path to your Kani workspace.
 
-**It is highly recommended that you start from the commit that corresponds to the current rustc version from your workspace.**
+**It is highly recommended that you start from the commit that corresponds to the current `rustc` version from your workspace.**
 To get that information, run the following command:
 ```bash
 cd ${KANI_WORKSPACE} # Go to your Kani workspace.
@@ -95,7 +95,7 @@ cargo clean
 cargo build
 ```
 
-# Enable RUSTC logs
+# Enable `rustc` logs
 
 In order to enable logs, you can just define the `RUSTC_LOG` variable, as documented here: <https://rustc-dev-guide.rust-lang.org/tracing.html>.
 
