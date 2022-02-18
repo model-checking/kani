@@ -67,8 +67,8 @@ def main():
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
-    return
+    return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
+    sys.exit(return_code)
 
 def transform_cbmc_output(cbmc_response_string, output_style):
     """

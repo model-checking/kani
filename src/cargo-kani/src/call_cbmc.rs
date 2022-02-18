@@ -32,13 +32,17 @@ impl KaniSession {
         } else {
             // extra argument
             cmd.arg("--json-ui");
-            let result = self.run_redirect(cmd, &output_filename)?;
 
-            // regardless of success or failure, first we need to print:
-            self.format_cbmc_output(&output_filename)?;
+            let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
+            let format_result = self.format_cbmc_output(&output_filename);
 
-            if !result.success() && !self.args.allow_cbmc_verification_failure {
-                bail!("cbmc exited with status {}", result);
+            if !self.args.allow_cbmc_verification_failure {
+                // Because of things like --assertion-reach-checks and other future features,
+                // we now decide if we fail or not based solely on the output of the formatter.
+                format_result?
+                // todo: this is imperfect, since we don't know why failure happened.
+                // the best possible fix is port to rust instead of using python, or getting more
+                // feedback than just exit status (or using a particular exit code?)
             }
         }
 
