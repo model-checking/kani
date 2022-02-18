@@ -4,7 +4,7 @@
 
 // This test checks that kani injects a reachability check for
 // index-out-of-bounds checks and that it reports ones that are unreachable.
-// The check in this test is unreachable and doesn't hold, so should be reported
+// The check in this test is reachable and doesn't hold, so should be reported
 // as FAILURE
 
 fn get(s: &[i16], index: usize) -> i16 {
