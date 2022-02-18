@@ -33,7 +33,7 @@ fn check_my_property() {
 ```
 
 Kani will then prove that all valid inputs will produce acceptable outputs, without panicking or executing undefined behavior.
-You can learn more about how to use Kani with [by following the Kani tutorial](https://model-checking.github.io/kani/kani-tutorial.html).
+You can learn more about how to use Kani [by following the Kani tutorial](https://model-checking.github.io/kani/kani-tutorial.html).
 
 ## Security
 See [SECURITY](https://github.com/model-checking/kani/security/policy) for more information.
