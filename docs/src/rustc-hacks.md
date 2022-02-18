@@ -13,7 +13,7 @@ In order to get these features working for `rustc` crates, you can do the follow
 ### VSCode
 
 Add the following to the `rust-analyzer` extension settings in `settings.json`:
-```
+```json
     "rust-analyzer.updates.channel": "nightly",
     "rust-analyzer.rustcSource": "discover",
     "rust-analyzer.workspace.symbol.search.scope": "workspace_and_dependencies",
@@ -21,7 +21,7 @@ Add the following to the `rust-analyzer` extension settings in `settings.json`:
 
 Ensure that any packages that use `rustc` data structures have the following line set in their `Cargo.toml`
 
-```
+```toml
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
 rustc_private=true
@@ -65,6 +65,9 @@ To get that information, run the following command:
 cd ${KANI_WORKSPACE} # Go to your Kani workspace.
 rustc --version # This will print the commit id. Something like:
 # rustc 1.60.0-nightly (0c292c966 2022-02-08)
+#                       ^^^^^^^^^ this is used as the ${COMMIT_ID} below
+# E.g.:
+COMMIT_ID=0c292c966
 ```
 
 First you need to clone and build stage 2 of the compiler.
