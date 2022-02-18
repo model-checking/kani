@@ -1,8 +1,39 @@
 # Kani Rust Verifier
-The Kani Rust Verifier aims to be a bit-precise model-checker for Rust.
 
-Check out the [Documentation](https://model-checking.github.io/kani) for
-instructions on installing and running Kani.
+The Kani Rust Verifier aims to be a bit-precise model-checker for Rust.
+Kani ensures that unsafe Rust code is actually safe, and verifies that safe Rust code will not panic at runtime.
+
+## Installing Kani
+
+An official release of Kani is coming soon.
+[Read documentation on how to check out and build Kani yourself](https://model-checking.github.io/kani/install-guide.html).
+
+## What can Kani do?
+
+Our documentation covers:
+
+* [Comparison with other tools](https://model-checking.github.io/kani/tool-comparison.html)
+* [Failures that Kani can spot](https://model-checking.github.io/kani/tutorial-kinds-of-failure.html)
+* [Kani's current limitations](https://model-checking.github.io/kani/limitations.html)
+
+## How does Kani work?
+
+You write a _proof harness_ that looks a lot like a test harness, except that you can check all possible values using `kani::any()`:
+
+```rust
+use my_crate::{function_under_test, is_acceptable, is_valid};
+
+#[kani::proof]
+fn check_my_property() {
+   let input = kani::any();
+   kani::assume(is_valid(input));
+   let output = function_under_test(input);
+   assert!(is_acceptable(output));
+}
+```
+
+Kani will then prove that all valid inputs will produce acceptable outputs, without panicking or executing undefined behavior.
+You can learn more about how to use Kani with [by following the Kani tutorial](https://model-checking.github.io/kani/kani-tutorial.html).
 
 ## Security
 See [SECURITY](https://github.com/model-checking/kani/security/policy) for more information.
