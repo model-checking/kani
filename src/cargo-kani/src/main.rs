@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
-use call_cargo::config_toml_to_args;
+use args_toml::config_toml_to_args;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use util::alter_extension;
 
 mod args;
+mod args_toml;
 mod call_cargo;
 mod call_cbmc;
 mod call_cbmc_viewer;
