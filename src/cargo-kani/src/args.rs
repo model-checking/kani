@@ -24,7 +24,7 @@ pub struct StandaloneArgs {
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "cargo-kani",
-    about = "Verify a Rust crate. For more information, see https://github.com/model-checking/rmc"
+    about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani"
 )]
 pub struct CargoKaniArgs {
     #[structopt(flatten)]
