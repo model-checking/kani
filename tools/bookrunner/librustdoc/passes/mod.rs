@@ -5,130 +5,29 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::{InnerSpan, Span, DUMMY_SP};
 use std::ops::Range;
 
-use self::Condition::*;
 use crate::clean::{self, DocFragmentKind};
-use crate::core::DocContext;
 
 mod stripper;
-crate use stripper::*;
 
 mod bare_urls;
-crate use self::bare_urls::CHECK_BARE_URLS;
 
 mod strip_hidden;
-crate use self::strip_hidden::STRIP_HIDDEN;
-
-mod strip_private;
-crate use self::strip_private::STRIP_PRIVATE;
-
-mod strip_priv_imports;
-crate use self::strip_priv_imports::STRIP_PRIV_IMPORTS;
 
 mod unindent_comments;
-crate use self::unindent_comments::UNINDENT_COMMENTS;
 
 mod propagate_doc_cfg;
-crate use self::propagate_doc_cfg::PROPAGATE_DOC_CFG;
 
 crate mod collect_intra_doc_links;
-crate use self::collect_intra_doc_links::COLLECT_INTRA_DOC_LINKS;
 
 mod check_doc_test_visibility;
-crate use self::check_doc_test_visibility::CHECK_DOC_TEST_VISIBILITY;
 
 mod collect_trait_impls;
-crate use self::collect_trait_impls::COLLECT_TRAIT_IMPLS;
 
 mod check_code_block_syntax;
-crate use self::check_code_block_syntax::CHECK_CODE_BLOCK_SYNTAX;
 
 mod calculate_doc_coverage;
-crate use self::calculate_doc_coverage::CALCULATE_DOC_COVERAGE;
 
 mod html_tags;
-crate use self::html_tags::CHECK_INVALID_HTML_TAGS;
-
-/// A single pass over the cleaned documentation.
-///
-/// Runs in the compiler context, so it has access to types and traits and the like.
-#[derive(Copy, Clone)]
-crate struct Pass {
-    crate name: &'static str,
-    crate run: fn(clean::Crate, &mut DocContext<'_>) -> clean::Crate,
-    crate description: &'static str,
-}
-
-/// In a list of passes, a pass that may or may not need to be run depending on options.
-#[derive(Copy, Clone)]
-crate struct ConditionalPass {
-    crate pass: Pass,
-    crate condition: Condition,
-}
-
-/// How to decide whether to run a conditional pass.
-#[derive(Copy, Clone)]
-crate enum Condition {
-    Always,
-    /// When `--document-private-items` is passed.
-    WhenDocumentPrivate,
-    /// When `--document-private-items` is not passed.
-    WhenNotDocumentPrivate,
-    /// When `--document-hidden-items` is not passed.
-    WhenNotDocumentHidden,
-}
-
-/// The full list of passes.
-crate const PASSES: &[Pass] = &[
-    CHECK_DOC_TEST_VISIBILITY,
-    STRIP_HIDDEN,
-    UNINDENT_COMMENTS,
-    STRIP_PRIVATE,
-    STRIP_PRIV_IMPORTS,
-    PROPAGATE_DOC_CFG,
-    COLLECT_INTRA_DOC_LINKS,
-    CHECK_CODE_BLOCK_SYNTAX,
-    COLLECT_TRAIT_IMPLS,
-    CALCULATE_DOC_COVERAGE,
-    CHECK_INVALID_HTML_TAGS,
-    CHECK_BARE_URLS,
-];
-
-/// The list of passes run by default.
-crate const DEFAULT_PASSES: &[ConditionalPass] = &[
-    ConditionalPass::always(COLLECT_TRAIT_IMPLS),
-    ConditionalPass::always(UNINDENT_COMMENTS),
-    ConditionalPass::always(CHECK_DOC_TEST_VISIBILITY),
-    ConditionalPass::new(STRIP_HIDDEN, WhenNotDocumentHidden),
-    ConditionalPass::new(STRIP_PRIVATE, WhenNotDocumentPrivate),
-    ConditionalPass::new(STRIP_PRIV_IMPORTS, WhenDocumentPrivate),
-    ConditionalPass::always(COLLECT_INTRA_DOC_LINKS),
-    ConditionalPass::always(CHECK_CODE_BLOCK_SYNTAX),
-    ConditionalPass::always(CHECK_INVALID_HTML_TAGS),
-    ConditionalPass::always(PROPAGATE_DOC_CFG),
-    ConditionalPass::always(CHECK_BARE_URLS),
-];
-
-/// The list of default passes run when `--doc-coverage` is passed to rustdoc.
-crate const COVERAGE_PASSES: &[ConditionalPass] = &[
-    ConditionalPass::new(STRIP_HIDDEN, WhenNotDocumentHidden),
-    ConditionalPass::new(STRIP_PRIVATE, WhenNotDocumentPrivate),
-    ConditionalPass::always(CALCULATE_DOC_COVERAGE),
-];
-
-impl ConditionalPass {
-    crate const fn always(pass: Pass) -> Self {
-        Self::new(pass, Always)
-    }
-
-    crate const fn new(pass: Pass, condition: Condition) -> Self {
-        ConditionalPass { pass, condition }
-    }
-}
-
-/// Returns the given default set of passes.
-crate fn defaults(show_coverage: bool) -> &'static [ConditionalPass] {
-    if show_coverage { COVERAGE_PASSES } else { DEFAULT_PASSES }
-}
 
 /// Returns a span encompassing all the given attributes.
 crate fn span_of_attrs(attrs: &clean::Attributes) -> Option<Span> {

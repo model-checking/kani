@@ -12,12 +12,12 @@ extern crate test;
 
 use crate::common::{output_base_dir, output_relative_path, PanicStrategy};
 use crate::common::{Config, Mode, TestPaths};
-use crate::util::logv;
+use crate::util::{logv, top_level};
 use getopts::Options;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, ErrorKind};
+use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use test::ColorConfig;
@@ -60,7 +60,6 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optopt("", "llvm-filecheck", "path to LLVM's FileCheck binary", "DIR")
         .optopt("", "src-base", "directory to scan for test files", "PATH")
         .optopt("", "build-base", "directory to deposit test outputs", "PATH")
-        .optopt("", "stage-id", "the target-stage identifier", "stageN-TARGET")
         .optopt(
             "",
             "mode",
@@ -137,7 +136,6 @@ pub fn parse_config(args: Vec<String>) -> Config {
         )
         .optflag("", "force-rerun", "rerun tests even if the inputs are unchanged")
         .optflag("h", "help", "show this message")
-        .optopt("", "channel", "current Rust channel", "CHANNEL")
         .optopt("", "edition", "default Rust edition", "EDITION");
 
     let (argv0, args_) = args.split_first().unwrap();
@@ -160,10 +158,16 @@ pub fn parse_config(args: Vec<String>) -> Config {
         panic!()
     }
 
-    fn opt_path(m: &getopts::Matches, nm: &str) -> PathBuf {
+    fn opt_path(m: &getopts::Matches, nm: &str, default: &[&str]) -> PathBuf {
         match m.opt_str(nm) {
             Some(s) => PathBuf::from(&s),
-            None => panic!("no option (=path) found for {}", nm),
+            None => {
+                let mut root_folder = top_level().expect(
+                    format!("Cannot find root directory. Please provide --{} option.", nm).as_str(),
+                );
+                default.into_iter().for_each(|f| root_folder.push(f));
+                root_folder
+            }
         }
     }
 
@@ -175,17 +179,17 @@ pub fn parse_config(args: Vec<String>) -> Config {
         Some(x) => panic!("argument for --color must be auto, always, or never, but found `{}`", x),
     };
 
-    let src_base = opt_path(matches, "src-base");
+    let suite = matches.opt_str("suite").unwrap();
+    let src_base = opt_path(matches, "src-base", &["tests", suite.as_str()]);
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
 
     Config {
-        kani_dir_path: opt_path(matches, "kani-dir-path"),
+        kani_dir_path: opt_path(matches, "kani-dir-path", &["scripts"]),
         src_base,
-        build_base: opt_path(matches, "build-base"),
-        stage_id: matches.opt_str("stage-id").unwrap(),
+        build_base: opt_path(matches, "build-base", &["build", "tests", suite.as_str()]),
         mode,
-        suite: matches.opt_str("suite").unwrap(),
+        suite,
         run_ignored,
         filters: matches.free.clone(),
         filter_exact: matches.opt_present("exact"),
@@ -202,7 +206,6 @@ pub fn parse_config(args: Vec<String>) -> Config {
         verbose: matches.opt_present("verbose"),
         quiet: matches.opt_present("quiet"),
         color,
-        channel: matches.opt_str("channel").unwrap(),
         edition: matches.opt_str("edition"),
 
         force_rerun: matches.opt_present("force-rerun"),
@@ -214,7 +217,6 @@ pub fn log_config(config: &Config) {
     logv(c, "configuration:".to_string());
     logv(c, format!("src_base: {:?}", config.src_base.display()));
     logv(c, format!("build_base: {:?}", config.build_base.display()));
-    logv(c, format!("stage_id: {}", config.stage_id));
     logv(c, format!("mode: {}", config.mode));
     logv(c, format!("run_ignored: {}", config.run_ignored));
     logv(c, format!("filters: {:?}", config.filters));
@@ -324,14 +326,14 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
 
 pub fn make_tests(config: &Config, tests: &mut Vec<test::TestDescAndFn>) {
     debug!("making tests from {:?}", config.src_base.display());
-    let inputs = common_inputs_stamp(config);
+    let inputs = common_inputs_stamp();
     collect_tests_from_dir(config, &config.src_base, &PathBuf::new(), &inputs, tests)
         .unwrap_or_else(|_| panic!("Could not read tests from {}", config.src_base.display()));
 }
 
 /// Returns a stamp constructed from input files common to all test cases.
-fn common_inputs_stamp(config: &Config) -> Stamp {
-    let rust_src_dir = config.find_rust_src_root().expect("Could not find Rust source root");
+fn common_inputs_stamp() -> Stamp {
+    let rust_src_dir = top_level().expect("Could not find Rust source root");
     let kani_bin_path = &rust_src_dir.join("target/debug/kani-compiler");
 
     // Create stamp based on the `kani-compiler` binary
@@ -453,16 +455,6 @@ fn is_up_to_date(
     inputs: &Stamp,
 ) -> bool {
     let stamp_name = stamp(config, testpaths, revision);
-    // Check hash.
-    let contents = match fs::read_to_string(&stamp_name) {
-        Ok(f) => f,
-        Err(ref e) if e.kind() == ErrorKind::InvalidData => panic!("Can't read stamp contents"),
-        Err(_) => return false,
-    };
-    let expected_hash = runtest::compute_stamp_hash(config);
-    if contents != expected_hash {
-        return false;
-    }
     // Check timestamps.
     let inputs = inputs.clone();
 

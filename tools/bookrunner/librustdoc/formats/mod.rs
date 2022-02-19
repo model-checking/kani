@@ -4,7 +4,7 @@ crate mod renderer;
 
 use rustc_hir::def_id::DefId;
 
-crate use renderer::{run_format, FormatRenderer};
+crate use renderer::FormatRenderer;
 
 use crate::clean;
 

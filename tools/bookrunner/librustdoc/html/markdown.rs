@@ -76,7 +76,7 @@ pub(crate) fn summary_opts() -> Options {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum HeadingOffset {
+pub(crate) enum HeadingOffset {
     H1 = 0,
     H2,
     H3,
@@ -87,20 +87,20 @@ pub enum HeadingOffset {
 
 /// When `to_string` is called, this struct will emit the HTML corresponding to
 /// the rendered version of the contained markdown string.
-pub struct Markdown<'a> {
-    pub content: &'a str,
+pub(crate) struct Markdown<'a> {
+    pub(crate) content: &'a str,
     /// A list of link replacements.
-    pub links: &'a [RenderedLink],
+    pub(crate) links: &'a [RenderedLink],
     /// The current list of used header IDs.
-    pub ids: &'a mut IdMap,
+    pub(crate) ids: &'a mut IdMap,
     /// Whether to allow the use of explicit error codes in doctest lang strings.
-    pub error_codes: ErrorCodes,
+    pub(crate) error_codes: ErrorCodes,
     /// Default edition to use when parsing doctests (to add a `fn main`).
-    pub edition: Edition,
-    pub playground: &'a Option<Playground>,
+    pub(crate) edition: Edition,
+    pub(crate) playground: &'a Option<Playground>,
     /// Offset at which we render headings.
     /// E.g. if `heading_offset: HeadingOffset::H2`, then `# something` renders an `<h2>`.
-    pub heading_offset: HeadingOffset,
+    pub(crate) heading_offset: HeadingOffset,
 }
 /// A tuple struct like `Markdown` that renders the markdown with a table of contents.
 crate struct MarkdownWithToc<'a>(
@@ -119,7 +119,7 @@ crate struct MarkdownHtml<'a>(
     crate &'a Option<Playground>,
 );
 /// A tuple struct like `Markdown` that renders only the first paragraph.
-crate struct MarkdownSummaryLine<'a>(pub &'a str, pub &'a [RenderedLink]);
+crate struct MarkdownSummaryLine<'a>(pub(crate) &'a str, pub(crate) &'a [RenderedLink]);
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum ErrorCodes {
@@ -201,9 +201,9 @@ fn slugify(c: char) -> Option<char> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Playground {
-    pub crate_name: Option<String>,
-    pub url: String,
+pub(crate) struct Playground {
+    pub(crate) crate_name: Option<String>,
+    pub(crate) url: String,
 }
 
 /// Adds syntax highlighting and playground Run buttons to Rust code blocks.
@@ -1034,7 +1034,7 @@ impl LangString {
 }
 
 impl Markdown<'_> {
-    pub fn into_string(self) -> String {
+    pub(crate) fn into_string(self) -> String {
         let Markdown {
             content: md,
             links,
@@ -1266,9 +1266,9 @@ crate fn plain_text_summary(md: &str) -> String {
 
 #[derive(Debug)]
 crate struct MarkdownLink {
-    pub kind: LinkType,
-    pub link: String,
-    pub range: Range<usize>,
+    pub(crate) kind: LinkType,
+    pub(crate) link: String,
+    pub(crate) range: Range<usize>,
 }
 
 crate fn markdown_links(md: &str) -> Vec<MarkdownLink> {
@@ -1430,7 +1430,7 @@ crate fn rust_code_blocks(md: &str, extra_info: &ExtraInfo<'_>) -> Vec<RustCodeB
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct IdMap {
+pub(crate) struct IdMap {
     map: FxHashMap<String, usize>,
 }
 
@@ -1482,7 +1482,7 @@ fn init_id_map() -> FxHashMap<String, usize> {
 }
 
 impl IdMap {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         IdMap { map: init_id_map() }
     }
 

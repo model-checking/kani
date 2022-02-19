@@ -8,16 +8,6 @@ fi
 set -o pipefail
 set -o nounset
 
-# Test for platform
-PLATFORM=$(uname -sp)
-if [[ $PLATFORM == "Linux x86_64" ]]
-then
-  TARGET="x86_64-unknown-linux-gnu"
-elif [[ $PLATFORM == "Darwin i386" ]]
-then
-  TARGET="x86_64-apple-darwin"
-fi
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
@@ -55,15 +45,10 @@ for testp in "${TESTS[@]}"; do
   testl=($testp)
   suite=${testl[0]}
   mode=${testl[1]}
-  echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
+  echo "Check compiletest suite=$suite mode=$mode"
   # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
   # Tracking issue: https://github.com/model-checking/kani/issues/755
-  cargo run -p compiletest --  --kani-dir-path scripts --src-base tests/$suite \
-                               --build-base $(pwd)/build/$TARGET/tests/$suite \
-                               --stage-id stage1-$TARGET \
-                               --suite $suite --mode $mode \
-                               --target $TARGET --host $TARGET \
-                               --quiet --channel dev
+  cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
 done
 
 # Check codegen for the standard library
