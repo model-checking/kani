@@ -19,8 +19,19 @@ pub struct HarnessMetadata {
     pub original_line: String,
 }
 
+/// We emit this struct for every unwind we find
+
+#[derive(Serialize)]
+pub struct UnwindMetadata {
+    /// The name of the function in the CBMC symbol table, being used as a unique identifer.
+    pub mangled_name: String,
+    /// The value of the unwind attribute that the user wants to set
+    pub unwind_value: u32,
+}
+
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Serialize)]
 pub struct KaniMetadata {
     pub proof_harnesses: Vec<HarnessMetadata>,
+    pub unwind_metadata: Vec<UnwindMetadata>,
 }

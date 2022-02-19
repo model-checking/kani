@@ -14,10 +14,10 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
-use super::metadata::HarnessMetadata;
-use super::vtable_ctx::VtableCtx;
+use super::metadata::{HarnessMetadata, UnwindMetadata};
 use crate::overrides::{fn_hooks, GotocHooks};
 use crate::utils::full_crate_name;
+use crate::VtableCtx;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
@@ -59,6 +59,7 @@ pub struct GotocCtx<'tcx> {
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
     pub proof_harnesses: Vec<HarnessMetadata>,
+    pub unwind_metadata: Vec<UnwindMetadata>,
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
 }
@@ -82,6 +83,7 @@ impl<'tcx> GotocCtx<'tcx> {
             current_fn: None,
             type_map: FxHashMap::default(),
             proof_harnesses: vec![],
+            unwind_metadata: vec![],
             global_checks_count: 0,
         }
     }

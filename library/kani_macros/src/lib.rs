@@ -9,6 +9,7 @@
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
+extern crate proc_macro;
 use proc_macro::TokenStream;
 
 #[cfg(all(not(kani), not(test)))]
@@ -48,4 +49,30 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     //     #[kanitool::proof]
     //     $item
     // )
+}
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    // Not-RMC, Not-Test means this code shouldn't exist, return nothing.
+    TokenStream::new()
+}
+
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+
+    // Translate #[kani::unwind(arg)] to #[kanitool::unwind_arg_] for easier handling
+    let insert_string = "#[kanitool::unwind_".to_owned() + &attr.clone().to_string() + "]";
+
+    // Add the string that looks like - #[kanitool::unwind_value_]
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+    // No mangle seems to be necessary as removing it prevents all the attributes in a lib from being read
+    result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
+
+    // / _attr
 }

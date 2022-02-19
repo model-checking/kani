@@ -3,7 +3,7 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::context::metadata::HarnessMetadata;
+use crate::context::metadata::{HarnessMetadata, UnwindMetadata};
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
@@ -13,6 +13,8 @@ use rustc_middle::ty::{self, Instance, TyS};
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 use tracing::{debug, warn};
+extern crate regex;
+use regex::Regex;
 
 /// Utility to skip functions that can't currently be successfully codgenned.
 impl<'tcx> GotocCtx<'tcx> {
@@ -243,11 +245,33 @@ impl<'tcx> GotocCtx<'tcx> {
     fn handle_kanitool_attributes(&mut self) {
         let instance = self.current_fn().instance();
 
+        // This regex can be expanded as more attributes become available
+        // Can be thought as a menu, in expanded mode
+        let input_re = Regex::new(
+            r#"(?x)
+            (proof) |
+            (unwind_)(\d+)
+            "#,
+        )
+        .unwrap();
+
         for attr in self.tcx.get_attrs(instance.def_id()) {
-            match kanitool_attr_name(attr).as_deref() {
-                Some("proof") => self.handle_kanitool_proof(),
-                _ => {}
-            }
+            if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
+                // This regex capture operation returns a vector of strings that can be matched for our purpose
+                // In later Attributes, it will be easy to parse the regex for the attribute arguments, regardless
+                // of the type of the argument itself if we capture all the patterns as a vector of strings of the format
+                // [command, argument]
+                let captures = input_re.captures(attribute_string).map(|captures| {
+                    captures.iter().skip(1).flat_map(|c| c).map(|c| c.as_str()).collect::<Vec<_>>()
+                });
+
+                // Match against the captured values as a slice
+                match captures.as_ref().map(|c| c.as_slice()) {
+                    Some(["proof"]) => self.handle_kanitool_proof(),
+                    Some(["unwind_", x]) => self.handle_kanitool_unwind(x),
+                    _ => {}
+                }
+            };
         }
     }
 
@@ -267,15 +291,36 @@ impl<'tcx> GotocCtx<'tcx> {
 
         self.proof_harnesses.push(harness);
     }
+
+    /// Unwind strings of the format 'unwind_x' and the mangled names are to be parsed for the value 'x'
+    fn handle_kanitool_unwind(&mut self, attribute_string: &str) {
+        // Parse parameter string for value of the argument
+        let argument_value: u32 =
+            attribute_string.parse().expect("Unwind Argument Value is not a number");
+
+        // Make sure the value lies between 0 and u32 max
+        assert!(argument_value < u32::MAX);
+
+        let current_fn = self.current_fn();
+        let mangled_name = current_fn.name();
+
+        let unwind_instance =
+            UnwindMetadata { mangled_name: mangled_name, unwind_value: argument_value };
+        self.unwind_metadata.push(unwind_instance);
+    }
 }
 
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     match &attr.kind {
         ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
-            if segments.len() == 2 && segments[0].ident.as_str() == "kanitool" =>
+            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" =>
         {
-            Some(segments[1].ident.as_str().to_string())
+            let mut new_string = String::new();
+            for index in 1..segments.len() {
+                new_string.push_str(segments[index].ident.as_str());
+            }
+            Some(new_string)
         }
         _ => None,
     }
