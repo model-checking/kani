@@ -77,6 +77,22 @@ macro_rules! assert_ne {
     });
 }
 
+// Treat the debug assert macros same as non-debug ones
+#[macro_export]
+macro_rules! debug_assert {
+    ($($x:tt)*) => ({ $crate::assert!($($x)*); })
+}
+
+#[macro_export]
+macro_rules! debug_assert_eq {
+    ($($x:tt)*) => ({ $crate::assert_eq!($($x)*); })
+}
+
+#[macro_export]
+macro_rules! debug_assert_ne {
+    ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
+}
+
 #[macro_export]
 macro_rules! evaluate_print_args {
     () => { /* do nothing */ };
