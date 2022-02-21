@@ -20,14 +20,14 @@ Our documentation covers:
 You write a _proof harness_ that looks a lot like a test harness, except that you can check all possible values using `kani::any()`:
 
 ```rust
-use my_crate::{function_under_test, is_acceptable, is_valid};
+use my_crate::{function_under_test, is_valid, meets_specification};
 
 #[kani::proof]
 fn check_my_property() {
    let input = kani::any();
    kani::assume(is_valid(input));
    let output = function_under_test(input);
-   assert!(is_acceptable(output));
+   assert!(meets_specification(input, output));
 }
 ```
 
