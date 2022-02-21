@@ -5,8 +5,7 @@ Kani ensures that unsafe Rust code is actually safe, and verifies that safe Rust
 
 ## Installing Kani
 
-An official release of Kani is coming soon.
-[Read documentation on how to check out and build Kani yourself](https://model-checking.github.io/kani/install-guide.html).
+Until an official release is out, you can [read documentation on how to check out and build Kani yourself](https://model-checking.github.io/kani/install-guide.html).
 
 ## What can Kani do?
 
@@ -42,16 +41,13 @@ See [SECURITY](https://github.com/model-checking/kani/security/policy) for more 
 See [Kani developer documentation](https://model-checking.github.io/kani/dev-documentation.html).
 
 ## License
-### Rust compiler
-Kani contains code from the Rust compiler.
-The rust compiler is primarily distributed under the terms of both the MIT license 
-   and the Apache License (Version 2.0), with portions covered by various BSD-like licenses.
-
-See [LICENSE-APACHE](LICENSE-APACHE), [LICENSE-MIT](LICENSE-MIT), and
-[UPSTREAM-COPYRIGHT](UPSTREAM-COPYRIGHT) for details.
-
-### Kani additions
+### Kani
 Kani is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.
 
+### Rust compiler
+Kani contains code from the Rust compiler.
+The rust compiler is primarily distributed under the terms of both the MIT license and the Apache License (Version 2.0), with portions covered by various BSD-like licenses.
+
+See [the Rust repository](https://github.com/rust-lang/rust) for details.
