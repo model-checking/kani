@@ -20,3 +20,14 @@ Again, SAT/SMT solving is an [NP-complete](https://en.wikipedia.org/wiki/NP-comp
 Model checking allows you to prove non-trivial properties about programs, and check those proofs in roughly the same amount of time as a traditional test suite would take to run.
 The downside is many types of properties can quickly become "too large" to practically model check, and so writing "proof harnesses" (very similar to property tests and fuzzer harnesses) requires some skill to understand why the solver is not terminating and fix the structure of the problem you're giving it so that it does.
 This process basically boils down to "debugging" the proof.
+
+## Looking for concurrency?
+
+Kani does not yet support verifying concurrent Rust code.
+Two tools of immediate interest are [Loom](https://github.com/tokio-rs/loom) and [Shuttle](https://github.com/awslabs/shuttle).
+Loom attempts to check all possible interleavings, while Shuttle chooses interleavings randomly.
+The former is sound (like Kani), but the latter is more scalable to large problem spaces (like property testing).
+
+## Other tools
+
+The Rust Formal Methods Interest Group maintains [a list of interesting Rust verification tools](https://rust-formal-methods.github.io/tools.html).
