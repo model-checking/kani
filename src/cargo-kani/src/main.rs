@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use args_toml::config_toml_to_args;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -43,6 +43,9 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
     }
     // Look where the symtabs are generated to find the `target/$TARGET/debug/deps` directory we're generating things in
+    if symtabs.is_empty() {
+        bail!("kani-compiler did not generate any symtabs, but also did not raise an error");
+    }
     let discovered_outdir = symtabs.get(0).unwrap().parent().unwrap().to_path_buf();
     let linked_obj = {
         let mut outdir = discovered_outdir.clone();
@@ -50,7 +53,6 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
         outdir
     };
 
-    // here on almost identical to below
     ctx.link_c_lib(&goto_objs, &linked_obj, &ctx.args.function)?;
     if ctx.args.restrict_vtable() {
         ctx.apply_vtable_restrictions(&linked_obj, &discovered_outdir)?;
@@ -75,7 +77,6 @@ fn standalone_main() -> Result<()> {
     let goto_obj = ctx.symbol_table_to_gotoc(&symtab_json)?;
     let linked_obj = util::alter_extension(&args.input, "out");
 
-    // almost identical to above below this line
     ctx.link_c_lib(&[goto_obj], &linked_obj, &ctx.args.function)?;
     if ctx.args.restrict_vtable() {
         ctx.apply_vtable_restrictions(

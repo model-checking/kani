@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,21 +51,13 @@ impl KaniSession {
 
         if self.args.dry_run {
             // mock an answer
-            return Ok(vec![
-                format!(
-                    "{}/{}/debug/deps/dry-run.symtab.json",
-                    target_dir.into_os_string().to_string_lossy(),
-                    build_target
-                )
-                .into(),
-            ]);
+            return Ok(vec![target_dir.join(build_target).join("debug/deps/dry-run.symtab.json")]);
         }
 
-        let build_glob = format!(
-            "{}/{}/debug/deps/*.symtab.json",
-            target_dir.into_os_string().to_string_lossy(),
-            build_target
-        );
+        let build_glob = target_dir.join(build_target).join("debug/deps/*.symtab.json");
+        // There isn't a good way to glob with non-UTF-8 paths.
+        // https://github.com/rust-lang-nursery/glob/issues/78
+        let build_glob = build_glob.to_str().context("Non-UTF-8 path enountered")?;
         let results = glob::glob(&build_glob)?;
 
         // the logic to turn "Iter<Result<T, E>>" into "Result<Vec<T>, E>" doesn't play well
