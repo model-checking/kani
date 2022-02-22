@@ -27,7 +27,7 @@ fn check_unlikely(x: i32, y: i32) {
     }
 }
 
-fn main () {
+fn main() {
     let x = kani::any();
     let y = kani::any();
     let _ = check_likely(x, y);
