@@ -1,2 +1,3 @@
 FAILURE
+ ** 1 of 3 failed
 Failed Checks: assertion failed: x != 5
