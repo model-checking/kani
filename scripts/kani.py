@@ -160,6 +160,7 @@ def run_cmd(
         debug=False,
         scanners=[],
         dry_run=False,
+        run_output_transformer=False,
         output_style=kani_flags.OutputStyle.DEFAULT
 ):
     # If this a dry run, we emulate running a successful process whose output is the command itself
@@ -192,7 +193,7 @@ def run_cmd(
     # Write to stdout if specified, or if failure, or verbose or debug
     if (output_to == "stdout" or process.returncode != EXIT_CODE_SUCCESS or verbose or debug) and not quiet:
         # By Default, the flag passed is the old output style
-        if (label == "cbmc" and output_style != kani_flags.OutputStyle.OLD and not dry_run):
+        if (run_output_transformer and not dry_run):
             try:
                 returncode = cbmc_json_parser.transform_cbmc_output(stdout, output_style)
             except BaseException:
@@ -341,6 +342,7 @@ def run_cbmc(
         unwind_asserts_pattern = ".*unwinding assertion.*: FAILURE"
         unwind_asserts_scanner = Scanner(unwind_asserts_pattern, append_unwind_tip)
         scanners.append(unwind_asserts_scanner)
+    run_output_transformer = output_style != kani_flags.OutputStyle.OLD
     return run_cmd(
         cbmc_cmd,
         label="cbmc",
@@ -349,6 +351,7 @@ def run_cbmc(
         quiet=quiet,
         scanners=scanners,
         dry_run=dry_run,
+        run_output_transformer=run_output_transformer,
         output_style=output_style)
 
 
