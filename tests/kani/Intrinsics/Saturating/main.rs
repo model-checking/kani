@@ -1,5 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Check that `saturating_add` and `saturating_sub` are supported and return the
+// expected results.
+
 #![feature(core_intrinsics)]
 use std::intrinsics;
 
@@ -54,10 +58,12 @@ fn main() {
     test_saturating_intrinsics!(u16);
     test_saturating_intrinsics!(u32);
     test_saturating_intrinsics!(u64);
+    test_saturating_intrinsics!(u128);
     test_saturating_intrinsics!(usize);
     test_saturating_intrinsics!(i8);
     test_saturating_intrinsics!(i16);
     test_saturating_intrinsics!(i32);
     test_saturating_intrinsics!(i64);
+    test_saturating_intrinsics!(i128);
     test_saturating_intrinsics!(isize);
 }
