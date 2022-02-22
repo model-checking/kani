@@ -160,6 +160,7 @@ pub enum BinaryOperand {
     Ashr,
     Bitand,
     Bitor,
+    Bitnand,
     Bitxor,
     Div,
     Equal,
@@ -837,6 +838,8 @@ impl Expr {
             Bitand | Bitor | Bitxor => {
                 lhs.typ == rhs.typ && (lhs.typ.is_integer() || lhs.typ.is_vector())
             }
+            // Bitwise ops (no vector support)
+            Bitnand => lhs.typ == rhs.typ && lhs.typ.is_integer(),
             // Comparisons
             Ge | Gt | Le | Lt => {
                 lhs.typ == rhs.typ
@@ -881,7 +884,7 @@ impl Expr {
             // Boolean ops
             And | Implies | Or | Xor => Type::bool(),
             // Bitwise ops
-            Bitand | Bitor | Bitxor => lhs.typ.clone(),
+            Bitand | Bitnand | Bitor | Bitxor => lhs.typ.clone(),
             // Comparisons
             Ge | Gt | Le | Lt => {
                 if lhs.typ.is_vector() {
@@ -964,6 +967,11 @@ impl Expr {
     /// `self & e`
     pub fn bitand(self, e: Expr) -> Expr {
         self.binop(Bitand, e)
+    }
+
+    /// `~ (self & e)`
+    pub fn bitnand(self, e: Expr) -> Expr {
+        self.binop(Bitnand, e)
     }
 
     /// `self | e`

@@ -54,6 +54,7 @@ impl ToIrepId for BinaryOperand {
             BinaryOperand::And => IrepId::And,
             BinaryOperand::Ashr => IrepId::Ashr,
             BinaryOperand::Bitand => IrepId::Bitand,
+            BinaryOperand::Bitnand => IrepId::Bitnand,
             BinaryOperand::Bitor => IrepId::Bitor,
             BinaryOperand::Bitxor => IrepId::Bitxor,
             BinaryOperand::Div => IrepId::Div,
