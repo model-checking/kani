@@ -58,7 +58,7 @@ impl KaniSession {
         // There isn't a good way to glob with non-UTF-8 paths.
         // https://github.com/rust-lang-nursery/glob/issues/78
         let build_glob = build_glob.to_str().context("Non-UTF-8 path enountered")?;
-        let results = glob::glob(&build_glob)?;
+        let results = glob::glob(build_glob)?;
 
         // the logic to turn "Iter<Result<T, E>>" into "Result<Vec<T>, E>" doesn't play well
         // with anyhow, so a type annotation is required

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,26 +9,42 @@ use std::process::Command;
 use crate::session::KaniSession;
 use crate::util::alter_extension;
 
+/// The outputs of kani-compiler operating on a single Rust source file.
+pub struct SingleOutputs {
+    /// The directory where compiler outputs should be directed.
+    /// May be '.' or a path for 'kani', usually under 'target/' for 'cargo-kani'
+    pub outdir: PathBuf,
+    /// The *.symtab.json written.
+    pub symtab: PathBuf,
+    /// The vtable restrictions files, if any.
+    pub restrictions: Option<PathBuf>,
+}
+
 impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
-    pub fn compile_single_rust_file(&self, file: &Path) -> Result<PathBuf> {
+    pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
+        let outdir =
+            file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
         let output_filename = alter_extension(file, "symtab.json");
+        let typemap_filename = alter_extension(file, "type_map.json");
+        let metadata_filename = alter_extension(file, "kani-metadata.json");
+        let restrictions_filename = alter_extension(file, "restrictions.json");
 
         {
             let mut temps = self.temporaries.borrow_mut();
             temps.push(output_filename.clone());
-            temps.push(alter_extension(file, "type_map.json"));
-            temps.push(alter_extension(file, "kani-metadata.json"));
+            temps.push(typemap_filename);
+            temps.push(metadata_filename);
             if self.args.restrict_vtable() {
-                temps.push(alter_extension(file, "restrictions.json"));
+                temps.push(restrictions_filename.clone());
             }
         }
 
         let mut args = self.kani_rustc_flags();
 
-        // kani-compiler workaround: *.symtab.json gets generated in the local
+        // kani-compiler workaround part 1/2: *.symtab.json gets generated in the local
         // directory, instead of based on file name like we expect.
-        // So we'll `cd` to that directory and only pass filename here.
+        // So let we'll `cd` to that directory and here we only pass filename.
         args.push(file.file_name().unwrap().into());
 
         if self.args.tests {
@@ -43,10 +59,8 @@ impl KaniSession {
         let mut cmd = Command::new(&self.kani_rustc);
         cmd.args(args);
 
-        // kani-compiler workaround: part 2: change directory for the subcommand
-        if let Some(p) = file.canonicalize()?.parent() {
-            cmd.current_dir(p);
-        }
+        // kani-compiler workaround: part 2/2: change directory for the subcommand
+        cmd.current_dir(&outdir);
 
         if self.args.debug && !self.args.quiet {
             self.run_terminal(cmd)?;
@@ -54,7 +68,15 @@ impl KaniSession {
             self.run_suppress(cmd)?;
         }
 
-        Ok(output_filename)
+        Ok(SingleOutputs {
+            outdir,
+            symtab: output_filename,
+            restrictions: if self.args.restrict_vtable() {
+                Some(restrictions_filename)
+            } else {
+                None
+            },
+        })
     }
 
     /// These arguments are passed directly here for single file runs,

@@ -6,7 +6,6 @@ use args_toml::config_toml_to_args;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use util::alter_extension;
 
 mod args;
 mod args_toml;
@@ -73,16 +72,13 @@ fn standalone_main() -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
-    let symtab_json = ctx.compile_single_rust_file(&args.input)?;
-    let goto_obj = ctx.symbol_table_to_gotoc(&symtab_json)?;
+    let outputs = ctx.compile_single_rust_file(&args.input)?;
+    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
     let linked_obj = util::alter_extension(&args.input, "out");
 
     ctx.link_c_lib(&[goto_obj], &linked_obj, &ctx.args.function)?;
-    if ctx.args.restrict_vtable() {
-        ctx.apply_vtable_restrictions(
-            &linked_obj,
-            &alter_extension(&args.input, "restrictions.json"),
-        )?;
+    if let Some(restriction) = outputs.restrictions {
+        ctx.apply_vtable_restrictions(&linked_obj, &restriction)?;
     }
     ctx.run_goto_instrument(&linked_obj)?;
 
