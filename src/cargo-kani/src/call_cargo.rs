@@ -8,16 +8,29 @@ use std::process::Command;
 
 use crate::session::KaniSession;
 
+/// The outputs of kani-compiler being invoked via cargo on a project.
+pub struct CargoOutputs {
+    /// The directory where compiler outputs should be directed.
+    /// Usually 'target/BUILD_TRIPLE/debug/deps/'
+    pub outdir: PathBuf,
+    /// The collection of *.symtab.json files written.
+    pub symtabs: Vec<PathBuf>,
+    /// The location of vtable restrictions files (a directory of *.restrictions.json)
+    pub restrictions: Option<PathBuf>,
+}
+
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
-    pub fn cargo_build(&self) -> Result<Vec<PathBuf>> {
+    pub fn cargo_build(&self) -> Result<CargoOutputs> {
+        let build_target = env!("TARGET"); // see build.rs
+        let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
+        let outdir = target_dir.join(build_target).join("debug/deps");
+
         let flag_env = {
             let rustc_args = self.kani_rustc_flags();
             crate::util::join_osstring(&rustc_args, " ")
         };
 
-        let build_target = env!("TARGET"); // see build.rs
-        let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
         let mut args: Vec<OsString> = Vec::new();
 
         if self.args.tests {
@@ -43,15 +56,15 @@ impl KaniSession {
             .env("RUSTFLAGS", "--kani-flags")
             .env("KANIFLAGS", flag_env);
 
-        if self.args.debug {
-            cmd.env("KANI_LOG", "rustc_codegen_kani");
-        }
-
         self.run_terminal(cmd)?;
 
         if self.args.dry_run {
             // mock an answer
-            return Ok(vec![target_dir.join(build_target).join("debug/deps/dry-run.symtab.json")]);
+            return Ok(CargoOutputs {
+                outdir: outdir.clone(),
+                symtabs: vec![target_dir.join(build_target).join("debug/deps/dry-run.symtab.json")],
+                restrictions: self.args.restrict_vtable().then(|| outdir),
+            });
         }
 
         let build_glob = target_dir.join(build_target).join("debug/deps/*.symtab.json");
@@ -64,6 +77,10 @@ impl KaniSession {
         // with anyhow, so a type annotation is required
         let symtabs: core::result::Result<Vec<PathBuf>, glob::GlobError> = results.collect();
 
-        Ok(symtabs?)
+        Ok(CargoOutputs {
+            outdir: outdir.clone(),
+            symtabs: symtabs?,
+            restrictions: self.args.restrict_vtable().then(|| outdir),
+        })
     }
 }

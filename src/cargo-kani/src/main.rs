@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use args_toml::config_toml_to_args;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -33,28 +33,19 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
-    let symtabs = ctx.cargo_build()?;
+    let outputs = ctx.cargo_build()?;
     if ctx.args.only_codegen {
         return Ok(());
     }
     let mut goto_objs: Vec<PathBuf> = Vec::new();
-    for symtab in &symtabs {
+    for symtab in &outputs.symtabs {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
     }
-    // Look where the symtabs are generated to find the `target/$TARGET/debug/deps` directory we're generating things in
-    if symtabs.is_empty() {
-        bail!("kani-compiler did not generate any symtabs, but also did not raise an error");
-    }
-    let discovered_outdir = symtabs.get(0).unwrap().parent().unwrap().to_path_buf();
-    let linked_obj = {
-        let mut outdir = discovered_outdir.clone();
-        outdir.push("cbmc.out");
-        outdir
-    };
+    let linked_obj = outputs.outdir.join("cbmc.out");
 
     ctx.link_c_lib(&goto_objs, &linked_obj, &ctx.args.function)?;
-    if ctx.args.restrict_vtable() {
-        ctx.apply_vtable_restrictions(&linked_obj, &discovered_outdir)?;
+    if let Some(restrictions) = outputs.restrictions {
+        ctx.apply_vtable_restrictions(&linked_obj, &restrictions)?;
     }
     ctx.run_goto_instrument(&linked_obj)?;
 
