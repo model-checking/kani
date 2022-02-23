@@ -307,10 +307,6 @@ def remove_check_ids_from_description(properties):
     check_id_pattern = re.compile(r"\[" + GlobalMessages.CHECK_ID + r"_.*_[0-9]*\] ")
     for property in properties:
         property["description"] = re.sub(check_id_pattern, "", property["description"])
-        #if match_obj:
-        #    check_id = match_obj.group(0)
-        #    print(check_id)
-        #    property["description"] = property["description"].replace(check_id, "", 1)
 
 
 def construct_solver_information_message(solver_information):
