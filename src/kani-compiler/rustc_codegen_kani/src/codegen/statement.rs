@@ -79,24 +79,28 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                let mut msg_str = format!("{:?}", msg);
-                let mut stmts: Vec<Stmt> = Vec::new();
-                if self.queries.get_check_assertion_reachability() {
+                let msg = format!("{:?}", msg);
+                let (msg_str, reach_stmt) = if self.queries.get_check_assertion_reachability() {
                     let check_id = self.next_check_id();
-                    msg_str = GotocCtx::add_prefix_to_msg(&msg_str, &check_id);
-                    let reach_msg = GotocCtx::reach_check_msg(&check_id);
-                    stmts.push(self.codegen_cover_loc(&reach_msg, Some(term.source_info.span)));
-                }
-                stmts.append(&mut vec![
-                    cond.cast_to(Type::bool()).if_then_else(
+                    let msg_str = GotocCtx::add_prefix_to_msg(&msg, &check_id);
+                    let reach_msg = GotocCtx::reachability_check_message(&check_id);
+                    (msg_str, self.codegen_cover_loc(&reach_msg, Some(term.source_info.span)))
+                } else {
+                    (msg, Stmt::skip(loc))
+                };
+                Stmt::block(
+                    vec![
+                        reach_stmt,
+                        cond.cast_to(Type::bool()).if_then_else(
+                            Stmt::goto(self.current_fn().find_label(target), loc),
+                            None,
+                            loc,
+                        ),
+                        Stmt::assert_false(&msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
-                        None,
-                        loc,
-                    ),
-                    Stmt::assert_false(&msg_str, loc),
-                    Stmt::goto(self.current_fn().find_label(target), loc),
-                ]);
-                Stmt::block(stmts, loc)
+                    ],
+                    loc,
+                )
             }
             TerminatorKind::Yield { .. }
             | TerminatorKind::GeneratorDrop

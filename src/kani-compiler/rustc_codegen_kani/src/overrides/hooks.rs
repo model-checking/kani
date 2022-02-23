@@ -165,33 +165,36 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
-        let mut msg = utils::extract_const_message(&msg).unwrap();
+        let msg = utils::extract_const_message(&msg).unwrap();
         let target = target.unwrap();
         let caller_loc = tcx.codegen_caller_span(&span);
 
-        let mut stmts: Vec<Stmt> = Vec::new();
-
-        if tcx.queries.get_check_assertion_reachability() {
+        let (msg, reach_stmt) = if tcx.queries.get_check_assertion_reachability() {
             // Generate a unique ID for the assert
             let assert_id = tcx.next_check_id();
             // Add this ID as a prefix to the assert message so that it can be
             // easily paired with the reachability check
-            msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
-            let reach_msg = GotocCtx::reach_check_msg(&assert_id);
+            let msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
+            let reach_msg = GotocCtx::reachability_check_message(&assert_id);
             // inject a reachability (cover) check to the current location
-            stmts.push(tcx.codegen_cover_loc(&reach_msg, span));
-        }
+            (msg, tcx.codegen_cover_loc(&reach_msg, span))
+        } else {
+            (msg, Stmt::skip(caller_loc))
+        };
 
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
         let tmp = tcx.gen_temp_variable(cond.typ().clone(), caller_loc.clone()).to_expr();
-        stmts.append(&mut vec![
-            Stmt::decl(tmp.clone(), Some(cond), caller_loc.clone()),
-            Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
-            Stmt::assume(tmp, caller_loc.clone()),
-            Stmt::goto(tcx.current_fn().find_label(&target), caller_loc.clone()),
-        ]);
-        Stmt::block(stmts, caller_loc)
+        Stmt::block(
+            vec![
+                reach_stmt,
+                Stmt::decl(tmp.clone(), Some(cond), caller_loc.clone()),
+                Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
+                Stmt::assume(tmp, caller_loc.clone()),
+                Stmt::goto(tcx.current_fn().find_label(&target), caller_loc.clone()),
+            ],
+            caller_loc,
+        )
     }
 }
 

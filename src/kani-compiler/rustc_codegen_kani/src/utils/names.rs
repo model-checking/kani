@@ -122,7 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// [KANI_REACHABILITY_CHECK] <ID of assert>
     /// The check_id is generated using the GotocCtx::next_check_id method and
     /// is a unique string identifier for that check.
-    pub fn reach_check_msg(check_id: &str) -> String {
+    pub fn reachability_check_message(check_id: &str) -> String {
         format!("[KANI_REACHABILITY_CHECK] {}", check_id)
     }
 }
