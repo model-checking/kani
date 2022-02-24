@@ -631,7 +631,7 @@ impl Type {
         self.unwrap_transparent_type(st).is_some()
     }
 
-    /// Given a transparent type (see comment on `Type::is_transparent_type()`),
+    /// If a type is transparent type (see comment on `Type::is_transparent_type()`),
     /// extract the type it wraps.
     pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
         fn recurse(t: &Type, st: &SymbolTable) -> Option<Type> {
@@ -667,6 +667,8 @@ impl Type {
         }
     }
 
+    /// Calculates an under-approximation of whether two types are structurally equivilant.
+    ///
     /// Two types are structurally equivilent if one can be cast into the other without changing
     /// any bytes.  For e.g.,
     /// ```
@@ -695,8 +697,11 @@ impl Type {
     /// }
     /// ```
     /// Since they have different padding.
+    /// https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136
     pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
-        if self.is_scalar() && other.is_scalar() {
+        if self.sizeof_in_bits(st) != other.sizeof_in_bits(st) {
+            false
+        } else if self.is_scalar() && other.is_scalar() {
             self == other
         } else if self.is_struct_like() && other.is_scalar() {
             self.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *other)
