@@ -115,6 +115,13 @@ impl DatatypeComponent {
         }
     }
 
+    pub fn is_field(&self) -> bool {
+        match self {
+            Field { .. } => true,
+            Padding { .. } => false,
+        }
+    }
+
     pub fn is_padding(&self) -> bool {
         match self {
             Field { .. } => false,
@@ -125,6 +132,13 @@ impl DatatypeComponent {
     pub fn name(&self) -> InternedString {
         match self {
             Field { name, .. } | Padding { name, .. } => *name,
+        }
+    }
+
+    pub fn sizeof_in_bits(&self, st: &SymbolTable) -> u64 {
+        match self {
+            Field { typ, .. } => typ.sizeof_in_bits(st),
+            Padding { bits, .. } => *bits,
         }
     }
 
@@ -638,6 +652,86 @@ impl Type {
             Some(self.clone())
         } else {
             None
+        }
+    }
+
+    /// Get the non-zero-sized fields (including padding) in self
+    pub fn get_non_empty_components<'a>(
+        &self,
+        st: &'a SymbolTable,
+    ) -> Option<Vec<&'a DatatypeComponent>> {
+        if let components = st.lookup_components_in_type(self).unwrap() {
+            components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect()
+        } else {
+            None
+        }
+    }
+
+    /// Two types are structurally equivilent if one can be cast into the other without changing
+    /// any bytes.  For e.g.,
+    /// ```
+    /// struct foo {
+    ///     char x;
+    ///     int y;
+    /// }
+    /// ```
+    /// is structurally equivalent to
+    /// ```
+    /// struct i {
+    ///     int z;
+    /// }
+    ///
+    /// struct bar {
+    ///     char a;
+    ///     struct i b;
+    /// }
+    /// ```
+    /// But, `struct foo` is not structurally equivilent to:
+    /// ```
+    /// __attribute__((packed))
+    /// struct baz {}
+    ///     char x;
+    ///     int y;
+    /// }
+    /// ```
+    /// Since they have different padding.
+    pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
+        if self.is_scalar() && other.is_scalar() {
+            self == other
+        } else if self.is_struct_like() && other.is_scalar() {
+            let components = self.get_non_empty_components(st).unwrap();
+            if components.len() == 1 {
+                let field = components[0];
+                field.is_field() && field.typ().is_structurally_equivalent_to(other, st)
+            } else {
+                false
+            }
+        } else if self.is_scalar() && other.is_struct_like() {
+            let components = other.get_non_empty_components(st).unwrap();
+            if components.len() == 1 {
+                let field = components[0];
+                field.is_field() && field.typ().is_structurally_equivalent_to(self, st)
+            } else {
+                false
+            }
+        } else if self.is_struct_like() && other.is_struct_like() {
+            let self_components = self.get_non_empty_components(st);
+            let other_components = other.get_non_empty_components(st);
+            if self_components.len() == other_components.len() {
+                self_components.iter().zip(other_components.iter()).all(|(a, b)| {
+                    (a.is_padding()
+                        && b.is_padding()
+                        && a.sizeof_in_bits(st) == b.sizeof_in_bits(st))
+                        || (a.is_field()
+                            && b.is_field()
+                            && a.typ().is_structurally_equivalent_to(&b.typ(), st))
+                })
+            } else {
+                false
+            }
+        } else {
+            // TODO: Figure out under which cases unions can work here
+            false
         }
     }
 
