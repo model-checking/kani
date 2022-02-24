@@ -1,5 +1,4 @@
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Symbol;
 
 use crate::clean;
 use crate::config::RenderOptions;
@@ -45,55 +44,4 @@ crate trait FormatRenderer<'tcx>: Sized {
     fn after_krate(&mut self) -> Result<(), Error>;
 
     fn cache(&self) -> &Cache;
-}
-
-/// Main method for rendering a crate.
-crate fn run_format<'tcx, T: FormatRenderer<'tcx>>(
-    krate: clean::Crate,
-    options: RenderOptions,
-    cache: Cache,
-    tcx: TyCtxt<'tcx>,
-) -> Result<(), Error> {
-    let prof = &tcx.sess.prof;
-
-    let emit_crate = options.should_emit_crate();
-    let (mut format_renderer, krate) = prof
-        .extra_verbose_generic_activity("create_renderer", T::descr())
-        .run(|| T::init(krate, options, cache, tcx))?;
-
-    if !emit_crate {
-        return Ok(());
-    }
-
-    // Render the crate documentation
-    let mut work = vec![(format_renderer.make_child_renderer(), krate.module)];
-
-    let unknown = Symbol::intern("<unknown item>");
-    while let Some((mut cx, item)) = work.pop() {
-        if item.is_mod() && T::RUN_ON_MODULE {
-            // modules are special because they add a namespace. We also need to
-            // recurse into the items of the module as well.
-            let _timer =
-                prof.generic_activity_with_arg("render_mod_item", item.name.unwrap().to_string());
-
-            cx.mod_item_in(&item)?;
-            let module = match *item.kind {
-                clean::StrippedItem(box clean::ModuleItem(m)) | clean::ModuleItem(m) => m,
-                _ => unreachable!(),
-            };
-            for it in module.items {
-                debug!("Adding {:?} to worklist", it.name);
-                work.push((cx.make_child_renderer(), it));
-            }
-
-            cx.mod_item_out()?;
-        // FIXME: checking `item.name.is_some()` is very implicit and leads to lots of special
-        // cases. Use an explicit match instead.
-        } else if item.name.is_some() && !item.is_extern_crate() {
-            prof.generic_activity_with_arg("render_item", item.name.unwrap_or(unknown).as_str())
-                .run(|| cx.item(item))?;
-        }
-    }
-    prof.extra_verbose_generic_activity("renderer_after_krate", T::descr())
-        .run(|| format_renderer.after_krate())
 }

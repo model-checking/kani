@@ -51,11 +51,11 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_const(const_, Some(&c.span))
     }
 
-    pub fn codegen_const(&mut self, lit: &'tcx Const<'tcx>, span: Option<&Span>) -> Expr {
+    pub fn codegen_const(&mut self, lit: Const<'tcx>, span: Option<&Span>) -> Expr {
         debug!("found literal: {:?}", lit);
         let lit = self.monomorphize(lit);
 
-        match lit.val {
+        match lit.val() {
             // evaluate constant if it has no been evaluated yet
             ConstKind::Unevaluated(unevaluated) => {
                 debug!("The literal was a Unevaluated");
@@ -63,15 +63,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     .tcx
                     .const_eval_resolve(ty::ParamEnv::reveal_all(), unevaluated, None)
                     .unwrap();
-                self.codegen_const_value(const_val, lit.ty, span)
+                self.codegen_const_value(const_val, lit.ty(), span)
             }
 
             ConstKind::Value(v) => {
                 debug!("The literal was a ConstValue {:?}", v);
-                self.codegen_const_value(v, lit.ty, span)
+                self.codegen_const_value(v, lit.ty(), span)
             }
             _ => {
-                unreachable!("monomorphized item shouldn't have this constant value: {:?}", lit.val)
+                unreachable!(
+                    "monomorphized item shouldn't have this constant value: {:?}",
+                    lit.val()
+                )
             }
         }
     }
@@ -199,7 +202,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // We need a regression for this case.
             (Scalar::Int(int), ty::Ref(_, ty, _)) => {
                 if int.is_null() {
-                    self.codegen_ty(ty).to_pointer().null()
+                    self.codegen_ty(*ty).to_pointer().null()
                 } else {
                     unreachable!()
                 }
@@ -280,7 +283,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // here we have tuples of at most one length
                 if substs.len() == 1 {
                     let overall_t = self.codegen_ty(ty);
-                    let t = substs[0].expect_ty();
+                    let t = substs[0];
                     self.codegen_single_variant_single_field(s, span, overall_t, t)
                 } else {
                     unreachable!()
@@ -389,10 +392,22 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))
             }
         };
-        base_addr
+        assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
+        let offset_addr = base_addr
             .cast_to(Type::unsigned_int(8).to_pointer())
-            .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
-            .cast_to(res_t)
+            .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)));
+
+        // In some cases, Rust uses a transparent type here. Convert the pointer to an rvalue
+        // of the type expected. https://github.com/model-checking/kani/issues/822
+        if let Some(wrapped_type) = res_t.unwrap_transparent_type(&self.symbol_table) {
+            assert!(wrapped_type.is_pointer());
+            offset_addr
+                .cast_to(wrapped_type)
+                .transmute_to_structurally_equivalent_type(res_t, &self.symbol_table)
+        } else {
+            assert!(res_t.is_pointer());
+            offset_addr.cast_to(res_t)
+        }
     }
 
     pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(

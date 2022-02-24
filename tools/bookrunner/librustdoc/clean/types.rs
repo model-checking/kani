@@ -177,97 +177,6 @@ impl ExternalCrate {
         }
     }
 
-    /// Attempts to find where an external crate is located, given that we're
-    /// rendering in to the specified source destination.
-    crate fn location(
-        &self,
-        extern_url: Option<&str>,
-        extern_url_takes_precedence: bool,
-        dst: &std::path::Path,
-        tcx: TyCtxt<'_>,
-    ) -> ExternalLocation {
-        use ExternalLocation::*;
-
-        fn to_remote(url: impl ToString) -> ExternalLocation {
-            let mut url = url.to_string();
-            if !url.ends_with('/') {
-                url.push('/');
-            }
-            Remote(url)
-        }
-
-        // See if there's documentation generated into the local directory
-        // WARNING: since rustdoc creates these directories as it generates documentation, this check is only accurate before rendering starts.
-        // Make sure to call `location()` by that time.
-        let local_location = dst.join(self.name(tcx).as_str());
-        if local_location.is_dir() {
-            return Local;
-        }
-
-        if extern_url_takes_precedence {
-            if let Some(url) = extern_url {
-                return to_remote(url);
-            }
-        }
-
-        // Failing that, see if there's an attribute specifying where to find this
-        // external crate
-        let did = DefId { krate: self.crate_num, index: CRATE_DEF_INDEX };
-        tcx.get_attrs(did)
-            .lists(sym::doc)
-            .filter(|a| a.has_name(sym::html_root_url))
-            .filter_map(|a| a.value_str())
-            .map(to_remote)
-            .next()
-            .or_else(|| extern_url.map(to_remote)) // NOTE: only matters if `extern_url_takes_precedence` is false
-            .unwrap_or(Unknown) // Well, at least we tried.
-    }
-
-    crate fn keywords(&self, tcx: TyCtxt<'_>) -> ThinVec<(DefId, Symbol)> {
-        let root = self.def_id();
-
-        let as_keyword = |res: Res<!>| {
-            if let Res::Def(DefKind::Mod, def_id) = res {
-                let attrs = tcx.get_attrs(def_id);
-                let mut keyword = None;
-                for attr in attrs.lists(sym::doc) {
-                    if attr.has_name(sym::keyword) {
-                        if let Some(v) = attr.value_str() {
-                            keyword = Some(v);
-                            break;
-                        }
-                    }
-                }
-                return keyword.map(|p| (def_id, p));
-            }
-            None
-        };
-        if root.is_local() {
-            tcx.hir()
-                .root_module()
-                .item_ids
-                .iter()
-                .filter_map(|&id| {
-                    let item = tcx.hir().item(id);
-                    match item.kind {
-                        hir::ItemKind::Mod(_) => {
-                            as_keyword(Res::Def(DefKind::Mod, id.def_id.to_def_id()))
-                        }
-                        hir::ItemKind::Use(path, hir::UseKind::Single)
-                            if tcx.visibility(id.def_id).is_public() =>
-                        {
-                            as_keyword(path.res.expect_non_local())
-                                .map(|(_, prim)| (id.def_id.to_def_id(), prim))
-                        }
-                        _ => None,
-                    }
-                })
-                .collect()
-        } else {
-            tcx.module_children(root).iter().map(|item| item.res).filter_map(as_keyword).collect()
-        }
-    }
-
     crate fn primitives(&self, tcx: TyCtxt<'_>) -> ThinVec<(DefId, PrimitiveType)> {
         let root = self.def_id();
 
@@ -429,7 +338,7 @@ impl Item {
 
     /// Convenience wrapper around [`Self::from_def_id_and_parts`] which converts
     /// `hir_id` to a [`DefId`]
-    pub fn from_hir_id_and_parts(
+    pub(crate) fn from_hir_id_and_parts(
         hir_id: hir::HirId,
         name: Option<Symbol>,
         kind: ItemKind,
@@ -438,7 +347,7 @@ impl Item {
         Item::from_def_id_and_parts(cx.tcx.hir().local_def_id(hir_id).to_def_id(), name, kind, cx)
     }
 
-    pub fn from_def_id_and_parts(
+    pub(crate) fn from_def_id_and_parts(
         def_id: DefId,
         name: Option<Symbol>,
         kind: ItemKind,
@@ -456,7 +365,7 @@ impl Item {
         )
     }
 
-    pub fn from_def_id_and_attrs_and_parts(
+    pub(crate) fn from_def_id_and_attrs_and_parts(
         def_id: DefId,
         name: Option<Symbol>,
         kind: ItemKind,
@@ -569,9 +478,6 @@ impl Item {
     }
     crate fn is_import(&self) -> bool {
         self.type_() == ItemType::Import
-    }
-    crate fn is_extern_crate(&self) -> bool {
-        self.type_() == ItemType::ExternCrate
     }
     crate fn is_keyword(&self) -> bool {
         self.type_() == ItemType::Keyword
@@ -688,44 +594,7 @@ crate enum ItemKind {
     KeywordItem(Symbol),
 }
 
-impl ItemKind {
-    /// Some items contain others such as structs (for their fields) and Enums
-    /// (for their variants). This method returns those contained items.
-    crate fn inner_items(&self) -> impl Iterator<Item = &Item> {
-        match self {
-            StructItem(s) => s.fields.iter(),
-            UnionItem(u) => u.fields.iter(),
-            VariantItem(Variant::Struct(v)) => v.fields.iter(),
-            VariantItem(Variant::Tuple(v)) => v.iter(),
-            EnumItem(e) => e.variants.iter(),
-            TraitItem(t) => t.items.iter(),
-            ImplItem(i) => i.items.iter(),
-            ModuleItem(m) => m.items.iter(),
-            ExternCrateItem { .. }
-            | ImportItem(_)
-            | FunctionItem(_)
-            | TypedefItem(_, _)
-            | OpaqueTyItem(_)
-            | StaticItem(_)
-            | ConstantItem(_)
-            | TraitAliasItem(_)
-            | TyMethodItem(_)
-            | MethodItem(_, _)
-            | StructFieldItem(_)
-            | VariantItem(_)
-            | ForeignFunctionItem(_)
-            | ForeignStaticItem(_)
-            | ForeignTypeItem
-            | MacroItem(_)
-            | ProcMacroItem(_)
-            | PrimitiveItem(_)
-            | AssocConstItem(_, _)
-            | AssocTypeItem(_, _)
-            | StrippedItem(_)
-            | KeywordItem(_) => [].iter(),
-        }
-    }
-}
+impl ItemKind {}
 
 #[derive(Clone, Debug)]
 crate struct Module {
@@ -994,7 +863,7 @@ crate struct ItemLink {
     pub(crate) fragment: Option<UrlFragment>,
 }
 
-pub struct RenderedLink {
+pub(crate) struct RenderedLink {
     /// The text the link was original written as.
     ///
     /// This could potentially include disambiguators and backticks.
@@ -1040,9 +909,9 @@ impl Attributes {
     ) -> Attributes {
         let mut doc_strings: Vec<DocFragment> = vec![];
         let clean_attr = |(attr, parent_module): (&ast::Attribute, Option<DefId>)| {
-            if let Some(value) = attr.doc_str() {
+            if let Some((value, kind)) = attr.doc_str_and_comment_kind() {
                 trace!("got doc_str={:?}", value);
-                let value = beautify_doc_string(value);
+                let value = beautify_doc_string(value, kind);
                 let kind = if attr.is_doc_comment() {
                     DocFragmentKind::SugaredDoc
                 } else {
@@ -1196,7 +1065,7 @@ impl GenericBound {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-crate struct Lifetime(pub Symbol);
+crate struct Lifetime(pub(crate) Symbol);
 
 impl Lifetime {
     crate fn statik() -> Lifetime {
@@ -2002,18 +1871,10 @@ impl Path {
         self.segments.last().expect("segments were empty").name
     }
 
-    crate fn whole_name(&self) -> String {
-        self.segments
-            .iter()
-            .map(|s| if s.name == kw::PathRoot { String::new() } else { s.name.to_string() })
-            .intersperse("::".into())
-            .collect()
-    }
-
     /// Checks if this is a `T::Name` path for an associated type.
     crate fn is_assoc_ty(&self) -> bool {
         match self.res {
-            Res::SelfTy(..) if self.segments.len() != 1 => true,
+            Res::SelfTy { .. } if self.segments.len() != 1 => true,
             Res::Def(DefKind::TyParam, _) if self.segments.len() != 1 => true,
             Res::Def(DefKind::AssocTy, _) => true,
             _ => false,
@@ -2222,7 +2083,7 @@ impl Impl {
         self.trait_
             .as_ref()
             .map(|t| t.def_id())
-            .map(|did| tcx.provided_trait_methods(did).map(|meth| meth.ident.name).collect())
+            .map(|did| tcx.provided_trait_methods(did).map(|meth| meth.ident(tcx).name).collect())
             .unwrap_or_default()
     }
 }

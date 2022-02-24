@@ -26,7 +26,7 @@ unsafe impl kani::Invariant for MyType {
 
 unsafe impl kani::Invariant for Error {
     fn is_valid(&self) -> bool {
-        matches!(*self, Error::Error1 | Error::Error2)
+        *self == Error::Error1 || *self == Error::Error2
     }
 }
 

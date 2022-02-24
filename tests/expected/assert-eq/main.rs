@@ -1,5 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// kani-flags: --output-format old
 /// This test touches a surprising amount of MIR, thanks to the `assert_eq!`, which translates into something like
 /// if(x != y) { String msg = format_error_message(<x as debug>::fmt(x), <y as debug>::fmt(y)); panic!(msg)} else {}
 /// This leads us to the land of foreign types, ReifyFnPointer, and transmute.

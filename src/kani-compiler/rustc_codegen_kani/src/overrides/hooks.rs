@@ -8,10 +8,11 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use crate::utils::instance_name_starts_with;
+use crate::utils;
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
+use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -76,7 +77,7 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
+        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
             warn!(
                 "The function __VERIFIER_expect_fail is deprecated. Use kani::expect_fail instead"
             );
@@ -115,7 +116,7 @@ impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
+        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
             warn!("The function __VERIFIER_assume is deprecated. Use kani::assume instead");
             return true;
         }
@@ -146,13 +147,62 @@ impl<'tcx> GotocHook<'tcx> for Assume {
     }
 }
 
+struct Assert;
+impl<'tcx> GotocHook<'tcx> for Assert {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniAssert")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        _assign_to: Option<Place<'tcx>>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let mut msg = utils::extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = tcx.codegen_caller_span(&span);
+
+        let mut stmts: Vec<Stmt> = Vec::new();
+
+        if tcx.queries.get_check_assertion_reachability() {
+            // Generate a unique ID for the assert
+            let assert_id = tcx.next_check_id();
+            // Use a description of the form:
+            // [KANI_REACHABILITY_CHECK] <check ID>
+            // for reachability checks
+            msg = format!("[{}] {}", assert_id, msg);
+            let reach_msg = format!("[KANI_REACHABILITY_CHECK] {}", assert_id);
+            // inject a reachability (cover) check to the current location
+            stmts.push(tcx.codegen_cover_loc(&reach_msg, span));
+        }
+
+        // Since `cond` might have side effects, assign it to a temporary
+        // variable so that it's evaluated once, then assert and assume it
+        let tmp = tcx.gen_temp_variable(cond.typ().clone(), caller_loc.clone()).to_expr();
+        stmts.append(&mut vec![
+            Stmt::decl(tmp.clone(), Some(cond), caller_loc.clone()),
+            Stmt::assert(tmp.clone(), &msg, caller_loc.clone()),
+            Stmt::assume(tmp, caller_loc.clone()),
+            Stmt::goto(tcx.current_fn().find_label(&target), caller_loc.clone()),
+        ]);
+        Stmt::block(stmts, caller_loc)
+    }
+}
+
 struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // Deprecate old __nondet since it doesn't match rust naming conventions.
         // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if instance_name_starts_with(tcx, instance, "__nondet") {
+        if utils::instance_name_starts_with(tcx, instance, "__nondet") {
             warn!("The function __nondet is deprecated. Use kani::any instead");
             return true;
         }
@@ -230,7 +280,7 @@ impl<'tcx> GotocHook<'tcx> for Nevers {
     ) -> Stmt {
         let msg = format!(
             "a panicking function {} is invoked",
-            with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()))
+            with_no_trimmed_paths!(tcx.tcx.def_path_str(instance.def_id()))
         );
         tcx.codegen_fatal_error(&msg, span)
     }
@@ -276,7 +326,7 @@ struct MemReplace;
 
 impl<'tcx> GotocHook<'tcx> for MemReplace {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::mem::replace" || name == "std::mem::replace"
     }
 
@@ -321,7 +371,7 @@ struct MemSwap;
 impl<'tcx> GotocHook<'tcx> for MemSwap {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // We need to keep the old std / core functions here because we don't compile std yet.
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::mem::swap"
             || name == "std::mem::swap"
             || name == "core::ptr::swap"
@@ -383,7 +433,7 @@ struct PtrRead;
 
 impl<'tcx> GotocHook<'tcx> for PtrRead {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::ptr::read"
             || name == "core::ptr::read_unaligned"
             || name == "core::ptr::read_volatile"
@@ -421,13 +471,11 @@ struct PtrWrite;
 
 impl<'tcx> GotocHook<'tcx> for PtrWrite {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::ptr::write"
             || name == "core::ptr::write_unaligned"
-            || name == "core::ptr::write_volatile"
             || name == "std::ptr::write"
             || name == "std::ptr::write_unaligned"
-            || name == "std::ptr::write_volatile"
     }
 
     fn handle(
@@ -458,7 +506,7 @@ struct RustAlloc;
 impl<'tcx> GotocHook<'tcx> for RustAlloc {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         let name = tcx.symbol_name(instance).name.to_string();
-        let full_name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let full_name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "__rust_alloc" || full_name == "alloc::alloc::exchange_malloc"
     }
 
@@ -609,7 +657,7 @@ struct SliceFromRawPart;
 
 impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::ptr::slice_from_raw_parts"
             || name == "std::ptr::slice_from_raw_parts"
             || name == "core::ptr::slice_from_raw_parts_mut"
@@ -648,6 +696,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
         hooks: vec![
             Rc::new(Panic), //Must go first, so it overrides Nevers
             Rc::new(Assume),
+            Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Intrinsic),
             Rc::new(MemReplace),

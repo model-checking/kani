@@ -4,30 +4,7 @@ use std::mem;
 
 use crate::clean;
 use crate::clean::{Item, ItemIdSet, NestedAttributesExt};
-use crate::core::DocContext;
 use crate::fold::{strip_item, DocFolder};
-use crate::passes::{ImplStripper, Pass};
-
-crate const STRIP_HIDDEN: Pass = Pass {
-    name: "strip-hidden",
-    run: strip_hidden,
-    description: "strips all `#[doc(hidden)]` items from the output",
-};
-
-/// Strip items marked `#[doc(hidden)]`
-crate fn strip_hidden(krate: clean::Crate, _: &mut DocContext<'_>) -> clean::Crate {
-    let mut retained = ItemIdSet::default();
-
-    // strip all #[doc(hidden)] items
-    let krate = {
-        let mut stripper = Stripper { retained: &mut retained, update_retained: true };
-        stripper.fold_crate(krate)
-    };
-
-    // strip all impls referencing stripped items
-    let mut stripper = ImplStripper { retained: &retained };
-    stripper.fold_crate(krate)
-}
 
 struct Stripper<'a> {
     retained: &'a mut ItemIdSet,

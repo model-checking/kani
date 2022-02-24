@@ -17,6 +17,7 @@
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [Kani developer documentation](./dev-documentation.md)
+  - [Working with `RUSTC`](./rustc-hacks.md)
   - [Testing](./kani-testing.md)
   - [Book runner](./bookrunner.md)
 

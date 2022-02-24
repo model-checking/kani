@@ -3,16 +3,11 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use rustc_span::edition::Edition;
-use rustc_span::source_map::DUMMY_SP;
-use rustc_span::Symbol;
 
-use crate::config::{Options, RenderOptions};
-use crate::doctest::{Collector, GlobalTestOptions};
+use crate::config::RenderOptions;
 use crate::html::escape::Escape;
 use crate::html::markdown;
-use crate::html::markdown::{
-    find_testable_code, ErrorCodes, HeadingOffset, IdMap, Markdown, MarkdownWithToc,
-};
+use crate::html::markdown::{ErrorCodes, HeadingOffset, IdMap, Markdown, MarkdownWithToc};
 
 /// Separate any lines at the start of the file that begin with `# ` or `%`.
 fn extract_leading_metadata(s: &str) -> (Vec<&str>, &str) {
@@ -123,28 +118,4 @@ crate fn render<P: AsRef<Path>>(
         Err(e) => Err(format!("cannot write to `{}`: {}", output.display(), e)),
         Ok(_) => Ok(()),
     }
-}
-
-/// Runs any tests/code examples in the markdown file `input`.
-crate fn test(options: Options) -> Result<(), String> {
-    let input_str = read_to_string(&options.input)
-        .map_err(|err| format!("{}: {}", options.input.display(), err))?;
-    let mut opts = GlobalTestOptions::default();
-    opts.no_crate_inject = true;
-    let mut collector = Collector::new(
-        Symbol::intern(&options.input.display().to_string()),
-        options.clone(),
-        true,
-        opts,
-        None,
-        Some(options.input),
-        options.enable_per_target_ignores,
-    );
-    collector.set_position(DUMMY_SP);
-    let codes = ErrorCodes::from(options.render_options.unstable_features.is_nightly_build());
-
-    find_testable_code(&input_str, &mut collector, codes, options.enable_per_target_ignores, None);
-
-    crate::doctest::run_tests(options.test_args, options.nocapture, collector.tests);
-    Ok(())
 }

@@ -1,19 +1,18 @@
 use crate::clean::auto_trait::AutoTraitFinder;
 use crate::clean::blanket_impl::BlanketImplFinder;
 use crate::clean::{
-    inline, Clean, Crate, ExternalCrate, Generic, GenericArg, GenericArgs, ImportSource, Item,
-    ItemKind, Lifetime, Path, PathSegment, Primitive, PrimitiveType, Type, TypeBinding, Visibility,
+    inline, Clean, Generic, GenericArg, GenericArgs, ImportSource, Item, ItemKind, Lifetime, Path,
+    PathSegment, Primitive, PrimitiveType, Type, TypeBinding, Visibility,
 };
 use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
-use crate::visit_lib::LibEmbargoVisitor;
 
 use rustc_ast as ast;
 use rustc_ast::tokenstream::TokenTree;
 use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::interpret::ConstValue;
 use rustc_middle::ty::subst::{GenericArgKind, SubstsRef};
 use rustc_middle::ty::{self, DefIdTree, TyCtxt};
@@ -25,58 +24,6 @@ use std::mem;
 
 #[cfg(test)]
 mod tests;
-
-crate fn krate(cx: &mut DocContext<'_>) -> Crate {
-    let module = crate::visit_ast::RustdocVisitor::new(cx).visit();
-
-    for &cnum in cx.tcx.crates(()) {
-        // Analyze doc-reachability for extern items
-        LibEmbargoVisitor::new(cx).visit_lib(cnum);
-    }
-
-    // Clean the crate, translating the entire librustc_ast AST to one that is
-    // understood by rustdoc.
-    let mut module = module.clean(cx);
-
-    match *module.kind {
-        ItemKind::ModuleItem(ref module) => {
-            for it in &module.items {
-                // `compiler_builtins` should be masked too, but we can't apply
-                // `#[doc(masked)]` to the injected `extern crate` because it's unstable.
-                if it.is_extern_crate()
-                    && (it.attrs.has_doc_flag(sym::masked)
-                        || cx.tcx.is_compiler_builtins(it.def_id.krate()))
-                {
-                    cx.cache.masked_crates.insert(it.def_id.krate());
-                }
-            }
-        }
-        _ => unreachable!(),
-    }
-
-    let local_crate = ExternalCrate { crate_num: LOCAL_CRATE };
-    let primitives = local_crate.primitives(cx.tcx);
-    let keywords = local_crate.keywords(cx.tcx);
-    {
-        let m = match *module.kind {
-            ItemKind::ModuleItem(ref mut m) => m,
-            _ => unreachable!(),
-        };
-        m.items.extend(primitives.iter().map(|&(def_id, prim)| {
-            Item::from_def_id_and_parts(
-                def_id,
-                Some(prim.as_sym()),
-                ItemKind::PrimitiveItem(prim),
-                cx,
-            )
-        }));
-        m.items.extend(keywords.into_iter().map(|(def_id, kw)| {
-            Item::from_def_id_and_parts(def_id, Some(kw), ItemKind::KeywordItem(kw), cx)
-        }));
-    }
-
-    Crate { module, primitives, external_traits: cx.external_traits.clone() }
-}
 
 fn external_generic_args(
     cx: &mut DocContext<'_>,
@@ -90,7 +37,7 @@ fn external_generic_args(
     let args: Vec<_> = substs
         .iter()
         .filter_map(|kind| match kind.unpack() {
-            GenericArgKind::Lifetime(lt) => match lt {
+            GenericArgKind::Lifetime(lt) => match lt.kind() {
                 ty::ReLateBound(_, ty::BoundRegion { kind: ty::BrAnon(_), .. }) => {
                     Some(GenericArg::Lifetime(Lifetime::elided()))
                 }
@@ -110,7 +57,7 @@ fn external_generic_args(
 
     if cx.tcx.fn_trait_kind_from_lang_item(did).is_some() {
         let inputs = match ty_kind.unwrap() {
-            ty::Tuple(tys) => tys.iter().map(|t| t.expect_ty().clean(cx)).collect(),
+            ty::Tuple(tys) => tys.iter().map(|t| t.clean(cx)).collect(),
             _ => return GenericArgs::AngleBracketed { args, bindings: bindings.into() },
         };
         let output = None;
@@ -228,7 +175,7 @@ crate fn name_from_pat(p: &hir::Pat<'_>) -> Symbol {
 }
 
 crate fn print_const(cx: &DocContext<'_>, n: &ty::Const<'_>) -> String {
-    match n.val {
+    match n.val() {
         ty::ConstKind::Unevaluated(ty::Unevaluated { def, substs: _, promoted }) => {
             let mut s = if let Some(def) = def.as_local() {
                 let hir_id = cx.tcx.hir().local_def_id_to_hir_id(def.did);
@@ -265,7 +212,7 @@ crate fn print_evaluated_const(tcx: TyCtxt<'_>, def_id: DefId) -> Option<String>
             (ConstValue::Scalar(_), &ty::Adt(_, _)) => None,
             (ConstValue::Scalar(_), _) => {
                 let const_ = ty::Const::from_value(tcx, val, ty);
-                Some(print_const_with_custom_print_scalar(tcx, const_))
+                Some(print_const_with_custom_print_scalar(tcx, &const_))
             }
             _ => None,
         }
@@ -301,12 +248,12 @@ fn format_integer_with_underscore_sep(num: &str) -> String {
 fn print_const_with_custom_print_scalar(tcx: TyCtxt<'_>, ct: &ty::Const<'_>) -> String {
     // Use a slightly different format for integer types which always shows the actual value.
     // For all other types, fallback to the original `pretty_print_const`.
-    match (ct.val, ct.ty.kind()) {
+    match (ct.val(), ct.ty().kind()) {
         (ty::ConstKind::Value(ConstValue::Scalar(int)), ty::Uint(ui)) => {
             format!("{}{}", format_integer_with_underscore_sep(&int.to_string()), ui.name_str())
         }
         (ty::ConstKind::Value(ConstValue::Scalar(int)), ty::Int(i)) => {
-            let ty = tcx.lift(ct.ty).unwrap();
+            let ty = tcx.lift(ct.ty()).unwrap();
             let size = tcx.layout_of(ty::ParamEnv::empty().and(ty)).unwrap().size;
             let data = int.assert_bits(size);
             let sign_extended_data = size.sign_extend(data) as i128;
@@ -356,7 +303,7 @@ crate fn resolve_type(cx: &mut DocContext<'_>, path: Path) -> Type {
 
     match path.res {
         Res::PrimTy(p) => Primitive(PrimitiveType::from(p)),
-        Res::SelfTy(..) if path.segments.len() == 1 => Generic(kw::SelfUpper),
+        Res::SelfTy { .. } if path.segments.len() == 1 => Generic(kw::SelfUpper),
         Res::Def(DefKind::TyParam, _) if path.segments.len() == 1 => Generic(path.segments[0].name),
         _ => {
             let _ = register_res(cx, path.res);
@@ -399,10 +346,10 @@ crate fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
             i,
         ) => (i, kind.into()),
         // This is part of a trait definition; document the trait.
-        Res::SelfTy(Some(trait_def_id), _) => (trait_def_id, ItemType::Trait),
+        Res::SelfTy { trait_: Some(trait_def_id), .. } => (trait_def_id, ItemType::Trait),
         // This is an inherent impl; it doesn't have its own page.
-        Res::SelfTy(None, Some((impl_def_id, _))) => return impl_def_id,
-        Res::SelfTy(None, None)
+        Res::SelfTy { trait_: None, alias_to: Some((impl_def_id, _)) } => return impl_def_id,
+        Res::SelfTy { trait_: None, alias_to: None }
         | Res::PrimTy(_)
         | Res::ToolMod
         | Res::SelfCtor(_)

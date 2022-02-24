@@ -119,7 +119,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // We only have the Gotoc type, we need to normalize to match the MIR type.
         assert!(trait_ty.is_struct_tag());
         let mir_name =
-            self.normalized_trait_name(self.type_map.get(&trait_ty.tag().unwrap()).unwrap());
+            self.normalized_trait_name(*self.type_map.get(&trait_ty.tag().unwrap()).unwrap());
 
         // Label
         self.vtable_ctx.add_call_site(

@@ -15,10 +15,8 @@ use crate::read2::read2_abbreviated;
 use crate::util::logv;
 use regex::Regex;
 
-use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs::{self, create_dir_all};
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
@@ -47,13 +45,6 @@ pub fn run(config: Config, testpaths: &TestPaths, revision: Option<&str>) {
     create_dir_all(&cx.output_base_dir()).unwrap();
     cx.run_revision();
     cx.create_stamp();
-}
-
-pub fn compute_stamp_hash(config: &Config) -> String {
-    let mut hash = DefaultHasher::new();
-    config.stage_id.hash(&mut hash);
-
-    format!("{:x}", hash.finish())
 }
 
 #[derive(Copy, Clone)]
@@ -327,10 +318,9 @@ impl<'test> TestCx<'test> {
         cargo
             .arg("kani")
             .args(["--function", function_name])
-            .arg("--target")
+            .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .arg("--crate")
-            .arg(&parent_dir);
+            .current_dir(&parent_dir);
         self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
@@ -352,9 +342,8 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
-        kani.args(&self.props.kani_flags)
-            .arg("--input")
-            .arg(&self.testpaths.file)
+        kani.arg(&self.testpaths.file)
+            .args(&self.props.kani_flags)
             .arg("--cbmc-args")
             .args(&self.props.cbmc_flags);
         self.add_kani_dir_to_path(&mut kani);
@@ -411,7 +400,7 @@ impl<'test> TestCx<'test> {
 
     fn create_stamp(&self) {
         let stamp = crate::stamp(&self.config, self.testpaths, self.revision);
-        fs::write(&stamp, compute_stamp_hash(&self.config)).unwrap();
+        fs::write(&stamp, "we only support one configuration").unwrap();
     }
 }
 

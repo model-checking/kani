@@ -88,9 +88,6 @@ pub struct Config {
     /// The directory where programs should be built
     pub build_base: PathBuf,
 
-    /// The name of the stage being built (stage1, etc)
-    pub stage_id: String,
-
     /// The test mode, e.g. ui or debuginfo.
     pub mode: Mode,
 
@@ -134,9 +131,6 @@ pub struct Config {
 
     /// Whether to use colors in test.
     pub color: ColorConfig,
-
-    /// The current Rust channel
-    pub channel: String,
 
     /// The default Rust edition
     pub edition: Option<String>,

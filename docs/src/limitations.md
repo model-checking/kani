@@ -1,5 +1,4 @@
 # Limitations
-
 ## Rust feature support
 
 The table below tries to summarize the current support in Kani for
@@ -246,16 +245,16 @@ atomic_load | Partial | See [Atomics](#atomics) |
 atomic_load_acq | Partial | See [Atomics](#atomics) |
 atomic_load_relaxed | Partial | See [Atomics](#atomics) |
 atomic_load_unordered | Partial | See [Atomics](#atomics) |
-atomic_max | Partial | See [Atomics](#atomics) |
-atomic_max_acq | Partial | See [Atomics](#atomics) |
-atomic_max_acqrel | Partial | See [Atomics](#atomics) |
-atomic_max_rel | Partial | See [Atomics](#atomics) |
-atomic_max_relaxed | Partial | See [Atomics](#atomics) |
-atomic_min | Partial | See [Atomics](#atomics) |
-atomic_min_acq | Partial | See [Atomics](#atomics) |
-atomic_min_acqrel | Partial | See [Atomics](#atomics) |
-atomic_min_rel | Partial | See [Atomics](#atomics) |
-atomic_min_relaxed | Partial | See [Atomics](#atomics) |
+atomic_max | No | See [Atomics](#atomics) |
+atomic_max_acq | No | See [Atomics](#atomics) |
+atomic_max_acqrel | No | See [Atomics](#atomics) |
+atomic_max_rel | No | See [Atomics](#atomics) |
+atomic_max_relaxed | No | See [Atomics](#atomics) |
+atomic_min | No | See [Atomics](#atomics) |
+atomic_min_acq | No | See [Atomics](#atomics) |
+atomic_min_acqrel | No | See [Atomics](#atomics) |
+atomic_min_rel | No | See [Atomics](#atomics) |
+atomic_min_relaxed | No | See [Atomics](#atomics) |
 atomic_nand | Partial | See [Atomics](#atomics) |
 atomic_nand_acq | Partial | See [Atomics](#atomics) |
 atomic_nand_acqrel | Partial | See [Atomics](#atomics) |
@@ -274,16 +273,16 @@ atomic_store | Partial | See [Atomics](#atomics) |
 atomic_store_rel | Partial | See [Atomics](#atomics) |
 atomic_store_relaxed | Partial | See [Atomics](#atomics) |
 atomic_store_unordered | Partial | See [Atomics](#atomics) |
-atomic_umax | Partial | See [Atomics](#atomics) |
-atomic_umax_acq | Partial | See [Atomics](#atomics) |
-atomic_umax_acqrel | Partial | See [Atomics](#atomics) |
-atomic_umax_rel | Partial | See [Atomics](#atomics) |
-atomic_umax_relaxed | Partial | See [Atomics](#atomics) |
-atomic_umin | Partial | See [Atomics](#atomics) |
-atomic_umin_acq | Partial | See [Atomics](#atomics) |
-atomic_umin_acqrel | Partial | See [Atomics](#atomics) |
-atomic_umin_rel | Partial | See [Atomics](#atomics) |
-atomic_umin_relaxed | Partial | See [Atomics](#atomics) |
+atomic_umax | No | See [Atomics](#atomics) |
+atomic_umax_acq | No | See [Atomics](#atomics) |
+atomic_umax_acqrel | No | See [Atomics](#atomics) |
+atomic_umax_rel | No | See [Atomics](#atomics) |
+atomic_umax_relaxed | No | See [Atomics](#atomics) |
+atomic_umin | No | See [Atomics](#atomics) |
+atomic_umin_acq | No | See [Atomics](#atomics) |
+atomic_umin_acqrel | No | See [Atomics](#atomics) |
+atomic_umin_rel | No | See [Atomics](#atomics) |
+atomic_umin_relaxed | No | See [Atomics](#atomics) |
 atomic_xadd | Partial | See [Atomics](#atomics) |
 atomic_xadd_acq | Partial | See [Atomics](#atomics) |
 atomic_xadd_acqrel | Partial | See [Atomics](#atomics) |
@@ -430,3 +429,21 @@ code to be sequential.
 While Kani is capable of generating code for SIMD instructions, unfortunately, it
 does not provide support for the verification of some operations like vector
 comparison (e.g., `simd_eq`).
+
+## Overrides
+
+As explained in [Comparison with other
+tools](./tool-comparison.md#comparison-with-other-tools), Kani is based on a
+technique called model checking, which verifies a program without actually
+executing it. It does so through encoding the program and analyzing the encoded
+version. The encoding process often requires "modeling" some of the library
+functions to make them suitable for analysis. Typical examples of functionality
+that requires modeling are system calls and I/O operations. In some cases, Kani
+performs such encoding through overriding some of the definitions in the Rust
+standard library. The following table lists some of the symbols that Kani
+overrides and a description of their behavior compared to the `std` versions:
+
+Name | Description |
+---  | --- |
+`print`, `eprint`, `println`, and `eprintln` macros | Kani's version of these macros skips functionality that is not relevant for verification, e.g., string formatting and I/O operations |
+`assert`, `assert_eq`, and `assert_ne` macros | Kani overrides these macros in order to skip string formatting code, control the message that is displayed in the verification report for those asserts, and perform some instrumentation. |

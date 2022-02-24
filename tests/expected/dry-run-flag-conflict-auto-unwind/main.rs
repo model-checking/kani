@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// kani-flags: --output-format old
+
 // kani-flags: --dry-run --auto-unwind
 // cbmc-flags: --unwind 2
 

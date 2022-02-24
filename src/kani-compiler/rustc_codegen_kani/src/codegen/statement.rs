@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
+use crate::utils;
 use crate::{GotocCtx, VtableCtx};
-use cbmc::goto_program::{BuiltinFn, Expr, ExprValue, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -39,7 +40,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
-                self.codegen_switch_int(discr, switch_ty, targets)
+                self.codegen_switch_int(discr, *switch_ty, targets)
             }
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
             TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
@@ -272,9 +273,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if fargs.len() > 0 {
             let tupe = fargs.remove(fargs.len() - 1);
             let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
-                ty::Tuple(tupled_args) => {
-                    tupled_args.iter().map(|s| self.codegen_ty(s.expect_ty())).collect()
-                }
+                ty::Tuple(tupled_args) => tupled_args.iter().map(|s| self.codegen_ty(s)).collect(),
                 _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
             };
 
@@ -462,7 +461,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         assert!(!fargs.is_empty(), "Panic requires a string message");
-        let msg = extract_const_message(&fargs[0]).unwrap_or(String::from(
+        let msg = utils::extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
@@ -480,6 +479,21 @@ impl<'tcx> GotocCtx<'tcx> {
             ],
             loc,
         )
+    }
+
+    /// Generate code to cover the given condition at the current location
+    pub fn codegen_cover(&self, cond: Expr, msg: &str, span: Option<Span>) -> Stmt {
+        let loc = self.codegen_caller_span(&span);
+        // Should use Stmt::cover, but currently this doesn't work with CBMC
+        // unless it is run with '--cover cover' (see
+        // https://github.com/diffblue/cbmc/issues/6613). So for now use
+        // assert(!cond).
+        Stmt::assert(cond.not(), msg, loc)
+    }
+
+    /// Generate code to cover the current location
+    pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
+        self.codegen_cover(Expr::bool_true(), msg, span)
     }
 
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
@@ -601,24 +615,5 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
-    }
-}
-
-/// Tries to extract a string message from an `Expr`.
-/// If the expression represents a pointer to a string constant, this will return the string
-/// constant. Otherwise, return `None`.
-fn extract_const_message(arg: &Expr) -> Option<String> {
-    match arg.value() {
-        ExprValue::Struct { values } => match &values[0].value() {
-            ExprValue::AddressOf(address) => match address.value() {
-                ExprValue::Index { array, .. } => match array.value() {
-                    ExprValue::StringConstant { s } => Some(s.to_string()),
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
     }
 }

@@ -1,15 +1,24 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
-use tracing::{debug, warn};
-
 use crate::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::mir::Place;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Instance;
-use rustc_middle::ty::{self, Ty, TyS};
+use rustc_middle::ty::{self, Ty};
 use rustc_span::Span;
+use tracing::{debug, warn};
+
+macro_rules! emit_concurrency_warning {
+    ($intrinsic: expr, $loc: expr) => {{
+        warn!(
+            "Kani does not support concurrency for now. `{}` in {} treated as a sequential operation.",
+            $intrinsic,
+            $loc.short_string()
+        );
+    }};
+}
 
 struct SizeAlign {
     size: Expr,
@@ -279,8 +288,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // Note: Atomic arithmetic operations wrap around on overflow.
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
-                warn!("Kani does not support concurrency for now. {} treated as a sequential operation.", intrinsic);
                 let loc = self.codegen_span_option(span);
+                emit_concurrency_warning!(intrinsic, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -326,11 +335,20 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_load_acq" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_relaxed" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_unordered" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_nand" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_acq" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_acqrel" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_rel" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_relaxed" => codegen_atomic_binop!(bitnand),
             "atomic_or" => codegen_atomic_binop!(bitor),
             "atomic_or_acq" => codegen_atomic_binop!(bitor),
             "atomic_or_acqrel" => codegen_atomic_binop!(bitor),
             "atomic_or_rel" => codegen_atomic_binop!(bitor),
             "atomic_or_relaxed" => codegen_atomic_binop!(bitor),
+            "atomic_singlethreadfence" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_acq" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_rel" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_store" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
@@ -391,11 +409,31 @@ impl<'tcx> GotocCtx<'tcx> {
             "expf64" => codegen_simple_intrinsic!(Exp),
             "fabsf32" => codegen_simple_intrinsic!(Fabsf),
             "fabsf64" => codegen_simple_intrinsic!(Fabs),
+            "fadd_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_stmt = codegen_intrinsic_binop!(plus);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+            }
+            "fdiv_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_stmt = codegen_intrinsic_binop!(div);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+            }
             "floorf32" => codegen_simple_intrinsic!(Floorf),
             "floorf64" => codegen_simple_intrinsic!(Floor),
             "fmaf32" => codegen_simple_intrinsic!(Fmaf),
             "fmaf64" => codegen_simple_intrinsic!(Fma),
+            "fmul_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_stmt = codegen_intrinsic_binop!(mul);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+            }
             "forget" => Stmt::skip(loc),
+            "fsub_fast" => {
+                let fargs_clone = fargs.clone();
+                let binop_stmt = codegen_intrinsic_binop!(sub);
+                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+            }
             "likely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "log10f32" => codegen_simple_intrinsic!(Log10f),
             "log10f64" => codegen_simple_intrinsic!(Log10),
@@ -499,6 +537,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_memory" => codegen_intrinsic_copy!(Memmove),
             "volatile_copy_nonoverlapping_memory" => codegen_intrinsic_copy!(Memcpy),
             "volatile_load" => self.codegen_expr_to_place(p, fargs.remove(0).dereference()),
+            "volatile_store" => {
+                assert!(self.place_ty(p).is_unit());
+                self.codegen_volatile_store(instance, intrinsic, fargs, loc)
+            }
             "wrapping_add" => codegen_wrapping_op!(plus),
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
@@ -518,6 +560,28 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/new/choose"
             ),
         }
+    }
+
+    // Fast math intrinsics for floating point operations like `fadd_fast`
+    // assume that their inputs are finite:
+    // https://doc.rust-lang.org/std/intrinsics/fn.fadd_fast.html
+    // This function adds assertions to the statement which performs the
+    // operation and checks for overflow failures.
+    fn add_finite_args_checks(
+        &mut self,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        stmt: Stmt,
+        span: Option<Span>,
+    ) -> Stmt {
+        let arg1 = fargs.remove(0);
+        let arg2 = fargs.remove(0);
+        let msg1 = format!("first argument for {} is finite", intrinsic);
+        let msg2 = format!("second argument for {} is finite", intrinsic);
+        let loc = self.codegen_span_option(span);
+        let finite_check1 = Stmt::assert(arg1.is_finite(), msg1.as_str(), loc.clone());
+        let finite_check2 = Stmt::assert(arg2.is_finite(), msg2.as_str(), loc.clone());
+        Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
     fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
@@ -615,10 +679,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc.clone());
         let res_stmt = self.codegen_expr_to_place(p, var1);
@@ -646,10 +707,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc.clone());
         let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -685,10 +743,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc.clone());
         let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
@@ -701,10 +756,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
-        warn!(
-            "Kani does not support concurrency for now. {} treated as a sequential operation.",
-            intrinsic
-        );
+        emit_concurrency_warning!(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc.clone());
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
@@ -757,7 +809,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_intrinsic_transmute(
         &mut self,
         mut fargs: Vec<Expr>,
-        ret_ty: &'tcx TyS<'tcx>,
+        ret_ty: Ty<'tcx>,
         p: &Place<'tcx>,
     ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
@@ -819,10 +871,10 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Slice(_) | ty::Str => {
                 let unit_t = match t.kind() {
                     ty::Slice(et) => et,
-                    ty::Str => self.tcx.types.u8,
+                    ty::Str => &self.tcx.types.u8,
                     _ => unreachable!(),
                 };
-                let unit = self.layout_of(unit_t);
+                let unit = self.layout_of(*unit_t);
                 // The info in this case is the length of the str, so the size is that
                 // times the unit size.
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
@@ -880,7 +932,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // We follow the SSA implementation using bit arithmetic: (size + (align-1)) & -align
                 // This assumes that align is a power of two, and that all values have the same size_t.
 
-                let one = Expr::int_constant(1, Type::size_t());
+                let one = Expr::int_constant::<isize>(1, Type::size_t());
                 let addend = align.clone().sub(one);
                 let add = size.plus(addend);
                 let neg = align.clone().neg();
@@ -962,5 +1014,28 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
+    }
+
+    /// A volatile write of a memory location:
+    /// https://doc.rust-lang.org/std/ptr/fn.write_volatile.html
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `dst` must be valid for writes (done by `--pointer-check`)
+    ///  * `dst` must be properly aligned (done by `align_check` below)
+    fn codegen_volatile_store(
+        &mut self,
+        instance: Instance<'tcx>,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        loc: Location,
+    ) -> Stmt {
+        emit_concurrency_warning!(intrinsic, loc);
+        let dst = fargs.remove(0);
+        let src = fargs.remove(0);
+        let typ = instance.substs.type_at(0);
+        let align = self.is_aligned(typ, dst.clone());
+        let align_check = Stmt::assert(align, "`dst` is properly aligned", loc.clone());
+        let expr = dst.dereference().assign(src, loc.clone());
+        Stmt::block(vec![align_check, expr], loc)
     }
 }

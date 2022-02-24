@@ -8,10 +8,13 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+atty = "0.2.14"
 clap = "2.33.0"
 kani_queries = {path = "kani_queries"}
 rustc_codegen_kani = {path = "rustc_codegen_kani"}
-tracing = {version = "0.1", features = ["max_level_debug", "release_max_level_info"]}
+tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_info"]}
+tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
+tracing-tree = "0.2.0"
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

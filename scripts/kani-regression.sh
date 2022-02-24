@@ -8,40 +8,25 @@ fi
 set -o pipefail
 set -o nounset
 
-# Test for platform
-PLATFORM=$(uname -sp)
-if [[ $PLATFORM == "Linux x86_64" ]]
-then
-  TARGET="x86_64-unknown-linux-gnu"
-elif [[ $PLATFORM == "Darwin i386" ]]
-then
-  TARGET="x86_64-apple-darwin"
-fi
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
 KANI_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 48
+check-cbmc-version.py --major 5 --minor 50
 check-cbmc-viewer-version.py --major 2 --minor 5
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build Kani compiler and Kani library
-cargo build -p kani-compiler
+# Build all packages in the workspace
+cargo build
 
 # Unit tests
-cargo test -p cbmc
+cargo test -p cprover_bindings
 cargo test -p kani-compiler
-
-# Build tool for linking Kani pointer restrictions
-cargo build --release -p kani-link-restrictions
-
-# Build compiletest
-cargo build --release -p compiletest
+cargo test -p cargo-kani
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -53,6 +38,7 @@ TESTS=(
     "cargo-kani cargo-kani"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
+    "ui expected"
 )
 
 # Extract testing suite information and run compiletest
@@ -60,15 +46,10 @@ for testp in "${TESTS[@]}"; do
   testl=($testp)
   suite=${testl[0]}
   mode=${testl[1]}
-  echo "Check compiletest suite=$suite mode=$mode ($TARGET -> $TARGET)"
+  echo "Check compiletest suite=$suite mode=$mode"
   # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
   # Tracking issue: https://github.com/model-checking/kani/issues/755
-  ./target/release/compiletest --kani-dir-path scripts --src-base tests/$suite \
-                               --build-base $(pwd)/build/$TARGET/tests/$suite \
-                               --stage-id stage1-$TARGET \
-                               --suite $suite --mode $mode \
-                               --target $TARGET --host $TARGET \
-                               --quiet --channel dev
+  cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
 done
 
 # Check codegen for the standard library
@@ -94,9 +75,6 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 #        \           / v0.1.1
 #         dependency2
 time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
-
-# Check that we don't have type mismatches across different crates
-time "$KANI_DIR"/tests/kani-multicrate/type-mismatch/run-mismatch-test.sh
 
 echo
 echo "All Kani regression tests completed successfully."

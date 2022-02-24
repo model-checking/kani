@@ -1,0 +1,27 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "cprover_bindings"
+version = "0.0.0"
+edition = "2018"
+
+[lib]
+test = true
+doctest = false
+
+[dependencies]
+bitflags = "1.0"
+lazy_static = "1.4.0"
+cstr = "0.2"
+libc = "0.2"
+measureme = "9.1.0"
+num = "0.4.0"
+serde = {version = "1", features = ["derive"]}
+snap = "1"
+string-interner = "0.14.0"
+tracing = "0.1"
+vector-map = "1.0.1"
+
+[dev-dependencies]
+serde_test = "1"

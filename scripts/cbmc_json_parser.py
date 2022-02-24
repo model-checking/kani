@@ -21,12 +21,13 @@ functions:
 
 import json
 from colorama import Fore, Style
+import re
 import sys
 from enum import Enum
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
-    'default': 'old',
+    'default': 'regular',
     'regular': 'regular',
     'terse': 'terse',
     'old': 'old'
@@ -42,6 +43,9 @@ class GlobalMessages(str, Enum):
     MESSAGE_TEXT = 'messageText'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
+    REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
+    REACH_CHECK_KEY = "reachCheckResult"
+    CHECK_ID = "KANI_CHECK_ID"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -53,13 +57,18 @@ def main():
         print("Json File Input Missing")
         sys.exit(1)
 
+    if len(sys.argv) == 3:
+        output_style = output_style_switcher[sys.argv[2]]
+    else:
+        output_style = "regular"
+
     # parse the input json file
     with open(sys.argv[1]) as f:
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["old"])
-    return
+    return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
+    sys.exit(return_code)
 
 def transform_cbmc_output(cbmc_response_string, output_style):
     """
@@ -97,25 +106,26 @@ def transform_cbmc_output(cbmc_response_string, output_style):
             output_message += construct_solver_information_message(solver_information)
 
             # Extract property messages from the json file
+            property_message, num_failed = construct_property_message(properties)
             # Combine both messages to give as final output
-            output_message += construct_property_message(properties)
+            output_message += property_message
 
         elif output_style == output_style_switcher["terse"]:
 
             # Construct only summarized result and display output
-            output_message = construct_terse_property_message(properties)
+            output_message, num_failed = construct_terse_property_message(properties)
 
         # Print using an Interface function
         print(output_message)
         print(messages)
 
     else:
-        # DynTrait tests generate a non json output due to "Invariant check failed" error
-        # For these cases, we just produce the cbmc output unparsed
-        # TODO: Parse these non json outputs from CBMC
+        # When CBMC crashes or does not produce json output, print the response
+        # string to allow us to debug
+        print(cbmc_response_string)
         raise Exception("CBMC Crashed - Unable to present Result")
 
-    return
+    return num_failed > 0
 
 # Check if the blob is in json format for parsing
 def is_json(cbmc_output_string):
@@ -179,7 +189,9 @@ def postprocess_results(properties):
     for a Rust construct that is not currently supported by Kani failed, since
     the missing exploration of execution paths through the unsupported construct
     may hide failures
-    2. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
+    2. Change a check's result from "SUCCESS" to "UNREACHABLE" if its
+    reachability check's result was "SUCCESS"
+    3. TODO: Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
     assertion failed, since the insufficient unwinding may cause some execution
     paths to be left unexplored (https://github.com/model-checking/kani/issues/746)
 
@@ -189,12 +201,18 @@ def postprocess_results(properties):
 
     has_reachable_unsupported_constructs = has_check_failure(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
     has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
+    properties, reach_checks = filter_reach_checks(properties)
+    annotate_properties_with_reach_results(properties, reach_checks)
 
     for property in properties:
         if has_reachable_unsupported_constructs:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
+        elif GlobalMessages.REACH_CHECK_KEY in property and property[GlobalMessages.REACH_CHECK_KEY] == "SUCCESS":
+            # Change SUCCESS to UNREACHABLE
+            assert property["status"] == "SUCCESS", "** ERROR: Expecting an unreachable property to have a status of \"SUCCESS\""
+            property["status"] = "UNREACHABLE"
         # TODO: Handle unwinding assertion failure
 
     messages = ""
@@ -214,6 +232,68 @@ def has_check_failure(properties, message):
         if message in property["description"] and property["status"] == "FAILURE":
             return True
     return False
+
+
+def filter_reach_checks(properties):
+    return filter_properties(properties, GlobalMessages.REACH_CHECK_DESC)
+
+
+def filter_properties(properties, message):
+    """
+    Move properties that have "message" in their description out of "properties"
+    into "removed_properties"
+    """
+    filtered_properties = []
+    removed_properties = []
+    for property in properties:
+        if message in property["description"]:
+            removed_properties.append(property)
+        else:
+            filtered_properties.append(property)
+    return filtered_properties, removed_properties
+
+
+def annotate_properties_with_reach_results(properties, reach_checks):
+    """
+    When assertion reachability checks are turned on, kani prefixes each
+    assert's description with an "ID" of the following form:
+    [KANI_CHECK_ID_<crate-name>_<index-of-check>]
+    e.g.:
+    [KANI_CHECK_ID_foo.6875c808::foo_0] assertion failed: x % 2 == 0
+    In addition, the description of each reachability check that it generates
+    includes the ID of the assert that we want to check its reachability. The
+    description of a reachability check uses the following template:
+    [KANI_REACHABILITY_CHECK] <ID of original assert>
+    e.g.:
+    [KANI_REACHABILITY_CHECK] KANI_CHECK_ID_foo.6875c808::foo_0
+    This function iterates over the reachability checks, and for each:
+    1. It finds the corresponding assert through matching the ID
+    2. It annotates the assert's data with the result of the reachability check
+    under the GlobalMessages.REACH_CHECK_KEY key
+    """
+    for reach_check in reach_checks:
+        description = reach_check["description"]
+        # Extract the ID of the assert from the description
+        match_obj = re.search(GlobalMessages.CHECK_ID + r"_.*_([0-9])*", description)
+        if not match_obj:
+            raise Exception("Error: failed to extract check ID for reachability check \"" + description + "\"")
+        check_id = match_obj.group(0)
+        prop = get_matching_property(properties, check_id)
+        # Attach the result of the reachability check to this property
+        prop[GlobalMessages.REACH_CHECK_KEY] = reach_check["status"]
+        # Remove the ID from the property's description so that it's not shown
+        # to the user
+        prop["description"] = prop["description"].replace("[" + check_id + "] ", "", 1)
+
+
+def get_matching_property(properties, check_id):
+    """
+    Find the property with the given ID
+    """
+    for property in properties:
+        if check_id in property["description"]:
+            return property
+    raise Exception("Error: failed to find a property with ID \"" + check_id + "\"")
 
 
 def construct_solver_information_message(solver_information):
@@ -312,7 +392,7 @@ def construct_terse_property_message(properties):
     # TODO: Get final status from the cprover status
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
-    return output_message
+    return output_message, number_tests_failed
 
 def construct_property_message(properties):
     """
@@ -337,12 +417,14 @@ def construct_property_message(properties):
     """
 
     number_tests_failed = 0
+    number_tests_unreachable = 0
+    number_tests_undetermined = 0
     output_message = ""
     failed_tests = []
     index = 0
     verification_status = GlobalMessages.FAILED
 
-    output_message = "RESULT:\n"
+    output_message = "RESULTS:\n"
 
     # for property_instance in properties:
     for index, property_instance in enumerate(properties):
@@ -357,6 +439,10 @@ def construct_property_message(properties):
             message = Fore.GREEN + f"{status}" + Style.RESET_ALL
         elif status == "UNDETERMINED":
             message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            number_tests_undetermined += 1
+        elif status == "UNREACHABLE":
+            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            number_tests_unreachable += 1
         else:
             number_tests_failed += 1
             failed_tests.append(property_instance)
@@ -368,7 +454,17 @@ def construct_property_message(properties):
         output_message += f"Check {index+1}: {name}\n\t - Status: " + \
             message + f"\n\t - Description: \"{description}\"\n" + "\n"
 
-    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed\n"
+    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed"
+    other_status = []
+    if number_tests_undetermined > 0:
+        other_status.append(f"{number_tests_undetermined} undetermined")
+    if number_tests_unreachable > 0:
+        other_status.append(f"{number_tests_unreachable} unreachable")
+    if other_status:
+        output_message += " ("
+        output_message += ",".join(other_status)
+        output_message += ")"
+    output_message += "\n"
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
@@ -393,7 +489,7 @@ def construct_property_message(properties):
     # TODO: Extract information from CBMC about iterations
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
-    return output_message
+    return output_message, number_tests_failed
 
 
 if __name__ == "__main__":

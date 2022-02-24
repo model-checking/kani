@@ -3,26 +3,28 @@
 ## Build command cheat sheet
 
 ```bash
-# Normal build
-cd src/kani-compiler
+# Build all packages in the repository
 cargo build
 ```
+
 ```bash
-# Full regression suite
+# Full regression suite (does not run bookrunner)
 ./scripts/kani-regression.sh
 ```
 ```bash
 # Delete regression test caches
-rm -r build/x86_64-unknown-linux-gnu/test/
+# Use build/x86_64-apple-darwin/tests for MacOs
+rm -r build/x86_64-unknown-linux-gnu/tests/
 ```
 ```bash
-# Test suite run (to run a specific suite from src/test/, just remove the others)
-COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 kani firecracker prusti smack expected cargo-kani kani-docs
+# Test suite run (we can only run one at a time)
+# cargo run -p compiletest -- --suite ${suite} --mode ${mode}
+cargo run -p compiletest -- --suite kani --mode kani
 ```
 ```bash
 # Book runner run
 ./scripts/setup/install_bookrunner_deps.sh
-./x.py run -i --stage 1 bookrunner
+cargo run -p bookrunner
 ```
 ```bash
 # Documentation build
@@ -35,9 +37,8 @@ cd docs
 ```bash
 # Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
 # or similar error? Clean kani-compiler build:
-cd src/kani-compiler
-cargo clean
-cargo build
+cargo clean -p kani-compiler
+cargo build -p kani-compiler
 ```
 
 ## Git command cheat sheet
@@ -88,29 +89,6 @@ git log --graph --oneline origin/upstream-rustc..origin/main
 ```bash
 # See all files modified by Kani (compared to upstream Rust)
 git diff --stat origin/upstream-rustc..origin/main
-```
-
-## Set up `rust-analyzer` in VSCode
-
-Add the following to the `rust-analyzer` extension settings in `settings.json`:
-```
-    "rust-analyzer.updates.channel": "nightly",
-    "rust-analyzer.rustcSource": "discover",
-    "rust-analyzer.workspace.symbol.search.scope": "workspace_and_dependencies",
-```
-
-Ensure that any packages that use `rustc` data structures have the following line set in their `Cargo.toml`
-
-```
-[package.metadata.rust-analyzer]
-# This package uses rustc crates.
-rustc_private=true
-```
-
-You may also need to install the `rustc-dev` package using rustup
-
-```
-rustup toolchain install nightly --component rustc-dev
 ```
 
 ## Kani command cheat sheet
