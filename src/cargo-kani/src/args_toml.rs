@@ -4,9 +4,10 @@
 use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use toml::value::Table;
 use toml::Value;
 
-/// Produces a set of arguments to pass to "self" (cargo-kani) from a Cargo.toml project file
+/// Produces a set of arguments to pass to ourself (cargo-kani) from a Cargo.toml project file
 pub fn config_toml_to_args() -> Result<Vec<OsString>> {
     // TODO: `cargo locate-project` maybe?
     let file = std::fs::read_to_string("Cargo.toml");
@@ -18,18 +19,17 @@ pub fn config_toml_to_args() -> Result<Vec<OsString>> {
     }
 }
 
-/// Parse a config toml and extract the cargo-kani arguments we should try injecting
-fn toml_to_args(file: &str) -> Result<Vec<OsString>> {
-    let config = file.parse::<Value>()?;
-    // We specifically rely on BTreeMap here to get a stable iteration order for unit testing
+/// Parse a config toml string and extract the cargo-kani arguments we should try injecting
+fn toml_to_args(tomldata: &str) -> Result<Vec<OsString>> {
+    let config = tomldata.parse::<Value>()?;
+    // To make testing easier, our function contract is to produce a stable ordering of flags for a given input.
+    // Consequently, we use BTreeMap instead of HashMap here.
     let mut map: BTreeMap<String, Value> = BTreeMap::new();
-    let keys = ["workspace.metadata.kani.flags", "package.metadata.kani.flags", "kani.flags"];
+    let tables = ["workspace.metadata.kani.flags", "package.metadata.kani.flags", "kani.flags"];
 
-    for key in keys {
-        if let Some(val) = descend(&config, key) {
-            if let Some(val) = val.as_table() {
-                map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
-            }
+    for table in tables {
+        if let Some(val) = get_table(&config, table) {
+            map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
         }
     }
 
@@ -38,6 +38,7 @@ fn toml_to_args(file: &str) -> Result<Vec<OsString>> {
 
     for (flag, value) in map {
         if flag == "cbmc-args" {
+            // --cbmc-args has to come last because it eats all remaining arguments
             insert_arg_from_toml(&flag, &value, &mut suffixed_args)?;
         } else {
             insert_arg_from_toml(&flag, &value, &mut args)?;
@@ -49,7 +50,7 @@ fn toml_to_args(file: &str) -> Result<Vec<OsString>> {
     Ok(args)
 }
 
-/// Translates one toml entry into arguments and inserts it into args
+/// Translates one toml entry (flag, value) into arguments and inserts it into `args`
 fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> Result<()> {
     match value {
         Value::Boolean(b) => {
@@ -83,13 +84,13 @@ fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> 
     Ok(())
 }
 
-/// Take 'a.b.c' and turn it into 'start['a']['b']['c']' reliably.
-fn descend<'a>(start: &'a Value, table: &str) -> Option<&'a Value> {
+/// Take 'a.b.c' and turn it into 'start['a']['b']['c']' reliably, and interpret the result as a table
+fn get_table<'a>(start: &'a Value, table: &str) -> Option<&'a Table> {
     let mut current = start;
     for key in table.split('.') {
         current = current.get(key)?;
     }
-    Some(current)
+    current.as_table()
 }
 
 #[cfg(test)]
