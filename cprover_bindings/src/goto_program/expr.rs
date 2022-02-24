@@ -1330,32 +1330,6 @@ impl Expr {
         let s = s.into();
         expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
     }
-
-    /// Given a value `self` with type `t`, and a structurally idential transparent wrapper with
-    /// type `wrapper_typ`, generate a struct rvalue that contains `self`.
-    // Addresses the issue found in https://github.com/model-checking/kani/issues/822
-    pub fn wrap_in_transparent_type(self, wrapper_typ: &Type, st: &SymbolTable) -> Expr {
-        assert!(wrapper_typ.is_transparent_type(st) || self.typ() == wrapper_typ);
-        if wrapper_typ.is_struct_like() || wrapper_typ.is_union_like() {
-            let components = st.lookup_components_in_type(wrapper_typ).unwrap();
-            // TODO: handle the case where there are zero sized fields.
-            // https://github.com/model-checking/kani/issues/837
-            assert_eq!(components.len(), 1);
-            if let DatatypeComponent::Field { typ, .. } = &components[0] {
-                Expr::struct_expr_from_values(
-                    wrapper_typ.aggr_tag().unwrap(),
-                    vec![self.wrap_in_transparent_type(typ, st)],
-                    st,
-                )
-            } else {
-                unreachable!()
-            }
-        } else if wrapper_typ.is_scalar() {
-            self
-        } else {
-            unreachable!("Unexpected typ {:?}", wrapper_typ);
-        }
-    }
 }
 /// Conversions to statements
 /// The statement constructors do typechecking, so we don't redundantly do that here.
