@@ -115,9 +115,9 @@ def transform_cbmc_output(cbmc_response_string, output_style):
         print(messages)
 
     else:
-        # DynTrait tests generate a non json output due to "Invariant check failed" error
-        # For these cases, we just produce the cbmc output unparsed
-        # TODO: Parse these non json outputs from CBMC
+        # When CBMC crashes or does not produce json output, print the response
+        # string to allow us to debug
+        print(cbmc_response_string)
         raise Exception("CBMC Crashed - Unable to present Result")
 
     return num_failed > 0
