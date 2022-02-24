@@ -10,7 +10,8 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "kani",
-    about = "Verify a single Rust file. For more information, see https://github.com/model-checking/kani"
+    about = "Verify a single Rust file. For more information, see https://github.com/model-checking/kani",
+    setting = structopt::clap::AppSettings::AllArgsOverrideSelf
 )]
 pub struct StandaloneArgs {
     /// Rust file to verify
@@ -24,7 +25,8 @@ pub struct StandaloneArgs {
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "cargo-kani",
-    about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani"
+    about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani",
+    setting = structopt::clap::AppSettings::AllArgsOverrideSelf
 )]
 pub struct CargoKaniArgs {
     #[structopt(flatten)]
