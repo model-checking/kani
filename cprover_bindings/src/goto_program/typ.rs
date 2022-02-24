@@ -637,16 +637,14 @@ impl Type {
     pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
         // If the type has components, i.e. is either a union or a struct, recurse into them
         if self.is_struct_like() || self.is_union_like() {
-            let components = st.lookup_components_in_type(self).unwrap();
-            // For now, only handle the case of transparent structs with one field.
-            // TODO https://github.com/model-checking/kani/issues/837
-            if components.len() != 1 {
-                None
-            } else {
+            let components = self.get_non_empty_components(st).unwrap();
+            if components.len() == 1 {
                 match &components[0] {
                     Padding { .. } => None,
                     Field { typ, .. } => typ.unwrap_transparent_type(st),
                 }
+            } else {
+                None
             }
         } else if self.is_scalar() {
             Some(self.clone())
@@ -699,21 +697,9 @@ impl Type {
         if self.is_scalar() && other.is_scalar() {
             self == other
         } else if self.is_struct_like() && other.is_scalar() {
-            let components = self.get_non_empty_components(st).unwrap();
-            if components.len() == 1 {
-                let field = components[0];
-                field.is_field() && field.typ().is_structurally_equivalent_to(other, st)
-            } else {
-                false
-            }
+            self.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *other)
         } else if self.is_scalar() && other.is_struct_like() {
-            let components = other.get_non_empty_components(st).unwrap();
-            if components.len() == 1 {
-                let field = components[0];
-                field.is_field() && field.typ().is_structurally_equivalent_to(self, st)
-            } else {
-                false
-            }
+            other.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *self)
         } else if self.is_struct_like() && other.is_struct_like() {
             let self_components = self.get_non_empty_components(st).unwrap();
             let other_components = other.get_non_empty_components(st).unwrap();
