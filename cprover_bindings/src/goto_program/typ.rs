@@ -628,29 +628,31 @@ impl Type {
     /// We define it recursively as a type which has exactly one field, which it itself either
     /// a transparent type, or is a scalar type.
     pub fn is_transparent_type(&self, st: &SymbolTable) -> bool {
-        (self.is_struct_like() || self.is_union_like())
-            && self.unwrap_transparent_type(st).is_some()
+        self.unwrap_transparent_type(st).is_some()
     }
 
     /// Given a transparent type (see comment on `Type::is_transparent_type()`),
     /// extract the type it wraps.
     pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
-        // If the type has components, i.e. is either a union or a struct, recurse into them
-        if self.is_struct_like() || self.is_union_like() {
-            let components = self.get_non_empty_components(st).unwrap();
-            if components.len() == 1 {
-                match &components[0] {
-                    Padding { .. } => None,
-                    Field { typ, .. } => typ.unwrap_transparent_type(st),
+        fn recurse(t: &Type, st: &SymbolTable) -> Option<Type> {
+            // If the type has components, i.e. is either a union or a struct, recurse into them
+            if t.is_struct_like() || t.is_union_like() {
+                let components = t.get_non_empty_components(st).unwrap();
+                if components.len() == 1 {
+                    match &components[0] {
+                        Padding { .. } => None,
+                        Field { typ, .. } => recurse(typ, st),
+                    }
+                } else {
+                    None
                 }
+            } else if t.is_scalar() {
+                Some(t.clone())
             } else {
                 None
             }
-        } else if self.is_scalar() {
-            Some(self.clone())
-        } else {
-            None
         }
+        if self.is_struct_like() || self.is_union_like() { recurse(self, st) } else { None }
     }
 
     /// Get the non-zero-sized fields (including padding) in self
