@@ -220,6 +220,9 @@ def postprocess_results(properties):
         messages += "** WARNING: A Rust construct that is not currently supported " \
                     "by Kani was found to be reachable. Check the results for " \
                     "more details."
+    if has_failed_unwinding_asserts:
+        messages += "[Kani] info: Verification output shows one or more unwinding failures.\n" \
+                    "[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n"
 
     return properties, messages
 
