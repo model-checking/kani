@@ -5,7 +5,7 @@ use crate::GotocCtx;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::TyS;
+use rustc_middle::ty::Ty;
 use tracing::debug;
 
 // Should move into rvalue
@@ -71,7 +71,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generates an expression `((dst as usize) % align_of(T) == 0`
     /// to determine if `dst` is aligned.
-    pub fn is_aligned(&mut self, typ: &'tcx TyS<'_>, dst: Expr) -> Expr {
+    pub fn is_aligned(&mut self, typ: Ty<'tcx>, dst: Expr) -> Expr {
         let layout = self.layout_of(typ);
         let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
         let cast_dst = dst.cast_to(Type::size_t());

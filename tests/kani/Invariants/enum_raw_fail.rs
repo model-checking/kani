@@ -15,8 +15,11 @@ enum Basic {
 fn main() {
     let e = unsafe { kani::any_raw::<Basic>() };
     // This enum can be invalid and this code may actually not match any of the options below.
+    // We had to split this into two matches because the compiler was statically pruning the
+    // default branch of matches. When that happens, the failure is due to unreachable code being
+    // executed.
     kani::expect_fail(
-        matches!(e, Basic::Variant1 | Basic::Variant2 | Basic::Variant3),
+        matches!(e, Basic::Variant1 | Basic::Variant2) || matches!(e, Basic::Variant3),
         "Invalid enum variant",
     );
     match e {
