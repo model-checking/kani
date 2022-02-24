@@ -886,7 +886,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     COMMON_VTABLE_ENTRIES
                 };
 
-                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(*&src_mir_type);
+                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);
                 let size_assert = ctx.check_vtable_size(src_mir_type, vt_size.clone());
 
                 let vtable_fields: Vec<Expr> = vtable_entries
