@@ -20,8 +20,8 @@ Check 4: success_example.assertion.4
 
 2. `FAILURE`: This indicates that the check failed, i.e., the property doesn't
 hold. In this case, you can view the failure trace by re-running with the
-`--visualize` option.  This generates a `report` directory that contains the
-trace information. Load the `report/html/index.html` file in a browser to
+`--visualize` option.  This generates a directory that contains the trace
+information. Load the `html/index.html` file from that directory in a browser to
 examine the trace.
 
 Example:
