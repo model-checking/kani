@@ -169,6 +169,8 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         let target = target.unwrap();
         let caller_loc = tcx.codegen_caller_span(&span);
 
+        // TODO: switch to tagging assertions via the property class once CBMC allows that:
+        // https://github.com/diffblue/cbmc/issues/6692
         let (msg, reach_stmt) = if tcx.queries.get_check_assertion_reachability() {
             // Generate a unique ID for the assert
             let assert_id = tcx.next_check_id();

@@ -79,6 +79,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
+                // TODO: switch to tagging assertions via the property class once CBMC allows that:
+                // https://github.com/diffblue/cbmc/issues/6692
                 let msg = format!("{:?}", msg);
                 let (msg_str, reach_stmt) = if self.queries.get_check_assertion_reachability() {
                     let check_id = self.next_check_id();
