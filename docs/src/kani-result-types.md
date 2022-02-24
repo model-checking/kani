@@ -38,7 +38,14 @@ Check 2: failure_example.assertion.2
 3. `UNREACHABLE`: This indicates that the check is unreachable. This occurs when
 there is no possible execution trace that can reach the check's line of code.
 This may be because the function that contains the check is unused, or that the
-harness does not trigger the condition under which the check is invoked.
+harness does not trigger the condition under which the check is invoked. Kani
+currently checks the reachability of the following assertion types:
+    1. Assert macros (e.g. `assert`, `assert_eq`, etc.)
+    2. Arithmetic overflow checks
+    3. Negation overflow checks
+    4. Index out-of-bound checks
+    5. Divide/remainder-by-zero checks
+
 
 Example:
 
