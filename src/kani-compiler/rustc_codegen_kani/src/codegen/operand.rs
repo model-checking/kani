@@ -401,8 +401,9 @@ impl<'tcx> GotocCtx<'tcx> {
         // of the type expected. https://github.com/model-checking/kani/issues/822
         if let Some(wrapped_type) = res_t.unwrap_transparent_type(&self.symbol_table) {
             assert!(wrapped_type.is_pointer());
-            let wrapped_addr = offset_addr.cast_to(wrapped_type);
-            wrapped_addr.wrap_in_transparent_type(&res_t, &self.symbol_table)
+            offset_addr
+                .cast_to(wrapped_type)
+                .transmute_to_structurally_equivalent_type(res_t, &self.symbol_table)
         } else {
             assert!(res_t.is_pointer());
             offset_addr.cast_to(res_t)

@@ -795,6 +795,13 @@ impl Expr {
         expr!(ByteExtract { e: self, offset: 0 }, t)
     }
 
+    /// Transmute between types that are already byte equivalent.
+    /// See documentation on `is_structurally_equivalent_to` for more details.
+    pub fn transmute_to_structurally_equivalent_type(self, t: Type, st: &SymbolTable) -> Expr {
+        assert!(self.typ().is_structurally_equivalent_to(&t, st));
+        self.transmute_to(t, st)
+    }
+
     /// Union initializer  
     /// `union foo the_foo = >>> {.field = value } <<<`
     pub fn union_expr<T: Into<InternedString>>(

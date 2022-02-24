@@ -660,8 +660,8 @@ impl Type {
         &self,
         st: &'a SymbolTable,
     ) -> Option<Vec<&'a DatatypeComponent>> {
-        if let components = st.lookup_components_in_type(self).unwrap() {
-            components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect()
+        if let Some(components) = st.lookup_components_in_type(self) {
+            Some(components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect())
         } else {
             None
         }
@@ -715,8 +715,8 @@ impl Type {
                 false
             }
         } else if self.is_struct_like() && other.is_struct_like() {
-            let self_components = self.get_non_empty_components(st);
-            let other_components = other.get_non_empty_components(st);
+            let self_components = self.get_non_empty_components(st).unwrap();
+            let other_components = other.get_non_empty_components(st).unwrap();
             if self_components.len() == other_components.len() {
                 self_components.iter().zip(other_components.iter()).all(|(a, b)| {
                     (a.is_padding()
