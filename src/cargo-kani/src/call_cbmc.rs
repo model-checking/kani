@@ -3,14 +3,20 @@
 
 use anyhow::{bail, Result};
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use crate::session::KaniSession;
 
+#[derive(PartialEq)]
+pub enum VerificationStatus {
+    Success,
+    Failure,
+}
+
 impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
-    pub fn run_cbmc(&self, file: &Path) -> Result<PathBuf> {
+    pub fn run_cbmc(&self, file: &Path) -> Result<VerificationStatus> {
         let output_filename = crate::util::append_path(file, "cbmc_output");
 
         {
@@ -26,8 +32,8 @@ impl KaniSession {
 
         if self.args.output_format == crate::args::OutputFormat::Old {
             let result = self.run_terminal(cmd);
-            if !self.args.allow_cbmc_verification_failure {
-                result?;
+            if !self.args.allow_cbmc_verification_failure && result.is_err() {
+                return Ok(VerificationStatus::Failure);
             }
         } else {
             // extra argument
@@ -36,17 +42,17 @@ impl KaniSession {
             let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
             let format_result = self.format_cbmc_output(&output_filename);
 
-            if !self.args.allow_cbmc_verification_failure {
+            if !self.args.allow_cbmc_verification_failure && format_result.is_err() {
                 // Because of things like --assertion-reach-checks and other future features,
                 // we now decide if we fail or not based solely on the output of the formatter.
-                format_result?
+                return Ok(VerificationStatus::Failure);
                 // todo: this is imperfect, since we don't know why failure happened.
                 // the best possible fix is port to rust instead of using python, or getting more
-                // feedback than just exit status (or using a particular exit code?)
+                // feedback than just exit status (or using a particular magic exit code?)
             }
         }
 
-        Ok(output_filename)
+        Ok(VerificationStatus::Success)
     }
 
     /// used by call_cbmc_viewer, invokes different variants of CBMC.

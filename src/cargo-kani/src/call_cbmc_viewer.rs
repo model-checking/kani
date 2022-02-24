@@ -11,6 +11,7 @@ use crate::util::alter_extension;
 
 impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
+    /// Viewer doesn't give different error codes depending on verification failure, so as long as it works, we report success.
     pub fn run_visualize(&self, file: &Path, default_reportdir: &str) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
         let coverage_filename = alter_extension(file, "coverage.xml");

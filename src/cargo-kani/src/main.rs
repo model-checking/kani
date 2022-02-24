@@ -3,6 +3,7 @@
 
 use anyhow::Result;
 use args_toml::config_toml_to_args;
+use call_cbmc::VerificationStatus;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -52,7 +53,12 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
     if ctx.args.visualize {
         ctx.run_visualize(&linked_obj, "target/report")?;
     } else {
-        ctx.run_cbmc(&linked_obj)?;
+        let result = ctx.run_cbmc(&linked_obj)?;
+        if result == VerificationStatus::Failure {
+            // Failure exit code without additional error message
+            drop(ctx);
+            std::process::exit(1);
+        }
     }
 
     Ok(())
@@ -76,7 +82,12 @@ fn standalone_main() -> Result<()> {
     if ctx.args.visualize {
         ctx.run_visualize(&linked_obj, "report")?;
     } else {
-        ctx.run_cbmc(&linked_obj)?;
+        let result = ctx.run_cbmc(&linked_obj)?;
+        if result == VerificationStatus::Failure {
+            // Failure exit code without additional error message
+            drop(ctx);
+            std::process::exit(1);
+        }
     }
 
     Ok(())
