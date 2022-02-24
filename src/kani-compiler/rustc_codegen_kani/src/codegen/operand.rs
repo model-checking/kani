@@ -392,14 +392,22 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))
             }
         };
-        base_addr
+        assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
+        let offset_addr = base_addr
             .cast_to(Type::unsigned_int(8).to_pointer())
-            .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
-            // The `cast_to` operation causes https://github.com/model-checking/kani/issues/822
-            // FIXME: Changing to a transmute to temporarily unblock, proper fix is to
-            // unwrap the transparent struct.
-            .transmute_to(res_t, &self.symbol_table)
-        //.cast_to(res_t)
+            .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)));
+
+        // In some cases, Rust uses a transparent type here. Convert the pointer to an rvalue
+        // of the type expected. https://github.com/model-checking/kani/issues/822
+        if let Some(wrapped_type) = res_t.unwrap_transparent_type(&self.symbol_table) {
+            assert!(wrapped_type.is_pointer());
+            offset_addr
+                .cast_to(wrapped_type)
+                .transmute_to_structurally_equivalent_type(res_t, &self.symbol_table)
+        } else {
+            assert!(res_t.is_pointer());
+            offset_addr.cast_to(res_t)
+        }
     }
 
     pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
