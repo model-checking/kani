@@ -56,7 +56,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// A human readable name in Rust for reference, should not be used as a key.
     pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths(|| self.tcx.def_path_str(instance.def_id()))
+        with_no_trimmed_paths!(self.tcx.def_path_str(instance.def_id()))
     }
 
     /// The actual function name used in the symbol table
@@ -105,7 +105,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the vtable struct, but we add the method name for debugging readability.
     ///     Example: 3_vol
     pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> InternedString {
-        // format!("{}_{}", idx, with_no_trimmed_paths(|| self.tcx.item_name(def_id)))
+        // format!("{}_{}", idx, with_no_trimmed_paths!(|| self.tcx.item_name(def_id)))
         // TODO: use def_id https://github.com/model-checking/kani/issues/364
         idx.to_string().into()
     }

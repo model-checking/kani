@@ -1,201 +1,21 @@
-#!/usr/bin/env python3
+#!/usr/bin/env bash
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import argparse
-import os
-import sys
-import kani
-import kani_flags
-import pathlib
+set -eu
 
-MY_PATH = pathlib.Path(__file__).parent.parent.absolute()
-KANI_C_LIB = MY_PATH / "library" / "kani" / "kani_lib.c"
-KANI_C_STUB = MY_PATH / "library" / "kani" / "stubs" / "C"
-EXIT_CODE_SUCCESS = 0
-CBMC_VERIFICATION_FAILURE_EXIT_CODE = 10
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+REPO_DIR="$(dirname $SCRIPT_DIR)"
 
+KANI_CANDIDATES=("$REPO_DIR"/target/*/cargo-kani)
 
-def main():
-    args = parse_args()
+if [[ -z ${KANI_CANDIDATES:-""} ]] || [[ ${#KANI_CANDIDATES[@]} -ne 1 ]]
+then
+    echo "ERROR: Could not find cargo-kani binary."
+    echo "Looked for: '$REPO_DIR/target/*/cargo-kani'"
+    echo "Was Kani successfully built first?"
+    exit 1
+fi
+KANI_PATH=${KANI_CANDIDATES[0]}
 
-    kani.ensure_dependencies_in_path()
-
-    base, ext = os.path.splitext(args.input)
-    kani.ensure(ext == ".rs", "Expecting .rs input file.")
-
-    if args.gen_c_runnable:
-        json_runnable_filename = base + "_runnable.json"
-        goto_runnable_filename = base + "_runnable.goto"
-        c_runnable_filename = base + "_runnable.c"
-        restrictions_runnable_filename = os.path.join(
-            args.target_dir, "debug", "deps") if args.restrict_vtable else None
-        if EXIT_CODE_SUCCESS != kani.compile_single_rust_file(
-                args.input, base, json_runnable_filename, args, ["gen-c"]):
-            return 1
-
-        out_files = kani.symbol_table_to_gotoc([json_runnable_filename], args.verbose, args.keep_temps, args.dry_run)
-
-        kani.link_c_lib(out_files, goto_runnable_filename, args.c_lib, args.verbose, args.quiet, args.function,
-                        args.dry_run, args.keep_temps)
-
-        if EXIT_CODE_SUCCESS != kani.goto_to_c(
-                goto_runnable_filename,
-                c_runnable_filename,
-                restrictions_runnable_filename,
-                args.verbose,
-                args.dry_run):
-            return 1
-
-        kani.gen_c_postprocess(c_runnable_filename, args.dry_run)
-
-    symbol_table_json_filename = base + ".symtab.json"
-    restrictions_filename = base + ".restrictions.json"
-    goto_filename = base + ".goto"
-    c_filename = base + ".c"
-    symbols_filename = base + ".symbols"
-
-    restrictions_filename = restrictions_filename if args.restrict_vtable else None
-    if EXIT_CODE_SUCCESS != kani.compile_single_rust_file(args.input, base, symbol_table_json_filename, args):
-        return 1
-
-    out_files = kani.symbol_table_to_gotoc([symbol_table_json_filename], args.verbose, args.keep_temps, args.dry_run)
-
-    args.c_lib.append(str(KANI_C_LIB))
-
-    # Check if the program wants to use the C-FFI based abstraction
-    if args.use_abs and args.abs_type == "c-ffi":
-        KANI_C_VEC = KANI_C_STUB / "vec" / "vec.c"
-        args.c_lib.append(str(KANI_C_VEC))
-
-        # Currently experimental
-        KANI_C_HASHSET = KANI_C_STUB / "hashset" / "hashset.c"
-        args.c_lib.append(str(KANI_C_HASHSET))
-
-    kani.link_c_lib(out_files, goto_filename, args.c_lib, args.verbose, args.quiet, args.function, args.dry_run,
-                    args.keep_temps)
-
-    if args.gen_c:
-        if EXIT_CODE_SUCCESS != kani.goto_to_c(
-                goto_filename,
-                c_filename,
-                restrictions_filename,
-                args.verbose,
-                args.dry_run):
-            return 1
-
-    if args.gen_symbols:
-        if EXIT_CODE_SUCCESS != kani.goto_to_symbols(goto_filename, symbols_filename, args.verbose, args.dry_run):
-            return 1
-
-    if args.undefined_function_checks:
-        # https://github.com/diffblue/cbmc/issues/6393
-        if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
-                goto_filename, goto_filename,
-                ['--add-library'],
-                args.verbose,
-                dry_run=args.dry_run,
-                restrictions_filename=restrictions_filename):
-            return 1
-        if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
-                goto_filename, goto_filename,
-                ['--generate-function-body-options', 'assert-false', '--generate-function-body', '.*', '--drop-unused-functions'],
-                args.verbose,
-                dry_run=args.dry_run,
-                restrictions_filename=restrictions_filename):
-            return 1
-    else:
-        # Apply --drop-unused-functions if undefined-function-checks was turned off
-        if EXIT_CODE_SUCCESS != kani.run_goto_instrument(
-                goto_filename, goto_filename,
-                ['--drop-unused-functions'],
-                args.verbose, dry_run=args.dry_run):
-            return 1
-
-    # The argument args.output_format's value is set as kani_flags.OutputStyle.DEFAULT by default. This DEFAULT
-    # Value takes on one of three values {REGULAR | OLD | TERSE} , as set in the kani_flags.OutputStyle Enum,
-    # The if branch takes care of the cases when the default value is set as one of REGULAR or Terse && for cases
-    # when --output-format regular and --output-format terse are explicitly passed. The elif branch takes care of the cases
-    # for when old output format is set as default or when it's explicity passed.
-    if(args.output_format == kani_flags.OutputStyle.REGULAR) or (args.output_format == kani_flags.OutputStyle.TERSE):
-        # This gives us the json output from CBMC which is passed into the parser
-        if "--json-ui" not in args.cbmc_args:
-            args.cbmc_args.extend(["--json-ui"])
-    elif args.output_format == kani_flags.OutputStyle.OLD:
-        pass
-    else:
-        # This else branch is seen only when multiple flags are passed or no flags are passed, or if the default value is
-        # corrupted to take on alternate values apart from {REGULAR | OLD | TERSE}.
-        raise Exception('Contradictory Flag outputs passed')
-
-    if "--function" not in args.cbmc_args:
-        args.cbmc_args.extend(["--function", args.function])
-
-    if args.visualize:
-        # Use a separate set of flags for coverage checking (empty for now)
-        cover_args = []
-        retcode = kani.run_visualize(goto_filename, args.cbmc_args, cover_args,
-                                     args.verbose, args.quiet, args.keep_temps,
-                                     args.function, args.srcdir, args.wkdir, args.target_dir, args.dry_run)
-    else:
-        retcode = kani.run_cbmc(
-            goto_filename,
-            args.cbmc_args,
-            args.verbose,
-            args.quiet,
-            args.dry_run,
-            args.output_format)
-
-    if retcode == CBMC_VERIFICATION_FAILURE_EXIT_CODE and args.allow_cbmc_verification_failure:
-        retcode = EXIT_CODE_SUCCESS
-
-    return retcode
-
-
-def parse_args():
-    # Create parser
-    def create_parser():
-        parser = argparse.ArgumentParser(
-            description="Verify a single Rust file. For more information, see https://github.com/model-checking/kani.",
-            allow_abbrev=False)
-
-        input_group = parser.add_argument_group(
-            "Input", "You can pass in the rust file positionally or with the --input flag.")
-        input_group.add_argument("input", help="Rust file to verify", nargs="?")
-        input_group.add_argument("--input", help="Rust file to verify", dest="input_flag", metavar="INPUT")
-
-        kani_flags.add_flags(parser, {"default-target": "."})
-
-        return parser
-
-    # Check for conflicting flags
-    def validate(args):
-        kani.ensure(not (args.input and args.input_flag), "Please provide a single file to verify.")
-        kani.ensure(args.input or args.input_flag, "Please provide a file to verify.")
-
-    # Fix up args before returning
-    def post_process(args):
-        # Combine positional and flag argument for input
-        args.input = args.input or args.input_flag
-
-        # --quiet overrides --verbose
-        if args.quiet:
-            args.verbose = False
-
-        # Add some CBMC flags by default unless `--no-default-checks` is being used
-        if args.default_checks:
-            kani.add_selected_default_cbmc_checks(args)
-
-        # Conditionally add common CBMC flags
-        kani.process_common_cbmc_flags(args)
-
-    parser = create_parser()
-    args = parser.parse_args()
-    validate(args)
-    post_process(args)
-
-    return args
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+exec -a kani "${KANI_PATH}" "$@"

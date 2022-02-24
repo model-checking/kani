@@ -158,7 +158,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
-        sz: &&'tcx ty::Const<'tcx>,
+        sz: &ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
     ) -> Expr {
         let func_name = format!("gen-repeat<{}>", self.ty_mangled_name(res_ty));
@@ -182,7 +182,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
             body.push(Stmt::for_loop(
                 Stmt::skip(Location::none()),
-                idx.clone().lt(tcx.codegen_const(sz, None)),
+                idx.clone().lt(tcx.codegen_const(*sz, None)),
                 idx.postincr().as_stmt(Location::none()),
                 lbody,
                 Location::none(),
@@ -202,7 +202,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
         let pt = self.place_ty(p);
         match pt.kind() {
-            ty::Array(_, sz) => self.codegen_const(sz, None),
+            ty::Array(_, sz) => self.codegen_const(*sz, None),
             ty::Slice(_) => {
                 self.codegen_place(p).fat_ptr_goto_expr.unwrap().member("len", &self.symbol_table)
             }
@@ -737,11 +737,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate a function pointer to drop_in_place for entry into the vtable
-    fn codegen_vtable_drop_in_place(
-        &mut self,
-        ty: Ty<'tcx>,
-        trait_ty: &'tcx ty::TyS<'tcx>,
-    ) -> Expr {
+    fn codegen_vtable_drop_in_place(&mut self, ty: Ty<'tcx>, trait_ty: ty::Ty<'tcx>) -> Expr {
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty).polymorphize(self.tcx);
         let drop_sym_name: InternedString = self.symbol_name(drop_instance).into();
 
@@ -854,7 +850,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
         let trait_type = match dst_mir_type.kind() {
             // DST is pointer type
-            ty::Ref(_, pointee_type, ..) => pointee_type,
+            ty::Ref(_, pointee_type, ..) => *pointee_type,
             // DST is box type
             ty::Adt(adt_def, adt_subst) if adt_def.is_box() => {
                 adt_subst.first().unwrap().expect_ty()
@@ -890,15 +886,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     COMMON_VTABLE_ENTRIES
                 };
 
-                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(&src_mir_type);
-                let size_assert = ctx.check_vtable_size(&src_mir_type, vt_size.clone());
+                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);
+                let size_assert = ctx.check_vtable_size(src_mir_type, vt_size.clone());
 
                 let vtable_fields: Vec<Expr> = vtable_entries
                     .iter()
                     .enumerate()
                     .filter_map(|(idx, entry)| match entry {
                         VtblEntry::MetadataDropInPlace => {
-                            Some(ctx.codegen_vtable_drop_in_place(&src_mir_type, trait_type))
+                            Some(ctx.codegen_vtable_drop_in_place(src_mir_type, trait_type))
                         }
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
@@ -1077,8 +1073,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 assert_eq!(src_elt_type, dst_elt_type);
                 let dst_goto_type = self.codegen_ty(dst_mir_type);
                 let dst_goto_expr = // cast from an array type to a pointer type
-                    src_goto_expr.cast_to(self.codegen_ty(src_elt_type).to_pointer());
-                let dst_goto_len = self.codegen_const(src_elt_count, None);
+                    src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer());
+                let dst_goto_len = self.codegen_const(*src_elt_count, None);
                 Some(slice_fat_ptr(dst_goto_type, dst_goto_expr, dst_goto_len, &self.symbol_table))
             }
             (src_kind, dst_kind) => panic!(
@@ -1135,8 +1131,8 @@ impl<'tcx> GotocCtx<'tcx> {
         for field in src_goto_field_values.keys() {
             if let Some(expr) = self.cast_to_unsized_expr(
                 src_goto_field_values.get(field).unwrap().clone(),
-                src_mir_field_types.get(field).unwrap(),
-                dst_mir_field_types.get(field).unwrap(),
+                *src_mir_field_types.get(field).unwrap(),
+                *dst_mir_field_types.get(field).unwrap(),
             ) {
                 cast_required.push((*field, expr));
             }
@@ -1195,8 +1191,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let mut matching_types: Option<(Ty<'tcx>, Ty<'tcx>)> = None;
                 for field in src_fields.keys() {
                     let pair = self.nested_pair_of_concrete_and_trait_types(
-                        src_fields.get(field).unwrap(),
-                        dst_fields.get(field).unwrap(),
+                        *src_fields.get(field).unwrap(),
+                        *dst_fields.get(field).unwrap(),
                     );
                     if pair.is_some() {
                         assert!(

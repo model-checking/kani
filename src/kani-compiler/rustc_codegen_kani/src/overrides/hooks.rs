@@ -280,7 +280,7 @@ impl<'tcx> GotocHook<'tcx> for Nevers {
     ) -> Stmt {
         let msg = format!(
             "a panicking function {} is invoked",
-            with_no_trimmed_paths(|| tcx.tcx.def_path_str(instance.def_id()))
+            with_no_trimmed_paths!(tcx.tcx.def_path_str(instance.def_id()))
         );
         tcx.codegen_fatal_error(&msg, span)
     }
@@ -326,7 +326,7 @@ struct MemReplace;
 
 impl<'tcx> GotocHook<'tcx> for MemReplace {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::mem::replace" || name == "std::mem::replace"
     }
 
@@ -371,7 +371,7 @@ struct MemSwap;
 impl<'tcx> GotocHook<'tcx> for MemSwap {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         // We need to keep the old std / core functions here because we don't compile std yet.
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::mem::swap"
             || name == "std::mem::swap"
             || name == "core::ptr::swap"
@@ -433,7 +433,7 @@ struct PtrRead;
 
 impl<'tcx> GotocHook<'tcx> for PtrRead {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::ptr::read"
             || name == "core::ptr::read_unaligned"
             || name == "core::ptr::read_volatile"
@@ -471,7 +471,7 @@ struct PtrWrite;
 
 impl<'tcx> GotocHook<'tcx> for PtrWrite {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::ptr::write"
             || name == "core::ptr::write_unaligned"
             || name == "std::ptr::write"
@@ -506,7 +506,7 @@ struct RustAlloc;
 impl<'tcx> GotocHook<'tcx> for RustAlloc {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         let name = tcx.symbol_name(instance).name.to_string();
-        let full_name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let full_name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "__rust_alloc" || full_name == "alloc::alloc::exchange_malloc"
     }
 
@@ -657,7 +657,7 @@ struct SliceFromRawPart;
 
 impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths(|| tcx.def_path_str(instance.def_id()));
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
         name == "core::ptr::slice_from_raw_parts"
             || name == "std::ptr::slice_from_raw_parts"
             || name == "core::ptr::slice_from_raw_parts_mut"
