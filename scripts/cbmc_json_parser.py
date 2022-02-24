@@ -57,13 +57,18 @@ def main():
         print("Json File Input Missing")
         sys.exit(1)
 
+    if len(sys.argv) == 3:
+        output_style = output_style_switcher[sys.argv[2]]
+    else:
+        output_style = "regular"
+
     # parse the input json file
     with open(sys.argv[1]) as f:
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["old"])
-    return
+    return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
+    sys.exit(return_code)
 
 def transform_cbmc_output(cbmc_response_string, output_style):
     """

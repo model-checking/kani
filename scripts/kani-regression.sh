@@ -26,6 +26,7 @@ cargo build
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
+cargo test -p cargo-kani
 
 # Declare testing suite information (suite and mode)
 TESTS=(
