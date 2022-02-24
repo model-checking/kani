@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: --no-restrict-vtable
-// TODO: Create a github issue about this?
+// Tracking issue for the need for this flag:
+// https://github.com/model-checking/kani/issues/802
 
 use std::any::Any;
 
