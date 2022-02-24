@@ -13,7 +13,7 @@ use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
-    ty::{self, Ty, TyS, TypeAndMut, VariantDef},
+    ty::{self, Ty, TypeAndMut, VariantDef},
 };
 use rustc_target::abi::{TagEncoding, Variants};
 use tracing::{debug, warn};
@@ -77,7 +77,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
         match typ {
             TypeOrVariant::Type(t) => {
                 let expr_ty = expr.typ().clone();
-                let type_from_mir = ctx.codegen_ty(t);
+                let type_from_mir = ctx.codegen_ty(*t);
                 if expr_ty != type_from_mir { Some((expr_ty, type_from_mir)) } else { None }
             }
             // TODO: handle Variant https://github.com/model-checking/kani/issues/448
@@ -149,7 +149,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
 impl<'tcx> TypeOrVariant<'tcx> {
     pub fn expect_type(&self) -> Ty<'tcx> {
         match self {
-            TypeOrVariant::Type(t) => t,
+            TypeOrVariant::Type(t) => *t,
             TypeOrVariant::Variant(v) => panic!("expect a type but variant is found: {:?}", v),
         }
     }
@@ -237,7 +237,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// a named variable.
     ///
     /// Recursively finds the actual FnDef from a pointer or box.
-    pub fn codegen_local_fndef(&mut self, ty: &'tcx ty::TyS<'tcx>) -> Option<Expr> {
+    pub fn codegen_local_fndef(&mut self, ty: ty::Ty<'tcx>) -> Option<Expr> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
             ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
@@ -275,7 +275,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_projection(
         &mut self,
         before: ProjectedPlace<'tcx>,
-        proj: ProjectionElem<Local, &'tcx TyS<'_>>,
+        proj: ProjectionElem<Local, Ty<'tcx>>,
     ) -> ProjectedPlace<'tcx> {
         match proj {
             ProjectionElem::Deref => {
@@ -361,7 +361,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let base_type = before.mir_typ();
                 let idxe = self.codegen_local(i);
                 let typ = match base_type.kind() {
-                    ty::Array(elemt, _) | ty::Slice(elemt) => TypeOrVariant::Type(elemt),
+                    ty::Array(elemt, _) | ty::Slice(elemt) => TypeOrVariant::Type(*elemt),
                     _ => unreachable!("must index an array"),
                 };
                 let expr = match base_type.kind() {
@@ -400,7 +400,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         } else {
                             Expr::int_constant(to - from, Type::size_t())
                         };
-                        let typ = self.tcx.mk_slice(elemt);
+                        let typ = self.tcx.mk_slice(*elemt);
                         let typ_and_mut = TypeAndMut { ty: typ, mutbl: Mutability::Mut };
                         let ptr_typ = self.tcx.mk_ptr(typ_and_mut);
                         let goto_type = self.codegen_ty(ptr_typ);
@@ -488,12 +488,12 @@ impl<'tcx> GotocCtx<'tcx> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             ty::Array(elemt, length) => {
-                let length = length.val.try_to_machine_usize(self.tcx).unwrap();
+                let length = length.val().try_to_machine_usize(self.tcx).unwrap();
                 assert!(length >= min_length);
                 let idx = if from_end { length - offset } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
                 let expr = self.codegen_idx_array(before.goto_expr, idxe);
-                let typ = TypeOrVariant::Type(elemt);
+                let typ = TypeOrVariant::Type(*elemt);
                 ProjectedPlace::new(
                     expr,
                     typ,
@@ -513,7 +513,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     offset_e
                 };
                 let expr = before.goto_expr.plus(idxe).dereference();
-                let typ = TypeOrVariant::Type(elemt);
+                let typ = TypeOrVariant::Type(*elemt);
                 ProjectedPlace::new(
                     expr,
                     typ,

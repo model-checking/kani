@@ -6,7 +6,7 @@ use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::mir::Place;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Instance;
-use rustc_middle::ty::{self, Ty, TyS};
+use rustc_middle::ty::{self, Ty};
 use rustc_span::Span;
 use tracing::{debug, warn};
 
@@ -809,7 +809,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_intrinsic_transmute(
         &mut self,
         mut fargs: Vec<Expr>,
-        ret_ty: &'tcx TyS<'tcx>,
+        ret_ty: Ty<'tcx>,
         p: &Place<'tcx>,
     ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
@@ -871,10 +871,10 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Slice(_) | ty::Str => {
                 let unit_t = match t.kind() {
                     ty::Slice(et) => et,
-                    ty::Str => self.tcx.types.u8,
+                    ty::Str => &self.tcx.types.u8,
                     _ => unreachable!(),
                 };
-                let unit = self.layout_of(unit_t);
+                let unit = self.layout_of(*unit_t);
                 // The info in this case is the length of the str, so the size is that
                 // times the unit size.
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
@@ -932,7 +932,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // We follow the SSA implementation using bit arithmetic: (size + (align-1)) & -align
                 // This assumes that align is a power of two, and that all values have the same size_t.
 
-                let one = Expr::int_constant(1, Type::size_t());
+                let one = Expr::int_constant::<isize>(1, Type::size_t());
                 let addend = align.clone().sub(one);
                 let add = size.plus(addend);
                 let neg = align.clone().neg();

@@ -9,7 +9,7 @@ use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_ast::ast;
 use rustc_middle::mir::{HasLocalDecls, Local};
-use rustc_middle::ty::{self, Instance, TyS};
+use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 use tracing::{debug, warn};
@@ -184,8 +184,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // ```
 
         let tupe = sig.inputs().last().unwrap();
-        let args: Vec<&TyS<'tcx>> = match tupe.kind() {
-            ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()).collect(),
+        let args = match tupe.kind() {
+            ty::Tuple(substs) => *substs,
             _ => unreachable!("a function's spread argument must be a tuple"),
         };
         let starting_idx = sig.inputs().len();
