@@ -262,8 +262,7 @@ unsafe impl kani::Invariant for Error {
                 | Error::GuestMemory
                 | Error::InvalidOffset
                 | Error::UnexpectedReadOnlyDescriptor
-                | Error::UnexpectedWriteOnlyDescriptor
-        )
+        ) || matches!(*self, Error::UnexpectedWriteOnlyDescriptor)
     }
 }
 

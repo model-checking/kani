@@ -28,7 +28,8 @@ macro_rules! check_enum {
     ( $fn_name:ident, $repr:ty, $enum_type:ident, $v1:literal, $v2:literal, $v3:literal ) => {
         unsafe impl kani::Invariant for $enum_type {
             fn is_valid(&self) -> bool {
-                matches!(*self, $enum_type::Variant1 | $enum_type::Variant2 | $enum_type::Variant3)
+                matches!(*self, $enum_type::Variant1 | $enum_type::Variant2)
+                    || matches!(*self, $enum_type::Variant3)
             }
         }
 

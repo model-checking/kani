@@ -1,6 +1,5 @@
 //! This module contains the "cleaned" pieces of the AST, and the functions
 //! that clean them.
-
 mod auto_trait;
 mod blanket_impl;
 crate mod cfg;
@@ -330,7 +329,7 @@ impl<'tcx> Clean<Option<WherePredicate>>
     fn clean(&self, cx: &mut DocContext<'_>) -> Option<WherePredicate> {
         let ty::OutlivesPredicate(a, b) = self;
 
-        if let (ty::ReEmpty(_), ty::ReEmpty(_)) = (a, b) {
+        if let (ty::ReEmpty(_), ty::ReEmpty(_)) = (a.kind(), b.kind()) {
             return None;
         }
 
@@ -345,7 +344,7 @@ impl<'tcx> Clean<Option<WherePredicate>> for ty::OutlivesPredicate<Ty<'tcx>, ty:
     fn clean(&self, cx: &mut DocContext<'_>) -> Option<WherePredicate> {
         let ty::OutlivesPredicate(ty, lt) = self;
 
-        if let ty::ReEmpty(_) = lt {
+        if let ty::ReEmpty(_) = lt.kind() {
             return None;
         }
 
@@ -1017,7 +1016,8 @@ impl Clean<Item> for hir::ImplItem<'_> {
                     {
                         m.header.constness = hir::Constness::NotConst;
                     }
-                    MethodItem(m, Some(self.defaultness))
+                    let defaultness = cx.tcx.associated_item(self.def_id).defaultness;
+                    MethodItem(m, Some(defaultness))
                 }
                 hir::ImplItemKind::TyAlias(ref hir_ty) => {
                     let type_ = hir_ty.clean(cx);
@@ -1394,7 +1394,7 @@ impl Clean<Type> for hir::Ty<'_> {
                         // does nothing for `ConstKind::Param`.
                         let ct = ty::Const::from_anon_const(cx.tcx, def_id);
                         let param_env = cx.tcx.param_env(def_id);
-                        print_const(cx, ct.eval(cx.tcx, param_env))
+                        print_const(cx, &ct.eval(cx.tcx, param_env))
                     }
                 };
 
@@ -1447,7 +1447,7 @@ fn normalize<'tcx>(cx: &mut DocContext<'tcx>, ty: Ty<'_>) -> Option<Ty<'tcx>> {
 impl<'tcx> Clean<Type> for Ty<'tcx> {
     fn clean(&self, cx: &mut DocContext<'_>) -> Type {
         trace!("cleaning type: {:?}", self);
-        let ty = normalize(cx, self).unwrap_or(self);
+        let ty = normalize(cx, *self).unwrap_or(*self);
         match *ty.kind() {
             ty::Never => Primitive(PrimitiveType::Never),
             ty::Bool => Primitive(PrimitiveType::Bool),
@@ -1460,7 +1460,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
             ty::Array(ty, n) => {
                 let mut n = cx.tcx.lift(n).expect("array lift failed");
                 n = n.eval(cx.tcx, ty::ParamEnv::reveal_all());
-                let n = print_const(cx, n);
+                let n = print_const(cx, &n);
                 Array(box ty.clean(cx), n)
             }
             ty::RawPtr(mt) => RawPointer(mt.mutbl, box mt.ty.clean(cx)),
@@ -1537,7 +1537,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
 
                 DynTrait(bounds, lifetime)
             }
-            ty::Tuple(t) => Tuple(t.iter().map(|t| t.expect_ty().clean(cx)).collect()),
+            ty::Tuple(t) => Tuple(t.iter().map(|t| t.clean(cx)).collect()),
 
             ty::Projection(ref data) => data.clean(cx),
 
@@ -1636,7 +1636,7 @@ impl<'tcx> Clean<Constant> for ty::Const<'tcx> {
     fn clean(&self, cx: &mut DocContext<'_>) -> Constant {
         // FIXME: instead of storing the stringified expression, store `self` directly instead.
         Constant {
-            type_: self.ty.clean(cx),
+            type_: self.ty().clean(cx),
             kind: ConstantKind::TyConst { expr: self.to_string() },
         }
     }
