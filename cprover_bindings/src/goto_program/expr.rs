@@ -577,8 +577,8 @@ impl Expr {
             self,
             field,
         );
-        if let Some(ty) = symbol_table.lookup_field_type_in_type(self.typ(), field) {
-            expr!(Member { lhs: self, field }, ty.clone())
+        if let Some(ty) = self.typ.lookup_field_type(field, symbol_table) {
+            expr!(Member { lhs: self, field }, ty)
         } else {
             unreachable!("unable to find field {} for type {:?}", field, self.typ())
         }
@@ -639,7 +639,7 @@ impl Expr {
             typ,
             components
         );
-        let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
+        let fields = typ.lookup_components(symbol_table).unwrap();
         let non_padding_fields: Vec<_> = fields.iter().filter(|x| !x.is_padding()).collect();
         assert_eq!(
             non_padding_fields.len(),
@@ -678,7 +678,7 @@ impl Expr {
         symbol_table: &SymbolTable,
     ) -> Self {
         assert!(typ.is_struct_tag());
-        let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
+        let fields = typ.lookup_components(symbol_table).unwrap();
         let non_padding_fields: Vec<_> = fields.iter().filter(|x| !x.is_padding()).collect();
         let values = non_padding_fields
             .iter()
@@ -709,7 +709,7 @@ impl Expr {
             typ,
             non_padding_values
         );
-        let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
+        let fields = typ.lookup_components(symbol_table).unwrap();
         let non_padding_fields: Vec<_> = fields.iter().filter(|x| !x.is_padding()).collect();
         assert_eq!(
             non_padding_fields.len(),
@@ -753,7 +753,7 @@ impl Expr {
             typ,
             values
         );
-        let fields = symbol_table.lookup_fields_in_type(&typ).unwrap();
+        let fields = typ.lookup_components(symbol_table).unwrap();
         assert_eq!(
             fields.len(),
             values.len(),
@@ -812,7 +812,7 @@ impl Expr {
     ) -> Self {
         let field = field.into();
         assert!(typ.is_union_tag());
-        assert_eq!(symbol_table.lookup_field_type_in_type(&typ, field), Some(value.typ()));
+        assert_eq!(typ.lookup_field_type(field, symbol_table).as_ref(), Some(value.typ()));
         expr!(Union { value, field }, typ)
     }
 }
@@ -1381,7 +1381,7 @@ impl Expr {
         assert!(struct_type.is_struct_tag());
 
         let mut exprs: BTreeMap<InternedString, Expr> = BTreeMap::new();
-        let fields = symbol_table.lookup_fields_in_type(struct_type).unwrap();
+        let fields = struct_type.lookup_components(symbol_table).unwrap();
         match self.struct_expr_values() {
             Some(values) => {
                 assert!(fields.len() == values.len());
