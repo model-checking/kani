@@ -4,6 +4,9 @@
 // kani-flags: --function find_error
 #![feature(decl_macro)]
 
+// This test checks for the case where transparent structs have zero sized fields
+// https://github.com/model-checking/kani/issues/837
+
 pub type Key = i8;
 pub struct Metadata {
     header: u32,
@@ -61,15 +64,15 @@ pub mod defs {
     pub struct Error {
         repr: Repr,
     }
-
+    pub(super) struct Zst;
     //#[repr(transparent)]
-    pub(super) struct Repr(std::ptr::NonNull<()>);
+    pub(super) struct Repr(std::ptr::NonNull<()>, Zst);
 
     impl Repr {
         #[inline]
         pub(super) const fn new_simple_message(m: &'static SimpleMessage) -> Self {
             // Safety: References are never null.
-            Self(unsafe { NonNull::new_unchecked(m as *const _ as *mut ()) })
+            Self(unsafe { NonNull::new_unchecked(m as *const _ as *mut ()) }, Zst)
         }
     }
 
