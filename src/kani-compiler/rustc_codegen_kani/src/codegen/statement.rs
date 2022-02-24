@@ -40,7 +40,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
-                self.codegen_switch_int(discr, switch_ty, targets)
+                self.codegen_switch_int(discr, *switch_ty, targets)
             }
             TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
             TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
@@ -273,9 +273,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if fargs.len() > 0 {
             let tupe = fargs.remove(fargs.len() - 1);
             let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
-                ty::Tuple(tupled_args) => {
-                    tupled_args.iter().map(|s| self.codegen_ty(s.expect_ty())).collect()
-                }
+                ty::Tuple(tupled_args) => tupled_args.iter().map(|s| self.codegen_ty(s)).collect(),
                 _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
             };
 
