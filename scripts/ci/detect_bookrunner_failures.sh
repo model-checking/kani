@@ -5,12 +5,13 @@
 set -eu
 
 # This script checks that the number of failures in a bookrunner run are below
-# the threshold declared below.
+# the threshold computed below.
 #
 # The threshold is roughly computed as: `1.05 * <number of expected failures>`
 # The extra 5% allows us to account for occasional timeouts. It is reviewed and
 # updated whenever the Rust toolchain version is updated.
-THRESHOLD=652
+EXPECTED=94
+THRESHOLD=$(expr ${EXPECTED} \* 105 / 100) # Add 5% threshold
 
 if [[ $# -ne 1 ]]; then
   echo "$0: Error: Specify the bookrunner text report"
@@ -25,7 +26,7 @@ SUMMARY_LINE=`head -n 1 $1`
 read -a strarr <<< $SUMMARY_LINE
 NUM_FAILURES=${strarr[-1]}
 
-# Print a message and return an nonzero code if the threshold is exceeded
+# Print a message and return a nonzero code if the threshold is exceeded
 if [[ $NUM_FAILURES -ge $THRESHOLD ]]; then
     echo "Error: The number of failures from bookrunner is higher than expected!"
     echo "This means that your changes are causing at least 5% more failures than in previous bookrunner runs."
