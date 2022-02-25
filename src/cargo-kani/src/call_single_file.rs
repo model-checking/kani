@@ -54,6 +54,11 @@ impl KaniSession {
             if !args.contains(&t) {
                 args.push(t);
             }
+        } else {
+            if self.args.function != "main" {
+                args.push("--crate-type".into());
+                args.push("lib".into());
+            }
         }
 
         let mut cmd = Command::new(&self.kani_rustc);
