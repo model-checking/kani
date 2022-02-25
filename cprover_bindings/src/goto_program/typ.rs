@@ -655,12 +655,40 @@ impl Type {
         if self.is_struct_like() || self.is_union_like() { recurse(self, st) } else { None }
     }
 
+    /// Get the fields (including padding) in self.  
+    /// For StructTag or UnionTag, lookup the definition in the symbol table.
+    pub fn lookup_components<'a>(&self, st: &'a SymbolTable) -> Option<&'a Vec<DatatypeComponent>> {
+        self.type_name().and_then(|aggr_name| st.lookup(aggr_name)).and_then(|x| x.typ.components())
+    }
+
+    /// If typ.field_name exists in the symbol table, return Some(field),
+    /// otherwise, return none.
+    pub fn lookup_field<'a, T: Into<InternedString>>(
+        &self,
+        field_name: T,
+        st: &'a SymbolTable,
+    ) -> Option<&'a DatatypeComponent> {
+        let field_name = field_name.into();
+        self.lookup_components(st)
+            .and_then(|fields| fields.iter().find(|&field| field.name() == field_name))
+    }
+
+    /// If typ.field_name exists in the symbol table, return Some(field.typ),
+    /// otherwise, return none.
+    pub fn lookup_field_type<'a, T: Into<InternedString>>(
+        &self,
+        field_name: T,
+        st: &'a SymbolTable,
+    ) -> Option<Type> {
+        self.lookup_field(field_name, st).map(|f| f.typ())
+    }
+
     /// Get the non-zero-sized fields (including padding) in self
     pub fn get_non_empty_components<'a>(
         &self,
         st: &'a SymbolTable,
     ) -> Option<Vec<&'a DatatypeComponent>> {
-        if let Some(components) = st.lookup_components_in_type(self) {
+        if let Some(components) = self.lookup_components(st) {
             Some(components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect())
         } else {
             None
@@ -1071,7 +1099,7 @@ impl Type {
         assert!(self.is_struct_tag());
 
         let mut types: BTreeMap<InternedString, Type> = BTreeMap::new();
-        let fields = symbol_table.lookup_fields_in_type(self).unwrap();
+        let fields = self.lookup_components(symbol_table).unwrap();
         for field in fields {
             if field.is_padding() {
                 continue;

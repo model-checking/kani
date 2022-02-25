@@ -96,44 +96,6 @@ impl SymbolTable {
         self.symbol_table.get(&name)
     }
 
-    pub fn lookup_components(&self, aggr_name: InternedString) -> Option<&Vec<DatatypeComponent>> {
-        self.lookup(aggr_name).and_then(|x| x.typ.components())
-    }
-
-    pub fn lookup_components_in_type(&self, base_type: &Type) -> Option<&Vec<DatatypeComponent>> {
-        base_type.type_name().and_then(|aggr_name| self.lookup_components(aggr_name))
-    }
-
-    /// If aggr_name.field_name exists in the symbol table, return Some(field_type),
-    /// otherwise, return none.
-    pub fn lookup_field_type(
-        &self,
-        aggr_name: InternedString,
-        field_name: InternedString,
-    ) -> Option<&Type> {
-        self.lookup_components(aggr_name)
-            .and_then(|fields| fields.iter().find(|&field| field.name() == field_name))
-            .and_then(|field| field.field_typ())
-    }
-
-    /// If aggr_name.field_name exists in the symbol table, return Some(field_type),
-    /// otherwise, return none.
-    pub fn lookup_field_type_in_type<T: Into<InternedString>>(
-        &self,
-        base_type: &Type,
-        field_name: T,
-    ) -> Option<&Type> {
-        let field_name = field_name.into();
-        base_type.type_name().and_then(|aggr_name| self.lookup_field_type(aggr_name, field_name))
-    }
-
-    pub fn lookup_fields_in_type(&self, base_type: &Type) -> Option<&Vec<DatatypeComponent>> {
-        base_type
-            .type_name()
-            .and_then(|aggr_name| self.lookup(aggr_name))
-            .and_then(|x| x.typ.components())
-    }
-
     pub fn machine_model(&self) -> &MachineModel {
         &self.machine_model
     }

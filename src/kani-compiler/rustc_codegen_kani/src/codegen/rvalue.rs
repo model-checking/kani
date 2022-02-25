@@ -498,24 +498,21 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
-        let dst_data_type =
-            self.symbol_table.lookup_field_type_in_type(&dst_goto_typ, "data").unwrap();
+        let dst_data_type = dst_goto_typ.lookup_field_type("data", &self.symbol_table).unwrap();
         let dst_data_field = (
             "data",
-            src_goto_expr.clone().member("data", &self.symbol_table).cast_to(dst_data_type.clone()),
+            src_goto_expr.clone().member("data", &self.symbol_table).cast_to(dst_data_type),
         );
 
         let dst_metadata_field = if let Some(vtable_typ) =
-            self.symbol_table.lookup_field_type_in_type(&dst_goto_typ, "vtable")
+            dst_goto_typ.lookup_field_type("vtable", &self.symbol_table)
         {
             (
                 "vtable",
                 src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_typ.clone()),
             )
-        } else if let Some(len_typ) =
-            self.symbol_table.lookup_field_type_in_type(&dst_goto_typ, "len")
-        {
-            ("len", src_goto_expr.member("len", &self.symbol_table).cast_to(len_typ.clone()))
+        } else if let Some(len_typ) = dst_goto_typ.lookup_field_type("len", &self.symbol_table) {
+            ("len", src_goto_expr.member("len", &self.symbol_table).cast_to(len_typ))
         } else {
             unreachable!("fat pointer with neither vtable nor len. {:?} {:?}", src, dst_t);
         };
@@ -700,12 +697,9 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> Expr {
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
-        let vtable_type_name = aggr_tag(self.vtable_name(t));
-        let field_type = self
-            .symbol_table
-            .lookup_field_type(vtable_type_name, vtable_field_name)
-            .cloned()
-            .unwrap();
+        let vtable_type = Type::struct_tag(self.vtable_name(t));
+        let field_type =
+            vtable_type.lookup_field_type(vtable_field_name, &self.symbol_table).unwrap();
 
         // Lookup in the symbol table using the full symbol table name/key
         let fn_name = self.symbol_name(instance);
