@@ -9,12 +9,24 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 atty = "0.2.14"
+bitflags = "1.0"
+cbmc = { path = "../../cprover_bindings", package = "cprover_bindings" }
 clap = "2.33.0"
+cstr = "0.2"
 kani_queries = {path = "kani_queries"}
-rustc_codegen_kani = {path = "rustc_codegen_kani"}
+kani_restrictions = { path = "../../library/kani_restrictions" }
+libc = "0.2"
+measureme = "9.1.0"
+num = "0.4.0"
+rustc-demangle = "0.1.21"
+serde = "1"
+serde_json = "1"
+smallvec = { version = "1.6.1", features = ["union", "may_dangle"]}
+snap = "1"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_info"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.0"
+
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

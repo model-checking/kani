@@ -7,11 +7,34 @@
 //! Like miri, clippy, and other tools developed on the top of rustc, we rely on the
 //! rustc_private feature and a specific version of rustc.
 
-#![feature(rustc_private, once_cell)]
+#![feature(bool_to_option)]
+#![feature(crate_visibility_modifier)]
+#![feature(extern_types)]
+#![feature(in_band_lifetimes)]
+#![feature(nll)]
+#![recursion_limit = "256"]
+#![feature(box_patterns)]
+#![feature(once_cell)]
+#![feature(rustc_private)]
+extern crate rustc_arena;
+extern crate rustc_ast;
+extern crate rustc_attr;
 extern crate rustc_codegen_ssa;
+extern crate rustc_data_structures;
 extern crate rustc_driver;
+extern crate rustc_errors;
+extern crate rustc_fs_util;
+extern crate rustc_hir;
+extern crate rustc_index;
+extern crate rustc_llvm;
+extern crate rustc_metadata;
+extern crate rustc_middle;
+extern crate rustc_serialize;
 extern crate rustc_session;
+extern crate rustc_span;
+extern crate rustc_target;
 
+mod codegen_cprover_gotoc;
 mod parser;
 mod session;
 
@@ -84,7 +107,7 @@ fn main() -> Result<(), &'static str> {
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
     if matches.is_present("goto-c") {
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
-            rustc_codegen_kani::GotocCodegenBackend::new(&Rc::new(queries))
+            codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries))
         })));
     }
     compiler.run().or(Err("Failed to compile crate."))
