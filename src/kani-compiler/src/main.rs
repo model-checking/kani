@@ -34,6 +34,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;
 
+#[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
 mod parser;
 mod session;
@@ -106,9 +107,14 @@ fn main() -> Result<(), &'static str> {
     let mut callbacks = KaniCallbacks {};
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
     if matches.is_present("goto-c") {
-        compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
-            codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries))
-        })));
+        if cfg!(feature = "cprover") {
+            compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
+                codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries))
+            })));
+        } else {
+            return Err("Kani was configured without 'cprover' feature. You must enable this \
+            feature in order to use --goto-c argument.");
+        }
     }
     compiler.run().or(Err("Failed to compile crate."))
 }
