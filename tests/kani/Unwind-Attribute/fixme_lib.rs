@@ -1,13 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// rmc-flags: --no-unwinding-checks
+
+// Fix me
+
 fn main() {
     assert!(1 == 2);
 }
 
-// rmc-flags: --no-unwinding-checks
-
-// Fix me
 #[kani::proof]
 #[kani::unwind(10)]
 fn harness() {

@@ -37,9 +37,10 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[cfg(kani)]
 #[proc_macro_attribute]
-pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
+    assert!(attr.to_string().len() == 0, "#[kani::proof] does not take any arguments");
     result.extend("#[kanitool::proof]".parse::<TokenStream>().unwrap());
     // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
     result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
@@ -54,7 +55,7 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[cfg(not(kani))]
 #[proc_macro_attribute]
 pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
-    // Not-RMC, Not-Test means this code shouldn't exist, return nothing.
+    // This code is never called by default as the config value is set to kani
     TokenStream::new()
 }
 
@@ -63,8 +64,8 @@ pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
-    // Translate #[kani::unwind(arg)] to #[kanitool::unwind_arg_] for easier handling
-    let insert_string = "#[kanitool::unwind_".to_owned() + &attr.clone().to_string() + "]";
+    // Translate #[kani::unwind(arg)] to #[kanitool::unwind8] for easier handling
+    let insert_string = "#[kanitool::unwind(".to_owned() + &attr.clone().to_string() + ")]";
 
     // Add the string that looks like - #[kanitool::unwind_value_]
     result.extend(insert_string.parse::<TokenStream>().unwrap());
@@ -74,5 +75,4 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     result.extend(item);
     result
 
-    // / _attr
 }

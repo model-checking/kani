@@ -3,18 +3,18 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::context::metadata::{HarnessMetadata, UnwindMetadata};
+use crate::context::metadata::{HarnessMetadata};
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
+use rustc_ast::LitKind;
+use rustc_ast::MetaItem;
 use rustc_ast::ast;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 use tracing::{debug, warn};
-extern crate regex;
-use regex::Regex;
 
 /// Utility to skip functions that can't currently be successfully codgenned.
 impl<'tcx> GotocCtx<'tcx> {
@@ -242,37 +242,54 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Currently, this is only proof harness annotations.
     /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
+    fn extract_unwind_argument(&mut self, attr: Option<&MetaItem>) -> Option<u128> {
+        if let Some(attr_literal) = attr.and_then(|x| x.meta_item_list().map(|x| x.to_vec())) {
+            if let Some(x) = &attr_literal[0].literal() {
+                match &x.kind {
+                    LitKind::Int(y,..) => { Some(*y) }
+                    // match other expressions here
+                    _ => None
+                }
+            }
+            else { None }
+        }
+        else { None }
+    }
+
     fn handle_kanitool_attributes(&mut self) {
         let instance = self.current_fn().instance();
 
-        // This regex can be expanded as more attributes become available
-        // Can be thought as a menu, in expanded mode
-        let input_re = Regex::new(
-            r#"(?x)
-            (proof) |
-            (unwind_)(\d+)
-            "#,
-        )
-        .unwrap();
+        // let mut attribute_global_vector = vec![];
+        let mut attribute_vector = vec![];
 
         for attr in self.tcx.get_attrs(instance.def_id()) {
             if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
-                // This regex capture operation returns a vector of strings that can be matched for our purpose
-                // In later Attributes, it will be easy to parse the regex for the attribute arguments, regardless
-                // of the type of the argument itself if we capture all the patterns as a vector of strings of the format
-                // [command, argument]
-                let captures = input_re.captures(attribute_string).map(|captures| {
-                    captures.iter().skip(1).flat_map(|c| c).map(|c| c.as_str()).collect::<Vec<_>>()
-                });
-
-                // Match against the captured values as a slice
-                match captures.as_ref().map(|c| c.as_slice()) {
-                    Some(["proof"]) => self.handle_kanitool_proof(),
-                    Some(["unwind_", x]) => self.handle_kanitool_unwind(x),
-                    _ => {}
-                }
-            };
+                attribute_vector.push((attribute_string.to_string(), attr.clone().meta()));
+            }
         }
+
+        let proof_attribute_count = attribute_vector.iter().filter(|x| x.0 == "proof").count();
+        let unwind_argument_tuples: Vec<_> = attribute_vector.iter().filter(|x| x.0 == "unwind").collect();
+
+        if proof_attribute_count == 1 {
+            if attribute_vector.len() == 1 {
+                self.handle_kanitool_proof()
+            }
+            else {
+                if unwind_argument_tuples.len() == 1 {
+                    let attribute_value = self.extract_unwind_argument(unwind_argument_tuples[0].1.as_ref());
+                    self.handle_kanitool_unwind(attribute_value)
+                }
+            }
+            println!("proof attribute count {:?}", proof_attribute_count);
+        }
+        else if proof_attribute_count > 1 {
+            panic!("Only one proof attribute allowed");
+        }
+        else {
+            warn!("Please insert proof attribute above harness");
+        }
+
     }
 
     /// Update `self` (the goto context) to add the current function as a listed proof harness
@@ -287,26 +304,38 @@ impl<'tcx> GotocCtx<'tcx> {
             mangled_name,
             original_file: loc.filename().unwrap(),
             original_line: loc.line().unwrap().to_string(),
+            unwind_value: None
         };
 
         self.proof_harnesses.push(harness);
     }
 
     /// Unwind strings of the format 'unwind_x' and the mangled names are to be parsed for the value 'x'
-    fn handle_kanitool_unwind(&mut self, attribute_string: &str) {
+    fn handle_kanitool_unwind(&mut self, attribute_value: Option<u128>) {
+
         // Parse parameter string for value of the argument
-        let argument_value: u32 =
-            attribute_string.parse().expect("Unwind Argument Value is not a number");
+        let current_fn = self.current_fn();
+        let pretty_name = current_fn.readable_name().to_owned();
+        let mangled_name = current_fn.name();
+        let loc = self.codegen_span(&current_fn.mir().span);
 
         // Make sure the value lies between 0 and u32 max
-        assert!(argument_value < u32::MAX);
+        // assert!(argument_value < u128::MAX);
 
-        let current_fn = self.current_fn();
-        let mangled_name = current_fn.name();
+        // let unwind_instance = Some(argument_value);
+        // println!("Printing unwind harness -> {:?}" , attribute_value);
 
-        let unwind_instance =
-            UnwindMetadata { mangled_name: mangled_name, unwind_value: argument_value };
-        self.unwind_metadata.push(unwind_instance);
+        // create
+        let unwind_harness = HarnessMetadata {
+            pretty_name,
+            mangled_name,
+            original_file: loc.filename().unwrap(),
+            original_line: loc.line().unwrap().to_string(),
+            unwind_value: attribute_value
+        };
+
+        self.proof_harnesses.push(unwind_harness);
+
     }
 }
 
