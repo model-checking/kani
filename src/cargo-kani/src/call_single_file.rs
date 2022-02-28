@@ -54,6 +54,15 @@ impl KaniSession {
             if !args.contains(&t) {
                 args.push(t);
             }
+        } else {
+            if self.args.function != "main" {
+                // Unless entry function for proof harness is main, compile code as lib.
+                // This ensures that rustc won't prune functions that are not reachable
+                // from main as well as enable compilation of crates that don't have a main
+                // function.
+                args.push("--crate-type".into());
+                args.push("lib".into());
+            }
         }
 
         let mut cmd = Command::new(&self.kani_rustc);
