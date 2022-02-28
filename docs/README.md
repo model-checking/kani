@@ -18,5 +18,5 @@ It also means the necessary `kani-` flag-comments must appear in each file.
 To run just these tests, return to the Kani root directory and run:
 
 ```
-COMPILETEST_FORCE_STAGE0=1 ./x.py test -i --stage 0 kani-docs
+cargo run -p compiletest --quiet -- --suite kani-docs --mode cargo-kani --quiet
 ```
