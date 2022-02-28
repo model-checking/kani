@@ -3,7 +3,7 @@
 
 //! This file contains functions related to codegenning MIR static variables into gotoc
 
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Symbol;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::mono::MonoItem;

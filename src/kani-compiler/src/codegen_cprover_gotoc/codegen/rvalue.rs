@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::{is_pointer, pointee_type, TypeExt};
-use crate::utils::{dynamic_fat_ptr, slice_fat_ptr};
-use crate::{GotocCtx, VtableCtx};
+use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
+use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::{aggr_tag, BUG_REPORT_URL};
 use cbmc::MachineModel;

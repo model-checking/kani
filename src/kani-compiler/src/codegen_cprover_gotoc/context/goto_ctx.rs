@@ -16,8 +16,8 @@
 use super::current_fn::CurrentFnCtx;
 use super::metadata::HarnessMetadata;
 use super::vtable_ctx::VtableCtx;
-use crate::overrides::{fn_hooks, GotocHooks};
-use crate::utils::full_crate_name;
+use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
+use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
