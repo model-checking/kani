@@ -16,5 +16,3 @@ fn foo(x: i32) {
         assert!(x <= 5);
     }
 }
-
-fn main() {}
