@@ -375,11 +375,11 @@ def construct_terse_property_message(properties):
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
-        verification_status = Fore.GREEN + "SUCCESSFUL" + Style.RESET_ALL
+        verification_status = colored_text(Fore.GREEN, "SUCCESSFUL")
     else:
         # Go through traces to extract relevant information to be displayed in the summary
         # only in the case of failure
-        verification_status = Fore.RED + "FAILED" + Style.RESET_ALL
+        verification_status = colored_text(Fore.RED, "FAILED")
         for failed_test in failed_tests:
             try:
                 failure_message = failed_test["description"]
@@ -439,17 +439,17 @@ def construct_property_message(properties):
             print("Key not present in json property", e)
 
         if status == "SUCCESS":
-            message = Fore.GREEN + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.GREEN, f"{status}")
         elif status == "UNDETERMINED":
-            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.YELLOW, f"{status}")
             number_tests_undetermined += 1
         elif status == "UNREACHABLE":
-            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.YELLOW, f"{status}")
             number_tests_unreachable += 1
         else:
             number_tests_failed += 1
             failed_tests.append(property_instance)
-            message = Fore.RED + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.RED, f"{status}")
 
         """ Ex - Property 54: calloc.assertion.1
          - Status: SUCCESS
@@ -471,9 +471,9 @@ def construct_property_message(properties):
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
-        verification_status = Fore.GREEN + "SUCCESSFUL" + Style.RESET_ALL
+        verification_status = colored_text(Fore.GREEN, "SUCCESSFUL")
     else:
-        verification_status = Fore.RED + "FAILED" + Style.RESET_ALL
+        verification_status = colored_text(Fore.RED, "FAILED")
         for failed_test in failed_tests:
             # Go through traces to extract relevant information to be displayed in the summary
             # only in the case of failure
@@ -493,6 +493,16 @@ def construct_property_message(properties):
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
     return output_message, number_tests_failed
+
+def colored_text(color, text):
+    """
+    Only use colored text if running in a terminal to avoid dumping escape
+    characters
+    """
+    if sys.stdout.isatty():
+        return color + text + Style.RESET_ALL
+    else:
+        return text
 
 
 if __name__ == "__main__":
