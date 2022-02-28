@@ -35,7 +35,7 @@ Check 2: failure_example.assertion.2
          - Description: "assertion failed: arr.len() != 3"
 ```
 
-3. `UNREACHABLE`: This indicates that the check is unreachable. This occurs when
+3. `UNREACHABLE` (requires `--assertion-reach-checks`): This indicates that the check is unreachable. This occurs when
 there is no possible execution trace that can reach the check's line of code.
 This may be because the function that contains the check is unused, or that the
 harness does not trigger the condition under which the check is invoked. Kani
