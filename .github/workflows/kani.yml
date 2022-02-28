@@ -45,6 +45,9 @@ jobs:
       - name: Print book runner text results
         run: cat build/output/latest/html/bookrunner.txt
 
+      - name: Detect unpexpected book runner failures
+        run: ./scripts/ci/detect_bookrunner_failures.sh build/output/latest/html/bookrunner.txt
+
       # On one OS only, build the documentation, too.
       - name: Build Documentation
         run: ./docs/build-docs.sh
