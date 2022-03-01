@@ -34,8 +34,6 @@ runs:
       - name: Build Kani and Kani Library
         run: |
           export RUST_BACKTRACE=1
-          cargo build -p kani-compiler
-          cargo build -p cargo-kani
-          cargo build -p kani-link-restrictions
+          cargo build
         shell: bash
 
