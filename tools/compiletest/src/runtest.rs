@@ -320,8 +320,7 @@ impl<'test> TestCx<'test> {
             .args(["--function", function_name])
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .arg("--crate")
-            .arg(&parent_dir);
+            .current_dir(&parent_dir);
         self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
@@ -343,9 +342,8 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
-        kani.args(&self.props.kani_flags)
-            .arg("--input")
-            .arg(&self.testpaths.file)
+        kani.arg(&self.testpaths.file)
+            .args(&self.props.kani_flags)
             .arg("--cbmc-args")
             .args(&self.props.cbmc_flags);
         self.add_kani_dir_to_path(&mut kani);

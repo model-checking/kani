@@ -57,13 +57,18 @@ def main():
         print("Json File Input Missing")
         sys.exit(1)
 
+    if len(sys.argv) == 3:
+        output_style = output_style_switcher[sys.argv[2]]
+    else:
+        output_style = "regular"
+
     # parse the input json file
     with open(sys.argv[1]) as f:
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["old"])
-    return
+    return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
+    sys.exit(return_code)
 
 def transform_cbmc_output(cbmc_response_string, output_style):
     """
@@ -115,9 +120,9 @@ def transform_cbmc_output(cbmc_response_string, output_style):
         print(messages)
 
     else:
-        # DynTrait tests generate a non json output due to "Invariant check failed" error
-        # For these cases, we just produce the cbmc output unparsed
-        # TODO: Parse these non json outputs from CBMC
+        # When CBMC crashes or does not produce json output, print the response
+        # string to allow us to debug
+        print(cbmc_response_string)
         raise Exception("CBMC Crashed - Unable to present Result")
 
     return num_failed > 0
@@ -215,6 +220,9 @@ def postprocess_results(properties):
         messages += "** WARNING: A Rust construct that is not currently supported " \
                     "by Kani was found to be reachable. Check the results for " \
                     "more details."
+    if has_failed_unwinding_asserts:
+        messages += "[Kani] info: Verification output shows one or more unwinding failures.\n" \
+                    "[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n"
 
     return properties, messages
 
@@ -367,11 +375,11 @@ def construct_terse_property_message(properties):
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
-        verification_status = Fore.GREEN + "SUCCESSFUL" + Style.RESET_ALL
+        verification_status = colored_text(Fore.GREEN, "SUCCESSFUL")
     else:
         # Go through traces to extract relevant information to be displayed in the summary
         # only in the case of failure
-        verification_status = Fore.RED + "FAILED" + Style.RESET_ALL
+        verification_status = colored_text(Fore.RED, "FAILED")
         for failed_test in failed_tests:
             try:
                 failure_message = failed_test["description"]
@@ -412,6 +420,8 @@ def construct_property_message(properties):
     """
 
     number_tests_failed = 0
+    number_tests_unreachable = 0
+    number_tests_undetermined = 0
     output_message = ""
     failed_tests = []
     index = 0
@@ -429,13 +439,17 @@ def construct_property_message(properties):
             print("Key not present in json property", e)
 
         if status == "SUCCESS":
-            message = Fore.GREEN + f"{status}" + Style.RESET_ALL
-        elif status == "UNDETERMINED" or status == "UNREACHABLE":
-            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.GREEN, f"{status}")
+        elif status == "UNDETERMINED":
+            message = colored_text(Fore.YELLOW, f"{status}")
+            number_tests_undetermined += 1
+        elif status == "UNREACHABLE":
+            message = colored_text(Fore.YELLOW, f"{status}")
+            number_tests_unreachable += 1
         else:
             number_tests_failed += 1
             failed_tests.append(property_instance)
-            message = Fore.RED + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.RED, f"{status}")
 
         """ Ex - Property 54: calloc.assertion.1
          - Status: SUCCESS
@@ -443,13 +457,23 @@ def construct_property_message(properties):
         output_message += f"Check {index+1}: {name}\n\t - Status: " + \
             message + f"\n\t - Description: \"{description}\"\n" + "\n"
 
-    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed\n"
+    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed"
+    other_status = []
+    if number_tests_undetermined > 0:
+        other_status.append(f"{number_tests_undetermined} undetermined")
+    if number_tests_unreachable > 0:
+        other_status.append(f"{number_tests_unreachable} unreachable")
+    if other_status:
+        output_message += " ("
+        output_message += ",".join(other_status)
+        output_message += ")"
+    output_message += "\n"
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
-        verification_status = Fore.GREEN + "SUCCESSFUL" + Style.RESET_ALL
+        verification_status = colored_text(Fore.GREEN, "SUCCESSFUL")
     else:
-        verification_status = Fore.RED + "FAILED" + Style.RESET_ALL
+        verification_status = colored_text(Fore.RED, "FAILED")
         for failed_test in failed_tests:
             # Go through traces to extract relevant information to be displayed in the summary
             # only in the case of failure
@@ -469,6 +493,16 @@ def construct_property_message(properties):
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
     return output_message, number_tests_failed
+
+def colored_text(color, text):
+    """
+    Only use colored text if running in a terminal to avoid dumping escape
+    characters
+    """
+    if sys.stdout.isatty():
+        return color + text + Style.RESET_ALL
+    else:
+        return text
 
 
 if __name__ == "__main__":

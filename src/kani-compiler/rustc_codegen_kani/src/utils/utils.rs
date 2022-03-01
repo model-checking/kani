@@ -5,7 +5,7 @@ use crate::GotocCtx;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::TyS;
+use rustc_middle::ty::Ty;
 use tracing::debug;
 
 // Should move into rvalue
@@ -71,7 +71,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generates an expression `((dst as usize) % align_of(T) == 0`
     /// to determine if `dst` is aligned.
-    pub fn is_aligned(&mut self, typ: &'tcx TyS<'_>, dst: Expr) -> Expr {
+    pub fn is_aligned(&mut self, typ: Ty<'tcx>, dst: Expr) -> Expr {
         let layout = self.layout_of(typ);
         let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
         let cast_dst = dst.cast_to(Type::size_t());
@@ -133,12 +133,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `boxed_type` is the type of the resulting expression
     pub fn box_value(&self, boxed_value: Expr, boxed_type: Type) -> Expr {
         self.assert_is_rust_box_like(&boxed_type);
-        let get_field_type = |struct_typ, field| {
-            self.symbol_table.lookup_field_type_in_type(struct_typ, field).unwrap().clone()
-        };
-        let unique_ptr_typ = get_field_type(&boxed_type, "0");
+        let unique_ptr_typ = boxed_type.lookup_field_type("0", &self.symbol_table).unwrap();
         self.assert_is_rust_unique_pointer_like(&unique_ptr_typ);
-        let unique_ptr_pointer_typ = get_field_type(&unique_ptr_typ, "pointer");
+        let unique_ptr_pointer_typ =
+            unique_ptr_typ.lookup_field_type("pointer", &self.symbol_table).unwrap();
         assert_eq!(&unique_ptr_pointer_typ, boxed_value.typ());
         let unique_ptr_val = Expr::struct_expr_with_nondet_fields(
             unique_ptr_typ,
@@ -158,7 +156,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // TODO: A std::alloc::Global appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
-        let components = self.symbol_table.lookup_components_in_type(t).unwrap();
+        let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
     }
 
@@ -167,7 +165,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // TODO: A std::marker::PhantomData appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
-        let components = self.symbol_table.lookup_components_in_type(t).unwrap();
+        let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
     }
 
@@ -181,7 +179,7 @@ impl<'tcx> GotocCtx<'tcx> {
         //   struct std::ptr::Unique<[u8; 8]>::14713681870393313245 0;
         // };
         assert!(t.is_struct_like());
-        let components = self.symbol_table.lookup_components_in_type(t).unwrap();
+        let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 2);
         for c in components {
             match c.name().to_string().as_str() {
@@ -202,7 +200,7 @@ impl<'tcx> GotocCtx<'tcx> {
         //   struct [u8::16712579856250238426; 8] *pointer;
         // };
         assert!(t.is_struct_like());
-        let components = self.symbol_table.lookup_components_in_type(t).unwrap();
+        let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 2);
         for c in components {
             match c.name().to_string().as_str() {

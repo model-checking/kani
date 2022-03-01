@@ -94,7 +94,7 @@ impl<'tcx> GotocCtx<'tcx> {
             debug!(
                 "handling {}, {}",
                 instance,
-                with_no_trimmed_paths(|| self.tcx.def_path_str(instance.def_id()))
+                with_no_trimmed_paths!(self.tcx.def_path_str(instance.def_id()))
             );
             debug!("variables: ");
             for l in mir.args_iter().chain(mir.vars_and_temps_iter()) {

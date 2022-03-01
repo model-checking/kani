@@ -46,17 +46,17 @@ This section describes how the book runner operates at a high level.
 To kick off the book runner process use
 
 ```
-./x.py run -i --stage 1 bookrunner
+cargo run -p bookrunner
 ```
 
 The main function of the bookrunner is `generate_run()` in
-[`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/kani/blob/main/src/tools/bookrunner/src/books.rs),
+[`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/kani/blob/main/tools/bookrunner/src/books.rs),
 which follows these steps:
- * First, it calls the different `parse_..._hierarchy()` functions which parse
-   the summary files for each book.
+ * First, it sets up all the books.
+ * For each book, it calls the `parse_..._hierarchy()` function to parse its summary files.
  * The `extract_examples(...)` function uses `rustdoc` to extract all examples
-   from the books.
- * Then for each example it will check if there is a corresponding `.props` file
+   from each book.
+ * For each example it will check if there is a corresponding `.props` file
    in `src/tools/bookrunner/configs/`. The contents of these files (e.g.,
    command-line options) are prepended to the example.
  * All examples are written in the `src/test/bookrunner/books/` folder.

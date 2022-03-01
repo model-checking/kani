@@ -12,10 +12,10 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
-use rustc_middle::ty::TypeFoldable;
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyS, UintTy, VariantDef, VtblEntry,
+    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, UintTy, VariantDef, VtblEntry,
 };
+use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
@@ -131,11 +131,10 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("sig_with_closure_untupled sig: {:?}", sig);
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
-            let args: Vec<Ty<'tcx>> = match tupe.kind() {
-                ty::Tuple(substs) => substs.iter().map(|s| s.expect_ty()),
+            let args = match *tupe.kind() {
+                ty::Tuple(substs) => substs,
                 _ => unreachable!("the final argument of a closure must be a tuple"),
-            }
-            .collect();
+            };
 
             // The leading argument should be exactly the environment
             assert!(prev_args.len() == 1);
@@ -253,30 +252,30 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Is the MIR type an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_unsized(&self, t: &'tcx TyS<'_>) -> bool {
+    pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
             .is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
     }
 
     /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_ref_of_unsized(&self, t: &'tcx TyS<'_>) -> bool {
+    pub fn is_ref_of_unsized(&self, t: Ty<'tcx>) -> bool {
         match t.kind() {
-            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => self.is_unsized(to),
+            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => self.is_unsized(*to),
             _ => false,
         }
     }
 
     /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_ref_of_sized(&self, t: &'tcx TyS<'_>) -> bool {
+    pub fn is_ref_of_sized(&self, t: Ty<'tcx>) -> bool {
         match t.kind() {
-            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => !self.is_unsized(to),
+            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => !self.is_unsized(*to),
             _ => false,
         }
     }
 
     /// Is the MIR type a box of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_box_of_unsized(&self, t: &'tcx TyS<'_>) -> bool {
+    pub fn is_box_of_unsized(&self, t: Ty<'tcx>) -> bool {
         if t.is_box() {
             let boxed_t = self.monomorphize(t.boxed_ty());
             self.is_unsized(boxed_t)
@@ -314,7 +313,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      ...
     ///   }
     /// Ensures that the vtable is added to the symbol table.
-    fn codegen_trait_vtable_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
+    fn codegen_trait_vtable_type(&mut self, t: ty::Ty<'tcx>) -> Type {
         self.ensure_struct(self.vtable_name(t), NO_PRETTY_NAME, |ctx, _| {
             ctx.trait_vtable_field_types(t)
         })
@@ -325,7 +324,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     void* data;
     ///     void* vtable;
     /// }
-    fn codegen_trait_fat_ptr_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
+    fn codegen_trait_fat_ptr_type(&mut self, t: ty::Ty<'tcx>) -> Type {
         self.ensure_struct(&self.normalized_trait_name(t), NO_PRETTY_NAME, |ctx, _| {
             // At this point in time, the vtable hasn't been codegen yet.
             // However, all we need to know is its name, which we do know.
@@ -340,7 +339,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// `drop_in_place` is a function with type &self -> (), the vtable for
     /// dynamic trait objects needs a pointer to it
-    pub fn trait_vtable_drop_type(&mut self, t: &'tcx ty::TyS<'tcx>) -> Type {
+    pub fn trait_vtable_drop_type(&mut self, t: ty::Ty<'tcx>) -> Type {
         Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
             .to_pointer()
     }
@@ -350,7 +349,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
     /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
     /// `get_vtable`.
-    fn trait_vtable_field_types(&mut self, t: &'tcx ty::TyS<'tcx>) -> Vec<DatatypeComponent> {
+    fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = vec![
             Type::datatype_component("drop", self.trait_vtable_drop_type(t)),
             Type::datatype_component("size", Type::size_t()),
@@ -418,7 +417,7 @@ impl<'tcx> GotocCtx<'tcx> {
         //   StructTag("tag-std::boxed::Box<(dyn std::error::Error + std::marker::Send + std::marker::Sync)>") }
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
-        with_no_trimmed_paths(|| printer.print_type(t).unwrap());
+        with_no_trimmed_paths!(printer.print_type(t).unwrap());
         name.intern()
     }
 
@@ -452,8 +451,8 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_ty_raw_array(&mut self, ty: Ty<'tcx>) -> Type {
         match ty.kind() {
             ty::Array(t, c) => {
-                let size = self.codegen_const(c, None).int_constant_value().unwrap();
-                let elemt = self.codegen_ty(t);
+                let size = self.codegen_const(*c, None).int_constant_value().unwrap();
+                let elemt = self.codegen_ty(*t);
                 elemt.array_of(size)
             }
             _ => unreachable!("should only call on array"),
@@ -518,7 +517,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Array(et, len) => {
                 let array_name = format!(
                     "[{}; {}]",
-                    self.ty_mangled_name(et),
+                    self.ty_mangled_name(*et),
                     len.try_eval_usize(self.tcx, self.param_env()).unwrap()
                 );
                 // wrap arrays into struct so that one can take advantage of struct copy in C
@@ -531,7 +530,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         // we do not generate a struct with an array of units
                         vec![]
                     } else {
-                        vec![Type::datatype_component(&0.to_string(), ctx.codegen_ty_raw_array(ty))]
+                        vec![Type::datatype_component(
+                            &0usize.to_string(),
+                            ctx.codegen_ty_raw_array(ty),
+                        )]
                     }
                 })
             }
@@ -539,9 +541,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(..) => self.codegen_fat_ptr(ty),
             // As per zulip, a raw slice/str is a variable length array
             // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
-            ty::Slice(e) => self.codegen_ty(e).flexible_array_of(),
+            ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::c_char().array_of(0),
-            ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(t),
+            ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
             ty::FnDef(_, _) => {
                 let sig = self.monomorphize(ty.fn_sig(self.tcx));
                 self.codegen_function_sig(sig)
@@ -561,7 +563,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.ensure_struct(
                         self.ty_mangled_name(ty),
                         Some(self.ty_pretty_name(ty)),
-                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, ts),
+                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, *ts),
                     )
                 }
             }
@@ -606,9 +608,9 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ty_tuple_fields(
         &mut self,
         t: Ty<'tcx>,
-        substs: ty::subst::SubstsRef<'tcx>,
+        tys: &List<Ty<'tcx>>,
     ) -> Vec<DatatypeComponent> {
-        self.codegen_ty_tuple_like(t, substs.iter().map(|g| g.expect_ty()).collect())
+        self.codegen_ty_tuple_like(t, tys.to_vec())
     }
 
     fn codegen_struct_padding<T>(
@@ -665,8 +667,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         final_fields.push(padding)
                     }
                     // we insert the actual field
-                    final_fields.push(Type::datatype_component(fld_name, self.codegen_ty(fld_ty)));
-                    let layout = self.layout_of(fld_ty);
+                    final_fields.push(Type::datatype_component(fld_name, self.codegen_ty(*fld_ty)));
+                    let layout = self.layout_of(*fld_ty);
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size.bits();
                 }
@@ -759,7 +761,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             let element_type = match mir_type.kind() {
-                ty::Slice(elt_type) => self.codegen_ty(elt_type),
+                ty::Slice(elt_type) => self.codegen_ty(*elt_type),
                 ty::Str => Type::c_char(),
                 // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                 ty::Adt(..) => self.codegen_ty(mir_type),
@@ -851,12 +853,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     is_first = false;
                     debug!("The first element in a dynamic function signature had type {:?}", t);
                     Some(Type::void_pointer())
-                } else if self.ignore_var_ty(t) {
+                } else if self.ignore_var_ty(*t) {
                     debug!("Ignoring type {:?} in function signature", t);
                     None
                 } else {
                     debug!("Using type {:?} in function signature", t);
-                    Some(self.codegen_ty(t))
+                    Some(self.codegen_ty(*t))
                 }
             })
             .collect();
@@ -872,12 +874,12 @@ impl<'tcx> GotocCtx<'tcx> {
             .inputs()
             .iter()
             .filter_map(|t| {
-                if self.ignore_var_ty(t) {
+                if self.ignore_var_ty(*t) {
                     debug!("Ignoring type {:?} in function signature", t);
                     None
                 } else {
                     debug!("Using type {:?} in function signature", t);
-                    Some(self.codegen_ty(t))
+                    Some(self.codegen_ty(*t))
                 }
             })
             .collect();
@@ -1195,7 +1197,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
-                if self.ignore_var_ty(t) {
+                if self.ignore_var_ty(*t) {
                     None
                 } else {
                     let lc = Local::from_usize(i + 1);
@@ -1277,8 +1279,8 @@ pub fn is_pointer(mir_type: Ty<'tcx>) -> bool {
 /// pointer points.
 pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
     match pointer_type.kind() {
-        ty::Ref(_, pointee_type, _) => Some(pointee_type),
-        ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(pointee_type),
+        ty::Ref(_, pointee_type, _) => Some(*pointee_type),
+        ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
         _ => None,
     }
 }
