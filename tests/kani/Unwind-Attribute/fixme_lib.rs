@@ -19,21 +19,3 @@ fn harness() {
         assert!(counter < 10);
     }
 }
-
-#[kani::unwind(8)]
-fn harness_2() {
-    let mut counter = 0;
-    for i in 0..7 {
-        counter += 1;
-        assert!(counter < 5);
-    }
-}
-
-#[kani::unwind(9)]
-fn harness_3() {
-    let mut counter = 0;
-    for i in 0..10 {
-        counter += 1;
-        assert!(counter < 8);
-    }
-}

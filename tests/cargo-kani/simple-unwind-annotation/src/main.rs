@@ -31,7 +31,7 @@ fn harness_2() {
     }
 }
 
-// NOTE: These are potential all scenarios that produce user errors. Uncomment each harness to test how the user error
+// NOTE: These are potentially all scenarios that produce user errors. Uncomment each harness to test how the user error
 // looks like.
 
 // #[kani::proof]
