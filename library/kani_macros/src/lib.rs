@@ -64,10 +64,10 @@ pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
-    // Translate #[kani::unwind(arg)] to #[kanitool::unwind8] for easier handling
+    // Translate #[kani::unwind(arg)] to #[kanitool::unwind(8)]
     let insert_string = "#[kanitool::unwind(".to_owned() + &attr.clone().to_string() + ")]";
 
-    // Add the string that looks like - #[kanitool::unwind_value_]
+    // Add the string that looks like - #[kanitool::unwindvalue]
     result.extend(insert_string.parse::<TokenStream>().unwrap());
     // No mangle seems to be necessary as removing it prevents all the attributes in a lib from being read
     result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
