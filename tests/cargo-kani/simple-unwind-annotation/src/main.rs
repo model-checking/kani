@@ -31,6 +31,9 @@ fn harness_2() {
     }
 }
 
+// NOTE: These are potential all scenarios that produce user errors. Uncomment each harness to test how the user error
+// looks like.
+
 // #[kani::proof]
 // #[kani::unwind(10,5)]
 // fn harness_3() {
@@ -69,11 +72,11 @@ fn harness_2() {
 //     }
 // }
 
-// #[kani::unwind(9)]
-// fn harness_7() {
-//     let mut counter = 0;
-//     for i in 0..10 {
-//         counter += 1;
-//         assert!(counter < 8);
-//     }
-// }
+// // #[kani::unwind(9)]
+// // fn harness_7() {
+// //     let mut counter = 0;
+// //     for i in 0..10 {
+// //         counter += 1;
+// //         assert!(counter < 8);
+// //     }
+// // }
