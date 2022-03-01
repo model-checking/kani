@@ -6,6 +6,7 @@
 // kani-flags: --function check_mul
 // compile-flags: --crate-type lib
 
+#[kani::proof]
 pub fn check_mul(a: u8, b: u8) {
     unsafe {
         a * b;
