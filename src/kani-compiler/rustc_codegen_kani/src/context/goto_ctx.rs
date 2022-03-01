@@ -14,7 +14,7 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
-use super::metadata::{HarnessMetadata};
+use super::metadata::HarnessMetadata;
 use crate::overrides::{fn_hooks, GotocHooks};
 use crate::utils::full_crate_name;
 use crate::VtableCtx;

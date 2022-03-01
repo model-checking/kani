@@ -18,7 +18,7 @@ pub struct HarnessMetadata {
     /// The line in that file where the proof harness begins
     pub original_line: String,
     /// Optional data to store unwind value
-    pub unwind_value: Option<u128>
+    pub unwind_value: Option<u128>,
 }
 
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate

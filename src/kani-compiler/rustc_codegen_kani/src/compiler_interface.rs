@@ -134,8 +134,7 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata =
-            KaniMetadata { proof_harnesses: c.proof_harnesses};
+        let metadata = KaniMetadata { proof_harnesses: c.proof_harnesses };
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.debugging_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {

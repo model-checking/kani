@@ -3,12 +3,12 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::context::metadata::{HarnessMetadata};
+use crate::context::metadata::HarnessMetadata;
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use rustc_ast::{LitKind, Attribute};
 use rustc_ast::ast;
+use rustc_ast::{Attribute, LitKind};
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
@@ -259,7 +259,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     proof_attribute_vector.push(attr);
                 }
                 // Push to attribute vector that can be expanded to a map when more options become available
-                else{
+                else {
                     attribute_vector.push((attribute_string.to_string(), attr));
                 }
             }
@@ -274,8 +274,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 for attribute_tuple in attribute_vector.iter() {
                     // match with "unwind" attribute and provide the harness for modification
                     match attribute_tuple.0.as_str() {
-                        "unwind" => self.handle_kanitool_unwind(attribute_tuple.1, &mut harness_metadata),
-                        _ => {},
+                        "unwind" => {
+                            self.handle_kanitool_unwind(attribute_tuple.1, &mut harness_metadata)
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -284,13 +286,19 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         // User error handling for when there's more than one proof attribute being called
         else if proof_attribute_vector.len() > 1 {
-            self.tcx.sess.span_err(proof_attribute_vector[0].span, "Only one Proof Attribute allowed");
+            self.tcx
+                .sess
+                .span_err(proof_attribute_vector[0].span, "Only one Proof Attribute allowed");
         }
         // User error handling for when there's an attribute being called without #kani::tool
         else if proof_attribute_vector.len() == 0 && attribute_vector.len() > 0 {
-            self.tcx.sess.span_err(attribute_vector[0].1.span, format!("Please use '#kani[proof]' above the annotation {}", attribute_vector[0].0).as_str());
+            self.tcx.sess.span_err(
+                attribute_vector[0].1.span,
+                format!("Please use '#kani[proof]' above the annotation {}", attribute_vector[0].0)
+                    .as_str(),
+            );
+        } else {
         }
-        else {}
     }
 
     /// Update `self` (the goto context) to add the current function as a listed proof harness
@@ -305,7 +313,7 @@ impl<'tcx> GotocCtx<'tcx> {
             mangled_name,
             original_file: loc.filename().unwrap(),
             original_line: loc.line().unwrap().to_string(),
-            unwind_value: None
+            unwind_value: None,
         };
 
         harness
@@ -313,21 +321,18 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Unwind strings of the format 'unwind_x' and the mangled names are to be parsed for the value 'x'
     fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
-
         // Check if some unwind value doesnt already exist
         if harness.unwind_value.is_none() {
-
             // Get Attribute value and if it's not none, assign it to the metadata
-            if let Some(integer_value) = extract_integer_argument(attr)
-            {
+            if let Some(integer_value) = extract_integer_argument(attr) {
                 harness.unwind_value = Some(integer_value);
-            }
-            else {
+            } else {
                 // Show an Error if there is no integer value assigned to the integer or there's too many values assigned to the annotation
-                self.tcx.sess.span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
+                self.tcx
+                    .sess
+                    .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
             }
-        }
-        else {
+        } else {
             // User warning for when there's more than one unwind attribute, in this case, only the first value will be
             self.tcx.sess.span_err(attr.span, "Use only one Unwind Annotation per Harness");
         }
@@ -353,15 +358,15 @@ fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
 /// Extracts the integer value argument from the unwind attribute
 fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     // Vector of meta items , that contain metadata about the annotation
-    let attr_args = attr.meta().and_then(|x| x.meta_item_list().map(|x| x.to_vec())) ?;
+    let attr_args = attr.meta().and_then(|x| x.meta_item_list().map(|x| x.to_vec()))?;
 
     // Only accept unwind attributes with one integer value as argument
     if attr_args.len() == 1 {
         // Returns the integer value that's the argument for the unwind
-        let x = attr_args[0].literal() ?;
+        let x = attr_args[0].literal()?;
         match x.kind {
-            LitKind::Int(y,..) => { Some(y) }
-            _ => None
+            LitKind::Int(y, ..) => Some(y),
+            _ => None,
         }
     }
     // Return none if there are no unwind attributes or if there's too many unwind attributes
