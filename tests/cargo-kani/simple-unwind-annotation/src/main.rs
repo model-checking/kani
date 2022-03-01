@@ -22,17 +22,8 @@ fn harness() {
     }
 }
 
-#[kani::unwind(8)]
-fn harness_2() {
-    let mut counter = 0;
-    for i in 0..7 {
-        counter += 1;
-        assert!(counter < 5);
-    }
-}
-
 #[kani::proof]
-fn harness_5() {
+fn harness_2() {
     let mut counter = 0;
     loop {
         counter += 1;
@@ -40,8 +31,9 @@ fn harness_5() {
     }
 }
 
-// #[kani::proof(some, argument2)]
-// fn harness_4() {
+// #[kani::proof]
+// #[kani::unwind(10,5)]
+// fn harness_3() {
 //     let mut counter = 0;
 //     loop {
 //         counter += 1;
@@ -49,11 +41,39 @@ fn harness_5() {
 //     }
 // }
 
-#[kani::unwind(9)]
-fn harness_3() {
-    let mut counter = 0;
-    for i in 0..10 {
-        counter += 1;
-        assert!(counter < 8);
-    }
-}
+// #[kani::unwind(8)]
+// fn harness_4() {
+//     let mut counter = 0;
+//     for i in 0..7 {
+//         counter += 1;
+//         assert!(counter < 5);
+//     }
+// }
+
+// #[kani::proof]
+// #[kani::proof]
+// fn harness_5() {
+//     let mut counter = 0;
+//     loop {
+//         counter += 1;
+//         assert!(counter < 10);
+//     }
+// }
+
+// #[kani::proof(some, argument2)]
+// fn harness_6() {
+//     let mut counter = 0;
+//     loop {
+//         counter += 1;
+//         assert!(counter < 10);
+//     }
+// }
+
+// #[kani::unwind(9)]
+// fn harness_7() {
+//     let mut counter = 0;
+//     for i in 0..10 {
+//         counter += 1;
+//         assert!(counter < 8);
+//     }
+// }

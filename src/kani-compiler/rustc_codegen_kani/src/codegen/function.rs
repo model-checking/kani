@@ -7,8 +7,7 @@ use crate::context::metadata::{HarnessMetadata};
 use crate::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use rustc_ast::LitKind;
-use rustc_ast::MetaItem;
+use rustc_ast::{LitKind, Attribute};
 use rustc_ast::ast;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance, TyS};
@@ -242,58 +241,60 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Currently, this is only proof harness annotations.
     /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
-    fn extract_unwind_argument(&mut self, attr: Option<&MetaItem>) -> Option<u128> {
-        if let Some(attr_literal) = attr.and_then(|x| x.meta_item_list().map(|x| x.to_vec())) {
-            if let Some(x) = &attr_literal[0].literal() {
-                match &x.kind {
-                    LitKind::Int(y,..) => { Some(*y) }
-                    // match other expressions here
-                    _ => None
-                }
-            }
-            else { None }
-        }
-        else { None }
-    }
-
     fn handle_kanitool_attributes(&mut self) {
         let instance = self.current_fn().instance();
 
-        // let mut attribute_global_vector = vec![];
+        // Vectors for storing instances of each attribute type,
+        // TODO: This can be modifed to use Enums when more options are provided
         let mut attribute_vector = vec![];
+        let mut proof_attribute_vector = vec![];
 
+        // Loop through instances to get all "kanitool::x" attribute strings
         for attr in self.tcx.get_attrs(instance.def_id()) {
+            // Get the string the appears after "kanitool::" in each attribute string.
+            // Ex - "proof" | "unwind" etc.
             if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
-                attribute_vector.push((attribute_string.to_string(), attr.clone().meta()));
-            }
-        }
-
-        let proof_attribute_count = attribute_vector.iter().filter(|x| x.0 == "proof").count();
-        let unwind_argument_tuples: Vec<_> = attribute_vector.iter().filter(|x| x.0 == "unwind").collect();
-
-        if proof_attribute_count == 1 {
-            if attribute_vector.len() == 1 {
-                self.handle_kanitool_proof()
-            }
-            else {
-                if unwind_argument_tuples.len() == 1 {
-                    let attribute_value = self.extract_unwind_argument(unwind_argument_tuples[0].1.as_ref());
-                    self.handle_kanitool_unwind(attribute_value)
+                // Push to proof vector
+                if attribute_string == "proof" {
+                    proof_attribute_vector.push(attr);
+                }
+                // Push to attribute vector that can be expanded to a map when more options become available
+                else{
+                    attribute_vector.push((attribute_string.to_string(), attr));
                 }
             }
-            println!("proof attribute count {:?}", proof_attribute_count);
-        }
-        else if proof_attribute_count > 1 {
-            panic!("Only one proof attribute allowed");
-        }
-        else {
-            warn!("Please insert proof attribute above harness");
         }
 
+        // In the case when there's only one proof attribute (correct behavior), create harness and modify it
+        // depending on each subsequent attribute that's being called by the user.
+        if proof_attribute_vector.len() == 1 {
+            let mut harness_metadata = self.handle_kanitool_proof();
+            if attribute_vector.len() > 0 {
+                // loop through all subsequent attributes
+                for attribute_tuple in attribute_vector.iter() {
+                    // match with "unwind" attribute and provide the harness for modification
+                    match attribute_tuple.0.as_str() {
+                        "unwind" => self.handle_kanitool_unwind(attribute_tuple.1, &mut harness_metadata),
+                        _ => {},
+                    }
+                }
+            }
+            // self.proof_harnesses contains the final metadata that's to be parsed
+            self.proof_harnesses.push(harness_metadata);
+        }
+        // User error handling for when there's more than one proof attribute being called
+        else if proof_attribute_vector.len() > 1 {
+            self.tcx.sess.span_err(proof_attribute_vector[0].span, "Only one Proof Attribute allowed");
+        }
+        // User error handling for when there's an attribute being called without #kani::tool
+        else if proof_attribute_vector.len() == 0 && attribute_vector.len() > 0 {
+            self.tcx.sess.span_err(attribute_vector[0].1.span, format!("Please use '#kani[proof]' above the annotation {}", attribute_vector[0].0).as_str());
+        }
+        else {}
     }
 
     /// Update `self` (the goto context) to add the current function as a listed proof harness
-    fn handle_kanitool_proof(&mut self) {
+    fn handle_kanitool_proof(&mut self) -> HarnessMetadata {
         let current_fn = self.current_fn();
         let pretty_name = current_fn.readable_name().to_owned();
         let mangled_name = current_fn.name();
@@ -307,35 +308,29 @@ impl<'tcx> GotocCtx<'tcx> {
             unwind_value: None
         };
 
-        self.proof_harnesses.push(harness);
+        harness
     }
 
     /// Unwind strings of the format 'unwind_x' and the mangled names are to be parsed for the value 'x'
-    fn handle_kanitool_unwind(&mut self, attribute_value: Option<u128>) {
+    fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
 
-        // Parse parameter string for value of the argument
-        let current_fn = self.current_fn();
-        let pretty_name = current_fn.readable_name().to_owned();
-        let mangled_name = current_fn.name();
-        let loc = self.codegen_span(&current_fn.mir().span);
+        // Check if some unwind value doesnt already exist
+        if harness.unwind_value.is_none() {
 
-        // Make sure the value lies between 0 and u32 max
-        // assert!(argument_value < u128::MAX);
-
-        // let unwind_instance = Some(argument_value);
-        // println!("Printing unwind harness -> {:?}" , attribute_value);
-
-        // create
-        let unwind_harness = HarnessMetadata {
-            pretty_name,
-            mangled_name,
-            original_file: loc.filename().unwrap(),
-            original_line: loc.line().unwrap().to_string(),
-            unwind_value: attribute_value
-        };
-
-        self.proof_harnesses.push(unwind_harness);
-
+            // Get Attribute value and if it's not none, assign it to the metadata
+            if let Some(integer_value) = extract_integer_argument(attr)
+            {
+                harness.unwind_value = Some(integer_value);
+            }
+            else {
+                // Show an Error if there is no integer value assigned to the integer or there's too many values assigned to the annotation
+                self.tcx.sess.span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
+            }
+        }
+        else {
+            // User warning for when there's more than one unwind attribute, in this case, only the first value will be
+            self.tcx.sess.span_err(attr.span, "Use only one Unwind Annotation per Harness");
+        }
     }
 }
 
@@ -352,5 +347,25 @@ fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
             Some(new_string)
         }
         _ => None,
+    }
+}
+
+/// Extracts the integer value argument from the unwind attribute
+fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
+    // Vector of meta items , that contain metadata about the annotation
+    let attr_args = attr.meta().and_then(|x| x.meta_item_list().map(|x| x.to_vec())) ?;
+
+    // Only accept unwind attributes with one integer value as argument
+    if attr_args.len() == 1 {
+        // Returns the integer value that's the argument for the unwind
+        let x = attr_args[0].literal() ?;
+        match x.kind {
+            LitKind::Int(y,..) => { Some(y) }
+            _ => None
+        }
+    }
+    // Return none if there are no unwind attributes or if there's too many unwind attributes
+    else {
+        None
     }
 }
