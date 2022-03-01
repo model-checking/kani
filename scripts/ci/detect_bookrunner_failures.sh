@@ -10,7 +10,7 @@ set -eu
 # The threshold is roughly computed as: `1.05 * <number of expected failures>`
 # The extra 5% allows us to account for occasional timeouts. It is reviewed and
 # updated whenever the Rust toolchain version is updated.
-EXPECTED=621
+EXPECTED=94
 THRESHOLD=$(expr ${EXPECTED} \* 105 / 100) # Add 5% threshold
 
 if [[ $# -ne 1 ]]; then
