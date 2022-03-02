@@ -1,16 +1,16 @@
-line 25 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
-line 28 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
-line 28 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
-line 34 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
-line 37 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
-line 37 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
-line 54 assertion failed: rec.vol(3) == 150: SUCCESS
-line 55 assertion failed: impl_area(rec.clone()) == 50: SUCCESS
-line 58 assertion failed: vol == 100: SUCCESS
-line 61 assertion failed: square.vol(3) == 27: SUCCESS
-line 62 assertion failed: do_vol(&square, 2) == 18: SUCCESS
-line 63 assertion failed: impl_area(square.clone()) == 9: SUCCESS
-line 65 assertion failed: !square.compare_area(&square): SUCCESS
-line 66 assertion failed: !square.compare_area(&rec): SUCCESS
-line 67 assertion failed: rec.compare_area(&square): SUCCESS
-line 68 assertion failed: !rec.compare_area(&rec): SUCCESS
+attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
+attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
+attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
+attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
+attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
+attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
+assertion failed: rec.vol(3) == 150: SUCCESS
+assertion failed: impl_area(rec.clone()) == 50: SUCCESS
+assertion failed: vol == 100: SUCCESS
+assertion failed: square.vol(3) == 27: SUCCESS
+assertion failed: do_vol(&square, 2) == 18: SUCCESS
+assertion failed: impl_area(square.clone()) == 9: SUCCESS
+assertion failed: !square.compare_area(&square): SUCCESS
+assertion failed: !square.compare_area(&rec): SUCCESS
+assertion failed: rec.compare_area(&square): SUCCESS
+assertion failed: !rec.compare_area(&rec): SUCCESS

@@ -1,2 +1,2 @@
-line 14 a panicking function std::process::abort is invoked: FAILURE
-line 18 a panicking function std::process::abort is invoked: SUCCESS
+a panicking function std::process::abort is invoked: FAILURE
+a panicking function std::process::abort is invoked: SUCCESS

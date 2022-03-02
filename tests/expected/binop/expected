@@ -1,42 +1,42 @@
-line 6 attempt to compute `move _8 + move _9`, which would overflow: SUCCESS
-line 6 assertion failed: a + b == correct: SUCCESS
-line 7 attempt to compute `move _15 + move _16`, which would overflow: SUCCESS
-line 7 assertion failed: a + b == wrong: FAILURE
-line 11 attempt to compute `move _8 - move _9`, which would overflow: SUCCESS
-line 11 assertion failed: a - b == correct: SUCCESS
-line 12 attempt to compute `move _15 - move _16`, which would overflow: SUCCESS
-line 12 assertion failed: a - b == wrong: FAILURE
-line 16 attempt to compute `move _8 * move _9`, which would overflow: SUCCESS
-line 16 assertion failed: a * b == correct: SUCCESS
-line 17 attempt to compute `move _15 * move _16`, which would overflow: SUCCESS
-line 17 assertion failed: a * b == wrong: FAILURE
-line 21 attempt to divide `_8` by zero: SUCCESS
-line 21 attempt to compute `_8 / _9`, which would overflow: SUCCESS
-line 21 assertion failed: a / b == correct: SUCCESS
-line 22 attempt to divide `_18` by zero: SUCCESS
-line 22 attempt to compute `_18 / _19`, which would overflow: SUCCESS
-line 22 assertion failed: a / b == wrong: FAILURE
-line 26 attempt to calculate the remainder of `_8` with a divisor of zero: SUCCESS
-line 26 attempt to compute the remainder of `_8 % _9`, which would overflow: SUCCESS
-line 26 assertion failed: a % b == correct: SUCCESS
-line 27 attempt to calculate the remainder of `_18` with a divisor of zero: SUCCESS
-line 27 attempt to compute the remainder of `_18 % _19`, which would overflow: SUCCESS
-line 27 assertion failed: a % b == wrong: FAILURE
-line 31 attempt to shift left by `move _9`, which would overflow: SUCCESS
-line 31 assertion failed: a << b == correct: SUCCESS
-line 32 attempt to shift left by `move _16`, which would overflow: SUCCESS
-line 32 assertion failed: a << b == wrong: FAILURE
-line 36 attempt to shift right by `move _9`, which would overflow: SUCCESS
-line 36 assertion failed: a >> b == correct: SUCCESS
-line 37 attempt to shift right by `move _16`, which would overflow: SUCCESS
-line 37 assertion failed: a >> b == wrong: FAILURE
-line 41 attempt to shift right by `move _9`, which would overflow: SUCCESS
-line 41 assertion failed: a >> b == correct: SUCCESS
-line 42 attempt to shift right by `move _16`, which would overflow: SUCCESS
-line 42 assertion failed: a >> b == wrong: FAILURE
-line 46 assertion failed: a & b == correct: SUCCESS
-line 47 assertion failed: a & b == wrong: FAILURE
-line 51 assertion failed: a | b == correct: SUCCESS
-line 52 assertion failed: a | b == wrong: FAILURE
-line 56 assertion failed: a ^ b == correct: SUCCESS
-line 57 assertion failed: a ^ b == wrong: FAILURE
+attempt to compute `move _8 + move _9`, which would overflow: SUCCESS
+assertion failed: a + b == correct: SUCCESS
+attempt to compute `move _15 + move _16`, which would overflow: SUCCESS
+assertion failed: a + b == wrong: FAILURE
+attempt to compute `move _8 - move _9`, which would overflow: SUCCESS
+assertion failed: a - b == correct: SUCCESS
+attempt to compute `move _15 - move _16`, which would overflow: SUCCESS
+assertion failed: a - b == wrong: FAILURE
+attempt to compute `move _8 * move _9`, which would overflow: SUCCESS
+assertion failed: a * b == correct: SUCCESS
+attempt to compute `move _15 * move _16`, which would overflow: SUCCESS
+assertion failed: a * b == wrong: FAILURE
+attempt to divide `_8` by zero: SUCCESS
+attempt to compute `_8 / _9`, which would overflow: SUCCESS
+assertion failed: a / b == correct: SUCCESS
+attempt to divide `_18` by zero: SUCCESS
+attempt to compute `_18 / _19`, which would overflow: SUCCESS
+assertion failed: a / b == wrong: FAILURE
+attempt to calculate the remainder of `_8` with a divisor of zero: SUCCESS
+attempt to compute the remainder of `_8 % _9`, which would overflow: SUCCESS
+assertion failed: a % b == correct: SUCCESS
+attempt to calculate the remainder of `_18` with a divisor of zero: SUCCESS
+attempt to compute the remainder of `_18 % _19`, which would overflow: SUCCESS
+assertion failed: a % b == wrong: FAILURE
+attempt to shift left by `move _9`, which would overflow: SUCCESS
+assertion failed: a << b == correct: SUCCESS
+attempt to shift left by `move _16`, which would overflow: SUCCESS
+assertion failed: a << b == wrong: FAILURE
+attempt to shift right by `move _9`, which would overflow: SUCCESS
+assertion failed: a >> b == correct: SUCCESS
+attempt to shift right by `move _16`, which would overflow: SUCCESS
+assertion failed: a >> b == wrong: FAILURE
+attempt to shift right by `move _9`, which would overflow: SUCCESS
+assertion failed: a >> b == correct: SUCCESS
+attempt to shift right by `move _16`, which would overflow: SUCCESS
+assertion failed: a >> b == wrong: FAILURE
+assertion failed: a & b == correct: SUCCESS
+assertion failed: a & b == wrong: FAILURE
+assertion failed: a | b == correct: SUCCESS
+assertion failed: a | b == wrong: FAILURE
+assertion failed: a ^ b == correct: SUCCESS
+assertion failed: a ^ b == wrong: FAILURE

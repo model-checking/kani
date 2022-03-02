@@ -1,5 +1,5 @@
-line 24 assertion failed: false: SUCCESS
-line 22 unreachable code: SUCCESS
-line 27 unreachable code: SUCCESS
-line 28 assertion failed: false: SUCCESS
-line 29 assertion failed: a == *b: SUCCESS
+assertion failed: false: SUCCESS
+unreachable code: SUCCESS
+unreachable code: SUCCESS
+assertion failed: false: SUCCESS
+assertion failed: a == *b: SUCCESS

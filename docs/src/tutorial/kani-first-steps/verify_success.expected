@@ -1,2 +1,2 @@
-[final_form::estimate_size.assertion.1] line 6 assertion failed: x < 4096:
-[final_form::verify_success.assertion.1] line 58 assertion failed: y < 10:
+assertion failed: x < 4096:
+assertion failed: y < 10:

@@ -1,2 +1,2 @@
-line 12 assertion failed: 10 == foo(): FAILURE
-line 13 assertion failed: 12 == foo(): SUCCESS
+assertion failed: 10 == foo(): FAILURE
+assertion failed: 12 == foo(): SUCCESS

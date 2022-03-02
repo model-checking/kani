@@ -1,3 +1,3 @@
-- Status: SUCCESS
-- Status: FAILURE
+assertion failed: 1 + 1 == 2: SUCCESS
+assertion failed: 2 + 2 == 3: FAILURE
 VERIFICATION:- FAILED

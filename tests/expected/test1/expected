@@ -1,5 +1,5 @@
-line 9 attempt to compute `_1 + move _4`, which would overflow: SUCCESS
-line 10 attempt to compute `_2 - const 1_i32`, which would overflow: SUCCESS
-line 14 assertion failed: a == 54: FAILURE
-line 16 assertion failed: a == 55: SUCCESS
-line 18 assertion failed: a >= 55: SUCCESS
+attempt to compute `_1 + move _4`, which would overflow: SUCCESS
+attempt to compute `_2 - const 1_i32`, which would overflow: SUCCESS
+assertion failed: a == 54: FAILURE
+assertion failed: a == 55: SUCCESS
+assertion failed: a >= 55: SUCCESS
