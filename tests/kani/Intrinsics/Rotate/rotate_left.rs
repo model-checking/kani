@@ -29,7 +29,7 @@ macro_rules! test_rotate_left {
         $fn_name(x, y, n);
         // Check that the stable version returns the same value
         assert!(y == x.rotate_left(n));
-    }
+    };
 }
 
 fn main() {
