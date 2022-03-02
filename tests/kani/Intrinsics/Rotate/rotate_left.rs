@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(core_intrinsics)]
-use std::intrinsics::{rotate_left, rotate_right};
 
 // Check that `rotate_left` is supported and returns the expected result.
+#![feature(core_intrinsics)]
+use std::intrinsics::rotate_left;
 
 macro_rules! test_rotate_left {
     ( $fn_name:ident, $ty:ty ) => {
@@ -29,7 +29,7 @@ macro_rules! test_rotate_left {
         $fn_name(x, y, n);
         // Check that the stable version returns the same value
         assert!(y == x.rotate_left(n));
-    };
+    }
 }
 
 fn main() {
