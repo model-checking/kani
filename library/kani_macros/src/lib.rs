@@ -59,17 +59,20 @@ pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     TokenStream::new()
 }
 
+// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
+// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
+// Usage is restricted to proof harnesses only currently.
 #[cfg(kani)]
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
-    // Translate #[kani::unwind(arg)] to #[kanitool::unwind(8)]
+    // Translate #[kani::unwind(arg)] to #[kanitool::unwind(arg)]
     let insert_string = "#[kanitool::unwind(".to_owned() + &attr.clone().to_string() + ")]";
 
-    // Add the string that looks like - #[kanitool::unwindvalue]
+    // Add the string that looks like - #[kanitool::unwind(arg)] to the tokenstream
     result.extend(insert_string.parse::<TokenStream>().unwrap());
-    // No mangle seems to be necessary as removing it prevents all the attributes in a lib from being read
+    // No mangle seems to be necessary as removing it prevents attributes without 'kani::proof' in a lib from being read or handled (from being codegen'd)
     result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
 
     result.extend(item);

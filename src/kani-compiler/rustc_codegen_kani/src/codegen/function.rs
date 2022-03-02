@@ -12,6 +12,7 @@ use rustc_ast::{Attribute, LitKind};
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::iter::FromIterator;
 use tracing::{debug, warn};
 
@@ -294,8 +295,7 @@ impl<'tcx> GotocCtx<'tcx> {
         else if proof_attribute_vector.len() == 0 && attribute_vector.len() > 0 {
             self.tcx.sess.span_err(
                 attribute_vector[0].1.span,
-                format!("Please use '#kani[proof]' above the annotation {}", attribute_vector[0].0)
-                    .as_str(),
+                "Please use '#kani[proof]' above the annotation",
             );
         } else {
         }
@@ -319,13 +319,18 @@ impl<'tcx> GotocCtx<'tcx> {
         harness
     }
 
-    /// Unwind strings of the format 'unwind_x' and the mangled names are to be parsed for the value 'x'
+    /// Unwind strings of the format 'unwind(x)' and the mangled names are to be parsed for the value 'x'
     fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
         // Check if some unwind value doesnt already exist
         if harness.unwind_value.is_none() {
             // Get Attribute value and if it's not none, assign it to the metadata
             if let Some(integer_value) = extract_integer_argument(attr) {
-                harness.unwind_value = Some(integer_value);
+                // Convert the extracted u128 and convert to u32
+                assert!(
+                    integer_value < u32::MAX.into(),
+                    "Value above maximum permitted value - u32::MAX"
+                );
+                harness.unwind_value = Some(integer_value.try_into().unwrap());
             } else {
                 // Show an Error if there is no integer value assigned to the integer or there's too many values assigned to the annotation
                 self.tcx
@@ -355,11 +360,10 @@ fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     }
 }
 
-/// Extracts the integer value argument from the unwind attribute
+/// Extracts the integer value argument from the any attribute provided
 fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     // Vector of meta items , that contain metadata about the annotation
-    let attr_args = attr.meta().and_then(|x| x.meta_item_list().map(|x| x.to_vec()))?;
-
+    let attr_args = attr.meta_item_list().map(|x| x.to_vec())?;
     // Only accept unwind attributes with one integer value as argument
     if attr_args.len() == 1 {
         // Returns the integer value that's the argument for the unwind

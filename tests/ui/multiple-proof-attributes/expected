@@ -1,0 +1,5 @@
+error: Only one Proof Attribute allowed
+  --> main.rs:14:1
+   |
+14 | #[kani::proof]
+   | ^^^^^^^^^^^^^^

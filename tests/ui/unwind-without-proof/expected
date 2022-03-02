@@ -1,0 +1,5 @@
+error: Please use '#kani[proof]' above the annotation
+  --> main.rs:13:1
+   |
+13 | #[kani::unwind(9)]
+   | ^^^^^^^^^^^^^^^^^^
