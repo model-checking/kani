@@ -38,7 +38,7 @@ macro_rules! test_ctlz {
 // exclude zero
 macro_rules! test_ctlz_nonzero {
     ($ty:ty) => {
-        let var_nonzero: $ty = 8;
+        let var_nonzero: $ty = kani::any();
         kani::assume(var_nonzero != 0);
         unsafe {
             assert!(ctlz(var_nonzero) == ctlz_nonzero(var_nonzero));
