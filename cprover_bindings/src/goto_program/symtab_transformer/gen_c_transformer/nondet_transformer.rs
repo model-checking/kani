@@ -84,7 +84,7 @@ impl Transformer for NondetTransformer {
 
         // Instead of just mapping `self.transform_expr` over the values,
         // only transform those which are true fields, not padding
-        let fields = self.symbol_table().lookup_fields_in_type(&transformed_typ).unwrap().clone();
+        let fields = transformed_typ.lookup_components(self.symbol_table()).unwrap().clone();
         let transformed_values: Vec<_> = fields
             .into_iter()
             .zip(values.into_iter())
