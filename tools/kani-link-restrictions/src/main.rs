@@ -23,6 +23,8 @@ fn link_function_pointer_restrictions(data_per_crate: Vec<VtableCtxResults>) -> 
     // Iterate call sites
     for crate_data in data_per_crate {
         for call_site in crate_data.call_sites {
+            // CBMC Now supports referencing callsites by label:
+            // https://github.com/diffblue/cbmc/pull/6508
             let cbmc_call_site_name = format!("{}.{}", call_site.function_name, call_site.label);
             let trait_def = call_site.trait_method;
 
