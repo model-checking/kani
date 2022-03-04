@@ -3,8 +3,8 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::context::metadata::KaniMetadata;
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::context::metadata::KaniMetadata;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::InternedString;

@@ -5,7 +5,7 @@
 // kani-verify-fail
 // kani-flags: --function check_add
 // compile-flags: --crate-type lib
-
+#[kani::proof]
 pub fn check_add(a: u8, b: u8) {
     unsafe {
         a + b;

@@ -5,5 +5,5 @@ array 'x'.0 upper bound in x.0[var_3]: SUCCESS
 array 'x'.0 upper bound in x.0[var_5]: SUCCESS
 line 14 assertion failed: y[0] == 1: SUCCESS
 line 15 assertion failed: y[1] == 2: SUCCESS
-line 16 index out of bounds: the length is move _17 but the index is _16: FAILURE
+line 16 index out of bounds: the length is less than or equal to the given index: FAILURE
 line 16 assertion failed: y[z] == 3: FAILURE
