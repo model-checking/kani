@@ -3,7 +3,7 @@
 
 //! Functions that make names for things
 
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;

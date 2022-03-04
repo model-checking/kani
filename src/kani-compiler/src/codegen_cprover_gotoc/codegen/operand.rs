@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::utils::slice_fat_ptr;
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use rustc_ast::ast::Mutability;

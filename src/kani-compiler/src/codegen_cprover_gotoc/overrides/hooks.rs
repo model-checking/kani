@@ -8,8 +8,8 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use crate::utils;
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::utils;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use kani_queries::UserInput;

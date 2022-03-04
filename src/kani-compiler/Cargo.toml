@@ -9,12 +9,29 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 atty = "0.2.14"
+bitflags = { version = "1.0", optional = true }
+cbmc = { path = "../../cprover_bindings", package = "cprover_bindings", optional = true }
 clap = "2.33.0"
+cstr = { version = "0.2", optional = true }
 kani_queries = {path = "kani_queries"}
-rustc_codegen_kani = {path = "rustc_codegen_kani"}
+kani_restrictions = { path = "../../library/kani_restrictions", optional = true }
+libc = { version = "0.2", optional = true }
+measureme = { version = "9.1.0", optional = true }
+num = { version = "0.4.0", optional = true }
+rustc-demangle = { version = "0.1.21", optional = true }
+serde = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
+smallvec = { version = "1.6.1", features = ["union", "may_dangle"], optional = true }
+snap = { version = "1", optional = true }
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_info"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.0"
+
+# Future proofing: enable backend dependencies using feature.
+[features]
+default = ['cprover']
+cprover = ['bitflags', 'cbmc', 'cstr', 'kani_restrictions', 'libc', 'measureme', 'num', 'rustc-demangle', 'serde',
+    'serde_json', 'smallvec', 'snap']
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
