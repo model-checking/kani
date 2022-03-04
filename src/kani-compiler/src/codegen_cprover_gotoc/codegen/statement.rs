@@ -8,7 +8,8 @@ use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
-    BasicBlock, Operand, Place, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    AssertKind, BasicBlock, Operand, Place, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind,
 };
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
@@ -78,6 +79,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
+                let msg = if let AssertKind::BoundsCheck { .. } = msg {
+                    // For bounds check the following panic message is generated at runtime:
+                    // "index out of bounds: the length is {len} but the index is {index}",
+                    // but CBMC only accepts static messages so we don't add values to the message.
+                    "index out of bounds: the length is less than or equal to the given index"
+                } else {
+                    // For all other assert kind we can get the static message.
+                    msg.description()
+                };
+
                 Stmt::block(
                     vec![
                         cond.cast_to(Type::bool()).if_then_else(
@@ -85,7 +96,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc.clone(),
                         ),
-                        Stmt::assert_false(&format!("{:?}", msg), loc.clone()),
+                        Stmt::assert_false(msg, loc.clone()),
                         Stmt::goto(self.current_fn().find_label(target), loc.clone()),
                     ],
                     loc,
