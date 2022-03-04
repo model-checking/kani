@@ -11,7 +11,7 @@ fn main() {
 }
 
 #[kani::unwind(7)]
-fn harness() {
+pub fn harness() {
     let mut counter = 0;
     loop {
         counter += 1;
