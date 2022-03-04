@@ -1,6 +1,6 @@
-line 10 attempt to compute `_2 + const 1_i32`, which would overflow: SUCCESS
+line 10 attempt to add with overflow: SUCCESS
 line 15 assertion failed: i == 3: FAILURE
 line 17 assertion failed: i == 2: SUCCESS
 line 19 assertion failed: i == 2 || i == 3: SUCCESS
-line 23 attempt to divide `_3` by zero: SUCCESS
-line 23 attempt to compute `_3 / _4`, which would overflow: SUCCESS
+line 23 attempt to divide by zero: SUCCESS
+line 23 attempt to divide with overflow: SUCCESS
