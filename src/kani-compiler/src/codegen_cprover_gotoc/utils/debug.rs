@@ -3,7 +3,7 @@
 
 //! This file contains functionality that makes Kani easier to debug
 
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
 use rustc_middle::mir::Body;
 use rustc_middle::ty::print::with_no_trimmed_paths;

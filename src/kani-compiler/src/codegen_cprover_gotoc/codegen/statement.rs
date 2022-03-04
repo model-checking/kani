@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
-use crate::utils;
-use crate::{GotocCtx, VtableCtx};
+use crate::codegen_cprover_gotoc::utils;
+use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;

@@ -15,7 +15,7 @@
 ///
 /// For the current CBMC implementation of function restrictions, see:
 ///     http://cprover.diffblue.com/md__home_travis_build_diffblue_cbmc_doc_architectural_restrict-function-pointer.html
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Stmt, Type};
 use cbmc::InternedString;
 use kani_restrictions::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
