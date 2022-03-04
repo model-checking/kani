@@ -18,6 +18,13 @@ pub enum Mode {
     KaniFixme,
     CargoKani,
     Expected,
+    // this is a temporary suite for testing results in the new format that will
+    // be deprecated by a more robust json-based approach
+    // expected files should be in the form:
+    //     <description>: <result>
+    // e.g.
+    //     assertion failed: 1 + 1 == 2: SUCCESS
+    ResultsNewFormat,
     Stub,
 }
 
@@ -29,6 +36,7 @@ impl FromStr for Mode {
             "kani-fixme" => Ok(KaniFixme),
             "cargo-kani" => Ok(CargoKani),
             "expected" => Ok(Expected),
+            "results-new-format" => Ok(ResultsNewFormat),
             "stub-tests" => Ok(Stub),
             _ => Err(()),
         }
@@ -42,6 +50,7 @@ impl fmt::Display for Mode {
             KaniFixme => "kani-fixme",
             CargoKani => "cargo-kani",
             Expected => "expected",
+            ResultsNewFormat => "results-new-format",
             Stub => "stub-tests",
         };
         fmt::Display::fmt(s, f)

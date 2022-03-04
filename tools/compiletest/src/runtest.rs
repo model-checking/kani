@@ -7,7 +7,7 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
+use crate::common::{CargoKani, Expected, Kani, KaniFixme, ResultsNewFormat, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
@@ -63,7 +63,8 @@ impl<'test> TestCx<'test> {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
             CargoKani => self.run_cargo_kani_test(),
-            Expected => self.run_expected_test(),
+            Expected => self.run_expected_test(false),
+            ResultsNewFormat => self.run_expected_test(true),
             Stub => self.run_stub_test(),
         }
     }
@@ -324,7 +325,7 @@ impl<'test> TestCx<'test> {
         self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
-        self.verify_output(&proc_res, &expected);
+        self.verify_output(&proc_res, &expected, false);
     }
 
     /// Common method used to run Kani on a single file test.
@@ -353,11 +354,11 @@ impl<'test> TestCx<'test> {
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
     /// message is printed to stdout if verification output does not contain
     /// the expected output in `expected` file.
-    fn run_expected_test(&self) {
+    fn run_expected_test(&self, new_format: bool) {
         let proc_res = self.run_kani();
         let expected =
             fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
-        self.verify_output(&proc_res, &expected);
+        self.verify_output(&proc_res, &expected, new_format);
     }
 
     /// Runs Kani with stub implementations of various data structures.
@@ -376,15 +377,112 @@ impl<'test> TestCx<'test> {
 
     /// Print an error if the verification output does not contain the expected
     /// lines.
-    fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
+    fn verify_output(&self, proc_res: &ProcRes, expected: &str, new_format: bool) {
         // Include the output from stderr here for cases where there are exceptions
-        let output = proc_res.stdout.to_string() + &proc_res.stderr;
+        let output = if new_format {
+            TestCx::reformat_output(&proc_res.stdout) + &proc_res.stderr
+        } else {
+            proc_res.stdout.to_string() + &proc_res.stderr
+        };
         if let Some(line) = TestCx::contains_lines(&output, expected.split('\n').collect()) {
             self.fatal_proc_rec(
                 &format!("test failed: expected output to contain the line: {}", line),
                 &proc_res,
             );
         }
+    }
+
+    /// Modify the results section of the output from the new format to the old
+    /// format so that it works for existing `expected` files that are based on
+    /// the old format
+    fn reformat_output(output: &str) -> String {
+        // Process the output on a line-by-line basis
+        let lines: Vec<String> = output.split('\n').map(|s| s.to_string()).collect();
+        let mut adapted_lines: Vec<String> = Vec::new();
+
+        // 1. Copy all lines until and including the "RESULTS:" line, which
+        // marks the beginning of the results section of the output
+        let mut line_iter = lines.iter();
+        while let Some(line) = line_iter.next() {
+            adapted_lines.push(line.clone());
+            if adapted_lines.last().unwrap() == "RESULTS:" {
+                break;
+            }
+        }
+
+        if line_iter.clone().peekable().peek().is_none() {
+            // iterated over all the lines, so this is not the new format
+            return output.to_string();
+        }
+
+        // 2. Adapt output of the form:
+        //
+        //        Check 2: foo.assertion.2
+        //        - Status: SUCCESS
+        //        - Description: "assertion failed: x == 2"
+        //
+        //    to:
+        //
+        //       [foo.assertion.2] line X assertion failed: x == 2: SUCCESS
+        //
+        // (Note that since the line numbers are missing from the new format, it
+        // will be printed as "line X")
+        let mut check_index = 1usize;
+        while let Some(line) = line_iter.next() {
+            // Check line is of the form: "Check <n>: foo.assertion.5"
+            if let Some(name) = line.strip_prefix(format!("Check {}: ", check_index).as_str()) {
+                // Result line is of the form: "\t - Status: <Result>"
+                let result = line_iter.next().unwrap().strip_prefix("\t - Status: ").unwrap();
+                // description could span multiple lines, e.g.
+                // - Description: "Code generation sanity check: Correct CBMC vtable size for StructTag("tag-_5528490532708175949") (MIR type Closure(DefId(2:9423 ~ std[c344]::rt::lang_start::{closure#0}), [(), i8, extern "rust-call" fn(()) -> i32, (fn(),)])). Please report failures:
+                // https://github.com/model-checking/kani/issues/new?template=bug_report.md"
+                // Extract all the lines to the next empty line which marks the end of the description
+                let mut description: Vec<String> = Vec::new();
+                while let Some(line) = line_iter.next() {
+                    if line.is_empty() {
+                        break;
+                    }
+                    description.push(line.clone());
+                }
+                assert!(!description.is_empty());
+
+                // Strip the '\t - Description: "' (including double quotes) from
+                // the beginning (first line) of the description
+                *description.first_mut().unwrap() = description
+                    .first()
+                    .unwrap()
+                    .strip_prefix("\t - Description: \"")
+                    .unwrap()
+                    .to_string();
+                // Strip the double quotes from the end (last line) of the description
+                *description.last_mut().unwrap() =
+                    description.last().unwrap().strip_suffix("\"").unwrap().to_string();
+
+                // Change the output to the following form:
+                //     [<assertion name>] line X <description>: <result>
+                // where description could have multiple lines
+                if description.len() == 1 {
+                    adapted_lines.push(format!("[{}] line X {}: {}", name, description[0], result));
+                } else {
+                    adapted_lines.push(format!("[{}] line X {}", name, description[0]));
+                    for i in 1..description.len() - 1 {
+                        adapted_lines.push(description[i].clone());
+                    }
+                    // last line
+                    adapted_lines.push(format!("{}: {}", description.last().unwrap(), result));
+                }
+                check_index += 1;
+            } else {
+                break;
+            }
+        }
+
+        // 3. Copy the remaining lines without any changes
+        while let Some(line) = line_iter.next() {
+            adapted_lines.push(line.clone());
+        }
+
+        adapted_lines.join("\n")
     }
 
     /// Looks for each line in `str`. Returns `None` if all lines are in `str`.

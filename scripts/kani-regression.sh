@@ -38,6 +38,7 @@ TESTS=(
     "cargo-kani cargo-kani"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
+    "results-new-format results-new-format"
     "ui expected"
 )
 
