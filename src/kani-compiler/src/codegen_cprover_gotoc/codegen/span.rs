@@ -3,7 +3,7 @@
 
 //! MIR Span related functions
 
-use crate::GotocCtx;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
 use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
 use rustc_span::Span;
