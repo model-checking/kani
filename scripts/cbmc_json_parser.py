@@ -205,7 +205,7 @@ def postprocess_results(properties):
     annotate_properties_with_reach_results(properties, reach_checks)
 
     for property in properties:
-        if has_reachable_unsupported_constructs:
+        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
@@ -213,7 +213,6 @@ def postprocess_results(properties):
             # Change SUCCESS to UNREACHABLE
             assert property["status"] == "SUCCESS", "** ERROR: Expecting an unreachable property to have a status of \"SUCCESS\""
             property["status"] = "UNREACHABLE"
-        # TODO: Handle unwinding assertion failure
 
     messages = ""
     if has_reachable_unsupported_constructs:
