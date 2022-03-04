@@ -16,9 +16,8 @@
 /// For the current CBMC implementation of function restrictions, see:
 ///     http://cprover.diffblue.com/md__home_travis_build_diffblue_cbmc_doc_architectural_restrict-function-pointer.html
 use crate::GotocCtx;
-use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{Stmt, Type};
 use cbmc::InternedString;
-use cbmc::NO_PRETTY_NAME;
 use kani_restrictions::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::stable_map::FxHashMap;
 use tracing::debug;
@@ -92,98 +91,44 @@ impl VtableCtx {
         trait_name: InternedString,
         method: usize,
         function_name: InternedString,
+        label: InternedString,
     ) {
         assert!(self.emit_vtable_restrictions);
         let site = CallSite {
             trait_method: TraitDefinedMethod { trait_name, vtable_idx: method },
             function_name: function_name,
+            label: label,
         };
         self.call_sites.push(site);
     }
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    /// Wrap a virtual call through a function pointer and restrict the
-    /// possible targets.
-    ///
-    /// We need to wrap because for the current implemention, CBMC employs
-    /// a hard-to-get-right naming scheme for restrictions: the call site is
-    /// named for its index in  a given function. We don't have a good way to
-    /// track _all_ function pointers within the function, so wrapping the call
-    /// to a function that makes a single virtual function pointer call makes
-    /// the naming unambiguous.
-    ///
-    /// This can be simplified if CBMC implemented label-based restrictions.
-    /// Kani tracking: https://github.com/model-checking/kani/issues/651
-    /// CBMC tracking: https://github.com/diffblue/cbmc/issues/6464
+    /// Create a label to the virtual call site
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,
         trait_ty: Type,
         vtable_idx: usize,
-        fn_ptr: Expr,
-        args: Vec<Expr>,
-    ) -> Expr {
+        body: Stmt,
+    ) -> Stmt {
         assert!(self.vtable_ctx.emit_vtable_restrictions);
 
-        // Crate-based naming scheme for wrappers
-        let full_crate_name = self.full_crate_name().to_string().replace("::", "_");
-        let wrapper_name: InternedString = format!(
-            "restricted_call_{}_{}",
-            full_crate_name,
-            self.vtable_ctx.get_call_site_global_idx()
-        )
-        .into();
+        let label: InternedString =
+            format!("restricted_call_label_{}", self.vtable_ctx.get_call_site_global_idx()).into();
 
         // We only have the Gotoc type, we need to normalize to match the MIR type.
         assert!(trait_ty.is_struct_tag());
         let mir_name =
             self.normalized_trait_name(*self.type_map.get(&trait_ty.tag().unwrap()).unwrap());
-        self.vtable_ctx.add_call_site(mir_name.into(), vtable_idx, wrapper_name);
 
-        // Declare the wrapper's parameters
-        let func_exp: Expr = fn_ptr.dereference();
-        let fn_type = func_exp.typ().clone();
-        let parameters: Vec<Symbol> = fn_type
-            .parameters()
-            .unwrap()
-            .iter()
-            .enumerate()
-            .map(|(i, parameter)| {
-                let name = format!("{}_{}", wrapper_name, i);
-                let param =
-                    Symbol::variable(name.clone(), name, parameter.typ().clone(), Location::none());
-                self.symbol_table.insert(param.clone());
-                param
-            })
-            .collect();
-
-        // Finish constructing the wrapper type
-        let ret_typ = fn_type.return_type().unwrap().clone();
-        let param_typs = parameters.clone().iter().map(|p| p.to_function_parameter()).collect();
-        let new_typ = if fn_type.is_code() {
-            Type::code(param_typs, ret_typ.clone())
-        } else if fn_type.is_variadic_code() {
-            Type::variadic_code(param_typs, ret_typ.clone())
-        } else {
-            unreachable!("Function type must be Code or VariadicCode")
-        };
-
-        // Build the body: call the original function pointer
-        let body = func_exp
-            .clone()
-            .call(parameters.iter().map(|p| p.to_expr()).collect())
-            .ret(Location::none());
-
-        // Build and insert the wrapper function itself
-        let sym = Symbol::function(
-            wrapper_name,
-            new_typ,
-            Some(Stmt::block(vec![body], Location::none())),
-            NO_PRETTY_NAME,
-            Location::none(),
+        // Label
+        self.vtable_ctx.add_call_site(
+            mir_name.into(),
+            vtable_idx,
+            self.current_fn().name().into(),
+            label,
         );
-        self.symbol_table.insert(sym.clone());
-        sym.to_expr().call(args.to_vec())
+        body.with_label(label)
     }
 }
 
