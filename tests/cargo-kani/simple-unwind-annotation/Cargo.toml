@@ -10,3 +10,4 @@ edition = "2021"
 
 [kani.flags]
 output-format = "old"
+function = "harness"

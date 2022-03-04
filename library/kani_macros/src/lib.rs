@@ -69,11 +69,8 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Translate #[kani::unwind(arg)] to #[kanitool::unwind(arg)]
     let insert_string = "#[kanitool::unwind(".to_owned() + &attr.clone().to_string() + ")]";
-
     // Add the string that looks like - #[kanitool::unwind(arg)] to the tokenstream
     result.extend(insert_string.parse::<TokenStream>().unwrap());
-    // No mangle seems to be necessary as removing it prevents attributes without 'kani::proof' in a lib from being read or handled (from being codegen'd)
-    result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
 
     result.extend(item);
     result

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// rmc-flags: --no-unwinding-checks
+// kani-flags: --no-unwinding-checks
 
 // This test is to check Kani's error handling for harnesses that have proof attributes
 // with arguments when the expected declaration takes no arguments.

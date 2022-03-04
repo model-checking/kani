@@ -243,62 +243,50 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Currently, this is only proof harness annotations.
     /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
     fn handle_kanitool_attributes(&mut self) {
-        let instance = self.current_fn().instance();
+        let attributes_list = self.tcx.get_attrs(self.current_fn().instance().def_id());
+        let (proof_attribute_vector, attribute_vector) = create_attribute_vectors(attributes_list);
+        let proof_attribute_count = proof_attribute_vector.len();
 
-        // Vectors for storing instances of each attribute type,
-        // TODO: This can be modifed to use Enums when more options are provided
-        let mut attribute_vector = vec![];
-        let mut proof_attribute_vector = vec![];
-
-        // Loop through instances to get all "kanitool::x" attribute strings
-        for attr in self.tcx.get_attrs(instance.def_id()) {
-            // Get the string the appears after "kanitool::" in each attribute string.
-            // Ex - "proof" | "unwind" etc.
-            if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
-                // Push to proof vector
-                if attribute_string == "proof" {
-                    proof_attribute_vector.push(attr);
-                }
-                // Push to attribute vector that can be expanded to a map when more options become available
-                else {
-                    attribute_vector.push((attribute_string.to_string(), attr));
-                }
-            }
+        // Handle the attributes only if there is one proof attribute
+        if proof_attribute_count == 1 {
+            self.create_proof_harness(attribute_vector);
         }
-
-        // In the case when there's only one proof attribute (correct behavior), create harness and modify it
-        // depending on each subsequent attribute that's being called by the user.
-        if proof_attribute_vector.len() == 1 {
-            let mut harness_metadata = self.handle_kanitool_proof();
-            if attribute_vector.len() > 0 {
-                // loop through all subsequent attributes
-                for attribute_tuple in attribute_vector.iter() {
-                    // match with "unwind" attribute and provide the harness for modification
-                    match attribute_tuple.0.as_str() {
-                        "unwind" => {
-                            self.handle_kanitool_unwind(attribute_tuple.1, &mut harness_metadata)
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            // self.proof_harnesses contains the final metadata that's to be parsed
-            self.proof_harnesses.push(harness_metadata);
-        }
-        // User error handling for when there's more than one proof attribute being called
-        else if proof_attribute_vector.len() > 1 {
+        // User error handling for user cases where there's more than one proof attribute being called
+        else if proof_attribute_count > 1 {
             self.tcx
                 .sess
-                .span_err(proof_attribute_vector[0].span, "Only one Proof Attribute allowed");
+                .span_warn(proof_attribute_vector[0].span, "Only one Proof Attribute allowed");
         }
-        // User error handling for when there's an attribute being called without #kani::tool
-        else if proof_attribute_vector.len() == 0 && attribute_vector.len() > 0 {
+        // User error handling for the user case where there's an attribute being called without #kani::tool
+        else if proof_attribute_count == 0 && attribute_vector.len() > 0 {
             self.tcx.sess.span_err(
                 attribute_vector[0].1.span,
                 "Please use '#kani[proof]' above the annotation",
             );
         } else {
+            // No op for instances without any annotations declared
         }
+    }
+
+    // Create the proof harness struct using the handler methods for various attributes
+    fn create_proof_harness(&mut self, attribute_vector: Vec<(String, &Attribute)>) {
+        // In the case when there's only one proof attribute (correct behavior), create harness and modify it
+        // depending on each subsequent attribute that's being called by the user.
+        let mut harness_metadata = self.handle_kanitool_proof();
+        if attribute_vector.len() > 0 {
+            // loop through all subsequent attributes
+            for attribute_tuple in attribute_vector.iter() {
+                // match with "unwind" attribute and provide the harness for modification
+                match attribute_tuple.0.as_str() {
+                    "unwind" => {
+                        self.handle_kanitool_unwind(attribute_tuple.1, &mut harness_metadata)
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // self.proof_harnesses contains the final metadata that's to be parsed
+        self.proof_harnesses.push(harness_metadata);
     }
 
     /// Update `self` (the goto context) to add the current function as a listed proof harness
@@ -350,30 +338,55 @@ fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
         ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
             if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" =>
         {
-            let mut new_string = String::new();
-            for index in 1..segments.len() {
-                new_string.push_str(segments[index].ident.as_str());
-            }
-            Some(new_string)
+            Some(segments[1].ident.as_str().to_string())
         }
         _ => None,
     }
+}
+
+// Create two vectors, proof_vector and attribute_vector which seperates the list of attributes into
+// proof and non-proof for easier parsing
+fn create_attribute_vectors(
+    attrs_list: &[Attribute],
+) -> (Vec<&Attribute>, Vec<(String, &Attribute)>) {
+    // Vectors for storing instances of each attribute type,
+    // TODO: This can be modifed to use Enums when more options are provided
+    let mut proof_attribute_vector = vec![];
+    let mut attribute_vector = vec![];
+
+    // Loop through instances to get all "kanitool::x" attribute strings
+    for attr in attrs_list {
+        // Get the string the appears after "kanitool::" in each attribute string.
+        // Ex - "proof" | "unwind" etc.
+        if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
+            // Push to proof vector
+            if attribute_string == "proof" {
+                proof_attribute_vector.push(attr);
+            }
+            // Push to attribute vector that can be expanded to a map when more options become available
+            else {
+                attribute_vector.push((attribute_string.to_string(), attr));
+            }
+        }
+    }
+
+    (proof_attribute_vector, attribute_vector)
 }
 
 /// Extracts the integer value argument from the any attribute provided
 fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     // Vector of meta items , that contain metadata about the annotation
     let attr_args = attr.meta_item_list().map(|x| x.to_vec())?;
-    // Only accept unwind attributes with one integer value as argument
+    // Only extracts one integer value as argument
     if attr_args.len() == 1 {
-        // Returns the integer value that's the argument for the unwind
+        // Returns the integer value that's the argument for the attribute
         let x = attr_args[0].literal()?;
         match x.kind {
             LitKind::Int(y, ..) => Some(y),
             _ => None,
         }
     }
-    // Return none if there are no unwind attributes or if there's too many unwind attributes
+    // Return none if there are no attributes or if there's too many attributes
     else {
         None
     }
