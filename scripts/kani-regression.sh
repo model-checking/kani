@@ -15,7 +15,7 @@ KANI_DIR=$SCRIPT_DIR/..
 
 # Required dependencies
 check-cbmc-version.py --major 5 --minor 50
-check-cbmc-viewer-version.py --major 2 --minor 5
+check-cbmc-viewer-version.py --major 2 --minor 10
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
@@ -26,6 +26,7 @@ cargo build
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
+cargo test -p cargo-kani
 
 # Declare testing suite information (suite and mode)
 TESTS=(

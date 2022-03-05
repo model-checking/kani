@@ -19,7 +19,7 @@ runs:
         shell: bash
 
       - name: Install cbmc-viewer
-        run: ./scripts/setup/install_viewer.sh 2.6
+        run: ./scripts/setup/install_viewer.sh 2.10
         shell: bash
 
       - name: Install Rust toolchain
@@ -34,6 +34,6 @@ runs:
       - name: Build Kani and Kani Library
         run: |
           export RUST_BACKTRACE=1
-          cargo build -p kani-compiler
+          cargo build
         shell: bash
 

@@ -57,13 +57,18 @@ def main():
         print("Json File Input Missing")
         sys.exit(1)
 
+    if len(sys.argv) == 3:
+        output_style = output_style_switcher[sys.argv[2]]
+    else:
+        output_style = "regular"
+
     # parse the input json file
     with open(sys.argv[1]) as f:
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    transform_cbmc_output(sample_json_file_parsing, output_style=output_style_switcher["old"])
-    return
+    return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
+    sys.exit(return_code)
 
 def transform_cbmc_output(cbmc_response_string, output_style):
     """
@@ -201,7 +206,7 @@ def postprocess_results(properties):
     remove_check_ids_from_description(properties)
 
     for property in properties:
-        if has_reachable_unsupported_constructs:
+        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
@@ -209,13 +214,15 @@ def postprocess_results(properties):
             # Change SUCCESS to UNREACHABLE
             assert property["status"] == "SUCCESS", "** ERROR: Expecting an unreachable property to have a status of \"SUCCESS\""
             property["status"] = "UNREACHABLE"
-        # TODO: Handle unwinding assertion failure
 
     messages = ""
     if has_reachable_unsupported_constructs:
         messages += "** WARNING: A Rust construct that is not currently supported " \
                     "by Kani was found to be reachable. Check the results for " \
                     "more details."
+    if has_failed_unwinding_asserts:
+        messages += "[Kani] info: Verification output shows one or more unwinding failures.\n" \
+                    "[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n"
 
     return properties, messages
 
@@ -385,11 +392,11 @@ def construct_terse_property_message(properties):
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
-        verification_status = Fore.GREEN + "SUCCESSFUL" + Style.RESET_ALL
+        verification_status = colored_text(Fore.GREEN, "SUCCESSFUL")
     else:
         # Go through traces to extract relevant information to be displayed in the summary
         # only in the case of failure
-        verification_status = Fore.RED + "FAILED" + Style.RESET_ALL
+        verification_status = colored_text(Fore.RED, "FAILED")
         for failed_test in failed_tests:
             try:
                 failure_message = failed_test["description"]
@@ -449,17 +456,17 @@ def construct_property_message(properties):
             print("Key not present in json property", e)
 
         if status == "SUCCESS":
-            message = Fore.GREEN + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.GREEN, f"{status}")
         elif status == "UNDETERMINED":
-            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.YELLOW, f"{status}")
             number_tests_undetermined += 1
         elif status == "UNREACHABLE":
-            message = Fore.YELLOW + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.YELLOW, f"{status}")
             number_tests_unreachable += 1
         else:
             number_tests_failed += 1
             failed_tests.append(property_instance)
-            message = Fore.RED + f"{status}" + Style.RESET_ALL
+            message = colored_text(Fore.RED, f"{status}")
 
         """ Ex - Property 54: calloc.assertion.1
          - Status: SUCCESS
@@ -481,9 +488,9 @@ def construct_property_message(properties):
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
-        verification_status = Fore.GREEN + "SUCCESSFUL" + Style.RESET_ALL
+        verification_status = colored_text(Fore.GREEN, "SUCCESSFUL")
     else:
-        verification_status = Fore.RED + "FAILED" + Style.RESET_ALL
+        verification_status = colored_text(Fore.RED, "FAILED")
         for failed_test in failed_tests:
             # Go through traces to extract relevant information to be displayed in the summary
             # only in the case of failure
@@ -503,6 +510,16 @@ def construct_property_message(properties):
     output_message += f"\nVERIFICATION:- {verification_status}\n"
 
     return output_message, number_tests_failed
+
+def colored_text(color, text):
+    """
+    Only use colored text if running in a terminal to avoid dumping escape
+    characters
+    """
+    if sys.stdout.isatty():
+        return color + text + Style.RESET_ALL
+    else:
+        return text
 
 
 if __name__ == "__main__":

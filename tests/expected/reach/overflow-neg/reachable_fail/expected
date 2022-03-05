@@ -1,2 +1,2 @@
 FAILURE
-Failed Checks: attempt to negate `_2`, which would overflow
+Failed Checks: attempt to negate with overflow

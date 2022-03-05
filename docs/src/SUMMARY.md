@@ -5,6 +5,7 @@
   - [Comparison with other tools](./tool-comparison.md)
   - [Kani on a single file](./kani-single-file.md)
   - [Kani on a package](./cargo-kani.md)
+  - [Kani result types](./kani-result-types.md)
   - [Debugging failures]()
   - [Debugging non-termination]()
   - [Debugging coverage]()

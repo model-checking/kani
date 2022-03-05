@@ -115,6 +115,13 @@ impl DatatypeComponent {
         }
     }
 
+    pub fn is_field(&self) -> bool {
+        match self {
+            Field { .. } => true,
+            Padding { .. } => false,
+        }
+    }
+
     pub fn is_padding(&self) -> bool {
         match self {
             Field { .. } => false,
@@ -125,6 +132,13 @@ impl DatatypeComponent {
     pub fn name(&self) -> InternedString {
         match self {
             Field { name, .. } | Padding { name, .. } => *name,
+        }
+    }
+
+    pub fn sizeof_in_bits(&self, st: &SymbolTable) -> u64 {
+        match self {
+            Field { typ, .. } => typ.sizeof_in_bits(st),
+            Padding { bits, .. } => *bits,
         }
     }
 
@@ -499,6 +513,35 @@ impl Type {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        match self {
+            // Base types
+            Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Empty
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. } => true,
+
+            Array { .. }
+            | Code { .. }
+            | Constructor
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | Struct { .. }
+            | StructTag(_)
+            | Union { .. }
+            | UnionTag(_)
+            | VariadicCode { .. }
+            | Vector { .. } => false,
+        }
+    }
+
     /// Is this a signed integer
     pub fn is_signed(&self, mm: &MachineModel) -> bool {
         match self {
@@ -539,6 +582,13 @@ impl Type {
         }
     }
 
+    pub fn is_union_like(&self) -> bool {
+        match self {
+            IncompleteUnion { .. } | Union { .. } | UnionTag(_) => true,
+            _ => false,
+        }
+    }
+
     /// This is a union tag
     pub fn is_union_tag(&self) -> bool {
         match self {
@@ -567,6 +617,142 @@ impl Type {
         match self {
             Vector { .. } => true,
             _ => false,
+        }
+    }
+
+    /// A transparent type wraps a base type inside a struct, and has the same in-memory layout.
+    /// For example,
+    /// ```rust
+    ///     struct TransparentWrapper { int x };
+    /// ```
+    /// We define it recursively as a type which has exactly one field, which it itself either
+    /// a transparent type, or is a scalar type.
+    pub fn is_transparent_type(&self, st: &SymbolTable) -> bool {
+        self.unwrap_transparent_type(st).is_some()
+    }
+
+    /// If a type is transparent type (see comment on `Type::is_transparent_type()`),
+    /// extract the type it wraps.
+    pub fn unwrap_transparent_type(&self, st: &SymbolTable) -> Option<Type> {
+        fn recurse(t: &Type, st: &SymbolTable) -> Option<Type> {
+            // If the type has components, i.e. is either a union or a struct, recurse into them
+            if t.is_struct_like() || t.is_union_like() {
+                let components = t.get_non_empty_components(st).unwrap();
+                if components.len() == 1 {
+                    match &components[0] {
+                        Padding { .. } => None,
+                        Field { typ, .. } => recurse(typ, st),
+                    }
+                } else {
+                    None
+                }
+            } else if t.is_scalar() {
+                Some(t.clone())
+            } else {
+                None
+            }
+        }
+        if self.is_struct_like() || self.is_union_like() { recurse(self, st) } else { None }
+    }
+
+    /// Get the fields (including padding) in self.  
+    /// For StructTag or UnionTag, lookup the definition in the symbol table.
+    pub fn lookup_components<'a>(&self, st: &'a SymbolTable) -> Option<&'a Vec<DatatypeComponent>> {
+        self.type_name().and_then(|aggr_name| st.lookup(aggr_name)).and_then(|x| x.typ.components())
+    }
+
+    /// If typ.field_name exists in the symbol table, return Some(field),
+    /// otherwise, return none.
+    pub fn lookup_field<'a, T: Into<InternedString>>(
+        &self,
+        field_name: T,
+        st: &'a SymbolTable,
+    ) -> Option<&'a DatatypeComponent> {
+        let field_name = field_name.into();
+        self.lookup_components(st)
+            .and_then(|fields| fields.iter().find(|&field| field.name() == field_name))
+    }
+
+    /// If typ.field_name exists in the symbol table, return Some(field.typ),
+    /// otherwise, return none.
+    pub fn lookup_field_type<'a, T: Into<InternedString>>(
+        &self,
+        field_name: T,
+        st: &'a SymbolTable,
+    ) -> Option<Type> {
+        self.lookup_field(field_name, st).map(|f| f.typ())
+    }
+
+    /// Get the non-zero-sized fields (including padding) in self
+    pub fn get_non_empty_components<'a>(
+        &self,
+        st: &'a SymbolTable,
+    ) -> Option<Vec<&'a DatatypeComponent>> {
+        if let Some(components) = self.lookup_components(st) {
+            Some(components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect())
+        } else {
+            None
+        }
+    }
+
+    /// Calculates an under-approximation of whether two types are structurally equivilant.
+    ///
+    /// Two types are structurally equivilent if one can be cast into the other without changing
+    /// any bytes.  For e.g.,
+    /// ```
+    /// struct foo {
+    ///     char x;
+    ///     int y;
+    /// }
+    /// ```
+    /// is structurally equivalent to
+    /// ```
+    /// struct i {
+    ///     int z;
+    /// }
+    ///
+    /// struct bar {
+    ///     char a;
+    ///     struct i b;
+    /// }
+    /// ```
+    /// But, `struct foo` is not structurally equivilent to:
+    /// ```
+    /// __attribute__((packed))
+    /// struct baz {}
+    ///     char x;
+    ///     int y;
+    /// }
+    /// ```
+    /// Since they have different padding.
+    /// https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136
+    pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
+        if self.sizeof_in_bits(st) != other.sizeof_in_bits(st) {
+            false
+        } else if self.is_scalar() && other.is_scalar() {
+            self == other
+        } else if self.is_struct_like() && other.is_scalar() {
+            self.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *other)
+        } else if self.is_scalar() && other.is_struct_like() {
+            other.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *self)
+        } else if self.is_struct_like() && other.is_struct_like() {
+            let self_components = self.get_non_empty_components(st).unwrap();
+            let other_components = other.get_non_empty_components(st).unwrap();
+            if self_components.len() == other_components.len() {
+                self_components.iter().zip(other_components.iter()).all(|(a, b)| {
+                    (a.is_padding()
+                        && b.is_padding()
+                        && a.sizeof_in_bits(st) == b.sizeof_in_bits(st))
+                        || (a.is_field()
+                            && b.is_field()
+                            && a.typ().is_structurally_equivalent_to(&b.typ(), st))
+                })
+            } else {
+                false
+            }
+        } else {
+            // TODO: Figure out under which cases unions can work here
+            false
         }
     }
 
@@ -913,7 +1099,7 @@ impl Type {
         assert!(self.is_struct_tag());
 
         let mut types: BTreeMap<InternedString, Type> = BTreeMap::new();
-        let fields = symbol_table.lookup_fields_in_type(self).unwrap();
+        let fields = self.lookup_components(symbol_table).unwrap();
         for field in fields {
             if field.is_padding() {
                 continue;

@@ -1,2 +1,2 @@
 FAILURE
-Failed Checks: attempt to calculate the remainder of `_3` with a divisor of zero
+Failed Checks: attempt to calculate the remainder with a divisor of zero
