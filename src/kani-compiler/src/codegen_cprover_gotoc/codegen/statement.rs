@@ -5,6 +5,7 @@ use super::typ::FN_RETURN_VOID_VAR_NAME;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -89,15 +90,27 @@ impl<'tcx> GotocCtx<'tcx> {
                     msg.description()
                 };
 
+                // TODO: switch to tagging assertions via the property class once CBMC allows that:
+                // https://github.com/diffblue/cbmc/issues/6692
+                let (msg_str, reach_stmt) = if self.queries.get_check_assertion_reachability() {
+                    let check_id = self.next_check_id();
+                    let msg_str = GotocCtx::add_prefix_to_msg(msg, &check_id);
+                    let reach_msg = GotocCtx::reachability_check_message(&check_id);
+                    (msg_str, self.codegen_cover_loc(&reach_msg, Some(term.source_info.span)))
+                } else {
+                    (msg.to_string(), Stmt::skip(loc))
+                };
+
                 Stmt::block(
                     vec![
+                        reach_stmt,
                         cond.cast_to(Type::bool()).if_then_else(
-                            Stmt::goto(self.current_fn().find_label(target), loc.clone()),
+                            Stmt::goto(self.current_fn().find_label(target), loc),
                             None,
-                            loc.clone(),
+                            loc,
                         ),
-                        Stmt::assert_false(msg, loc.clone()),
-                        Stmt::goto(self.current_fn().find_label(target), loc.clone()),
+                        Stmt::assert_false(&msg_str, loc),
+                        Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
                 )
