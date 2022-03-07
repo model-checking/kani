@@ -9,6 +9,7 @@ use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
+use rustc_middle::mir::coverage::Op;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
@@ -240,41 +241,35 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This updates the goto context with any information that should be accumulated from a function's
     /// attributes.
     ///
-    /// Currently, this is only proof harness annotations.
-    /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
+    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
     fn handle_kanitool_attributes(&mut self) {
         let all_attributes = self.tcx.get_attrs(self.current_fn().instance().def_id());
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
 
-        // Early return with empty tuple for instances without any attributes declared
-        if proof_attributes.is_empty() && other_attributes.is_empty() {
-            return;
-        }
-        // User error handling for user cases where there's more than one proof attribute being called
-        if proof_attributes.len() > 1 {
-            self.tcx.sess.span_warn(proof_attributes[0].span, "Only one Proof Attribute allowed");
-            return;
-        }
-        // User error handling for the user case where there's an attribute being called without #kani::tool
         if proof_attributes.is_empty() && !other_attributes.is_empty() {
             self.tcx.sess.span_err(
                 other_attributes[0].1.span,
-                "Please use '#kani[proof]' above the annotation",
+                format!(
+                    "The {} attribute also requires the '#[kani::proof]' attribute",
+                    other_attributes[0].0
+                )
+                .as_str(),
             );
             return;
         }
-        // Create a proof harness if no user error has been triggered
-        self.create_proof_harness(other_attributes);
+        if proof_attributes.len() > 1 {
+            // No return because this only requires a warning
+            self.tcx.sess.span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
+        }
+        if !proof_attributes.is_empty() {
+            self.create_proof_harness(other_attributes);
+        }
     }
 
     /// Create the proof harness struct using the handler methods for various attributes
     fn create_proof_harness(&mut self, other_attributes: Vec<(String, &Attribute)>) {
-        // In the case when there's only one proof attribute (correct behavior), create harness and modify it
-        // depending on each subsequent attribute that's being called by the user.
         let mut harness = self.default_kanitool_proof();
-        // loop through all subsequent attributes
         for attr in other_attributes.iter() {
-            // match with "unwind" attribute and provide the harness for modification
             match attr.0.as_str() {
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
                 _ => {
@@ -285,11 +280,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
         }
-        // Update `self` (the goto context) to add the current function as a listed proof harness
         self.proof_harnesses.push(harness);
     }
 
-    /// Handler to create the default proof harness and return
+    /// Create the default proof harness for the current function
     fn default_kanitool_proof(&mut self) -> HarnessMetadata {
         let current_fn = self.current_fn();
         let pretty_name = current_fn.readable_name().to_owned();
@@ -307,33 +301,31 @@ impl<'tcx> GotocCtx<'tcx> {
         harness
     }
 
-    /// Unwind strings of the format 'unwind(x)' and the mangled names are to be parsed for the value 'x'
+    /// Updates the proof harness with new unwind value
     fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
-        // Check if some unwind value doesnt already exist
+        // If some unwind value already exists, then the current unwind being handled is a duplicate
         if !harness.unwind_value.is_none() {
-            // User warning for when there's more than one unwind attribute, in this case, only the first value will be
-            self.tcx.sess.span_err(attr.span, "Use only one Unwind Annotation per Harness");
+            self.tcx.sess.span_err(attr.span, "Only one '#[kani::unwind]' allowed");
             return;
         }
         // Get Attribute value and if it's not none, assign it to the metadata
         match extract_integer_argument(attr) {
             None => {
-                // There are no integers or too many integers given as argument to the annotatio
+                // There are no integers or too many arguments given to the attribute
                 self.tcx
                     .sess
                     .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
                 return;
             }
             Some(unwind_integer_value) => {
-                // Binding integer to u32
-                if unwind_integer_value >= u32::MAX.into() {
+                let val: Result<u32, _> = unwind_integer_value.try_into();
+                if val.is_err() {
                     self.tcx
                         .sess
                         .span_err(attr.span, "Value above maximum permitted value - u32::MAX");
                     return;
                 }
-                // Expected case
-                harness.unwind_value = Some(unwind_integer_value.try_into().unwrap());
+                harness.unwind_value = Some(val.unwrap());
             }
         }
     }
@@ -351,27 +343,20 @@ fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     }
 }
 
-/// Create two vectors, proof_vector and attribute_vector which seperates the list of attributes into
-/// proof and non-proof for easier parsing
+/// Partition all the attributes into two buckets, proof_attributes and other_attributes
 fn partition_kanitool_attributes(
     all_attributes: &[Attribute],
 ) -> (Vec<&Attribute>, Vec<(String, &Attribute)>) {
-    // Vectors for storing instances of each attribute type,
-    // TODO: This can be modifed to use Enums when more options are provided
     let mut proof_attributes = vec![];
     let mut other_attributes = vec![];
 
-    // Loop through instances to get all "kanitool::x" attribute strings
     for attr in all_attributes {
         // Get the string the appears after "kanitool::" in each attribute string.
         // Ex - "proof" | "unwind" etc.
         if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
-            // Push to proof vector
             if attribute_string == "proof" {
                 proof_attributes.push(attr);
-            }
-            // Push to attribute vector that can be expanded to a map when more options become available
-            else {
+            } else {
                 other_attributes.push((attribute_string.to_string(), attr));
             }
         }
@@ -380,13 +365,13 @@ fn partition_kanitool_attributes(
     (proof_attributes, other_attributes)
 }
 
-/// Extracts the integer value argument from the any attribute provided
+/// Extracts the integer value argument from the attribute provided
+/// For example, `unwind(8)` return `Some(8)`
 fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
-    // Vector of meta items , that contain metadata about the annotation
-    let attr_args = attr.meta_item_list().map(|x| x.to_vec())?;
+    // Vector of meta items , that contain the arguments given the attribute
+    let attr_args = attr.meta_item_list()?;
     // Only extracts one integer value as argument
     if attr_args.len() == 1 {
-        // Returns the integer value that's the argument for the attribute
         let x = attr_args[0].literal()?;
         match x.kind {
             LitKind::Int(y, ..) => Some(y),

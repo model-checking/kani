@@ -1,5 +1,6 @@
-error: Please use '#kani[proof]' above the annotation
+error: The unwind attribute also requires the '#[kani::proof]' attribute
   --> main.rs:13:1
    |
 13 | #[kani::unwind(7)]
    | ^^^^^^^^^^^^^^^^^^
+   |

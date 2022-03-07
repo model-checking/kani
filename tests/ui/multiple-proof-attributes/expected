@@ -1,4 +1,4 @@
-warning: Only one Proof Attribute allowed
+warning: Only one '#[kani::proof]' allowed
   --> main.rs:14:1
    |
 14 | #[kani::proof]

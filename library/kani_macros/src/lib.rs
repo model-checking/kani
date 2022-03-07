@@ -54,13 +54,13 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[cfg(not(kani))]
 #[proc_macro_attribute]
 pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
-    // This code is never called by default as the config value is set to kani
-    TokenStream::new()
+    // When the config is not kani, we should leave the function alone
+    _item
 }
 
-// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
-// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
-// Usage is restricted to proof harnesses only currently.
+/// Set Loop unwind limit for proof harnesses
+/// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
+/// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
 #[cfg(kani)]
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -68,7 +68,6 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Translate #[kani::unwind(arg)] to #[kanitool::unwind(arg)]
     let insert_string = "#[kanitool::unwind(".to_owned() + &attr.clone().to_string() + ")]";
-    // Add the string that looks like - #[kanitool::unwind(arg)] to the tokenstream
     result.extend(insert_string.parse::<TokenStream>().unwrap());
 
     result.extend(item);
