@@ -381,7 +381,7 @@ impl<'test> TestCx<'test> {
         let output = proc_res.stdout.to_string() + &proc_res.stderr;
         if let Some(line) = TestCx::contains_lines(&output, expected.split('\n').collect()) {
             self.fatal_proc_rec(
-                &format!("test failed: expected output to contain the line: {}", line),
+                &format!("test failed: expected output to contain the line: {:?}", line),
                 &proc_res,
             );
         }
@@ -389,10 +389,14 @@ impl<'test> TestCx<'test> {
 
     /// Looks for each line in `str`. Returns `None` if all lines are in `str`.
     /// Otherwise, it returns the first line not found in `str`.
-    fn contains_lines<'a>(str: &str, lines: Vec<&'a str>) -> Option<&'a str> {
+    fn contains_lines<'a>(str: &str, lines: Vec<&'a str>) -> Option<String> {
         for line in lines {
-            if !str.contains(line) {
-                return Some(line);
+            // A "\\" pattern in the expected file is a marker that is used for
+            // separating multiple consecutive lines in the output, so
+            // substitute those markers with newlines
+            let consecutive_lines = line.replace("\\\\", "\n");
+            if !str.contains(&consecutive_lines) {
+                return Some(consecutive_lines);
             }
         }
         None
