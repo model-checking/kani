@@ -4,14 +4,13 @@
 use anyhow::Result;
 use std::ffi::OsString;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Command;
 
 use crate::session::KaniSession;
 use crate::util::alter_extension;
 
 use kani_metadata::{InternedString, TraitDefinedMethod, VtableCtxResults};
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 
@@ -169,7 +168,7 @@ fn collect_and_link_function_pointer_restrictions(
         }
     } else if md.is_file() {
         assert!(path.as_os_str().to_str().unwrap().ends_with(".restrictions.json"));
-        let restrictions = read_restrictions(&path)?;
+        let restrictions = read_restrictions(path)?;
         per_crate_restrictions.push(restrictions);
     } else {
         unreachable!("Path must be restrcitions file or directory containing restrictions files")
