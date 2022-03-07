@@ -1,0 +1,6 @@
+  --> main.rs:13:1
+   |
+13 | #[kani::proof(some, argument2)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: message: #[kani::proof] does not take any arguments
