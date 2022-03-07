@@ -53,9 +53,9 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[cfg(not(kani))]
 #[proc_macro_attribute]
-pub fn unwind(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+pub fn unwind(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // When the config is not kani, we should leave the function alone
-    _item
+    item
 }
 
 /// Set Loop unwind limit for proof harnesses
