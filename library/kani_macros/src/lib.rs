@@ -9,7 +9,6 @@
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
-extern crate proc_macro;
 use proc_macro::TokenStream;
 
 #[cfg(all(not(kani), not(test)))]

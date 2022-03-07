@@ -243,54 +243,54 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Currently, this is only proof harness annotations.
     /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
     fn handle_kanitool_attributes(&mut self) {
-        let attributes_list = self.tcx.get_attrs(self.current_fn().instance().def_id());
-        let (proof_attribute_vector, attribute_vector) = create_attribute_vectors(attributes_list);
-        let proof_attribute_count = proof_attribute_vector.len();
+        let all_attributes = self.tcx.get_attrs(self.current_fn().instance().def_id());
+        let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
 
-        // Handle the attributes only if there is one proof attribute
-        if proof_attribute_count == 1 {
-            self.create_proof_harness(attribute_vector);
+        // Early return with empty tuple for instances without any attributes declared
+        if proof_attributes.is_empty() && other_attributes.is_empty() {
+            return;
         }
         // User error handling for user cases where there's more than one proof attribute being called
-        else if proof_attribute_count > 1 {
-            self.tcx
-                .sess
-                .span_warn(proof_attribute_vector[0].span, "Only one Proof Attribute allowed");
+        if proof_attributes.len() > 1 {
+            self.tcx.sess.span_warn(proof_attributes[0].span, "Only one Proof Attribute allowed");
+            return;
         }
         // User error handling for the user case where there's an attribute being called without #kani::tool
-        else if proof_attribute_count == 0 && attribute_vector.len() > 0 {
+        if proof_attributes.is_empty() && !other_attributes.is_empty() {
             self.tcx.sess.span_err(
-                attribute_vector[0].1.span,
+                other_attributes[0].1.span,
                 "Please use '#kani[proof]' above the annotation",
             );
-        } else {
-            // No op for instances without any annotations declared
+            return;
         }
+        // Create a proof harness if no user error has been triggered
+        self.create_proof_harness(other_attributes);
     }
 
-    // Create the proof harness struct using the handler methods for various attributes
-    fn create_proof_harness(&mut self, attribute_vector: Vec<(String, &Attribute)>) {
+    /// Create the proof harness struct using the handler methods for various attributes
+    fn create_proof_harness(&mut self, other_attributes: Vec<(String, &Attribute)>) {
         // In the case when there's only one proof attribute (correct behavior), create harness and modify it
         // depending on each subsequent attribute that's being called by the user.
-        let mut harness_metadata = self.handle_kanitool_proof();
-        if attribute_vector.len() > 0 {
-            // loop through all subsequent attributes
-            for attribute_tuple in attribute_vector.iter() {
-                // match with "unwind" attribute and provide the harness for modification
-                match attribute_tuple.0.as_str() {
-                    "unwind" => {
-                        self.handle_kanitool_unwind(attribute_tuple.1, &mut harness_metadata)
-                    }
-                    _ => {}
+        let mut harness = self.default_kanitool_proof();
+        // loop through all subsequent attributes
+        for attr in other_attributes.iter() {
+            // match with "unwind" attribute and provide the harness for modification
+            match attr.0.as_str() {
+                "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
+                _ => {
+                    self.tcx.sess.span_err(
+                        attr.1.span,
+                        format!("Unsupported Annotation -> {}", attr.0.as_str()).as_str(),
+                    );
                 }
             }
         }
-        // self.proof_harnesses contains the final metadata that's to be parsed
-        self.proof_harnesses.push(harness_metadata);
+        // Update `self` (the goto context) to add the current function as a listed proof harness
+        self.proof_harnesses.push(harness);
     }
 
-    /// Update `self` (the goto context) to add the current function as a listed proof harness
-    fn handle_kanitool_proof(&mut self) -> HarnessMetadata {
+    /// Handler to create the default proof harness and return
+    fn default_kanitool_proof(&mut self) -> HarnessMetadata {
         let current_fn = self.current_fn();
         let pretty_name = current_fn.readable_name().to_owned();
         let mangled_name = current_fn.name();
@@ -310,24 +310,31 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Unwind strings of the format 'unwind(x)' and the mangled names are to be parsed for the value 'x'
     fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
         // Check if some unwind value doesnt already exist
-        if harness.unwind_value.is_none() {
-            // Get Attribute value and if it's not none, assign it to the metadata
-            if let Some(integer_value) = extract_integer_argument(attr) {
-                // Convert the extracted u128 and convert to u32
-                assert!(
-                    integer_value < u32::MAX.into(),
-                    "Value above maximum permitted value - u32::MAX"
-                );
-                harness.unwind_value = Some(integer_value.try_into().unwrap());
-            } else {
-                // Show an Error if there is no integer value assigned to the integer or there's too many values assigned to the annotation
+        if !harness.unwind_value.is_none() {
+            // User warning for when there's more than one unwind attribute, in this case, only the first value will be
+            self.tcx.sess.span_err(attr.span, "Use only one Unwind Annotation per Harness");
+            return;
+        }
+        // Get Attribute value and if it's not none, assign it to the metadata
+        match extract_integer_argument(attr) {
+            None => {
+                // There are no integers or too many integers given as argument to the annotatio
                 self.tcx
                     .sess
                     .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
+                return;
             }
-        } else {
-            // User warning for when there's more than one unwind attribute, in this case, only the first value will be
-            self.tcx.sess.span_err(attr.span, "Use only one Unwind Annotation per Harness");
+            Some(unwind_integer_value) => {
+                // Binding integer to u32
+                if unwind_integer_value >= u32::MAX.into() {
+                    self.tcx
+                        .sess
+                        .span_err(attr.span, "Value above maximum permitted value - u32::MAX");
+                    return;
+                }
+                // Expected case
+                harness.unwind_value = Some(unwind_integer_value.try_into().unwrap());
+            }
         }
     }
 }
@@ -344,33 +351,33 @@ fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     }
 }
 
-// Create two vectors, proof_vector and attribute_vector which seperates the list of attributes into
-// proof and non-proof for easier parsing
-fn create_attribute_vectors(
-    attrs_list: &[Attribute],
+/// Create two vectors, proof_vector and attribute_vector which seperates the list of attributes into
+/// proof and non-proof for easier parsing
+fn partition_kanitool_attributes(
+    all_attributes: &[Attribute],
 ) -> (Vec<&Attribute>, Vec<(String, &Attribute)>) {
     // Vectors for storing instances of each attribute type,
     // TODO: This can be modifed to use Enums when more options are provided
-    let mut proof_attribute_vector = vec![];
-    let mut attribute_vector = vec![];
+    let mut proof_attributes = vec![];
+    let mut other_attributes = vec![];
 
     // Loop through instances to get all "kanitool::x" attribute strings
-    for attr in attrs_list {
+    for attr in all_attributes {
         // Get the string the appears after "kanitool::" in each attribute string.
         // Ex - "proof" | "unwind" etc.
         if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
             // Push to proof vector
             if attribute_string == "proof" {
-                proof_attribute_vector.push(attr);
+                proof_attributes.push(attr);
             }
             // Push to attribute vector that can be expanded to a map when more options become available
             else {
-                attribute_vector.push((attribute_string.to_string(), attr));
+                other_attributes.push((attribute_string.to_string(), attr));
             }
         }
     }
 
-    (proof_attribute_vector, attribute_vector)
+    (proof_attributes, other_attributes)
 }
 
 /// Extracts the integer value argument from the any attribute provided
