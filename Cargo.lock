@@ -137,6 +137,7 @@ dependencies = [
  "anyhow",
  "clap",
  "glob",
+ "kani_metadata",
  "serde",
  "serde_json",
  "structopt",
@@ -434,16 +435,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
-]
-
-[[package]]
-name = "kani-link-restrictions"
-version = "0.1.0"
-dependencies = [
- "cprover_bindings",
- "kani_metadata",
- "serde",
- "serde_json",
 ]
 
 [[package]]

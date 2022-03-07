@@ -346,7 +346,6 @@ fn common_inputs_stamp() -> Stamp {
 
     // Add relevant tools directories
     stamp.add_dir(&rust_src_dir.join("tools/compiletest/"));
-    stamp.add_dir(&rust_src_dir.join("tools/kani-link-restrictions/"));
 
     stamp
 }

@@ -4,7 +4,7 @@
 //! Data structures to represent vtable trait function pointer restrictions
 
 // TODO: We currently use `InternedString`, but possibly should only use `String`
-use cbmc::InternedString;
+pub use cbmc::InternedString;
 use serde::{Deserialize, Serialize};
 
 /// A "trait-defined method"  (`Trait::method`) represents the abstract function.

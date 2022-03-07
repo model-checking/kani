@@ -5,7 +5,6 @@ members = [
   "library/std",
   "tools/bookrunner",
   "tools/compiletest",
-  "tools/kani-link-restrictions",
   "src/cargo-kani",
   "src/kani-compiler",
   # `librustdoc` is still needed by bookrunner.
