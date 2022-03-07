@@ -421,8 +421,8 @@ dependencies = [
  "clap",
  "cprover_bindings",
  "cstr",
+ "kani_metadata",
  "kani_queries",
- "kani_restrictions",
  "libc",
  "measureme",
  "num",
@@ -441,7 +441,7 @@ name = "kani-link-restrictions"
 version = "0.1.0"
 dependencies = [
  "cprover_bindings",
- "kani_restrictions",
+ "kani_metadata",
  "serde",
  "serde_json",
 ]
@@ -451,18 +451,18 @@ name = "kani_macros"
 version = "0.1.0"
 
 [[package]]
-name = "kani_queries"
-version = "0.1.0"
-dependencies = [
- "tracing",
-]
-
-[[package]]
-name = "kani_restrictions"
+name = "kani_metadata"
 version = "0.1.0"
 dependencies = [
  "cprover_bindings",
  "serde",
+]
+
+[[package]]
+name = "kani_queries"
+version = "0.1.0"
+dependencies = [
+ "tracing",
 ]
 
 [[package]]

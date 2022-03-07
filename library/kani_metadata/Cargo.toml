@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "kani_restrictions"
+name = "kani_metadata"
 version = "0.1.0"
 edition = "2021"
 

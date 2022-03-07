@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "library/kani",
-  "library/kani_restrictions",
+  "library/kani_metadata",
   "library/std",
   "tools/bookrunner",
   "tools/compiletest",
