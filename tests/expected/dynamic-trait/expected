@@ -1,9 +1,9 @@
-line 25 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
-line 28 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
-line 28 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
-line 34 attempt to compute `move _2 * move _3`, which would overflow: SUCCESS
-line 37 attempt to compute `move _4 * move _5`, which would overflow: SUCCESS
-line 37 attempt to compute `move _3 * move _7`, which would overflow: SUCCESS
+line 25 attempt to multiply with overflow: SUCCESS
+line 28 attempt to multiply with overflow: SUCCESS
+line 28 attempt to multiply with overflow: SUCCESS
+line 34 attempt to multiply with overflow: SUCCESS
+line 37 attempt to multiply with overflow: SUCCESS
+line 37 attempt to multiply with overflow: SUCCESS
 line 54 assertion failed: rec.vol(3) == 150: SUCCESS
 line 55 assertion failed: impl_area(rec.clone()) == 50: SUCCESS
 line 58 assertion failed: vol == 100: SUCCESS

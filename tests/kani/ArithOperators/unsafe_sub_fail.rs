@@ -6,6 +6,7 @@
 // kani-flags: --function check_sub
 // compile-flags: --crate-type lib
 
+#[kani::proof]
 pub fn check_sub(a: u8, b: u8) {
     unsafe {
         a - b;
