@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "simple-proof-annotation"
+name = "simple-unwind-annotation"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,3 +10,4 @@ edition = "2021"
 
 [kani.flags]
 output-format = "old"
+function = "harness"

@@ -8,9 +8,12 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_ast::ast;
+use rustc_ast::{Attribute, LitKind};
+use rustc_middle::mir::coverage::Op;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::iter::FromIterator;
 use tracing::{debug, warn};
 
@@ -238,21 +241,50 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This updates the goto context with any information that should be accumulated from a function's
     /// attributes.
     ///
-    /// Currently, this is only proof harness annotations.
-    /// i.e. `#[kani::proof]` (which kani_macros translates to `#[kanitool::proof]` for us to handle here)
+    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
     fn handle_kanitool_attributes(&mut self) {
-        let instance = self.current_fn().instance();
+        let all_attributes = self.tcx.get_attrs(self.current_fn().instance().def_id());
+        let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
 
-        for attr in self.tcx.get_attrs(instance.def_id()) {
-            match kanitool_attr_name(attr).as_deref() {
-                Some("proof") => self.handle_kanitool_proof(),
-                _ => {}
-            }
+        if proof_attributes.is_empty() && !other_attributes.is_empty() {
+            self.tcx.sess.span_err(
+                other_attributes[0].1.span,
+                format!(
+                    "The {} attribute also requires the '#[kani::proof]' attribute",
+                    other_attributes[0].0
+                )
+                .as_str(),
+            );
+            return;
+        }
+        if proof_attributes.len() > 1 {
+            // No return because this only requires a warning
+            self.tcx.sess.span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
+        }
+        if !proof_attributes.is_empty() {
+            self.create_proof_harness(other_attributes);
         }
     }
 
-    /// Update `self` (the goto context) to add the current function as a listed proof harness
-    fn handle_kanitool_proof(&mut self) {
+    /// Create the proof harness struct using the handler methods for various attributes
+    fn create_proof_harness(&mut self, other_attributes: Vec<(String, &Attribute)>) {
+        let mut harness = self.default_kanitool_proof();
+        for attr in other_attributes.iter() {
+            match attr.0.as_str() {
+                "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
+                _ => {
+                    self.tcx.sess.span_err(
+                        attr.1.span,
+                        format!("Unsupported Annotation -> {}", attr.0.as_str()).as_str(),
+                    );
+                }
+            }
+        }
+        self.proof_harnesses.push(harness);
+    }
+
+    /// Create the default proof harness for the current function
+    fn default_kanitool_proof(&mut self) -> HarnessMetadata {
         let current_fn = self.current_fn();
         let pretty_name = current_fn.readable_name().to_owned();
         let mangled_name = current_fn.name();
@@ -263,9 +295,39 @@ impl<'tcx> GotocCtx<'tcx> {
             mangled_name,
             original_file: loc.filename().unwrap(),
             original_line: loc.line().unwrap().to_string(),
+            unwind_value: None,
         };
 
-        self.proof_harnesses.push(harness);
+        harness
+    }
+
+    /// Updates the proof harness with new unwind value
+    fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
+        // If some unwind value already exists, then the current unwind being handled is a duplicate
+        if !harness.unwind_value.is_none() {
+            self.tcx.sess.span_err(attr.span, "Only one '#[kani::unwind]' allowed");
+            return;
+        }
+        // Get Attribute value and if it's not none, assign it to the metadata
+        match extract_integer_argument(attr) {
+            None => {
+                // There are no integers or too many arguments given to the attribute
+                self.tcx
+                    .sess
+                    .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
+                return;
+            }
+            Some(unwind_integer_value) => {
+                let val: Result<u32, _> = unwind_integer_value.try_into();
+                if val.is_err() {
+                    self.tcx
+                        .sess
+                        .span_err(attr.span, "Value above maximum permitted value - u32::MAX");
+                    return;
+                }
+                harness.unwind_value = Some(val.unwrap());
+            }
+        }
     }
 }
 
@@ -273,10 +335,51 @@ impl<'tcx> GotocCtx<'tcx> {
 fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     match &attr.kind {
         ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
-            if segments.len() == 2 && segments[0].ident.as_str() == "kanitool" =>
+            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" =>
         {
             Some(segments[1].ident.as_str().to_string())
         }
         _ => None,
+    }
+}
+
+/// Partition all the attributes into two buckets, proof_attributes and other_attributes
+fn partition_kanitool_attributes(
+    all_attributes: &[Attribute],
+) -> (Vec<&Attribute>, Vec<(String, &Attribute)>) {
+    let mut proof_attributes = vec![];
+    let mut other_attributes = vec![];
+
+    for attr in all_attributes {
+        // Get the string the appears after "kanitool::" in each attribute string.
+        // Ex - "proof" | "unwind" etc.
+        if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
+            if attribute_string == "proof" {
+                proof_attributes.push(attr);
+            } else {
+                other_attributes.push((attribute_string.to_string(), attr));
+            }
+        }
+    }
+
+    (proof_attributes, other_attributes)
+}
+
+/// Extracts the integer value argument from the attribute provided
+/// For example, `unwind(8)` return `Some(8)`
+fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
+    // Vector of meta items , that contain the arguments given the attribute
+    let attr_args = attr.meta_item_list()?;
+    // Only extracts one integer value as argument
+    if attr_args.len() == 1 {
+        let x = attr_args[0].literal()?;
+        match x.kind {
+            LitKind::Int(y, ..) => Some(y),
+            _ => None,
+        }
+    }
+    // Return none if there are no attributes or if there's too many attributes
+    else {
+        None
     }
 }

@@ -36,9 +36,10 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[cfg(kani)]
 #[proc_macro_attribute]
-pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
+    assert!(attr.to_string().len() == 0, "#[kani::proof] does not take any arguments");
     result.extend("#[kanitool::proof]".parse::<TokenStream>().unwrap());
     // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
     result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
@@ -48,4 +49,27 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     //     #[kanitool::proof]
     //     $item
     // )
+}
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn unwind(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // When the config is not kani, we should leave the function alone
+    item
+}
+
+/// Set Loop unwind limit for proof harnesses
+/// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
+/// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+
+    // Translate #[kani::unwind(arg)] to #[kanitool::unwind(arg)]
+    let insert_string = "#[kanitool::unwind(".to_owned() + &attr.clone().to_string() + ")]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
 }

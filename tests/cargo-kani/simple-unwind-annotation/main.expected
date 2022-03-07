@@ -1,0 +1,1 @@
+[harness.assertion.2] line 21 assertion failed: counter < 10: FAILURE
