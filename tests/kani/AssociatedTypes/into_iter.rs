@@ -19,7 +19,7 @@ impl<'a> MyStruct<'a> {
 }
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(3)]
 pub fn check_into_iter_type() {
     let original = "h";
     let mut wrapper = MyStruct::new(original.chars());
