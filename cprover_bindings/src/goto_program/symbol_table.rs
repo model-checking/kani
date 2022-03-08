@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::{env, MachineModel};
-use super::{BuiltinFn, DatatypeComponent, Stmt, Symbol, Type};
+use super::{BuiltinFn, Stmt, Symbol};
 use crate::InternedString;
 use std::collections::BTreeMap;
 /// This is a typesafe implementation of the CBMC symbol table, based on the CBMC code at:
