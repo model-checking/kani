@@ -23,6 +23,8 @@ impl KaniSession {
             self.just_drop_unused_functions(output)?;
         }
 
+        self.rewrite_back_edges(output)?;
+
         if self.args.gen_c {
             if !self.args.quiet {
                 println!("Generated C code written to {}", output.to_string_lossy());
@@ -93,6 +95,16 @@ impl KaniSession {
     fn just_drop_unused_functions(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--drop-unused-functions".into(),
+            file.to_owned().into_os_string(), // input
+            file.to_owned().into_os_string(), // output
+        ];
+
+        self.call_goto_instrument(args)
+    }
+
+    fn rewrite_back_edges(&self, file: &Path) -> Result<()> {
+        let args: Vec<OsString> = vec![
+            "--ensure-one-backedge-per-target".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output
         ];
