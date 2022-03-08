@@ -1,12 +1,12 @@
 [workspace]
 members = [
   "library/kani",
-  "library/kani_metadata",
   "library/std",
   "tools/bookrunner",
   "tools/compiletest",
   "src/cargo-kani",
   "src/kani-compiler",
+  "src/kani_metadata",
   # `librustdoc` is still needed by bookrunner.
   "tools/bookrunner/librustdoc",
 ]
