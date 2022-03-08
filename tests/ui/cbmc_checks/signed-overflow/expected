@@ -1,0 +1,14 @@
+Failed Checks: arithmetic overflow on signed +
+Failed Checks: arithmetic overflow on signed -
+Failed Checks: arithmetic overflow on signed *
+Failed Checks: division by zero
+Failed Checks: arithmetic overflow on signed division
+Failed Checks: division by zero
+Failed Checks: result of signed mod is not representable
+Failed Checks: shift distance is negative
+Failed Checks: shift distance too large
+Failed Checks: shift operand is negative
+Failed Checks: arithmetic overflow on signed shl
+Failed Checks: shift distance is negative
+Failed Checks: shift distance too large
+Failed Checks: arithmetic overflow on signed unary minus

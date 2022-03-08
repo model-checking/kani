@@ -20,6 +20,8 @@ functions:
 """
 
 import json
+import os
+
 from colorama import Fore, Style
 import re
 import sys
@@ -206,6 +208,7 @@ def postprocess_results(properties):
     remove_check_ids_from_description(properties)
 
     for property in properties:
+        property["description"] = get_friendly_description(property)
         if has_reachable_unsupported_constructs or has_failed_unwinding_asserts:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
@@ -255,6 +258,129 @@ def filter_properties(properties, message):
             filtered_properties.append(property)
     return filtered_properties, removed_properties
 
+class CProverCheck:
+    """ Represents a CProverCheck and provides methods to replace the check. """
+
+    def __init__(self, msg, new_msg=None):
+        self.original = msg
+        self.kani_msg = new_msg if new_msg else msg
+
+    def matches(self, msg):
+        return self.original in msg
+
+    def replace(self, msg):
+        return self.kani_msg
+
+
+CBMC_DESCRIPTIONS = {
+    "error_label": [],
+    "division-by-zero": [CProverCheck("division by zero")],
+    "enum-range-check": [CProverCheck("enum range check")],
+    "undefined-shift": [CProverCheck("shift distance is negative"),
+                        CProverCheck("shift distance too large"),
+                        CProverCheck("shift operand is negative"),
+                        CProverCheck("shift of non-integer type")],
+    "overflow": [
+        CProverCheck("result of signed mod is not representable"),
+        CProverCheck("arithmetic overflow on signed type conversion"),
+        CProverCheck("arithmetic overflow on signed division"),
+        CProverCheck("arithmetic overflow on signed unary minus"),
+        CProverCheck("arithmetic overflow on signed shl"),
+        CProverCheck("arithmetic overflow on unsigned unary minus"),
+        CProverCheck("arithmetic overflow on signed +"),
+        CProverCheck("arithmetic overflow on signed -"),
+        CProverCheck("arithmetic overflow on signed *"),
+        CProverCheck("arithmetic overflow on unsigned +"),
+        CProverCheck("arithmetic overflow on unsigned -"),
+        CProverCheck("arithmetic overflow on unsigned *"),
+        CProverCheck("arithmetic overflow on floating-point typecast"),
+        CProverCheck("arithmetic overflow on floating-point division"),
+        CProverCheck("arithmetic overflow on floating-point addition"),
+        CProverCheck("arithmetic overflow on floating-point subtraction"),
+        CProverCheck("arithmetic overflow on floating-point multiplication"),
+        CProverCheck("arithmetic overflow on unsigned to signed type conversion"),
+        CProverCheck("arithmetic overflow on float to signed integer type conversion"),
+        CProverCheck("arithmetic overflow on signed to unsigned type conversion"),
+        CProverCheck("arithmetic overflow on unsigned to unsigned type conversion"),
+        CProverCheck("arithmetic overflow on float to unsigned integer type conversion")],
+    "NaN": [
+        CProverCheck("NaN on +"),
+        CProverCheck("NaN on -"),
+        CProverCheck("NaN on /"),
+        CProverCheck("NaN on *")],
+    "pointer": [
+        CProverCheck("same object violation")],
+    "pointer_arithmetic": [
+        CProverCheck("pointer relation: deallocated dynamic object"),
+        CProverCheck("pointer relation: dead object"),
+        CProverCheck("pointer relation: pointer NULL"),
+        CProverCheck("pointer relation: pointer invalid"),
+        CProverCheck("pointer relation: pointer outside dynamic object bounds"),
+        CProverCheck("pointer relation: pointer outside object bounds"),
+        CProverCheck("pointer relation: invalid integer address"),
+        CProverCheck("pointer arithmetic: deallocated dynamic object"),
+        CProverCheck("pointer arithmetic: dead object"),
+        CProverCheck("pointer arithmetic: pointer NULL"),
+        CProverCheck("pointer arithmetic: pointer invalid"),
+        CProverCheck("pointer arithmetic: pointer outside dynamic object bounds"),
+        CProverCheck("pointer arithmetic: pointer outside object bounds"),
+        CProverCheck("pointer arithmetic: invalid integer address")],
+    "pointer_dereference": [
+        CProverCheck("dereferenced function pointer must be", "dereference failure: invalid function pointer"),
+        CProverCheck("dereference failure: pointer NULL"),
+        CProverCheck("dereference failure: pointer invalid"),
+        CProverCheck("dereference failure: deallocated dynamic object"),
+        CProverCheck("dereference failure: dead object"),
+        CProverCheck("dereference failure: pointer outside dynamic object bounds"),
+        CProverCheck("dereference failure: pointer outside object bounds"),
+        CProverCheck("dereference failure: invalid integer address")],
+    "pointer_primitives": [
+        # These are very hard to understand without more context.
+        CProverCheck("pointer invalid"),
+        CProverCheck("deallocated dynamic object", "pointer to deallocated dynamic object"),
+        CProverCheck("dead object", "pointer to dead object"),
+        CProverCheck("pointer outside dynamic object bounds"),
+        CProverCheck("pointer outside object bounds"),
+        CProverCheck("invalid integer address")
+    ],
+    "array_bounds": [
+        CProverCheck("lower bound", "access out of bounds"),
+        # This one is redundant: CProverCheck("dynamic object upper bound", "access out of bounds"),
+        CProverCheck("upper bound", "access out of bounds"), ],
+    "bit_count": [
+        CProverCheck("count trailing zeros is undefined for value zero"),
+        CProverCheck("count leading zeros is undefined for value zero")],
+    "memory-leak": [
+        CProverCheck("dynamically allocated memory never freed")],
+    # These pre-conditions should not print temporary variables since they are embedded in the libc implementation.
+    # They are added via __CPROVER_precondition.
+    # "precondition_instance": [],
+}
+
+def get_friendly_description(prop):
+    """This function will return a user friendly property description.
+
+       For CBMC checks, it will ensure that the failure does not include any
+       temporary variable.
+    """
+    original = prop["description"]
+    # Id is structured as [<function>.]<property_class>.<counter>
+    prop_class = prop["property"].rsplit(".", 3)
+    # Do nothing if prop_class is diff than cbmc's convention
+    class_id = prop_class[-2] if len(prop_class) > 1 else None
+    if class_id in CBMC_DESCRIPTIONS:
+        prop_type = [check.replace(original) for check in CBMC_DESCRIPTIONS[class_id] if check.matches(original)]
+        if len(prop_type) != 1:
+            if "KANI_FAIL_ON_UNEXPECTED_DESCRIPTION" in os.environ:
+                print("Unexpected description: {}".format(original))
+                print(f"  - class_id: {class_id}")
+                print(f"  - matches: {[prop_type]}")
+                exit(1)
+            else:
+                return original
+        else:
+            return prop_type[0]
+    return original
 
 def annotate_properties_with_reach_results(properties, reach_checks):
     """

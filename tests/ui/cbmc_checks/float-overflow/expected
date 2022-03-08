@@ -1,0 +1,10 @@
+Failed Checks: NaN on +
+Failed Checks: arithmetic overflow on floating-point addition
+Failed Checks: NaN on -
+Failed Checks: arithmetic overflow on floating-point subtraction
+Failed Checks: NaN on *
+Failed Checks: arithmetic overflow on floating-point multiplication
+Failed Checks: division by zero
+Failed Checks: NaN on /
+Failed Checks: arithmetic overflow on floating-point division
+Failed Checks: division by zero

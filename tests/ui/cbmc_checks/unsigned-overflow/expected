@@ -1,0 +1,7 @@
+Failed Checks: arithmetic overflow on unsigned +
+Failed Checks: arithmetic overflow on unsigned -
+Failed Checks: arithmetic overflow on unsigned *
+Failed Checks: division by zero
+Failed Checks: division by zero
+Failed Checks: shift distance too large
+Failed Checks: shift distance too large
