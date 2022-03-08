@@ -1,1 +1,2 @@
-SUCCESS
+SUCCESS\
+Description: "assertion failed: x == 10"
