@@ -3,10 +3,10 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::codegen_cprover_gotoc::context::metadata::HarnessMetadata;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
+use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
 use rustc_middle::mir::coverage::Op;
