@@ -20,8 +20,6 @@ pub struct KaniSession {
     pub kani_lib_c: PathBuf,
     /// The location we found the Kani C stub .c files
     pub kani_c_stubs: PathBuf,
-    /// The location we found kani-link-restrictions binary
-    pub kani_link_restrictions: PathBuf,
     /// The location we found 'cbmc_json_parser.py'
     pub cbmc_json_parser_py: PathBuf,
 
@@ -46,7 +44,6 @@ impl KaniSession {
             kani_rustc: install.kani_rustc()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
-            kani_link_restrictions: install.kani_link_restrictions()?,
             cbmc_json_parser_py: install.cbmc_json_parser_py()?,
             temporaries: RefCell::new(vec![]),
         })
@@ -199,20 +196,6 @@ impl InstallType {
                     Ok(path)
                 } else {
                     bail!("Unable to find kani/stubs/C. Looked for {}", path.display());
-                }
-            }
-        }
-    }
-
-    pub fn kani_link_restrictions(&self) -> Result<PathBuf> {
-        match self {
-            Self::DevRepo(repo) => {
-                let mut path = repo.clone();
-                path.push("target/debug/kani-link-restrictions");
-                if path.as_path().exists() {
-                    Ok(path)
-                } else {
-                    bail!("Unable to find kani-link-restrictions. Looked for {}", path.display());
                 }
             }
         }

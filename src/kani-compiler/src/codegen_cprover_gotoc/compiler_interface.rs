@@ -3,11 +3,11 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::codegen_cprover_gotoc::context::metadata::KaniMetadata;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::symtab_transformer;
 use cbmc::InternedString;
+use kani_metadata::KaniMetadata;
 use kani_queries::{QueryDb, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};

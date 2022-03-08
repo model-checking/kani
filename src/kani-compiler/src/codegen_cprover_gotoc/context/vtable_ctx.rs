@@ -18,7 +18,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Stmt, Type};
 use cbmc::InternedString;
-use kani_restrictions::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
+use kani_metadata::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::stable_map::FxHashMap;
 use tracing::debug;
 
