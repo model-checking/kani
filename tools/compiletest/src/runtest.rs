@@ -383,23 +383,27 @@ impl<'test> TestCx<'test> {
             TestCx::contains_lines(&output.split('\n').collect(), expected.split('\n').collect())
         {
             self.fatal_proc_rec(
-                &format!("test failed: expected output to contain the line(s):\n{}", lines.join("\n")),
+                &format!(
+                    "test failed: expected output to contain the line(s):\n{}",
+                    lines.join("\n")
+                ),
                 &proc_res,
             );
         }
     }
 
-
-    /// Looks for each line in `str`. Returns `None` if all lines are in `str`.
-    /// Otherwise, it returns the first line not found in `str`.
+    /// Looks for each line or set of lines in `str`. Returns `None` if all
+    /// lines are in `str`.  Otherwise, it returns the first line not found in
+    /// `str`.
     fn contains_lines<'a>(str: &Vec<&str>, lines: Vec<&'a str>) -> Option<Vec<&'a str>> {
         let mut consecutive_lines: Vec<&str> = Vec::new();
         for line in lines {
             // A line that ends in "\" indicates that the next line in the
-            // expected file should appear on the consecutive line in the output
-            // This is a temporary fix until we have more robust json-based
-            // checking of verification results
-           if let Some(prefix) = line.strip_suffix("\\") {
+            // expected file should appear on the consecutive line in the
+            // output. This is a temporary mechanism until we have more robust
+            // json-based checking of verification results
+            if let Some(prefix) = line.strip_suffix("\\") {
+                // accumulate the lines
                 consecutive_lines.push(prefix);
             } else {
                 consecutive_lines.push(line);
@@ -421,7 +425,7 @@ impl<'test> TestCx<'test> {
                 // Check if the rest of the lines in `lines` are contained in
                 // the subsequent lines in `str`
                 let mut matches = true;
-                // Clone the iterator so that we don't change i
+                // Clone the iterator so that we keep i unchanged
                 let mut j = i.clone();
                 for i in 1..lines.len() {
                     if let Some(output_line) = j.next() {
