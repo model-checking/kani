@@ -14,7 +14,6 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
-use super::metadata::HarnessMetadata;
 use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
@@ -22,6 +21,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Symbol
 use cbmc::utils::aggr_tag;
 use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
 use cbmc::{MachineModel, RoundingMode};
+use kani_metadata::HarnessMetadata;
 use kani_queries::{QueryDb, UserInput};
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
