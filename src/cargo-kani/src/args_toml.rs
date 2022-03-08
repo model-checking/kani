@@ -1,22 +1,33 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::path::PathBuf;
+use std::process::Command;
 use toml::value::Table;
 use toml::Value;
 
 /// Produces a set of arguments to pass to ourself (cargo-kani) from a Cargo.toml project file
 pub fn config_toml_to_args() -> Result<Vec<OsString>> {
-    // TODO: `cargo locate-project` maybe?
-    let file = std::fs::read_to_string("Cargo.toml");
+    let file = std::fs::read_to_string(cargo_locate_project()?);
     if let Ok(file) = file {
         toml_to_args(&file)
     } else {
         // Suppress the error if we can't find it, for now.
         Ok(vec![])
     }
+}
+
+/// `cargo locate-project` produces a response like:
+/// `{"root":"/full/path/to/src/cargo-kani/Cargo.toml"}`
+fn cargo_locate_project() -> Result<PathBuf> {
+    let cmd = Command::new("cargo").arg("locate-project").output()?;
+    let json: serde_json::Value = serde_json::from_slice(&cmd.stdout)?;
+    let project_toml =
+        json.as_object().context("expected map")?.get("root").context("expected root")?;
+    Ok(project_toml.as_str().context("expected string")?.into())
 }
 
 /// Parse a config toml string and extract the cargo-kani arguments we should try injecting
