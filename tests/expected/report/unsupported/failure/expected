@@ -1,4 +1,5 @@
-assertion failed: x == 0
+FAILURE\
+Description: "assertion failed: x == 0"
 Failed Checks: assertion failed: x == 0
  ** 2 of 4 failed (2 undetermined)
 Failed Checks: InlineAsm is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/2

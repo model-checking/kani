@@ -1,4 +1,4 @@
-SUCCESS
-assertion failed: x == 0
+SUCCESS\
+Description: "assertion failed: x == 0"
  ** 0 of 4 failed
 SUCCESSFUL
