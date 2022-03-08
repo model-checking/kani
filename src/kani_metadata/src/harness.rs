@@ -1,13 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This module should be factored out into its own separate crate eventually,
-//! but leaving it here for now...
+use serde::{Deserialize, Serialize};
 
-use serde::Serialize;
-
-/// We emit this structure for each annotated proof harness we find
-#[derive(Serialize)]
+/// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find
+#[derive(Serialize, Deserialize)]
 pub struct HarnessMetadata {
     /// The name the user gave to the function
     pub pretty_name: String,
@@ -19,10 +16,4 @@ pub struct HarnessMetadata {
     pub original_line: String,
     /// Optional data to store unwind value
     pub unwind_value: Option<u32>,
-}
-
-/// The structure of `.kani-metadata.json` files, which are emitted for each crate
-#[derive(Serialize)]
-pub struct KaniMetadata {
-    pub proof_harnesses: Vec<HarnessMetadata>,
 }
