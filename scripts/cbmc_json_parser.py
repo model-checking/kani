@@ -355,9 +355,10 @@ CBMC_DESCRIPTIONS = {
         CProverCheck("invalid integer address")
     ],
     "array_bounds": [
-        CProverCheck("lower bound", "access out of bounds"),
-        # This one is redundant: CProverCheck("dynamic object upper bound", "access out of bounds"),
-        CProverCheck("upper bound", "access out of bounds"), ],
+        CProverCheck("lower bound", "index out of bounds"),  # Irrelevant check. Only usize allowed as index.
+        # This one is redundant:
+        # CProverCheck("dynamic object upper bound", "access out of bounds"),
+        CProverCheck("upper bound", "index out of bounds: the length is less than or equal to the given index"), ],
     "bit_count": [
         CProverCheck("count trailing zeros is undefined for value zero"),
         CProverCheck("count leading zeros is undefined for value zero")],
