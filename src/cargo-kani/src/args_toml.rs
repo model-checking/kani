@@ -4,19 +4,28 @@
 use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::path::PathBuf;
+use std::process::Command;
 use toml::value::Table;
 use toml::Value;
 
 /// Produces a set of arguments to pass to ourself (cargo-kani) from a Cargo.toml project file
 pub fn config_toml_to_args() -> Result<Vec<OsString>> {
-    // TODO: `cargo locate-project` maybe?
-    let file = std::fs::read_to_string("Cargo.toml");
-    if let Ok(file) = file {
-        toml_to_args(&file)
-    } else {
-        // Suppress the error if we can't find it, for now.
-        Ok(vec![])
+    let file = std::fs::read_to_string(cargo_locate_project()?)?;
+    toml_to_args(&file)
+}
+
+/// `locate-project` produces a response like: `/full/path/to/src/cargo-kani/Cargo.toml`
+fn cargo_locate_project() -> Result<PathBuf> {
+    let cmd =
+        Command::new("cargo").args(["locate-project", "--message-format", "plain"]).output()?;
+    if !cmd.status.success() {
+        let err = std::str::from_utf8(&cmd.stderr)?;
+        bail!("{}", err);
     }
+    let path = std::str::from_utf8(&cmd.stdout)?;
+    // A trim is essential: remove the trailing newline
+    Ok(path.trim().into())
 }
 
 /// Parse a config toml string and extract the cargo-kani arguments we should try injecting
