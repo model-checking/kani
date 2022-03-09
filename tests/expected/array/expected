@@ -1,14 +1,4 @@
 SUCCESS\
-array 'y'.0 upper bound in y.0[var_8]
-SUCCESS\
-array 'y'.0 upper bound in y.0[var_12]
-FAILURE\
-array 'y'.0 upper bound in y.0[var_16]
-SUCCESS\
-array 'x'.0 upper bound in x.0[var_3]
-SUCCESS\
-array 'x'.0 upper bound in x.0[var_5]
-SUCCESS\
 assertion failed: y[0] == 1
 SUCCESS\
 assertion failed: y[1] == 2
