@@ -1,3 +1,5 @@
-line 11 index out of bounds: the length is less than or equal to the given index
-line 11 dereference failure: pointer outside object bounds in a.data[var_5]: FAILURE
-VERIFICATION FAILED
+FAILURE\
+index out of bounds: the length is less than or equal to the given index
+FAILURE\
+dereference failure: pointer outside object bounds in a.data[var_5]
+VERIFICATION:- FAILED

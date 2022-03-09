@@ -39,13 +39,13 @@ Kani will automatically generate verification conditions that help us understand
 Let's start with the "sledge hammer" by dropping all the way down to size 1:
 
 ```
-# kani src/lib.rs --cbmc-args --unwind 1
-[.unwind.0] unwinding assertion loop 0: FAILURE
-VERIFICATION FAILED
+# kani src/lib.rs --unwind 1
+Check 69: .unwind.0
+         - Status: FAILURE
+         - Description: "unwinding assertion loop 0"
+[...]
+VERIFICATION:- FAILED
 ```
-
-> **NOTE:** `--unwind` is a flag to the underlying model checker, CBMC, and so it needs to appear after `--cbmc-args`.
-> This flag `--cbmc-args` "switches modes" in the command line from Kani flags to CBMC flags, so we place all Kani flags and arguments before it.
 
 This output is showing us two things:
 
@@ -58,29 +58,26 @@ Doing an initial `--unwind 1` is generally enough to force termination, but ofte
 We were clearly aiming at a size limit of 10 in our proof harness, so let's try a few things here:
 
 ```
-# kani src/lib.rs --cbmc-args --unwind 10 | grep FAIL
-[.unwind.0] unwinding assertion loop 0: FAILURE
-VERIFICATION FAILED
+# kani src/lib.rs --unwind 10 | grep Failed
+Failed Checks: unwinding assertion loop 0
 ```
 
 A bound of 10 still isn't enough because we generally need to unwind one greater than the number of executed loop iterations:
 
 ```
-# kani src/lib.rs --cbmc-args --unwind 11 | grep FAIL
-[initialize_prefix.unwind.0] line 11 unwinding assertion loop 0: FAILURE
-[initialize_prefix.assertion.2] line 12 index out of bounds: the length is move _20 but the index is _19: FAILURE
-[initialize_prefix.pointer_dereference.5] line 12 dereference failure: pointer outside object bounds in buffer.data[var_19]: FAILURE
-VERIFICATION FAILED
+# kani src/lib.rs --unwind 11 | grep Failed
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+Failed Checks: dereference failure: pointer outside object bounds in buffer.data[var_16]
+Failed Checks: unwinding assertion loop 0
 ```
 
 We're still not seeing the unwinding assertion failure go away!
 This is because our error is really an off by one problem, we loop one too many times, so let's add one more:
 
 ```
-# kani src/lib.rs --cbmc-args --unwind 12 | grep FAIL
-[initialize_prefix.assertion.2] line 12 index out of bounds: the length is move _20 but the index is _19: FAILURE
-[initialize_prefix.pointer_dereference.5] line 12 dereference failure: pointer outside object bounds in buffer.data[var_19]: FAILURE
-VERIFICATION FAILED
+# kani src/lib.rs --unwind 12 | grep Failed
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+Failed Checks: dereference failure: pointer outside object bounds in buffer.data[var_16]
 ```
 
 Kani is now sure we've unwound the loop enough to verify our proof harness, and now we're seeing just the bound checking failures from the off by one error.
@@ -104,7 +101,7 @@ For example, we see 0.5s at unwinding 12, and 3s at unwinding 100.
 In situations where you need to optimize solving time better, specific bounds for specific loops can be provided on the command line.
 
 ```
-# kani src/lib.rs --cbmc-args --show-loops
+# kani src/lib.rs --output-format old --cbmc-args --show-loops
 [...]
 Loop _RNvCs6JP7pnlEvdt_3lib17initialize_prefix.0:
   file ./src/lib.rs line 11 column 5 function initialize_prefix
@@ -114,6 +111,11 @@ Loop _RNvMs8_NtNtCswN0xKFrR8r_4core3ops5rangeINtB5_14RangeInclusivejE8is_emptyCs
 
 Loop gen-repeat<[u8; 10]::16806744624734428132>.0:
 ```
+
+> **NOTE:** `--show-loops` is a flag to the underlying model checker, CBMC, and so it needs to appear after `--cbmc-args`.
+> This flag `--cbmc-args` "switches modes" in the command line from Kani flags to CBMC flags, so we place all Kani flags and arguments before it.
+> Also, the `--output-format old` flag turns off the post-processing of output from CBMC, which is needed here because with `--show-loops`,
+> CBMC is not running the actual verification step
 
 This command shows us the mangled names of the loops involved.
 Then we can specify the bound for specific loops by name, from the command line:
