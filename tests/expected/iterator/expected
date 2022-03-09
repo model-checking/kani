@@ -1,3 +1,6 @@
-line 7 unreachable code: SUCCESS
-line 8 attempt to multiply with overflow: SUCCESS
-line 10 assertion failed: z == 6: SUCCESS
+SUCCESS\
+unreachable code
+SUCCESS\
+attempt to multiply with overflow
+SUCCESS\
+assertion failed: z == 6

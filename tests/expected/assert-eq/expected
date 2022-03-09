@@ -1,3 +1,6 @@
-line 17 assertion failed: x + 1 == y: SUCCESS
-line 18 assertion failed: x == y: FAILURE
-line 19 assertion failed: x != y: SUCCESS
+SUCCESS\
+assertion failed: x + 1 == y
+FAILURE\
+assertion failed: x == y
+SUCCESS\
+assertion failed: x != y

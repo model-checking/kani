@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --output-format old
 // cbmc-flags: --bounds-check
 fn foo(x: [i32; 5]) -> [i32; 2] {
     [x[0], x[1]]

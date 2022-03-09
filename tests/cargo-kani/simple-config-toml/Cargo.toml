@@ -10,6 +10,5 @@ edition = "2018"
 [workspace]
 
 [kani.flags]
-output-format = "old"
 cbmc-args = []
 gen-c = true
