@@ -1,3 +1,4 @@
-FAILURE
+FAILURE\
+Description: "assertion failed: x != 5"
  ** 1 of 3 failed
 Failed Checks: assertion failed: x != 5
