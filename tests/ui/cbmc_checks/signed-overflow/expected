@@ -1,6 +1,6 @@
-Failed Checks: arithmetic overflow on signed +
-Failed Checks: arithmetic overflow on signed -
-Failed Checks: arithmetic overflow on signed *
+Failed Checks: arithmetic overflow on signed addition
+Failed Checks: arithmetic overflow on signed subtraction
+Failed Checks: arithmetic overflow on signed multiplication
 Failed Checks: division by zero
 Failed Checks: arithmetic overflow on signed division
 Failed Checks: division by zero

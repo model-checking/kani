@@ -21,10 +21,10 @@ functions:
 
 import json
 import os
-
-from colorama import Fore, Style
 import re
 import sys
+
+from colorama import Fore, Style
 from enum import Enum
 
 # Enum to store the style of output that is given by the argument flags
@@ -208,7 +208,7 @@ def postprocess_results(properties):
     remove_check_ids_from_description(properties)
 
     for property in properties:
-        property["description"] = get_friendly_description(property)
+        property["description"] = get_readable_description(property)
         if has_reachable_unsupported_constructs or has_failed_unwinding_asserts:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
@@ -259,7 +259,18 @@ def filter_properties(properties, message):
     return filtered_properties, removed_properties
 
 class CProverCheck:
-    """ Represents a CProverCheck and provides methods to replace the check. """
+    """ Represents a CProverCheck and provides methods to replace the check.
+
+        Objects of this class are used to represent specific types of CBMC's
+        check messages. It allow us to identify and to replace them by a more
+        user friendly message.
+
+        That includes rewriting them and removing information that don't
+        make sense in the ust context. E.g.:
+        - Original CBMC message: "dead object in OBJECT_SIZE(&temp_0)"
+                     Not in the original code -> ^^^^^^^^^^^^^^^^^^^^
+        - New message: "pointer to dead object"
+    """
 
     def __init__(self, msg, new_msg=None):
         self.original = msg
@@ -287,12 +298,12 @@ CBMC_DESCRIPTIONS = {
         CProverCheck("arithmetic overflow on signed unary minus"),
         CProverCheck("arithmetic overflow on signed shl"),
         CProverCheck("arithmetic overflow on unsigned unary minus"),
-        CProverCheck("arithmetic overflow on signed +"),
-        CProverCheck("arithmetic overflow on signed -"),
-        CProverCheck("arithmetic overflow on signed *"),
-        CProverCheck("arithmetic overflow on unsigned +"),
-        CProverCheck("arithmetic overflow on unsigned -"),
-        CProverCheck("arithmetic overflow on unsigned *"),
+        CProverCheck("arithmetic overflow on signed +", "arithmetic overflow on signed addition"),
+        CProverCheck("arithmetic overflow on signed -", "arithmetic overflow on signed subtraction"),
+        CProverCheck("arithmetic overflow on signed *", "arithmetic overflow on signed multiplication"),
+        CProverCheck("arithmetic overflow on unsigned +", "arithmetic overflow on unsigned addition"),
+        CProverCheck("arithmetic overflow on unsigned -", "arithmetic overflow on unsigned subtraction"),
+        CProverCheck("arithmetic overflow on unsigned *", "arithmetic overflow on unsigned multiplication"),
         CProverCheck("arithmetic overflow on floating-point typecast"),
         CProverCheck("arithmetic overflow on floating-point division"),
         CProverCheck("arithmetic overflow on floating-point addition"),
@@ -304,10 +315,10 @@ CBMC_DESCRIPTIONS = {
         CProverCheck("arithmetic overflow on unsigned to unsigned type conversion"),
         CProverCheck("arithmetic overflow on float to unsigned integer type conversion")],
     "NaN": [
-        CProverCheck("NaN on +"),
-        CProverCheck("NaN on -"),
-        CProverCheck("NaN on /"),
-        CProverCheck("NaN on *")],
+        CProverCheck("NaN on +", "NaN on addition"),
+        CProverCheck("NaN on -", "NaN on subtraction"),
+        CProverCheck("NaN on /", "NaN on division"),
+        CProverCheck("NaN on *", "NaN on multiplication")],
     "pointer": [
         CProverCheck("same object violation")],
     "pointer_arithmetic": [
@@ -357,7 +368,7 @@ CBMC_DESCRIPTIONS = {
     # "precondition_instance": [],
 }
 
-def get_friendly_description(prop):
+def get_readable_description(prop):
     """This function will return a user friendly property description.
 
        For CBMC checks, it will ensure that the failure does not include any
@@ -369,12 +380,13 @@ def get_friendly_description(prop):
     # Do nothing if prop_class is diff than cbmc's convention
     class_id = prop_class[-2] if len(prop_class) > 1 else None
     if class_id in CBMC_DESCRIPTIONS:
+        # Contains a list for potential message translation [String].
         prop_type = [check.replace(original) for check in CBMC_DESCRIPTIONS[class_id] if check.matches(original)]
         if len(prop_type) != 1:
             if "KANI_FAIL_ON_UNEXPECTED_DESCRIPTION" in os.environ:
-                print("Unexpected description: {}".format(original))
-                print(f"  - class_id: {class_id}")
-                print(f"  - matches: {[prop_type]}")
+                print(f"Unexpected description: {original}\n"
+                      f"  - class_id: {class_id}\n"
+                      f"  - matches: {prop_type}\n")
                 exit(1)
             else:
                 return original
