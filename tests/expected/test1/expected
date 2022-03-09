@@ -1,5 +1,10 @@
-line 9 attempt to add with overflow: SUCCESS
-line 10 attempt to subtract with overflow: SUCCESS
-line 14 assertion failed: a == 54: FAILURE
-line 16 assertion failed: a == 55: SUCCESS
-line 18 assertion failed: a >= 55: SUCCESS
+SUCCESS\
+attempt to add with overflow
+SUCCESS\
+attempt to subtract with overflow
+FAILURE\
+assertion failed: a == 54
+SUCCESS\
+assertion failed: a == 55
+SUCCESS\
+assertion failed: a >= 55

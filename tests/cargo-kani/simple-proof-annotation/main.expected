@@ -1,1 +1,2 @@
-line 5 assertion failed: 1 == 2: FAILURE
+FAILURE\
+assertion failed: 1 == 2

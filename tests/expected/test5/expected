@@ -1,4 +1,8 @@
-line 7 assertion failed: div(4, 2) == 2: SUCCESS
-line 9 assertion failed: div(6, 2) == 2: FAILURE
-line 13 attempt to divide by zero: SUCCESS
-line 13 attempt to divide with overflow: SUCCESS
+SUCCESS\
+assertion failed: div(4, 2) == 2
+FAILURE\
+assertion failed: div(6, 2) == 2
+SUCCESS\
+attempt to divide by zero
+SUCCESS\
+attempt to divide with overflow

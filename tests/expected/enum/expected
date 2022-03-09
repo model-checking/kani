@@ -1,7 +1,14 @@
-line 20 unreachable code: SUCCESS
-line 21 assertion failed: x == 10: SUCCESS
-line 22 assertion failed: false: SUCCESS
-line 24 unreachable code: SUCCESS
-line 25 assertion failed: false: SUCCESS
-line 27 assertion failed: x == 30 && y == 60.0: SUCCESS
-line 28 assertion failed: x == 31: FAILURE
+SUCCESS\
+unreachable code
+SUCCESS\
+assertion failed: x == 10
+SUCCESS\
+assertion failed: false
+SUCCESS\
+unreachable code
+SUCCESS\
+assertion failed: false
+SUCCESS\
+assertion failed: x == 30 && y == 60.0
+FAILURE\
+assertion failed: x == 31
