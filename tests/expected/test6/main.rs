@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --output-format old
 fn add2(a: i32, b: i32) -> f32 {
     add(a, b as f32)
 }

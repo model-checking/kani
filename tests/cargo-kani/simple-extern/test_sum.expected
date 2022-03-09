@@ -1,1 +1,2 @@
-[external_c_assertion.assertion.1] line 14 assertion rust_add1(x) == x + 1: SUCCESS
+SUCCESS\
+assertion rust_add1(x) == x + 1

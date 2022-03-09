@@ -1,4 +1,8 @@
-line 7 attempt to add with overflow: SUCCESS
-line 9 attempt to add with overflow: SUCCESS
-line 10 assertion failed: z == 102: SUCCESS
-line 11 assertion failed: g(z) == 206: SUCCESS
+SUCCESS\
+attempt to add with overflow
+SUCCESS\
+attempt to add with overflow
+SUCCESS\
+assertion failed: z == 102
+SUCCESS\
+assertion failed: g(z) == 206

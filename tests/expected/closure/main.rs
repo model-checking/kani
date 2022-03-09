@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --output-format old
 fn call_with_one<F>(mut some_closure: F) -> ()
 where
     F: FnMut(i64, i64) -> (),

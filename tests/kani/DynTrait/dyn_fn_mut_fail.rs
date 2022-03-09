@@ -5,8 +5,6 @@
 // function definition. Expected to fail because we are comparing
 // to an incorrect value.
 
-// kani-flags: --output-format old
-
 fn takes_dyn_fun(mut fun: Box<dyn FnMut(&mut i32)>, x_ptr: &mut i32) {
     fun(x_ptr)
 }

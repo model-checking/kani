@@ -1,3 +1,6 @@
-line 16 attempt to add with overflow: SUCCESS
-line 17 attempt to add with overflow: SUCCESS
-line 17 assertion failed: num + 10 == y: SUCCESS
+SUCCESS\
+attempt to add with overflow
+SUCCESS\
+attempt to add with overflow
+SUCCESS\
+assertion failed: num + 10 == y

@@ -8,6 +8,3 @@ edition = "2018"
 [dependencies]
 
 [workspace]
-
-[kani.flags]
-output-format = "old"

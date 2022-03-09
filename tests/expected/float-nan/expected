@@ -1,5 +1,10 @@
-line 14 assertion failed: 1.0 / f != 0.0 / f: SUCCESS
-line 16 assertion failed: !(1.0 / f == 0.0 / f): SUCCESS
-line 18 assertion failed: 1.0 / f == 0.0 / f: FAILURE
-line 20 assertion failed: 0.0 / f == 0.0 / f: FAILURE
-line 22 assertion failed: 0.0 / f != 0.0 / f: SUCCESS
+SUCCESS\
+assertion failed: 1.0 / f != 0.0 / f
+SUCCESS\
+assertion failed: !(1.0 / f == 0.0 / f)
+FAILURE\
+assertion failed: 1.0 / f == 0.0 / f
+FAILURE\
+assertion failed: 0.0 / f == 0.0 / f
+SUCCESS\
+assertion failed: 0.0 / f != 0.0 / f
