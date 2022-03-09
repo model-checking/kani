@@ -9,7 +9,6 @@ use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
-use rustc_middle::mir::coverage::Op;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
