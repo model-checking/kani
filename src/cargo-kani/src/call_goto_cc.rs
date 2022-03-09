@@ -25,12 +25,8 @@ impl KaniSession {
 
         // Special case hack for handling the "c-ffi" abs-type
         if self.args.use_abs && self.args.abs_type == AbstractionType::CFfi {
-            let mut vec = self.kani_c_stubs.clone();
-            vec.push("vec");
-            vec.push("vec.c");
-            let mut hashset = self.kani_c_stubs.clone();
-            hashset.push("hashset");
-            hashset.push("hashset.c");
+            let vec = self.kani_c_stubs.join("vec/vec.c");
+            let hashset = self.kani_c_stubs.join("hashset/hashset.c");
 
             args.push(vec.into_os_string());
             args.push(hashset.into_os_string());

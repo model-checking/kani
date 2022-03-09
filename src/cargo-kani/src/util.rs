@@ -8,9 +8,7 @@ use std::process::Command;
 
 /// Replace an extension with another one, in a new PathBuf. (See tests for examples)
 pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
-    let mut result = path.to_owned();
-    result.set_extension(ext);
-    result
+    path.with_extension(ext)
 }
 
 /// Add an extension to an existing file path (amazingly Rust doesn't support this well)
