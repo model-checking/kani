@@ -16,16 +16,19 @@ use std::io::{BufReader, BufWriter};
 
 impl KaniSession {
     /// Postprocess a goto binary (before cbmc, after linking) in-place by calling goto-instrument
-    pub fn run_goto_instrument(&self, file: &Path) -> Result<()> {
+    pub fn run_goto_instrument(&self, input: &Path, output: &Path, function: &str) -> Result<()> {
+        // We actually start by calling goto-cc to start the specialization:
+        self.specialize_to_proof_harness(input, output, function)?;
+
         if self.args.checks.undefined_function_on() {
-            self.add_library(file)?;
-            self.undefined_functions(file)?;
+            self.add_library(output)?;
+            self.undefined_functions(output)?;
         } else {
-            self.just_drop_unused_functions(file)?;
+            self.just_drop_unused_functions(output)?;
         }
 
         if self.args.gen_c {
-            self.gen_c(file)?;
+            self.gen_c(output)?;
         }
 
         Ok(())
@@ -53,6 +56,10 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
+    /// Link the binary against the CBMC model for C library functions.
+    /// Normally this happens implicitly, but we use this explicitly
+    /// before we invoke `undefined_functions` below, otherwise these
+    /// functions appear undefined.
     fn add_library(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--add-library".into(),
@@ -63,6 +70,12 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
+    /// Instruct CBMC to "assert false" when invoking an undefined function.
+    /// (This contrasts with its default behavior of returning `nondet`, which is
+    /// unsound in the face of side-effects.)
+    /// Then remove unused functions. (Oddly, it seems CBMC will both see some
+    /// functions as unused and remove them, and also as used and so would
+    /// generate "assert false". So it's essential to do this afterwards.)
     fn undefined_functions(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--generate-function-body-options".into(),
@@ -77,6 +90,7 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
+    /// Remove all functions unreachable from the current proof harness.
     fn just_drop_unused_functions(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--drop-unused-functions".into(),

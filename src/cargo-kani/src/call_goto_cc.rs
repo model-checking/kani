@@ -11,15 +11,9 @@ use crate::session::KaniSession;
 
 impl KaniSession {
     /// Given a set of goto binaries (`inputs`), produce `output` by linking everything
-    /// together (including essential libraries) and also specializing to the proof harness
-    /// `function`.
-    pub fn link_c_lib(&self, inputs: &[PathBuf], output: &Path, function: &str) -> Result<()> {
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(output.to_owned());
-        }
-
-        let mut args: Vec<OsString> = vec!["--function".into(), function.into()];
+    /// together (including essential libraries). The result is generic over all proof harnesses.
+    pub fn link_goto_binary(&self, inputs: &[PathBuf], output: &Path) -> Result<()> {
+        let mut args: Vec<OsString> = Vec::new();
         args.extend(inputs.iter().map(|x| x.clone().into_os_string()));
         args.extend(self.args.c_lib.iter().map(|x| x.clone().into_os_string()));
 
@@ -42,6 +36,21 @@ impl KaniSession {
         // TODO get goto-cc path from self
         let mut cmd = Command::new("goto-cc");
         cmd.args(args);
+
+        self.run_suppress(cmd)?;
+
+        Ok(())
+    }
+
+    /// Produce a goto binary with its entry point set to a particular proof harness.
+    pub fn specialize_to_proof_harness(
+        &self,
+        input: &Path,
+        output: &Path,
+        function: &str,
+    ) -> Result<()> {
+        let mut cmd = Command::new("goto-cc");
+        cmd.arg(input).args(["--function", function, "-o"]).arg(output);
 
         self.run_suppress(cmd)?;
 
