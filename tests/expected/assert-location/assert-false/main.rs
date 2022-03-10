@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Check the location of the assert statement when using assert!(false);
-// kani-flags: --output-format old
+// This currently requires the old format since the new format doesn't include
+// line numbers https://github.com/model-checking/kani/issues/918
+// Also disable reachability checks because they add annotations to each
+// assert's description which would be visible with the old output format
+// kani-flags: --output-format old --no-assertion-reach-checks
 
 fn any_bool() -> bool {
     kani::nondet()

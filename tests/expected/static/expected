@@ -1,4 +1,4 @@
 FAILURE\
 assertion failed: 10 == foo()
-SUCCESS\
+UNREACHABLE\
 assertion failed: 12 == foo()

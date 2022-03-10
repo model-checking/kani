@@ -1,10 +1,10 @@
-SUCCESS\
+UNREACHABLE\
 assertion failed: false
 SUCCESS\
 unreachable code
 SUCCESS\
 unreachable code
-SUCCESS\
+UNREACHABLE\
 assertion failed: false
 SUCCESS\
 assertion failed: a == *b

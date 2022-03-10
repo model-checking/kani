@@ -27,7 +27,7 @@ fi
 # Compile crates with Kani backend
 cd $(dirname $0)
 rm -rf build
-RUST_BACKTRACE=1 cargo kani --target-dir build --only-codegen --keep-temps --verbose
+RUST_BACKTRACE=1 cargo kani --target-dir build --only-codegen --keep-temps --verbose --no-assertion-reach-checks
 
 # Convert from JSON to Gotoc
 cd build/${TARGET}/debug/deps/

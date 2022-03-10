@@ -2,11 +2,11 @@ SUCCESS\
 unreachable code
 SUCCESS\
 assertion failed: x == 10
-SUCCESS\
+UNREACHABLE\
 assertion failed: false
 SUCCESS\
 unreachable code
-SUCCESS\
+UNREACHABLE\
 assertion failed: false
 SUCCESS\
 assertion failed: x == 30 && y == 60.0
