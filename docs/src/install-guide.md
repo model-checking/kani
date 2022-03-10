@@ -87,12 +87,12 @@ You should get a result like this one:
 
 ```
 [snipped output]
-** Results:
-test.rs function main
-[main.assertion.1] line 2 assertion failed: 1 == 2: FAILURE
-
-** 1 of 1 failed (2 iterations)
-VERIFICATION FAILED
+RESULTS:
+Check 1: main.assertion.1
+         - Status: FAILURE
+         - Description: "assertion failed: 1 == 2"
+[...]
+VERIFICATION:- FAILED
 ```
 
 Fix the test and you should see `kani` succeed.

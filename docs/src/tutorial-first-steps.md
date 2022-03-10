@@ -42,12 +42,12 @@ With Kani, however:
 [...]
 Runtime decision procedure: 0.00116886s
 
-** Results:
-./src/lib.rs function estimate_size
-[estimate_size.assertion.1] line 9 Oh no, a failing corner case!: FAILURE
-
-** 1 of 1 failed (2 iterations)
-VERIFICATION FAILED
+RESULTS:
+Check 3: estimate_size.assertion.1
+         - Status: FAILURE
+         - Description: "Oh no, a failing corner case!"
+[...]
+VERIFICATION:- FAILED
 ```
 
 Kani has immediately found a failure.
@@ -106,12 +106,14 @@ Still, it is just a warning, and we can run the code without test failures just 
 But Kani still catches the issue:
 
 ```
-** Results:
-./src/lib.rs function estimate_size
-[estimate_size.pointer_dereference.1] line 10 dereference failure: pointer NULL in *var_10: FAILURE
-
-** 1 of 1 failed (2 iterations)
-VERIFICATION FAILED
+[...]
+RESULTS:
+[...]
+Check 2: foo.pointer_dereference.1
+         - Status: FAILURE
+         - Description: "dereference failure: pointer NULL"
+[...]
+VERIFICATION:- FAILED
 ```
 
 **Can you find an example where the Rust compiler will not complain, and Kani will?**
@@ -126,13 +128,17 @@ return 1 << x;
 Overflow (addition, multiplication, etc, and this case, [bitshifting by too much](https://github.com/rust-lang/rust/issues/10183)) is also caught by Kani:
 
 ```
-** Results:
-./src/lib.rs function estimate_size
-[estimate_size.assertion.1] line 10 attempt to shift left by `move _10`, which would overflow: FAILURE
-[estimate_size.undefined-shift.1] line 10 shift distance too large in 1 << var_10: FAILURE
+RESULTS:
+[...]
+Check 3: foo.assertion.1
+         - Status: FAILURE
+         - Description: "attempt to shift left with overflow"
 
-** 2 of 2 failed (2 iterations)
-VERIFICATION FAILED
+Check 4: foo.undefined-shift.1
+         - Status: FAILURE
+         - Description: "shift distance too large"
+[...]
+VERIFICATION:- FAILED
 ```
 
 </details>
@@ -150,12 +156,14 @@ Now we have stated our previously implicit expectation: this function should nev
 But if we attempt to verify this, we get a problem:
 
 ```
-** Results:
-./src/final_form.rs function estimate_size
-[estimate_size.assertion.1] line 3 assertion failed: x < 4096: FAILURE
-
-** 1 of 1 failed (2 iterations)
-VERIFICATION FAILED
+[...]
+RESULTS:
+[...]
+Check 3: final_form::estimate_size.assertion.1
+         - Status: FAILURE
+         - Description: "assertion failed: x < 4096"
+[...]
+VERIFICATION:- FAILED
 ```
 
 We intended this to be a precondition of calling the function, but Kani is treating it like a failure.
