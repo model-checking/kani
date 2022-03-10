@@ -1,2 +1,2 @@
 Description: "assertion failed: 1 + 1 == 2"
-Description: "dead object in OBJECT_SIZE(&temp_0)"
+Description: "pointer to dead object"
