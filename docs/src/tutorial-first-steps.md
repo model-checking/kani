@@ -111,7 +111,7 @@ RESULTS:
 [...]
 Check 2: foo.pointer_dereference.1
          - Status: FAILURE
-         - Description: "dereference failure: pointer NULL in *var_1"
+         - Description: "dereference failure: pointer NULL"
 [...]
 VERIFICATION:- FAILED
 ```
@@ -136,7 +136,7 @@ Check 3: foo.assertion.1
 
 Check 4: foo.undefined-shift.1
          - Status: FAILURE
-         - Description: "shift distance too large in 1 << var_2"
+         - Description: "shift distance too large"
 [...]
 VERIFICATION:- FAILED
 ```

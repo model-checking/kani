@@ -60,18 +60,18 @@ Let's narrow that output down a bit:
 Failed Checks: attempt to compute offset which would overflow
 Failed Checks: attempt to calculate the remainder with a divisor of zero
 Failed Checks: attempt to add with overflow
-Failed Checks: arithmetic overflow on unsigned to signed type conversion in (long int)var_5
-Failed Checks: pointer arithmetic: pointer NULL in var_3 + var_4
-Failed Checks: pointer arithmetic: deallocated dynamic object in var_3 + var_4
-Failed Checks: pointer arithmetic: dead object in var_3 + var_4
-Failed Checks: pointer arithmetic: pointer outside object bounds in var_3 + var_4
-Failed Checks: pointer arithmetic: invalid integer address in var_3 + var_4
-Failed Checks: division by zero in var_7 % var_8
-Failed Checks: dereference failure: pointer NULL in *var_3
-Failed Checks: dereference failure: deallocated dynamic object in *var_3
-Failed Checks: dereference failure: dead object in *var_3
-Failed Checks: dereference failure: pointer outside object bounds in *var_3
-Failed Checks: dereference failure: invalid integer address in *var_3
+Failed Checks: division by zero
+Failed Checks: dereference failure: pointer NULL
+Failed Checks: dereference failure: deallocated dynamic object
+Failed Checks: dereference failure: dead object
+Failed Checks: dereference failure: pointer outside object bounds
+Failed Checks: dereference failure: invalid integer address
+Failed Checks: arithmetic overflow on unsigned to signed type conversion
+Failed Checks: pointer arithmetic: pointer NULL
+Failed Checks: pointer arithmetic: deallocated dynamic object
+Failed Checks: pointer arithmetic: dead object
+Failed Checks: pointer arithmetic: pointer outside object bounds
+Failed Checks: pointer arithmetic: invalid integer address
 ```
 
 Notice that, for Kani, this has gone from a simple bounds-checking problem to a pointer-checking problem.
@@ -94,7 +94,7 @@ Having switched back to the safe indexing operation, Kani reports two failures:
 ```
 # kani src/bounds_check.rs --function bound_check | grep Failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
-Failed Checks: dereference failure: pointer outside object bounds in a.data[var_5]
+Failed Checks: dereference failure: pointer outside object bounds
 ```
 
 The first is Rust's implicit assertion for the safe indexing operation.

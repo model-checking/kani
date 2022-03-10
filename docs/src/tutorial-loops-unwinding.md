@@ -67,7 +67,7 @@ A bound of 10 still isn't enough because we generally need to unwind one greater
 ```
 # kani src/lib.rs --unwind 11 | grep Failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
-Failed Checks: dereference failure: pointer outside object bounds in buffer.data[var_16]
+Failed Checks: dereference failure: pointer outside object bounds
 Failed Checks: unwinding assertion loop 0
 ```
 
@@ -77,7 +77,7 @@ This is because our error is really an off by one problem, we loop one too many 
 ```
 # kani src/lib.rs --unwind 12 | grep Failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
-Failed Checks: dereference failure: pointer outside object bounds in buffer.data[var_16]
+Failed Checks: dereference failure: pointer outside object bounds
 ```
 
 Kani is now sure we've unwound the loop enough to verify our proof harness, and now we're seeing just the bound checking failures from the off by one error.
@@ -115,7 +115,7 @@ Loop gen-repeat<[u8; 10]::16806744624734428132>.0:
 > **NOTE:** `--show-loops` is a flag to the underlying model checker, CBMC, and so it needs to appear after `--cbmc-args`.
 > This flag `--cbmc-args` "switches modes" in the command line from Kani flags to CBMC flags, so we place all Kani flags and arguments before it.
 > Also, the `--output-format old` flag turns off the post-processing of output from CBMC, which is needed here because with `--show-loops`,
-> CBMC is not running the actual verification step
+> CBMC is not running the actual verification step.
 
 This command shows us the mangled names of the loops involved.
 Then we can specify the bound for specific loops by name, from the command line:
