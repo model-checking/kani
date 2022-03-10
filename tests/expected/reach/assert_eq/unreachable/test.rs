@@ -4,7 +4,7 @@
 // macro. The test has an unreachable assert_eq statement which should be
 // reported as UNREACHABLE
 
-// kani-flags: --assertion-reach-checks --output-format regular --no-default-checks
+// kani-flags: --output-format regular --no-default-checks
 
 fn main() {
     let x: i32 = kani::any();
