@@ -42,18 +42,20 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
     for symtab in &outputs.symtabs {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
     }
-    let linked_obj = outputs.outdir.join("cbmc.out");
 
-    ctx.link_c_lib(&goto_objs, &linked_obj, &ctx.args.function)?;
+    let linked_obj = outputs.outdir.join("cbmc-linked.out");
+    ctx.link_goto_binary(&goto_objs, &linked_obj)?;
     if let Some(restrictions) = outputs.restrictions {
         ctx.apply_vtable_restrictions(&linked_obj, &restrictions)?;
     }
-    ctx.run_goto_instrument(&linked_obj)?;
+
+    let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &ctx.args.function));
+    ctx.run_goto_instrument(&linked_obj, &specialized_obj, &ctx.args.function)?;
 
     if ctx.args.visualize {
-        ctx.run_visualize(&linked_obj, "target/report")?;
+        ctx.run_visualize(&specialized_obj, "target/report")?;
     } else {
-        let result = ctx.run_cbmc(&linked_obj)?;
+        let result = ctx.run_cbmc(&specialized_obj)?;
         if result == VerificationStatus::Failure {
             // Failure exit code without additional error message
             drop(ctx);
@@ -71,13 +73,17 @@ fn standalone_main() -> Result<()> {
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
     let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
-    let linked_obj = util::alter_extension(&args.input, "out");
 
-    ctx.link_c_lib(&[goto_obj], &linked_obj, &ctx.args.function)?;
+    let linked_obj = util::alter_extension(&args.input, "out");
+    {
+        let mut temps = ctx.temporaries.borrow_mut();
+        temps.push(linked_obj.to_owned());
+    }
+    ctx.link_goto_binary(&[goto_obj], &linked_obj)?;
     if let Some(restriction) = outputs.restrictions {
         ctx.apply_vtable_restrictions(&linked_obj, &restriction)?;
     }
-    ctx.run_goto_instrument(&linked_obj)?;
+    ctx.run_goto_instrument(&linked_obj, &linked_obj, &ctx.args.function)?;
 
     if ctx.args.visualize {
         ctx.run_visualize(&linked_obj, "report")?;
