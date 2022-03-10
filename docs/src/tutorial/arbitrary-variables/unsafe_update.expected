@@ -1,3 +1,5 @@
-[inventory::verification::unsafe_update.assertion.1] line 61 assertion failed: inventory.get(&id).unwrap() == quantity: SUCCESS
-called `Option::unwrap()` on a `None` value: FAILURE
-VERIFICATION FAILED
+SUCCESS\
+assertion failed: inventory.get(&id).unwrap() == quantity
+FAILURE\
+called `Option::unwrap()` on a `None` value
+VERIFICATION:- FAILED

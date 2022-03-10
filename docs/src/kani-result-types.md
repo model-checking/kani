@@ -1,4 +1,4 @@
-# Kani result types
+# Kani verification results
 
 The result of a check in Kani can be one of the following:
 

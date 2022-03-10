@@ -1,1 +1,2 @@
-[overflow::simple_addition.assertion.1] line 7 attempt to add with overflow: FAILURE
+FAILURE\
+attempt to add with overflow
