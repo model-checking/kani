@@ -4,6 +4,12 @@
 // Check that we can codegen various nesting structures of boxes and
 // pointer to closures.
 
+// Temporarily disabling assertion reachability checks because they trigger a
+// CBMC crash
+// https://github.com/diffblue/cbmc/issues/6691
+// https://github.com/model-checking/kani/issues/861
+// kani-flags: --no-assertion-reach-checks
+
 fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> = Box::new(Box::new(|x| assert!(x == 1)));
