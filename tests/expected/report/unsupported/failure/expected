@@ -1,6 +1,5 @@
 FAILURE\
 Description: "assertion failed: x == 0"
 Failed Checks: assertion failed: x == 0
- ** 2 of 4 failed (2 undetermined)
 Failed Checks: InlineAsm is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/2
 ** WARNING: A Rust construct that is not currently supported by Kani was found to be reachable. Check the results for more details.

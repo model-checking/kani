@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --output-format regular
 
 // This test checks that kani injects a reachability check for arithmetic
 // overflow checks and that it reports ones that are unreachable
