@@ -43,21 +43,35 @@ But we're able to check this unsafe code with Kani:
 ```
 
 ```
-# kani src/bounds_check.rs
+# kani src/bounds_check.rs --function bound_check
 [...]
-** 1 of 468 failed (2 iterations)
-VERIFICATION FAILED
+** 15 of 448 failed
+[...]
+VERIFICATION:- FAILED
 ```
 
-Notice there were a *lot* of verification conditions being checked: in the above output, 468! (It may change for you.)
+Notice there were a *lot* of verification conditions being checked: in the above output, 448! (It may change for you.)
 This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
 Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
 Let's narrow that output down a bit:
 
 ```
-# kani src/bounds_check.rs | grep FAIL
-[get_wrapped.pointer_dereference.5] line 10 dereference failure: pointer outside object bounds in *var_5: FAILURE
-VERIFICATION FAILED
+# kani src/bounds_check.rs --function bound_check | grep Failed
+Failed Checks: attempt to compute offset which would overflow
+Failed Checks: attempt to calculate the remainder with a divisor of zero
+Failed Checks: attempt to add with overflow
+Failed Checks: division by zero
+Failed Checks: dereference failure: pointer NULL
+Failed Checks: dereference failure: deallocated dynamic object
+Failed Checks: dereference failure: dead object
+Failed Checks: dereference failure: pointer outside object bounds
+Failed Checks: dereference failure: invalid integer address
+Failed Checks: arithmetic overflow on unsigned to signed type conversion
+Failed Checks: pointer arithmetic: pointer NULL
+Failed Checks: pointer arithmetic: deallocated dynamic object
+Failed Checks: pointer arithmetic: dead object
+Failed Checks: pointer arithmetic: pointer outside object bounds
+Failed Checks: pointer arithmetic: invalid integer address
 ```
 
 Notice that, for Kani, this has gone from a simple bounds-checking problem to a pointer-checking problem.
@@ -75,13 +89,12 @@ Consider trying a few more small exercises with this example:
 <details>
 <summary>Click to see explanation for exercise 1</summary>
 
-Having switched back to the safe indexing operation, Kani reports two failures instead of just one:
+Having switched back to the safe indexing operation, Kani reports two failures:
 
 ```
-# kani src/bounds_check.rs | grep FAIL
-[get_wrapped.assertion.3] line 9 index out of bounds: the length is move _12 but the index is _5: FAILURE
-[get_wrapped.pointer_dereference.5] line 9 dereference failure: pointer outside object bounds in a.data[var_5]: FAILURE
-VERIFICATION FAILED
+# kani src/bounds_check.rs --function bound_check | grep Failed
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+Failed Checks: dereference failure: pointer outside object bounds
 ```
 
 The first is Rust's implicit assertion for the safe indexing operation.
@@ -163,24 +176,18 @@ Kani will find these failures as well.
 Here's the output from Kani:
 
 ```
-# kani src/overflow.rs
+# kani src/overflow.rs --function add_overflow
 [...]
-** Results:
-./src/overflow.rs function simple_addition
-[simple_addition.assertion.1] line 6 attempt to compute `move _3 + move _4`, which would overflow: FAILURE
-[simple_addition.overflow.1] line 6 arithmetic overflow on unsigned + in var_3 + var_4: FAILURE
-
-** 2 of 2 failed (2 iterations)
-VERIFICATION FAILED
+RESULTS:
+Check 1: simple_addition.assertion.1
+         - Status: FAILURE
+         - Description: "attempt to add with overflow"
+[...]
+VERIFICATION:- FAILED
 ```
 
-Notice the two failures: the Rust-inserted overflow check (`simple_addition.assertion.1`) and Kani's explicit overflow check (`simple_addition.overflow.1`).
-
-> **NOTE:** You could attempt to fix this issue by using Rust's alternative mathematical functions with explicit overflow behavior.
+This issue can be fixed using Rust's alternative mathematical functions with explicit overflow behavior.
 For instance, instead of `a + b` write `a.wrapping_add(b)`.
->
-> However, [at the present time](https://github.com/model-checking/kani/issues/480), while this disables the dynamic assertion that Rust inserts, it does not disable the additional Kani overflow check.
-> As a result, this currently still fails in Kani.
 
 ### Exercise: Classic overflow failure
 

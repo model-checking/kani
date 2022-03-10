@@ -24,7 +24,7 @@ This report will shows coverage information, as well as give traces for each fai
 
 **`--function <name>`** Kani defaults to assuming the starting function is called `main`.
 You can change it to a different function with this argument.
-Note that to "find" the function given, it needs to be given the `#[no_mangle]` annotation.
+Note that to "find" the function given, it needs to be given the `#[kani::proof]` annotation.
 
 **`--gen-c`** will generate a C file that roughly corresponds to the input Rust file.
 This can sometimes be helpful when trying to debug a problem with Kani.
@@ -57,4 +57,3 @@ The labels for each loop can be discovered by running with the following CBMC fl
 
 **`--show-loops`** Print the labels of each loop in the program.
 Useful for `--unwindset`.
-

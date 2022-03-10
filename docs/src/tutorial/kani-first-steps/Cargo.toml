@@ -11,6 +11,3 @@ edition = "2018"
 proptest = "1.0.0"
 
 [workspace]
-
-[workspace.metadata.kani]
-flags = { output-format = "old" }
