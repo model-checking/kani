@@ -80,13 +80,11 @@ impl Irep {
         mm: &MachineModel,
     ) -> Self {
         if !l.is_none() {
-            let temp_location_irep = self.with_location(l, mm);
-            temp_location_irep
-                .with_named_sub(IrepId::Comment, Irep::just_string_id(msg))
-                .with_named_sub(
-                    IrepId::PropertyClass,
-                    Irep::just_string_id(property_class.as_str()),
-                )
+            let location_irep = self.with_location(l, mm);
+            location_irep.with_named_sub(IrepId::Comment, Irep::just_string_id(msg)).with_named_sub(
+                IrepId::PropertyClass,
+                Irep::just_string_id(property_class.as_str()),
+            )
         } else {
             self
         }
