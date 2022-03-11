@@ -99,7 +99,7 @@ impl KaniSession {
         if self.args.restrict_vtable() {
             flags.push("--restrict-vtable-fn-ptrs".into());
         }
-        if self.args.assertion_reach_checks {
+        if !self.args.no_assertion_reach_checks {
             flags.push("--assertion-reach-checks".into());
         }
 

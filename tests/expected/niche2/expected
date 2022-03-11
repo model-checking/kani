@@ -1,8 +1,8 @@
-SUCCESS\
+UNREACHABLE\
 assertion failed: false
 SUCCESS\
 assertion failed: x == 10
-SUCCESS\
+UNREACHABLE\
 assertion failed: false
-SUCCESS\
+UNREACHABLE\
 assertion failed: false

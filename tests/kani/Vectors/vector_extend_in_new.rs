@@ -4,6 +4,12 @@
 // Check that we can handle set len on drop for an implicit extend with
 // the vec![i; j] constructor.
 
+// Temporarily disabling assertion reachability checks because they trigger a
+// CBMC crash
+// https://github.com/diffblue/cbmc/issues/6691
+// https://github.com/model-checking/kani/issues/861
+// kani-flags: --no-assertion-reach-checks
+
 // There is an implicit loop, so we need an explicit unwind
 // cbmc-flags: --unwind 3 --unwinding-assertions
 

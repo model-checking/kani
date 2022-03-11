@@ -1,8 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// Disable undefined function checks because of a failure
 // https://github.com/model-checking/kani/issues/555
-// kani-flags: --no-undefined-function-checks
+// Also temporarily disabling assertion reachability checks because they trigger
+// a CBMC crash
+// https://github.com/diffblue/cbmc/issues/6691
+// https://github.com/model-checking/kani/issues/861
+// kani-flags: --no-undefined-function-checks --no-assertion-reach-checks
 
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]

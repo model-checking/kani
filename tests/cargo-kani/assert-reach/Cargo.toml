@@ -9,4 +9,4 @@ edition = "2021"
 foo = { path = "foo" }
 
 [package.metadata.kani]
-flags = {output-format = "regular", assertion-reach-checks = true}
+flags = {output-format = "regular"}
