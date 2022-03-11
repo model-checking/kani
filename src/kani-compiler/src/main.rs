@@ -38,6 +38,7 @@ use crate::session::init_session;
 use clap::ArgMatches;
 use kani_queries::{QueryDb, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
+use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -84,7 +85,8 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
 
 /// Main function. Configure arguments and run the compiler.
 fn main() -> Result<(), &'static str> {
-    let matches = parser::parser().get_matches();
+    let args = parser::command_arguments(&env::args().collect());
+    let matches = parser::parser().get_matches_from(args);
     init_session(&matches);
 
     // Configure queries.
@@ -194,25 +196,9 @@ fn sysroot_path(sysroot_arg: Option<&str>) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-mod parser_test {
+mod args_test {
     use super::*;
     use crate::parser;
-
-    #[test]
-    fn test_rustc_version() {
-        let args = vec!["kani-compiler", "-V"];
-        let matches = parser::parser().get_matches_from(args);
-        assert!(matches.is_present("rustc-version"));
-    }
-
-    #[test]
-    fn test_kani_flags() {
-        let args = vec!["kani-compiler", "--goto-c", "--kani-lib", "some/path"];
-        let matches = parser::parser().get_matches_from(args);
-        assert!(matches.is_present("goto-c"));
-        assert_eq!(matches.value_of("kani-lib"), Some("some/path"));
-    }
-
     #[cfg(unix)]
     #[test]
     #[should_panic]

@@ -149,7 +149,7 @@ pub fn parse_test_header(path: &Path) -> TestProps {
 /// Adds Kani and Litani directories to the current `PATH` environment variable.
 pub fn add_kani_and_litani_to_path() {
     let cwd = env::current_dir().unwrap();
-    let kani_dir = cwd.join("scripts");
+    let kani_dir = cwd.join("target/debug");
     let mut litani_dir = cwd.clone();
     litani_dir.extend(["tools", "litani"].iter());
     env::set_var(
@@ -161,7 +161,7 @@ pub fn add_kani_and_litani_to_path() {
 /// Does Kani catch syntax, type, and borrow errors (if any)?
 pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Check) { 1 } else { 0 };
-    let mut kani_rustc = Command::new("kani-rustc");
+    let mut kani_rustc = Command::new("kani-compiler");
     kani_rustc.args(&test_props.rustc_args).args(["-Z", "no-codegen"]).arg(&test_props.path);
 
     let mut phony_out = test_props.path.clone();
@@ -181,7 +181,7 @@ pub fn add_check_job(litani: &mut Litani, test_props: &TestProps) {
 /// Is Kani expected to codegen all the Rust features in the test?
 pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Codegen) { 1 } else { 0 };
-    let mut kani_rustc = Command::new("kani-rustc");
+    let mut kani_rustc = Command::new("kani-compiler");
     kani_rustc.args(&test_props.rustc_args).args(["--out-dir", "build/tmp"]).arg(&test_props.path);
 
     let mut phony_in = test_props.path.clone();

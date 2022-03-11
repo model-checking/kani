@@ -1,4 +1,4 @@
-kani-rustc --goto-c
+kani-compiler --goto-c
 symtab2gb
 goto-cc
 --function main
