@@ -4,7 +4,7 @@ SUCCESS\
 attempt to subtract with overflow
 FAILURE\
 assertion failed: a == 54
-SUCCESS\
+UNREACHABLE\
 assertion failed: a == 55
-SUCCESS\
+UNREACHABLE\
 assertion failed: a >= 55

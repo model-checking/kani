@@ -2,5 +2,5 @@ SUCCESS\
 assertion failed: x + 1 == y
 FAILURE\
 assertion failed: x == y
-SUCCESS\
+UNREACHABLE\
 assertion failed: x != y

@@ -1,2 +1,2 @@
-line 7 "This should fail and stop the execution": FAILURE
-line 8 "This should be unreachable": SUCCESS
+line 12 "This should fail and stop the execution": FAILURE
+line 13 "This should be unreachable": SUCCESS
