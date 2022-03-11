@@ -4,7 +4,7 @@ use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
-use cbmc::utils::{aggr_tag, BUG_REPORT_URL};
+use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
 use cbmc::NO_PRETTY_NAME;
 use cbmc::{btree_string_map, InternString, InternedString};
