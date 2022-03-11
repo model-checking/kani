@@ -10,7 +10,7 @@
 
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, PropertyClass, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
@@ -99,11 +99,17 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         let target = target.unwrap();
         let cond = fargs.remove(0).cast_to(Type::bool());
         //TODO: actually use the error message passed by the user.
+
+        // msg is the comment field that's set on source location
         let msg = "EXPECTED FAIL";
+
+        // property_class is used as a unique identifier for this assert
+        let property_class = PropertyClass::ExpectFail;
+
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
-                Stmt::assert(cond, msg, loc.clone()),
+                Stmt::assert_stmt(cond, property_class, msg, loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,

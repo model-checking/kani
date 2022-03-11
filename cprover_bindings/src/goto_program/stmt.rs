@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
-use crate::InternedString;
-use std::fmt::Debug;
+use crate::{InternString, InternedString};
+use std::{fmt::Debug, str::FromStr};
 use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -22,6 +22,37 @@ use tracing::debug;
 ///      would translate to `Stmt::while_loop(c, vec![stmt1, stmt2], loc)`
 /// Statements can also be created using the converters in the `Expr` module.
 ///
+#[derive(Copy, Debug, Clone)]
+pub enum PropertyClass {
+    ExpectFail,
+    UnsupportedStructs,
+    DefaultAssertion,
+}
+
+impl FromStr for PropertyClass {
+    type Err = &'static str;
+
+    fn from_str(input: &str) -> Result<PropertyClass, Self::Err> {
+        match input {
+            "expect_fail" => Ok(PropertyClass::ExpectFail),
+            "unsupported_struct" => Ok(PropertyClass::UnsupportedStructs),
+            "assertion" => Ok(PropertyClass::DefaultAssertion),
+            _ => Err("No such property class"),
+        }
+    }
+}
+
+impl PropertyClass {
+    pub fn as_str(&self) -> &str {
+        match self {
+            PropertyClass::ExpectFail => "expect_fail",
+            PropertyClass::UnsupportedStructs => "unsupported_struct",
+            PropertyClass::DefaultAssertion => "assertion",
+        }
+    }
+}
+
+///
 /// TODO:
 /// The CBMC irep resentation uses sharing to reduce the in-memory size of expressions.
 /// This is not currently implemented for these expressions, but would be possible given a factory.
@@ -39,6 +70,12 @@ pub enum StmtBody {
     Assign {
         lhs: Expr,
         rhs: Expr,
+    },
+    /// `assert(cond)`
+    Assert {
+        cond: Expr,
+        property_class: PropertyClass,
+        msg: InternedString,
     },
     /// `__CPROVER_assume(cond);`
     Assume {
@@ -182,6 +219,34 @@ impl Stmt {
             return Stmt::block(vec![assert_stmt, nondet_assign_stmt], loc);
         }
         stmt!(Assign { lhs, rhs }, loc)
+    }
+
+    /// `assert(cond);`
+    pub fn assert_stmt(
+        cond: Expr,
+        property_class: PropertyClass,
+        message: &str,
+        loc: Location,
+    ) -> Self {
+        assert!(cond.typ().is_bool());
+
+        let msg = message.into();
+
+        // Match enum of string
+        let property_location = if let Location::Loc { file, line, function, col, .. } = loc {
+            Location::property_location(
+                file,
+                function,
+                line,
+                col,
+                Some(message.into()),
+                Some(property_class.as_str().to_string().intern()),
+            )
+        } else {
+            loc
+        };
+
+        stmt!(Assert { cond, property_class, msg }, property_location)
     }
 
     /// `__CPROVER_assert(cond, msg);`
