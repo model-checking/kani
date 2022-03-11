@@ -6,7 +6,7 @@
 //!
 //! Like miri, clippy, and other tools developed on the top of rustc, we rely on the
 //! rustc_private feature and a specific version of rustc.
-
+#![deny(warnings)]
 #![feature(bool_to_option)]
 #![feature(crate_visibility_modifier)]
 #![feature(extern_types)]
@@ -16,20 +16,15 @@
 #![feature(box_patterns)]
 #![feature(once_cell)]
 #![feature(rustc_private)]
-extern crate rustc_arena;
 extern crate rustc_ast;
-extern crate rustc_attr;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_errors;
-extern crate rustc_fs_util;
 extern crate rustc_hir;
 extern crate rustc_index;
-extern crate rustc_llvm;
 extern crate rustc_metadata;
 extern crate rustc_middle;
-extern crate rustc_serialize;
 extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;

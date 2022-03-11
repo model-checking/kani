@@ -76,11 +76,6 @@ impl CurrentFnCtx<'tcx> {
 
 /// Getters
 impl CurrentFnCtx<'tcx> {
-    /// The basic block we are currently compiling
-    pub fn current_bb(&self) -> BasicBlock {
-        self.current_bb.unwrap()
-    }
-
     /// The function we are currently compiling
     pub fn instance(&self) -> Instance<'tcx> {
         self.instance
