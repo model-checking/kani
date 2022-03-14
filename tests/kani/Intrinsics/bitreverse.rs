@@ -4,10 +4,6 @@
 // Check that we get the expected results for the `bitreverse` intrinsic
 // https://doc.rust-lang.org/std/intrinsics/fn.bitreverse.html
 
-// Note: Support for `__builtin_bitreverse` in CBMC is being added in
-// https://github.com/diffblue/cbmc/pull/6581
-// Tracking issue: https://github.com/model-checking/kani/issues/778
-
 const BITS_PER_BYTE: usize = 8;
 
 macro_rules! test_bitreverse_intrinsic {
@@ -16,19 +12,15 @@ macro_rules! test_bitreverse_intrinsic {
             return x & (1 << n) != 0;
         }
 
-        fn $check_name(a: $ty, b: $ty) -> bool {
-            let len: usize = (std::mem::size_of::<$ty>() * BITS_PER_BYTE) - 1;
-            for n in 0..len {
-                if $get_bit_name(a, n) != $get_bit_name(b, len - n) {
-                    return false;
-                }
-            }
-            return true;
+        fn $check_name(a: $ty, b: $ty) {
+            let len: usize = (std::mem::size_of::<$ty>() * BITS_PER_BYTE);
+            let n: usize = kani::any();
+            kani::assume(n < len);
+            assert!($get_bit_name(a, n) == $get_bit_name(b, (len - 1) - n));
         }
 
         let x: $ty = kani::any();
-        let res = $check_name(x, x.reverse_bits());
-        assert!(res);
+        $check_name(x, x.reverse_bits());
     };
 }
 
@@ -38,10 +30,11 @@ fn main() {
     test_bitreverse_intrinsic!(u16, check_reverse_u16, get_bit_at_u16);
     test_bitreverse_intrinsic!(u32, check_reverse_u32, get_bit_at_u32);
     test_bitreverse_intrinsic!(u64, check_reverse_u64, get_bit_at_u64);
+    test_bitreverse_intrinsic!(u128, check_reverse_u128, get_bit_at_u128);
     test_bitreverse_intrinsic!(usize, check_reverse_usize, get_bit_at_usize);
-    test_bitreverse_intrinsic!(i8, check_reverse_i8, get_bit_at_i8);
-    test_bitreverse_intrinsic!(i16, check_reverse_i16, get_bit_at_i16);
-    test_bitreverse_intrinsic!(i32, check_reverse_i32, get_bit_at_i32);
-    test_bitreverse_intrinsic!(i64, check_reverse_i64, get_bit_at_i64);
-    test_bitreverse_intrinsic!(isize, check_reverse_isize, get_bit_at_isize);
+    // `reverse_bits` is also defined for signed integer types by casting the
+    // number into the corresponding unsigned type and then casting the result
+    // into the original signed type. This causes overflows unless we restrict
+    // their values considerably, making the signed versions not very
+    // interesting to test here.
 }
