@@ -306,7 +306,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-impl LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
     type LayoutOfResult = TyAndLayout<'tcx>;
 
     #[inline]

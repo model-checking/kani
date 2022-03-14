@@ -1271,13 +1271,13 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// The mir type is a mir pointer type.
-pub fn is_pointer(mir_type: Ty<'tcx>) -> bool {
+pub fn is_pointer(mir_type: Ty) -> bool {
     return matches!(mir_type.kind(), ty::Ref(..) | ty::RawPtr(..));
 }
 
 /// Extract from a mir pointer type the mir type of the value to which the
 /// pointer points.
-pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
+pub fn pointee_type(pointer_type: Ty) -> Option<Ty> {
     match pointer_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
         ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
@@ -1286,7 +1286,7 @@ pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
 }
 
 /// Is the MIR type using a C representation (marked with #[repr(C)] at the source level)?
-pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
+pub fn is_repr_c_adt(mir_type: Ty) -> bool {
     match mir_type.kind() {
         ty::Adt(def, _) => def.repr.c(),
         _ => false,
@@ -1297,7 +1297,7 @@ pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
 ///
 /// TODO: We should normalize the type projection here. For more details, see
 /// https://github.com/model-checking/kani/issues/752
-fn normalize_type(ty: Ty<'tcx>) -> Ty<'tcx> {
+fn normalize_type(ty: Ty) -> Ty {
     ty
 }
 
