@@ -130,7 +130,7 @@ impl<'tcx> GotocCtx<'tcx> {
 /// The full crate name should use the Codegen Unit builder to include full name resolution,
 /// for example, the versioning information if a build requires two different versions
 /// of the same crate.
-pub fn full_crate_name(tcx: TyCtxt<'tcx>) -> String {
+pub fn full_crate_name(tcx: TyCtxt) -> String {
     format!(
         "{}::{}",
         CodegenUnitNameBuilder::new(tcx).build_cgu_name(
@@ -146,11 +146,7 @@ pub fn full_crate_name(tcx: TyCtxt<'tcx>) -> String {
 
 /// Helper function to determine if the function name starts with `expected`
 // TODO: rationalize how we match the hooks https://github.com/model-checking/kani/issues/130
-pub fn instance_name_starts_with(
-    tcx: TyCtxt<'tcx>,
-    instance: Instance<'tcx>,
-    expected: &str,
-) -> bool {
+pub fn instance_name_starts_with(tcx: TyCtxt, instance: Instance, expected: &str) -> bool {
     let def_path = tcx.def_path(instance.def.def_id());
     if let Some(data) = def_path.data.last() {
         match data.data.name() {
