@@ -5,8 +5,8 @@
 set -eu
 
 UBUNTU_VERSION=$(lsb_release -rs)
-FILE="ubuntu-${UBUNTU_VERSION}-cbmc-5.50.0-Linux.deb"
-URL="https://github.com/diffblue/cbmc/releases/download/cbmc-5.50.0/$FILE"
+FILE="ubuntu-${UBUNTU_VERSION}-cbmc-5.52.0-Linux.deb"
+URL="https://github.com/diffblue/cbmc/releases/download/cbmc-5.52.0/$FILE"
 
 set -x
 
