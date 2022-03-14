@@ -1,7 +1,7 @@
 use rustc_ast as ast;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{ColorConfig, ErrorReported};
+use rustc_errors::{ColorConfig, ErrorGuaranteed};
 use rustc_hir as hir;
 use rustc_hir::intravisit;
 use rustc_hir::HirId;
@@ -346,11 +346,7 @@ pub fn make_test(
 
             let mut parser = match maybe_new_parser_from_source_str(&sess, filename, source) {
                 Ok(p) => p,
-                Err(errs) => {
-                    for mut err in errs {
-                        err.cancel();
-                    }
-
+                Err(_errs) => {
                     return (found_main, found_extern_crate, found_macro);
                 }
             };
@@ -390,7 +386,7 @@ pub fn make_test(
                         }
                     }
                     Ok(None) => break,
-                    Err(mut e) => {
+                    Err(e) => {
                         e.cancel();
                         break;
                     }
@@ -412,7 +408,7 @@ pub fn make_test(
     });
     let (already_has_main, already_has_extern_crate, found_macro) = match result {
         Ok(result) => result,
-        Err(ErrorReported) => {
+        Err(ErrorGuaranteed) => {
             // If the parser panicked due to a fatal error, pass the test code through unchanged.
             // The error will be reported during compilation.
             return (s.to_owned(), 0, false);
@@ -719,6 +715,7 @@ impl Tester for Collector {
                     Ignore::None => false,
                     Ignore::Some(ref ignores) => ignores.iter().any(|s| target_str.contains(s)),
                 },
+                ignore_message: None,
                 // compiler failures are test failures
                 should_panic: test::ShouldPanic::No,
                 compile_fail: config.compile_fail,
@@ -932,7 +929,7 @@ impl<'a, 'hir, 'tcx> intravisit::Visitor<'hir> for HirCollector<'a, 'hir, 'tcx> 
 
     fn visit_item(&mut self, item: &'hir hir::Item<'_>) {
         let name = match &item.kind {
-            hir::ItemKind::Macro(ref macro_def) => {
+            hir::ItemKind::Macro(ref macro_def, _) => {
                 // FIXME(#88038): Non exported macros have historically not been tested,
                 // but we really ought to start testing them.
                 let def_id = item.def_id.to_def_id();
