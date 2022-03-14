@@ -1,6 +1,10 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// kani-flags: --no-restrict-vtable
+// Tracking issue for the need for this flag:
+// https://github.com/model-checking/kani/issues/802
+
 use std::any::Any;
 
 // Cast one dynamic trait object type to another, which is legal because Send

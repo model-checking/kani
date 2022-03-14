@@ -1,2 +1,3 @@
+UNDETERMINED
 [Kani] info: Verification output shows one or more unwinding failures.
 [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.

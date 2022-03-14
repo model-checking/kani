@@ -1,11 +1,22 @@
-line 25 assertion failed: foo().x == 12: SUCCESS
-line 27 assertion failed: foo().y == 12: FAILURE
-line 30 assertion failed: foo().x == 14: FAILURE
-line 32 assertion failed: foo().y == 14: SUCCESS
-line 35 assertion failed: foo().x == 1: SUCCESS
-line 37 assertion failed: foo().y == 1: FAILURE
-line 40 assertion failed: foo().x == 2: FAILURE
-line 42 assertion failed: foo().y == 2: SUCCESS
-line 45 assertion failed: foo().x == 1 << 62: SUCCESS
-line 47 assertion failed: foo().x == 1 << 31: FAILURE
-line 49 assertion failed: foo().y == 1 << 31: SUCCESS
+SUCCESS\
+assertion failed: foo().x == 12
+FAILURE\
+assertion failed: foo().y == 12
+FAILURE\
+assertion failed: foo().x == 14
+SUCCESS\
+assertion failed: foo().y == 14
+SUCCESS\
+assertion failed: foo().x == 1
+FAILURE\
+assertion failed: foo().y == 1
+FAILURE\
+assertion failed: foo().x == 2
+SUCCESS\
+assertion failed: foo().y == 2
+SUCCESS\
+assertion failed: foo().x == 1 << 62
+FAILURE\
+assertion failed: foo().x == 1 << 31
+SUCCESS\
+assertion failed: foo().y == 1 << 31

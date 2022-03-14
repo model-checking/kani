@@ -1,4 +1,4 @@
-# Kani result types
+# Kani verification results
 
 The result of a check in Kani can be one of the following:
 
@@ -35,7 +35,7 @@ Check 2: failure_example.assertion.2
          - Description: "assertion failed: arr.len() != 3"
 ```
 
-3. `UNREACHABLE` (requires `--assertion-reach-checks`): This indicates that the check is unreachable. This occurs when
+3. `UNREACHABLE`: This indicates that the check is unreachable. This occurs when
 there is no possible execution trace that can reach the check's line of code.
 This may be because the function that contains the check is unused, or that the
 harness does not trigger the condition under which the check is invoked. Kani
@@ -53,8 +53,7 @@ Example:
 {{#include getting-started/result-types/src/main.rs:unreachable_example}}
 ```
 
-The output from Kani when run with `--assertion-reach-checks` indicates that
-the assertion is unreachable:
+The output from Kani indicates that the assertion is unreachable:
 ```
 Check 2: unreachable_example.assertion.2
          - Status: UNREACHABLE

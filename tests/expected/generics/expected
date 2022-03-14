@@ -1,2 +1,4 @@
-line 23 assertion failed: x == y.data: SUCCESS
-line 24 assertion failed: z == w.data: SUCCESS
+SUCCESS\
+assertion failed: x == y.data
+SUCCESS\
+assertion failed: z == w.data

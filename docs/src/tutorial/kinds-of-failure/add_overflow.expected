@@ -1,1 +1,2 @@
-[overflow::simple_addition.assertion.1] line 7 attempt to compute `move _3 + move _4`, which would overflow: FAILURE
+FAILURE\
+attempt to add with overflow

@@ -1,4 +1,8 @@
-line 25 assertion failed: false: SUCCESS
-line 29 assertion failed: x == 10: SUCCESS
-line 30 assertion failed: false: SUCCESS
-line 35 assertion failed: false: SUCCESS
+UNREACHABLE\
+assertion failed: false
+SUCCESS\
+assertion failed: x == 10
+UNREACHABLE\
+assertion failed: false
+UNREACHABLE\
+assertion failed: false

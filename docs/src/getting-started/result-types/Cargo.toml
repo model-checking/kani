@@ -8,4 +8,4 @@ edition = "2018"
 [workspace]
 
 [package.metadata.kani]
-flags = {output-format = "regular", assertion-reach-checks = true}
+flags = {output-format = "regular"}

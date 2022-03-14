@@ -109,6 +109,10 @@ impl KaniSession {
             args.push("--nan-check".into());
             args.push("--pointer-overflow-check".into());
             args.push("--undefined-shift-check".into());
+            // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
+            // --unsigned-overflow-check
+            // --signed-overflow-check
+            // So these options are deliberately skipped to avoid erroneously re-checking operations.
         }
         if self.args.checks.unwinding_on() {
             args.push("--unwinding-assertions".into());

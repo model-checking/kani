@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // This test checks for the case of a valid failure despite the existence of a
 // reachable unsupported construct
-// kani-flags: --output-format regular --no-default-checks
 
 #![feature(asm)]
 fn unsupp(x: &mut u8) {

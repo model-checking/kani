@@ -1,0 +1,12 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "simple-unwind-annotation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[kani.flags]
+function = "harness"

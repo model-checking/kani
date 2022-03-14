@@ -62,20 +62,12 @@ impl KaniSession {
             // mock an answer
             return Ok(CargoOutputs {
                 outdir: outdir.clone(),
-                symtabs: vec![target_dir.join(build_target).join("debug/deps/dry-run.symtab.json")],
+                symtabs: vec![outdir.join("dry-run.symtab.json")],
                 restrictions: self.args.restrict_vtable().then(|| outdir),
             });
         }
 
-        let build_glob = target_dir.join(build_target).join("debug/deps/*.symtab.json");
-        // There isn't a good way to glob with non-UTF-8 paths.
-        // https://github.com/rust-lang-nursery/glob/issues/78
-        let build_glob = build_glob.to_str().context("Non-UTF-8 path enountered")?;
-        let results = glob::glob(build_glob)?;
-
-        // the logic to turn "Iter<Result<T, E>>" into "Result<Vec<T>, E>" doesn't play well
-        // with anyhow, so a type annotation is required
-        let symtabs: core::result::Result<Vec<PathBuf>, glob::GlobError> = results.collect();
+        let symtabs = glob(&outdir.join("*.symtab.json"));
 
         Ok(CargoOutputs {
             outdir: outdir.clone(),
@@ -83,4 +75,13 @@ impl KaniSession {
             restrictions: self.args.restrict_vtable().then(|| outdir),
         })
     }
+}
+
+/// Given a `path` with glob characters in it (e.g. `*.json`), return a vector of matching files
+fn glob(path: &PathBuf) -> Result<Vec<PathBuf>> {
+    let results = glob::glob(path.to_str().context("Non-UTF-8 path enountered")?)?;
+    // the logic to turn "Iter<Result<T, E>>" into "Result<Vec<T>, E>" doesn't play well
+    // with anyhow, so a type annotation is required
+    let v: core::result::Result<Vec<PathBuf>, glob::GlobError> = results.collect();
+    Ok(v?)
 }

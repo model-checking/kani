@@ -71,10 +71,10 @@ impl KaniSession {
         // kani-compiler workaround: part 2/2: change directory for the subcommand
         cmd.current_dir(&outdir);
 
-        if self.args.debug && !self.args.quiet {
-            self.run_terminal(cmd)?;
-        } else {
+        if self.args.quiet {
             self.run_suppress(cmd)?;
+        } else {
+            self.run_terminal(cmd)?;
         }
 
         Ok(SingleOutputs {
@@ -95,11 +95,16 @@ impl KaniSession {
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
+        } else if self.args.verbose {
+            flags.push("--log-level=info".into());
+        } else {
+            flags.push("--log-level=warn".into());
         }
+
         if self.args.restrict_vtable() {
             flags.push("--restrict-vtable-fn-ptrs".into());
         }
-        if self.args.assertion_reach_checks {
+        if !self.args.no_assertion_reach_checks {
             flags.push("--assertion-reach-checks".into());
         }
 

@@ -4,6 +4,12 @@
 // This test checks the size and align fields for 3-deep nested trait pointers. The
 // outter 2 dynamic trait objects have fat pointers as their backing data.
 
+// Temporarily disabling assertion reachability checks because they trigger a
+// CBMC crash
+// https://github.com/diffblue/cbmc/issues/6691
+// https://github.com/model-checking/kani/issues/861
+// kani-flags: --no-assertion-reach-checks
+
 // cbmc-flags: --unwind 2 --unwinding-assertions
 
 #![feature(core_intrinsics)]
