@@ -23,8 +23,6 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://github.com/model-checking/kani/issues/202
             "fmt::ArgumentV1::<'a>::as_usize" => true,
             // https://github.com/model-checking/kani/issues/204
-            name if name.ends_with("__getit") => true,
-            // https://github.com/model-checking/kani/issues/281
             name if name.starts_with("bridge::client") => true,
             // https://github.com/model-checking/kani/issues/282
             "bridge::closure::Closure::<'a, A, R>::call" => true,
