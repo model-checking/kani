@@ -4,7 +4,9 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
-use kani_metadata::{InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults};
+use kani_metadata::{
+    HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
+};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -118,19 +120,37 @@ impl KaniSession {
     }
 
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
-    pub fn determine_target_function(&self, metadata: &KaniMetadata) -> Result<String> {
+    pub fn determine_targets(&self, metadata: &KaniMetadata) -> Result<Vec<HarnessMetadata>> {
         if let Some(name) = &self.args.function {
-            // --function is untranslated
-            return Ok(name.to_string());
+            // --function is untranslated, create a mock harness
+            return Ok(vec![mock_proof_harness(name)]);
         }
         if let Some(name) = &self.args.harness {
             // Linear search, since this is only ever called once
             if let Some(harness) = metadata.proof_harnesses.iter().find(|x| x.pretty_name == *name)
             {
-                return Ok(harness.mangled_name.to_string());
+                return Ok(vec![harness.clone()]);
             }
             bail!("A proof harness named {} was not found", name);
         }
-        Ok("main".to_string()) // TODO
+        if metadata.proof_harnesses.is_empty() {
+            // This is not the desirable behavior we deliver to our users,
+            // but this is a hack to get kani regression tests back to working quickly.
+            // TODO: This should be removed in favor of a good error message suggesting that proof harnesses be written.
+            // Probably even with a link to Kani documentation!
+            Ok(vec![mock_proof_harness("main")])
+        } else {
+            Ok(metadata.proof_harnesses.clone())
+        }
+    }
+}
+
+fn mock_proof_harness(name: &str) -> HarnessMetadata {
+    HarnessMetadata {
+        pretty_name: name.into(),
+        mangled_name: name.into(),
+        original_file: "<unknown>".into(),
+        original_line: "<unknown>".into(),
+        unwind_value: None,
     }
 }

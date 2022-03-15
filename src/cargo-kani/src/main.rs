@@ -7,6 +7,7 @@ use call_cbmc::VerificationStatus;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use util::append_path;
 
 mod args;
 mod args_toml;
@@ -51,20 +52,31 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
     }
 
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
-    let function = ctx.determine_target_function(&metadata)?;
+    let harnesses = ctx.determine_targets(&metadata)?;
 
-    let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &function));
-    ctx.run_goto_instrument(&linked_obj, &specialized_obj, &function)?;
+    for harness in &harnesses {
+        let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &harness.pretty_name));
+        ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-    if ctx.args.visualize {
-        ctx.run_visualize(&specialized_obj, "target/report")?;
-    } else {
-        let result = ctx.run_cbmc(&specialized_obj)?;
-        if result == VerificationStatus::Failure {
-            // Failure exit code without additional error message
-            drop(ctx);
-            std::process::exit(1);
+        if !ctx.args.quiet {
+            println!("Checking harness {}...", harness.pretty_name);
         }
+
+        if ctx.args.visualize {
+            ctx.run_visualize(&specialized_obj, "target/report")?;
+        } else {
+            let result = ctx.run_cbmc(&specialized_obj)?;
+            if result == VerificationStatus::Failure {
+                // Failure exit code without additional error message
+                drop(ctx);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if harnesses.len() > 1 && !ctx.args.quiet {
+        // Right now we're aborting on first failing harness, so if we get here...
+        println!("All harnesses successfully verified.");
     }
 
     Ok(())
@@ -89,19 +101,35 @@ fn standalone_main() -> Result<()> {
     }
 
     let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
-    let function = ctx.determine_target_function(&metadata)?;
+    let harnesses = ctx.determine_targets(&metadata)?;
 
-    ctx.run_goto_instrument(&linked_obj, &linked_obj, &function)?;
-
-    if ctx.args.visualize {
-        ctx.run_visualize(&linked_obj, "report")?;
-    } else {
-        let result = ctx.run_cbmc(&linked_obj)?;
-        if result == VerificationStatus::Failure {
-            // Failure exit code without additional error message
-            drop(ctx);
-            std::process::exit(1);
+    for harness in &harnesses {
+        let specialized_obj = append_path(&linked_obj, &format!("-for-{}", harness.pretty_name));
+        {
+            let mut temps = ctx.temporaries.borrow_mut();
+            temps.push(specialized_obj.to_owned());
         }
+        ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
+
+        if !ctx.args.quiet {
+            println!("Checking harness {}...", harness.pretty_name);
+        }
+
+        if ctx.args.visualize {
+            ctx.run_visualize(&specialized_obj, "report")?;
+        } else {
+            let result = ctx.run_cbmc(&specialized_obj)?;
+            if result == VerificationStatus::Failure {
+                // Failure exit code without additional error message
+                drop(ctx);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if harnesses.len() > 1 && !ctx.args.quiet {
+        // Right now we're aborting on first failing harness, so if we get here...
+        println!("All harnesses successfully verified.");
     }
 
     Ok(())
