@@ -3,11 +3,7 @@
 
 // Disable undefined function checks because of a failure
 // https://github.com/model-checking/kani/issues/555
-// Also temporarily disabling assertion reachability checks because they trigger
-// a CBMC crash
-// https://github.com/diffblue/cbmc/issues/6691
-// https://github.com/model-checking/kani/issues/861
-// kani-flags: --no-undefined-function-checks --no-assertion-reach-checks
+// kani-flags: --no-undefined-function-checks
 
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
