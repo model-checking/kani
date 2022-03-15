@@ -4,12 +4,6 @@
 // Check that we can pass a dyn FnMut pointer to a stand alone
 // function definition.
 
-// Temporarily disabling assertion reachability checks because they trigger a
-// CBMC crash
-// https://github.com/diffblue/cbmc/issues/6691
-// https://github.com/model-checking/kani/issues/861
-// kani-flags: --no-assertion-reach-checks
-
 fn takes_dyn_fun(mut fun: Box<dyn FnMut(&mut i32)>, x_ptr: &mut i32) {
     fun(x_ptr)
 }
