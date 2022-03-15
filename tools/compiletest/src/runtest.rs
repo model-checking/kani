@@ -178,10 +178,10 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs `kani-rustc` on the test file specified by `self.testpaths.file`. An
+    /// Runs `kani-compiler` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the check result is not expected.
     fn check(&self) {
-        let mut rustc = Command::new("kani-rustc");
+        let mut rustc = Command::new("kani-compiler");
         rustc
             .args(["--goto-c"])
             .args(self.props.compile_flags.clone())
@@ -200,11 +200,11 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Runs `kani-rustc` on the test file specified by `self.testpaths.file`. An
+    /// Runs `kani-compiler` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the codegen result is not
     /// expected.
     fn codegen(&self) {
-        let mut rustc = Command::new("kani-rustc");
+        let mut rustc = Command::new("kani-compiler");
         rustc
             .args(["--goto-c"])
             .args(self.props.compile_flags.clone())
