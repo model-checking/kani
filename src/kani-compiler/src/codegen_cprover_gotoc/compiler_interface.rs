@@ -12,7 +12,7 @@ use kani_queries::{QueryDb, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
-use rustc_errors::ErrorReported;
+use rustc_errors::ErrorGuaranteed;
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
@@ -167,7 +167,7 @@ impl CodegenBackend for GotocCodegenBackend {
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
         _filenames: &OutputFilenames,
-    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorReported> {
+    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorGuaranteed> {
         Ok(*ongoing_codegen
             .downcast::<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>)>()
             .unwrap())
@@ -178,7 +178,7 @@ impl CodegenBackend for GotocCodegenBackend {
         _sess: &Session,
         _codegen_results: CodegenResults,
         _outputs: &OutputFilenames,
-    ) -> Result<(), ErrorReported> {
+    ) -> Result<(), ErrorGuaranteed> {
         Ok(())
     }
 }
