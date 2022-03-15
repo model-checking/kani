@@ -138,12 +138,12 @@ impl<'tcx> GotocCtx<'tcx> {
         match v {
             ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
             ConstValue::Slice { data, start, end } => {
-                self.codegen_slice_value(v, lit_ty, span, &data, start, end)
+                self.codegen_slice_value(v, lit_ty, span, &data.inner(), start, end)
             }
             ConstValue::ByRef { alloc, offset } => {
                 debug!("ConstValue by ref {:?} {:?}", alloc, offset);
-                let mem_var =
-                    self.codegen_allocation_auto_imm_name(alloc, |tcx| tcx.next_global_name());
+                let mem_var = self
+                    .codegen_allocation_auto_imm_name(alloc.inner(), |tcx| tcx.next_global_name());
                 mem_var
                     .cast_to(Type::unsigned_int(8).to_pointer())
                     .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
@@ -389,7 +389,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // crates do not conflict. The name alone is insufficient becase Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
-                self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))
+                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));

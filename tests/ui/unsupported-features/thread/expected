@@ -1,0 +1,1 @@
+Failed Checks: Rvalue::ThreadLocalRef is not currently supported by Kani.
