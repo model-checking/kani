@@ -317,10 +317,12 @@ impl<'test> TestCx<'test> {
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
         cargo
             .arg("kani")
-            .args(["--function", function_name])
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
             .current_dir(&parent_dir);
+        if "expected" != self.testpaths.file.file_name().unwrap() {
+            cargo.args(["--function", function_name]);
+        }
         self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
