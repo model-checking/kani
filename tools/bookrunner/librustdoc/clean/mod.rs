@@ -191,9 +191,9 @@ impl Clean<Lifetime> for hir::Lifetime {
     fn clean(&self, cx: &mut DocContext<'_>) -> Lifetime {
         let def = cx.tcx.named_region(self.hir_id);
         if let Some(
-            rl::Region::EarlyBound(_, node_id, _)
-            | rl::Region::LateBound(_, _, node_id, _)
-            | rl::Region::Free(_, node_id),
+            rl::Region::EarlyBound(_, node_id)
+            | rl::Region::LateBound(_, _, node_id)
+            | rl::Region::Free(node_id, _),
         ) = def
         {
             if let Some(lt) = cx.substs.get(&node_id).and_then(|p| p.as_lt()).cloned() {
@@ -279,6 +279,7 @@ impl Clean<WherePredicate> for hir::WherePredicate<'_> {
     }
 }
 
+#[allow(unreachable_patterns)]
 impl<'a> Clean<Option<WherePredicate>> for ty::Predicate<'a> {
     fn clean(&self, cx: &mut DocContext<'_>) -> Option<WherePredicate> {
         let bound_predicate = self.kind();
@@ -1850,7 +1851,7 @@ fn clean_maybe_renamed_item(
             ItemKind::Fn(ref sig, ref generics, body_id) => {
                 clean_fn_or_proc_macro(item, sig, generics, body_id, &mut name, cx)
             }
-            ItemKind::Macro(ref macro_def) => {
+            ItemKind::Macro(ref macro_def, _) => {
                 let ty_vis = cx.tcx.visibility(def_id).clean(cx);
                 MacroItem(Macro {
                     source: display_macro_source(cx, name, macro_def, def_id, ty_vis),
