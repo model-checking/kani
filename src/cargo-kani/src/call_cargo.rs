@@ -52,7 +52,7 @@ impl KaniSession {
 
         let mut cmd = Command::new("cargo");
         cmd.args(args)
-            .env("RUSTC", &self.kani_rustc)
+            .env("RUSTC", &self.kani_compiler)
             .env("RUSTFLAGS", "--kani-flags")
             .env("KANIFLAGS", flag_env);
 
