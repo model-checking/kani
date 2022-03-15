@@ -185,7 +185,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
 
     Config {
-        kani_dir_path: opt_path(matches, "kani-dir-path", &["scripts"]),
+        kani_dir_path: opt_path(matches, "kani-dir-path", &["target/debug"]),
         src_base,
         build_base: opt_path(matches, "build-base", &["build", "tests", suite.as_str()]),
         mode,
