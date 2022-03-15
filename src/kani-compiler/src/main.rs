@@ -10,7 +10,6 @@
 #![feature(bool_to_option)]
 #![feature(crate_visibility_modifier)]
 #![feature(extern_types)]
-#![feature(in_band_lifetimes)]
 #![feature(nll)]
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
