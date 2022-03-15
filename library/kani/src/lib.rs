@@ -109,7 +109,7 @@ pub fn nondet<T: Arbitrary>() -> T {
 /// Function used in tests for cases where the condition is not always true.
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniExpectFail"]
-pub fn expect_fail(_cond: bool, _message: &str) {}
+pub fn expect_fail(_cond: bool, _message: &'static str) {}
 
 /// Kani proc macros must be in a separate crate
 pub use kani_macros::*;
