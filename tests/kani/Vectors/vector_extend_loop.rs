@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// https://github.com/model-checking/kani/issues/184
-
 // kani-flags: --unwind 3
 
 fn main() {
