@@ -18,6 +18,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
+mod metadata;
 mod session;
 mod util;
 
@@ -49,8 +50,11 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
         ctx.apply_vtable_restrictions(&linked_obj, &restrictions)?;
     }
 
-    let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &ctx.args.function));
-    ctx.run_goto_instrument(&linked_obj, &specialized_obj, &ctx.args.function)?;
+    let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
+    let function = ctx.determine_target_function(&metadata)?;
+
+    let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &function));
+    ctx.run_goto_instrument(&linked_obj, &specialized_obj, &function)?;
 
     if ctx.args.visualize {
         ctx.run_visualize(&specialized_obj, "target/report")?;
@@ -83,7 +87,11 @@ fn standalone_main() -> Result<()> {
     if let Some(restriction) = outputs.restrictions {
         ctx.apply_vtable_restrictions(&linked_obj, &restriction)?;
     }
-    ctx.run_goto_instrument(&linked_obj, &linked_obj, &ctx.args.function)?;
+
+    let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
+    let function = ctx.determine_target_function(&metadata)?;
+
+    ctx.run_goto_instrument(&linked_obj, &linked_obj, &function)?;
 
     if ctx.args.visualize {
         ctx.run_visualize(&linked_obj, "report")?;

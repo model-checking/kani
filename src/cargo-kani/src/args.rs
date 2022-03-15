@@ -72,9 +72,12 @@ pub struct KaniArgs {
     #[structopt(flatten)]
     pub checks: CheckArgs,
 
-    /// Entry point for verification
-    #[structopt(long, default_value = "main")]
-    pub function: String,
+    /// Entry point for verification (symbol name)
+    #[structopt(long, hidden = true)]
+    pub function: Option<String>,
+    /// Entry point for verification (proof harness)
+    #[structopt(long, conflicts_with = "function", conflicts_with = "dry-run")]
+    pub harness: Option<String>,
     /// Link external C files referenced by Rust code
     #[structopt(long, parse(from_os_str))]
     pub c_lib: Vec<PathBuf>,
@@ -315,5 +318,14 @@ mod tests {
         for t in AbstractionType::variants() {
             assert_eq!(t, format!("{}", AbstractionType::from_str(t).unwrap()));
         }
+    }
+
+    #[test]
+    fn check_dry_run_harness_conflicts() {
+        // harness needs metadata which we don't have with dry-run
+        let args = vec!["kani", "file.rs", "--dry-run", "--harness", "foo"];
+        let app = StandaloneArgs::clap();
+        let err = app.get_matches_from_safe(args).unwrap_err();
+        assert!(err.kind == ErrorKind::ArgumentConflict);
     }
 }

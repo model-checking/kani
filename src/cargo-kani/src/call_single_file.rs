@@ -18,6 +18,8 @@ pub struct SingleOutputs {
     pub symtab: PathBuf,
     /// The vtable restrictions files, if any.
     pub restrictions: Option<PathBuf>,
+    /// The kani-metadata.json file written by kani-compiler.
+    pub metadata: PathBuf,
 }
 
 impl KaniSession {
@@ -34,7 +36,7 @@ impl KaniSession {
             let mut temps = self.temporaries.borrow_mut();
             temps.push(output_filename.clone());
             temps.push(typemap_filename);
-            temps.push(metadata_filename);
+            temps.push(metadata_filename.clone());
             if self.args.restrict_vtable() {
                 temps.push(restrictions_filename.clone());
             }
@@ -55,7 +57,9 @@ impl KaniSession {
                 args.push(t);
             }
         } else {
-            if self.args.function != "main" {
+            // TODO: This is a slight hack, since this function isn't really supposed to know or
+            // care about what function is being verified.
+            if self.args.function.is_some() && self.args.function != Some("main".into()) {
                 // Unless entry function for proof harness is main, compile code as lib.
                 // This ensures that rustc won't prune functions that are not reachable
                 // from main as well as enable compilation of crates that don't have a main
@@ -80,6 +84,7 @@ impl KaniSession {
         Ok(SingleOutputs {
             outdir,
             symtab: output_filename,
+            metadata: metadata_filename,
             restrictions: if self.args.restrict_vtable() {
                 Some(restrictions_filename)
             } else {
