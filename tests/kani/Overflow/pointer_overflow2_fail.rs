@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-verify-fail
-// This should fail, but doesn't due to https://github.com/diffblue/cbmc/issues/6631
 
 #[kani::proof]
 fn main() {
