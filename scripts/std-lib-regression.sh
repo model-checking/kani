@@ -46,7 +46,7 @@ echo "Starting cargo build with Kani"
 export RUSTC_LOG=error
 export KANIFLAGS="--goto-c"
 export RUSTFLAGS="--kani-flags"
-export RUSTC="${SCRIPT_DIR}/kani-rustc"
+export RUSTC="$KANI_DIR/target/debug/kani-compiler"
 $WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
 
 echo

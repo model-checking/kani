@@ -61,7 +61,7 @@ fn output_of_instance_is_never<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>
     }
 }
 
-fn matches_function(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, attr_name: &str) -> bool {
+fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
     let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
     if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
         if instance.def.def_id() == *attr_id {

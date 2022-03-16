@@ -190,11 +190,18 @@ pub fn make_test_description<R: Read>(
 ) -> test::TestDesc {
     let mut ignore = false;
     let mut should_fail = false;
+    let mut ignore_message = None;
 
     if config.mode == Mode::Kani || config.mode == Mode::Stub {
         // If the path to the test contains "fixme" or "ignore", skip it.
         let file_path = path.to_str().unwrap();
-        ignore |= file_path.contains("fixme") || file_path.contains("ignore");
+        (ignore, ignore_message) = if file_path.contains("fixme") {
+            (true, Some("fixme test"))
+        } else if file_path.contains("ignore") {
+            (true, Some("ignore test"))
+        } else {
+            (false, None)
+        };
     }
 
     // The `KaniFixme` mode runs tests that are ignored in the `kani` suite
@@ -208,7 +215,11 @@ pub fn make_test_description<R: Read>(
 
         // If the base name does NOT contain "fixme" or "ignore", we skip it.
         // All "fixme" tests are expected to fail
-        ignore |= !(base_name.contains("fixme") || base_name.contains("ignore"));
+        (ignore, ignore_message) = if base_name.contains("fixme") || base_name.contains("ignore") {
+            (false, None)
+        } else {
+            (true, Some("regular test"))
+        };
         should_fail = true;
     }
 
@@ -230,6 +241,7 @@ pub fn make_test_description<R: Read>(
     test::TestDesc {
         name,
         ignore,
+        ignore_message,
         should_panic,
         compile_fail: false,
         no_run: false,

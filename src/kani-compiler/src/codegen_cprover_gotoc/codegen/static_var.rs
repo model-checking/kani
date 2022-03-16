@@ -18,7 +18,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_static");
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
         let symbol_name = item.symbol_name(self.tcx).to_string();
-        self.codegen_allocation(alloc, |_| symbol_name.clone(), Some(symbol_name.clone()));
+        self.codegen_allocation(alloc.inner(), |_| symbol_name.clone(), Some(symbol_name.clone()));
     }
 
     pub fn declare_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {

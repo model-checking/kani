@@ -15,7 +15,7 @@ pub struct KaniSession {
     pub args: KaniArgs,
 
     /// The location we found the 'kani_rustc' command
-    pub kani_rustc: PathBuf,
+    pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
     pub kani_lib_c: PathBuf,
     /// The location we found the Kani C stub .c files
@@ -41,7 +41,7 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
-            kani_rustc: install.kani_rustc()?,
+            kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
             cbmc_json_parser_py: install.cbmc_json_parser_py()?,
@@ -138,36 +138,44 @@ impl KaniSession {
     }
 }
 
+/// Return the path for the folder where the current executable is located.
+#[inline]
+fn bin_folder() -> Result<PathBuf> {
+    let mut exe_path =
+        std::env::current_exe().context("Cannot determine current executable location")?;
+    exe_path.pop();
+    Ok(exe_path)
+}
+
 impl InstallType {
     pub fn new() -> Result<Self> {
-        let mut exe = std::env::current_exe()
-            .context("cargo-kani was unable to determine where its executable was located")?;
-        // Remove the executable name, so we're in the directory we care about
-        exe.pop();
-
         // Case 1: We've checked out the development repo and we're built under `target/`
-        if exe.ends_with("target/debug") {
-            exe.pop();
-            exe.pop();
+        let mut path = bin_folder()?;
+        if path.ends_with("target/debug") || path.ends_with("target/release") {
+            path.pop();
+            path.pop();
 
-            Ok(InstallType::DevRepo(exe))
+            Ok(InstallType::DevRepo(path))
         } else {
             bail!(
                 "Unable to determine installation location. {} doesn't look typical",
-                exe.display()
+                path.display()
             )
         }
     }
 
-    pub fn kani_rustc(&self) -> Result<PathBuf> {
+    pub fn kani_compiler(&self) -> Result<PathBuf> {
         match self {
-            Self::DevRepo(repo) => {
-                let mut path = repo.clone();
-                path.push("scripts/kani-rustc");
+            Self::DevRepo(_) => {
+                let mut path = bin_folder()?;
+                path.push("kani-compiler");
                 if path.as_path().exists() {
                     Ok(path)
                 } else {
-                    bail!("Unable to find kani-rustc. Looked for {}", path.display());
+                    bail!(
+                        "Unable to find kani-compiler at expected location: '{}'",
+                        path.display()
+                    );
                 }
             }
         }

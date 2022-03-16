@@ -65,7 +65,7 @@ impl KaniSession {
             }
         }
 
-        let mut cmd = Command::new(&self.kani_rustc);
+        let mut cmd = Command::new(&self.kani_compiler);
         cmd.args(args);
 
         // kani-compiler workaround: part 2/2: change directory for the subcommand

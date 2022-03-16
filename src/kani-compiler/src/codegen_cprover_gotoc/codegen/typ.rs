@@ -409,16 +409,14 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ty_pretty_name(&self, t: Ty<'tcx>) -> InternedString {
         use rustc_hir::def::Namespace;
         use rustc_middle::ty::print::Printer;
-        let mut name = String::new();
-        let printer = FmtPrinter::new(self.tcx, &mut name, Namespace::TypeNS);
+        let printer = FmtPrinter::new(self.tcx, Namespace::TypeNS);
 
         // Monomorphizing the type ensures we get a cannonical form for dynamic trait
         // objects with auto traits, such as:
         //   StructTag("tag-std::boxed::Box<(dyn std::error::Error + std::marker::Send + std::marker::Sync)>") }
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
-        with_no_trimmed_paths!(printer.print_type(t).unwrap());
-        name.intern()
+        with_no_trimmed_paths!(printer.print_type(t).unwrap().into_buffer()).intern()
     }
 
     pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
@@ -652,13 +650,13 @@ impl<'tcx> GotocCtx<'tcx> {
         layout: &Layout,
         initial_offset: usize,
     ) -> Vec<DatatypeComponent> {
-        match &layout.fields {
+        match &layout.fields() {
             FieldsShape::Arbitrary { offsets, memory_index } => {
                 assert_eq!(flds.len(), offsets.len());
                 assert_eq!(offsets.len(), memory_index.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset: u64 = initial_offset.try_into().unwrap();
-                for idx in layout.fields.index_by_increasing_offset() {
+                for idx in layout.fields().index_by_increasing_offset() {
                     let fld_offset = offsets[idx].bits();
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
@@ -674,7 +672,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
 
                 // If we don't meet our expected alignment, pad until we do
-                let align = layout.align.abi.bits();
+                let align = layout.align().abi.bits();
                 let overhang = offset % align;
                 if overhang != 0 {
                     final_fields.push(
@@ -691,7 +689,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // Primitives, such as NEVER, have no fields
             FieldsShape::Primitive => vec![],
-            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields),
+            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields()),
         }
     }
 
@@ -700,7 +698,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, layout.layout, 0)
+        self.codegen_struct_fields(flds, &layout.layout, 0)
     }
 
     /// A closure in Rust MIR takes two arguments:
@@ -903,7 +901,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
             let variant = &def.variants.raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, layout.layout, 0)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, 0)
         })
     }
 
@@ -993,7 +991,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = ctx.layout_of(ty).layout;
-                            ctx.codegen_variant_struct_fields(variant, subst, layout, 0)
+                            ctx.codegen_variant_struct_fields(variant, subst, &layout, 0)
                         }
                     }
                 }
@@ -1053,7 +1051,7 @@ impl<'tcx> GotocCtx<'tcx> {
         variants
             .iter()
             .filter_map(|lo| {
-                if lo.fields.count() == 0 {
+                if lo.fields().count() == 0 {
                     None
                 } else {
                     // get the offset of the leftmost field, which is the one
@@ -1062,8 +1060,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     // necessarily the 0th field since the compiler may reorder
                     // fields.
                     Some(
-                        lo.fields
-                            .offset(lo.fields.index_by_increasing_offset().nth(0).unwrap())
+                        lo.fields()
+                            .offset(lo.fields().index_by_increasing_offset().nth(0).unwrap())
                             .bits_usize(),
                     )
                 }
@@ -1171,11 +1169,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_vector(&mut self, ty: Ty<'tcx>) -> Type {
-        let layout = &self.layout_of(ty).layout.abi;
+        let layout = &self.layout_of(ty).layout.abi();
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            Vector { element, count } => (element.clone(), *count),
+            Vector { element, count } => (element.clone(), count),
             _ => unreachable!(),
         };
 
@@ -1183,7 +1181,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let rust_type = self.codegen_prim_typ(prim_type);
         let cbmc_type = self.codegen_ty(rust_type);
 
-        Type::vector(cbmc_type, size)
+        Type::vector(cbmc_type, *size)
     }
 
     /// the function type of the current instance
@@ -1271,13 +1269,13 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// The mir type is a mir pointer type.
-pub fn is_pointer(mir_type: Ty<'tcx>) -> bool {
+pub fn is_pointer(mir_type: Ty) -> bool {
     return matches!(mir_type.kind(), ty::Ref(..) | ty::RawPtr(..));
 }
 
 /// Extract from a mir pointer type the mir type of the value to which the
 /// pointer points.
-pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
+pub fn pointee_type(pointer_type: Ty) -> Option<Ty> {
     match pointer_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
         ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
@@ -1286,7 +1284,7 @@ pub fn pointee_type(pointer_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
 }
 
 /// Is the MIR type using a C representation (marked with #[repr(C)] at the source level)?
-pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
+pub fn is_repr_c_adt(mir_type: Ty) -> bool {
     match mir_type.kind() {
         ty::Adt(def, _) => def.repr.c(),
         _ => false,
@@ -1297,7 +1295,7 @@ pub fn is_repr_c_adt(mir_type: Ty<'tcx>) -> bool {
 ///
 /// TODO: We should normalize the type projection here. For more details, see
 /// https://github.com/model-checking/kani/issues/752
-fn normalize_type(ty: Ty<'tcx>) -> Ty<'tcx> {
+fn normalize_type(ty: Ty) -> Ty {
     ty
 }
 

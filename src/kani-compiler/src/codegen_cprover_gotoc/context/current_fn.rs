@@ -32,7 +32,7 @@ pub struct CurrentFnCtx<'tcx> {
 }
 
 /// Constructor
-impl CurrentFnCtx<'tcx> {
+impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn new(instance: Instance<'tcx>, gcx: &GotocCtx<'tcx>, labels: Vec<String>) -> Self {
         Self {
             block: vec![],
@@ -49,7 +49,7 @@ impl CurrentFnCtx<'tcx> {
 }
 
 /// Setters
-impl CurrentFnCtx<'tcx> {
+impl<'tcx> CurrentFnCtx<'tcx> {
     /// Returns the current block, replacing it with an empty vector.
     pub fn extract_block(&mut self) -> Vec<Stmt> {
         std::mem::replace(&mut self.block, vec![])
@@ -75,7 +75,7 @@ impl CurrentFnCtx<'tcx> {
 }
 
 /// Getters
-impl CurrentFnCtx<'tcx> {
+impl<'tcx> CurrentFnCtx<'tcx> {
     /// The function we are currently compiling
     pub fn instance(&self) -> Instance<'tcx> {
         self.instance
