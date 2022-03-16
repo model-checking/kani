@@ -229,21 +229,38 @@ impl Stmt {
         loc: Location,
     ) -> Self {
         assert!(cond.typ().is_bool());
-
         let msg = message.into();
 
-        // Match enum of string
-        let property_location = if let Location::Loc { file, line, function, col, .. } = loc {
-            Location::property_location(
-                file,
-                function,
-                line,
-                col,
-                Some(message.into()),
-                Some(property_class.as_str().to_string().intern()),
-            )
-        } else {
-            loc
+        let property_location = match loc {
+            Location::BuiltinFunction { function_name, line } => {
+
+                let file = "".intern();
+                let col: Option<u64> = Some(0);
+                Location::property_location(
+                    file,
+                    Some(function_name),
+                    line.unwrap(),
+                    col,
+                    message.into(),
+                    property_class.as_str().to_string().intern(),
+                )
+            },
+            Location::Loc { file , function , line , col } => {
+                Location::property_location(
+                    file,
+                    function,
+                    line,
+                    col,
+                    message.into(),
+                    property_class.as_str().to_string().intern(),
+                )
+            },
+            Location::Property { .. } => {
+                loc
+            },
+            Location::None => {
+                loc
+            },
         };
 
         stmt!(Assert { cond, property_class, msg }, property_location)

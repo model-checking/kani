@@ -20,8 +20,8 @@ pub enum Location {
         function: Option<InternedString>,
         line: u64,
         col: Option<u64>,
-        comment: Option<InternedString>,
-        property_class: Option<InternedString>,
+        comment: InternedString,
+        property_class: InternedString,
     },
 }
 
@@ -62,23 +62,23 @@ impl Location {
         }
     }
 
-    pub fn get_column_number(&self) -> Option<u64> {
+    pub fn column_number(&self) -> Option<u64> {
         match self {
             Location::Loc { col, .. } => *col,
             _ => None,
         }
     }
 
-    pub fn get_comment(&self) -> Option<InternedString> {
+    pub fn comment(&self) -> Option<String> {
         match self {
-            Location::Property { comment, .. } => *comment,
+            Location::Property { comment, .. } => Some(comment.to_string()),
             _ => None,
         }
     }
 
-    pub fn get_property_class(&self) -> Option<InternedString> {
+    pub fn property_class(&self) -> Option<String> {
         match self {
-            Location::Property { property_class, .. } => *property_class,
+            Location::Property { property_class, .. } => Some(property_class.to_string()),
             _ => None,
         }
     }
@@ -88,10 +88,10 @@ impl Location {
     pub fn short_string(&self) -> String {
         match self {
             Location::None => "<none>".to_string(),
-            Location::BuiltinFunction { function_name, line: Some(line), .. } => {
+            Location::BuiltinFunction { function_name, line: Some(line)} => {
                 format!("<{}>:{}", function_name, line)
             }
-            Location::BuiltinFunction { function_name, line: None, .. } => {
+            Location::BuiltinFunction { function_name, line: None} => {
                 format!("<{}>", function_name)
             }
             Location::Loc { file, line, .. } => format!("{}:{}", file, line),
@@ -121,13 +121,13 @@ impl Location {
         Location::Loc { file, function, line, col }
     }
 
-    pub fn property_location<T, U: Into<InternedString>, V: Into<InternedString>>(
+    pub fn property_location<T, U: Into<InternedString>, V: Into<InternedString>, X: Into<InternedString>>(
         file: U,
         function: Option<V>,
         line: T,
         col: Option<T>,
-        comment: Option<U>,
-        property_name: Option<U>,
+        comment: X,
+        property_name: X,
     ) -> Location
     where
         T: TryInto<u64>,
@@ -137,8 +137,8 @@ impl Location {
         let line = line.try_into().unwrap();
         let col = col.map(|x| x.try_into().unwrap());
         let function = function.intern();
-        let property_class = Some(property_name.unwrap().into());
-        let comment = Some(comment.unwrap().into());
+        let property_class = property_name.into();
+        let comment = comment.into();
         Location::Property { file, function, line, col, comment, property_class }
     }
 
@@ -148,6 +148,6 @@ impl Location {
 
     pub fn builtin_function<T: Into<InternedString>>(name: T, line: Option<u64>) -> Location {
         let function_name = name.into();
-        Location::BuiltinFunction { line, function_name }
+        Location::BuiltinFunction { function_name, line}
     }
 }

@@ -71,24 +71,24 @@ impl Irep {
         self.with_named_sub(IrepId::Type, t.to_irep(mm))
     }
 
-    /// Add Property Class and Message (Description) fields to Source location IRep
-    pub fn with_assert_properties(
-        self,
-        property_class: &PropertyClass,
-        msg: InternedString,
-        l: &Location,
-        mm: &MachineModel,
-    ) -> Self {
-        if !l.is_none() {
-            let location_irep = self.with_location(l, mm);
-            location_irep.with_named_sub(IrepId::Comment, Irep::just_string_id(msg)).with_named_sub(
-                IrepId::PropertyClass,
-                Irep::just_string_id(property_class.as_str()),
-            )
-        } else {
-            self
-        }
-    }
+    // /// Add Property Class and Message (Description) fields to Source location IRep
+    // pub fn with_assert_properties(
+    //     self,
+    //     property_class: &PropertyClass,
+    //     msg: InternedString,
+    //     l: &Location,
+    //     mm: &MachineModel,
+    // ) -> Self {
+    //     if !l.is_none() {
+    //         let location_irep = self.with_location(l, mm);
+    //         location_irep.with_named_sub(IrepId::Comment, Irep::just_string_id(msg)).with_named_sub(
+    //             IrepId::PropertyClass,
+    //             Irep::just_string_id(property_class.as_str()),
+    //         )
+    //     } else {
+    //         self
+    //     }
+    // }
 }
 
 /// Predicates
