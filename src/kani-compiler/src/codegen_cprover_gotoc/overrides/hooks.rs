@@ -98,12 +98,13 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         assert_eq!(fargs.len(), 2);
         let target = target.unwrap();
         let cond = fargs.remove(0).cast_to(Type::bool());
-        //TODO: actually use the error message passed by the user.
-        let msg = "EXPECTED FAIL";
+        // add "EXPECTED FAIL" to the message because compiletest relies on it
+        let msg =
+            format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
-                Stmt::assert(cond, msg, loc.clone()),
+                Stmt::assert(cond, &msg, loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
