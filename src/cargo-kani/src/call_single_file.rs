@@ -57,16 +57,9 @@ impl KaniSession {
                 args.push(t);
             }
         } else {
-            // TODO: This is a slight hack, since this function isn't really supposed to know or
-            // care about what function is being verified.
-            if self.args.function.is_some() && self.args.function != Some("main".into()) {
-                // Unless entry function for proof harness is main, compile code as lib.
-                // This ensures that rustc won't prune functions that are not reachable
-                // from main as well as enable compilation of crates that don't have a main
-                // function.
-                args.push("--crate-type".into());
-                args.push("lib".into());
-            }
+            // Don't require a 'main' function to exist. We only run against proof harnesses.
+            args.push("--crate-type".into());
+            args.push("lib".into());
         }
 
         let mut cmd = Command::new(&self.kani_compiler);
