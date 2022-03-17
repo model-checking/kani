@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // cbmc-flags: --unwind 3
 
+#[kani::proof]
 fn main() {
     let arr = [(1, 2), (2, 2)];
     let result = arr.iter().try_fold((), |acc, &i| Some(()));

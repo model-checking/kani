@@ -13,4 +13,5 @@ pub fn bar(infalliable: Infallible) -> i32 {
 }
 
 // Give an empty main to make rustc happy.
+#[kani::proof]
 fn main() {}

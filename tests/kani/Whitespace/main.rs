@@ -3,6 +3,7 @@
 
 // cbmc-flags: --unwind 2
 
+#[kani::proof]
 fn main() {
     let mut iter = "A few words".split_whitespace();
     match iter.next() {

@@ -5,6 +5,7 @@ fn add2(a: i32, b: i32) -> f32 {
     add(a, b as f32)
 }
 
+#[kani::proof]
 fn main() {
     // should succeed: 1 + 1 = 2
     assert!(add2(1, 1) == 2.0);

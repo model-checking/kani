@@ -14,6 +14,7 @@ fn dummy(var: i32) {
 
 
 #[kani::proof]
+#[kani::proof]
 fn main() {
     dummy(any::<i32>() + any::<i32>());
     dummy(any::<i32>() - any::<i32>());

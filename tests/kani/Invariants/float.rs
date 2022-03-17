@@ -16,6 +16,7 @@ macro_rules! test {
     }};
 }
 
+#[kani::proof]
 fn main() {
     test!(f32);
     test!(f64);

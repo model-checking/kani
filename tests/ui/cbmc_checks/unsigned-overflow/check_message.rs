@@ -13,6 +13,7 @@ fn dummy(var: u32) {
 }
 
 #[kani::proof]
+#[kani::proof]
 fn main() {
     dummy(any::<u32>() + any::<u32>());
     dummy(any::<u32>() - any::<u32>());

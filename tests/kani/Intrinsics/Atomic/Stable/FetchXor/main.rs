@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[kani::proof]
 fn main() {
     // pub fn fetch_xor(&self, val: bool, order: Ordering) -> bool
     // Performs a bitwise "xor" operation on the current value and

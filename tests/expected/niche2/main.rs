@@ -18,6 +18,7 @@ fn get_b() -> Option<Foo> {
     Some(Foo::B([]))
 }
 
+#[kani::proof]
 fn main() {
     match get_none() {
         None => {}

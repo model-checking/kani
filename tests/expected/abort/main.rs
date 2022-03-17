@@ -5,7 +5,8 @@
 
 use std::process;
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     for i in 0..4 {
         if i == 1 {
             // This comes first and it should be reachable.

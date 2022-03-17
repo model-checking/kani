@@ -53,6 +53,7 @@ fn expand(ranges: Vec<(u32, u32)>) -> Vec<u32> {
     return v;
 }
 
+#[kani::proof]
 fn main() {
     let mut input = vec![0; 2];
     for i in 0..input.len() {

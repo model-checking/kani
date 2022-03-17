@@ -22,6 +22,7 @@
 //
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
+#[kani::proof]
 fn main() {
     let mut a: u32 = kani::any();
 

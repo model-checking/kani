@@ -8,6 +8,7 @@ fn not_zero(p1: *const i32) {
 }
 
 #[kani::proof]
+#[kani::proof]
 fn main() {
     let mut ptr = 10 as *const i32;
     if kani::any() {

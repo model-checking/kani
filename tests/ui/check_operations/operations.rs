@@ -8,6 +8,7 @@ extern crate kani;
 use kani::any;
 
 #[kani::proof]
+#[kani::proof]
 fn main() {
     let _ = any::<u8>() + any::<u8>();
     let _ = any::<u8>() - any::<u8>();

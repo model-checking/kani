@@ -6,6 +6,7 @@
 // This test is to check Kani's error handling for harnesses that have proof attributes
 // with arguments when the expected declaration takes no arguments.
 
+#[kani::proof]
 fn main() {
     assert!(1 == 2);
 }

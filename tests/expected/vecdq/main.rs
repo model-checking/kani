@@ -3,6 +3,7 @@
 
 use std::collections::VecDeque;
 
+#[kani::proof]
 fn main() {
     let x = kani::any();
     let y = kani::any();

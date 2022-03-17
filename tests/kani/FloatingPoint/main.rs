@@ -21,6 +21,7 @@ macro_rules! test_floats {
     };
 }
 
+#[kani::proof]
 fn main() {
     assert!(1.1 == 1.1 * 1.0);
     assert!(1.1 != 1.11 / 1.0);

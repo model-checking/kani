@@ -10,6 +10,7 @@
 ///     "library/std/src/macros.rs line 17 a panicking function core::panicking::panic_fmt is invoked: SUCCESS"
 ///     https://github.com/model-checking/kani/issues/13
 
+#[kani::proof]
 fn main() {
     let x = 1;
     let y = 2;

@@ -12,6 +12,7 @@ fn dummy(result: f32) -> f32 {
 }
 
 #[kani::proof]
+#[kani::proof]
 fn main() {
     dummy(any::<f32>() + any::<f32>());
     dummy(any::<f32>() - any::<f32>());

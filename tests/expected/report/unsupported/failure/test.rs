@@ -10,6 +10,7 @@ fn unsupp(x: &mut u8) {
     }
 }
 
+#[kani::proof]
 fn main() {
     let mut x = 0;
     if kani::any() {

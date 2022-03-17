@@ -13,6 +13,7 @@
 // The documentation mentions that `std::process::abort` is preferred if
 // possible: https://doc.rust-lang.org/core/intrinsics/fn.abort.html
 // In Kani, `std::process::abort` is identified as a panicking function
+#[kani::proof]
 fn main() {
     std::intrinsics::abort();
 }

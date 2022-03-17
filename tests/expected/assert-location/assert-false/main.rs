@@ -12,7 +12,8 @@ fn any_bool() -> bool {
     kani::nondet()
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     if any_bool() {
         assert!(false);
     }

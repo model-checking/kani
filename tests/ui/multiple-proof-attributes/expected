@@ -1,9 +1,1 @@
 warning: Only one '#[kani::proof]' allowed
-  --> main.rs:14:1
-   |
-14 | #[kani::proof]
-   | ^^^^^^^^^^^^^^
-   |
-   = note: this warning originates in the attribute macro `kani::proof` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-warning: 1 warning emitted
