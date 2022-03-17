@@ -18,6 +18,7 @@ fn is_true(b: bool) {
 
 // This should print a warning since this is a no-op.
 #[kani::proof]
+#[kani::proof]
 fn harness() {
     is_true(true);
 }
