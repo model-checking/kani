@@ -8,7 +8,6 @@ thread_local! {
 }
 
 #[kani::proof]
-#[kani::proof]
 fn main() {
     COND.with(|&b|{
         kani::assume(b);

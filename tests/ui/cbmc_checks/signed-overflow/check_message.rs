@@ -12,8 +12,6 @@ fn dummy(var: i32) {
     kani::assume(var != 0);
 }
 
-
-#[kani::proof]
 #[kani::proof]
 fn main() {
     dummy(any::<i32>() + any::<i32>());
