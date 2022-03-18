@@ -8,6 +8,7 @@ fn ack(m: u64, n: u64) -> u64 {
     }
 }
 
+#[kani::proof]
 fn main() {
     let a = ack(2, 4);
     assert!(a == 11);

@@ -3,6 +3,7 @@
 
 // Failing example from https://github.com/model-checking/kani/issues/702
 // Push 5 elements to force the vector to resize, then check that the values were correctly copied.
+#[kani::proof]
 fn main() {
     let mut v = Vec::new();
     v.push(72);

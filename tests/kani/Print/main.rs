@@ -3,6 +3,7 @@
 
 // This test checks that the print macros do not result in verification failure
 
+#[kani::proof]
 fn main() {
     println!("Hello, world!");
     let a = 5;

@@ -11,6 +11,7 @@ use std::mem;
 
 enum Void {}
 
+#[kani::proof]
 fn main() {
     let _ = mem::variant_count::<Void>();
 }

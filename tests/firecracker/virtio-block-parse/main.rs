@@ -352,6 +352,7 @@ fn is_nonzero_pow2(x: u16) -> bool {
     unsafe { (x != 0) && ((x & (x - 1)) == 0) }
 }
 
+#[kani::proof]
 fn main() {
     let mem = GuestMemoryMmap {};
     let queue_size: u16 = kani::any();

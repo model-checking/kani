@@ -22,6 +22,7 @@ macro_rules! test {
     }};
 }
 
+#[kani::proof]
 fn main() {
     test!(NonZeroI8);
     test!(NonZeroI16);

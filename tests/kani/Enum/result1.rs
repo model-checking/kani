@@ -3,6 +3,7 @@
 #[derive(Debug, PartialEq)]
 pub enum Empty {}
 
+#[kani::proof]
 fn main() {
     let res: Result<u32, Empty> = Ok(0);
     if let Ok(num) = res {

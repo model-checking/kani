@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicIsize, Ordering};
 
+#[kani::proof]
 fn main() {
     // pub fn fetch_sub(&self, val: isize, order: Ordering) -> isize
     // Subtracts from the current value, returning the previous value.

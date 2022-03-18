@@ -3,6 +3,7 @@
 
 // cbmc-flags: --unwind 6
 
+#[kani::proof]
 fn main() {
     let name: &str = "hello";
     assert!(name == "hello");

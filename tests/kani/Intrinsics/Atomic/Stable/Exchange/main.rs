@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[kani::proof]
 fn main() {
     let a1 = AtomicBool::new(true);
     let a2 = AtomicBool::new(true);

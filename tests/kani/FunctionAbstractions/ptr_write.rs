@@ -3,6 +3,7 @@
 
 use std::ptr::write;
 
+#[kani::proof]
 fn main() {
     let mut var = 1;
     unsafe {

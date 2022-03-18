@@ -6,6 +6,7 @@
 
 // kani-verify-fail
 
+#[kani::proof]
 fn main() {
     // Create a nested boxed once-callable closure
     let f: Box<Box<dyn FnOnce(i32)>> =

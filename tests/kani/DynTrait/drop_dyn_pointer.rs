@@ -33,6 +33,7 @@ impl Drop for Concrete2 {
     }
 }
 
+#[kani::proof]
 fn main() {
     {
         let _x1: &dyn T = &Concrete1 {};

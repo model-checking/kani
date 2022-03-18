@@ -5,6 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::ptr_offset_from;
 
+#[kani::proof]
 fn main() {
     let a = [0; 5];
     let b = [0; 5];

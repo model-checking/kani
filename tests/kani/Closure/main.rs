@@ -38,6 +38,7 @@ fn test_env() {
     assert!(r == 9);
 }
 
+#[kani::proof]
 fn main() {
     closure_with_empty_args();
     closure_with_1_arg();

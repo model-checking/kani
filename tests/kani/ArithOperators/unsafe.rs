@@ -14,6 +14,7 @@ macro_rules! verify_no_overflow {
     }};
 }
 
+#[kani::proof]
 fn main() {
     verify_no_overflow!(checked_add, +);
     verify_no_overflow!(checked_sub, -);

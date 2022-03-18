@@ -6,6 +6,7 @@ pub enum EnumMultiple {
     Multiple2,
 }
 
+#[kani::proof]
 fn main() {
     let e = EnumMultiple::Multiple1;
 }
