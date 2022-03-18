@@ -14,6 +14,7 @@ fn new_id() -> i8 {
     }
 }
 
+#[kani::proof]
 fn main() {
     let id_1 = new_id();
     let id_2 = new_id();

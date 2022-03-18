@@ -11,6 +11,7 @@ use std::intrinsics::{
     atomic_cxchg_rel, atomic_cxchg_relaxed,
 };
 
+#[kani::proof]
 fn main() {
     let mut a1 = 0 as u8;
     let mut a2 = 0 as u8;

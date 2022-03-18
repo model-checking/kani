@@ -3,7 +3,8 @@
 // kani-verify-fail
 // This should fail, but doesn't due to https://github.com/diffblue/cbmc/issues/6631
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let a = [0; 5];
     let i: i32 = 0;
     let ptr1: *const i32 = &a[1];

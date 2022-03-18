@@ -1,7 +1,1 @@
 error[E0433]: failed to resolve: could not find `test_annotation` in `kani`
-  --> main.rs:14:9
-   |
-14 | #[kani::test_annotation]
-   |         ^^^^^^^^^^^^^^^ could not find `test_annotation` in `kani`
-
-error: aborting due to previous error

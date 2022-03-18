@@ -3,6 +3,7 @@
 
 use std::mem;
 
+#[kani::proof]
 fn main() {
     let mut var1 = kani::any::<i32>();
     let mut var2 = kani::any::<i32>();

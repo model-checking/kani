@@ -17,6 +17,7 @@ unsafe impl kani::Invariant for MyType {
     }
 }
 
+#[kani::proof]
 fn main() {
     let option: Option<MyType> = unsafe { kani::any_raw() };
     if let Some(ref v) = option {

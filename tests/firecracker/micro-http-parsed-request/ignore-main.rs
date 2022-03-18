@@ -23,6 +23,7 @@ fn fix(n: u32) {
         request_uri.trim_start_matches('/').split_terminator('/').collect();
 }
 
+#[kani::proof]
 fn main() {
     let n: u32 = kani::any();
     bug(n);

@@ -13,6 +13,7 @@ fn eq2(a: i32, b: i32) {
     assert!(a - b < a);
 }
 
+#[kani::proof]
 fn main() {
     let a = kani::any();
     let b = kani::any();

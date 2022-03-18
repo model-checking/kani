@@ -17,6 +17,7 @@ impl fmt::Display for OneOf {
     }
 }
 
+#[kani::proof]
 fn main() {
     let v = OneOf { names: &["one"] };
     println!("{}", v);

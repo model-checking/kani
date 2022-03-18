@@ -7,6 +7,7 @@ use std::intrinsics;
 
 // The code below attempts to leave type `bool` uninitialized, causing the
 // intrinsic `assert_uninit_valid` to generate a panic during compilation.
+#[kani::proof]
 fn main() {
     let _var: () = unsafe {
         intrinsics::assert_uninit_valid::<bool>();

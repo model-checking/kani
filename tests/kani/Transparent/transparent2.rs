@@ -23,6 +23,7 @@ where
     }
 }
 
+#[kani::proof]
 fn main() {
     let mut x: u32 = 4;
     let container = Container::new(&mut x);

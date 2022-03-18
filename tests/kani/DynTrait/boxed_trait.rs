@@ -43,6 +43,7 @@ fn do_area_box(x: Box<dyn Shape>) -> u32 {
     x.area()
 }
 
+#[kani::proof]
 fn main() {
     let rec = Box::new(Rectangle { w: 10, h: 5 });
     assert!(rec.vol(3) == 150);

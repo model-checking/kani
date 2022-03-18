@@ -13,6 +13,7 @@ extern "C" {
 
 }
 
+#[kani::proof]
 fn main() {
     unsafe {
         assert!(my_add(2 as usize, 3 as usize, 4 as usize) == 7); //works

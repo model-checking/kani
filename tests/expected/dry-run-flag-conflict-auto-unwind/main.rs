@@ -7,4 +7,5 @@
 // `--dry-run` causes Kani to print out commands instead of running them
 // In `expected` you will find substrings of these commands because the
 // concrete paths depend on your working directory.
+#[kani::proof]
 fn main() {}

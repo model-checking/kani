@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+#[kani::proof]
 fn main() {
     // pub unsafe fn offset_from(self, origin: *const T) -> isize
     // Calculates the distance between two pointers. The returned value

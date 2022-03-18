@@ -10,6 +10,7 @@ fn rem(x: u16, y: u16) -> u16 {
     x % y
 }
 
+#[kani::proof]
 fn main() {
     rem(678, 0);
 }

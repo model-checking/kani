@@ -33,6 +33,7 @@ impl Drop for Concrete2 {
     }
 }
 
+#[kani::proof]
 fn main() {
     {
         let x: Box<dyn T>;

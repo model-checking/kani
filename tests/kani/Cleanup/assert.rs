@@ -21,7 +21,8 @@ impl Drop for S {
     }
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let lhs = S { a: 42, b: 42 };
     let rhs = S { a: 0, b: 0 };
     assert!(lhs == rhs, "A2: A very false statement. Always fail.");

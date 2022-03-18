@@ -1,5 +1,1 @@
 error: Exactly one Unwind Argument as Integer accepted
-  --> main.rs:14:1
-   |
-14 | #[kani::unwind(10,5)]
-   | ^^^^^^^^^^^^^^^^^^^^^

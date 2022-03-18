@@ -4,6 +4,7 @@
 
 #![feature(core_intrinsics)]
 
+#[kani::proof]
 fn main() {
     let x: f32 = kani::any();
     let y: f32 = kani::any();

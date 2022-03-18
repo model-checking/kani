@@ -19,6 +19,7 @@ fn assume_fp_range(val: f64) {
     }
 }
 
+#[kani::proof]
 fn main() {
     let x: f64 = kani::any();
     let y: f64 = kani::any();

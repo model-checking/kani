@@ -10,7 +10,7 @@ pub fn err() -> ! {
 }
 
 // Give an empty main to make rustc happy.
-#[no_mangle]
+#[kani::proof]
 fn main() {
     let var = kani::any::<i32>();
     if var > 0 {

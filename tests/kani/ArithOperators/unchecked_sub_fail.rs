@@ -6,6 +6,7 @@
 
 #![feature(unchecked_math)]
 
+#[kani::proof]
 fn main() {
     let a: u8 = kani::nondet();
     let b: u8 = kani::nondet();

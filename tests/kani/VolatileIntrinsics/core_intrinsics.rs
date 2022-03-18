@@ -6,6 +6,7 @@
 
 use std::intrinsics::*;
 
+#[kani::proof]
 fn main() {
     let mut a: Box<u8> = Box::new(0);
     unsafe {

@@ -525,7 +525,7 @@ fn litani_run_tests() {
     let bookrunner_dir: PathBuf = ["tests", "bookrunner"].iter().collect();
     let stage_names = ["check", "codegen", "verification"];
 
-    util::add_kani_and_litani_to_path();
+    util::add_kani_to_path();
     let mut litani = Litani::init("Book Runner", &stage_names, &output_prefix, &output_symlink);
 
     // Run all tests under the `tests/bookrunner` directory.

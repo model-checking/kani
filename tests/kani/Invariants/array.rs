@@ -8,6 +8,7 @@ extern crate kani;
 
 use kani::Invariant;
 
+#[kani::proof]
 fn main() {
     let arr: [char; 2] = kani::any();
     assert!(arr[0].is_valid());

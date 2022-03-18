@@ -9,6 +9,7 @@ use std::intrinsics::{
     atomic_xor, atomic_xor_acq, atomic_xor_acqrel, atomic_xor_rel, atomic_xor_relaxed,
 };
 
+#[kani::proof]
 fn main() {
     let mut a1 = 1 as u8;
     let mut a2 = 1 as u8;

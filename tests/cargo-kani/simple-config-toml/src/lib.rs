@@ -15,8 +15,7 @@ mod tests {
 mod kani_tests {
     use super::*;
 
-    #[allow(dead_code)]
-    #[no_mangle]
+    #[kani::proof]
     fn test_sum() {
         let a: u64 = kani::any();
         let b: u64 = kani::any();

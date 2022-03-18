@@ -10,6 +10,7 @@ fn foo(input: &Result<u32, Unit>) -> u32 {
     if let Ok(num) = input { *num } else { 3 }
 }
 
+#[kani::proof]
 fn main() {
     let input: Result<u32, Unit> = unsafe { kani::any_raw() };
     let x = foo(&input);

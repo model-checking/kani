@@ -19,7 +19,7 @@ runs:
         shell: bash
 
       - name: Install cbmc-viewer
-        run: ./scripts/setup/install_viewer.sh 2.10
+        run: ./scripts/setup/install_viewer.sh 2.11
         shell: bash
 
       - name: Install Rust toolchain

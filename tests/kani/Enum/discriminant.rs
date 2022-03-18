@@ -14,7 +14,8 @@ fn foo(x: u32) -> Option<MyEnum> {
     if x > 10 { Some(MyEnum::Val2) } else { None }
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let x = foo(15);
     assert!(x.is_some(), "assert");
 }

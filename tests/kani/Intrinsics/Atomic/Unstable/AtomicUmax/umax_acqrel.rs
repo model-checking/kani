@@ -7,6 +7,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::atomic_umax_acqrel;
 
+#[kani::proof]
 fn main() {
     let mut a1 = 0 as u8;
     let ptr_a1: *mut u8 = &mut a1;
