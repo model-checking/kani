@@ -9,6 +9,7 @@ use std::intrinsics::{
     atomic_xadd, atomic_xadd_acq, atomic_xadd_acqrel, atomic_xadd_rel, atomic_xadd_relaxed,
 };
 
+#[kani::proof]
 fn main() {
     let mut a1 = 0 as u8;
     let mut a2 = 0 as u8;

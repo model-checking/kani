@@ -4,7 +4,7 @@
 use dependency1;
 use dependency2;
 
-#[no_mangle]
+#[kani::proof]
 fn harness() {
     assert!(dependency1::delegate_get_int() == 0);
     assert!(dependency2::delegate_get_int() == 1);

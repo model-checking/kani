@@ -19,6 +19,7 @@ impl Drop for Concrete {
     }
 }
 
+#[kani::proof]
 fn main() {
     // Check normal box
     {

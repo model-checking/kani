@@ -18,6 +18,7 @@ fn weird_add(x: &dyn WeirdAdd, y: i32) -> i32 {
     x.add(y)
 }
 
+#[kani::proof]
 fn main() {
     let x = 2;
     let y = 4;

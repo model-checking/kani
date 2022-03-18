@@ -8,6 +8,7 @@
 // [main.pointer_dereference.5] line 16 dereference failure: pointer outside object bounds in *lut_ptr: FAILURE
 // Tracking issue: https://github.com/model-checking/kani/issues/307
 const DEC_DIGITS_LUT: &'static [u8] = b"ab";
+#[kani::proof]
 fn main() {
     // The next two assertions don't go through to CBMC
     // 'cos they're constant folded away

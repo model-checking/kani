@@ -15,6 +15,7 @@ impl<T> Foo<T> {
     }
 }
 
+#[kani::proof]
 fn main() {
     // Integers don't need to be dropped
     let int_foo = Foo::<i32> { _foo: 0 };

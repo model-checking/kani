@@ -8,6 +8,7 @@ extern crate kani;
 
 use kani::Invariant;
 
+#[kani::proof]
 fn main() {
     let arr_raw: [char; 2] = unsafe { kani::any_raw() };
     kani::expect_fail(arr_raw[0].is_valid(), "Should fail");

@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#[kani::proof]
 fn main() {
     assert!(x_plus_two_1(0) == 2);
     assert!(x_plus_two_2(1) == 3);

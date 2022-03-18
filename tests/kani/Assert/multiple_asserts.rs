@@ -3,7 +3,7 @@
 
 // kani-verify-fail
 // Check that this doesn't trigger a fake loop. See issue #636.
-#[no_mangle]
+#[kani::proof]
 fn main() {
     let x: bool = kani::nondet();
     if x {

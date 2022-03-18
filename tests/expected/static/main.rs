@@ -7,6 +7,7 @@ fn foo() -> i32 {
     X
 }
 
+#[kani::proof]
 fn main() {
     assert!(10 == foo());
     assert!(12 == foo());

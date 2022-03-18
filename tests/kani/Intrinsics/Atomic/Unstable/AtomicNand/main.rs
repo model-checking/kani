@@ -9,6 +9,7 @@ use std::intrinsics::{
     atomic_nand, atomic_nand_acq, atomic_nand_acqrel, atomic_nand_rel, atomic_nand_relaxed,
 };
 
+#[kani::proof]
 fn main() {
     let mut a1 = 0 as u8;
     let mut a2 = 0 as u8;

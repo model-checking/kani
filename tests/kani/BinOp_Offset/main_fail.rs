@@ -8,6 +8,7 @@ pub fn test_offset_in_double_array() {
     table[0][kani::any::<usize>()]; // EXPECTED FAIL
 }
 
+#[kani::proof]
 fn main() {
     test_offset_in_double_array();
 }

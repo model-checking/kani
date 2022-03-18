@@ -12,6 +12,7 @@ enum Basic {
     Variant3,
 }
 
+#[kani::proof]
 fn main() {
     let e = unsafe { kani::any_raw::<Basic>() };
     // This enum can be invalid and this code may actually not match any of the options below.

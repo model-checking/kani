@@ -5,6 +5,7 @@ fn bitmap_new(byte_size: usize, page_size: usize) -> usize {
     let map_size = ((bit_size - 1) >> 6) + 1;
     map_size
 }
+#[kani::proof]
 fn main() {
     let map_size = bitmap_new(1024, 128);
     assert!(map_size == 1);

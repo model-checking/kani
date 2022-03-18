@@ -47,6 +47,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
     if random_number < 5 { Box::new(Sheep { sheep_num: 7 }) } else { Box::new(Cow { cow_num: 9 }) }
 }
 
+#[kani::proof]
 fn main() {
     let ptr_size = size_of::<&usize>() as isize;
 

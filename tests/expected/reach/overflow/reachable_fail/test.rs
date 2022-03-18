@@ -10,6 +10,7 @@ fn cond_reduce(thresh: u32, x: u32) -> u32 {
     if x > thresh { x - 50 } else { x }
 }
 
+#[kani::proof]
 fn main() {
     cond_reduce(60, 70);
     cond_reduce(40, 42);

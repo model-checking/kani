@@ -49,6 +49,7 @@ macro_rules! test_cttz_nonzero {
     };
 }
 
+#[kani::proof]
 fn main() {
     test_cttz!(my_cttz_u8, u8);
     test_cttz!(my_cttz_u16, u16);

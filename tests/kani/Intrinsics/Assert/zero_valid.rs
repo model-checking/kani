@@ -18,6 +18,7 @@ fn do_test<T: std::cmp::Eq>(init: T, expected: T) {
     assert!(expected == x);
 }
 
+#[kani::proof]
 fn main() {
     do_test::<bool>(true, false);
     do_test::<i8>(-42, 0);

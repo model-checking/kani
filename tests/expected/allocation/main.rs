@@ -5,6 +5,7 @@ fn foo() -> Option<i32> {
     None
 }
 
+#[kani::proof]
 fn main() {
     assert!(foo() == None);
     let x = foo();

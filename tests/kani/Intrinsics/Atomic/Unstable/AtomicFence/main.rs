@@ -7,6 +7,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::{atomic_fence, atomic_fence_acq, atomic_fence_acqrel, atomic_fence_rel};
 
+#[kani::proof]
 fn main() {
     unsafe {
         atomic_fence();

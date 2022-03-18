@@ -13,6 +13,7 @@ fn takes_dyn_fun(fun: &dyn Fn() -> i32) {
     kani::expect_fail(size_from_vtable(vtable!(fun)) != 8, "Wrong size");
 }
 
+#[kani::proof]
 fn main() {
     let a = vec![3];
     let closure = || a[0] + 2;

@@ -5,6 +5,7 @@ pub enum Level {
     Error,
 }
 
+#[kani::proof]
 fn main() {
     let left = Level::Error;
     assert!((left as u8).cmp(&0) == Ordering::Equal);

@@ -8,6 +8,7 @@ where
     f(10)
 }
 
+#[kani::proof]
 fn main() {
     let num: i64 = kani::any();
     if num <= std::i64::MAX - 100 {
