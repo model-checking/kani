@@ -30,6 +30,7 @@ fn doswitch_bytes() -> i32 {
     return 2;
 }
 
+#[kani::proof]
 fn main() {
     let v = doswitch_int();
     assert!(v == 1);

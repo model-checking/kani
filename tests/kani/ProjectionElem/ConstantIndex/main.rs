@@ -96,6 +96,7 @@ fn test4() {
     assert!(encode_utf8_raw(code, dst) == 0);
 }
 
+#[kani::proof]
 fn main() {
     test1();
     test2();

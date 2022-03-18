@@ -23,6 +23,7 @@ impl MemoryMapping {
     }
 }
 
+#[kani::proof]
 fn main() {
     let mm = MemoryMapping::new(2);
     if mm.is_ok() {

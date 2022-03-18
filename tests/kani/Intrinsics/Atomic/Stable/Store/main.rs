@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[kani::proof]
 fn main() {
     // ppub fn store(&self, val: bool, order: Ordering)
     // Stores a value into the bool.

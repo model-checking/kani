@@ -60,6 +60,7 @@ check_enum!(check_basic, u8, Basic, 0, 1, 2);
 check_enum!(check_continuous, u8, Continuous, 10, 11, 12);
 check_enum!(check_random, i8, Random, -10, 100, 0);
 
+#[kani::proof]
 fn main() {
     check_basic();
     check_continuous();

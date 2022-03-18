@@ -9,6 +9,7 @@ use std::intrinsics::{
     atomic_xchg, atomic_xchg_acq, atomic_xchg_acqrel, atomic_xchg_rel, atomic_xchg_relaxed,
 };
 
+#[kani::proof]
 fn main() {
     let mut a1 = 0 as u8;
     let mut a2 = 0 as u8;

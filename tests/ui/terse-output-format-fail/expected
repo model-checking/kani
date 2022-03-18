@@ -1,3 +1,2 @@
 VERIFICATION RESULT:
- ** 1 of 3 failed
 Failed Checks: assertion failed: 1 + 1 == 3

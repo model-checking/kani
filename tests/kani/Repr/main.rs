@@ -13,6 +13,7 @@ fn mmap() -> *mut MyCVoid {
     0 as *mut MyCVoid
 }
 
+#[kani::proof]
 fn main() {
     let v = mmap();
     assert!(v != MAP_FAILED);

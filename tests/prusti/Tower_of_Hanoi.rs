@@ -7,6 +7,7 @@ fn move_(n: i32, from: i32, to: i32, via: i32) {
     }
 }
 
+#[kani::proof]
 fn main() {
     move_(4, 1, 2, 3);
 }

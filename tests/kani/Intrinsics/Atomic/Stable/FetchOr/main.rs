@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[kani::proof]
 fn main() {
     // pub fn fetch_or(&self, val: bool, order: Ordering) -> bool
     // Performs a logical "or" operation on the current value and

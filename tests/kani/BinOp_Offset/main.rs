@@ -22,6 +22,7 @@ pub fn test_offset_str() {
     }
 }
 
+#[kani::proof]
 fn main() {
     test_offset_array();
     test_offset_str()

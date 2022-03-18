@@ -3,6 +3,7 @@
 
 // kani-flags: --output-format regular
 
+#[kani::proof]
 fn main() {
     assert!(1 + 1 == 3);
 }

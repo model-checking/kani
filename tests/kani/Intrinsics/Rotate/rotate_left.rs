@@ -32,6 +32,7 @@ macro_rules! test_rotate_left {
     };
 }
 
+#[kani::proof]
 fn main() {
     test_rotate_left!(check_rol_u8, u8);
     test_rotate_left!(check_rol_u16, u16);

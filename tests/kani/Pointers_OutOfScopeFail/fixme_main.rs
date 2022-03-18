@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-verify-fail
 
+#[kani::proof]
 fn main() {
     // declare pointer to integer
     let p_subscoped: *const u32;

@@ -6,13 +6,9 @@
 // This test is to check Kani's error handling for harnesses that have multiple proof annotations
 // declared.
 
+#[kani::proof]
+#[kani::proof]
 fn main() {
-    assert!(1 == 2);
-}
-
-#[kani::proof]
-#[kani::proof]
-fn harness() {
     let mut counter = 0;
     loop {
         counter += 1;

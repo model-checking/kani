@@ -14,6 +14,7 @@ fn foo(vec: &mut Vec<i32>) -> &i32 {
     &vec[last]
 }
 
+#[kani::proof]
 fn main() {
     let mut v = vec![-1, 2, 3];
     let r = foo(&mut v);

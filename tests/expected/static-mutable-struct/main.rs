@@ -20,6 +20,7 @@ fn mutate_the_thing(nx: i64, ny: i32) {
     }
 }
 
+#[kani::proof]
 fn main() {
     assert!(foo().x == 12);
     if kani::nondet() {

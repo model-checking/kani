@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+#[kani::proof]
 fn main() {
     let x: u128 = u128::MAX;
     let x2: u128 = {

@@ -10,6 +10,7 @@ pub struct Container<T> {
     container: Pointer<T>,
 }
 
+#[kani::proof]
 fn main() {
     let x: u32 = 4;
     let my_pointer = Pointer { pointer: &x };

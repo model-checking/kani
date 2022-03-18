@@ -13,6 +13,7 @@ enum MyError {
     Error3,
 }
 
+#[kani::proof]
 fn main() {
     assert!(mem::variant_count::<Void>() == 0);
     assert!(mem::variant_count::<MyError>() == 3);

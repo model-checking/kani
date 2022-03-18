@@ -8,6 +8,7 @@ where
     some_closure(1, 1);
 }
 
+#[kani::proof]
 fn main() {
     let mut num: i32 = kani::any();
     let y = 2;

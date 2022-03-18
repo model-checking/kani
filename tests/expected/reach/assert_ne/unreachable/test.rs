@@ -4,6 +4,7 @@
 // macro. The test has an unreachable assert_ne statement which should be
 // reported as UNREACHABLE
 
+#[kani::proof]
 fn main() {
     let x: u32 = kani::any();
     if x > 0 {

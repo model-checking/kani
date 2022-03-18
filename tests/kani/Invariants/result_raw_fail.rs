@@ -30,6 +30,7 @@ unsafe impl kani::Invariant for Error {
     }
 }
 
+#[kani::proof]
 fn main() {
     let result: Result<MyType, Error> = unsafe { kani::any_raw() };
     if let Ok(ref v) = result {

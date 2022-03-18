@@ -8,6 +8,7 @@
 // a verification failure (the loop being unwound depends on
 // a nondet. variable)
 
+#[kani::proof]
 fn main() {
     let x: u32 = kani::any();
     let pi = 3.14159265359;

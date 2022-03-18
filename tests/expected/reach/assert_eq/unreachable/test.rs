@@ -4,6 +4,7 @@
 // macro. The test has an unreachable assert_eq statement which should be
 // reported as UNREACHABLE
 
+#[kani::proof]
 fn main() {
     let x: i32 = kani::any();
     let y = if x > 10 { 15 } else { 33 };

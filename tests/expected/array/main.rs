@@ -6,6 +6,7 @@ fn foo(x: [i32; 5]) -> [i32; 2] {
     [x[0], x[1]]
 }
 
+#[kani::proof]
 fn main() {
     let x = [1, 2, 3, 4, 5];
     let y = foo(x);

@@ -44,6 +44,7 @@ impl OsStr {
     }
 }
 
+#[kani::proof]
 fn main() {
     let x = OsStr::new("hi");
     x.as_bytes();

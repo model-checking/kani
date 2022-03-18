@@ -10,6 +10,7 @@ fn negate(x: i32) -> i32 {
     -x
 }
 
+#[kani::proof]
 fn main() {
     negate(std::i32::MIN);
 }

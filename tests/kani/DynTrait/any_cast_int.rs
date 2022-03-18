@@ -29,6 +29,7 @@ fn downcast_to_fewer_traits(s: &(dyn Any + Send)) {
     downcast_to_concrete(c);
 }
 
+#[kani::proof]
 fn main() {
     let i: i32 = 7;
     downcast_to_fewer_traits(&i);
