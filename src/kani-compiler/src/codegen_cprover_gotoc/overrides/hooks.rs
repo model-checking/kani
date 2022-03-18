@@ -102,7 +102,8 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
 
         // msg is the comment field that's set on source location which is presented as the Description field
         // to the end user
-        let msg = format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
+        let msg =
+            format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
 
         // property_class is used as a unique class identiier
         let property_class = PropertyClass::ExpectFail;
