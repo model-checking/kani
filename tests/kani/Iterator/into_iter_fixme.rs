@@ -1,5 +1,5 @@
 // compile-flags: --edition 2018
-// cbmc-flags: --unwind 4 --object-bits 9
+// kani-flags: --unwind 4 --cbmc-args --object-bits 9
 //
 // This reproduces the issue seen in "Failures when iterating over results".
 // See https://github.com/model-checking/kani/issues/556 for more information.

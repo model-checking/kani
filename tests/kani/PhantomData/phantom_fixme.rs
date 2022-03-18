@@ -1,5 +1,5 @@
 // compile-flags: --edition 2018
-// cbmc-flags: --unwind 4 --object-bits 9
+// cbmc-flags: --unwind 4 --cbmc-args --object-bits 9
 //
 // Testcase based on https://doc.rust-lang.org/rust-by-example/generics/phantom/testcase_units.html
 // which reproduces issue https://github.com/model-checking/kani/issues/560
