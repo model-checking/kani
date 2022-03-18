@@ -93,7 +93,7 @@ impl Location {
         Location::Loc { file, function, line, col }
     }
 
-    pub fn property_location<T, U: Into<InternedString>>(
+    pub fn property_location<T, U>(
         file: Option<U>,
         function: Option<U>,
         line: T,
@@ -104,6 +104,7 @@ impl Location {
     where
         T: TryInto<u64>,
         T::Error: Debug,
+        U: Into<InternedString>,
     {
         let file = file.unwrap().into();
         let line = line.try_into().unwrap();
