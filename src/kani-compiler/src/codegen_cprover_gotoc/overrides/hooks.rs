@@ -100,10 +100,11 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         let cond = fargs.remove(0).cast_to(Type::bool());
         //TODO: actually use the error message passed by the user.
 
-        // msg is the comment field that's set on source location
+        // msg is the comment field that's set on source location which is presented as the Description field
+        // to the end user
         let msg = "EXPECTED FAIL";
 
-        // property_class is used as a unique identifier for this assert
+        // property_class is used as a unique class identiier
         let property_class = PropertyClass::ExpectFail;
 
         let loc = tcx.codegen_span_option(span);

@@ -20,8 +20,8 @@ pub enum Location {
         function: Option<InternedString>,
         line: u64,
         col: Option<u64>,
-        comment: Option<InternedString>,
-        property_class: Option<InternedString>,
+        comment: InternedString,
+        property_class: InternedString,
     },
 }
 
@@ -55,43 +55,15 @@ impl Location {
         }
     }
 
-    pub fn function_name(&self) -> Option<InternedString> {
-        match self {
-            Location::Loc { function, .. } => *function,
-            _ => None,
-        }
-    }
-
-    pub fn get_column_number(&self) -> Option<u64> {
-        match self {
-            Location::Loc { col, .. } => *col,
-            _ => None,
-        }
-    }
-
-    pub fn get_comment(&self) -> Option<InternedString> {
-        match self {
-            Location::Property { comment, .. } => *comment,
-            _ => None,
-        }
-    }
-
-    pub fn get_property_class(&self) -> Option<InternedString> {
-        match self {
-            Location::Property { property_class, .. } => *property_class,
-            _ => None,
-        }
-    }
-
     /// Convert a location to a short string suitable for (e.g.) logging.
     /// Goal is to return just "file:line" as clearly as possible.
     pub fn short_string(&self) -> String {
         match self {
             Location::None => "<none>".to_string(),
-            Location::BuiltinFunction { function_name, line: Some(line), .. } => {
+            Location::BuiltinFunction { function_name, line: Some(line) } => {
                 format!("<{}>:{}", function_name, line)
             }
-            Location::BuiltinFunction { function_name, line: None, .. } => {
+            Location::BuiltinFunction { function_name, line: None } => {
                 format!("<{}>", function_name)
             }
             Location::Loc { file, line, .. } => format!("{}:{}", file, line),
@@ -121,25 +93,66 @@ impl Location {
         Location::Loc { file, function, line, col }
     }
 
-    pub fn property_location<T, U: Into<InternedString>, V: Into<InternedString>>(
-        file: U,
-        function: Option<V>,
+    pub fn property_location<T, U: Into<InternedString>>(
+        file: Option<U>,
+        function: Option<U>,
         line: T,
         col: Option<T>,
-        comment: Option<U>,
-        property_name: Option<U>,
+        comment: U,
+        property_name: U,
     ) -> Location
     where
         T: TryInto<u64>,
         T::Error: Debug,
     {
-        let file = file.into();
+        let file = file.unwrap().into();
         let line = line.try_into().unwrap();
         let col = col.map(|x| x.try_into().unwrap());
         let function = function.intern();
-        let property_class = Some(property_name.unwrap().into());
-        let comment = Some(comment.unwrap().into());
+        let property_class = property_name.into();
+        let comment = comment.into();
         Location::Property { file, function, line, col, comment, property_class }
+    }
+
+    // Create a Property type Location from an already existing Location type
+    pub fn create_location<T: Into<InternedString>>(
+        comment: T,
+        property_name: T,
+        location: Self,
+    ) -> Location {
+        let property_location = match location {
+            Location::BuiltinFunction { function_name, line } => {
+                let file = None;
+                let line = line.unwrap();
+                let col = None;
+                let function = Some(function_name);
+                Location::property_location(
+                    file,
+                    function,
+                    line,
+                    col,
+                    comment.into(),
+                    property_name.into(),
+                )
+            }
+            Location::Loc { file, function, line, col } => {
+                let file = file.into();
+                let col = col.map(|x| x.try_into().unwrap());
+                let function = function.intern();
+                Location::property_location(
+                    file,
+                    function,
+                    line,
+                    col,
+                    comment.into(),
+                    property_name.into(),
+                )
+            }
+            Location::Property { .. } => location,
+            Location::None => location,
+        };
+
+        property_location
     }
 
     pub fn none() -> Location {

@@ -230,21 +230,11 @@ impl Stmt {
     ) -> Self {
         assert!(cond.typ().is_bool());
 
+        let property_name = property_class.as_str().to_string().intern();
         let msg = message.into();
 
-        // Match enum of string
-        let property_location = if let Location::Loc { file, line, function, col, .. } = loc {
-            Location::property_location(
-                file,
-                function,
-                line,
-                col,
-                Some(message.into()),
-                Some(property_class.as_str().to_string().intern()),
-            )
-        } else {
-            loc
-        };
+        // Create a Property Location Variant from any given Location type
+        let property_location = Location::create_location(msg, property_name, loc);
 
         stmt!(Assert { cond, property_class, msg }, property_location)
     }
