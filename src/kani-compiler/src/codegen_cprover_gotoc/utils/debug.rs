@@ -19,29 +19,19 @@ use tracing::debug;
 // codegen item in the panic trace.
 thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Location>)> = RefCell::new((None, None)));
 
-// Include Kani's bug reporting URL in our panics.
-const BUG_REPORT_URL: &str =
-    "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
-
 pub fn init() {
     // Install panic hook
     SyncLazy::force(&DEFAULT_HOOK); // Install ice hook
 }
 
-// Custom panic hook.
+// Custom panic hook to add more information when panic occurs during goto-c codegen.
 static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
     SyncLazy::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
             // Invoke the default handler, which prints the actual panic message and
-            // optionally a backtrace. This also prints Rustc's "file a bug here" message:
-            // it seems like the only way to remove that is to use rustc_driver::report_ice;
-            // however, adding that dependency to this crate causes a circular dependency.
-            // For now, just print our message after the Rust one and explicitly point to
-            // our bug template form.
+            // optionally a backtrace.
             (*DEFAULT_HOOK)(info);
-
-            // Separate the output with an empty line
             eprintln!();
 
             // Print the current function if available
@@ -58,16 +48,6 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
                     eprintln!("[Kani] no current codegen location.");
                 }
             });
-
-            // Separate the output with an empty line
-            eprintln!();
-
-            // Print the Kani message
-            eprintln!("Kani unexpectedly panicked during code generation.\n");
-            eprintln!(
-                "If you are seeing this message, please file an issue here instead of on the Rust compiler: {}",
-                BUG_REPORT_URL
-            );
         }));
         hook
     });

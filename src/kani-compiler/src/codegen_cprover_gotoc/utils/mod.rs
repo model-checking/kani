@@ -12,6 +12,4 @@ mod utils;
 pub use names::*;
 pub use utils::*;
 
-pub fn init() {
-    debug::init()
-}
+pub use debug::init;
