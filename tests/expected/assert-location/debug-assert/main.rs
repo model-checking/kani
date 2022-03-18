@@ -7,7 +7,8 @@
 // Also disable reachability checks because they add annotations to each
 // assert's description which would be visible with the old output format
 // kani-flags: --output-format old --no-assertion-reach-checks
-pub fn main() {
+#[kani::proof]
+fn main() {
     for i in 0..4 {
         debug_assert!(i > 0, "This should fail and stop the execution");
         assert!(i == 0, "This should be unreachable");

@@ -12,6 +12,7 @@ fn check(x: i32) {
     }
 }
 
+#[kani::proof]
 fn main() {
     check(7);
 }

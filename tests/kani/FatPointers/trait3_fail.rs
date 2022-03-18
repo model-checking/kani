@@ -29,6 +29,7 @@ impl Subscriber for DummySubscriber {
     }
 }
 
+#[kani::proof]
 fn main() {
     let d = DummySubscriber::new();
 

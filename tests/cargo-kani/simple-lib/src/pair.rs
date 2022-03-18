@@ -24,8 +24,8 @@ mod tests {
 #[cfg(kani)]
 mod kani_tests {
     use super::*;
-    #[allow(dead_code)]
-    #[no_mangle]
+
+    #[kani::proof]
     fn test_one_plus_two() {
         let p = Pair::new(1, 2);
         assert!(p.sum() == 3);

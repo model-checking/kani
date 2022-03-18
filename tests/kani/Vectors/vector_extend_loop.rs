@@ -3,6 +3,7 @@
 
 // kani-flags: --unwind 3
 
+#[kani::proof]
 fn main() {
     let mut v: Vec<u32> = Vec::new();
     for (start, len) in vec![(0, 1), (1, 2)] {

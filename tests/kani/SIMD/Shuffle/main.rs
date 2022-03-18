@@ -17,6 +17,7 @@ extern "platform-intrinsic" {
     fn simd_shuffle4<T, U>(x: T, y: T, idx: [u32; 4]) -> U;
 }
 
+#[kani::proof]
 fn main() {
     {
         let y = i64x2(0, 1);

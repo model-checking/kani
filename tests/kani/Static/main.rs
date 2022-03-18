@@ -11,6 +11,7 @@ pub enum MyEnum {
     ChoiceC,
 }
 
+#[kani::proof]
 fn main() {
     assert!(!X);
     unsafe {

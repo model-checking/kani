@@ -3,6 +3,7 @@
 //
 // Ensure that kani::any::<bool> generates only valid booleans.
 
+#[kani::proof]
 fn main() {
     let b: bool = kani::any();
     match b {

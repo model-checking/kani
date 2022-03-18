@@ -17,6 +17,7 @@ fn bar() -> Result<(), MyError> {
     Ok(x)
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     bar();
 }

@@ -18,6 +18,7 @@ fn ret_unit() {
     ()
 }
 
+#[kani::proof]
 fn main() {
     assert!(() == ());
     let u = ret_unit();

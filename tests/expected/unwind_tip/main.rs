@@ -10,6 +10,7 @@
 //
 // In this test, we check that Kani warns the user about unwinding failures
 // and makes a recommendation to fix the issue.
+#[kani::proof]
 fn main() {
     let mut a: u32 = kani::any();
 

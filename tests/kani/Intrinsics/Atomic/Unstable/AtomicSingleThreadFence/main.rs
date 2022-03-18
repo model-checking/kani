@@ -10,6 +10,7 @@ use std::intrinsics::{
     atomic_singlethreadfence_rel,
 };
 
+#[kani::proof]
 fn main() {
     unsafe {
         atomic_singlethreadfence();

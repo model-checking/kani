@@ -9,6 +9,7 @@ use std::mem::MaybeUninit;
 // This should cause the intrinsic `assert_inhabited` to generate a panic during
 // compilation, but at present it triggers the `Nevers` hook instead.
 // See https://github.com/model-checking/kani/issues/751
+#[kani::proof]
 fn main() {
     let _uninit_never: () = unsafe {
         MaybeUninit::<!>::uninit().assume_init();

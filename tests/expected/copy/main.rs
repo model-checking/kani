@@ -3,6 +3,7 @@
 
 use std::ptr;
 
+#[kani::proof]
 fn main() {
     // TODO: make an overlapping set of locations, and check that it does the right thing for the overlapping region too.
     // https://github.com/model-checking/kani/issues/12

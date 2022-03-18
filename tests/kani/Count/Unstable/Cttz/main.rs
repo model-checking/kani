@@ -3,6 +3,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::{cttz, cttz_nonzero};
 
+#[kani::proof]
 fn main() {
     let uv8 = 0b0011_1000_u8;
     let uv16 = uv8 as u16;

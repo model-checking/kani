@@ -12,6 +12,7 @@ macro_rules! test {
     }};
 }
 
+#[kani::proof]
 fn main() {
     test!(i8);
     test!(i16);

@@ -3,6 +3,7 @@
 //
 // Ensure that kani::any_raw::<bool> may generate invalid booleans.
 
+#[kani::proof]
 fn main() {
     let b: bool = unsafe { kani::any_raw() };
     assert!(matches!(b, true | false), "Rust converts any non-zero value to true");
