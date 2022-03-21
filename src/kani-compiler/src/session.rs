@@ -6,6 +6,8 @@
 use crate::parser;
 use clap::ArgMatches;
 use rustc_driver;
+use std::lazy::SyncLazy;
+use std::panic;
 use std::str::FromStr;
 use tracing_subscriber::{filter::Directive, layer::SubscriberExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
@@ -13,21 +15,45 @@ use tracing_tree::HierarchicalLayer;
 /// Environment variable used to control this session log tracing.
 const LOG_ENV_VAR: &'static str = "KANI_LOG";
 
+// Include Kani's bug reporting URL in our panics.
+const BUG_REPORT_URL: &str =
+    "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
+
+// Custom panic hook.
+static PANIC_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+    SyncLazy::new(|| {
+        let hook = panic::take_hook();
+        panic::set_hook(Box::new(|info| {
+            // Print stack trace.
+            (*PANIC_HOOK)(info);
+            eprintln!();
+
+            // Print the Kani message
+            eprintln!("Kani unexpectedly panicked during compilation.");
+            eprintln!(
+                "If you are seeing this message, please file an issue here: {}",
+                BUG_REPORT_URL
+            );
+        }));
+        hook
+    });
+
 /// Initialize compiler session.
 pub fn init_session(args: &ArgMatches) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
     rustc_driver::init_rustc_env_logger();
-    // Use rustc internal compiler error (ICE) hook for now.
-    rustc_driver::install_ice_hook();
+
+    // Kani panic hook.
+    init_panic_hook();
 
     // Kani logger initialization.
     init_logger(args);
 }
 
 /// Initialize the logger using the KANI_LOG environment variable and the --log-level argument.
-pub fn init_logger(args: &ArgMatches) {
+fn init_logger(args: &ArgMatches) {
     let filter = EnvFilter::from_env(LOG_ENV_VAR);
     let filter = if let Some(log_level) = args.value_of(parser::LOG_LEVEL) {
         filter.add_directive(Directive::from_str(log_level).unwrap())
@@ -63,4 +89,9 @@ fn hier_logs(filter: EnvFilter) {
             .with_indent_amount(2),
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
+}
+
+fn init_panic_hook() {
+    // Install panic hook
+    SyncLazy::force(&PANIC_HOOK); // Install ice hook
 }
