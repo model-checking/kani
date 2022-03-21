@@ -7,6 +7,3 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-
-[kani.flags]
-function = "harness"

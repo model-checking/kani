@@ -26,7 +26,7 @@ test rectangle::proptests::stretched_rectangle_can_hold_original ... ok
 Use `cargo kani` to verify the first proof harness `stretched_rectangle_can_hold_original`. As we explain in the post, verification failure is expected.
 
 ```bash
-$ cargo kani --function stretched_rectangle_can_hold_original --output-format terse
+$ cargo kani --harness stretched_rectangle_can_hold_original --output-format terse
 # --snip--
 VERIFICATION:- FAILED
 ```
@@ -34,7 +34,7 @@ VERIFICATION:- FAILED
 In order to view a trace (a step-by-step execution of the program) use the `--visualize` flag:
 
 ```bash
-$ cargo kani --function stretched_rectangle_can_hold_original --output-format terse --visualize
+$ cargo kani --harness stretched_rectangle_can_hold_original --output-format terse --visualize
 # --snip--
 VERIFICATION:- FAILED
 # and generates a html report in target/report/html/index.html

@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @flag --unroll=10
-// @expect verified
 
 fn fac(n: u64, acc: u64) -> u64 {
     match n {
@@ -10,7 +8,8 @@ fn fac(n: u64, acc: u64) -> u64 {
     }
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let x = fac(5, 1);
     assert!(x == 120);
 }
