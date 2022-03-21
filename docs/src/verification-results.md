@@ -9,7 +9,7 @@ _over-constrained_.
 
 Example:
 ```rust
-{{#include getting-started/result-types/src/main.rs:success_example}}
+{{#include introduction/verification-results/src/main.rs:success_example}}
 ```
 The output from Kani indicates that the assertion holds:
 ```
@@ -26,7 +26,7 @@ examine the trace.
 
 Example:
 ```rust
-{{#include getting-started/result-types/src/main.rs:failure_example}}
+{{#include introduction/verification-results/src/main.rs:failure_example}}
 ```
 The assertion doesn't hold as Kani's output indicates:
 ```
@@ -50,7 +50,7 @@ currently checks the reachability of the following assertion types:
 Example:
 
 ```rust
-{{#include getting-started/result-types/src/main.rs:unreachable_example}}
+{{#include introduction/verification-results/src/main.rs:unreachable_example}}
 ```
 
 The output from Kani indicates that the assertion is unreachable:
@@ -68,7 +68,7 @@ Rust language features.
 
 Example:
 ```rust
-{{#include getting-started/result-types/src/main.rs:undetermined_example}}
+{{#include introduction/verification-results/src/main.rs:undetermined_example}}
 ```
 The output from Kani indicates that the assertion is undetermined due to the
 missing support for inline assembly in Kani:
