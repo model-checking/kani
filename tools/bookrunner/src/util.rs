@@ -203,7 +203,7 @@ pub fn add_codegen_job(litani: &mut Litani, test_props: &TestProps) {
 pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
     let exit_status = if test_props.fail_step == Some(FailStep::Verification) { 10 } else { 0 };
     let mut kani = Command::new("kani");
-    kani.arg(&test_props.path).args(&test_props.kani_args);
+    kani.arg(&test_props.path).args(&test_props.kani_args).args(&["--function", "main"]);
     if !test_props.rustc_args.is_empty() {
         kani.env("RUSTFLAGS", test_props.rustc_args.join(" "));
     }

@@ -57,9 +57,14 @@ impl KaniSession {
                 args.push(t);
             }
         } else {
-            // Don't require a 'main' function to exist. We only run against proof harnesses.
-            args.push("--crate-type".into());
-            args.push("lib".into());
+            // If we specifically request "--function main" then don't override crate type
+            if Some("main".to_string()) != self.args.function {
+                // We only run against proof harnesses normally, and this change
+                // 1. Means we do not require a `fn main` to exist
+                // 2. Don't forget it also changes visibility rules.
+                args.push("--crate-type".into());
+                args.push("lib".into());
+            }
         }
 
         let mut cmd = Command::new(&self.kani_compiler);
