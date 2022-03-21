@@ -280,15 +280,17 @@ impl<'test> TestCx<'test> {
     /// `self.testpaths.file`. An error message is printed to stdout if a result
     /// is not expected.
     fn run_kani_test(&self) {
-        self.check();
-        if self.props.kani_panic_step == Some(KaniFailStep::Check) {
-            return;
+        match self.props.kani_panic_step {
+            Some(KaniFailStep::Check) => {
+                self.check();
+            }
+            Some(KaniFailStep::Codegen) => {
+                self.codegen();
+            }
+            Some(KaniFailStep::Verify) | None => {
+                self.verify();
+            }
         }
-        self.codegen();
-        if self.props.kani_panic_step == Some(KaniFailStep::Codegen) {
-            return;
-        }
-        self.verify();
     }
 
     /// If the test file contains expected failures in some locations, ensure
@@ -321,7 +323,7 @@ impl<'test> TestCx<'test> {
             .arg(self.output_base_dir().join("target"))
             .current_dir(&parent_dir);
         if "expected" != self.testpaths.file.file_name().unwrap() {
-            cargo.args(["--function", function_name]);
+            cargo.args(["--harness", function_name]);
         }
         self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);

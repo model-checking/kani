@@ -127,18 +127,15 @@ impl KaniSession {
         }
         if let Some(name) = &self.args.harness {
             // Linear search, since this is only ever called once
-            if let Some(harness) = metadata.proof_harnesses.iter().find(|x| x.pretty_name == *name)
-            {
+            if let Some(harness) = find_proof_harness(name, &metadata.proof_harnesses) {
                 return Ok(vec![harness.clone()]);
             }
             bail!("A proof harness named {} was not found", name);
         }
         if metadata.proof_harnesses.is_empty() {
-            // This is not the desirable behavior we deliver to our users,
-            // but this is a hack to get kani regression tests back to working quickly.
-            // TODO: This should be removed in favor of a good error message suggesting that proof harnesses be written.
-            // Probably even with a link to Kani documentation!
-            Ok(vec![mock_proof_harness("main")])
+            // TODO: This could use a better error message, possibly with links to Kani documentation.
+            // New users may encounter this and could use a pointer to how to write proof harnesses.
+            bail!("No proof harnesses (functions with #[kani::proof]) were found to verify.");
         } else {
             Ok(metadata.proof_harnesses.clone())
         }
@@ -152,5 +149,45 @@ fn mock_proof_harness(name: &str) -> HarnessMetadata {
         original_file: "<unknown>".into(),
         original_line: "<unknown>".into(),
         unwind_value: None,
+    }
+}
+
+fn find_proof_harness<'a>(
+    name: &str,
+    harnesses: &'a [HarnessMetadata],
+) -> Option<&'a HarnessMetadata> {
+    for h in harnesses.iter() {
+        if h.pretty_name == *name {
+            return Some(h);
+        } else {
+            // pretty_name will be things like `module::submodule::name_of_function`
+            // and we want people to be able to specify `--harness name_of_function`
+            if let Some(prefix) = h.pretty_name.strip_suffix(name) {
+                if prefix.ends_with("::") {
+                    return Some(h);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_find_proof_harness() {
+        let harnesses = vec![
+            mock_proof_harness("check_one"),
+            mock_proof_harness("module::check_two"),
+            mock_proof_harness("module::not_check_three"),
+        ];
+        assert!(find_proof_harness("check_three", &harnesses).is_none());
+        assert!(
+            find_proof_harness("check_two", &harnesses).unwrap().mangled_name
+                == "module::check_two"
+        );
+        assert!(find_proof_harness("check_one", &harnesses).unwrap().mangled_name == "check_one");
     }
 }
