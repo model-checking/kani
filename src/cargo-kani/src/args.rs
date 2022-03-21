@@ -76,6 +76,7 @@ pub struct KaniArgs {
     #[structopt(long, hidden = true)]
     pub function: Option<String>,
     /// Entry point for verification (proof harness)
+    // In a dry-run, we don't have kani-metadata.json to read, so we can't use this flag
     #[structopt(long, conflicts_with = "function", conflicts_with = "dry-run")]
     pub harness: Option<String>,
     /// Link external C files referenced by Rust code
