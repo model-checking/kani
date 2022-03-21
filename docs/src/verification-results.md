@@ -1,4 +1,4 @@
-# Kani verification results
+# Verification results
 
 The result of a check in Kani can be one of the following:
 
@@ -63,7 +63,7 @@ Check 2: unreachable_example.assertion.2
 4. `UNDETERMINED`: This indicates that Kani was not able to conclude whether the
 property holds or not. This can occur when the Rust program contains a construct
 that is not currently supported by Kani. See
-[Limitations](./limitations.md#limitations) for Kani's current support of the
+[Rust feature support](./rust-feature-support.md) for Kani's current support of the
 Rust language features.
 
 Example:
