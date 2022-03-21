@@ -1,32 +1,40 @@
-# Kani Installation Guide
+# Installation
 
 Kani must currently be built from source.
 
-In general, the following dependencies are required. Note: These dependencies may be installed by running the CI scripts shown below and there is no need to install them separately, for their respective OS.
+In general, the following dependencies are required.
 
-1. Cargo installed via rustup
+1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.53.1)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.10)
 
-## Installing on Ubuntu 20.04
+> **Note:** These dependencies may be installed by running the CI scripts shown
+> below and there is no need to install them separately, for their respective
+> OS.
 
-The simplest way to install (especially if you're using a fresh VM) is following our CI scripts:
+Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
+
+## Install dependencies on Ubuntu
+
+Support is available for Ubuntu 18.04 and 20.04.
+The simplest way to install dependencies (especially if you're using a fresh VM)
+is following our CI scripts:
 
 ```
 # git clone git@github.com:model-checking/kani.git
 git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
-./scripts/setup/ubuntu-20.04/install_deps.sh
-./scripts/setup/ubuntu-20.04/install_cbmc.sh
+./scripts/setup/ubuntu/install_deps.sh
+./scripts/setup/ubuntu/install_cbmc.sh
 ./scripts/setup/install_viewer.sh 2.10
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```
 
-## Installing on Mac OS
+## Install dependencies on macOS
 
-You need to have [Homebrew](https://brew.sh/) installed already.
+Support is available for macOS 10.15. You need to have [Homebrew](https://brew.sh/) installed already.
 
 ```
 # git clone git@github.com:model-checking/kani.git
@@ -40,9 +48,9 @@ git submodule update --init
 source $HOME/.cargo/env
 ```
 
-## Building and testing Kani
+## Build and test Kani
 
-Build Kani's packages:
+Build the Kani package:
 
 ```
 cargo build
@@ -62,7 +70,7 @@ All Kani regression tests completed successfully.
 
 ## Try running Kani
 
-Get the Kani script in your path:
+Add the Kani script to your path:
 
 ```bash
 export PATH=$(pwd)/scripts:$PATH
@@ -86,7 +94,7 @@ kani test.rs
 You should get a result like this one:
 
 ```
-[snipped output]
+[...]
 RESULTS:
 Check 1: main.assertion.1
          - Status: FAILURE
@@ -95,4 +103,9 @@ Check 1: main.assertion.1
 VERIFICATION:- FAILED
 ```
 
-Fix the test and you should see `kani` succeed.
+Fix the test and you should see a result like this one:
+
+```
+[...]
+VERIFICATION:- SUCCESSFUL
+```
