@@ -289,6 +289,14 @@ impl KaniArgs {
             )
             .exit();
         }
+
+        if self.cbmc_args.contains(&OsString::from("--function")) {
+            Error::with_description(
+                "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
+                ErrorKind::ArgumentConflict,
+            )
+            .exit();
+        }
     }
 }
 
