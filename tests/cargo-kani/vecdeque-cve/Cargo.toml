@@ -1,0 +1,9 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "vecdeque-cve"
+version = "0.1.0"
+edition = "2018"
+description = "Reproduces CVE-2018-1000657"
+
+[dependencies]
