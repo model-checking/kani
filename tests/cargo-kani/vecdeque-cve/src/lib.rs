@@ -10,17 +10,31 @@
 #![feature(core_intrinsics)]
 #![feature(ptr_internals)]
 #![feature(rustc_allow_const_fn_unstable)]
-
 mod cve;
 mod raw_vec;
 
-use crate::cve::VecDeque as CveVecDeque;
-use std::collections::VecDeque;
+use crate::cve::VecDeque;
+
+// Bound proof to a maximum length.
+const MAX_LENGTH: usize = 100;
 
 #[kani::proof]
 pub fn cve_harness() {
-    let mut q: CveVecDeque<i32> = CveVecDeque::<i32>::with_capacity(7);
-    q.push_front(0);
+    // Insert element to empty VecDeque.
+    let mut q: VecDeque<i32> = VecDeque::<i32>::new();
+    let front = kani::any();
+    q.push_front(front);
+
+    // Change extra capacity to any value between 0 and MAX_LENGTH.
+    let new_len: usize = kani::any();
+    kani::assume(new_len <= MAX_LENGTH);
     q.reserve(6);
-    q.push_back(0);
+
+    // Push element to the back.
+    let back = kani::any();
+    q.push_back(back);
+
+    // Assert front and back have the expected value.
+    assert_eq!(front, *q.front().unwrap());
+    assert_eq!(back, *q.back().unwrap());
 }
