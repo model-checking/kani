@@ -53,7 +53,11 @@ class GlobalMessages(str, Enum):
 
 
 def main():
-
+    """
+    Script main function.
+    Usage:
+      > cbmc_json_parser.py <cbmc_output.json> [<format>]
+    """
     # Check only one json file as input
     if len(sys.argv) < 2:
         print("Json File Input Missing")
@@ -71,6 +75,42 @@ def main():
     # the main function should take a json file as input
     return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
     sys.exit(return_code)
+
+
+class SourceLocation:
+    def __init__(self, source_location={}):
+        """ Convert a source location dictionary from CBMC json into an object.
+           The SOURCE_LOCATION_OBJECT has the following structure:
+           {
+             'column': '<num>',
+             'file': '<file_name>',
+             'function': '<fn_name>',
+             'line': '<num>'
+           }},
+
+           Some fields might be missing.
+        """
+        self.filename = source_location.get("file", None)
+        self.function = source_location.get("function", None)
+        self.column = source_location.get("column", None)
+        self.line = source_location.get("line", None)
+
+    def __str__(self):
+        if self.filename:
+            s = f"{self.filename}"
+            if self.line:
+                s += f":{self.line}"
+                if self.column:
+                    s += f":{self.column}"
+        else:
+            s = "Unknown File"
+        if self.function:
+            s += f" in function {self.function}"
+        return s
+
+    def __bool__(self):
+        return bool(self.function) or bool(self.filename)
+
 
 def transform_cbmc_output(cbmc_response_string, output_style):
     """
@@ -92,12 +132,11 @@ def transform_cbmc_output(cbmc_response_string, output_style):
     output_message = ""
 
     # Check if the output given by CBMC is in Json format or not
-    is_json_bool, cbmc_json_array = is_json(cbmc_response_string)
+    is_json_bool, cbmc_json_array = parse_json(cbmc_response_string)
     if is_json_bool:
 
         # Extract property information from the restructured JSON file
         properties, solver_information = extract_solver_information(cbmc_json_array)
-
         properties, messages = postprocess_results(properties)
 
         # Using Case Switching to Toggle between various output styles
@@ -130,7 +169,7 @@ def transform_cbmc_output(cbmc_response_string, output_style):
     return num_failed > 0
 
 # Check if the blob is in json format for parsing
-def is_json(cbmc_output_string):
+def parse_json(cbmc_output_string):
     try:
         cbmc_json_array = json.loads(cbmc_output_string)
     except ValueError:
@@ -570,9 +609,12 @@ def construct_property_message(properties):
             Property 53: sinf.assertion.1
                 - Status: SUCCESS
                 - Description: "assertion false"
+                - Location: file/path.rs:10:8 in function harness
             Property 54: calloc.assertion.1
                 - Status: SUCCESS
                 - Description: "assertion false"
+
+        Note: Location is missing on CBMC checks. In those cases, we omit the Location line.
     """
 
     number_tests_failed = 0
@@ -591,6 +633,7 @@ def construct_property_message(properties):
             name = property_instance["property"]
             status = property_instance["status"]
             description = property_instance["description"]
+            location = SourceLocation(property_instance.get("sourceLocation", {}))
         except KeyError as e:
             print("Key not present in json property", e)
 
@@ -610,8 +653,13 @@ def construct_property_message(properties):
         """ Ex - Property 54: calloc.assertion.1
          - Status: SUCCESS
          - Description: "assertion false" """
-        output_message += f"Check {index+1}: {name}\n\t - Status: " + \
-            message + f"\n\t - Description: \"{description}\"\n" + "\n"
+        output_message += f"Check {index+1}: {name}\n" \
+            f"\t - Status: {message}\n" \
+            f"\t - Description: \"{description}\"\n"
+        if location:
+            output_message += f"\t - Location: {location}\n"
+
+        output_message += "\n"
 
     output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed"
     other_status = []
