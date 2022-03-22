@@ -105,7 +105,7 @@ class SourceLocation:
         else:
             s = "Unknown File"
         if self.function:
-            s += f" at function {self.function}"
+            s += f" in function {self.function}"
         return s
 
     def __bool__(self):
@@ -609,7 +609,7 @@ def construct_property_message(properties):
             Property 53: sinf.assertion.1
                 - Status: SUCCESS
                 - Description: "assertion false"
-                - Location: file/path.rs:10:8 at function harness
+                - Location: file/path.rs:10:8 in function harness
             Property 54: calloc.assertion.1
                 - Status: SUCCESS
                 - Description: "assertion false"
