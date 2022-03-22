@@ -1,0 +1,5 @@
+cve::VecDeque::<T, A>::handle_capacity_increase.assertion.16\
+- Status: FAILURE\
+- Description: "assertion failed: self.head < self.cap()"
+
+Failed Checks: assertion failed: self.head < self.cap()
