@@ -75,8 +75,9 @@ pub struct KaniArgs {
     /// Entry point for verification
     #[structopt(long, default_value = "main")]
     pub function: String,
-    /// Link external C files referenced by Rust code
-    #[structopt(long, parse(from_os_str))]
+    /// Link external C files referenced by Rust code.
+    /// This is an experimental feature.
+    #[structopt(long, parse(from_os_str), hidden = true)]
     pub c_lib: Vec<PathBuf>,
     /// Enable test function verification. Only use this option when the entry point is a test function.
     #[structopt(long)]
