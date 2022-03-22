@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // compile-flags: --edition 2018
-// kani-flags: --unwind 4 --cbmc-args --object-bits 9
+// kani-flags: --unwind 4
 //
 // This reproduces the issue seen in "Failures when iterating over results".
 // See https://github.com/model-checking/kani/issues/556 for more information.
