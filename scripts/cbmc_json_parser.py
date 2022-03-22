@@ -79,7 +79,7 @@ def main():
 
 class SourceLocation:
     def __init__(self, source_location={}):
-        """ Coverts a source location dictionary from CBMC json into an object.
+        """ Convert a source location dictionary from CBMC json into an object.
            The SOURCE_LOCATION_OBJECT has the following structure:
            {
              'column': '<num>',
