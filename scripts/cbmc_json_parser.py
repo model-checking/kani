@@ -90,14 +90,14 @@ class SourceLocation:
 
            Some fields might be missing.
         """
-        self.fname = source_location.get("file", None)
+        self.filename = source_location.get("file", None)
         self.function = source_location.get("function", None)
         self.column = source_location.get("column", None)
         self.line = source_location.get("line", None)
 
     def __str__(self):
-        if self.fname:
-            s = f"{self.fname}"
+        if self.filename:
+            s = f"{self.filename}"
             if self.line:
                 s += f":{self.line}"
                 if self.column:
@@ -109,7 +109,7 @@ class SourceLocation:
         return s
 
     def __bool__(self):
-        return bool(self.function) or bool(self.fname)
+        return bool(self.function) or bool(self.filename)
 
 
 def transform_cbmc_output(cbmc_response_string, output_style):
