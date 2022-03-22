@@ -15,6 +15,7 @@ fn check(slice: &[u8]) {
     }
 }
 
+#[kani::proof]
 fn main() {
     let arr = [1, 2, 3];
     // The slice returned can be any of the following:

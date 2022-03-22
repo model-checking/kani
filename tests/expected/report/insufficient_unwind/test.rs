@@ -6,6 +6,7 @@
 
 // kani-flags: --unwind 6
 
+#[kani::proof]
 fn main() {
     let x: bool = kani::any();
     let v = if x { vec![1, 2, 3] } else { vec![1, 1, 1, 1, 1, 1] };

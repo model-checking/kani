@@ -25,6 +25,7 @@ macro_rules! test_bitreverse_intrinsic {
 }
 
 #[allow(overflowing_literals)]
+#[kani::proof]
 fn main() {
     test_bitreverse_intrinsic!(u8, check_reverse_u8, get_bit_at_u8);
     test_bitreverse_intrinsic!(u16, check_reverse_u16, get_bit_at_u16);

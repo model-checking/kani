@@ -24,7 +24,7 @@ impl Drop for DummyResource {
     }
 }
 
-#[no_mangle]
+#[kani::proof]
 pub fn create(empty: bool) -> DummyResource {
     let mut dummy = DummyResource { data: None };
     if empty {

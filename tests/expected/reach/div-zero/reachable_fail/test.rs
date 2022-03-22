@@ -10,6 +10,7 @@ fn div(x: u16, y: u16) -> u16 {
     x / y
 }
 
+#[kani::proof]
 fn main() {
     div(678, 0);
 }

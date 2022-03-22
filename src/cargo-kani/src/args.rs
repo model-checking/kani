@@ -101,11 +101,15 @@ pub struct KaniArgs {
     #[structopt(long, allow_hyphen_values = true, min_values(0))] // consumes everything
     pub cbmc_args: Vec<OsString>,
 
+    // Hide option till https://github.com/model-checking/kani/issues/697 is
+    // fixed
     /// Use abstractions for the standard library
-    #[structopt(long)]
+    #[structopt(long, hidden = true)]
     pub use_abs: bool,
+    // Hide option till https://github.com/model-checking/kani/issues/697 is
+    // fixed
     /// Choose abstraction for modules of standard library if available
-    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true)]
+    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true, hidden = true)]
     pub abs_type: AbstractionType,
 
     /// Restrict the targets of virtual table function pointer calls

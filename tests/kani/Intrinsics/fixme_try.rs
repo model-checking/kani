@@ -5,6 +5,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::r#try;
 
+#[kani::proof]
 fn main() {
     unsafe {
         // Rust will make a best-effort to swallow the panic, and then execute the cleanup function.

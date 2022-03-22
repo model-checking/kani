@@ -87,6 +87,7 @@ fn test_swap() {
     assert!(y == 12);
 }
 
+#[kani::proof]
 fn main() {
     test_copy();
     test_swap();

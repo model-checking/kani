@@ -28,6 +28,7 @@ fn test2() {
     assert!(inner.inner[1] == 'i' as u8);
 }
 
+#[kani::proof]
 fn main() {
     test1();
     test2();

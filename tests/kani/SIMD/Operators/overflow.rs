@@ -27,7 +27,8 @@ macro_rules! assert_op {
 
 // Tests inspired by Rust's examples in
 // https://github.com/rust-lang/rust/blob/0d97f7a96877a96015d70ece41ad08bb7af12377/src/test/ui/simd-intrinsic/simd-intrinsic-generic-arithmetic.rs
-pub fn main() {
+#[kani::proof]
+fn main() {
     let v1 = i8x2(2, 2);
     let max_min = i8x2(i8::MIN, i8::MAX);
 

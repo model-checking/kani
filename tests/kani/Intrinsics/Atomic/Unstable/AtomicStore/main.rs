@@ -7,6 +7,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::{atomic_store, atomic_store_rel, atomic_store_relaxed};
 
+#[kani::proof]
 fn main() {
     let mut a1 = 1 as u8;
     let mut a2 = 1 as u8;

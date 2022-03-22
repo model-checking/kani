@@ -14,6 +14,7 @@ fn b() -> Foo {
     Foo::B { x: 30, y: 60.0 }
 }
 
+#[kani::proof]
 fn main() {
     let x = a();
     match x {

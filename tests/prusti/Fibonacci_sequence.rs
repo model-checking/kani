@@ -21,6 +21,7 @@ impl Iterator for Fib {
     }
 }
 
+#[kani::proof]
 fn main() {
     let mut fib = Fib::new();
     assert!(fib.nth(10).unwrap() == 55);

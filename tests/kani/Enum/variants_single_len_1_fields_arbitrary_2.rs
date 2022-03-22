@@ -5,6 +5,7 @@ pub enum EnumSingle {
     MySingle(u32, u32),
 }
 
+#[kani::proof]
 fn main() {
     let e = EnumSingle::MySingle(1, 1);
     assert!(e == EnumSingle::MySingle(1, 1));

@@ -3,6 +3,7 @@
 
 use std::ptr::read;
 
+#[kani::proof]
 fn main() {
     let var = 1;
     unsafe {

@@ -11,6 +11,7 @@ fn subtract_two(x: &mut i32) -> i32 {
     y
 }
 
+#[kani::proof]
 fn main() {
     let mut x = 5;
     println!("calling function with side-effect from println!: {}", subtract_two(&mut x));

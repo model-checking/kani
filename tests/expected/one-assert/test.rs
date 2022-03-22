@@ -3,7 +3,7 @@
 
 // kani-flags: --function check_assert
 // compile-flags: --crate-type lib
-#[no_mangle]
+#[kani::proof]
 pub fn check_assert() {
     let x: u8 = kani::any();
     let y = x;

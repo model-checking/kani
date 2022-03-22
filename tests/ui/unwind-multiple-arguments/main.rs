@@ -6,6 +6,7 @@
 // This test is to check Kani's error handling for harnesses that have unwind attributes
 // that have multiple arguments provided when only one is allowed.
 
+#[kani::proof]
 fn main() {
     assert!(1 == 2);
 }

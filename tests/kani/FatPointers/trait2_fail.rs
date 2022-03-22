@@ -25,6 +25,7 @@ impl Subscriber for DummySubscriber {
     }
 }
 
+#[kani::proof]
 fn main() {
     let _d = DummySubscriber::new();
     let _s = &_d as *const dyn Subscriber;

@@ -24,6 +24,7 @@ fn copy_string(s: &str, l: usize) {
     }
 }
 
+#[kani::proof]
 fn main() {
     copy_string("x", 1);
     copy_string("", 0);

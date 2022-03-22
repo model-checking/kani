@@ -9,6 +9,7 @@ fn test1() {
     assert!(string.len() == 3);
 }
 
+#[kani::proof]
 fn main() {
     test1();
 }

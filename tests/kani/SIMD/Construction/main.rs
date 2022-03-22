@@ -12,6 +12,7 @@ extern "platform-intrinsic" {
     fn simd_insert<T, U>(x: T, idx: u32, b: U) -> T;
 }
 
+#[kani::proof]
 fn main() {
     let y = i64x2(0, 1);
     let z = i64x2(1, 2);

@@ -15,6 +15,7 @@ macro_rules! test_ctlz_nonzero {
     };
 }
 
+#[kani::proof]
 fn main() {
     test_ctlz_nonzero!(u8);
     test_ctlz_nonzero!(u16);

@@ -18,6 +18,7 @@ fn selection_sort(array: &mut [i32]) {
     }
 }
 
+#[kani::proof]
 fn main() {
     let mut array = [9, 4, 8, 3];
     selection_sort(&mut array);

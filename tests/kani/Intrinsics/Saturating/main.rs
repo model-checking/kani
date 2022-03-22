@@ -53,6 +53,7 @@ macro_rules! test_saturating_intrinsics {
     };
 }
 
+#[kani::proof]
 fn main() {
     test_saturating_intrinsics!(u8);
     test_saturating_intrinsics!(u16);
