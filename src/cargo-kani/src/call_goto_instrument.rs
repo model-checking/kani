@@ -78,7 +78,7 @@ impl KaniSession {
     fn undefined_functions(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--generate-function-body-options".into(),
-            "assert-false".into(),
+            "assert-false-assume-false".into(),
             "--generate-function-body".into(),
             ".*".into(),
             "--drop-unused-functions".into(),
