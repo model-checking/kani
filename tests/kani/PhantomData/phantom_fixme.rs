@@ -1,3 +1,6 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 // compile-flags: --edition 2018
 // cbmc-flags: --unwind 4 --cbmc-args --object-bits 9
 //
