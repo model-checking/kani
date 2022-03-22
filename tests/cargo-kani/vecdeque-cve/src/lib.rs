@@ -10,31 +10,34 @@
 #![feature(core_intrinsics)]
 #![feature(ptr_internals)]
 #![feature(rustc_allow_const_fn_unstable)]
-mod cve;
+
 mod raw_vec;
 
+#[cfg(cve)]
+mod cve;
+#[cfg(cve)]
 use crate::cve::VecDeque;
 
-// Bound proof to a maximum length.
-const MAX_LENGTH: usize = 100;
+#[cfg(not(cve))]
+mod fixed;
+#[cfg(not(cve))]
+use crate::fixed::VecDeque;
 
+/// Prove that reserving a min capacity that is less than current capacity is no-op.
 #[kani::proof]
-pub fn cve_harness() {
-    // Insert element to empty VecDeque.
-    let mut q: VecDeque<i32> = VecDeque::<i32>::new();
+pub fn reserve_less_capacity_is_no_op() {
+    let mut vec_deque = VecDeque::<i8>::new();
+    let old_capacity = vec_deque.capacity();
+
+    // Insert an element to empty VecDeque.
     let front = kani::any();
-    q.push_front(front);
+    vec_deque.push_front(front);
 
-    // Change extra capacity to any value between 0 and MAX_LENGTH.
-    let new_len: usize = kani::any();
-    kani::assume(new_len <= MAX_LENGTH);
-    q.reserve(6);
+    // Change extra capacity to *any* value that is less than current capacity.
+    let new_capacity: usize = kani::any();
+    kani::assume(new_capacity < old_capacity);
+    vec_deque.reserve(new_capacity);
 
-    // Push element to the back.
-    let back = kani::any();
-    q.push_back(back);
-
-    // Assert front and back have the expected value.
-    assert_eq!(front, *q.front().unwrap());
-    assert_eq!(back, *q.back().unwrap());
+    // Capacity should stay the same.
+    assert_eq!(vec_deque.capacity(), old_capacity);
 }
