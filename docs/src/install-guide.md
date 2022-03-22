@@ -80,6 +80,7 @@ Create a test file:
 
 ```rust
 // File: test.rs
+#[kani::proof]
 fn main() {
     assert!(1 == 2);
 }
