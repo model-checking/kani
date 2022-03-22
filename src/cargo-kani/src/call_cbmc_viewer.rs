@@ -12,7 +12,7 @@ use crate::util::alter_extension;
 impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
     /// Viewer doesn't give different error codes depending on verification failure, so as long as it works, we report success.
-    pub fn run_visualize(&self, file: &Path, default_reportdir: &str) -> Result<()> {
+    pub fn run_visualize(&self, file: &Path, report_dir: &Path) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
         let coverage_filename = alter_extension(file, "coverage.xml");
         let property_filename = alter_extension(file, "property.xml");
@@ -28,12 +28,6 @@ impl KaniSession {
         self.cbmc_variant(file, &["--xml-ui", "--cover", "location"], &coverage_filename)?;
         self.cbmc_variant(file, &["--xml-ui", "--show-properties"], &property_filename)?;
 
-        let reportdir = if let Some(pb) = &self.args.target_dir {
-            pb.join("report").into_os_string()
-        } else {
-            default_reportdir.into()
-        };
-
         let args: Vec<OsString> = vec![
             "--result".into(),
             results_filename.into(),
@@ -48,7 +42,7 @@ impl KaniSession {
             "--goto".into(),
             file.into(),
             "--reportdir".into(),
-            reportdir.clone(),
+            report_dir.into(),
         ];
 
         // TODO get cbmc-viewer path from self
@@ -59,7 +53,7 @@ impl KaniSession {
 
         // Let the user know
         if !self.args.quiet {
-            println!("Report written to: {}/html/index.html", reportdir.to_string_lossy());
+            println!("Report written to: {}/html/index.html", report_dir.to_string_lossy());
         }
 
         Ok(())

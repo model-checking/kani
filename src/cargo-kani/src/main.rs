@@ -4,8 +4,10 @@
 use anyhow::Result;
 use args_toml::config_toml_to_args;
 use call_cbmc::VerificationStatus;
+use kani_metadata::HarnessMetadata;
+use session::KaniSession;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 use util::append_path;
 
@@ -53,30 +55,33 @@ fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
     let harnesses = ctx.determine_targets(&metadata)?;
+    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
+
+    let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
     for harness in &harnesses {
         let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &harness.pretty_name));
         ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-        if !ctx.args.quiet {
-            println!("Checking harness {}...", harness.pretty_name);
-        }
-
-        if ctx.args.visualize {
-            ctx.run_visualize(&specialized_obj, "target/report")?;
-        } else {
-            let result = ctx.run_cbmc(&specialized_obj)?;
-            if result == VerificationStatus::Failure {
-                // Failure exit code without additional error message
-                drop(ctx);
-                std::process::exit(1);
-            }
+        let result = ctx.check_harness(&specialized_obj, &report_base, &harness)?;
+        if result == VerificationStatus::Failure {
+            failed_harnesses.push(&harness);
         }
     }
 
-    if harnesses.len() > 1 && !ctx.args.quiet {
-        // Right now we're aborting on first failing harness, so if we get here...
-        println!("All harnesses successfully verified.");
+    if !ctx.args.quiet && !ctx.args.visualize {
+        println!(
+            "Complete - {} successfully verified harnesses, {} failures, {} total.",
+            harnesses.len() - failed_harnesses.len(),
+            failed_harnesses.len(),
+            harnesses.len()
+        );
+    }
+
+    if !failed_harnesses.is_empty() {
+        // Failure exit code without additional error message
+        drop(ctx);
+        std::process::exit(1);
     }
 
     Ok(())
@@ -88,6 +93,9 @@ fn standalone_main() -> Result<()> {
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
+    if ctx.args.only_codegen {
+        return Ok(());
+    }
     let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
 
     let linked_obj = util::alter_extension(&args.input, "out");
@@ -102,6 +110,9 @@ fn standalone_main() -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
     let harnesses = ctx.determine_targets(&metadata)?;
+    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
+
+    let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
     for harness in &harnesses {
         let specialized_obj = append_path(&linked_obj, &format!("-for-{}", harness.pretty_name));
@@ -111,28 +122,51 @@ fn standalone_main() -> Result<()> {
         }
         ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-        if !ctx.args.quiet {
-            println!("Checking harness {}...", harness.pretty_name);
-        }
-
-        if ctx.args.visualize {
-            ctx.run_visualize(&specialized_obj, "report")?;
-        } else {
-            let result = ctx.run_cbmc(&specialized_obj)?;
-            if result == VerificationStatus::Failure {
-                // Failure exit code without additional error message
-                drop(ctx);
-                std::process::exit(1);
-            }
+        let result = ctx.check_harness(&specialized_obj, &report_base, &harness)?;
+        if result == VerificationStatus::Failure {
+            failed_harnesses.push(&harness);
         }
     }
 
-    if harnesses.len() > 1 && !ctx.args.quiet {
-        // Right now we're aborting on first failing harness, so if we get here...
-        println!("All harnesses successfully verified.");
+    if !ctx.args.quiet && !ctx.args.visualize {
+        println!(
+            "Complete - {} successfully verified harnesses, {} failures, {} total.",
+            harnesses.len() - failed_harnesses.len(),
+            failed_harnesses.len(),
+            harnesses.len()
+        );
+    }
+
+    if !failed_harnesses.is_empty() {
+        // Failure exit code without additional error message
+        drop(ctx);
+        std::process::exit(1);
     }
 
     Ok(())
+}
+
+impl KaniSession {
+    fn check_harness(
+        &self,
+        binary: &Path,
+        report_base: &Path,
+        harness: &HarnessMetadata,
+    ) -> Result<VerificationStatus> {
+        if !self.args.quiet {
+            println!("Checking harness {}...", harness.pretty_name);
+        }
+
+        if self.args.visualize {
+            let report_name = format!("report-{}", harness.pretty_name);
+            let report_dir = report_base.join(report_name);
+            self.run_visualize(&binary, &report_dir)?;
+            // Strictly speaking, we're faking success here. This is more "no error"
+            Ok(VerificationStatus::Success)
+        } else {
+            self.run_cbmc(&binary)
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
