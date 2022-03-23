@@ -323,7 +323,7 @@ impl ToIrep for Location {
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])
             .with_named_sub_option(IrepId::Line, line.map(Irep::just_int_id)),
-            Location::Loc { file, function, line, col} => Irep::just_named_sub(vector_map![
+            Location::Loc { file, function, line, col } => Irep::just_named_sub(vector_map![
                 (IrepId::File, Irep::just_string_id(file.to_string())),
                 (IrepId::Line, Irep::just_int_id(*line)),
             ])
