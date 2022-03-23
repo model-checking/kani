@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::goto_program::{
-    BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
-    PropertyClass, SelfOperand, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues,
-    Type, UnaryOperand,
+    BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
+    Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
 };
 use crate::InternedString;
 use num::bigint::BigInt;
@@ -538,13 +537,13 @@ pub trait Transformer: Sized {
     fn transform_stmt_assert(
         &mut self,
         cond: &Expr,
-        property_class: PropertyClass,
+        property_name: InternedString,
         msg: InternedString,
     ) -> Stmt {
         let transformed_cond = self.transform_expr(cond);
-        Stmt::assert_stmt(
+        Stmt::assert_statement(
             transformed_cond,
-            property_class,
+            property_name.to_string().as_str(),
             msg.to_string().as_str(),
             Location::none(),
         )

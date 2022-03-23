@@ -8,9 +8,10 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, PropertyClass, Stmt, Symbol, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
@@ -98,7 +99,6 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         assert_eq!(fargs.len(), 2);
         let target = target.unwrap();
         let cond = fargs.remove(0).cast_to(Type::bool());
-        //TODO: actually use the error message passed by the user.
 
         // msg is the comment field that's set on source location which is presented as the Description field
         // to the end user
@@ -111,7 +111,7 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
-                Stmt::assert_stmt(cond, property_class, &msg, loc.clone()),
+                tcx.codegen_assert(cond, property_class, &msg, loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,

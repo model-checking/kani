@@ -3,7 +3,7 @@
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
 use crate::{InternString, InternedString};
-use std::{fmt::Debug, str::FromStr};
+use std::fmt::Debug;
 use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -22,35 +22,6 @@ use tracing::debug;
 ///      would translate to `Stmt::while_loop(c, vec![stmt1, stmt2], loc)`
 /// Statements can also be created using the converters in the `Expr` module.
 ///
-#[derive(Copy, Debug, Clone)]
-pub enum PropertyClass {
-    ExpectFail,
-    UnsupportedStructs,
-    DefaultAssertion,
-}
-
-impl FromStr for PropertyClass {
-    type Err = &'static str;
-
-    fn from_str(input: &str) -> Result<PropertyClass, Self::Err> {
-        match input {
-            "expect_fail" => Ok(PropertyClass::ExpectFail),
-            "unsupported_struct" => Ok(PropertyClass::UnsupportedStructs),
-            "assertion" => Ok(PropertyClass::DefaultAssertion),
-            _ => Err("No such property class"),
-        }
-    }
-}
-
-impl PropertyClass {
-    pub fn as_str(&self) -> &str {
-        match self {
-            PropertyClass::ExpectFail => "expect_fail",
-            PropertyClass::UnsupportedStructs => "unsupported_struct",
-            PropertyClass::DefaultAssertion => "assertion",
-        }
-    }
-}
 
 ///
 /// TODO:
@@ -74,7 +45,7 @@ pub enum StmtBody {
     /// `assert(cond)`
     Assert {
         cond: Expr,
-        property_class: PropertyClass,
+        property_class: InternedString,
         msg: InternedString,
     },
     /// `__CPROVER_assume(cond);`
@@ -222,21 +193,14 @@ impl Stmt {
     }
 
     /// `assert(cond);`
-    pub fn assert_stmt(
-        cond: Expr,
-        property_class: PropertyClass,
-        message: &str,
-        loc: Location,
-    ) -> Self {
+    pub fn assert_statement(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
 
-        let property_name = property_class.as_str().to_string().intern();
+        // Create a Assert Stmt type
+        let property_class = property_name.to_string().intern();
         let msg = message.into();
 
-        // Create a Property Location Variant from any given Location type
-        let property_location = Location::create_location(msg, property_name, loc);
-
-        stmt!(Assert { cond, property_class, msg }, property_location)
+        stmt!(Assert { cond, property_class, msg }, loc)
     }
 
     /// `__CPROVER_assert(cond, msg);`

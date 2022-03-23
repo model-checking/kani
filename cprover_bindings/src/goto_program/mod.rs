@@ -16,7 +16,7 @@ pub use expr::{
     ArithmeticOverflowResult, BinaryOperand, Expr, ExprValue, SelfOperand, UnaryOperand,
 };
 pub use location::Location;
-pub use stmt::{PropertyClass, Stmt, StmtBody, SwitchCase};
+pub use stmt::{Stmt, StmtBody, SwitchCase};
 pub use symbol::{Symbol, SymbolValues};
 pub use symbol_table::SymbolTable;
 pub use typ::{CIntType, DatatypeComponent, Parameter, Type};
