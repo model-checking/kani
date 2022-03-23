@@ -111,13 +111,16 @@ class SourceLocation:
             # proofing.
             return self.filename
 
+        # Reference to C files use relative paths, while rust uses absolute.
+        # Normalize both to be absolute first.
+        full_path = path.abspath(self.filename)
         cwd = os.getcwd()
-        if path.commonpath([self.filename, cwd]) == cwd:
-            return path.relpath(self.filename)
+        if path.commonpath([full_path, cwd]) == cwd:
+            return path.relpath(full_path)
 
         home_path = path.expanduser("~")
-        if path.commonpath([self.filename, home_path]) == home_path:
-            return "~/{}".format(path.relpath(self.filename, home_path))
+        if path.commonpath([full_path, home_path]) == home_path:
+            return "~/{}".format(path.relpath(full_path, home_path))
 
         return self.filename
 
