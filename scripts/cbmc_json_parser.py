@@ -26,6 +26,7 @@ import sys
 
 from colorama import Fore, Style
 from enum import Enum
+from os import path
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
@@ -95,9 +96,34 @@ class SourceLocation:
         self.column = source_location.get("column", None)
         self.line = source_location.get("line", None)
 
+    def filepath(self):
+        """ Return a more user friendly path.
+
+        - If the path is inside the current directory, return a relative path.
+        - If not but the path is in the ${HOME} directory, return relative to ${HOME}
+        - Otherwise, return the path as is.
+        """
+        if not self.filename:
+            return None
+
+        if not path.exists(self.filename):
+            # I'm not sure this can happen today, but keep it here for future
+            # proofing.
+            return self.filename
+
+        cwd = os.getcwd()
+        if path.commonpath([self.filename, cwd]) == cwd:
+            return path.relpath(self.filename)
+
+        home_path = path.expanduser("~")
+        if path.commonpath([self.filename, home_path]) == home_path:
+            return "~/{}".format(path.relpath(self.filename, home_path))
+
+        return self.filename
+
     def __str__(self):
         if self.filename:
-            s = f"{self.filename}"
+            s = f"{self.filepath()}"
             if self.line:
                 s += f":{self.line}"
                 if self.column:

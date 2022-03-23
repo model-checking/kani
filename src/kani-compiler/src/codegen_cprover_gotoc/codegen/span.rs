@@ -14,7 +14,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let lo = smap.lookup_char_pos(sp.lo());
         let line = lo.line;
         let col = 1 + lo.col_display;
-        let filename0 = lo.file.name.prefer_remapped().to_string_lossy().to_string();
+        let filename0 = lo.file.name.prefer_local().to_string_lossy().to_string();
         let filename1 = match std::fs::canonicalize(filename0.clone()) {
             Ok(pathbuf) => pathbuf.to_str().unwrap().to_string(),
             Err(_) => filename0,
