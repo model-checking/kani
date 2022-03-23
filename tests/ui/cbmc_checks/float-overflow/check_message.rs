@@ -8,7 +8,7 @@ use kani::any;
 
 // Use the result so rustc doesn't optimize them away.
 fn dummy(result: f32) -> f32 {
-    result.round()
+    result
 }
 
 #[kani::proof]
