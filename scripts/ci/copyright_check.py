@@ -99,6 +99,7 @@ if __name__ == "__main__":
     # Get the copyright check for each file
     checks = [copyright_check(fname) for fname in filenames]
 
+    all_checks_pass = True
     for i in range(len(filenames)):
         print(f'Copyright check - {filenames[i]}: ', end='')
 
@@ -107,11 +108,10 @@ if __name__ == "__main__":
         elif checks[i] == CheckResult.PASS_MODIFIED:
             print('PASS (MODIFIED)')
         else:
+            all_checks_pass = False
             print('FAIL')
 
-    # Convert checks into boolean values to determine the exit code
-    bool_checks = map(result_into_bool, checks)
-    if all(bool_checks):
+    if all_checks_pass:
         sys.exit(0)
     else:
         sys.exit(1)
