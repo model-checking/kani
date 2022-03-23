@@ -29,6 +29,7 @@ macro_rules! assert_op {
 
 // Tests inspired by Rust's examples in
 // https://github.com/rust-lang/rust/blob/0d97f7a96877a96015d70ece41ad08bb7af12377/src/test/ui/simd-intrinsic/simd-intrinsic-generic-arithmetic.rs
+#[kani::proof]
 fn main() {
     let x = i64x2(0, 0);
     let y = i64x2(0, 1);

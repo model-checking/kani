@@ -4,6 +4,7 @@ enum Dummy {
     Dumb,
 }
 
+#[kani::proof]
 fn main() {
     // invoke replace on a zero-sized type
     let mut value: Dummy = Dummy::Dumb;

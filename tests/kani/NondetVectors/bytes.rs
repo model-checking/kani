@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::convert::TryInto;
 
+#[kani::proof]
 fn main() {
     let input: &[u8] = &vec![
         kani::any(),

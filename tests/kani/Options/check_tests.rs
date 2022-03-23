@@ -18,7 +18,7 @@ mod test {
     use my_mod::fn_under_verification;
 
     #[test]
-    #[no_mangle]
+    #[kani::proof]
     fn test_harness() {
         let input: i32 = kani::nondet();
         kani::assume(input > 1);

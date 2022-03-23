@@ -15,6 +15,7 @@ impl Drop for Concrete1 {
     }
 }
 
+#[kani::proof]
 fn main() {
     {
         let _x1 = Concrete1 {};

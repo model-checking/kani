@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#[kani::proof]
 fn main() {
     let a: u32 = kani::any();
     let b = a / 2;

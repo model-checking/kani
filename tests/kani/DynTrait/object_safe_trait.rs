@@ -40,6 +40,7 @@ impl NonDispatchable for S {
     }
 }
 
+#[kani::proof]
 fn main() {
     let s = S {};
     S::foo();

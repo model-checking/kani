@@ -3,6 +3,7 @@
 
 // cbmc-flags: --unwind 10
 
+#[kani::proof]
 fn main() {
     let mut a: u32 = kani::any();
 

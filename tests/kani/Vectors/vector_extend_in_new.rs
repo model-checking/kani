@@ -7,6 +7,7 @@
 // There is an implicit loop, so we need an explicit unwind
 // cbmc-flags: --unwind 3 --unwinding-assertions
 
+#[kani::proof]
 fn main() {
     let a: Vec<Vec<i32>> = vec![vec![0; 2]; 1];
     assert!(a.len() == 1);

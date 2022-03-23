@@ -6,6 +6,7 @@
 // This test is to check Kani's error handling for harnesses that have multiple proof annotations
 // declared.
 
+#[kani::proof]
 fn main() {
     assert!(1 == 2);
 }

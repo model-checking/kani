@@ -75,8 +75,9 @@ pub struct KaniArgs {
     /// Entry point for verification
     #[structopt(long, default_value = "main")]
     pub function: String,
-    /// Link external C files referenced by Rust code
-    #[structopt(long, parse(from_os_str))]
+    /// Link external C files referenced by Rust code.
+    /// This is an experimental feature.
+    #[structopt(long, parse(from_os_str), hidden = true)]
     pub c_lib: Vec<PathBuf>,
     /// Enable test function verification. Only use this option when the entry point is a test function.
     #[structopt(long)]
@@ -101,11 +102,15 @@ pub struct KaniArgs {
     #[structopt(long, allow_hyphen_values = true, min_values(0))] // consumes everything
     pub cbmc_args: Vec<OsString>,
 
+    // Hide option till https://github.com/model-checking/kani/issues/697 is
+    // fixed
     /// Use abstractions for the standard library
-    #[structopt(long)]
+    #[structopt(long, hidden = true)]
     pub use_abs: bool,
+    // Hide option till https://github.com/model-checking/kani/issues/697 is
+    // fixed
     /// Choose abstraction for modules of standard library if available
-    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true)]
+    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true, hidden = true)]
     pub abs_type: AbstractionType,
 
     /// Restrict the targets of virtual table function pointer calls

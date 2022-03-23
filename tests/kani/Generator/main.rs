@@ -21,6 +21,7 @@ fn maybe_call(call: bool) {
     }
 }
 
+#[kani::proof]
 fn main() {
     maybe_call(false);
 }

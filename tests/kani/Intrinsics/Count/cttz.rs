@@ -27,9 +27,6 @@ macro_rules! test_cttz {
             count
         }
         let var: $ty = kani::any();
-        // FIXME: Remove the assumption below when CBMC returns the correct value for 0
-        // https://github.com/model-checking/kani/issues/881
-        kani::assume(var != 0);
         // Check that the result is correct
         assert!($fn_name(var) == cttz(var));
         // Check that the stable version returns the same value
@@ -49,6 +46,7 @@ macro_rules! test_cttz_nonzero {
     };
 }
 
+#[kani::proof]
 fn main() {
     test_cttz!(my_cttz_u8, u8);
     test_cttz!(my_cttz_u16, u16);

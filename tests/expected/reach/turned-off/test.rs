@@ -6,6 +6,7 @@
 
 // kani-flags: --no-assertion-reach-checks
 
+#[kani::proof]
 fn main() {
     let x = if kani::any() { 5 } else { 9 };
     if x > 10 {

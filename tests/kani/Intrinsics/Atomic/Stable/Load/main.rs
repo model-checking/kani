@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[kani::proof]
 fn main() {
     // pub fn load(&self, order: Ordering) -> bool
     // Loads a value from the bool.

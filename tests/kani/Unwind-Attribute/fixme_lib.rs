@@ -6,6 +6,7 @@
 // Added to fix me because there are no tests for the annotations themselves.
 // TODO : The unwind value needs to be parsed and the unwind needs to be applied to each harness, we do not test this behavior yet.
 
+#[kani::proof]
 fn main() {
     assert!(1 == 2);
 }

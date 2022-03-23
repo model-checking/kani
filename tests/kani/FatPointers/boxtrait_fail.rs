@@ -28,6 +28,7 @@ impl Trait for Concrete {
     }
 }
 
+#[kani::proof]
 fn main() {
     let mut x: Box<dyn Trait> = Box::new(Concrete::new());
     x.increment();

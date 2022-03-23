@@ -4,6 +4,7 @@
 #![feature(bench_black_box)]
 use std::hint::black_box;
 
+#[kani::proof]
 fn main() {
     // black_box is an identity function that limits compiler optimizations
     let a = 10;
