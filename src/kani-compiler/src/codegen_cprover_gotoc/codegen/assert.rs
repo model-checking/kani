@@ -1,10 +1,13 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! This file contains the code that acts as a wrapper to create the new assert and related statements
+
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt};
 use std::str::FromStr;
 
-///
-///
-
+/// The Property Class enum stores all viable options for classifying asserts, cover assume and other related statements
 #[derive(Copy, Debug, Clone)]
 pub enum PropertyClass {
     ExpectFail,

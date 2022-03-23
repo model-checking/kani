@@ -22,8 +22,6 @@ use tracing::debug;
 ///      would translate to `Stmt::while_loop(c, vec![stmt1, stmt2], loc)`
 /// Statements can also be created using the converters in the `Expr` module.
 ///
-
-///
 /// TODO:
 /// The CBMC irep resentation uses sharing to reduce the in-memory size of expressions.
 /// This is not currently implemented for these expressions, but would be possible given a factory.
@@ -192,11 +190,11 @@ impl Stmt {
         stmt!(Assign { lhs, rhs }, loc)
     }
 
-    /// `assert(cond);`
+    /// `assert(cond, property_class, commment);`
     pub fn assert_statement(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
 
-        // Create a Assert Stmt type
+        // Chose InternedString to seperate out codegen from the cprover_bindings logic
         let property_class = property_name.to_string().intern();
         let msg = message.into();
 
