@@ -1,2 +1,1 @@
-FAILURE\
-assertion failed: counter < 10
+Failed Checks: assertion failed: 1 == 2
