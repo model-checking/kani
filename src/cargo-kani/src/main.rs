@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
-use args_toml::config_toml_to_args;
+use args_toml::join_args;
 use call_cbmc::VerificationStatus;
 use kani_metadata::HarnessMetadata;
 use session::KaniSession;
@@ -32,8 +32,8 @@ fn main() -> Result<()> {
     }
 }
 
-fn cargokani_main(mut input_args: Vec<OsString>) -> Result<()> {
-    input_args.extend(config_toml_to_args()?);
+fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
+    let input_args = join_args(input_args)?;
     let args = args::CargoKaniArgs::from_iter(input_args);
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
