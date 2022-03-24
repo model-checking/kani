@@ -71,22 +71,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         }
     }
 
-    if !ctx.args.quiet && !ctx.args.visualize {
-        println!(
-            "Complete - {} successfully verified harnesses, {} failures, {} total.",
-            harnesses.len() - failed_harnesses.len(),
-            failed_harnesses.len(),
-            harnesses.len()
-        );
-    }
-
-    if !failed_harnesses.is_empty() {
-        // Failure exit code without additional error message
-        drop(ctx);
-        std::process::exit(1);
-    }
-
-    Ok(())
+    ctx.print_final_summary(&harnesses, &failed_harnesses)
 }
 
 fn standalone_main() -> Result<()> {
@@ -132,22 +117,7 @@ fn standalone_main() -> Result<()> {
         }
     }
 
-    if !ctx.args.quiet && !ctx.args.visualize {
-        println!(
-            "Complete - {} successfully verified harnesses, {} failures, {} total.",
-            harnesses.len() - failed_harnesses.len(),
-            failed_harnesses.len(),
-            harnesses.len()
-        );
-    }
-
-    if !failed_harnesses.is_empty() {
-        // Failure exit code without additional error message
-        drop(ctx);
-        std::process::exit(1);
-    }
-
-    Ok(())
+    ctx.print_final_summary(&harnesses, &failed_harnesses)
 }
 
 impl KaniSession {
@@ -168,6 +138,36 @@ impl KaniSession {
         } else {
             self.run_cbmc(&binary)
         }
+    }
+
+    fn print_final_summary(
+        self,
+        harnesses: &[HarnessMetadata],
+        failed_harnesses: &[&HarnessMetadata],
+    ) -> Result<()> {
+        if !self.args.quiet && !self.args.visualize && harnesses.len() > 1 {
+            if !failed_harnesses.is_empty() {
+                println!("Summary:");
+            }
+            for harness in failed_harnesses.iter() {
+                println!("Verification failed for - {}", harness.pretty_name);
+            }
+
+            println!(
+                "Complete - {} successfully verified harnesses, {} failures, {} total.",
+                harnesses.len() - failed_harnesses.len(),
+                failed_harnesses.len(),
+                harnesses.len()
+            );
+        }
+
+        if !failed_harnesses.is_empty() {
+            // Failure exit code without additional error message
+            drop(self);
+            std::process::exit(1);
+        }
+
+        Ok(())
     }
 }
 
