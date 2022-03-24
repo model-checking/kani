@@ -1,4 +1,4 @@
-# Kani verification results
+# Verification results
 
 The result of a check in Kani can be one of the following:
 
@@ -9,7 +9,7 @@ _over-constrained_.
 
 Example:
 ```rust
-{{#include getting-started/result-types/src/main.rs:success_example}}
+{{#include getting-started/verification-results/src/main.rs:success_example}}
 ```
 The output from Kani indicates that the assertion holds:
 ```
@@ -26,7 +26,7 @@ examine the trace.
 
 Example:
 ```rust
-{{#include getting-started/result-types/src/main.rs:failure_example}}
+{{#include getting-started/verification-results/src/main.rs:failure_example}}
 ```
 The assertion doesn't hold as Kani's output indicates:
 ```
@@ -50,7 +50,7 @@ currently checks the reachability of the following assertion types:
 Example:
 
 ```rust
-{{#include getting-started/result-types/src/main.rs:unreachable_example}}
+{{#include getting-started/verification-results/src/main.rs:unreachable_example}}
 ```
 
 The output from Kani indicates that the assertion is unreachable:
@@ -63,12 +63,12 @@ Check 2: unreachable_example.assertion.2
 4. `UNDETERMINED`: This indicates that Kani was not able to conclude whether the
 property holds or not. This can occur when the Rust program contains a construct
 that is not currently supported by Kani. See
-[Limitations](./limitations.md#limitations) for Kani's current support of the
+[Rust feature support](./rust-feature-support.md) for Kani's current support of the
 Rust language features.
 
 Example:
 ```rust
-{{#include getting-started/result-types/src/main.rs:undetermined_example}}
+{{#include getting-started/verification-results/src/main.rs:undetermined_example}}
 ```
 The output from Kani indicates that the assertion is undetermined due to the
 missing support for inline assembly in Kani:
