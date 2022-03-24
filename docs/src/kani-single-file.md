@@ -28,7 +28,7 @@ The most common `kani` arguments are the following:
    unwinding](./tutorial-loop-unwinding.md) bound on all loops. This can force
    termination when CBMC tries to unwind loops indefinitely.
 
- * `output-format <regular|terse|old>`: By default (`regular`), Kani
+ * `--output-format <regular|terse|old>`: By default (`regular`), Kani
    post-processes CBMC's output to produce more comprehensible results. In
    contrast, `terse` outputs only a summary of these results, and `old` forces
    Kani to emit the original output from CBMC.
