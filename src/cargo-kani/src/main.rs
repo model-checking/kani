@@ -60,10 +60,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
     for harness in &harnesses {
-        let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", &harness.pretty_name));
+        let harness_filename = harness.pretty_name.replace("::", "-");
+        let report_dir = report_base.join(format!("report-{}", harness_filename));
+        let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
         ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-        let result = ctx.check_harness(&specialized_obj, &report_base, &harness)?;
+        let result = ctx.check_harness(&specialized_obj, &report_dir, &harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(&harness);
         }
@@ -115,14 +117,16 @@ fn standalone_main() -> Result<()> {
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
     for harness in &harnesses {
-        let specialized_obj = append_path(&linked_obj, &format!("-for-{}", harness.pretty_name));
+        let harness_filename = harness.pretty_name.replace("::", "-");
+        let report_dir = report_base.join(format!("report-{}", harness_filename));
+        let specialized_obj = append_path(&linked_obj, &format!("-for-{}", harness_filename));
         {
             let mut temps = ctx.temporaries.borrow_mut();
             temps.push(specialized_obj.to_owned());
         }
         ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-        let result = ctx.check_harness(&specialized_obj, &report_base, &harness)?;
+        let result = ctx.check_harness(&specialized_obj, &report_dir, &harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(&harness);
         }
@@ -150,7 +154,7 @@ impl KaniSession {
     fn check_harness(
         &self,
         binary: &Path,
-        report_base: &Path,
+        report_dir: &Path,
         harness: &HarnessMetadata,
     ) -> Result<VerificationStatus> {
         if !self.args.quiet {
@@ -158,8 +162,6 @@ impl KaniSession {
         }
 
         if self.args.visualize {
-            let report_name = format!("report-{}", harness.pretty_name);
-            let report_dir = report_base.join(report_name);
             self.run_visualize(&binary, &report_dir)?;
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationStatus::Success)
