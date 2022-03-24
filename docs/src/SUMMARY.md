@@ -1,25 +1,29 @@
 # The Kani Rust Verifier
 
-- [Getting started with Kani](./getting-started.md)
+- [Getting started](./getting-started.md)
   - [Installation](./install-guide.md)
-  - [Comparison with other tools](./tool-comparison.md)
-  - [Kani on a single file](./kani-single-file.md)
-  - [Kani on a package](./cargo-kani.md)
-  - [Kani result types](./kani-result-types.md)
-  - [Debugging failures]()
-  - [Debugging non-termination]()
-  - [Debugging coverage]()
+  - [Usage](./usage.md)
+    - [On a single file](./kani-single-file.md)
+    - [On a package](./cargo-kani.md)
+  - [Verification results](./verification-results.md)
 
-- [Kani tutorial](./kani-tutorial.md)
-  - [First steps with Kani](./tutorial-first-steps.md)
+- [Tutorial](./kani-tutorial.md)
+  - [First steps](./tutorial-first-steps.md)
   - [Failures that Kani can spot](./tutorial-kinds-of-failure.md)
-  - [Loops, unwinding, and bounds](./tutorial-loops-unwinding.md)
-  - [Creating non-deterministic variables](./tutorial-nondeterministic-variables.md)
+  - [Loop unwinding](./tutorial-loop-unwinding.md)
+  - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
   - [Where to start on real code](./tutorial-real-code.md)
 
-- [Kani developer documentation](./dev-documentation.md)
-  - [Working with `RUSTC`](./rustc-hacks.md)
-  - [Testing](./kani-testing.md)
-  - [Book runner](./bookrunner.md)
+- [Developer documentation](dev-documentation.md)
+  - [Command cheat sheets](./cheat-sheets.md)
+  - [Working with `rustc`](./rustc-hacks.md)
+  - [Testing](./testing.md)
+    - [Regression testing](./kani-testing.md)
+    - [Book runner](./bookrunner.md)
 
-- [Limitations](./limitations.md)
+- [Rust feature support](./rust-feature-support.md)
+  - [Overrides](./overrides.md)
+
+---
+
+[Comparison with other tools](./tool-comparison.md)
