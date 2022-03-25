@@ -15,7 +15,7 @@ Check 1: example.assertion.1
 Kani determines the verification result for the harness based on the
 result (i.e., `<status>`) of each individual check (also known as "properties"). If all
 checks are successful then the overall verification result of the harness is successful. Otherwise the
-verification is failed, which indicates issues with the code under verification.
+verification fails, which indicates issues with the code under verification.
 
 ## Check results
 
