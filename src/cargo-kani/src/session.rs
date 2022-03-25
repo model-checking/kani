@@ -52,7 +52,7 @@ impl KaniSession {
 
 impl Drop for KaniSession {
     fn drop(&mut self) {
-        if !self.args.keep_temps {
+        if !self.args.keep_temps && !self.args.dry_run {
             let temporaries = self.temporaries.borrow();
 
             for file in temporaries.iter() {

@@ -8,9 +8,9 @@ use std::process::Command;
 use crate::session::KaniSession;
 
 impl KaniSession {
-    /// Given a `file` (a .symtab.json), produce `{file}.out` by calling symtab2gb
+    /// Given a `file.symtab.json`, produce `{file}.symtab.out` by calling symtab2gb
     pub fn symbol_table_to_gotoc(&self, file: &Path) -> Result<PathBuf> {
-        let output_filename = crate::util::append_path(file, "out");
+        let output_filename = file.with_extension("out");
 
         {
             let mut temps = self.temporaries.borrow_mut();

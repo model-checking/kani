@@ -104,7 +104,7 @@ fn standalone_main() -> Result<()> {
     for harness in &harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
-        let specialized_obj = append_path(&linked_obj, &format!("-for-{}", harness_filename));
+        let specialized_obj = append_path(&linked_obj, &format!("for-{}", harness_filename));
         {
             let mut temps = ctx.temporaries.borrow_mut();
             temps.push(specialized_obj.to_owned());
