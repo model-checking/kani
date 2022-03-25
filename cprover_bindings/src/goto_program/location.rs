@@ -67,8 +67,8 @@ impl Location {
                 format!("<{}>", function_name)
             }
             Location::Loc { file, line, .. } => format!("{}:{}", file, line),
-            Location::Property { property_class, comment, .. } => {
-                format!("{:?}:{:?}", property_class, comment)
+            Location::Property { property_class, comment, file, line, .. } => {
+                format!("{:?}:{:?},{:?}:{:?}", property_class, comment, file, line)
             }
         }
     }
@@ -117,11 +117,11 @@ impl Location {
     }
 
     /// Create a Property type Location from an already existing Location type
-    pub fn create_location<T: Into<InternedString>>(
+    pub fn create_location_with_property<T: Into<InternedString>>(
         comment: T,
         property_name: T,
         location: Self,
-    ) -> Location {
+    ) -> Self {
         match location {
             Location::BuiltinFunction { function_name, line } => Location::property_location(
                 None,
