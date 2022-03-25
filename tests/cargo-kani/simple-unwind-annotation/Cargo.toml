@@ -7,7 +7,3 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-
-# Remove this once unwind has been hooked up
-[package.metadata.kani]
-flags = {function = "harness"}

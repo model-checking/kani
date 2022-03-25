@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @expect verified
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     // unsigned
     {
         let a: u32 = 2;
