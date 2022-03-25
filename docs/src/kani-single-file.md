@@ -23,7 +23,7 @@ kani filenames.rs --visualize --cbmc-args --object-bits 11 --unwind 15
 This report will shows coverage information, as well as give traces for each failure Kani finds.
 
 **`--harness <name>`** Kani defaults to checking all proof harnesses.
-You can switch to hceking just one harness using this flag.
+You can switch to checking just one harness using this flag.
 Proof harnesses are functions that have been given the `#[kani::proof]` annotation.
 
 **`--gen-c`** will generate a C file that roughly corresponds to the input Rust file.

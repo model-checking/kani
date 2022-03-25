@@ -113,7 +113,7 @@ impl KaniSession {
             Ok(KaniMetadata { proof_harnesses: vec![] })
         } else {
             // TODO: one possible future improvement here would be to return some kind of Lazy
-            // value, that only computes this metadata it turns out we need it.
+            // value, that only computes this metadata if it turns out we need it.
             let results: Result<Vec<_>, _> = files.iter().map(|x| read_kani_metadata(x)).collect();
             Ok(merge_kani_metadata(results?))
         }
