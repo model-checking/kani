@@ -1,12 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @expect verified
 
 fn safe_div(x: u32, y: u32) -> Option<u32> {
     if y != 0 { Some(x / y) } else { None }
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let x = kani::any();
     if x > 0 && x <= 200 {
         // avoid overflow

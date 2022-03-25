@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @flag --no-memory-splitting
-// @expect verified
 
 fn call_with_one<F>(mut some_closure: F) -> ()
 where
@@ -10,7 +8,8 @@ where
     some_closure(1);
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let mut num: i32 = kani::any();
     if num <= std::i32::MAX - 10 {
         let original_num = num;

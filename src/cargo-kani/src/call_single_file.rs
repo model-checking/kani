@@ -18,6 +18,8 @@ pub struct SingleOutputs {
     pub symtab: PathBuf,
     /// The vtable restrictions files, if any.
     pub restrictions: Option<PathBuf>,
+    /// The kani-metadata.json file written by kani-compiler.
+    pub metadata: PathBuf,
 }
 
 impl KaniSession {
@@ -34,7 +36,7 @@ impl KaniSession {
             let mut temps = self.temporaries.borrow_mut();
             temps.push(output_filename.clone());
             temps.push(typemap_filename);
-            temps.push(metadata_filename);
+            temps.push(metadata_filename.clone());
             if self.args.restrict_vtable() {
                 temps.push(restrictions_filename.clone());
             }
@@ -55,11 +57,11 @@ impl KaniSession {
                 args.push(t);
             }
         } else {
-            if self.args.function != "main" {
-                // Unless entry function for proof harness is main, compile code as lib.
-                // This ensures that rustc won't prune functions that are not reachable
-                // from main as well as enable compilation of crates that don't have a main
-                // function.
+            // If we specifically request "--function main" then don't override crate type
+            if Some("main".to_string()) != self.args.function {
+                // We only run against proof harnesses normally, and this change
+                // 1. Means we do not require a `fn main` to exist
+                // 2. Don't forget it also changes visibility rules.
                 args.push("--crate-type".into());
                 args.push("lib".into());
             }
@@ -80,6 +82,7 @@ impl KaniSession {
         Ok(SingleOutputs {
             outdir,
             symtab: output_filename,
+            metadata: metadata_filename,
             restrictions: if self.args.restrict_vtable() {
                 Some(restrictions_filename)
             } else {

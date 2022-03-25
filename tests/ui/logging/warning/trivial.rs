@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --function harness
 // This test is to make sure we are correctly printing warnings from the kani-compiler.
 
 // FIXME: This should also print a warning:
@@ -16,7 +15,7 @@ fn is_true(b: bool) {
     assert!(b);
 }
 
-// This should print a warning since this is a no-op.
+// Duplicate proof harness attributes should produce a warning
 #[kani::proof]
 #[kani::proof]
 fn harness() {

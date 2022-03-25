@@ -1,12 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
-// This harness should fail because unwind limit is too high.
 
-fn main() {
-    assert!(1 == 2);
-}
-
+// TODO: When unwind is hooked up, `harness.expected` should now see success
 #[kani::proof]
 #[kani::unwind(9)]
 fn harness() {
