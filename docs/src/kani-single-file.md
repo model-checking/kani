@@ -22,9 +22,9 @@ kani filenames.rs --visualize --cbmc-args --object-bits 11 --unwind 15
 **`--visualize`** will generate a report in the local directory accessible through `report/html/index.html`.
 This report will shows coverage information, as well as give traces for each failure Kani finds.
 
-**`--function <name>`** Kani defaults to assuming the starting function is called `main`.
-You can change it to a different function with this argument.
-Note that to "find" the function given, it needs to be given the `#[kani::proof]` annotation.
+**`--harness <name>`** Kani defaults to checking all proof harnesses.
+You can switch to checking just one harness using this flag.
+Proof harnesses are functions that have been given the `#[kani::proof]` annotation.
 
 **`--gen-c`** will generate a C file that roughly corresponds to the input Rust file.
 This can sometimes be helpful when trying to debug a problem with Kani.

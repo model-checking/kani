@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HarnessMetadata {
     /// The name the user gave to the function
     pub pretty_name: String,
