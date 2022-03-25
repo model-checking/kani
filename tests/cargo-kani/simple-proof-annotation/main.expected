@@ -1,2 +1,1 @@
-FAILURE\
-assertion failed: 1 == 2
+Error: A proof harness named main was not found

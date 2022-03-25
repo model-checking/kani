@@ -185,7 +185,7 @@ Fortunately, Kani is able to report a coverage metric for each proof harness.
 Try running:
 
 ```
-kani --visualize src/final_form.rs --function verify_success
+kani --visualize src/final_form.rs --harness verify_success
 open report/html/index.html
 ```
 

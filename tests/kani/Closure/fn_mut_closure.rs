@@ -15,6 +15,7 @@ where
     }
 }
 
+#[kani::proof]
 fn main() {
     let mut sum = 0_usize;
     let elems = [1_usize, 2, 3, 4, 5];
