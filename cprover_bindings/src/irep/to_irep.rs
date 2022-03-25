@@ -135,7 +135,18 @@ impl ToIrep for DatatypeComponent {
 
 impl ToIrep for Expr {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
-        self.value().to_irep(mm).with_location(self.location(), mm).with_type(self.typ(), mm)
+        if let ExprValue::IntConstant(i) = self.value() {
+            let width = self.typ().native_width(mm).unwrap();
+            Irep {
+                id: IrepId::Constant,
+                sub: vec![],
+                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(i.clone(), width))],
+            }
+            .with_location(self.location(), mm)
+            .with_type(self.typ(), mm)
+        } else {
+            self.value().to_irep(mm).with_location(self.location(), mm).with_type(self.typ(), mm)
+        }
     }
 }
 
@@ -181,7 +192,10 @@ impl ToIrep for ExprValue {
             ExprValue::CBoolConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(if *i { 1 } else { 0 }),)],
+                named_sub: vector_map![(
+                    IrepId::Value,
+                    Irep::just_hex_id(if *i { 1u8 } else { 0 }, mm.bool_width())
+                )],
             },
             ExprValue::Dereference(e) => {
                 Irep { id: IrepId::Dereference, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
@@ -192,7 +206,10 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c))],
+                    named_sub: vector_map![(
+                        IrepId::Value,
+                        Irep::just_hex_id(c, mm.double_width())
+                    )],
                 }
             }
             ExprValue::FloatConstant(i) => {
@@ -200,7 +217,7 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c))],
+                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c, mm.float_width()))],
                 }
             }
             ExprValue::FunctionCall { function, arguments } => side_effect_irep(
@@ -217,11 +234,9 @@ impl ToIrep for ExprValue {
                 sub: vec![array.to_irep(mm), index.to_irep(mm)],
                 named_sub: vector_map![],
             },
-            ExprValue::IntConstant(i) => Irep {
-                id: IrepId::Constant,
-                sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(i.clone()))],
-            },
+            ExprValue::IntConstant(_) => {
+                unreachable!("Should have been processed in previous step")
+            }
             ExprValue::Member { lhs, field } => Irep {
                 id: IrepId::Member,
                 sub: vec![lhs.to_irep(mm)],
@@ -239,7 +254,7 @@ impl ToIrep for ExprValue {
             ExprValue::PointerConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(*i))],
+                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(*i, mm.pointer_width()))],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
             ExprValue::StatementExpression { statements: ops } => side_effect_irep(
@@ -278,7 +293,7 @@ impl ToIrep for ExprValue {
             ExprValue::UnOp { op: UnaryOperand::Bswap, e } => Irep {
                 id: IrepId::Bswap,
                 sub: vec![e.to_irep(mm)],
-                named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8))],
+                named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8u8))],
             },
             ExprValue::UnOp { op: UnaryOperand::BitReverse, e } => {
                 Irep { id: IrepId::BitReverse, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }

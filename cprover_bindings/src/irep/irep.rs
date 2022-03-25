@@ -28,7 +28,7 @@ impl Irep {
 
     pub fn lookup_as_int(&self, id: IrepId) -> Option<&BigInt> {
         self.lookup(id).and_then(|x| match &x.id {
-            IrepId::FreeformInteger(i) | IrepId::FreeformHexInteger(i) => Some(i),
+            IrepId::FreeformInteger(i) | IrepId::FreeformHexInteger { value: i, .. } => Some(i),
             _ => None,
         })
     }
@@ -101,11 +101,11 @@ impl Irep {
         Irep::just_id(IrepId::Empty)
     }
 
-    pub fn just_hex_id<T>(i: T) -> Irep
+    pub fn just_hex_id<T>(i: T, width: u64) -> Irep
     where
         T: Into<BigInt>,
     {
-        Irep::just_id(IrepId::hex_from_int(i))
+        Irep::just_id(IrepId::hex_from_int(i, width))
     }
 
     pub fn just_id(id: IrepId) -> Irep {

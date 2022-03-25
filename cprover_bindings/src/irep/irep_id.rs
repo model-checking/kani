@@ -5,7 +5,8 @@
 //! This file contains [IrepId] which is the id's used in CBMC.
 //! c.f. CBMC source code [src/util/irep_ids.def]
 use crate::cbmc_string::InternedString;
-use num::bigint::BigInt;
+use num::{bigint::BigInt, Signed};
+use std::ops::{Shl, Sub};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum IrepId {
@@ -15,7 +16,10 @@ pub enum IrepId {
     /// An integer, encoded as a decimal string
     FreeformInteger(BigInt),
     /// An integer, encoded as a hex string
-    FreeformHexInteger(BigInt),
+    FreeformHexInteger {
+        value: BigInt,
+        width: u64,
+    },
     EmptyString,
     Let,
     LetBinding,
@@ -829,11 +833,11 @@ impl IrepId {
         IrepId::FreeformInteger(i.into())
     }
 
-    pub fn hex_from_int<T>(i: T) -> IrepId
+    pub fn hex_from_int<T>(i: T, width: u64) -> IrepId
     where
         T: Into<BigInt>,
     {
-        IrepId::FreeformHexInteger(i.into())
+        IrepId::FreeformHexInteger { value: i.into(), width }
     }
 
     //TODO assert that s is not the string produced by any other IrepId
@@ -847,14 +851,27 @@ impl ToString for IrepId {
         match self {
             IrepId::FreeformString(s) => return s.to_string(),
             IrepId::FreeformInteger(i) => return i.to_string(),
-            IrepId::FreeformHexInteger(i) => return format!("{:X}", i),
+            IrepId::FreeformHexInteger { value, width } => {
+                // CBMC expects two's complement for negative numbers.
+                // The bignum crate instead does sign/magnitude when making hex.
+                // So for negatives, do the two's complement ourselves.
+                if value.lt(&0u8.into()) {
+                    let one: BigInt = 1u8.into();
+                    let max: BigInt = one.clone().shl(width).sub(one.clone());
+                    assert!(value.abs().lt(&max));
+                    let two_complement = max.sub(value.abs().sub(one.clone()));
+                    return format!("{:X}", two_complement);
+                } else {
+                    return format!("{:X}", value);
+                }
+            }
             _ => (),
         }
 
         let s = match self {
             IrepId::FreeformString(_)
             | IrepId::FreeformInteger(_)
-            | IrepId::FreeformHexInteger(_) => unreachable!(),
+            | IrepId::FreeformHexInteger { .. } => unreachable!(),
             IrepId::EmptyString => "",
             IrepId::Let => "let",
             IrepId::LetBinding => "let_binding",
