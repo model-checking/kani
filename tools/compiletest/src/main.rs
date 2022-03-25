@@ -374,7 +374,9 @@ fn collect_tests_from_dir(
     if config.mode == Mode::CargoKani && dir.join("Cargo.toml").exists() {
         for file in fs::read_dir(dir)? {
             let file_path = file?.path();
-            if file_path.to_str().unwrap().ends_with(".expected") {
+            if file_path.to_str().unwrap().ends_with(".expected")
+                || "expected" == file_path.file_name().unwrap()
+            {
                 fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
                 let paths =
                     TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };

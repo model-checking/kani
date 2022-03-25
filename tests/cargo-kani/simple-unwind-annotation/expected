@@ -1,0 +1,2 @@
+FAILURE\
+assertion failed: counter < 10

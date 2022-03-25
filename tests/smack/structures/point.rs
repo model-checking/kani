@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @expect verified
 
 use std::ops::{Add, AddAssign};
 
@@ -36,7 +35,8 @@ impl AddAssign for Point {
     }
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let w = kani::any();
     let x = kani::any();
     let y = kani::any();

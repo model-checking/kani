@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @expect verified
 
 struct Point<T> {
     pub x: T,
@@ -33,7 +32,8 @@ fn swapem<T, U: S<T>>(s: U) -> U {
     s.swap_items()
 }
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let x2 = kani::any();
     let y2 = kani::any();
     let x3 = kani::any();

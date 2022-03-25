@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result};
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::session::KaniSession;
@@ -17,6 +17,8 @@ pub struct CargoOutputs {
     pub symtabs: Vec<PathBuf>,
     /// The location of vtable restrictions files (a directory of *.restrictions.json)
     pub restrictions: Option<PathBuf>,
+    /// The kani-metadata.json files written by kani-compiler.
+    pub metadata: Vec<PathBuf>,
 }
 
 impl KaniSession {
@@ -44,7 +46,7 @@ impl KaniSession {
         args.push(build_target.into());
 
         args.push("--target-dir".into());
-        args.push(target_dir.clone().into());
+        args.push(target_dir.into());
 
         if self.args.verbose {
             args.push("-v".into());
@@ -59,26 +61,26 @@ impl KaniSession {
         self.run_terminal(cmd)?;
 
         if self.args.dry_run {
-            // mock an answer
+            // mock an answer: mostly the same except we don't/can't expand the globs
             return Ok(CargoOutputs {
                 outdir: outdir.clone(),
-                symtabs: vec![outdir.join("dry-run.symtab.json")],
+                symtabs: vec![outdir.join("*.symtab.json")],
+                metadata: vec![outdir.join("*.kani-metadata.json")],
                 restrictions: self.args.restrict_vtable().then(|| outdir),
             });
         }
 
-        let symtabs = glob(&outdir.join("*.symtab.json"));
-
         Ok(CargoOutputs {
             outdir: outdir.clone(),
-            symtabs: symtabs?,
+            symtabs: glob(&outdir.join("*.symtab.json"))?,
+            metadata: glob(&outdir.join("*.kani-metadata.json"))?,
             restrictions: self.args.restrict_vtable().then(|| outdir),
         })
     }
 }
 
 /// Given a `path` with glob characters in it (e.g. `*.json`), return a vector of matching files
-fn glob(path: &PathBuf) -> Result<Vec<PathBuf>> {
+fn glob(path: &Path) -> Result<Vec<PathBuf>> {
     let results = glob::glob(path.to_str().context("Non-UTF-8 path enountered")?)?;
     // the logic to turn "Iter<Result<T, E>>" into "Result<Vec<T>, E>" doesn't play well
     // with anyhow, so a type annotation is required

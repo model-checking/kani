@@ -32,7 +32,7 @@ You can try it out by running the example under
 [arbitrary-variables directory](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
-cargo kani --function safe_update
+cargo kani --harness safe_update
 ```
 
 ## Unsafe nondeterministic variables
@@ -57,7 +57,7 @@ The compiler is able to represent `Option<NonZeroU32>` using `32` bits by using 
 You can try it out by running the example under [arbitrary-variables directory](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
-cargo kani --function unsafe_update
+cargo kani --harness unsafe_update
 ```
 
 ## Safe nondeterministic variables for custom types
@@ -88,5 +88,5 @@ You can try it out by running the example under
 [`docs/src/tutorial/arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
-cargo kani --function check_rating
+cargo kani --harness check_rating
 ```
