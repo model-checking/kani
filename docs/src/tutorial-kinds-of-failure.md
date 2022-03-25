@@ -10,13 +10,13 @@ In this section, we're going to expand on these additional checks, to give you a
 Rust is safe by default, and so includes dynamic (run-time) bounds checking where needed.
 Consider this Rust code (which can be found under [`docs/src/tutorial/kinds-of-failure`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kinds-of-failure/)):
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:code}}
 ```
 
 We can again write a simple property test against this code:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:proptest}}
 ```
 
@@ -24,7 +24,7 @@ This property test will immediately find the failing case because of this dynami
 
 But what if we change this function to use unsafe Rust:
 
-```rust
+```rust,noplaypen
 return unsafe { *a.get_unchecked(i % a.len() + 1) };
 ```
 
@@ -38,7 +38,7 @@ test tests::doesnt_crash ... ok
 
 But we're able to check this unsafe code with Kani:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:kani}}
 ```
 
@@ -153,7 +153,7 @@ These two techniques should help you find both the nondeterministic inputs, and 
 
 Consider a different variant on the above function:
 
-```rust
+```rust,noplaypen
 fn get_wrapped(i: usize, a: &[u32]) -> u32 {
     return a[i % a.len()];
 }
@@ -167,7 +167,7 @@ Kani will spot this not as a bound error, but as a mathematical error: on an emp
 Rust also performs runtime safety checks for integer overflows, much like it does for bounds checks.
 Consider this code (from `src/overflow.rs`):
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kinds-of-failure/src/overflow.rs:code}}
 ```
 
@@ -194,7 +194,7 @@ For instance, instead of `a + b` write `a.wrapping_add(b)`.
 One of the classic subtle bugs that persisted in many implementations for a very long time is finding the midpoint in quick sort.
 This often naively looks like this (from `src/overflow_quicksort.rs`):
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kinds-of-failure/src/overflow_quicksort.rs:code}}
 ```
 
@@ -210,7 +210,7 @@ Don't add that right away, see what happens if you don't. Just keep it in mind.)
 
 A very common approach for resolving the overflow issue looks like this:
 
-```rust
+```rust,noplaypen
 return low + (high - low) / 2;
 ```
 
@@ -223,7 +223,7 @@ After all, what does "correct" even mean?
 Often we're using a good approximation of correct, such as the equivalence of two implementations (often one much "simpler" than the other somehow).
 Here's one possible assertion to make that obvious:
 
-```rust
+```rust,noplaypen
 assert!(result as u64 == (a as u64 + b as u64) / 2);
 ```
 

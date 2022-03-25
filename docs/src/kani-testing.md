@@ -78,7 +78,7 @@ error: test failed: expected check success, got failure
 When working on a test that is expected to fail, there are two options to
 indicate an expected failure. The first one is to add a comment
 
-```rust
+```rust,noplaypen
 // kani-<stage>-fail
 ```
 at the top of the test file, where `<stage>` is the stage where the test is
