@@ -5,7 +5,7 @@
 // Note: We need to provide the compile-flags because compile test runs rustc directly and via kani.
 
 // compile-flags: --test
-// kani-flags: --tests --function test_harness
+// kani-flags: --tests
 
 pub mod my_mod {
     pub fn fn_under_verification(a: i32) {

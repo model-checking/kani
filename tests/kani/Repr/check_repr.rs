@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// compile-flags: --crate-type lib
-// kani-flags: --function find_error
 #![feature(decl_macro)]
 
 pub type Key = i8;

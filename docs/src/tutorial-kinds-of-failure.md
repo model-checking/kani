@@ -43,7 +43,7 @@ But we're able to check this unsafe code with Kani:
 ```
 
 ```
-# kani src/bounds_check.rs --function bound_check
+# kani src/bounds_check.rs --harness bound_check
 [...]
 ** 15 of 448 failed
 [...]
@@ -56,7 +56,7 @@ Kani is inserting a lot more checks than appear as asserts in our code, so the o
 Let's narrow that output down a bit:
 
 ```
-# kani src/bounds_check.rs --function bound_check | grep Failed
+# kani src/bounds_check.rs --harness bound_check | grep Failed
 Failed Checks: attempt to compute offset which would overflow
 Failed Checks: attempt to calculate the remainder with a divisor of zero
 Failed Checks: attempt to add with overflow
@@ -92,7 +92,7 @@ Consider trying a few more small exercises with this example:
 Having switched back to the safe indexing operation, Kani reports two failures:
 
 ```
-# kani src/bounds_check.rs --function bound_check | grep Failed
+# kani src/bounds_check.rs --harness bound_check | grep Failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
 Failed Checks: dereference failure: pointer outside object bounds
 ```
@@ -176,7 +176,7 @@ Kani will find these failures as well.
 Here's the output from Kani:
 
 ```
-# kani src/overflow.rs --function add_overflow
+# kani src/overflow.rs --harness add_overflow
 [...]
 RESULTS:
 Check 1: simple_addition.assertion.1
