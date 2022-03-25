@@ -5,11 +5,11 @@ This section will try to help you get over that hurdle.
 
 In general, you're trying to do three things:
 
-1. Find a place it'd be valuable to have a proof.
-2. Find a place it won't be too difficult to prove something, just to start.
+1. Find a place where it'd be valuable to have a proof.
+2. Find a place where it won't be too difficult to prove something, just to start.
 3. Figure out what a feasible longer-term goal might be.
 
-**By far the best strategy is to follow your testing.**
+**By far, the best strategy is to follow your testing.**
 Places where proof will be valuable are often places where you've written a lot of tests, because they're valuable there for the same reasons.
 Likewise, code structure changes to make functions more unit-testable will also make functions more amenable to proof.
 Often, by examining existing unit tests (and especially property tests), you can easily find a relatively self-contained function that's a good place to start.
@@ -18,7 +18,7 @@ Often, by examining existing unit tests (and especially property tests), you can
 
 1. Where complicated things happen with untrusted user input.
 These are often the critical "entry points" into the code.
-These are also places where you probably want to try fuzz testing.
+These are also places where you probably want to try other techniques (e.g., fuzz testing).
 
 2. Where `unsafe` is used extensively.
 These are often places where you'll already have concentrated a lot of tests.
@@ -36,7 +36,7 @@ Dependencies can sometimes blow up the tractability of proofs.
 This can usually be handled, but requires a lot more investment to make it happen, and so isn't a good place to start.
 
 2. Don't forget to consider starting with your dependencies.
-Sometimes the best place to start won't be your code, but in code you depend on.
+Sometimes the best place to start won't be your code, but the code you depend on.
 If it's used by more projects that just yours, it will be valuable to more people, too!
 
 3. Find well-tested code.
@@ -47,14 +47,13 @@ Here are some things to avoid, when starting out:
 1. Lots of loops, or at least nested loops.
 As we saw in the last section, right now we often need to put upper bounds on these to make more limited claims.
 
-2. "Inductive data structures."
-These are data of unbounded size.
-(For example, linked lists and trees.)
-Much like needing to put bounds on loops, these can be hard to model since you needs to put bounds on their size, too.
+2. Inductive data structures.
+These are data structures with unbounded size (e.g., linked lists or trees.)
+These can be hard to model since you need to set bounds on their size, similar to what happens with loops.
 
-3. I/O code.
-Kani doesn't model I/O, so if you're depending on behavior like reading/writing to a file, you won't be able to prove anything.
-This is one obvious area where testability helps provability: often we separate I/O and "pure" computation into different functions, so we can unit test the latter.
+3. Input/Output code.
+Kani doesn't model I/O, so if you depend on behavior like reading/writing to a file, you won't be able to prove anything.
+This is one obvious area where testability helps provability: often we separate I/O and "pure" computation into different functions, so we can unit-test the latter.
 
 4. Deeper call graphs.
 Functions that call a lot of other functions can require more investment to make tractable.
@@ -68,7 +67,7 @@ Rust tends to discourage this, but it still exists in some forms.
 
 A first proof will likely start in the following form:
 
-1. Nondeterministically initialize variables that will correspond to function inputs, with as few constraints as possible
+1. Nondeterministically initialize variables that will correspond to function inputs, with as few constraints as possible.
 2. Call the function in question with these inputs.
 3. Don't (yet) assert any post-conditions.
 
@@ -81,18 +80,5 @@ Running Kani on this simple starting point will help figure out:
 (If the problem is initially intractable, try `--unwind 1` and see if you can follow the techniques in the previous section to put a bound on the problem.)
 
 Once you've got something working, the next step is to prove more interesting properties than what Kani covers by default.
-You accomplish this by adding new assertions.
-These are not necessarily assertions just in your proof harness: consider also adding new assertions to the code being run.
-These count too!
+You accomplish this by adding new assertions (not just in your harness, but also to the code being run).
 Even if a proof harness has no post-conditions being asserted directly, the assertions encountered along the way can be meaningful proof results by themselves.
-
-
-## Summary
-
-In this section:
-
-1. We got some advice on how to choose a higher-value starting point for a first proof.
-2. We got some advice on how to choose an easier starting point for a first proof.
-3. We got some advice on how to structure our first proof, at least initially.
-
-> TODO: This section is incomplete. We should probably add an example session of finding a proof to write for, perhaps, Firecracker.

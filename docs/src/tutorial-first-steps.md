@@ -1,7 +1,5 @@
 # First steps with Kani
 
-> This tutorial expects you to have followed the Kani [installation instructions](./install-guide.md) first.
-
 Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
 With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.

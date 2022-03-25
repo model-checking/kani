@@ -12,6 +12,9 @@
   - [Failures that Kani can spot](./tutorial-kinds-of-failure.md)
   - [Loop unwinding](./tutorial-loop-unwinding.md)
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
+
+- [Application](./application.md)
+  - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [Developer documentation](dev-documentation.md)
@@ -23,7 +26,3 @@
 
 - [Rust feature support](./rust-feature-support.md)
   - [Overrides](./overrides.md)
-
----
-
-[Comparison with other tools](./tool-comparison.md)
