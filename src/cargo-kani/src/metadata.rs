@@ -127,10 +127,8 @@ impl KaniSession {
         }
         if let Some(name) = &self.args.harness {
             // Linear search, since this is only ever called once
-            if let Some(harness) = find_proof_harness(name, &metadata.proof_harnesses) {
-                return Ok(vec![harness.clone()]);
-            }
-            bail!("A proof harness named {} was not found", name);
+            let harness = find_proof_harness(name, &metadata.proof_harnesses)?;
+            return Ok(vec![harness.clone()]);
         }
         if metadata.proof_harnesses.is_empty() {
             // TODO: This could use a better error message, possibly with links to Kani documentation.
@@ -152,24 +150,43 @@ fn mock_proof_harness(name: &str) -> HarnessMetadata {
     }
 }
 
+/// Search for a proof harness with a particular name.
+/// At the present time, we use `no_mangle` so collisions shouldn't happen,
+/// but this function is written to be robust against that changing in the future.
 fn find_proof_harness<'a>(
     name: &str,
     harnesses: &'a [HarnessMetadata],
-) -> Option<&'a HarnessMetadata> {
+) -> Result<&'a HarnessMetadata> {
+    let mut result: Option<&'a HarnessMetadata> = None;
     for h in harnesses.iter() {
-        if h.pretty_name == *name {
-            return Some(h);
-        } else {
+        // Either an exact match, or...
+        let matches = h.pretty_name == *name || {
             // pretty_name will be things like `module::submodule::name_of_function`
             // and we want people to be able to specify `--harness name_of_function`
             if let Some(prefix) = h.pretty_name.strip_suffix(name) {
-                if prefix.ends_with("::") {
-                    return Some(h);
-                }
+                prefix.ends_with("::")
+            } else {
+                false
+            }
+        };
+        if matches {
+            if let Some(other) = result {
+                bail!(
+                    "Conflicting proof harnesses named {}:\n {}\n {}",
+                    name,
+                    other.pretty_name,
+                    h.pretty_name
+                );
+            } else {
+                result = Some(h);
             }
         }
     }
-    None
+    if let Some(x) = result {
+        Ok(x)
+    } else {
+        bail!("A proof harness named {} was not found", name);
+    }
 }
 
 #[cfg(test)]
@@ -183,7 +200,7 @@ mod tests {
             mock_proof_harness("module::check_two"),
             mock_proof_harness("module::not_check_three"),
         ];
-        assert!(find_proof_harness("check_three", &harnesses).is_none());
+        assert!(find_proof_harness("check_three", &harnesses).is_err());
         assert!(
             find_proof_harness("check_two", &harnesses).unwrap().mangled_name
                 == "module::check_two"
