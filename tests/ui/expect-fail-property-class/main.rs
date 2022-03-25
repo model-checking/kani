@@ -3,6 +3,7 @@
 //
 // Check if expect_fail uses new property class and description in it's check id
 
+#[kani::proof]
 fn main() {
     let i: i32 = kani::any();
     kani::assume(i < 10);
