@@ -78,7 +78,7 @@ export PATH=$(pwd)/scripts:$PATH
 
 Create a test file:
 
-```rust
+```rust,noplaypen
 // File: test.rs
 #[kani::proof]
 fn main() {

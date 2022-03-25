@@ -8,7 +8,7 @@ because the property is unreachable, or because the harness is
 _over-constrained_.
 
 Example:
-```rust
+```rust,noplaypen
 {{#include getting-started/verification-results/src/main.rs:success_example}}
 ```
 The output from Kani indicates that the assertion holds:
@@ -25,7 +25,7 @@ information. Load the `html/index.html` file from that directory in a browser to
 examine the trace.
 
 Example:
-```rust
+```rust,noplaypen
 {{#include getting-started/verification-results/src/main.rs:failure_example}}
 ```
 The assertion doesn't hold as Kani's output indicates:
@@ -49,7 +49,7 @@ currently checks the reachability of the following assertion types:
 
 Example:
 
-```rust
+```rust,noplaypen
 {{#include getting-started/verification-results/src/main.rs:unreachable_example}}
 ```
 
@@ -67,7 +67,7 @@ that is not currently supported by Kani. See
 Rust language features.
 
 Example:
-```rust
+```rust,noplaypen
 {{#include getting-started/verification-results/src/main.rs:undetermined_example}}
 ```
 The output from Kani indicates that the assertion is undetermined due to the

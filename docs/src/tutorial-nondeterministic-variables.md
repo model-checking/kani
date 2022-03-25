@@ -13,13 +13,13 @@ In this tutorial, we will show how to safely use nondeterministic assignments to
 Let's say you are developing an inventory management tool, and you would like to verify that your API to manage items is correct.
 Here is a simple implementation of this API:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:inventory_lib}}
 ```
 
 Now we would like to verify that no matter which combination of `id` and `quantity`, that a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same id returns some value that is equal to the one we inserted:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:safe_update}}
 ```
 
@@ -44,7 +44,7 @@ That said, there may be cases where you want to verify your code taking into con
 
 Let's see what happens if we modify our verification harness to use the unsafe method `kani::any_raw()` to generate the updated value.
 
-```rust
+```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:unsafe_update}}
 ```
 
@@ -65,7 +65,7 @@ cargo kani --function unsafe_update
 Now you would like to add a new structure to your library that allow users to represent a review rating, which can go from 0 to 5 stars.
 Let's say you add the following implementation:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_struct}}
 ```
 
@@ -74,13 +74,13 @@ The easiest way to allow users to create nondeterministic variables of the Ratin
 The implementation only requires you to define a check to your structure that returns whether its current value is valid or not.
 In our case, we have the following implementation:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}
 ```
 
 Now you can use `kani::any()` to create valid nondeterministic variables of the Rating type as shown in this harness:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/rating.rs:verify_rating}}
 ```
 
