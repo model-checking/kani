@@ -67,8 +67,8 @@ impl Location {
                 format!("<{}>", function_name)
             }
             Location::Loc { file, line, .. } => format!("{}:{}", file, line),
-            Location::Property { property_class, comment, file, line, .. } => {
-                format!("{:?}:{:?},{:?}:{:?}", property_class, comment, file, line)
+            Location::Property { file, line, .. } => {
+                format!("<{:?}>:{}", file, line)
             }
         }
     }
