@@ -218,18 +218,3 @@ Since this implementation is just the original one, but cast to a wider unsigned
 When Kani tells us both of these methods yield the same exact result, that gives us additional confidence that we haven't overlooked something.
 
 </details>
-
-## Future work
-
-Kani notably does not currently check the following:
-
-1. [Concurrency bugs, deadlocks, or data races](./rust-feature-support.md#concurrency).
-
-2. Rust type invariants.
-For example, it's undefined behavior in Rust to produce a value of type `bool` that isn't `0` or `1`.
-Kani will not spot this error (in presumably unsafe code), yet.
-
-3. Fully generic functions.
-To write a proof harness and call functions, they must be fully "monomorphized."
-This means we can't currently check a generic function (`foo<T>`) generically.
-Proof harnesses have to be written specializing type parameters (`T`) to concrete types (e.g. `u32`), and check those instead.
