@@ -2,14 +2,14 @@
 
 Consider code like this:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/loops-unwinding/src/lib.rs:code}}
 ```
 
 This code has an off-by-one error that only occurs on the last iteration of the loop (when called with an input that will trigger it).
 We can try to find this bug with a proof harness like this:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/loops-unwinding/src/lib.rs:kani}}
 ```
 
