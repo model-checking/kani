@@ -1685,3 +1685,73 @@ impl ToString for IrepId {
         s.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::irep::IrepId;
+
+    #[test]
+    fn test_hex_id() {
+        // For positive numbers, should just give the smallest representation
+        // TODO: confirm no need to 0 pad.
+        assert_eq!(IrepId::FreeformHexInteger { value: 0.into(), width: 4 }.to_string(), "0");
+        assert_eq!(IrepId::FreeformHexInteger { value: 12.into(), width: 4 }.to_string(), "C");
+        assert_eq!(IrepId::FreeformHexInteger { value: 12.into(), width: 32 }.to_string(), "C");
+        assert_eq!(IrepId::FreeformHexInteger { value: 234.into(), width: 16 }.to_string(), "EA");
+        assert_eq!(IrepId::FreeformHexInteger { value: 234.into(), width: 32 }.to_string(), "EA");
+
+        // For negative numbers, should convert to 2s complement of `width` bits, then print hex.
+        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 2 }.to_string(), "3");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 3 }.to_string(), "7");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 4 }.to_string(), "F");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 8 }.to_string(), "FF");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 9 }.to_string(), "1FF");
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-1).into(), width: 16 }.to_string(),
+            "FFFF"
+        );
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-1).into(), width: 32 }.to_string(),
+            "FFFFFFFF"
+        );
+
+        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 4 }.to_string(), "4");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 5 }.to_string(), "14");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 6 }.to_string(), "34");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 7 }.to_string(), "74");
+        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 8 }.to_string(), "F4");
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-12).into(), width: 32 }.to_string(),
+            "FFFFFFF4"
+        );
+
+        // // TODO: Any width < 9 fails with an assertion violation, since `value.abs().lt(&max)`.
+        // // Not sure how we can check that in a test.
+        assert_eq!(IrepId::FreeformHexInteger { value: (-127).into(), width: 8 }.to_string(), "81");
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-127).into(), width: 9 }.to_string(),
+            "181"
+        );
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-127).into(), width: 10 }.to_string(),
+            "381"
+        );
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-127).into(), width: 11 }.to_string(),
+            "781"
+        );
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-127).into(), width: 12 }.to_string(),
+            "F81"
+        );
+
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-255).into(), width: 9 }.to_string(),
+            "101"
+        );
+        assert_eq!(
+            IrepId::FreeformHexInteger { value: (-255).into(), width: 32 }.to_string(),
+            "FFFFFF01"
+        );
+    }
+}
