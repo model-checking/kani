@@ -106,11 +106,6 @@ class SourceLocation:
         if not self.filename:
             return None
 
-        if not path.exists(self.filename):
-            # I'm not sure this can happen today, but keep it here for future
-            # proofing.
-            return self.filename
-
         # Reference to C files use relative paths, while rust uses absolute.
         # Normalize both to be absolute first.
         full_path = path.abspath(self.filename)
