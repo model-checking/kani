@@ -26,7 +26,7 @@ check-cbmc-viewer-version.py --major 2 --minor 10
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Parser tests
-PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_parser.py
+PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_cbmc_json_parser.py
 
 # Build all packages in the workspace
 cargo build
