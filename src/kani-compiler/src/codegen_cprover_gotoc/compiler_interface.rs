@@ -196,7 +196,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
     }
 
     if need_metadata_module {
-        session.err("Kani cannot generate metadata module.")
+        session.err("Kani cannot generate metadata module.");
     }
 
     session.abort_if_errors();

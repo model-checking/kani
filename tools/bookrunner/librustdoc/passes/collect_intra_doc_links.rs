@@ -34,6 +34,7 @@ use crate::core::DocContext;
 use crate::html::markdown::{markdown_links, MarkdownLink};
 use crate::lint::{BROKEN_INTRA_DOC_LINKS, PRIVATE_INTRA_DOC_LINKS};
 use crate::visit::DocVisitor;
+use rustc_data_structures::intern::Interned;
 
 mod early;
 
@@ -427,7 +428,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                         } else {
                             Err(ResolutionFailure::NotResolved {
                                 module_id,
-                                partial_res: Some(Res::Def(DefKind::Enum, def.did)),
+                                partial_res: Some(Res::Def(DefKind::Enum, def.did())),
                                 unresolved: variant_field_name.to_string().into(),
                             }
                             .into())
@@ -639,7 +640,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
             ty::FnDef(..) => panic!("type alias to a function definition"),
             ty::FnPtr(_) => Res::Primitive(Fn),
             ty::Never => Res::Primitive(Never),
-            ty::Adt(&ty::AdtDef { did, .. }, _) | ty::Foreign(did) => {
+            ty::Adt(ty::AdtDef(Interned(&ty::AdtDefData { did, .. }, _)), _) | ty::Foreign(did) => {
                 Res::Def(self.cx.tcx.def_kind(did), did)
             }
             ty::Projection(_)
@@ -927,8 +928,8 @@ fn traits_implemented_by<'a>(
             let saw_impl = impl_type == ty
                 || match (impl_type.kind(), ty.kind()) {
                     (ty::Adt(impl_def, _), ty::Adt(ty_def, _)) => {
-                        debug!("impl def_id: {:?}, ty def_id: {:?}", impl_def.did, ty_def.did);
-                        impl_def.did == ty_def.did
+                        debug!("impl def_id: {:?}, ty def_id: {:?}", impl_def.did(), ty_def.did());
+                        impl_def.did() == ty_def.did()
                     }
                     _ => false,
                 };
@@ -995,7 +996,7 @@ impl<'a, 'tcx> DocVisitor for LinkCollector<'a, 'tcx> {
                 // using `ty.to_string()` (or any variant) has issues with raw idents
                 let ty = self.cx.tcx.type_of(self_id);
                 let name = match ty.kind() {
-                    ty::Adt(def, _) => Some(self.cx.tcx.item_name(def.did).to_string()),
+                    ty::Adt(def, _) => Some(self.cx.tcx.item_name(def.did()).to_string()),
                     other if other.is_primitive() => Some(ty.to_string()),
                     _ => None,
                 };
