@@ -447,6 +447,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     e.member("case", &self.symbol_table).cast_to(self.codegen_ty(res_ty))
                 }
                 TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                    // This code follows the logic in the cranelift codegen backend:
+                    // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
                         FieldsShape::Arbitrary { offsets, .. } => offsets[0].bytes_usize(),
                         _ => unreachable!("niche encoding must have arbitrary fields"),
@@ -457,8 +459,32 @@ impl<'tcx> GotocCtx<'tcx> {
                     let relative_discr = if *niche_start == 0 {
                         niche_val
                     } else {
-                        // This should be a wrapping sub.
-                        niche_val.sub(Expr::int_constant(*niche_start, discr_ty.clone()))
+                        // Compute "niche_val - niche_start" where "-" is
+                        // wrapping subtraction, i.e., the result should be
+                        // interpreted as an unsigned value.
+                        // While this can be done through a regular subtraction
+                        // and then casting the result to an unsigned, doing so
+                        // may result in CBMC flagging the operation with a
+                        // signed to unsigned overflow failure (see
+                        // https://github.com/model-checking/kani/issues/356).
+                        // To avoid those overflow failures, the wrapping
+                        // subtraction operation is computed as:
+                        //   if niche_val >= niche_start {
+                        //       // result is positive, so overflow may not occur
+                        //       niche_val - niche_start
+                        //   } else {
+                        //       // compute the 2's complement to avoid overflow
+                        //       niche_val - niche_start + 2^32
+                        //   }
+                        let s64 = Type::signed_int(64);
+                        let niche_val = niche_val.cast_to(s64.clone());
+                        let twos_complement: i64 =
+                            u32::MAX as i64 + 1 - i64::try_from(*niche_start).unwrap();
+                        let niche_start = Expr::int_constant(*niche_start, s64.clone());
+                        niche_val.clone().ge(niche_start.clone()).ternary(
+                            niche_val.clone().sub(niche_start),
+                            niche_val.plus(Expr::int_constant(twos_complement, s64)),
+                        )
                     };
                     let relative_max =
                         niche_variants.end().as_u32() - niche_variants.start().as_u32();
@@ -467,8 +493,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     } else {
                         relative_discr
                             .clone()
-                            .cast_to(Type::unsigned_int(64))
-                            .le(Expr::int_constant(relative_max, Type::unsigned_int(64)))
+                            .cast_to(Type::unsigned_int(128))
+                            .le(Expr::int_constant(relative_max, Type::unsigned_int(128)))
                     };
                     let niche_discr = {
                         let relative_discr = if relative_max == 0 {
