@@ -36,22 +36,18 @@ Now the error becomes invisible to this test:
 test bounds_check::tests::doesnt_crash ... ok
 ```
 
-But we're able to check this unsafe code with Kani:
+But we're able to write a harness for this unsafe code:
 
 ```rust,noplaypen
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:kani}}
 ```
 
-```
-# kani src/bounds_check.rs --harness bound_check
-[...]
-SUMMARY:
- ** 1 of 459 failed
-[...]
-VERIFICATION:- FAILED
+If we run it with Kani:
+```bash
+kani src/bounds_check.rs --harness bound_check
 ```
 
-Notice there were a *lot* of verification conditions being checked in the above output: 459! (This number may change depending on the version.)
+One of the checks fails. Also, notice there were many checks in the verification output.
 This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
 Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
 Let's narrow that output down a bit:
@@ -218,3 +214,8 @@ Since this implementation is just the original one, but cast to a wider unsigned
 When Kani tells us both of these methods yield the same exact result, that gives us additional confidence that we haven't overlooked something.
 
 </details>
+
+## Failures that Kani cannot spot
+
+Check out [Limitations](./limitations.md) for information on the checks that
+Kani doesn't perform.
