@@ -1,7 +1,7 @@
 use rustc_ast as ast;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{ColorConfig, ErrorGuaranteed};
+use rustc_errors::ColorConfig;
 use rustc_hir as hir;
 use rustc_hir::intravisit;
 use rustc_hir::HirId;
