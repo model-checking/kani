@@ -357,6 +357,7 @@ impl<T, A: Allocator> VecDeque<T, A> {
             .and_then(|needed_cap| needed_cap.checked_next_power_of_two())
             .expect("capacity overflow");
 
+        // *** This is the issue! new_cap is related to underlying buffer, capacity() is not.
         if new_cap > self.capacity() {
             self.buf.reserve_exact(used_cap, new_cap - used_cap);
             unsafe {
