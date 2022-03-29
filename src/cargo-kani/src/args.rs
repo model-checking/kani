@@ -142,6 +142,11 @@ impl KaniArgs {
         self.restrict_vtable
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
+
+    pub fn assertion_reach_checks(&self) -> bool {
+        // Turn them off when visualizing an error trace.
+        !self.no_assertion_reach_checks && !self.visualize
+    }
 }
 
 arg_enum! {

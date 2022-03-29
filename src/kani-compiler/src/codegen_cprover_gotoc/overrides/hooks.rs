@@ -8,6 +8,7 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
@@ -98,13 +99,17 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         assert_eq!(fargs.len(), 2);
         let target = target.unwrap();
         let cond = fargs.remove(0).cast_to(Type::bool());
-        // add "EXPECTED FAIL" to the message because compiletest relies on it
+
+        // Add "EXPECTED FAIL" to the message because compiletest relies on it
         let msg =
             format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
+
+        let property_class = PropertyClass::ExpectFail;
+
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
-                Stmt::assert(cond, &msg, loc.clone()),
+                tcx.codegen_assert(cond, property_class, &msg, loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
