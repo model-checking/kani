@@ -17,7 +17,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use tracing::debug;
+use tracing::{debug, info_span};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self) -> Stmt {
@@ -35,6 +35,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
         let loc = self.codegen_span(&term.source_info.span);
+        let _trace_span = info_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
@@ -521,6 +522,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
+        let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
         debug!("handling statement {:?}", stmt);
         match &stmt.kind {
             StatementKind::Assign(box (l, r)) => {

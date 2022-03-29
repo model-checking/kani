@@ -14,7 +14,7 @@ use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
-use tracing::{debug, warn};
+use tracing::{debug, info_span, warn};
 
 /// Utility to skip functions that can't currently be successfully codgenned.
 impl<'tcx> GotocCtx<'tcx> {
@@ -68,6 +68,9 @@ impl<'tcx> GotocCtx<'tcx> {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
+
+        let _trace_span =
+            info_span!("Codegen Function", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
