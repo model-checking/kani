@@ -7,6 +7,7 @@ use super::{Expr, Location, Symbol, Type};
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinFn {
     Abort,
+    Assert,
     CProverAssert,
     CProverAssume,
     CProverCover,
@@ -66,6 +67,7 @@ impl ToString for BuiltinFn {
     fn to_string(&self) -> String {
         match self {
             Abort => "abort",
+            Assert => "assert",
             CProverAssert => "__CPROVER_assert",
             CProverAssume => "__CPROVER_assume",
             CProverCover => "__CPROVER_cover",
@@ -129,6 +131,7 @@ impl BuiltinFn {
     pub fn param_types(&self) -> Vec<Type> {
         match self {
             Abort => vec![],
+            Assert => vec![Type::bool()],
             CProverAssert => vec![Type::bool(), Type::c_char().to_pointer()],
             CProverAssume => vec![Type::bool()],
             CProverCover => vec![Type::bool()],
@@ -185,6 +188,7 @@ impl BuiltinFn {
     pub fn return_type(&self) -> Type {
         match self {
             Abort => Type::empty(),
+            Assert => Type::empty(),
             CProverAssert => Type::empty(),
             CProverAssume => Type::empty(),
             CProverCover => Type::empty(),
@@ -244,6 +248,7 @@ impl BuiltinFn {
     pub fn list_all() -> Vec<BuiltinFn> {
         vec![
             Abort,
+            Assert,
             CProverAssert,
             CProverAssume,
             CProverCover,

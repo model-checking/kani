@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
-use crate::InternedString;
+use crate::{InternString, InternedString};
 use std::fmt::Debug;
 use tracing::debug;
 
@@ -39,6 +39,12 @@ pub enum StmtBody {
     Assign {
         lhs: Expr,
         rhs: Expr,
+    },
+    /// `assert(cond)`
+    Assert {
+        cond: Expr,
+        property_class: InternedString,
+        msg: InternedString,
     },
     /// `__CPROVER_assume(cond);`
     Assume {
@@ -182,6 +188,17 @@ impl Stmt {
             return Stmt::block(vec![assert_stmt, nondet_assign_stmt], loc);
         }
         stmt!(Assign { lhs, rhs }, loc)
+    }
+
+    /// `assert(cond, property_class, commment);`
+    pub fn assert_statement(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
+        assert!(cond.typ().is_bool());
+
+        // Chose InternedString to seperate out codegen from the cprover_bindings logic
+        let property_class = property_name.to_string().intern();
+        let msg = message.into();
+
+        stmt!(Assert { cond, property_class, msg }, loc)
     }
 
     /// `__CPROVER_assert(cond, msg);`
