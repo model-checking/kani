@@ -16,4 +16,4 @@ developers (including external contributors):
 > **NOTE:** The developer documentation is intended for Kani developers and not
 users. At present, the project is under heavy development and some items
 discussed in this documentation may stop working without notice (e.g., commands
-or configurations). Therefore, we recommend users not to rely on them.
+or configurations). Therefore, we recommend users to not rely on them.
