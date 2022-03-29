@@ -6,7 +6,10 @@ Since Kani is a bit-level model checker, this means that Kani considers that an 
 As a Rust developer, this sounds a lot like the `mem::transmute` operation, which is highly `unsafe`.
 And that's correct.
 
-In this tutorial, we will show how to safely use nondeterministic assignments to generate valid symbolic variables that respect Rust's type invariants, as well as show how you can specify invariants for types that you define enabling creation of safe nondeterministic variables for those types.
+In this tutorial, we will show how to:
+ 1. Safely use nondeterministic assignments to generate valid symbolic variables that respect Rust's type invariants.
+ 2. Unsafely use nondeterministic assignments to generate unconstrained symbolic variables that do not respect Rust's type invariants.
+ 2. Specify invariants for types that you define, enabling the creation of safe nondeterministic variables for those types.
 
 ## Safe nondeterministic variables
 
@@ -17,13 +20,13 @@ Here is a simple implementation of this API:
 {{#include tutorial/arbitrary-variables/src/inventory.rs:inventory_lib}}
 ```
 
-Now we would like to verify that no matter which combination of `id` and `quantity`, that a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same id returns some value that is equal to the one we inserted:
+Now we would like to verify that, no matter which combination of `id` and `quantity`, a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same `id` returns some value that is equal to the one we inserted:
 
 ```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:safe_update}}
 ```
 
-In this harness, we use`kani::any()` to generate `ProductId` and the new quantity.
+In this harness, we use `kani::any()` to generate the new `id` and `quantity`.
 `kani::any()` is a **safe** API function, and it represents only valid values.
 
 If we run this example, Kani verification will succeed, including the assertion that shows that the underlying `u32` variable  used to represent `NonZeroU32` cannot be zero, per its type invariant:
@@ -38,7 +41,7 @@ cargo kani --harness safe_update
 ## Unsafe nondeterministic variables
 
 Kani also includes an **unsafe** method to generate unconstrained nondeterministic variables which do not take type invariants into consideration.
-As any unsafe method in rust, users must be careful when using unsafe methods and ensure the right guardrails are put in place to avoid undesirable behavior.
+As with any unsafe method in Rust, users have to make sure the right guardrails are put in place to avoid undesirable behavior.
 
 That said, there may be cases where you want to verify your code taking into consideration that some inputs may contain invalid data.
 
@@ -49,7 +52,7 @@ Let's see what happens if we modify our verification harness to use the unsafe m
 ```
 
 We commented out the assertion that the underlying `u32` variable cannot be `0`, since this no longer holds.
-The Kani verification will now fail showing that `inventory.get(&id).unwrap()` method call can panic.
+The verification will now fail showing that the `inventory.get(&id).unwrap()` method call can panic.
 
 This is an interesting issue that emerges from how `rustc` optimizes the memory layout of `Option<NonZeroU32>`.
 The compiler is able to represent `Option<NonZeroU32>` using `32` bits by using the value `0` to represent `None`.
