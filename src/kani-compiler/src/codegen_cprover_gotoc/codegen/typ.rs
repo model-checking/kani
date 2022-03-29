@@ -500,9 +500,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 FloatTy::F32 => Type::float(),
                 FloatTy::F64 => Type::double(),
             },
-            ty::Adt(def, _) if def.repr.simd() => self.codegen_vector(ty),
+            ty::Adt(def, _) if def.repr().simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
-                debug!("variants are: {:?}", def.variants);
+                debug!("variants are: {:?}", def.variants());
                 if def.is_struct() {
                     self.codegen_struct(ty, def, subst)
                 } else if def.is_union() {
@@ -899,7 +899,7 @@ impl<'tcx> GotocCtx<'tcx> {
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
         self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
-            let variant = &def.variants.raw[0];
+            let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
             ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, 0)
         })
@@ -926,7 +926,7 @@ impl<'tcx> GotocCtx<'tcx> {
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
         self.ensure_union(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
-            def.variants.raw[0]
+            def.variants().raw[0]
                 .fields
                 .iter()
                 .map(|f| {
@@ -979,7 +979,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Type {
         self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, name| {
             // variants appearing in source code (in source code order)
-            let source_variants = &adtdef.variants;
+            let source_variants = &adtdef.variants();
             // variants appearing in mir code
             match &ctx.layout_of(ty).variants {
                 Variants::Single { index } => {
@@ -1030,7 +1030,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             // storing the discriminant, which is a few bytes larger.
                             //
                             // dataful_variant is pretty much the only variant which contains the valid data
-                            let variant = &adtdef.variants[*dataful_variant];
+                            let variant = &adtdef.variants()[*dataful_variant];
                             ctx.codegen_variant_struct_fields(
                                 variant,
                                 subst,
@@ -1135,7 +1135,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Type {
         // TODO Should we have a pretty name here?
         self.ensure_union(&format!("{}-union", name.to_string()), NO_PRETTY_NAME, |ctx, name| {
-            def.variants
+            def.variants()
                 .iter_enumerated()
                 .map(|(i, case)| {
                     Type::datatype_component(
@@ -1255,8 +1255,8 @@ impl<'tcx> GotocCtx<'tcx> {
         struct_type: Ty<'tcx>,
     ) -> BTreeMap<InternedString, Ty<'tcx>> {
         match struct_type.kind() {
-            ty::Adt(adt_def, adt_substs) if adt_def.variants.len() == 1 => {
-                let fields = &adt_def.variants.get(VariantIdx::from_u32(0)).unwrap().fields;
+            ty::Adt(adt_def, adt_substs) if adt_def.variants().len() == 1 => {
+                let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                 BTreeMap::from_iter(
                     fields.iter().map(|field| {
                         (field.name.to_string().into(), field.ty(self.tcx, adt_substs))
@@ -1286,7 +1286,7 @@ pub fn pointee_type(pointer_type: Ty) -> Option<Ty> {
 /// Is the MIR type using a C representation (marked with #[repr(C)] at the source level)?
 pub fn is_repr_c_adt(mir_type: Ty) -> bool {
     match mir_type.kind() {
-        ty::Adt(def, _) => def.repr.c(),
+        ty::Adt(def, _) => def.repr().c(),
         _ => false,
     }
 }
@@ -1303,16 +1303,17 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
-        return !self.is_unsized(mir_type)
-            || mir_type.ptr_metadata_ty(self.tcx, normalize_type) == self.tcx.types.unit;
+        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        return !self.is_unsized(mir_type) || metadata == self.tcx.types.unit;
     }
     /// A pointer to the mir type should be a slice fat pointer.
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        return mir_type.ptr_metadata_ty(self.tcx, normalize_type) == self.tcx.types.usize;
+        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        return metadata == self.tcx.types.usize;
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         return metadata != self.tcx.types.unit && metadata != self.tcx.types.usize;
     }
 
