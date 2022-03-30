@@ -70,7 +70,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
         let _trace_span =
-            info_span!("Codegen Function", name = self.current_fn().readable_name()).entered();
+            info_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
