@@ -839,13 +839,14 @@ impl IrepId {
         T: Into<BigInt>,
     {
         let value: BigInt = i.into();
-        assert!(
-            value.fits_in_bits(width, signed),
-            "Cannot fit value into bits. value {} width: {} signed: {}",
-            value,
-            width,
-            signed
-        );
+        // TODO https://github.com/model-checking/kani/issues/996
+        // assert!(
+        //     value.fits_in_bits(width, signed),
+        //     "Cannot fit value into bits. value {} width: {} signed: {}",
+        //     value,
+        //     width,
+        //     signed
+        // );
         IrepId::FreeformHexInteger { value, width, signed }
     }
 
@@ -862,15 +863,17 @@ impl ToString for IrepId {
             IrepId::FreeformInteger(i) => return i.to_string(),
             IrepId::FreeformHexInteger { value, width, signed } => {
                 // CBMC expects two's complement for negative numbers.
+                // https://github.com/diffblue/cbmc/blob/develop/src/util/arith_tools.cpp#L401..L424
                 // The bignum crate instead does sign/magnitude when making hex.
                 // So for negatives, do the two's complement ourselves.
-                assert!(
-                    value.fits_in_bits(*width, *signed),
-                    "Cannot fit value into bits. value {} width: {} signed: {}",
-                    value,
-                    width,
-                    signed
-                );
+                // TODO https://github.com/model-checking/kani/issues/996
+                // assert!(
+                //     value.fits_in_bits(*width, *signed),
+                //     "Cannot fit value into bits. value {} width: {} signed: {}",
+                //     value,
+                //     width,
+                //     signed
+                // );
                 if value.sign() == Sign::Minus {
                     assert!(signed);
                     return format!("{:X}", value.two_complement(*width));
@@ -1703,47 +1706,48 @@ impl ToString for IrepId {
 mod tests {
     use crate::irep::IrepId;
     use num::BigInt;
-    #[test]
-    #[should_panic]
-    fn test_hex_id_panic1() {
-        IrepId::hex_from_int(-127, 7, true);
-    }
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic1() {
+    //     IrepId::hex_from_int(-127, 7, true);
+    // }
 
-    #[test]
-    #[should_panic]
-    fn test_hex_id_panic2() {
-        IrepId::hex_from_int(12, 4, true);
-    }
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic2() {
+    //     IrepId::hex_from_int(12, 4, true);
+    // }
 
-    #[test]
-    #[should_panic]
-    fn test_hex_id_panic3() {
-        IrepId::hex_from_int(-12, 4, true);
-    }
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic3() {
+    //     IrepId::hex_from_int(-12, 4, true);
+    // }
 
-    #[test]
-    #[should_panic]
-    fn test_hex_id_panic_string1() {
-        IrepId::FreeformHexInteger { value: BigInt::from(-127), width: 7, signed: true }
-            .to_string();
-    }
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic_string1() {
+    //     IrepId::FreeformHexInteger { value: BigInt::from(-127), width: 7, signed: true }
+    //         .to_string();
+    // }
 
-    #[test]
-    #[should_panic]
-    fn test_hex_id_panic_string2() {
-        IrepId::FreeformHexInteger { value: BigInt::from(12), width: 4, signed: true }.to_string();
-    }
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic_string2() {
+    //     IrepId::FreeformHexInteger { value: BigInt::from(12), width: 4, signed: true }.to_string();
+    // }
 
-    #[test]
-    #[should_panic]
-    fn test_hex_id_panic_string3() {
-        IrepId::FreeformHexInteger { value: BigInt::from(-12), width: 4, signed: true }.to_string();
-    }
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic_string3() {
+    //     IrepId::FreeformHexInteger { value: BigInt::from(-12), width: 4, signed: true }.to_string();
+    // }
 
     #[test]
     fn test_hex_id() {
-        // For positive numbers, should just give the smallest representation
-        // TODO: confirm no need to 0 pad.
+        // For positive numbers, should just give the smallest representation.
+        // No need to zero pad.
+        // https://github.com/diffblue/cbmc/blob/develop/src/util/arith_tools.cpp#L401..L424
         assert_eq!(IrepId::hex_from_int(0, 4, true).to_string(), "0");
         assert_eq!(IrepId::hex_from_int(12, 5, true).to_string(), "C");
         assert_eq!(IrepId::hex_from_int(12, 32, true).to_string(), "C");

@@ -5,8 +5,7 @@
 use crate::InternedString;
 use num::bigint::{BigInt, Sign};
 use num::Signed;
-use num_traits::{One, Zero};
-use std::ops::{Shl, Sub};
+use num_traits::Zero;
 
 /// Kani bug report URL, for asserts/errors
 pub const BUG_REPORT_URL: &str =
