@@ -727,7 +727,9 @@ impl AttributesExt for [ast::Attribute] {
                         {
                             match Cfg::parse(cfg_mi) {
                                 Ok(new_cfg) => cfg &= new_cfg,
-                                Err(e) => sess.span_err(e.span, e.msg),
+                                Err(e) => {
+                                    sess.span_err(e.span, e.msg);
+                                }
                             }
                         }
                     }
