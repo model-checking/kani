@@ -13,17 +13,17 @@ enum Foo {
 }
 
 #[kani::proof]
-fn main() {
+fn check_negative_discriminant() {
     let a = Some(Foo::A);
     let b = Some(Foo::B);
     let c = Some(Foo::C);
     let d = Some(Foo::D);
     let e = Some(Foo::E);
     let f = Some(Foo::F);
-    let _ = matches!(a, Some(Foo::A));
-    let _ = matches!(b, Some(Foo::B));
-    let _ = matches!(c, Some(Foo::C));
-    let _ = matches!(d, Some(Foo::D));
-    let _ = matches!(e, Some(Foo::E));
-    let _ = matches!(f, Some(Foo::F));
+    let _ = assert!(matches!(a, Some(Foo::A)));
+    let _ = assert!(matches!(b, Some(Foo::B)));
+    let _ = assert!(matches!(c, Some(Foo::C)));
+    let _ = assert!(matches!(d, Some(Foo::D)));
+    let _ = assert!(matches!(e, Some(Foo::E)));
+    let _ = assert!(matches!(f, Some(Foo::F)));
 }
