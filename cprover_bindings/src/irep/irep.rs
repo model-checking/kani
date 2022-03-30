@@ -26,13 +26,6 @@ impl Irep {
         self.named_sub.get(&key)
     }
 
-    pub fn lookup_as_int(&self, id: IrepId) -> Option<&BigInt> {
-        self.lookup(id).and_then(|x| match &x.id {
-            IrepId::FreeformInteger(i) | IrepId::FreeformHexInteger { value: i, .. } => Some(i),
-            _ => None,
-        })
-    }
-
     pub fn lookup_as_string(&self, id: IrepId) -> Option<String> {
         self.lookup(id).and_then(|x| {
             let s = x.id.to_string();
@@ -101,11 +94,11 @@ impl Irep {
         Irep::just_id(IrepId::Empty)
     }
 
-    pub fn just_hex_id<T>(i: T, width: u64, signed: bool) -> Irep
+    pub fn just_bitpattern_id<T>(i: T, width: u64, signed: bool) -> Irep
     where
         T: Into<BigInt>,
     {
-        Irep::just_id(IrepId::hex_from_int(i, width, signed))
+        Irep::just_id(IrepId::bitpattern_from_int(i, width, signed))
     }
 
     pub fn just_id(id: IrepId) -> Irep {
