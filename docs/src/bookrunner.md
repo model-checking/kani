@@ -20,16 +20,16 @@ Because of that, we run up to three different types of jobs when generating the 
 Note that these are incremental: A `verification` job depends on a previous `codegen` job.
 Similary, a `codegen` job depends on a `check` job.
 
-> **Warning:** [Litani](https://github.com/awslabs/aws-build-accumulator) does
-> not support hierarchical views at the moment. For this reason, we are
-> publishing a [text version of the book runner
-> report](./bookrunner/bookrunner.txt) which displays the same results in a
-> hierarchical way while we work on adding more features to
-> [Litani](https://github.com/awslabs/aws-build-accumulator).
+> **NOTE:** [Litani](https://github.com/awslabs/aws-build-accumulator) does not
+> support hierarchical views at the moment. For this reason, we are publishing a
+> [text version of the book runner report](./bookrunner/bookrunner.txt) which
+> displays the same results in a hierarchical way while we work on [improvements
+> for the visualization and navigation of book runner
+> results](https://github.com/model-checking/kani/issues/699).
 
 Before running the above mentioned jobs, we pre-process the examples to:
  1. Set the expected output according to flags present in the code snippet.
- 2. Add any required compiler/Kani flags (e.g., CBMC unwinding flags).
+ 2. Add any required compiler/Kani flags (e.g., unwinding).
 
 Finally, we run all jobs, collect their outputs and compare them against the expected outputs.
 The results are summarized as follows: If the obtained and expected outputs differ,
@@ -43,34 +43,39 @@ automatically updated whenever a PR gets merged into Kani.
 
 This section describes how the book runner operates at a high level.
 
-To kick off the book runner process use
+To kick off the book runner process use:
 
-```
+```bash
 cargo run -p bookrunner
 ```
 
 The main function of the bookrunner is `generate_run()` in
 [`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/kani/blob/main/tools/bookrunner/src/books.rs),
 which follows these steps:
- * First, it sets up all the books.
- * For each book, it calls the `parse_..._hierarchy()` function to parse its summary files.
- * The `extract_examples(...)` function uses `rustdoc` to extract all examples
-   from each book.
- * For each example it will check if there is a corresponding `.props` file
-   in `src/tools/bookrunner/configs/`. The contents of these files (e.g.,
-   command-line options) are prepended to the example.
- * All examples are written in the `src/test/bookrunner/books/` folder.
+ 1. Sets up all the books, including data about their summaries.
+ 2. Then, for each book:
+  * Calls the `parse_hierarchy()` method to parse its summary
+    files.
+  * Calls the `extract_examples()` method to extract all
+    examples from the book. Note that `extract_examples()` uses `rustdoc`
+    functions to ensure the extracted examples are runnable.
+  * Checks if there is a corresponding `.props` file
+    in `src/tools/bookrunner/configs/`. If there is, prepends the contents of these files
+    ([testing options](./regression-testing.md#testing-options)) to the example.
+  * The resulting examples are written to the `src/test/bookrunner/books/` folder.
 
-   In general, the path to a given example is
-   `src/test/bookrunner/books/<book>/<chapter>/<section>/<subsection>/<line>.rs`
-   where `<line>` is the line number where the example appears in the
-   documentation. The `.props` files mentioned above follow the same naming
-   scheme in order to match them and detect conflicts.
+> In general, the path to a given example is
+> `src/test/bookrunner/books/<book>/<chapter>/<section>/<subsection>/<line>.rs`
+> where `<line>` is the line number where the example appears in the markdown
+> file where it's written. The `.props` files mentioned above follow the same
+> naming scheme in order to match them and detect conflicts.
 
- * Then all examples are run using
-   [Litani](https://github.com/awslabs/aws-build-accumulator).
- * Finally, the Litani log is used to generate the [text version of the
-   bookrunner](./bookrunner/bookrunner.txt).
+ 3. Runs all examples using
+   [Litani](https://github.com/awslabs/aws-build-accumulator) with the
+   `litani_run_tests()` function.
+ 4. Parses the Litani log file with `parse_litani_output(...)`.
+ 5. Generates the [text version of the bookrunner](./bookrunner/bookrunner.txt)
+    with `generate_text_bookrunner(...)`.
 
-> **Warning:** Note that any changes done to the examples in
-> `src/test/bookrunner/books/` may be gone if the bookrunner is executed.
+> **NOTE**: Any changes done to the examples in `src/test/bookrunner/books/` may
+> be gone if the bookrunner is executed.
