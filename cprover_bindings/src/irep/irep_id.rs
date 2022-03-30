@@ -16,7 +16,7 @@ pub enum IrepId {
     /// An integer, to be encoded as a decimal string
     FreeformInteger(BigInt),
     /// A constant, stored as a bit pattern (negative numbers in 2's complement).
-    FreeformBitpattern(BigUint),
+    FreeformBitPattern(BigUint),
     EmptyString,
     Let,
     LetBinding,
@@ -852,7 +852,7 @@ impl IrepId {
         } else {
             value.to_biguint().unwrap()
         };
-        IrepId::FreeformBitpattern(bitpattern)
+        IrepId::FreeformBitPattern(bitpattern)
     }
 
     //TODO assert that s is not the string produced by any other IrepId
@@ -866,7 +866,7 @@ impl ToString for IrepId {
         match self {
             IrepId::FreeformString(s) => return s.to_string(),
             IrepId::FreeformInteger(i) => return i.to_string(),
-            IrepId::FreeformBitpattern(i) => {
+            IrepId::FreeformBitPattern(i) => {
                 return format!("{:X}", i);
             }
             _ => (),
@@ -875,7 +875,7 @@ impl ToString for IrepId {
         let s = match self {
             IrepId::FreeformString(_)
             | IrepId::FreeformInteger(_)
-            | IrepId::FreeformBitpattern { .. } => unreachable!(),
+            | IrepId::FreeformBitPattern { .. } => unreachable!(),
             IrepId::EmptyString => "",
             IrepId::Let => "let",
             IrepId::LetBinding => "let_binding",
