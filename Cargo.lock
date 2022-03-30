@@ -219,6 +219,7 @@ dependencies = [
  "libc",
  "measureme",
  "num",
+ "num-traits",
  "serde",
  "serde_test",
  "snap",

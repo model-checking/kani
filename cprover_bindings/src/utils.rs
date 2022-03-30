@@ -3,7 +3,9 @@
 //! Useful utilities for CBMC
 
 use crate::InternedString;
-use num::bigint::BigInt;
+use num::{bigint::BigInt, Signed};
+use std::ops::{Shl, Sub};
+use num_traits::One;
 
 /// Kani bug report URL, for asserts/errors
 pub const BUG_REPORT_URL: &str =
@@ -13,6 +15,12 @@ pub const BUG_REPORT_URL: &str =
 pub fn aggr_tag<T: Into<InternedString>>(n: T) -> InternedString {
     let n = n.into();
     format!("tag-{}", n.to_string()).into()
+}
+
+pub fn two_complement(value : &BigInt, width: u64) -> BigInt {
+    let max: BigInt = BigInt::one().shl(width).sub(BigInt::one());
+    assert!(value.abs().lt(&max));
+    max.sub(value.abs().sub(BigInt::one()))
 }
 
 /// Provides a useful shortcut for making BTreeMaps.

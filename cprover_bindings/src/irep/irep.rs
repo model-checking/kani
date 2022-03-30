@@ -101,11 +101,11 @@ impl Irep {
         Irep::just_id(IrepId::Empty)
     }
 
-    pub fn just_hex_id<T>(i: T, width: u64) -> Irep
+    pub fn just_hex_id<T>(i: T, width: u64, signed: bool) -> Irep
     where
         T: Into<BigInt>,
     {
-        Irep::just_id(IrepId::hex_from_int(i, width))
+        Irep::just_id(IrepId::hex_from_int(i, width, signed))
     }
 
     pub fn just_id(id: IrepId) -> Irep {

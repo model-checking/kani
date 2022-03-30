@@ -140,7 +140,10 @@ impl ToIrep for Expr {
             Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(i.clone(), width))],
+                named_sub: vector_map![(
+                    IrepId::Value,
+                    Irep::just_hex_id(i.clone(), width, self.typ().is_signed(mm))
+                )],
             }
             .with_location(self.location(), mm)
             .with_type(self.typ(), mm)
@@ -194,7 +197,7 @@ impl ToIrep for ExprValue {
                 sub: vec![],
                 named_sub: vector_map![(
                     IrepId::Value,
-                    Irep::just_hex_id(if *i { 1u8 } else { 0 }, mm.bool_width())
+                    Irep::just_hex_id(if *i { 1u8 } else { 0 }, mm.bool_width(), false)
                 )],
             },
             ExprValue::Dereference(e) => {
@@ -208,7 +211,7 @@ impl ToIrep for ExprValue {
                     sub: vec![],
                     named_sub: vector_map![(
                         IrepId::Value,
-                        Irep::just_hex_id(c, mm.double_width())
+                        Irep::just_hex_id(c, mm.double_width(), false)
                     )],
                 }
             }
@@ -217,7 +220,10 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c, mm.float_width()))],
+                    named_sub: vector_map![(
+                        IrepId::Value,
+                        Irep::just_hex_id(c, mm.float_width(), false)
+                    )],
                 }
             }
             ExprValue::FunctionCall { function, arguments } => side_effect_irep(
@@ -254,7 +260,10 @@ impl ToIrep for ExprValue {
             ExprValue::PointerConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(*i, mm.pointer_width()))],
+                named_sub: vector_map![(
+                    IrepId::Value,
+                    Irep::just_hex_id(*i, mm.pointer_width(), false)
+                )],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
             ExprValue::StatementExpression { statements: ops } => side_effect_irep(

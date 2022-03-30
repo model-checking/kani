@@ -5,7 +5,7 @@
 //! This file contains [IrepId] which is the id's used in CBMC.
 //! c.f. CBMC source code [src/util/irep_ids.def]
 use crate::cbmc_string::InternedString;
-use num::{bigint::BigInt, Signed};
+use num::{bigint::BigInt, bigint::Sign, Signed};
 use std::ops::{Shl, Sub};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -19,6 +19,7 @@ pub enum IrepId {
     FreeformHexInteger {
         value: BigInt,
         width: u64,
+        signed: bool,
     },
     EmptyString,
     Let,
@@ -833,11 +834,11 @@ impl IrepId {
         IrepId::FreeformInteger(i.into())
     }
 
-    pub fn hex_from_int<T>(i: T, width: u64) -> IrepId
+    pub fn hex_from_int<T>(i: T, width: u64, signed: bool) -> IrepId
     where
         T: Into<BigInt>,
     {
-        IrepId::FreeformHexInteger { value: i.into(), width }
+        IrepId::FreeformHexInteger { value: i.into(), width, signed }
     }
 
     //TODO assert that s is not the string produced by any other IrepId
@@ -851,11 +852,11 @@ impl ToString for IrepId {
         match self {
             IrepId::FreeformString(s) => return s.to_string(),
             IrepId::FreeformInteger(i) => return i.to_string(),
-            IrepId::FreeformHexInteger { value, width } => {
+            IrepId::FreeformHexInteger { value, width, signed } => {
                 // CBMC expects two's complement for negative numbers.
                 // The bignum crate instead does sign/magnitude when making hex.
                 // So for negatives, do the two's complement ourselves.
-                if value.lt(&0u8.into()) {
+                if value.sign() == Sign::Minus {
                     let one: BigInt = 1u8.into();
                     let max: BigInt = one.clone().shl(width).sub(one.clone());
                     assert!(value.abs().lt(&max));
@@ -1691,67 +1692,53 @@ mod tests {
     use crate::irep::IrepId;
 
     #[test]
+    #[should_panic]
+    fn test_hex_id_panic() {
+        IrepId::hex_from_int(-127, 7, true).to_string().to_string();
+    }
+
+    #[test]
     fn test_hex_id() {
         // For positive numbers, should just give the smallest representation
         // TODO: confirm no need to 0 pad.
-        assert_eq!(IrepId::FreeformHexInteger { value: 0.into(), width: 4 }.to_string(), "0");
-        assert_eq!(IrepId::FreeformHexInteger { value: 12.into(), width: 4 }.to_string(), "C");
-        assert_eq!(IrepId::FreeformHexInteger { value: 12.into(), width: 32 }.to_string(), "C");
-        assert_eq!(IrepId::FreeformHexInteger { value: 234.into(), width: 16 }.to_string(), "EA");
-        assert_eq!(IrepId::FreeformHexInteger { value: 234.into(), width: 32 }.to_string(), "EA");
+        assert_eq!(IrepId::hex_from_int(0, 4, true).to_string(), "0");
+        assert_eq!(IrepId::hex_from_int(12, 4, true).to_string(), "C");
+        assert_eq!(IrepId::hex_from_int(12, 32, true).to_string(), "C");
+        assert_eq!(IrepId::hex_from_int(234, 16, true).to_string(), "EA");
+        assert_eq!(IrepId::hex_from_int(234, 32, true).to_string(), "EA");
 
-        // For negative numbers, should convert to 2s complement of `width` bits, then print hex.
-        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 2 }.to_string(), "3");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 3 }.to_string(), "7");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 4 }.to_string(), "F");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 8 }.to_string(), "FF");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-1).into(), width: 9 }.to_string(), "1FF");
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-1).into(), width: 16 }.to_string(),
-            "FFFF"
-        );
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-1).into(), width: 32 }.to_string(),
-            "FFFFFFFF"
-        );
+        // For positive numbers, signed and unsigned should produce the same value
+        assert_eq!(IrepId::hex_from_int(0, 4, false).to_string(), "0");
+        assert_eq!(IrepId::hex_from_int(12, 4, false).to_string(), "C");
+        assert_eq!(IrepId::hex_from_int(12, 32, false).to_string(), "C");
+        assert_eq!(IrepId::hex_from_int(234, 16, false).to_string(), "EA");
+        assert_eq!(IrepId::hex_from_int(234, 32, false).to_string(), "EA");
 
-        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 4 }.to_string(), "4");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 5 }.to_string(), "14");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 6 }.to_string(), "34");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 7 }.to_string(), "74");
-        assert_eq!(IrepId::FreeformHexInteger { value: (-12).into(), width: 8 }.to_string(), "F4");
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-12).into(), width: 32 }.to_string(),
-            "FFFFFFF4"
-        );
+        // // For negative numbers, should convert to 2s complement of `width` bits, then print hex.
+        assert_eq!(IrepId::hex_from_int(-1, 2, true).to_string(), "3");
+        assert_eq!(IrepId::hex_from_int(-1, 3, true).to_string(), "7");
+        assert_eq!(IrepId::hex_from_int(-1, 4, true).to_string(), "F");
+        assert_eq!(IrepId::hex_from_int(-1, 8, true).to_string(), "FF");
+        assert_eq!(IrepId::hex_from_int(-1, 9, true).to_string(), "1FF");
+        assert_eq!(IrepId::hex_from_int(-1, 16, true).to_string(), "FFFF");
+        assert_eq!(IrepId::hex_from_int(-1, 32, true).to_string(), "FFFFFFFF");
 
-        // // TODO: Any width < 9 fails with an assertion violation, since `value.abs().lt(&max)`.
-        // // Not sure how we can check that in a test.
-        assert_eq!(IrepId::FreeformHexInteger { value: (-127).into(), width: 8 }.to_string(), "81");
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-127).into(), width: 9 }.to_string(),
-            "181"
-        );
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-127).into(), width: 10 }.to_string(),
-            "381"
-        );
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-127).into(), width: 11 }.to_string(),
-            "781"
-        );
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-127).into(), width: 12 }.to_string(),
-            "F81"
-        );
+        assert_eq!(IrepId::hex_from_int(-12, 4, true).to_string(), "4");
+        assert_eq!(IrepId::hex_from_int(-12, 5, true).to_string(), "14");
+        assert_eq!(IrepId::hex_from_int(-12, 6, true).to_string(), "34");
+        assert_eq!(IrepId::hex_from_int(-12, 7, true).to_string(), "74");
+        assert_eq!(IrepId::hex_from_int(-12, 8, true).to_string(), "F4");
+        assert_eq!(IrepId::hex_from_int(-12, 32, true).to_string(), "FFFFFFF4");
+        assert_eq!(IrepId::hex_from_int(-12, 4, true).to_string(), "4");
 
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-255).into(), width: 9 }.to_string(),
-            "101"
-        );
-        assert_eq!(
-            IrepId::FreeformHexInteger { value: (-255).into(), width: 32 }.to_string(),
-            "FFFFFF01"
-        );
+        assert_eq!(IrepId::hex_from_int(-127, 8, true).to_string(), "81");
+        assert_eq!(IrepId::hex_from_int(-127, 9, true).to_string(), "181");
+        assert_eq!(IrepId::hex_from_int(-127, 10, true).to_string(), "381");
+        assert_eq!(IrepId::hex_from_int(-127, 11, true).to_string(), "781");
+        assert_eq!(IrepId::hex_from_int(-127, 12, true).to_string(), "F81");
+        assert_eq!(IrepId::hex_from_int(-127, 36, true).to_string(), "FFFFFFF81");
+
+        assert_eq!(IrepId::hex_from_int(-255, 9, true).to_string(), "101");
+        assert_eq!(IrepId::hex_from_int(-255, 32, true).to_string(), "FFFFFF01");
     }
 }
