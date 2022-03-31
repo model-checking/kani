@@ -1,0 +1,4 @@
+RESULTS:
+Check 1: main.expect_fail.1
+- Status: FAILURE
+- Description: "EXPECTED FAIL: Blocked by assumption above."
