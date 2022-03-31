@@ -72,7 +72,7 @@ impl Location {
             Location::Property { file, line, .. } => {
                 format!("<{:?}>:{}", file, line)
             }
-            Location::NoneProperty => "<none>".to_string()
+            Location::NoneProperty { comment, property_class } => "<none>".to_string(),
         }
     }
 }

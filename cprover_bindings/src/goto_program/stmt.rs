@@ -201,14 +201,6 @@ impl Stmt {
         stmt!(Assert { cond, property_class, msg }, loc)
     }
 
-    /// `__CPROVER_assert(cond, msg);`
-    pub fn assert(cond: Expr, msg: &str, loc: Location) -> Self {
-        assert!(cond.typ().is_bool());
-        BuiltinFn::CProverAssert
-            .call(vec![cond, Expr::string_constant(msg)], loc.clone())
-            .as_stmt(loc)
-    }
-
     pub fn assert_false(msg: &str, loc: Location) -> Self {
         Stmt::assert(Expr::bool_false(), msg, loc)
     }
