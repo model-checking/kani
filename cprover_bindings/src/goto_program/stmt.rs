@@ -202,7 +202,8 @@ impl Stmt {
     }
 
     pub fn assert_false(msg: &str, loc: Location) -> Self {
-        Stmt::assert(Expr::bool_false(), msg, loc)
+        //Stmt::assert(Expr::bool_false(), msg, loc)
+        Stmt::assert_statement(Expr::bool_false(), "assertion", msg, loc)
     }
 
     /// A __CPROVER_assert to sanity check expected components of code
@@ -215,7 +216,12 @@ impl Stmt {
         Stmt::block(
             vec![
                 // Assert our expected true expression.
-                Stmt::assert(expect_true.clone(), &assert_msg, loc.clone()),
+                Stmt::assert_statement(
+                    expect_true.clone(),
+                    "sanity_check",
+                    &assert_msg,
+                    loc.clone(),
+                ),
                 // If expect_true is false, assume false to block any further
                 // exploration of this path.
                 Stmt::assume(expect_true, loc.clone()),

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
+use super::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
@@ -44,8 +45,18 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
                 self.codegen_switch_int(discr, *switch_ty, targets)
             }
-            TerminatorKind::Resume => Stmt::assert_false("resume instruction", loc),
-            TerminatorKind::Abort => Stmt::assert_false("abort instruction", loc),
+            TerminatorKind::Resume => self.codegen_assert(
+                Expr::bool_false(),
+                PropertyClass::DefaultAssertion,
+                "resume instruction",
+                loc,
+            ),
+            TerminatorKind::Abort => self.codegen_assert(
+                Expr::bool_false(),
+                PropertyClass::DefaultAssertion,
+                "abort instruction",
+                loc,
+            ),
             TerminatorKind::Return => {
                 let rty = self.current_fn().sig().unwrap().skip_binder().output();
                 if rty.is_unit() {
@@ -62,7 +73,13 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    Stmt::assert_false("unreachable code", loc.clone()),
+                    //Stmt::assert_false("unreachable code", loc.clone()),
+                    self.codegen_assert(
+                        Expr::bool_false(),
+                        PropertyClass::DefaultAssertion,
+                        "unreachable code",
+                        loc.clone(),
+                    ),
                     Stmt::assume(Expr::bool_false(), loc.clone()),
                 ],
                 loc,
@@ -109,7 +126,12 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc,
                         ),
-                        Stmt::assert_false(&msg_str, loc),
+                        self.codegen_assert(
+                            Expr::bool_false(),
+                            PropertyClass::DefaultAssertion,
+                            &msg_str,
+                            loc,
+                        ),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -357,7 +379,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 if destination.is_none() {
                     // No target block means this function doesn't return.
                     // This should have been handled by the Nevers hook.
-                    return Stmt::assert_false(
+                    return self.codegen_assert(
+                        Expr::bool_false(),
+                        PropertyClass::DefaultAssertion,
                         &format!("reach some nonterminating function: {:?}", func),
                         loc.clone(),
                     );
@@ -503,7 +527,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
             vec![
-                Stmt::assert_false(msg, loc.clone()),
+                self.codegen_assert(Expr::bool_false(), PropertyClass::DefaultAssertion, msg, loc),
+                //Stmt::assert_false(msg, loc.clone()),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,
@@ -517,7 +542,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // assert(!cond).
-        Stmt::assert(cond.not(), msg, loc)
+        self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
     }
 
     /// Generate code to cover the current location

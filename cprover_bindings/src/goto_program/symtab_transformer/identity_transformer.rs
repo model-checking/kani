@@ -367,6 +367,7 @@ mod tests {
                 Location::none(),
             ));
             add_sym(Stmt::assert(Expr::bool_true(), "", Location::none()));
+            add_sym(Stmt::assert_statement(Expr::bool_true(), "", "", Location::none()));
             add_sym(Stmt::assume(Expr::bool_false(), Location::none()));
             add_sym(Stmt::atomic_block(
                 vec![Stmt::assert_false("", Location::none())],
