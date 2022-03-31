@@ -73,7 +73,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    //Stmt::assert_false("unreachable code", loc.clone()),
                     self.codegen_assert(
                         Expr::bool_false(),
                         PropertyClass::DefaultAssertion,
@@ -528,7 +527,6 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(
             vec![
                 self.codegen_assert(Expr::bool_false(), PropertyClass::DefaultAssertion, msg, loc),
-                //Stmt::assert_false(msg, loc.clone()),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,

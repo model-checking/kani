@@ -171,11 +171,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
-                // let check = Stmt::assert(
-                //     res.overflowed.not(),
-                //     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                //     loc,
-                // );
                 let expr_place = self.codegen_expr_to_place(p, res.result);
                 Stmt::block(vec![expr_place, check], loc)
             }};
@@ -209,11 +204,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
-                // let check_stmt = Stmt::assert(
-                //     check.not(),
-                //     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                //     loc,
-                // );
                 let res = a.$op(b);
                 let expr_place = self.codegen_expr_to_place(p, res);
                 Stmt::block(vec![expr_place, check_stmt], loc)
@@ -823,11 +813,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     "ptr_offset_from: pointers point to same object",
                     loc.clone(),
                 ),
-                // Stmt::assert(
-                //     pointers_to_same_object,
-                //     "ptr_offset_from: pointers point to same object",
-                //     loc.clone(),
-                // ),
                 self.codegen_expr_to_place(p, a.sub(b)),
             ],
             loc,

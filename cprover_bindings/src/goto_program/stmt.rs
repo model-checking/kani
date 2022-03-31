@@ -202,8 +202,7 @@ impl Stmt {
     }
 
     pub fn assert_false(msg: &str, loc: Location) -> Self {
-        //Stmt::assert(Expr::bool_false(), msg, loc)
-        Stmt::assert_statement(Expr::bool_false(), "assertion", msg, loc)
+        Stmt::assert_statement(Expr::bool_false(), "assert_false", msg, loc)
     }
 
     /// A __CPROVER_assert to sanity check expected components of code
