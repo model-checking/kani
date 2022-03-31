@@ -1,6 +1,4 @@
-# First steps with Kani
-
-> This tutorial expects you to have followed the Kani [installation instructions](./install-guide.md) first.
+# First steps
 
 Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
@@ -14,7 +12,7 @@ Consider this first program (which can be found under [`docs/src/tutorial/kani-f
 
 Think about the test harness you would need to write to test this function.
 You would need figure out a whole set of arguments to call the function with that would exercise each branch.
-You would need to keep that test harness up-to-date with the code, in case some of the branches change.
+You would also need to keep that test harness up-to-date with the code, in case some of the branches change.
 And if this function was more complicated—for example, if some of the branches depended on global state—the test harness would be even more onerous to write.
 
 We can try to property test a function like this, but if we're naive about it (and consider all possible `u32` inputs), then it's unlikely we'll ever find the bug.
@@ -31,7 +29,7 @@ test tests::doesnt_crash ... ok
 
 There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the property test will find it, even with a million samples.
 
-With Kani, however:
+With Kani, however, we can use `kani::any()` to represent all possible `u32` values:
 
 ```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/lib.rs:kani}}
@@ -51,7 +49,7 @@ VERIFICATION:- FAILED
 ```
 
 Kani has immediately found a failure.
-Notably, we haven't had to write explicit assertions in our "proof harness": by default, Kani will find a host of erroneous conditions which include a reachable call to `panic` or a failing `assert`.
+Notably, we haven't had to write explicit assertions in our proof harness: by default, Kani will find a host of erroneous conditions which include a reachable call to `panic` or a failing `assert`.
 
 ### Getting a trace
 
@@ -63,11 +61,10 @@ To see traces, run:
 
 ```
 kani --visualize src/lib.rs
-open report/html/index.html
 ```
 
-The first command runs Kani and generates the html-based report in `report/`.
-The second command opens that report in your default browser (on mac, on linux desktops try `xdg-open`).
+This command runs Kani and generates the HTML report in `report/html/index.html`.
+Open the report with your favorite browser.
 From this report, we can find the trace of the failure and filter through it to find the relevant line (at present time, an unfortunate amount of generated code is present in the trace):
 
 ```
@@ -125,7 +122,7 @@ VERIFICATION:- FAILED
 return 1 << x;
 ```
 
-Overflow (addition, multiplication, etc, and this case, [bitshifting by too much](https://github.com/rust-lang/rust/issues/10183)) is also caught by Kani:
+Overflow (in addition, multiplication or, in this case, [bit-shifting by too much](https://github.com/rust-lang/rust/issues/10183)) is also caught by Kani:
 
 ```
 RESULTS:
@@ -145,8 +142,8 @@ VERIFICATION:- FAILED
 
 ## Assertions, Assumptions, and Harnesses
 
-It seems a bit odd that we can take billions of inputs, but our function clearly only handles up to a few thousand.
-Let's codify this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug:
+It seems a bit odd that we can take billions of inputs when our function only handles up to a few thousand.
+Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug:
 
 ```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/final_form.rs:code}}
@@ -171,7 +168,7 @@ If we call this function with too large of a value, it will crash with an assert
 But we know that, that was our intention.
 
 This is the purpose of _proof harnesses_.
-Much like property testing (which would also find this assertion failure as a bug), we need to set up our preconditions, call the function in question, then assert our post conditions.
+Much like property testing (which would also fail in this assertion), we need to set up our preconditions, call the function in question, then assert our postconditions.
 Here's a revised example of the proof harness, one that now succeeds:
 
 ```rust,noplaypen
@@ -196,13 +193,3 @@ Lines not covered by our proof harness will show in red.
 1. Try changing the assumption in the proof harness to `x < 2048`. Now the harness won't be testing all possible cases.
 2. Rerun `kani --visualize` on the file
 3. Look at the report: you'll see we no longer have 100% coverage of the function.
-
-
-## Summary
-
-In this section:
-
-1. We saw Kani find panics, assertion failures, and even some other failures like unsafe dereferencing of null pointers.
-2. We saw how to get a failing trace using `kani --visualize`
-3. We saw how proof harnesses are used to set up preconditions and assert postconditions.
-4. We saw how to obtain coverage metrics and use them to ensure our proofs are covering as much as they should be.
