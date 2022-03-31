@@ -6,7 +6,6 @@
 // tracked in: https://github.com/model-checking/kani/issues/416
 
 #![feature(generators, generator_trait)]
-
 use std::ops::{Generator, GeneratorState};
 
 // Seperate function to force translation

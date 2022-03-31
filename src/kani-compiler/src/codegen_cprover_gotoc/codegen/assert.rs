@@ -10,6 +10,7 @@ use cbmc::goto_program::{Expr, Location, Stmt};
 #[allow(dead_code)]
 pub enum PropertyClass {
     ExpectFail,
+    Unimplemented,
     ExactDiv,
     SanityCheck,
     UnsupportedStructs,
@@ -27,6 +28,7 @@ impl PropertyClass {
     pub fn as_str(&self) -> &str {
         match self {
             PropertyClass::ExpectFail => "expect_fail",
+            PropertyClass::Unimplemented => "unimplemented",
             PropertyClass::AssertFalse => "assert_false",
             PropertyClass::Unreachable => "unreachable",
             PropertyClass::Assume => "assume",
@@ -43,6 +45,7 @@ impl PropertyClass {
     pub fn from_str(input: &str) -> PropertyClass {
         match input {
             "expect_fail" => PropertyClass::ExpectFail,
+            "unimplemented" => PropertyClass::Unimplemented,
             "assert_false" => PropertyClass::AssertFalse,
             "assume" => PropertyClass::Assume,
             "unreachable" => PropertyClass::Unreachable,
