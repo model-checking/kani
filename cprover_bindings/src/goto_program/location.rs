@@ -23,6 +23,8 @@ pub enum Location {
         comment: InternedString,
         property_class: InternedString,
     },
+    /// Covers cases where there are no Location Details but Property Class is needed
+    NoneProperty { comment: InternedString, property_class: InternedString },
 }
 
 /// Getters and predicates
@@ -70,6 +72,7 @@ impl Location {
             Location::Property { file, line, .. } => {
                 format!("<{:?}>:{}", file, line)
             }
+            Location::NoneProperty => "<none>".to_string()
         }
     }
 }
@@ -140,7 +143,13 @@ impl Location {
                 property_name.into(),
             ),
             Location::Property { .. } => location,
-            Location::None => location,
+            Location::NoneProperty { .. } => location,
+            // This converts None type Locations to NoneProperty type which inserts Property Class and Description
+            // into the Source Location Irep's without any location details.
+            Location::None => Location::NoneProperty {
+                comment: comment.into(),
+                property_class: property_name.into(),
+            },
         }
     }
 

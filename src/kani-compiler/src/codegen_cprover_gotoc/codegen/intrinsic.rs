@@ -316,9 +316,12 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
-            "assume" => {
-                Stmt::assert(fargs.remove(0).cast_to(Type::bool()), "assumption failed", loc)
-            }
+            "assume" => self.codegen_assert(
+                fargs.remove(0).cast_to(Type::bool()),
+                PropertyClass::Assume,
+                "assumption failed",
+                loc,
+            ),
             "atomic_and" => codegen_atomic_binop!(bitand),
             "atomic_and_acq" => codegen_atomic_binop!(bitand),
             "atomic_and_acqrel" => codegen_atomic_binop!(bitand),
@@ -579,8 +582,18 @@ impl<'tcx> GotocCtx<'tcx> {
         let msg1 = format!("first argument for {} is finite", intrinsic);
         let msg2 = format!("second argument for {} is finite", intrinsic);
         let loc = self.codegen_span_option(span);
-        let finite_check1 = Stmt::assert(arg1.is_finite(), msg1.as_str(), loc.clone());
-        let finite_check2 = Stmt::assert(arg2.is_finite(), msg2.as_str(), loc.clone());
+        let finite_check1 = self.codegen_assert(
+            arg1.is_finite(),
+            PropertyClass::DefaultAssertion,
+            msg1.as_str(),
+            loc.clone(),
+        );
+        let finite_check2 = self.codegen_assert(
+            arg2.is_finite(),
+            PropertyClass::DefaultAssertion,
+            msg2.as_str(),
+            loc.clone(),
+        );
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
@@ -1034,7 +1047,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let src = fargs.remove(0);
         let typ = instance.substs.type_at(0);
         let align = self.is_aligned(typ, dst.clone());
-        let align_check = Stmt::assert(align, "`dst` is properly aligned", loc.clone());
+        let align_check = self.codegen_assert(
+            align,
+            PropertyClass::DefaultAssertion,
+            "`dst` is properly aligned",
+            loc.clone(),
+        );
         let expr = dst.dereference().assign(src, loc.clone());
         Stmt::block(vec![align_check, expr], loc)
     }
