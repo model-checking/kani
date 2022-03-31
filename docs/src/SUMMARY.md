@@ -22,6 +22,7 @@
     - [Book runner](./bookrunner.md)
 
 - [Limitations](./limitations.md)
+  - [Guarantees]()
   - [Rust feature support](./rust-feature-support.md)
   - [Overrides](./overrides.md)
 
