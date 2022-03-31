@@ -21,7 +21,8 @@
     - [Regression testing](./kani-testing.md)
     - [Book runner](./bookrunner.md)
 
-- [Rust feature support](./rust-feature-support.md)
+- [Limitations](./limitations.md)
+  - [Rust feature support](./rust-feature-support.md)
   - [Overrides](./overrides.md)
 
 ---

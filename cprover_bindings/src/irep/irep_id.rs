@@ -5,17 +5,18 @@
 //! This file contains [IrepId] which is the id's used in CBMC.
 //! c.f. CBMC source code [src/util/irep_ids.def]
 use crate::cbmc_string::InternedString;
-use num::bigint::BigInt;
+use crate::utils::NumUtils;
+use num::bigint::{BigInt, BigUint, Sign};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum IrepId {
     /// In addition to the standard enums defined below, CBMC also allows ids to be strings.
     /// For e.g, to store the id of a variable. This enum variant captures those strings.
     FreeformString(InternedString),
-    /// An integer, encoded as a decimal string
+    /// An integer, to be encoded as a decimal string
     FreeformInteger(BigInt),
-    /// An integer, encoded as a hex string
-    FreeformHexInteger(BigInt),
+    /// A constant, stored as a bit pattern (negative numbers in 2's complement).
+    FreeformBitPattern(BigUint),
     EmptyString,
     Let,
     LetBinding,
@@ -829,11 +830,29 @@ impl IrepId {
         IrepId::FreeformInteger(i.into())
     }
 
-    pub fn hex_from_int<T>(i: T) -> IrepId
+    /// CBMC expects two's complement for negative numbers.
+    /// https://github.com/diffblue/cbmc/blob/develop/src/util/arith_tools.cpp#L401..L424
+    /// The bignum crate instead does sign/magnitude when making hex.
+    /// So for negatives, do the two's complement ourselves.
+    pub fn bitpattern_from_int<T>(i: T, width: u64, _signed: bool) -> IrepId
     where
         T: Into<BigInt>,
     {
-        IrepId::FreeformHexInteger(i.into())
+        let value: BigInt = i.into();
+        // TODO https://github.com/model-checking/kani/issues/996
+        // assert!(
+        //     value.fits_in_bits(width, signed),
+        //     "Cannot fit value into bits. value {} width: {} signed: {}",
+        //     value,
+        //     width,
+        //     signed
+        // );
+        let bitpattern = if value.sign() == Sign::Minus {
+            value.two_complement(width).to_biguint().unwrap()
+        } else {
+            value.to_biguint().unwrap()
+        };
+        IrepId::FreeformBitPattern(bitpattern)
     }
 
     //TODO assert that s is not the string produced by any other IrepId
@@ -847,14 +866,16 @@ impl ToString for IrepId {
         match self {
             IrepId::FreeformString(s) => return s.to_string(),
             IrepId::FreeformInteger(i) => return i.to_string(),
-            IrepId::FreeformHexInteger(i) => return format!("{:X}", i),
+            IrepId::FreeformBitPattern(i) => {
+                return format!("{:X}", i);
+            }
             _ => (),
         }
 
         let s = match self {
             IrepId::FreeformString(_)
             | IrepId::FreeformInteger(_)
-            | IrepId::FreeformHexInteger(_) => unreachable!(),
+            | IrepId::FreeformBitPattern { .. } => unreachable!(),
             IrepId::EmptyString => "",
             IrepId::Let => "let",
             IrepId::LetBinding => "let_binding",
@@ -1666,5 +1687,91 @@ impl ToString for IrepId {
             IrepId::StatementListInstructions => "statement_list_instructions",
         };
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::irep::IrepId;
+    use num::BigInt;
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic1() {
+    //     IrepId::hex_from_int(-127, 7, true);
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic2() {
+    //     IrepId::hex_from_int(12, 4, true);
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic3() {
+    //     IrepId::hex_from_int(-12, 4, true);
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic_string1() {
+    //     IrepId::FreeformHexInteger { value: BigInt::from(-127), width: 7, signed: true }
+    //         .to_string();
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic_string2() {
+    //     IrepId::FreeformHexInteger { value: BigInt::from(12), width: 4, signed: true }.to_string();
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn test_hex_id_panic_string3() {
+    //     IrepId::FreeformHexInteger { value: BigInt::from(-12), width: 4, signed: true }.to_string();
+    // }
+
+    #[test]
+    fn test_hex_id() {
+        // For positive numbers, should just give the smallest representation.
+        // No need to zero pad.
+        // https://github.com/diffblue/cbmc/blob/develop/src/util/arith_tools.cpp#L401..L424
+        assert_eq!(IrepId::bitpattern_from_int(0, 4, true).to_string(), "0");
+        assert_eq!(IrepId::bitpattern_from_int(12, 5, true).to_string(), "C");
+        assert_eq!(IrepId::bitpattern_from_int(12, 32, true).to_string(), "C");
+        assert_eq!(IrepId::bitpattern_from_int(234, 16, true).to_string(), "EA");
+        assert_eq!(IrepId::bitpattern_from_int(234, 32, true).to_string(), "EA");
+
+        // For positive numbers, signed and unsigned should produce the same value
+        assert_eq!(IrepId::bitpattern_from_int(0, 4, false).to_string(), "0");
+        assert_eq!(IrepId::bitpattern_from_int(12, 4, false).to_string(), "C");
+        assert_eq!(IrepId::bitpattern_from_int(12, 32, false).to_string(), "C");
+        assert_eq!(IrepId::bitpattern_from_int(234, 16, false).to_string(), "EA");
+        assert_eq!(IrepId::bitpattern_from_int(234, 32, false).to_string(), "EA");
+
+        // // For negative numbers, should convert to 2s complement of `width` bits, then print hex.
+        assert_eq!(IrepId::bitpattern_from_int(-1, 2, true).to_string(), "3");
+        assert_eq!(IrepId::bitpattern_from_int(-1, 3, true).to_string(), "7");
+        assert_eq!(IrepId::bitpattern_from_int(-1, 4, true).to_string(), "F");
+        assert_eq!(IrepId::bitpattern_from_int(-1, 8, true).to_string(), "FF");
+        assert_eq!(IrepId::bitpattern_from_int(-1, 9, true).to_string(), "1FF");
+        assert_eq!(IrepId::bitpattern_from_int(-1, 16, true).to_string(), "FFFF");
+        assert_eq!(IrepId::bitpattern_from_int(-1, 32, true).to_string(), "FFFFFFFF");
+
+        assert_eq!(IrepId::bitpattern_from_int(-12, 5, true).to_string(), "14");
+        assert_eq!(IrepId::bitpattern_from_int(-12, 6, true).to_string(), "34");
+        assert_eq!(IrepId::bitpattern_from_int(-12, 7, true).to_string(), "74");
+        assert_eq!(IrepId::bitpattern_from_int(-12, 8, true).to_string(), "F4");
+        assert_eq!(IrepId::bitpattern_from_int(-12, 32, true).to_string(), "FFFFFFF4");
+
+        assert_eq!(IrepId::bitpattern_from_int(-127, 8, true).to_string(), "81");
+        assert_eq!(IrepId::bitpattern_from_int(-127, 9, true).to_string(), "181");
+        assert_eq!(IrepId::bitpattern_from_int(-127, 10, true).to_string(), "381");
+        assert_eq!(IrepId::bitpattern_from_int(-127, 11, true).to_string(), "781");
+        assert_eq!(IrepId::bitpattern_from_int(-127, 12, true).to_string(), "F81");
+        assert_eq!(IrepId::bitpattern_from_int(-127, 36, true).to_string(), "FFFFFFF81");
+
+        assert_eq!(IrepId::bitpattern_from_int(-255, 9, true).to_string(), "101");
+        assert_eq!(IrepId::bitpattern_from_int(-255, 32, true).to_string(), "FFFFFF01");
     }
 }

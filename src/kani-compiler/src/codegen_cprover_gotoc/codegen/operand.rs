@@ -210,7 +210,7 @@ impl<'tcx> GotocCtx<'tcx> {
             (Scalar::Int(_), ty::Adt(adt, subst)) => {
                 if adt.is_struct() || adt.is_union() {
                     // in this case, we must have a one variant ADT. there are two cases
-                    let variant = &adt.variants.raw[0];
+                    let variant = &adt.variants().raw[0];
                     // if there is no field, then it's just a ZST
                     if variant.fields.is_empty() {
                         if adt.is_struct() {
@@ -238,7 +238,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     match &layout.variants {
                         Variants::Single { index } => {
                             // here we must have one variant
-                            let variant = &adt.variants[*index];
+                            let variant = &adt.variants()[*index];
 
                             match variant.fields.len() {
                                 0 => Expr::struct_expr_from_values(

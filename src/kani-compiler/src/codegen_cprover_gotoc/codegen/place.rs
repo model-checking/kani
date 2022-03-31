@@ -189,7 +189,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     ty::Tuple(_) => {
                         res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table)
                     }
-                    ty::Adt(def, _) if def.repr.simd() => {
+                    ty::Adt(def, _) if def.repr().simd() => {
                         // this is a SIMD vector - the index represents one
                         // of the elements, so we want to index as an array
                         // Example:
@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
-                        let field = &def.variants.raw[0].fields[f.index()];
+                        let field = &def.variants().raw[0].fields[f.index()];
                         res.member(&field.name.to_string(), &self.symbol_table)
                     }
                     ty::Closure(..) => res.member(&f.index().to_string(), &self.symbol_table),
@@ -425,7 +425,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = before.mir_typ();
                 match t.kind() {
                     ty::Adt(def, _) => {
-                        let variant = def.variants.get(idx).unwrap();
+                        let variant = def.variants().get(idx).unwrap();
                         let typ = TypeOrVariant::Variant(variant);
                         let expr = match &self.layout_of(t).variants {
                             Variants::Single { .. } => before.goto_expr,
