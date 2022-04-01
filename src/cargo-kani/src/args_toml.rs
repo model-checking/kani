@@ -42,7 +42,7 @@ fn merge_args(
         // [<config_kani_args>]* [input_args]*
         merged_args.extend_from_slice(&cmd_args[1..]);
     } else {
-        let cbmc_flag = cmd_args.iter().enumerate().find(|&f| f.1.eq("--cbmc-args".into()));
+        let cbmc_flag = cmd_args.iter().enumerate().find(|&f| f.1 == "--cbmc-args");
         if let Some((idx, _)) = cbmc_flag {
             // Both command line and config file have --cbmc-args. Merge them to be in order.
             merged_args.extend_from_slice(&cmd_args[1..idx]);
