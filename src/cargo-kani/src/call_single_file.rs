@@ -94,7 +94,14 @@ impl KaniSession {
     /// These arguments are passed directly here for single file runs,
     /// but are also used by call_cargo to pass as the env var KANIFLAGS.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let mut flags = vec!["--goto-c".to_string()];
+        let mut flags = vec![OsString::from("--goto-c")];
+
+        flags.push("--sysroot".into());
+        flags.push((&self.rust_toolchain).into());
+        if let Some(rlib) = &self.kani_rlib {
+            flags.push("--kani-lib".into());
+            flags.push(rlib.into());
+        }
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
@@ -121,7 +128,8 @@ impl KaniSession {
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
             flags.push("--cfg=use_abs".into());
             flags.push("--cfg".into());
-            flags.push(format!("abs_type={}", self.args.abs_type.to_string().to_lowercase()));
+            let abs_type = format!("abs_type={}", self.args.abs_type.to_string().to_lowercase());
+            flags.push(abs_type.into());
         }
 
         flags.push("-C".into());
@@ -130,9 +138,9 @@ impl KaniSession {
         // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
         // and we fail in `tests/kani/Match/match_bool.rs`
         if let Ok(str) = std::env::var("RUSTFLAGS") {
-            flags.extend(str.split(' ').map(|x| x.to_string()));
+            flags.extend(str.split(' ').map(OsString::from));
         }
 
-        flags.iter().map(|x| x.into()).collect()
+        flags
     }
 }
