@@ -1,6 +1,6 @@
 # Workarounds
 
-This section describes a few workarounds that may help to overcome tooling
+This section describes a few workarounds that may help overcome tooling
 issues in the Kani project.
 
 ## CBMC arguments
