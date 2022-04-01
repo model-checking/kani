@@ -225,10 +225,12 @@ impl InstallType {
     }
 
     pub fn rust_toolchain(&self) -> Result<PathBuf> {
-        // This is a compile-time constant, not a dynamic lookup at runtime,
-        // so we get the toolchain we're built with (i.e. that from rust_toolchain.toml)
+        // rustup sets some environment variables during build, but this is not clearly documented.
+        // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
+        // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
+        // This is a compile-time constant, not a dynamic lookup at runtime, so this is reliable.
         let toolchain = env!("RUSTUP_TOOLCHAIN");
-        // But we use the home crate to do a runtime determination of where rustup toolchains live
+        // We use the home crate to do a *runtime* determination of where rustup toolchains live
         let path = home::rustup_home()?.join("toolchains").join(toolchain);
         if path.as_path().exists() {
             Ok(path)
