@@ -22,6 +22,9 @@ pub const SYM_TABLE_PASSES: &'static str = "symbol-table-passes";
 /// Option name used to set the log output to a json file.
 pub const JSON_OUTPUT: &'static str = "json-output";
 
+/// Option name used to force logger to use color output. This doesn't work with --json-output.
+pub const COLOR_OUTPUT: &'static str = "color-output";
+
 /// Option name used to dump function pointer restrictions.
 pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
 
@@ -84,6 +87,12 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(JSON_OUTPUT)
                 .long("--json-output")
                 .help("Print output including logs in json format."),
+        )
+        .arg(
+            Arg::with_name(COLOR_OUTPUT)
+                .long("--color-output")
+                .help("Print output using colors.")
+                .conflicts_with(JSON_OUTPUT),
         )
         .arg(
             Arg::with_name(RESTRICT_FN_PTRS)

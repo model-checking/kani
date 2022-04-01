@@ -517,7 +517,7 @@ impl Expr {
     {
         assert!(typ.is_integer());
         let i = i.into();
-        //TODO: This check fails on some regressions
+        // TODO: https://github.com/model-checking/kani/issues/996
         // if i != 0 && i != 1 {
         //     assert!(
         //         typ.min_int() <= i && i <= typ.max_int(),
