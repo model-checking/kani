@@ -65,9 +65,9 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
         ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-        let result = ctx.check_harness(&specialized_obj, &report_dir, &harness)?;
+        let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
-            failed_harnesses.push(&harness);
+            failed_harnesses.push(harness);
         }
     }
 
@@ -111,9 +111,9 @@ fn standalone_main() -> Result<()> {
         }
         ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
 
-        let result = ctx.check_harness(&specialized_obj, &report_dir, &harness)?;
+        let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
-            failed_harnesses.push(&harness);
+            failed_harnesses.push(harness);
         }
     }
 
@@ -132,11 +132,11 @@ impl KaniSession {
         }
 
         if self.args.visualize {
-            self.run_visualize(&binary, &report_dir)?;
+            self.run_visualize(binary, report_dir)?;
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationStatus::Success)
         } else {
-            self.run_cbmc(&binary)
+            self.run_cbmc(binary)
         }
     }
 
