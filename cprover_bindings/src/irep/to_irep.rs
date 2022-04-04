@@ -135,7 +135,21 @@ impl ToIrep for DatatypeComponent {
 
 impl ToIrep for Expr {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
-        self.value().to_irep(mm).with_location(self.location(), mm).with_type(self.typ(), mm)
+        if let ExprValue::IntConstant(i) = self.value() {
+            let width = self.typ().native_width(mm).unwrap();
+            Irep {
+                id: IrepId::Constant,
+                sub: vec![],
+                named_sub: vector_map![(
+                    IrepId::Value,
+                    Irep::just_bitpattern_id(i.clone(), width, self.typ().is_signed(mm))
+                )],
+            }
+            .with_location(self.location(), mm)
+            .with_type(self.typ(), mm)
+        } else {
+            self.value().to_irep(mm).with_location(self.location(), mm).with_type(self.typ(), mm)
+        }
     }
 }
 
@@ -181,7 +195,10 @@ impl ToIrep for ExprValue {
             ExprValue::CBoolConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(if *i { 1 } else { 0 }),)],
+                named_sub: vector_map![(
+                    IrepId::Value,
+                    Irep::just_bitpattern_id(if *i { 1u8 } else { 0 }, mm.bool_width(), false)
+                )],
             },
             ExprValue::Dereference(e) => {
                 Irep { id: IrepId::Dereference, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
@@ -192,7 +209,10 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c))],
+                    named_sub: vector_map![(
+                        IrepId::Value,
+                        Irep::just_bitpattern_id(c, mm.double_width(), false)
+                    )],
                 }
             }
             ExprValue::FloatConstant(i) => {
@@ -200,7 +220,10 @@ impl ToIrep for ExprValue {
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(c))],
+                    named_sub: vector_map![(
+                        IrepId::Value,
+                        Irep::just_bitpattern_id(c, mm.float_width(), false)
+                    )],
                 }
             }
             ExprValue::FunctionCall { function, arguments } => side_effect_irep(
@@ -217,11 +240,9 @@ impl ToIrep for ExprValue {
                 sub: vec![array.to_irep(mm), index.to_irep(mm)],
                 named_sub: vector_map![],
             },
-            ExprValue::IntConstant(i) => Irep {
-                id: IrepId::Constant,
-                sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(i.clone()))],
-            },
+            ExprValue::IntConstant(_) => {
+                unreachable!("Should have been processed in previous step")
+            }
             ExprValue::Member { lhs, field } => Irep {
                 id: IrepId::Member,
                 sub: vec![lhs.to_irep(mm)],
@@ -239,7 +260,10 @@ impl ToIrep for ExprValue {
             ExprValue::PointerConstant(i) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: vector_map![(IrepId::Value, Irep::just_hex_id(*i))],
+                named_sub: vector_map![(
+                    IrepId::Value,
+                    Irep::just_bitpattern_id(*i, mm.pointer_width(), false)
+                )],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
             ExprValue::StatementExpression { statements: ops } => side_effect_irep(
@@ -278,7 +302,7 @@ impl ToIrep for ExprValue {
             ExprValue::UnOp { op: UnaryOperand::Bswap, e } => Irep {
                 id: IrepId::Bswap,
                 sub: vec![e.to_irep(mm)],
-                named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8))],
+                named_sub: vector_map![(IrepId::BitsPerByte, Irep::just_int_id(8u8))],
             },
             ExprValue::UnOp { op: UnaryOperand::BitReverse, e } => {
                 Irep { id: IrepId::BitReverse, sub: vec![e.to_irep(mm)], named_sub: vector_map![] }
@@ -329,6 +353,19 @@ impl ToIrep for Location {
             ])
             .with_named_sub_option(IrepId::Column, col.map(Irep::just_int_id))
             .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id)),
+            Location::Property { file, function, line, col, property_class, comment } => {
+                Irep::just_named_sub(vector_map![
+                    (IrepId::File, Irep::just_string_id(file.to_string())),
+                    (IrepId::Line, Irep::just_int_id(*line)),
+                ])
+                .with_named_sub_option(IrepId::Column, col.map(Irep::just_int_id))
+                .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id))
+                .with_named_sub(IrepId::Comment, Irep::just_string_id(comment.to_string()))
+                .with_named_sub(
+                    IrepId::PropertyClass,
+                    Irep::just_string_id(property_class.to_string()),
+                )
+            }
         }
     }
 }
@@ -357,6 +394,7 @@ impl ToIrep for StmtBody {
             StmtBody::Assign { lhs, rhs } => {
                 code_irep(IrepId::Assign, vec![lhs.to_irep(mm), rhs.to_irep(mm)])
             }
+            StmtBody::Assert { cond, .. } => code_irep(IrepId::Assert, vec![cond.to_irep(mm)]),
             StmtBody::Assume { cond } => code_irep(IrepId::Assume, vec![cond.to_irep(mm)]),
             StmtBody::AtomicBlock(stmts) => {
                 let mut irep_stmts = vec![code_irep(IrepId::AtomicBegin, vec![])];

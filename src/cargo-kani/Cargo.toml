@@ -19,6 +19,7 @@ structopt = "0.3"
 clap = "2.34"
 glob = "0.3"
 toml = "0.5"
+home = "0.5"
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml
@@ -34,9 +35,6 @@ toml = "0.5"
 
 # neat: embed git commit/tag info
 # git-testament = "0.1.4"
-
-# find home directory in the same way cargo does
-# home
 
 # Decompress a stream. then parse it as tar file
 # flate2 = "1"

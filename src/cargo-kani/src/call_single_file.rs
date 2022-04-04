@@ -18,6 +18,8 @@ pub struct SingleOutputs {
     pub symtab: PathBuf,
     /// The vtable restrictions files, if any.
     pub restrictions: Option<PathBuf>,
+    /// The kani-metadata.json file written by kani-compiler.
+    pub metadata: PathBuf,
 }
 
 impl KaniSession {
@@ -34,7 +36,7 @@ impl KaniSession {
             let mut temps = self.temporaries.borrow_mut();
             temps.push(output_filename.clone());
             temps.push(typemap_filename);
-            temps.push(metadata_filename);
+            temps.push(metadata_filename.clone());
             if self.args.restrict_vtable() {
                 temps.push(restrictions_filename.clone());
             }
@@ -55,11 +57,11 @@ impl KaniSession {
                 args.push(t);
             }
         } else {
-            if self.args.function != "main" {
-                // Unless entry function for proof harness is main, compile code as lib.
-                // This ensures that rustc won't prune functions that are not reachable
-                // from main as well as enable compilation of crates that don't have a main
-                // function.
+            // If we specifically request "--function main" then don't override crate type
+            if Some("main".to_string()) != self.args.function {
+                // We only run against proof harnesses normally, and this change
+                // 1. Means we do not require a `fn main` to exist
+                // 2. Don't forget it also changes visibility rules.
                 args.push("--crate-type".into());
                 args.push("lib".into());
             }
@@ -80,6 +82,7 @@ impl KaniSession {
         Ok(SingleOutputs {
             outdir,
             symtab: output_filename,
+            metadata: metadata_filename,
             restrictions: if self.args.restrict_vtable() {
                 Some(restrictions_filename)
             } else {
@@ -91,7 +94,14 @@ impl KaniSession {
     /// These arguments are passed directly here for single file runs,
     /// but are also used by call_cargo to pass as the env var KANIFLAGS.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let mut flags = vec!["--goto-c".to_string()];
+        let mut flags = vec![OsString::from("--goto-c")];
+
+        flags.push("--sysroot".into());
+        flags.push((&self.rust_toolchain).into());
+        if let Some(rlib) = &self.kani_rlib {
+            flags.push("--kani-lib".into());
+            flags.push(rlib.into());
+        }
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
@@ -104,7 +114,7 @@ impl KaniSession {
         if self.args.restrict_vtable() {
             flags.push("--restrict-vtable-fn-ptrs".into());
         }
-        if !self.args.no_assertion_reach_checks {
+        if self.args.assertion_reach_checks() {
             flags.push("--assertion-reach-checks".into());
         }
 
@@ -118,7 +128,8 @@ impl KaniSession {
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
             flags.push("--cfg=use_abs".into());
             flags.push("--cfg".into());
-            flags.push(format!("abs_type={}", self.args.abs_type.to_string().to_lowercase()));
+            let abs_type = format!("abs_type={}", self.args.abs_type.to_string().to_lowercase());
+            flags.push(abs_type.into());
         }
 
         flags.push("-C".into());
@@ -127,9 +138,9 @@ impl KaniSession {
         // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
         // and we fail in `tests/kani/Match/match_bool.rs`
         if let Ok(str) = std::env::var("RUSTFLAGS") {
-            flags.extend(str.split(' ').map(|x| x.to_string()));
+            flags.extend(str.split(' ').map(OsString::from));
         }
 
-        flags.iter().map(|x| x.into()).collect()
+        flags
     }
 }

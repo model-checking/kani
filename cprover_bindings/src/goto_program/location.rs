@@ -14,6 +14,15 @@ pub enum Location {
     /// Location in user code.
     /// `function` is `None` for global, `Some(function_name)` for function local.
     Loc { file: InternedString, function: Option<InternedString>, line: u64, col: Option<u64> },
+    /// Location for Statements that use Property Class and Description - Assert, Assume, Cover etc.
+    Property {
+        file: InternedString,
+        function: Option<InternedString>,
+        line: u64,
+        col: Option<u64>,
+        comment: InternedString,
+        property_class: InternedString,
+    },
 }
 
 /// Getters and predicates
@@ -58,6 +67,9 @@ impl Location {
                 format!("<{}>", function_name)
             }
             Location::Loc { file, line, .. } => format!("{}:{}", file, line),
+            Location::Property { file, line, .. } => {
+                format!("<{:?}>:{}", file, line)
+            }
         }
     }
 }
@@ -79,6 +91,57 @@ impl Location {
         let col = col.map(|x| x.try_into().unwrap());
         let function = function.intern();
         Location::Loc { file, function, line, col }
+    }
+
+    /// Create a Property type Location
+    pub fn property_location<T, U>(
+        file: Option<U>,
+        function: Option<U>,
+        line: T,
+        col: Option<T>,
+        comment: U,
+        property_name: U,
+    ) -> Location
+    where
+        T: TryInto<u64>,
+        T::Error: Debug,
+        U: Into<InternedString>,
+    {
+        let file = file.unwrap().into();
+        let line = line.try_into().unwrap();
+        let col = col.map(|x| x.try_into().unwrap());
+        let function = function.intern();
+        let property_class = property_name.into();
+        let comment = comment.into();
+        Location::Property { file, function, line, col, comment, property_class }
+    }
+
+    /// Create a Property type Location from an already existing Location type
+    pub fn create_location_with_property<T: Into<InternedString>>(
+        comment: T,
+        property_name: T,
+        location: Self,
+    ) -> Self {
+        match location {
+            Location::BuiltinFunction { function_name, line } => Location::property_location(
+                None,
+                Some(function_name),
+                line.unwrap(),
+                None,
+                comment.into(),
+                property_name.into(),
+            ),
+            Location::Loc { file, function, line, col } => Location::property_location(
+                file.into(),
+                function.intern(),
+                line,
+                col.map(|x| x.try_into().unwrap()),
+                comment.into(),
+                property_name.into(),
+            ),
+            Location::Property { .. } => location,
+            Location::None => location,
+        }
     }
 
     pub fn none() -> Location {

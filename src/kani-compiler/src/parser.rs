@@ -22,6 +22,9 @@ pub const SYM_TABLE_PASSES: &'static str = "symbol-table-passes";
 /// Option name used to set the log output to a json file.
 pub const JSON_OUTPUT: &'static str = "json-output";
 
+/// Option name used to force logger to use color output. This doesn't work with --json-output.
+pub const COLOR_OUTPUT: &'static str = "color-output";
+
 /// Option name used to dump function pointer restrictions.
 pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
 
@@ -73,7 +76,7 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(LOG_LEVEL)
                 .long("--log-level")
                 .takes_value(true)
-                .possible_values(["error", "warn", "info", "debug", "trace"].as_slice())
+                .possible_values(&["error", "warn", "info", "debug", "trace"])
                 .value_name("LOG_LEVEL")
                 .help(
                     "Sets the maximum log level to the value given. Use KANI_LOG for more granular \
@@ -86,14 +89,26 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
                 .help("Print output including logs in json format."),
         )
         .arg(
+            Arg::with_name(COLOR_OUTPUT)
+                .long("--color-output")
+                .help("Print output using colors.")
+                .conflicts_with(JSON_OUTPUT),
+        )
+        .arg(
             Arg::with_name(RESTRICT_FN_PTRS)
                 .long("--restrict-vtable-fn-ptrs")
                 .help("Restrict the targets of virtual table function pointer calls."),
         )
-        .arg(Arg::with_name(SYSROOT).long("--sysroot").help("Override the system root.").long_help(
-            "The \"sysroot\" is the location where Kani will look for the Rust \
+        .arg(
+            Arg::with_name(SYSROOT)
+                .long("--sysroot")
+                .takes_value(true)
+                .help("Override the system root.")
+                .long_help(
+                    "The \"sysroot\" is the location where Kani will look for the Rust \
                 distribution.",
-        ))
+                ),
+        )
         .arg(
             // TODO: Move this to a cargo wrapper. This should return kani version.
             Arg::with_name(RUSTC_VERSION)

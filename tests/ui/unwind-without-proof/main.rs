@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --no-unwinding-checks --function harness
+// kani-flags: --no-unwinding-checks
 
 // This test is to check Kani's error handling for harnesses that have unwind attributes
 // without '#[kani::proof]' attribute declared

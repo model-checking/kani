@@ -6,7 +6,7 @@ With Kani, all the corner cases are covered from the start, and the new concern 
 
 Consider this first program (which can be found under [`docs/src/tutorial/kani-first-steps`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kani-first-steps/)):
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/lib.rs:code}}
 ```
 
@@ -17,7 +17,7 @@ And if this function was more complicated—for example, if some of the branches
 
 We can try to property test a function like this, but if we're naive about it (and consider all possible `u32` inputs), then it's unlikely we'll ever find the bug.
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/lib.rs:proptest}}
 ```
 
@@ -31,7 +31,7 @@ There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the p
 
 With Kani, however:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/lib.rs:kani}}
 ```
 
@@ -84,7 +84,7 @@ Try a few other types of errors.
 
 For example, instead of panicking we could try explicitly dereferencing a null pointer:
 
-```rust
+```rust,noplaypen
 unsafe { return *(0 as *const u32) };
 ```
 
@@ -146,7 +146,7 @@ VERIFICATION:- FAILED
 It seems a bit odd that we can take billions of inputs, but our function clearly only handles up to a few thousand.
 Let's codify this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/final_form.rs:code}}
 ```
 
@@ -172,7 +172,7 @@ This is the purpose of _proof harnesses_.
 Much like property testing (which would also find this assertion failure as a bug), we need to set up our preconditions, call the function in question, then assert our post conditions.
 Here's a revised example of the proof harness, one that now succeeds:
 
-```rust
+```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/final_form.rs:kani}}
 ```
 
@@ -183,7 +183,7 @@ Fortunately, Kani is able to report a coverage metric for each proof harness.
 Try running:
 
 ```
-kani --visualize src/final_form.rs --function verify_success
+kani --visualize src/final_form.rs --harness verify_success
 open report/html/index.html
 ```
 

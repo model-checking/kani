@@ -1,9 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// @flag --no-memory-splitting
-// @expect verified
 
-pub fn main() {
+#[kani::proof]
+fn main() {
     let mut v: Vec<u64> = Vec::new();
     v.push(0);
     v.push(1);

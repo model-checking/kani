@@ -19,11 +19,14 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 53
+check-cbmc-version.py --major 5 --minor 54
 check-cbmc-viewer-version.py --major 2 --minor 10
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
+
+# Parser tests
+PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_cbmc_json_parser.py
 
 # Build all packages in the workspace
 cargo build
