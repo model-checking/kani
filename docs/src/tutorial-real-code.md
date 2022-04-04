@@ -36,7 +36,7 @@ Dependencies can sometimes blow up the tractability of proofs.
 This can usually be handled, but requires a lot more investment to make it happen, and so isn't a good place to start.
 
 2. Don't forget to consider starting with your dependencies.
-Sometimes the best place to start won't be your code, but the code you depend on.
+Sometimes the best place to start won't be your code, but the code that you depend on.
 If it's used by more projects that just yours, it will be valuable to more people, too!
 
 3. Find well-tested code.
@@ -52,7 +52,7 @@ These are data structures with unbounded size (e.g., linked lists or trees.)
 These can be hard to model since you need to set bounds on their size, similar to what happens with loops.
 
 3. Input/Output code.
-Kani doesn't model I/O, so if you depend on behavior like reading/writing to a file, you won't be able to prove anything.
+Kani doesn't model I/O, so if your code depends on behavior like reading/writing to a file, you won't be able to prove anything.
 This is one obvious area where testability helps provability: often we separate I/O and "pure" computation into different functions, so we can unit-test the latter.
 
 4. Deeper call graphs.
