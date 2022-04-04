@@ -167,7 +167,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let res = a.$f(b);
                 let check = self.codegen_assert(
                     res.overflowed.not(),
-                    PropertyClass::DefaultAssertion,
+                    PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
@@ -200,7 +200,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 let check_stmt = self.codegen_assert(
                     check.not(),
-                    PropertyClass::DefaultAssertion,
+                    PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
@@ -592,13 +592,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc = self.codegen_span_option(span);
         let finite_check1 = self.codegen_assert(
             arg1.is_finite(),
-            PropertyClass::DefaultAssertion,
+            PropertyClass::FiniteCheck,
             msg1.as_str(),
             loc.clone(),
         );
         let finite_check2 = self.codegen_assert(
             arg2.is_finite(),
-            PropertyClass::DefaultAssertion,
+            PropertyClass::FiniteCheck,
             msg2.as_str(),
             loc.clone(),
         );

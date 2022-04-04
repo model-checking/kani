@@ -541,7 +541,7 @@ pub trait Transformer: Sized {
         msg: InternedString,
     ) -> Stmt {
         let transformed_cond = self.transform_expr(cond);
-        Stmt::assert_statement(
+        Stmt::assert(
             transformed_cond,
             property_name.to_string().as_str(),
             msg.to_string().as_str(),

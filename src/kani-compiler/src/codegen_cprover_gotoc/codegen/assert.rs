@@ -10,10 +10,12 @@ use cbmc::goto_program::{Expr, Location, Stmt};
 #[allow(dead_code)]
 pub enum PropertyClass {
     ExpectFail,
+    FiniteCheck,
+    ArithmeticOverflow,
     Unimplemented,
     ExactDiv,
     SanityCheck,
-    UnsupportedStructs,
+    UnsupportedConstruct,
     Unreachable,
     Cover,
     PointerOffset,
@@ -27,6 +29,8 @@ pub enum PropertyClass {
 impl PropertyClass {
     pub fn as_str(&self) -> &str {
         match self {
+            PropertyClass::ArithmeticOverflow => "arithmetic_overflow",
+            PropertyClass::FiniteCheck => "finite_check",
             PropertyClass::ExpectFail => "expect_fail",
             PropertyClass::Unimplemented => "unimplemented",
             PropertyClass::AssertFalse => "assert_false",
@@ -35,7 +39,7 @@ impl PropertyClass {
             PropertyClass::ExactDiv => "exact_div",
             PropertyClass::Cover => "coverage_check",
             PropertyClass::SanityCheck => "sanity_check",
-            PropertyClass::UnsupportedStructs => "unsupported_struct",
+            PropertyClass::UnsupportedConstruct => "unsupported_construct",
             PropertyClass::PointerOffset => "pointer_offset",
             PropertyClass::DefaultAssertion => "assertion",
             PropertyClass::CustomProperty(property_string) => property_string.as_str(),
@@ -45,12 +49,14 @@ impl PropertyClass {
     pub fn from_str(input: &str) -> PropertyClass {
         match input {
             "expect_fail" => PropertyClass::ExpectFail,
+            "finite_check" => PropertyClass::FiniteCheck,
             "unimplemented" => PropertyClass::Unimplemented,
+            "arithmetic_overflow" => PropertyClass::ArithmeticOverflow,
             "assert_false" => PropertyClass::AssertFalse,
             "assume" => PropertyClass::Assume,
             "unreachable" => PropertyClass::Unreachable,
             "exact_div" => PropertyClass::ExactDiv,
-            "unsupported_struct" => PropertyClass::UnsupportedStructs,
+            "unsupported_construct" => PropertyClass::UnsupportedConstruct,
             "assertion" => PropertyClass::DefaultAssertion,
             "coverage_check" => PropertyClass::Cover,
             "sanity_check" => PropertyClass::SanityCheck,
@@ -76,6 +82,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let property_location =
             Location::create_location_with_property(message, property_name, loc);
 
-        Stmt::assert_statement(cond, property_name, message, property_location)
+        Stmt::assert(cond, property_name, message, property_location)
+    }
+
+    pub fn codegen_assert_false(&self, message: &str, loc: Location) -> Stmt {
+        // Default assertion class for assert_false
+        let property_name = PropertyClass::DefaultAssertion.as_str();
+
+        // Create a Property Location Variant from any given Location type
+        let property_location =
+            Location::create_location_with_property(message, property_name, loc);
+
+        Stmt::assert(Expr::bool_false(), property_name, message, property_location)
     }
 }

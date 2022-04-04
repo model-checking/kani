@@ -45,18 +45,8 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
                 self.codegen_switch_int(discr, *switch_ty, targets)
             }
-            TerminatorKind::Resume => self.codegen_assert(
-                Expr::bool_false(),
-                PropertyClass::DefaultAssertion,
-                "resume instruction",
-                loc,
-            ),
-            TerminatorKind::Abort => self.codegen_assert(
-                Expr::bool_false(),
-                PropertyClass::DefaultAssertion,
-                "abort instruction",
-                loc,
-            ),
+            TerminatorKind::Resume => self.codegen_assert_false("resume instruction", loc),
+            TerminatorKind::Abort => self.codegen_assert_false("abort instruction", loc),
             TerminatorKind::Return => {
                 let rty = self.current_fn().sig().unwrap().skip_binder().output();
                 if rty.is_unit() {
@@ -73,12 +63,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    self.codegen_assert(
-                        Expr::bool_false(),
-                        PropertyClass::DefaultAssertion,
-                        "unreachable code",
-                        loc.clone(),
-                    ),
+                    self.codegen_assert_false("unreachable code", loc.clone()),
                     Stmt::assume(Expr::bool_false(), loc.clone()),
                 ],
                 loc,
@@ -125,12 +110,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc,
                         ),
-                        self.codegen_assert(
-                            Expr::bool_false(),
-                            PropertyClass::DefaultAssertion,
-                            &msg_str,
-                            loc,
-                        ),
+                        self.codegen_assert_false(&msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -378,9 +358,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 if destination.is_none() {
                     // No target block means this function doesn't return.
                     // This should have been handled by the Nevers hook.
-                    return self.codegen_assert(
-                        Expr::bool_false(),
-                        PropertyClass::DefaultAssertion,
+                    return self.codegen_assert_false(
                         &format!("reach some nonterminating function: {:?}", func),
                         loc.clone(),
                     );
@@ -526,7 +504,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
             vec![
-                self.codegen_assert(Expr::bool_false(), PropertyClass::DefaultAssertion, msg, loc),
+                self.codegen_assert_false(msg, loc),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,
