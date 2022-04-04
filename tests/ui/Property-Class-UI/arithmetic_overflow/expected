@@ -1,14 +1,11 @@
 core::num::<impl u8>::unchecked_mul.arithmetic_overflow.1
 - Status: SUCCESS
 - Description: "attempt to compute unchecked_mul which would overflow"
-- Location: ~/.rustup/toolchains/nightly-2022-03-23-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:579:22 in function core::num::<impl u8>::unchecked_mul
 
 core::num::<impl u8>::unchecked_add.arithmetic_overflow.1
 - Status: SUCCESS
 - Description: "attempt to compute unchecked_add which would overflow"
-- Location: ~/.rustup/toolchains/nightly-2022-03-23-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:464:22 in function core::num::<impl u8>::unchecked_add
 
 core::num::<impl u8>::unchecked_sub.arithmetic_overflow.1
 - Status: SUCCESS
 - Description: "attempt to compute unchecked_sub which would overflow"
-- Location: ~/.rustup/toolchains/nightly-2022-03-23-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:533:22 in function core::num::<impl u8>::unchecked_sub
