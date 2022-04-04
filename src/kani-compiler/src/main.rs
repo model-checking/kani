@@ -44,13 +44,11 @@ use std::rc::Rc;
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
-    let kani_deps = lib_path.clone().to_owned() + "/deps";
     // The option below provides a mechanism by which definitions in the
     // standard library can be overriden. See
     // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
     // for more details.
-    let mut kani_std_rlib = PathBuf::from(lib_path);
-    kani_std_rlib.push("libstd.rlib");
+    let kani_std_rlib = PathBuf::from(lib_path).join("libstd.rlib");
     let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
     let args = vec![
         "-C",
@@ -76,8 +74,6 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "kani",
         "--extern",
         kani_std_wrapper.as_str(),
-        "-L",
-        kani_deps.as_str(),
     ];
     args.iter().map(|s| s.to_string()).collect()
 }
