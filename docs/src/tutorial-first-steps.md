@@ -64,7 +64,7 @@ kani --visualize src/lib.rs
 ```
 
 This command runs Kani and generates the HTML report in `report/html/index.html`.
-Open the report with your favorite browser.
+Open the report with your preferred browser.
 From this report, we can find the trace of the failure and filter through it to find the relevant line (at present time, an unfortunate amount of generated code is present in the trace):
 
 ```
