@@ -1,4 +1,4 @@
-This example accompanies Kani's post on Firecracker. This describes a proof harness for ensuring that the Firecracker block device `parse` method adheres to a virtio requirement.
+This example accompanies Kani's post on Firecracker. This describes a proof harness for ensuring that the Firecracker block device `parse` method adheres to a virtio requirement. We implement this as a standalone example with some simplifications (search for "Kani change" in the source).
 
 ## Reproducing results locally
 
@@ -11,7 +11,9 @@ If you have problems installing Kani then please file an [issue](https://github.
 
 ### Using Kani
 
+Since there is only one harness in this example you can simply do:
+
 ```bash
-$ cargo kani --harness requirement_2642 --output-format terse
+$ cargo kani
 # expected result: verification success
 ```

@@ -1,15 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
-// Example from Firecracker virtio block device
-// We verify the parse function against a symbolic guest memory
-// To reproduce the result in the post:
-//
-//     cargo kani --harness requirement_2642 main.rs
-//
-// You should see output ending with:
-//
-//    VERIFICATION SUCCESSFUL
+// This code is based on Firecracker's virtio block device implementation
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
@@ -26,6 +17,9 @@ macro_rules! error {
 }
 
 /// Verification-mock of GuestMemoryMmap
+/// This allows us to return symbolic values to model reading from memory not
+/// under the control of Firecracker. This also enables us to interpose our
+/// `DescriptorPermissionChecker`.
 pub struct GuestMemoryMmap {
     permission_checker: RefCell<DescriptorPermissionChecker>,
 }
@@ -419,7 +413,7 @@ impl Request {
 mod verification {
     use super::*;
 
-    // ANCHOR: stretch_kani
+    // ANCHOR: requirement_2642
     #[kani::proof]
     pub fn requirement_2642() {
         let mem = GuestMemoryMmap::new();
