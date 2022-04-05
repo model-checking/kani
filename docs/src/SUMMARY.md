@@ -19,7 +19,7 @@
   - [Command cheat sheets](./cheat-sheets.md)
   - [Working with `rustc`](./rustc-hacks.md)
   - [Testing](./testing.md)
-    - [Regression testing](./kani-testing.md)
+    - [Regression testing](./regression-testing.md)
     - [Book runner](./bookrunner.md)
 
 - [Limitations](./limitations.md)
