@@ -1,4 +1,4 @@
-## Rust feature support
+# Rust feature support
 
 The table below tries to summarize the current support in Kani for
 the Rust language features according to the [Rust Reference](https://doc.rust-lang.org/stable/reference/).
@@ -85,7 +85,7 @@ Reference | Feature | Support | Notes |
 | | `Arc<T>` | Yes | |
 | | `Pin<T>` | Yes | |
 | | `UnsafeCell<T>` | Partial | |
-| | `PhantomData<T>` | Partial | *Review this* |
+| | `PhantomData<T>` | Partial | |
 | | Operator Traits | Partial | |
 | | `Deref` and `DerefMut` | Yes | |
 | | `Drop` | Partial | |
@@ -143,16 +143,18 @@ compiles as if it was sequential code.
 
 At present, Kani is able to link in functions from the standard library but the
 generated code will not contain them unless they are generic, intrinsics,
-inlined or macros. Missing functions are treated in a similar way to unsupported
-features (i.e., replacing the function body with an `assert(false)` statement).
-This results in verification failures if the code under verification, for
-example, includes a reachable `println!` statement.
+inlined or macros. Missing functions are treated in a similar way to [unsupported
+features](#code-generation-for-unsupported-features).
+This results in verification failures if a call to one of these missing functions
+is reachable.
 
 We have done some experiments to embed the standard library into the generated
 code, but this causes verification times to increase significantly. As of now,
 we have not been able to find a simple solution for [this
-issue](https://github.com/model-checking/kani/issues/581), but we have some ideas
-for future work in this direction.
+issue](https://github.com/model-checking/kani/issues/581), but we have some
+ideas for future work in this direction. At present, Kani
+[overrides](./overrides.md) a few common functions (e.g., print macros) as
+a workaround.
 
 ### Advanced features
 
@@ -209,9 +211,9 @@ Name | Support | Notes |
 abort | Yes | |
 add_with_overflow | Yes | |
 arith_offset | Yes | |
-assert_inhabited | Yes | |
-assert_uninit_valid | Partial | Generates `SKIP` statement |
-assert_zero_valid | Partial | Generates `SKIP` statement |
+assert_inhabited | Partial | [#751](https://github.com/model-checking/kani/issues/751) |
+assert_uninit_valid | Yes | |
+assert_zero_valid | Yes | |
 assume | Yes | |
 atomic_and | Partial | See [Atomics](#atomics) |
 atomic_and_acq | Partial | See [Atomics](#atomics) |
@@ -302,7 +304,8 @@ atomic_xsub_acq | Partial | See [Atomics](#atomics) |
 atomic_xsub_acqrel | Partial | See [Atomics](#atomics) |
 atomic_xsub_rel | Partial | See [Atomics](#atomics) |
 atomic_xsub_relaxed | Partial | See [Atomics](#atomics) |
-bitreverse | No | |
+blackbox | Yes | |
+bitreverse | Yes | |
 breakpoint | Yes | |
 bswap | Yes | |
 caller_location | No | |
@@ -327,17 +330,17 @@ expf32 | Yes | |
 expf64 | Yes | |
 fabsf32 | Yes | |
 fabsf64 | Yes | |
-fadd_fast | No | |
-fdiv_fast | No | |
+fadd_fast | Yes | |
+fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 float_to_int_unchecked | No | |
 floorf32 | Yes | |
 floorf64 | Yes | |
 fmaf32 | Yes | |
 fmaf64 | Yes | |
-fmul_fast | No | |
+fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 forget | Partial | Generates `SKIP` statement |
 frem_fast | No | |
-fsub_fast | No | |
+fsub_fast | Yes | |
 likely | Yes | |
 log2f32 | Yes | |
 log2f64 | Yes | |
@@ -390,7 +393,7 @@ sub_with_overflow | Yes | |
 transmute | Yes | |
 truncf32 | Yes | |
 truncf64 | Yes | |
-try | No | |
+try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
 unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
