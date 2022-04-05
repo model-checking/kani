@@ -15,13 +15,16 @@
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [Developer documentation](dev-documentation.md)
+  - [Workarounds](./workarounds.md)
   - [Command cheat sheets](./cheat-sheets.md)
   - [Working with `rustc`](./rustc-hacks.md)
   - [Testing](./testing.md)
-    - [Regression testing](./kani-testing.md)
+    - [Regression testing](./regression-testing.md)
     - [Book runner](./bookrunner.md)
 
-- [Rust feature support](./rust-feature-support.md)
+- [Limitations](./limitations.md)
+  - [Guarantees]()
+  - [Rust feature support](./rust-feature-support.md)
   - [Overrides](./overrides.md)
 
 ---
