@@ -366,7 +366,7 @@ impl ToIrep for Location {
                     Irep::just_string_id(property_class.to_string()),
                 )
             }
-            Location::NoneProperty { property_class, comment } => {
+            Location::PropertyUnknownLocation { property_class, comment } => {
                 Irep::just_named_sub(vector_map![
                     (IrepId::Comment, Irep::just_string_id(comment.to_string())),
                     (IrepId::PropertyClass, Irep::just_string_id(property_class.to_string()))
