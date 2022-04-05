@@ -1,12 +1,11 @@
-RESULTS:
-Check 1: main.exact_div.1
-- Status: SUCCESS
-- Description: "exact_div arguments divide exactly"
+main.exact_div.1\
+Status: SUCCESS
+Description: "exact_div arguments divide exactly"
 
-Check 2: main.exact_div.2
-- Status: SUCCESS
-- Description: "exact_div divisor is nonzero"
+main.exact_div.2\
+Status: SUCCESS
+Description: "exact_div divisor is nonzero"
 
-Check 3: main.exact_div.3
-- Status: SUCCESS
-- Description: "exact_div division does not overflow"
+main.exact_div.3\
+Status: SUCCESS
+Description: "exact_div division does not overflow"
