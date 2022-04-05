@@ -78,4 +78,4 @@ which follows these steps:
     with `generate_text_bookrunner(...)`.
 
 > **NOTE**: Any changes done to the examples in `src/test/bookrunner/books/` may
-> be gone if the bookrunner is executed.
+> be overwritten if the bookrunner is executed.
