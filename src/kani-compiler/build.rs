@@ -46,6 +46,9 @@ pub fn main() {
     let rustup_tc = env::var("RUSTUP_TOOLCHAIN").unwrap();
     let rustup_lib = path_str!([&rustup_home, "toolchains", &rustup_tc, "lib"]);
     println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{}", rustup_lib);
+    // While we hard-code the above for development purposes, for a release/install we look
+    // in a relative location for a symlink to the local rust toolchain
+    println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,$ORIGIN/../toolchain/lib");
 
     // Compile kani library and export KANI_LIB_PATH variable with its relative location.
     let out_dir = env::var("OUT_DIR").unwrap();

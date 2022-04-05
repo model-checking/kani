@@ -447,6 +447,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     e.member("case", &self.symbol_table).cast_to(self.codegen_ty(res_ty))
                 }
                 TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                    // This code follows the logic in the cranelift codegen backend:
+                    // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
                         FieldsShape::Arbitrary { offsets, .. } => offsets[0].bytes_usize(),
                         _ => unreachable!("niche encoding must have arbitrary fields"),
@@ -457,8 +459,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let relative_discr = if *niche_start == 0 {
                         niche_val
                     } else {
-                        // This should be a wrapping sub.
-                        niche_val.sub(Expr::int_constant(*niche_start, discr_ty.clone()))
+                        wrapping_sub(&niche_val, *niche_start)
                     };
                     let relative_max =
                         niche_variants.end().as_u32() - niche_variants.start().as_u32();
@@ -467,8 +468,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     } else {
                         relative_discr
                             .clone()
-                            .cast_to(Type::unsigned_int(64))
-                            .le(Expr::int_constant(relative_max, Type::unsigned_int(64)))
+                            .le(Expr::int_constant(relative_max, relative_discr.typ().clone()))
                     };
                     let niche_discr = {
                         let relative_discr = if relative_max == 0 {
@@ -1222,4 +1222,31 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
         }
     }
+}
+
+/// Perform a wrapping subtraction of an Expr with a constant "expr - constant"
+/// where "-" is wrapping subtraction, i.e., the result should be interpreted as
+/// an unsigned value (2's complement).
+fn wrapping_sub(expr: &Expr, constant: u128) -> Expr {
+    // While the wrapping subtraction can be done through a regular subtraction
+    // and then casting the result to an unsigned, doing so may result in CBMC
+    // flagging the operation with a signed to unsigned overflow failure (see
+    // https://github.com/model-checking/kani/issues/356).
+    // To avoid those overflow failures, the wrapping subtraction operation is
+    // computed as:
+    //   if expr >= constant {
+    //       // result is positive, so overflow may not occur
+    //       expr - constant
+    //   } else {
+    //       // compute the 2's complement to avoid overflow
+    //       expr - constant + 2^32
+    //   }
+    let s64 = Type::signed_int(64);
+    let expr = expr.clone().cast_to(s64.clone());
+    let twos_complement: i64 = u32::MAX as i64 + 1 - i64::try_from(constant).unwrap();
+    let constant = Expr::int_constant(constant, s64.clone());
+    expr.clone().ge(constant.clone()).ternary(
+        expr.clone().sub(constant),
+        expr.plus(Expr::int_constant(twos_complement, s64.clone())),
+    )
 }
