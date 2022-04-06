@@ -13,7 +13,7 @@ Tests in this style do actually state properties: *For all inputs (of some const
 
 Property testing is often quite effective, but the engine can't fully prove the property: It can only sample randomly a few of those values to test (though property testing libraries frequently give interesting "edge cases" a higher probability, making them more effective at bug-finding).
 
-**Model checking** is similar to these techniques in how you use them, but it is non-random and exhaustive (though often only up to some bound on input or problem size).
+**Model checking** is similar to these techniques in how you use them, but it's non-random and exhaustive (though often only up to some bound on input or problem size).
 Thus, properties checked with a model checker are effectively proofs.
 Instead of naively trying all possible _concrete_ inputs (which could be infeasible and blow up exponentially), model checkers like Kani will cleverly encode program traces as _symbolic_ "[SAT](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem)/[SMT](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories)" problems, and hand them off to SAT/SMT solvers.
 Again, SAT/SMT solving is an [NP-complete](https://en.wikipedia.org/wiki/NP-completeness) problem, but most practical programs can be model- checked within milliseconds to seconds (with notable exceptions: you can easily try to reverse a cryptographic hash with a model checker, but good luck getting it to terminate!)
