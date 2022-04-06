@@ -177,7 +177,7 @@ In particular, there are some outstanding issues to note here:
 We are particularly interested in bug reports concerning
 these features, so please [file a bug
 report](https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md)
-if you are aware of one.
+if you're aware of one.
 
 ### Panic strategies
 

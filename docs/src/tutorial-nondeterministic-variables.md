@@ -13,7 +13,7 @@ In this tutorial, we will show how to:
 
 ## Safe nondeterministic variables
 
-Let's say you are developing an inventory management tool, and you would like to verify that your API to manage items is correct.
+Let's say you're developing an inventory management tool, and you would like to verify that your API to manage items is correct.
 Here is a simple implementation of this API:
 
 ```rust,noplaypen

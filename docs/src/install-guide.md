@@ -62,7 +62,7 @@ Then, optionally, run the regression tests:
 ./scripts/kani-regression.sh
 ```
 
-This script has a lot of noisy output, but on a successful run you will see:
+This script has a lot of noisy output, but on a successful run you'll see:
 
 ```
 All Kani regression tests completed successfully.
