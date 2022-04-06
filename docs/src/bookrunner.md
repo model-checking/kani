@@ -20,7 +20,7 @@ Because of that, we run up to three different types of jobs when generating the 
 Note that these are incremental: A `verification` job depends on a previous `codegen` job.
 Similary, a `codegen` job depends on a `check` job.
 
-> **NOTE:** [Litani](https://github.com/awslabs/aws-build-accumulator) does not
+> **NOTE**: [Litani](https://github.com/awslabs/aws-build-accumulator) does not
 > support hierarchical views at the moment. For this reason, we are publishing a
 > [text version of the book runner report](./bookrunner/bookrunner.txt) which
 > displays the same results in a hierarchical way while we work on [improvements
@@ -34,7 +34,7 @@ Before running the above mentioned jobs, we pre-process the examples to:
 Finally, we run all jobs, collect their outputs and compare them against the expected outputs.
 The results are summarized as follows: If the obtained and expected outputs differ,
 the color of the stage bar will be red. Otherwise, it will be blue.
-If an example shows one red bar, it is considered a failed example that cannot be handled by Kani.
+If an example shows one red bar, it's considered a failed example that cannot be handled by Kani.
 
 The [book runner report](./bookrunner/index.html) and [its text version](./bookrunner/bookrunner.txt) are
 automatically updated whenever a PR gets merged into Kani.
@@ -49,8 +49,8 @@ To kick off the book runner process use:
 cargo run -p bookrunner
 ```
 
-The main function of the bookrunner is `generate_run()` in
-[`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/kani/blob/main/tools/bookrunner/src/books.rs),
+The main function of the bookrunner is `generate_run()` (code available
+[here](https://github.com/model-checking/kani/blob/main/tools/bookrunner/src/books.rs))
 which follows these steps:
  1. Sets up all the books, including data about their summaries.
  2. Then, for each book:

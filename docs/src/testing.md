@@ -14,5 +14,5 @@ two very good reasons to do it:
     particularly valuable for project management purposes.
 
 We recommend reading our section on [Regression Testing](./regression-testing.md)
-if you are interested in Kani development. At present, we obtain metrics based
+if you're interested in Kani development. At present, we obtain metrics based
 on the [book runner](./bookrunner.md).

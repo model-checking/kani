@@ -1,4 +1,4 @@
-# The Kani Rust Verifier
+# Kani Rust Verifier
 
 - [Getting started](./getting-started.md)
   - [Installation](./install-guide.md)
