@@ -32,7 +32,7 @@ In this harness, we use `kani::any()` to generate the new `id` and `quantity`.
 If we run this example, Kani verification will succeed, including the assertion that shows that the underlying `u32` variable  used to represent `NonZeroU32` cannot be zero, per its type invariant:
 
 You can try it out by running the example under
-[arbitrary-variables directory](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+[`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
 cargo kani --harness safe_update
@@ -57,7 +57,7 @@ The verification will now fail showing that the `inventory.get(&id).unwrap()` me
 This is an interesting issue that emerges from how `rustc` optimizes the memory layout of `Option<NonZeroU32>`.
 The compiler is able to represent `Option<NonZeroU32>` using `32` bits by using the value `0` to represent `None`.
 
-You can try it out by running the example under [arbitrary-variables directory](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+You can try it out by running the example under [`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
 cargo kani --harness unsafe_update
@@ -88,7 +88,7 @@ Now you can use `kani::any()` to create valid nondeterministic variables of the 
 ```
 
 You can try it out by running the example under
-[`docs/src/tutorial/arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+[`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
 cargo kani --harness check_rating

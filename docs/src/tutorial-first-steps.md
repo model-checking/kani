@@ -4,7 +4,7 @@ Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
 With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.
 
-Consider this first program (which can be found under [`docs/src/tutorial/kani-first-steps`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kani-first-steps/)):
+Consider this first program (which can be found under [`kani-first-steps`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kani-first-steps/)):
 
 ```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/lib.rs:code}}
