@@ -191,7 +191,7 @@ impl Stmt {
     }
 
     /// `assert(cond, property_class, commment);`
-    pub fn assert_statement(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
+    pub fn assert(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
 
         // Chose InternedString to seperate out codegen from the cprover_bindings logic
@@ -201,16 +201,8 @@ impl Stmt {
         stmt!(Assert { cond, property_class, msg }, loc)
     }
 
-    /// `__CPROVER_assert(cond, msg);`
-    pub fn assert(cond: Expr, msg: &str, loc: Location) -> Self {
-        assert!(cond.typ().is_bool());
-        BuiltinFn::CProverAssert
-            .call(vec![cond, Expr::string_constant(msg)], loc.clone())
-            .as_stmt(loc)
-    }
-
     pub fn assert_false(msg: &str, loc: Location) -> Self {
-        Stmt::assert(Expr::bool_false(), msg, loc)
+        Stmt::assert(Expr::bool_false(), "assert_false", msg, loc)
     }
 
     /// A __CPROVER_assert to sanity check expected components of code
@@ -223,7 +215,7 @@ impl Stmt {
         Stmt::block(
             vec![
                 // Assert our expected true expression.
-                Stmt::assert(expect_true.clone(), &assert_msg, loc.clone()),
+                Stmt::assert(expect_true.clone(), "sanity_check", &assert_msg, loc.clone()),
                 // If expect_true is false, assume false to block any further
                 // exploration of this path.
                 Stmt::assume(expect_true, loc.clone()),
