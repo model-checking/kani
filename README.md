@@ -4,9 +4,9 @@ The Kani Rust Verifier is a bit-precise model checker for Rust.
 
 Kani verifies:
  * Memory Safety -- even in unsafe Rust code
- * User specified assertions
+ * User-specified assertions
  * Absence of panics
- * Checks for some classes of undefined behavior
+ * Absence of some classes of undefined behavior
 
 ## Installation
 
