@@ -1,11 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, any_raw, assume};
+use crate::{any, assume};
 use core::ops::{Deref, DerefMut};
-use std::{
-    alloc::{alloc, dealloc, Layout},
-    marker::PhantomData,
-};
+use std::alloc::{alloc, dealloc, Layout};
 
 /// Given an array `arr` of length `LENGTH`, this function returns a **valid**
 /// slice of `arr` with non-deterministic start and end points.  This is useful
@@ -52,9 +49,8 @@ fn any_range<const LENGTH: usize>() -> (usize, usize) {
 /// ```
 pub struct NonDetSlice<T, const MAX_SLICE_LENGTH: usize> {
     layout: Layout,
-    ptr: *mut u8,
+    ptr: *mut T,
     slice_len: usize,
-    _phantom: PhantomData<T>,
 }
 
 impl<T, const MAX_SLICE_LENGTH: usize> NonDetSlice<T, MAX_SLICE_LENGTH> {
@@ -63,15 +59,15 @@ impl<T, const MAX_SLICE_LENGTH: usize> NonDetSlice<T, MAX_SLICE_LENGTH> {
         assume(slice_len <= MAX_SLICE_LENGTH);
         let layout = Layout::array::<T>(slice_len).unwrap();
         let ptr = unsafe { alloc(layout) };
-        Self { layout, ptr, slice_len, _phantom: PhantomData }
+        Self { layout, ptr: ptr as *mut T, slice_len }
     }
 
     pub fn get_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.ptr as *mut T, self.slice_len) }
+        unsafe { std::slice::from_raw_parts(self.ptr, self.slice_len) }
     }
 
     pub fn get_slice_mut(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr as *mut T, self.slice_len) }
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.slice_len) }
     }
 }
 
@@ -79,7 +75,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> Drop for NonDetSlice<T, MAX_SLICE_LENGTH>
     fn drop(&mut self) {
         if self.slice_len > 0 {
             unsafe {
-                dealloc(self.ptr, self.layout);
+                dealloc(self.ptr as *mut u8, self.layout);
             }
         }
     }
