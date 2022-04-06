@@ -75,7 +75,7 @@ Let's say you add the following implementation:
 The easiest way to allow users to create nondeterministic variables of the Rating type which represents values from 0-5 stars is by implementing the `kani::Invariant` trait.
 
 The implementation only requires you to define a check to your structure that returns whether its current value is valid or not.
-In our case, we've the following implementation:
+In our case, we have the following implementation:
 
 ```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}
