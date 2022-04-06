@@ -49,8 +49,8 @@ To kick off the book runner process use:
 cargo run -p bookrunner
 ```
 
-The main function of the bookrunner is `generate_run()` in
-[`src/tools/bookrunner/src/books.rs`](https://github.com/model-checking/kani/blob/main/tools/bookrunner/src/books.rs),
+The main function of the bookrunner is `generate_run()` (code available
+[here](https://github.com/model-checking/kani/blob/main/tools/bookrunner/src/books.rs))
 which follows these steps:
  1. Sets up all the books, including data about their summaries.
  2. Then, for each book:

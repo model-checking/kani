@@ -1,6 +1,6 @@
 # Loops, unwinding, and bounds
 
-Consider code like this (from [`src/lib.rs`](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/loops-unwinding/src/lib.rs)):
+Consider code like this (available [here](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/loops-unwinding/src/lib.rs)):
 
 ```rust,noplaypen
 {{#include tutorial/loops-unwinding/src/lib.rs:code}}
