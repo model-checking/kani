@@ -3,13 +3,13 @@
 
 //! This file is a glorified shell script for constructing a Kani release bundle.
 //! We use Rust here just to aid in making the "script" more robust.
-//! 
+//!
 //! Run with `cargo run -p make-kani-release -- <version>` and this will produce
 //! (e.g.) `kani-1.0-x86_64-unknown-linux-gnu.tar.gz`.
 
-use std::{path::Path, process::Command, ffi::OsString};
+use std::{ffi::OsString, path::Path, process::Command};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 fn main() -> Result<()> {
     let version_string = parse_args()?;
@@ -22,7 +22,10 @@ fn main() -> Result<()> {
 
     let dir = Path::new(&kani_string);
     if dir.exists() {
-        bail!("Directory {} already exists. Previous failed run? Delete it first.", dir.to_string_lossy());
+        bail!(
+            "Directory {} already exists. Previous failed run? Delete it first.",
+            dir.to_string_lossy()
+        );
     }
     std::fs::create_dir(dir)?;
 
@@ -108,7 +111,6 @@ fn create_release_bundle(dir: &Path, bundle: &str) -> Result<()> {
     Command::new("tar").args(&["zcf", bundle]).arg(dir).run()
 }
 
-
 /// Helper trait to fallibly run commands
 trait AutoRun {
     fn run(&mut self) -> Result<()>;
@@ -133,7 +135,7 @@ fn cp(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 /// Invoke `cp -r`
-fn cp_dir(src: &Path, dst:&Path) -> Result<()> {
+fn cp_dir(src: &Path, dst: &Path) -> Result<()> {
     let mut cmd = OsString::from("cp -r ");
     cmd.push(src.as_os_str());
     cmd.push(" ");
@@ -142,7 +144,7 @@ fn cp_dir(src: &Path, dst:&Path) -> Result<()> {
     Command::new("bash").arg("-c").arg(cmd).run()
 }
 
-/// Render a Command as a string, to log it 
+/// Render a Command as a string, to log it
 pub fn render_command(cmd: &Command) -> OsString {
     let mut str = OsString::new();
 
