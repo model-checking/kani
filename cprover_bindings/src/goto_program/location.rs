@@ -144,7 +144,7 @@ impl Location {
             ),
             Location::Property { .. } => location,
             Location::PropertyUnknownLocation { .. } => location,
-            // This converts None type Locations to NoneProperty type which inserts Property Class and Description
+            // This converts None type Locations to PropertyUnknownLocation type which inserts Property Class and Description
             // into the Source Location Irep's without any location details.
             Location::None => Location::PropertyUnknownLocation {
                 comment: comment.into(),
