@@ -23,6 +23,8 @@ pub enum Location {
         comment: InternedString,
         property_class: InternedString,
     },
+    /// Covers cases where Location Details are unknown or set as None but Property Class is needed.
+    PropertyUnknownLocation { comment: InternedString, property_class: InternedString },
 }
 
 /// Getters and predicates
@@ -70,6 +72,7 @@ impl Location {
             Location::Property { file, line, .. } => {
                 format!("<{:?}>:{}", file, line)
             }
+            Location::PropertyUnknownLocation { .. } => "<none>".to_string(),
         }
     }
 }
@@ -140,7 +143,13 @@ impl Location {
                 property_name.into(),
             ),
             Location::Property { .. } => location,
-            Location::None => location,
+            Location::PropertyUnknownLocation { .. } => location,
+            // This converts None type Locations to PropertyUnknownLocation type which inserts Property Class and Description
+            // into the Source Location Irep's without any location details.
+            Location::None => Location::PropertyUnknownLocation {
+                comment: comment.into(),
+                property_class: property_name.into(),
+            },
         }
     }
 
