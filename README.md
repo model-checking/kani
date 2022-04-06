@@ -3,10 +3,10 @@
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 
 Kani verifies:
- * memory safety -- even in unsafe Rust code
- * user-specified assertions
- * absence of panics
- * checks for some classes of undefined behavior
+ * Memory Safety -- Even in unsafe Rust code.
+ * User specified Assertions.
+ * Absence of Panics.
+ * Checks for some classes of Undefined Behavior.
 
 ## Installation
 
@@ -21,12 +21,16 @@ use my_crate::{function_under_test, is_valid, meets_specification};
 
 #[kani::proof]
 fn check_my_property() {
+
    // Create a nondeterministic input
    let input = kani::any();
+
    // Constrain it to represent valid values
    kani::assume(is_valid(input));
+
    // Call the function under verification
    let output = function_under_test(input);
+
    // Check that it meets the specification
    assert!(meets_specification(input, output));
 }
