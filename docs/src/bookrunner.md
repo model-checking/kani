@@ -20,7 +20,7 @@ Because of that, we run up to three different types of jobs when generating the 
 Note that these are incremental: A `verification` job depends on a previous `codegen` job.
 Similary, a `codegen` job depends on a `check` job.
 
-> **NOTE:** [Litani](https://github.com/awslabs/aws-build-accumulator) does not
+> **NOTE**: [Litani](https://github.com/awslabs/aws-build-accumulator) does not
 > support hierarchical views at the moment. For this reason, we are publishing a
 > [text version of the book runner report](./bookrunner/bookrunner.txt) which
 > displays the same results in a hierarchical way while we work on [improvements

@@ -4,7 +4,7 @@ Kani must currently be built from source.
 
 In general, the following dependencies are required.
 
-> **Note:** These dependencies may be installed by running the CI scripts shown
+> **NOTE**: These dependencies may be installed by running the CI scripts shown
 > below and there is no need to install them separately, for their respective
 > OS.
 

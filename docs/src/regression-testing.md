@@ -92,7 +92,7 @@ that you expect not to hold during verification. The testing framework expects
 one `EXPECTED FAIL` message in the verification output for each use of the
 predicate.
 
-> **NOTE:** `kani::expect_fail` is only useful to indicate failure in the
+> **NOTE**: `kani::expect_fail` is only useful to indicate failure in the
 > `verify` stage, errors in other stages will be considered testing failures.
 
 ### Testing options

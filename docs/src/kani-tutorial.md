@@ -1,6 +1,6 @@
 # Tutorial
 
-> Note: This tutorial expects you to have followed the Kani [installation instructions](./install-guide.md) first.
+> **NOTE**: This tutorial expects you to have followed the Kani [installation instructions](./install-guide.md) first.
 
 This tutorial will step you through a progression from simple to moderately complex tasks with Kani.
 It's meant to ensure you can get started, and see at least some simple examples of how typical proofs are structured.
