@@ -9,20 +9,20 @@ use cbmc::goto_program::{Expr, Location, Stmt};
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum PropertyClass {
-    ExpectFail,
-    FiniteCheck,
     ArithmeticOverflow,
-    Unimplemented,
-    ExactDiv,
-    SanityCheck,
-    UnsupportedConstruct,
-    Unreachable,
-    Cover,
-    PointerOffset,
     AssertFalse,
     Assume,
-    DefaultAssertion,
+    Cover,
     CustomProperty(String),
+    DefaultAssertion,
+    ExactDiv,
+    ExpectFail,
+    FiniteCheck,
+    PointerOffset,
+    SanityCheck,
+    Unimplemented,
+    UnsupportedConstruct,
+    Unreachable,
 }
 
 #[allow(dead_code)]
@@ -30,37 +30,37 @@ impl PropertyClass {
     pub fn as_str(&self) -> &str {
         match self {
             PropertyClass::ArithmeticOverflow => "arithmetic_overflow",
-            PropertyClass::FiniteCheck => "finite_check",
-            PropertyClass::ExpectFail => "expect_fail",
-            PropertyClass::Unimplemented => "unimplemented",
             PropertyClass::AssertFalse => "assert_false",
-            PropertyClass::Unreachable => "unreachable",
             PropertyClass::Assume => "assume",
-            PropertyClass::ExactDiv => "exact_div",
             PropertyClass::Cover => "coverage_check",
-            PropertyClass::SanityCheck => "sanity_check",
-            PropertyClass::UnsupportedConstruct => "unsupported_construct",
-            PropertyClass::PointerOffset => "pointer_offset",
-            PropertyClass::DefaultAssertion => "assertion",
             PropertyClass::CustomProperty(property_string) => property_string.as_str(),
+            PropertyClass::DefaultAssertion => "assertion",
+            PropertyClass::ExactDiv => "exact_div",
+            PropertyClass::ExpectFail => "expect_fail",
+            PropertyClass::FiniteCheck => "finite_check",
+            PropertyClass::PointerOffset => "pointer_offset",
+            PropertyClass::SanityCheck => "sanity_check",
+            PropertyClass::Unimplemented => "unimplemented",
+            PropertyClass::Unreachable => "unreachable",
+            PropertyClass::UnsupportedConstruct => "unsupported_construct",
         }
     }
 
     pub fn from_str(input: &str) -> PropertyClass {
         match input {
-            "expect_fail" => PropertyClass::ExpectFail,
-            "finite_check" => PropertyClass::FiniteCheck,
-            "unimplemented" => PropertyClass::Unimplemented,
             "arithmetic_overflow" => PropertyClass::ArithmeticOverflow,
             "assert_false" => PropertyClass::AssertFalse,
             "assume" => PropertyClass::Assume,
-            "unreachable" => PropertyClass::Unreachable,
-            "exact_div" => PropertyClass::ExactDiv,
-            "unsupported_construct" => PropertyClass::UnsupportedConstruct,
             "assertion" => PropertyClass::DefaultAssertion,
             "coverage_check" => PropertyClass::Cover,
-            "sanity_check" => PropertyClass::SanityCheck,
+            "exact_div" => PropertyClass::ExactDiv,
+            "expect_fail" => PropertyClass::ExpectFail,
+            "finite_check" => PropertyClass::FiniteCheck,
             "pointer_offset" => PropertyClass::PointerOffset,
+            "sanity_check" => PropertyClass::SanityCheck,
+            "unimplemented" => PropertyClass::Unimplemented,
+            "unreachable" => PropertyClass::Unreachable,
+            "unsupported_construct" => PropertyClass::UnsupportedConstruct,
             _ => PropertyClass::CustomProperty(input.to_owned()),
         }
     }
@@ -93,6 +93,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let property_location =
             Location::create_location_with_property(message, property_name, loc);
 
-        Stmt::assert(Expr::bool_false(), property_name, message, property_location)
+        Stmt::assert_false(message, property_location)
     }
 }

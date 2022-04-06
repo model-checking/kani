@@ -23,7 +23,7 @@ pub enum Location {
         comment: InternedString,
         property_class: InternedString,
     },
-    /// Covers cases where there are no Location Details but Property Class is needed
+    /// Covers cases where Location Details are unknown or set as None but Property Class is needed.
     PropertyUnknownLocation { comment: InternedString, property_class: InternedString },
 }
 
