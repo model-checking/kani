@@ -14,7 +14,7 @@ developers (including external contributors):
  3. [Development setup recommendations for working with `rustc`](./rustc-hacks.md).
  4. [Guide for testing in Kani](./testing.md).
 
-> **NOTE:** The developer documentation is intended for Kani developers and not
+> **NOTE**: The developer documentation is intended for Kani developers and not
 users. At present, the project is under heavy development and some items
 discussed in this documentation may stop working without notice (e.g., commands
 or configurations). Therefore, we recommend users to not rely on them.

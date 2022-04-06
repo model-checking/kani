@@ -36,7 +36,7 @@ rustup toolchain install nightly --component rustc-dev
 ### CLion / IntelliJ
 This is not a great solution, but it works for now (see <https://github.com/intellij-rust/intellij-rust/issues/1618>
 for more details).
-Edit the `Cargo.toml` of the package that you are working on and add artificial dependencies on the `rustc` packages that you would like to explore.
+Edit the `Cargo.toml` of the package that you're working on and add artificial dependencies on the `rustc` packages that you would like to explore.
 
 ```toml
 # This configuration doesn't exist so it shouldn't affect your build.
@@ -59,7 +59,7 @@ There are a few reasons why you may want to use your own copy of `rustc`. E.g.:
 
 We will assume that you already have a Kani setup and that the variable `KANI_WORKSPACE` contains the path to your Kani workspace.
 
-**It is highly recommended that you start from the commit that corresponds to the current `rustc` version from your workspace.**
+**It's highly recommended that you start from the commit that corresponds to the current `rustc` version from your workspace.**
 To get that information, run the following command:
 ```bash
 cd ${KANI_WORKSPACE} # Go to your Kani workspace.
@@ -102,4 +102,4 @@ cargo build
 
 In order to enable logs, you can just define the `RUSTC_LOG` variable, as documented here: <https://rustc-dev-guide.rust-lang.org/tracing.html>.
 
-Note that depending on the level of logs you would like to enable, you will need to build your own version of `rustc` as described above.
+Note that depending on the level of logs you would like to enable, you'll need to build your own version of `rustc` as described above.
