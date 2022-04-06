@@ -59,7 +59,7 @@ There are a few reasons why you may want to use your own copy of `rustc`. E.g.:
 
 We will assume that you already have a Kani setup and that the variable `KANI_WORKSPACE` contains the path to your Kani workspace.
 
-**It is highly recommended that you start from the commit that corresponds to the current `rustc` version from your workspace.**
+**It's highly recommended that you start from the commit that corresponds to the current `rustc` version from your workspace.**
 To get that information, run the following command:
 ```bash
 cd ${KANI_WORKSPACE} # Go to your Kani workspace.

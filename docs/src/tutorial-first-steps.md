@@ -99,7 +99,7 @@ warning: dereferencing a null pointer
    = note: `#[warn(deref_nullptr)]` on by default
 ```
 
-Still, it is just a warning, and we can run the code without test failures just as before.
+Still, it's just a warning, and we can run the code without test failures just as before.
 But Kani still catches the issue:
 
 ```
@@ -149,7 +149,7 @@ Let's encode this fact about our function by asserting some reasonable bound on 
 {{#include tutorial/kani-first-steps/src/final_form.rs:code}}
 ```
 
-Now we have stated our previously implicit expectation: this function should never be called with inputs that are too big.
+Now we've stated our previously implicit expectation: this function should never be called with inputs that are too big.
 But if we attempt to verify this, we get a problem:
 
 ```

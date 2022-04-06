@@ -148,10 +148,10 @@ features](#code-generation-for-unsupported-features).
 This results in verification failures if a call to one of these missing functions
 is reachable.
 
-We have done some experiments to embed the standard library into the generated
+We've done some experiments to embed the standard library into the generated
 code, but this causes verification times to increase significantly. As of now,
-we have not been able to find a simple solution for [this
-issue](https://github.com/model-checking/kani/issues/581), but we have some
+we've not been able to find a simple solution for [this
+issue](https://github.com/model-checking/kani/issues/581), but we've some
 ideas for future work in this direction. At present, Kani
 [overrides](./overrides.md) a few common functions (e.g., print macros) as
 a workaround.

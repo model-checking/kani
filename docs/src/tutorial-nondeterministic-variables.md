@@ -20,7 +20,7 @@ Here is a simple implementation of this API:
 {{#include tutorial/arbitrary-variables/src/inventory.rs:inventory_lib}}
 ```
 
-Now we would like to verify that, no matter which combination of `id` and `quantity`, a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same `id` returns some value that is equal to the one we inserted:
+Now we would like to verify that, no matter which combination of `id` and `quantity`, a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same `id` returns some value that's equal to the one we inserted:
 
 ```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:safe_update}}
@@ -75,7 +75,7 @@ Let's say you add the following implementation:
 The easiest way to allow users to create nondeterministic variables of the Rating type which represents values from 0-5 stars is by implementing the `kani::Invariant` trait.
 
 The implementation only requires you to define a check to your structure that returns whether its current value is valid or not.
-In our case, we have the following implementation:
+In our case, we've the following implementation:
 
 ```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}

@@ -16,7 +16,7 @@ The `kani-regression.sh` script executes different testing commands, which we cl
 See below for a description of each one.
 
 Note that regression testing is run whenever a Pull Request is opened, updated or merged
-into the main branch. Therefore, it is a good idea to run regression testing locally before
+into the main branch. Therefore, it's a good idea to run regression testing locally before
 submitting a Pull Request for Kani.
 
 ## Kani testing suites
@@ -33,7 +33,7 @@ Command-line options can be passed to the test by adding a special
 comment to the file. See [testing options](#testing-options) for more details.
 
 In particular, the Kani testing suites are composed of:
- * `kani`: The main testing suite for Kani. The test is a single Rust file that is
+ * `kani`: The main testing suite for Kani. The test is a single Rust file that's
           run through Kani. In general, the test passes if verification with Kani
           is successful, otherwise it fails.
  * `firecracker`: Works like `kani` but contains tests inspired by
@@ -57,7 +57,7 @@ In particular, the Kani testing suites are composed of:
                 Similar to the `expected` suite, we look for `*.expected` files
                 for each harness in the package.
 
-We have extended
+We've extended
 [`compiletest`](https://rustc-dev-guide.rust-lang.org/tests/intro.html) (the
 Rust compiler testing framework) to work with these suites. That way, we take
 advantage of all `compiletest` features (e.g., parallel execution).
@@ -77,7 +77,7 @@ If a test fails, the error message will include the stage where it failed:
 error: test failed: expected check success, got failure
 ```
 
-When working on a test that is expected to fail, there are two options to
+When working on a test that's expected to fail, there are two options to
 indicate an expected failure. The first one is to add a comment
 
 ```rust,noplaypen

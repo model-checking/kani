@@ -34,7 +34,7 @@ Before running the above mentioned jobs, we pre-process the examples to:
 Finally, we run all jobs, collect their outputs and compare them against the expected outputs.
 The results are summarized as follows: If the obtained and expected outputs differ,
 the color of the stage bar will be red. Otherwise, it will be blue.
-If an example shows one red bar, it is considered a failed example that cannot be handled by Kani.
+If an example shows one red bar, it's considered a failed example that cannot be handled by Kani.
 
 The [book runner report](./bookrunner/index.html) and [its text version](./bookrunner/bookrunner.txt) are
 automatically updated whenever a PR gets merged into Kani.

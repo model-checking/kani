@@ -5,7 +5,7 @@ Kani must currently be built from source.
 In general, the following dependencies are required.
 
 > **NOTE**: These dependencies may be installed by running the CI scripts shown
-> below and there is no need to install them separately, for their respective
+> below and there's no need to install them separately, for their respective
 > OS.
 
 1. Cargo installed via [rustup](https://rustup.rs/)
