@@ -60,7 +60,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
-            Stmt::assert_false(&GotocCtx::unsupported_msg(operation_name, Some(url)), loc.clone()),
+            self.codegen_assert_false(
+                &GotocCtx::unsupported_msg(operation_name, Some(url)),
+                loc.clone(),
+            ),
             // Assume false to block any further exploration of this path.
             Stmt::assume(Expr::bool_false(), loc.clone()),
             t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
