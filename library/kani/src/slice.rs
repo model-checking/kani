@@ -44,16 +44,16 @@ fn any_range<const LENGTH: usize>() -> (usize, usize) {
 /// # Example:
 ///
 /// ```rust
-/// let slice: kani::slice::NonDetSlice<u8, 5> = kani::slice::any_slice();
+/// let slice: kani::slice::AnySlice<u8, 5> = kani::slice::any_slice();
 /// foo(&slice); // where foo is a function that takes a slice and verifies a property about it
 /// ```
-pub struct NonDetSlice<T, const MAX_SLICE_LENGTH: usize> {
+pub struct AnySlice<T, const MAX_SLICE_LENGTH: usize> {
     layout: Layout,
     ptr: *mut T,
     slice_len: usize,
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> NonDetSlice<T, MAX_SLICE_LENGTH> {
+impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
     fn new() -> Self {
         let slice_len: usize = any();
         assume(slice_len <= MAX_SLICE_LENGTH);
@@ -71,7 +71,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> NonDetSlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> Drop for NonDetSlice<T, MAX_SLICE_LENGTH> {
+impl<T, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
     fn drop(&mut self) {
         if self.slice_len > 0 {
             unsafe {
@@ -81,7 +81,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> Drop for NonDetSlice<T, MAX_SLICE_LENGTH>
     }
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> Deref for NonDetSlice<T, MAX_SLICE_LENGTH> {
+impl<T, const MAX_SLICE_LENGTH: usize> Deref for AnySlice<T, MAX_SLICE_LENGTH> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
@@ -89,12 +89,12 @@ impl<T, const MAX_SLICE_LENGTH: usize> Deref for NonDetSlice<T, MAX_SLICE_LENGTH
     }
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> DerefMut for NonDetSlice<T, MAX_SLICE_LENGTH> {
+impl<T, const MAX_SLICE_LENGTH: usize> DerefMut for AnySlice<T, MAX_SLICE_LENGTH> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.get_slice_mut()
     }
 }
 
-pub fn any_slice<T, const MAX_SLICE_LENGTH: usize>() -> NonDetSlice<T, MAX_SLICE_LENGTH> {
-    NonDetSlice::<T, MAX_SLICE_LENGTH>::new()
+pub fn any_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH> {
+    AnySlice::<T, MAX_SLICE_LENGTH>::new()
 }
