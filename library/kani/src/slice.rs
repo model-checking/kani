@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, assume};
+use crate::{any, assume, Invariant};
 use core::ops::{Deref, DerefMut};
 use std::alloc::{alloc, dealloc, Layout};
 
@@ -47,18 +47,27 @@ fn any_range<const LENGTH: usize>() -> (usize, usize) {
 /// let slice: kani::slice::AnySlice<u8, 5> = kani::slice::any_slice();
 /// foo(&slice); // where foo is a function that takes a slice and verifies a property about it
 /// ```
-pub struct AnySlice<T, const MAX_SLICE_LENGTH: usize> {
+pub struct AnySlice<T, const MAX_SLICE_LENGTH: usize>
+    where T: Invariant
+{
     layout: Layout,
     ptr: *mut T,
     slice_len: usize,
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
+impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH>
+    where T: Invariant
+{
     fn new() -> Self {
         let slice_len: usize = any();
         assume(slice_len <= MAX_SLICE_LENGTH);
         let layout = Layout::array::<T>(slice_len).unwrap();
         let ptr = unsafe { alloc(layout) };
+        unsafe {
+            for i in 0..slice_len {
+                *(ptr as *mut T).add(i) = any();
+            }
+        }
         Self { layout, ptr: ptr as *mut T, slice_len }
     }
 
@@ -71,7 +80,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
+impl<T: Invariant, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
     fn drop(&mut self) {
         if self.slice_len > 0 {
             unsafe {
@@ -81,7 +90,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> Deref for AnySlice<T, MAX_SLICE_LENGTH> {
+impl<T: Invariant, const MAX_SLICE_LENGTH: usize> Deref for AnySlice<T, MAX_SLICE_LENGTH> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
@@ -89,12 +98,12 @@ impl<T, const MAX_SLICE_LENGTH: usize> Deref for AnySlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
-impl<T, const MAX_SLICE_LENGTH: usize> DerefMut for AnySlice<T, MAX_SLICE_LENGTH> {
+impl<T: Invariant, const MAX_SLICE_LENGTH: usize> DerefMut for AnySlice<T, MAX_SLICE_LENGTH> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.get_slice_mut()
     }
 }
 
-pub fn any_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH> {
+pub fn any_slice<T: Invariant, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH> {
     AnySlice::<T, MAX_SLICE_LENGTH>::new()
 }
