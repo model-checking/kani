@@ -4,8 +4,8 @@ Kani must currently be built from source.
 
 In general, the following dependencies are required.
 
-> **Note:** These dependencies may be installed by running the CI scripts shown
-> below and there is no need to install them separately, for their respective
+> **NOTE**: These dependencies may be installed by running the CI scripts shown
+> below and there's no need to install them separately, for their respective
 > OS.
 
 1. Cargo installed via [rustup](https://rustup.rs/)
@@ -62,7 +62,7 @@ Then, optionally, run the regression tests:
 ./scripts/kani-regression.sh
 ```
 
-This script has a lot of noisy output, but on a successful run you will see:
+This script has a lot of noisy output, but on a successful run you'll see:
 
 ```
 All Kani regression tests completed successfully.
