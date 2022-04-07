@@ -10,9 +10,11 @@ runs:
   steps:
       - name: Install dependencies
         run: ./scripts/setup/${{ inputs.os }}/install_deps.sh
+        shell: bash
 
       - name: Install CBMC
         run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh
+        shell: bash
 
       # This is unfortunate, but cbmc-viewer currently requires Python >= 3.8
       - name: Install Python 3.9
@@ -22,10 +24,13 @@ runs:
 
       - name: Install cbmc-viewer
         run: ./scripts/setup/install_viewer.sh 2.11
+        shell: bash
 
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
+        shell: bash
 
       - name: Update submodules
         run: |
           git submodule update --init --depth 1
+        shell: bash
