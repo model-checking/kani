@@ -309,8 +309,8 @@ bitreverse | Yes | |
 breakpoint | Yes | |
 bswap | Yes | |
 caller_location | No | |
-ceilf32 | Yes | |
-ceilf64 | Yes | |
+ceilf32 | No | |
+ceilf64 | No | |
 copy_nonoverlapping | Yes | |
 copysignf32 | Yes | |
 copysignf64 | Yes | |
@@ -333,8 +333,8 @@ fabsf64 | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 float_to_int_unchecked | No | |
-floorf32 | Yes | |
-floorf64 | Yes | |
+floorf32 | No | |
+floorf64 | No | |
 fmaf32 | Yes | |
 fmaf64 | Yes | |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
@@ -378,8 +378,8 @@ rintf32 | Yes | |
 rintf64 | Yes | |
 rotate_left | Yes | |
 rotate_right | Yes | |
-roundf32 | Yes | |
-roundf64 | Yes | |
+roundf32 | No | |
+roundf64 | No | |
 rustc_peek | No | |
 saturating_add | Yes | |
 saturating_sub | Yes | |
