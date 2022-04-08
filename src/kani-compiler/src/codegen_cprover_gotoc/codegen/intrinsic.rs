@@ -390,9 +390,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/374"
                 )
             }
-            // FIXME: https://github.com/model-checking/kani/issues/1025
-            // "ceilf32" => codegen_simple_intrinsic!(Ceilf),
-            // "ceilf64" => codegen_simple_intrinsic!(Ceil),
+            "ceilf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "ceilf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "copy" => codegen_intrinsic_copy!(Memmove),
             "copy_nonoverlapping" => codegen_intrinsic_copy!(Memcpy),
             "copysignf32" => codegen_simple_intrinsic!(Copysignf),
@@ -426,9 +429,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
-            // FIXME: https://github.com/model-checking/kani/issues/1025
-            // "floorf32" => codegen_simple_intrinsic!(Floorf),
-            // "floorf64" => codegen_simple_intrinsic!(Floor),
+            "floorf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "floorf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "fmaf32" => codegen_simple_intrinsic!(Fmaf),
             "fmaf64" => codegen_simple_intrinsic!(Fma),
             "fmul_fast" => {
@@ -473,9 +479,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "rintf64" => codegen_simple_intrinsic!(Rint),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
-            // FIXME: https://github.com/model-checking/kani/issues/1025
-            // "roundf32" => codegen_simple_intrinsic!(Roundf),
-            // "roundf64" => codegen_simple_intrinsic!(Round),
+            "roundf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "roundf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "saturating_add" => codegen_intrinsic_binop_with_mm!(saturating_add),
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
