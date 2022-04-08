@@ -96,10 +96,13 @@ fn bundle_cbmc(dir: &Path) -> Result<()> {
 
     let bin = dir.join("bin");
 
+    // We use these directly
     cp(&which::which("cbmc")?, &bin)?;
     cp(&which::which("goto-instrument")?, &bin)?;
     cp(&which::which("goto-cc")?, &bin)?;
     cp(&which::which("symtab2gb")?, &bin)?;
+    // cbmc-viewer invokes this
+    cp(&which::which("goto-analyzer")?, &bin)?;
 
     Ok(())
 }
