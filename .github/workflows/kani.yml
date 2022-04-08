@@ -88,7 +88,7 @@ jobs:
       
       - name: Build container test
         run: |
-          docker build -t kani-latest -f Dockerfile .
+          docker build -t kani-latest -f scripts/ci/Dockerfile.release-bundle-test .
 
       - name: Run installed tests
         run: |
