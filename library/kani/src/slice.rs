@@ -64,8 +64,11 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH>
         let layout = Layout::array::<T>(slice_len).unwrap();
         let ptr = unsafe { alloc(layout) };
         unsafe {
-            for i in 0..slice_len {
+            let mut i = 0;
+            while i < MAX_SLICE_LENGTH && i < slice_len {
+            //for i in 0..slice_len {
                 *(ptr as *mut T).add(i) = any();
+                i += 1;
             }
         }
         Self { layout, ptr: ptr as *mut T, slice_len }
