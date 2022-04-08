@@ -182,16 +182,16 @@ impl<'tcx> GotocCtx<'tcx> {
                             let fn_ptr = vtable.member("drop", &self.symbol_table);
 
                             // Pull the self argument off of the fat pointer's data pointer
-                            let self_ref =
+                            let self_data =
                                 trait_fat_ptr.to_owned().member("data", &self.symbol_table);
                             let self_ref =
-                                self_ref.cast_to(trait_fat_ptr.typ().clone().to_pointer());
+                                self_data.clone().cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
                             let call =
                                 fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
                             if self.vtable_ctx.emit_vtable_restrictions {
                                 self.virtual_call_with_restricted_fn_ptr(
-                                    trait_fat_ptr.typ().clone(),
+                                    self_data.typ().clone(),
                                     VtableCtx::drop_index(),
                                     call,
                                 )

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{DatatypeComponent, Expr, Parameter, Symbol, SymbolTable, Type};
+use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{btree_map, NO_PRETTY_NAME};
 use cbmc::{InternString, InternedString};
@@ -319,19 +319,40 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
+    /// This will codegen the raw pointer to the trait data.
+    /// This is just an alias to void*.
+    pub fn codegen_trait_data_pointer(&mut self, t: ty::Ty<'tcx>) -> Type {
+        let name = self.normalized_trait_name(t);
+        let inner_name = name.clone() + "Inner";
+        tracing::debug!(typ=?t, kind=?t.kind(), %name, %inner_name,
+                "codegen_trait_fat_ptr_type");
+        self.ensure(inner_name.clone(), |_ctx, _| {
+            Symbol::typedef(
+                &inner_name,
+                &inner_name,
+                Type::empty().to_typedef(inner_name.clone()),
+                Location::None,
+            )
+        });
+        Type::empty().to_typedef(inner_name).to_pointer()
+    }
+
     /// a trait dyn Trait is translated to
-    /// struct thetrait {
-    ///     void* data;
-    ///     void* vtable;
+    /// struct RefToTrait {
+    ///     T* data;
+    ///     Tag* vtable;
     /// }
+    /// Note: T is `typedef void`.
     fn codegen_trait_fat_ptr_type(&mut self, t: ty::Ty<'tcx>) -> Type {
-        self.ensure_struct(&self.normalized_trait_name(t), NO_PRETTY_NAME, |ctx, _| {
+        let name = self.normalized_trait_name(t);
+        let data_type = self.codegen_trait_data_pointer(t);
+        self.ensure_struct(&name, NO_PRETTY_NAME, |ctx, _| {
             // At this point in time, the vtable hasn't been codegen yet.
             // However, all we need to know is its name, which we do know.
             // See the comment on codegen_ty_ref.
             let vtable_name = ctx.vtable_name(t);
             vec![
-                Type::datatype_component("data", Type::void_pointer()),
+                Type::datatype_component("data", data_type),
                 Type::datatype_component("vtable", Type::struct_tag(vtable_name).to_pointer()),
             ]
         })
@@ -340,8 +361,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `drop_in_place` is a function with type &self -> (), the vtable for
     /// dynamic trait objects needs a pointer to it
     pub fn trait_vtable_drop_type(&mut self, t: ty::Ty<'tcx>) -> Type {
-        Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
+        if matches!(t.kind(), ty::Dynamic(..)) {
+            Type::code_with_unnamed_parameters(
+                vec![self.codegen_fat_ptr(t).to_pointer()],
+                Type::unit(),
+            )
             .to_pointer()
+        } else {
+            Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
+                .to_pointer()
+        }
     }
 
     /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.
@@ -535,8 +564,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 })
             }
-            //TODO: Ensure that this is correct
-            ty::Dynamic(..) => self.codegen_fat_ptr(ty),
+            ty::Dynamic(..) => {
+                // This is dyn Trait not a reference. Codegen the data pointer.
+                self.codegen_trait_data_pointer(ty)
+            }
             // As per zulip, a raw slice/str is a variable length array
             // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Memory.20layout.20of.20DST
             // &[T] -> { data: *const T, len: usize }
@@ -850,10 +881,12 @@ impl<'tcx> GotocCtx<'tcx> {
             .iter()
             .filter_map(|t| {
                 if is_first {
-                    //TODO assert that this is a dynamic object
+                    // This should either be a &dyn T or a dyn T.
                     is_first = false;
-                    debug!("The first element in a dynamic function signature had type {:?}", t);
-                    Some(Type::void_pointer())
+                    let first_ty = pointee_type(*t).unwrap_or(*t);
+                    debug!(?first_ty, "The first element in a dynamic function signature");
+                    assert!(matches!(first_ty.kind(), ty::Dynamic(..)));
+                    Some(self.codegen_ty(first_ty))
                 } else if self.ignore_var_ty(*t) {
                     debug!("Ignoring type {:?} in function signature", t);
                     None
@@ -1230,10 +1263,11 @@ impl<'tcx> GotocCtx<'tcx> {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier();
                 let ty = self_param.typ().clone();
-                params[0] = ty.to_pointer().as_parameter(ident, ident);
+                params[0] = ty.clone().to_pointer().as_parameter(ident, ident);
             }
         }
 
+        debug!(?params, signature=?sig, "function_type");
         if sig.c_variadic {
             Type::variadic_code(params, self.codegen_ty(sig.output()))
         } else {
@@ -1304,17 +1338,21 @@ fn normalize_type(ty: Ty) -> Ty {
 
 impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
+    /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         return !self.is_unsized(mir_type) || metadata == self.tcx.types.unit;
     }
     /// A pointer to the mir type should be a slice fat pointer.
+    /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         return metadata == self.tcx.types.usize;
     }
     /// A pointer to the mir type should be a vtable fat pointer.
+    /// We use a vtable fat pointer if this is a fat pointer to anything that is not a slice ptr.
+    /// I.e.: The metadata is not length (type usize).
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         return metadata != self.tcx.types.unit && metadata != self.tcx.types.usize;
