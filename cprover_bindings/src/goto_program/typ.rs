@@ -56,6 +56,8 @@ pub enum Type {
     Struct { tag: InternedString, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
     StructTag(InternedString),
+    /// Typedef construct. It has a name and a type.
+    TypeDef { name: InternedString, typ: Box<Type> },
     /// `union tag {component1.typ component1.name; component2.typ component2.name ... }`
     Union { tag: InternedString, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
@@ -203,7 +205,8 @@ impl CIntType {
 impl Type {
     /// Return the StructTag or UnionTag naming the struct or union type.
     pub fn aggr_tag(&self) -> Option<Type> {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             IncompleteStruct { tag } | Struct { tag, .. } => Some(Type::struct_tag(*tag)),
             IncompleteUnion { tag } | Union { tag, .. } => Some(Type::union_tag(*tag)),
             StructTag(_) | UnionTag(_) => Some(self.clone()),
@@ -214,7 +217,8 @@ impl Type {
     /// The base type of this type, if one exists.
     /// `typ*` | `typ x[width]` | `typ x : width`  -> `typ`,
     pub fn base_type(&self) -> Option<&Type> {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Array { typ, .. }
             | CBitField { typ, .. }
             | FlexibleArray { typ }
@@ -225,7 +229,8 @@ impl Type {
     }
 
     pub fn components(&self) -> Option<&Vec<DatatypeComponent>> {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Struct { components, .. } | Union { components, .. } => Some(components),
             _ => None,
         }
@@ -237,7 +242,8 @@ impl Type {
     //       1) Make CBMC have width independent intrinstics
     //    or 2) Move the use of the machine model to irep generation time
     pub fn native_width(&self, mm: &MachineModel) -> Option<u64> {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             CInteger(CIntType::SizeT) | CInteger(CIntType::SSizeT) | Pointer { .. } => {
                 Some(mm.pointer_width())
             }
@@ -278,7 +284,8 @@ impl Type {
         // TODO: sizeof involving bitfields is tricky, since bitfields in a struct can be merged.
         // I need to understand exactly when this can happen, and whether it depends on the
         // base type.
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Array { typ, size } => typ.sizeof_in_bits(st) * size,
             Bool => unreachable!("Bool doesn't have a sizeof"),
             CBitField { .. } => todo!("implement sizeof for bitfields"),
@@ -306,6 +313,7 @@ impl Type {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).sum()
             }
             StructTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
+            TypeDef { typ, .. } => typ.sizeof_in_bits(st),
             Union { components, .. } => {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).max().unwrap_or(0)
             }
@@ -326,7 +334,8 @@ impl Type {
             | Struct { tag, .. }
             | StructTag(tag)
             | Union { tag, .. }
-            | UnionTag(tag) => Some(*tag),
+            | UnionTag(tag)
+            | TypeDef { name: tag, .. } => Some(*tag),
             _ => None,
         }
     }
@@ -338,7 +347,8 @@ impl Type {
             IncompleteStruct { tag }
             | Struct { tag, .. }
             | IncompleteUnion { tag }
-            | Union { tag, .. } => Some(aggr_tag(*tag)),
+            | Union { tag, .. }
+            | TypeDef { name: tag, .. } => Some(aggr_tag(*tag)),
             StructTag(tag) | UnionTag(tag) => Some(*tag),
             _ => None,
         }
@@ -346,7 +356,8 @@ impl Type {
 
     /// the width of an integer type
     pub fn width(&self) -> Option<u64> {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             CBitField { width, .. } | Signedbv { width } | Unsignedbv { width } => Some(*width),
             _ => None,
         }
@@ -356,42 +367,48 @@ impl Type {
 /// Predicates
 impl Type {
     pub fn is_array(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Array { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_array_like(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Array { .. } | FlexibleArray { .. } | Vector { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_bool(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Bool => true,
             _ => false,
         }
     }
 
     pub fn is_c_bool(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Type::CInteger(CIntType::Bool) => true,
             _ => false,
         }
     }
 
     pub fn is_c_size_t(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Type::CInteger(CIntType::SizeT) => true,
             _ => false,
         }
     }
 
     pub fn is_c_ssize_t(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Type::CInteger(CIntType::SSizeT) => true,
             _ => false,
         }
@@ -405,14 +422,16 @@ impl Type {
     }
 
     pub fn is_double(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Double => true,
             _ => false,
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Empty => true,
             _ => false,
         }
@@ -421,37 +440,43 @@ impl Type {
     /// Whether self and other have the same concrete type on the given machine
     /// (specifically whether they have the same bit-size and signed-ness)
     pub fn is_equal_on_machine(&self, other: &Self, mm: &MachineModel) -> bool {
-        if self == other {
+        let concrete_self = self.unwrap_typedef();
+        let other = other.unwrap_typedef();
+        if concrete_self == other {
             true
         } else {
-            self.native_width(mm) == other.native_width(mm)
-                && self.is_signed(mm) == other.is_signed(mm)
+            concrete_self.native_width(mm) == other.native_width(mm)
+                && concrete_self.is_signed(mm) == other.is_signed(mm)
         }
     }
 
     pub fn is_flexible_array(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             FlexibleArray { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_float(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Float => true,
             _ => false,
         }
     }
 
     pub fn is_floating_point(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Double | Float => true,
             _ => false,
         }
     }
 
     pub fn is_c_integer(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             CInteger(_) => true,
             _ => false,
         }
@@ -459,14 +484,16 @@ impl Type {
 
     /// Whether the current type is an integer with finite width
     pub fn is_integer(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             CInteger(_) | Signedbv { .. } | Unsignedbv { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_lvalue(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Bool
             | CBitField { .. }
             | CInteger(_)
@@ -490,6 +517,8 @@ impl Type {
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
             | VariadicCode { .. } => false,
+
+            TypeDef { .. } => unreachable!("Expected concrete type only."),
         }
     }
 
@@ -499,7 +528,8 @@ impl Type {
     }
 
     pub fn is_pointer(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Pointer { .. } => true,
             _ => false,
         }
@@ -507,14 +537,16 @@ impl Type {
 
     /// Is this a size_t, ssize_t, or pointer?
     pub fn is_pointer_width(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Pointer { .. } | CInteger(CIntType::SizeT) | CInteger(CIntType::SSizeT) => true,
             _ => false,
         }
     }
 
     pub fn is_scalar(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             // Base types
             Bool
             | CBitField { .. }
@@ -539,12 +571,15 @@ impl Type {
             | UnionTag(_)
             | VariadicCode { .. }
             | Vector { .. } => false,
+
+            TypeDef { .. } => unreachable!("Expected concrete type only."),
         }
     }
 
     /// Is this a signed integer
     pub fn is_signed(&self, mm: &MachineModel) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             CInteger(CIntType::Int) | CInteger(CIntType::SSizeT) | Signedbv { .. } => true,
             CInteger(CIntType::Char) => !mm.char_is_unsigned(),
             _ => false,
@@ -553,14 +588,16 @@ impl Type {
 
     /// This is a struct (and not an incomplete struct or struct tag)
     pub fn is_struct(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Struct { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_struct_like(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             IncompleteStruct { .. } | Struct { .. } | StructTag(_) => true,
             _ => false,
         }
@@ -568,7 +605,8 @@ impl Type {
 
     /// This is a struct tag
     pub fn is_struct_tag(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             StructTag(_) => true,
             _ => false,
         }
@@ -576,14 +614,16 @@ impl Type {
 
     /// This is a union (and not an incomplete union or union tag)
     pub fn is_union(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             Union { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_union_like(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             IncompleteUnion { .. } | Union { .. } | UnionTag(_) => true,
             _ => false,
         }
@@ -591,7 +631,8 @@ impl Type {
 
     /// This is a union tag
     pub fn is_union_tag(&self) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             UnionTag(_) => true,
             _ => false,
         }
@@ -599,7 +640,8 @@ impl Type {
 
     /// Is this an unsigned integer
     pub fn is_unsigned(&self, mm: &MachineModel) -> bool {
-        match self {
+        let concrete = self.unwrap_typedef();
+        match concrete {
             CInteger(CIntType::Bool) | CInteger(CIntType::SizeT) | Unsignedbv { .. } => true,
             CInteger(CIntType::Char) => mm.char_is_unsigned(),
             _ => false,
@@ -607,17 +649,32 @@ impl Type {
     }
 
     pub fn is_variadic_code(&self) -> bool {
-        match self {
-            VariadicCode { .. } => true,
+        matches!(self, VariadicCode { .. })
+    }
+
+    pub fn is_vector(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Vector { .. } => true,
             _ => false,
         }
     }
 
-    pub fn is_vector(&self) -> bool {
-        match self {
-            Vector { .. } => true,
-            _ => false,
+    pub fn is_typedef(&self) -> bool {
+        matches!(self, TypeDef { .. })
+    }
+
+    /// This function will unwrap any type definitions into its concrete type.
+    /// This will traverse chained typedefs until it finds the first concrete type.
+    /// If the type is not a typedef, this will return the current type.
+    ///
+    /// post-condition: matches!(unwrap_typedef(typ), TypeDef{..}) is false.
+    pub fn unwrap_typedef(&self) -> &Type {
+        let mut final_typ = self;
+        while let TypeDef { typ, .. } = &final_typ {
+            final_typ = typ;
         }
+        final_typ
     }
 
     /// A transparent type wraps a base type inside a struct, and has the same in-memory layout.
@@ -652,7 +709,7 @@ impl Type {
                 None
             }
         }
-        if self.is_struct_like() || self.is_union_like() { recurse(self, st) } else { None }
+        recurse(self.unwrap_typedef(), st)
     }
 
     /// Get the fields (including padding) in self.  
@@ -727,6 +784,7 @@ impl Type {
     /// Since they have different padding.
     /// https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136
     pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
+        let other = other.unwrap_typedef();
         if self.sizeof_in_bits(st) != other.sizeof_in_bits(st) {
             false
         } else if self.is_scalar() && other.is_scalar() {
@@ -960,6 +1018,11 @@ impl Type {
         Struct { tag, components }
     }
 
+    /// self *
+    pub fn to_typedef<T: Into<InternedString>>(self, name: T) -> Self {
+        TypeDef { typ: Box::new(self), name: name.into() }
+    }
+
     /// union name
     pub fn union_tag<T: Into<InternedString>>(name: T) -> Self {
         UnionTag(aggr_tag(name.into()))
@@ -1147,6 +1210,7 @@ impl Type {
             Type::Signedbv { width } => format!("signed_bv_{}", width),
             Type::Struct { tag, .. } => format!("struct_{}", tag),
             Type::StructTag(tag) => format!("struct_tag_{}", tag),
+            Type::TypeDef { name: tag, .. } => format!("type_def_{}", tag),
             Type::Union { tag, .. } => format!("union_{}", tag),
             Type::UnionTag(tag) => format!("union_tag_{}", tag),
             Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
@@ -1165,5 +1229,86 @@ impl Type {
                 format!("vec_of_{}_{}", size, typ.to_identifier())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod type_tests {
+    use super::*;
+    use crate::goto_program::typ::CIntType::Char;
+    use crate::machine_model::test_util::machine_model_test_stub;
+
+    // Just a dummy name used for the tests.
+    const NAME: &str = "Dummy";
+
+    #[test]
+    fn check_typedef_tag() {
+        let type_def = Bool.to_typedef(NAME);
+        assert_eq!(type_def.tag().unwrap().to_string().as_str(), NAME);
+        assert_eq!(type_def.type_name().unwrap().to_string(), format!("tag-{}", NAME));
+    }
+
+    #[test]
+    fn check_typedef_create() {
+        assert!(matches!(Bool.to_typedef(NAME), TypeDef { .. }));
+        assert!(matches!(StructTag(NAME.into()).to_typedef(NAME), TypeDef { .. }));
+        assert!(matches!(Double.to_typedef(NAME), TypeDef { .. }));
+    }
+
+    #[test]
+    fn check_unwrap_typedef_works() {
+        assert!(matches!(Bool.to_typedef(NAME).unwrap_typedef(), Bool));
+        assert!(matches!(Double.to_typedef(NAME).unwrap_typedef(), Double));
+        assert!(matches!(StructTag(NAME.into()).to_typedef(NAME).unwrap_typedef(), StructTag(..)));
+    }
+
+    #[test]
+    fn check_unwrap_nested_typedef_works() {
+        assert!(matches!(Bool.to_typedef(NAME).to_typedef(NAME).unwrap_typedef(), Bool));
+        assert!(matches!(
+            StructTag(NAME.into()).to_typedef(NAME).to_typedef(NAME).unwrap_typedef(),
+            StructTag(..)
+        ));
+    }
+
+    fn check_properties(src_type: Type) {
+        let type_def = src_type.clone().to_typedef(NAME);
+        let mm = machine_model_test_stub();
+        assert_eq!(type_def.is_empty(), src_type.is_empty());
+        assert_eq!(type_def.is_double(), src_type.is_double());
+        assert_eq!(type_def.is_bool(), src_type.is_bool());
+        assert_eq!(type_def.is_array(), src_type.is_array());
+        assert_eq!(type_def.is_array_like(), src_type.is_array_like());
+        assert_eq!(type_def.is_union(), src_type.is_union());
+        assert_eq!(type_def.is_union_like(), src_type.is_union_like());
+        assert_eq!(type_def.is_union_tag(), src_type.is_union_tag());
+        assert_eq!(type_def.is_struct_like(), src_type.is_struct_like());
+        assert_eq!(type_def.is_struct(), src_type.is_struct());
+        assert_eq!(type_def.is_signed(&mm), src_type.is_signed(&mm));
+        assert_eq!(type_def.is_unsigned(&mm), src_type.is_unsigned(&mm));
+        assert_eq!(type_def.is_scalar(), src_type.is_scalar());
+        assert_eq!(type_def.is_float(), src_type.is_float());
+        assert_eq!(type_def.is_floating_point(), src_type.is_floating_point());
+        assert_eq!(type_def.width(), src_type.width());
+    }
+
+    #[test]
+    fn check_typedef_bool_properties() {
+        check_properties(Bool);
+    }
+
+    #[test]
+    fn check_typedef_empty_properties() {
+        check_properties(Empty);
+    }
+
+    #[test]
+    fn check_typedef_array_properties() {
+        check_properties(Array { typ: Box::new(CInteger(Char)), size: 10 });
+    }
+
+    #[test]
+    fn check_typedef_pointer_properties() {
+        check_properties(Pointer { typ: Box::new(Empty) });
     }
 }
