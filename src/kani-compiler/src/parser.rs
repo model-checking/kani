@@ -31,6 +31,9 @@ pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
 /// Option name used to enable assertion reachability checks
 pub const ASSERTION_REACH_CHECKS: &'static str = "assertion-reach-checks";
 
+/// Option name used to use json pretty-print for output files.
+pub const PRETTY_OUTPUT_FILES: &'static str = "pretty-files";
+
 /// Option name used to override the sysroot.
 pub const SYSROOT: &'static str = "sysroot";
 
@@ -126,6 +129,11 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(ASSERTION_REACH_CHECKS)
                 .long("--assertion-reach-checks")
                 .help("Check the reachability of every assertion."),
+        )
+        .arg(
+            Arg::with_name(PRETTY_OUTPUT_FILES)
+                .long("--pretty-files")
+                .help("Output json files will be more human friendly (with spaces)."),
         )
 }
 
