@@ -65,10 +65,15 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         let ptr = unsafe { alloc(layout) };
         unsafe {
             let mut i = 0;
-            // Note: even though the guard "i < MAX_SLICE_LENGTH" is redundant
-            // since the assumption above guarantees that slice_len <=
-            // MAX_SLICE_LENGTH, without it, CBMC fails to infer the required
-            // unwind value, and requires specifying one, which is inconvenient
+            // Note: even though the guard `i < MAX_SLICE_LENGTH` is redundant
+            // since the assumption above guarantees that `slice_len` <=
+            // `MAX_SLICE_LENGTH`, without it, CBMC fails to infer the required
+            // unwind value, and requires specifying one, which is inconvenient.
+            // CBMC also fails to infer the unwinding if the loop is simply
+            // written as:
+            //     for i in 0..slice_len {
+            //         *(ptr as *mut T).add(i) = any();
+            //     }
             while i < slice_len && i < MAX_SLICE_LENGTH {
                 *(ptr as *mut T).add(i) = any();
                 i += 1;
@@ -84,7 +89,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         let ptr = unsafe { alloc(layout) };
         unsafe {
             let mut i = 0;
-            // See note on MAX_SLICE_LENGTH in new method above
+            // See note on `MAX_SLICE_LENGTH` in `new` method above
             while i < slice_len && i < MAX_SLICE_LENGTH {
                 *(ptr as *mut T).add(i) = any_raw();
                 i += 1;
