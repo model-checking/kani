@@ -356,8 +356,8 @@ minnumf32 | Yes | |
 minnumf64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
-nearbyintf32 | Yes | |
-nearbyintf64 | Yes | |
+nearbyintf32 | No | |
+nearbyintf64 | No | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Missing undefined behavior checks |
@@ -374,8 +374,8 @@ ptr_guaranteed_eq | Partial | |
 ptr_guaranteed_ne | Partial | |
 ptr_offset_from | Partial | Missing undefined behavior checks |
 raw_eq | Partial | Missing undefined behavior checks |
-rintf32 | Yes | |
-rintf64 | Yes | |
+rintf32 | No | |
+rintf64 | No | |
 rotate_left | Yes | |
 rotate_right | Yes | |
 roundf32 | No | |
@@ -391,8 +391,8 @@ sqrtf32 | Yes | |
 sqrtf64 | Yes | |
 sub_with_overflow | Yes | |
 transmute | Yes | |
-truncf32 | Yes | |
-truncf64 | Yes | |
+truncf32 | No | |
+truncf64 | No | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
