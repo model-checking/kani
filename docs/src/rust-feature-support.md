@@ -309,8 +309,8 @@ bitreverse | Yes | |
 breakpoint | Yes | |
 bswap | Yes | |
 caller_location | No | |
-ceilf32 | Yes | |
-ceilf64 | Yes | |
+ceilf32 | No | |
+ceilf64 | No | |
 copy_nonoverlapping | Yes | |
 copysignf32 | Yes | |
 copysignf64 | Yes | |
@@ -333,8 +333,8 @@ fabsf64 | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 float_to_int_unchecked | No | |
-floorf32 | Yes | |
-floorf64 | Yes | |
+floorf32 | No | |
+floorf64 | No | |
 fmaf32 | Yes | |
 fmaf64 | Yes | |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
@@ -356,8 +356,8 @@ minnumf32 | Yes | |
 minnumf64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
-nearbyintf32 | Yes | |
-nearbyintf64 | Yes | |
+nearbyintf32 | No | |
+nearbyintf64 | No | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Missing undefined behavior checks |
@@ -374,12 +374,12 @@ ptr_guaranteed_eq | Partial | |
 ptr_guaranteed_ne | Partial | |
 ptr_offset_from | Partial | Missing undefined behavior checks |
 raw_eq | Partial | Missing undefined behavior checks |
-rintf32 | Yes | |
-rintf64 | Yes | |
+rintf32 | No | |
+rintf64 | No | |
 rotate_left | Yes | |
 rotate_right | Yes | |
-roundf32 | Yes | |
-roundf64 | Yes | |
+roundf32 | No | |
+roundf64 | No | |
 rustc_peek | No | |
 saturating_add | Yes | |
 saturating_sub | Yes | |
@@ -391,8 +391,8 @@ sqrtf32 | Yes | |
 sqrtf64 | Yes | |
 sub_with_overflow | Yes | |
 transmute | Yes | |
-truncf32 | Yes | |
-truncf64 | Yes | |
+truncf32 | No | |
+truncf64 | No | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
