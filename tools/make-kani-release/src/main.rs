@@ -15,25 +15,16 @@ fn main() -> Result<()> {
     let version_string = parse_args()?;
     let kani_string = format!("kani-{}", version_string);
     let bundle_name = format!("{}-{}.tar.gz", kani_string, env!("TARGET"));
-
-    if !Path::new("src/kani-compiler").exists() {
-        bail!("Run from project root directory. Couldn't find 'src/kani-compiler'.");
-    }
-
     let dir = Path::new(&kani_string);
-    if dir.exists() {
-        bail!(
-            "Directory {} already exists. Previous failed run? Delete it first.",
-            dir.to_string_lossy()
-        );
-    }
+
+    // Check everything is ready before we start copying files
+    prebundle(dir)?;
+
     std::fs::create_dir(dir)?;
 
     bundle_kani(dir)?;
     bundle_cbmc(dir)?;
-    // We don't bundle viewer, and we instead `pip install` it on-first run,
-    // due to issues with portability between python versions the user may have.
-    // bundle_viewer(dir)?;
+    // cbmc-viewer isn't bundled, it's pip install'd on first-time setup
 
     create_release_bundle(dir, &bundle_name)?;
 
@@ -52,14 +43,36 @@ fn parse_args() -> Result<String> {
     Ok(args[1].clone())
 }
 
+/// Ensures everything is good to go before we begin to build the release bundle.
+/// Notably, builds Kani in release mode.
+fn prebundle(dir: &Path) -> Result<()> {
+    if !Path::new("src/kani-compiler").exists() {
+        bail!("Run from project root directory. Couldn't find 'src/kani-compiler'.");
+    }
+
+    if dir.exists() {
+        bail!(
+            "Directory {} already exists. Previous failed run? Delete it first.",
+            dir.to_string_lossy()
+        );
+    }
+
+    if !which::which("cbmc").is_ok() {
+        bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
+    }
+
+    // Before we begin, ensure Kani is built successfully in release mode.
+    Command::new("cargo").args(&["build", "--release"]).run()?;
+
+    Ok(())
+}
+
 /// Copy Kani files into `dir`
 fn bundle_kani(dir: &Path) -> Result<()> {
     let bin = dir.join("bin");
     std::fs::create_dir(&bin)?;
 
     // 1. Kani binaries
-    Command::new("cargo").args(&["build", "--release"]).run()?;
-
     let release = Path::new("./target/release");
     cp(&release.join("cargo-kani"), &bin)?;
     cp(&release.join("kani-compiler"), &bin)?;
