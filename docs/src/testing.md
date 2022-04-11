@@ -13,6 +13,6 @@ two very good reasons to do it:
     characteristics which are quantitative and countable. Metrics are
     particularly valuable for project management purposes.
 
-We recommend reading our section on [Regression Testing](#regression-testing)
-if you are interested in Kani development. At present, we obtain metrics based
+We recommend reading our section on [Regression Testing](./regression-testing.md)
+if you're interested in Kani development. At present, we obtain metrics based
 on the [book runner](./bookrunner.md).

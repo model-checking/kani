@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
+use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::mir::Place;
@@ -164,8 +165,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
                 let res = a.$f(b);
-                let check = Stmt::assert(
+                let check = self.codegen_assert(
                     res.overflowed.not(),
+                    PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
@@ -196,8 +198,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     }
                 }
-                let check_stmt = Stmt::assert(
+                let check_stmt = self.codegen_assert(
                     check.not(),
+                    PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
@@ -316,9 +319,12 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
-            "assume" => {
-                Stmt::assert(fargs.remove(0).cast_to(Type::bool()), "assumption failed", loc)
-            }
+            "assume" => self.codegen_assert(
+                fargs.remove(0).cast_to(Type::bool()),
+                PropertyClass::Assume,
+                "assumption failed",
+                loc,
+            ),
             "atomic_and" => codegen_atomic_binop!(bitand),
             "atomic_and_acq" => codegen_atomic_binop!(bitand),
             "atomic_and_acqrel" => codegen_atomic_binop!(bitand),
@@ -384,8 +390,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/374"
                 )
             }
-            "ceilf32" => codegen_simple_intrinsic!(Ceilf),
-            "ceilf64" => codegen_simple_intrinsic!(Ceil),
+            "ceilf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "ceilf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "copy" => codegen_intrinsic_copy!(Memmove),
             "copy_nonoverlapping" => codegen_intrinsic_copy!(Memcpy),
             "copysignf32" => codegen_simple_intrinsic!(Copysignf),
@@ -419,8 +429,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
-            "floorf32" => codegen_simple_intrinsic!(Floorf),
-            "floorf64" => codegen_simple_intrinsic!(Floor),
+            "floorf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "floorf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "fmaf32" => codegen_simple_intrinsic!(Fmaf),
             "fmaf64" => codegen_simple_intrinsic!(Fma),
             "fmul_fast" => {
@@ -448,8 +462,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
-            "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
-            "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
+            "nearbyintf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "nearbyintf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "needs_drop" => codegen_intrinsic_const!(),
             "offset" => codegen_op_with_overflow_check!(add_overflow),
             "powf32" => codegen_simple_intrinsic!(Powf),
@@ -461,12 +479,20 @@ impl<'tcx> GotocCtx<'tcx> {
             "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
-            "rintf32" => codegen_simple_intrinsic!(Rintf),
-            "rintf64" => codegen_simple_intrinsic!(Rint),
+            "rintf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "rintf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
-            "roundf32" => codegen_simple_intrinsic!(Roundf),
-            "roundf64" => codegen_simple_intrinsic!(Round),
+            "roundf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "roundf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "saturating_add" => codegen_intrinsic_binop_with_mm!(saturating_add),
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
@@ -507,8 +533,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "sqrtf64" => codegen_simple_intrinsic!(Sqrt),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
-            "truncf32" => codegen_simple_intrinsic!(Truncf),
-            "truncf64" => codegen_simple_intrinsic!(Trunc),
+            "truncf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "truncf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "try" => {
                 codegen_unimplemented_intrinsic!(
                     "https://github.com/model-checking/kani/issues/267"
@@ -533,7 +563,12 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
-            "unreachable" => Stmt::assert_false("unreachable", loc),
+            "unreachable" => self.codegen_assert(
+                Expr::bool_false(),
+                PropertyClass::DefaultAssertion,
+                "unreachable",
+                loc,
+            ),
             "volatile_copy_memory" => codegen_intrinsic_copy!(Memmove),
             "volatile_copy_nonoverlapping_memory" => codegen_intrinsic_copy!(Memcpy),
             "volatile_load" => self.codegen_expr_to_place(p, fargs.remove(0).dereference()),
@@ -579,8 +614,18 @@ impl<'tcx> GotocCtx<'tcx> {
         let msg1 = format!("first argument for {} is finite", intrinsic);
         let msg2 = format!("second argument for {} is finite", intrinsic);
         let loc = self.codegen_span_option(span);
-        let finite_check1 = Stmt::assert(arg1.is_finite(), msg1.as_str(), loc.clone());
-        let finite_check2 = Stmt::assert(arg2.is_finite(), msg2.as_str(), loc.clone());
+        let finite_check1 = self.codegen_assert(
+            arg1.is_finite(),
+            PropertyClass::FiniteCheck,
+            msg1.as_str(),
+            loc.clone(),
+        );
+        let finite_check2 = self.codegen_assert(
+            arg2.is_finite(),
+            PropertyClass::FiniteCheck,
+            msg2.as_str(),
+            loc.clone(),
+        );
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
@@ -604,12 +649,23 @@ impl<'tcx> GotocCtx<'tcx> {
         let division_does_not_overflow = dividend_is_int_min.and(divisor_is_minus_one).not();
         Stmt::block(
             vec![
-                Stmt::assert(division_is_exact, "exact_div arguments divide exactly", loc.clone()),
-                Stmt::assert(divisor_is_nonzero, "exact_div divisor is nonzero", loc.clone()),
-                Stmt::assert(
+                self.codegen_assert(
+                    division_is_exact,
+                    PropertyClass::ExactDiv,
+                    "exact_div arguments divide exactly",
+                    loc,
+                ),
+                self.codegen_assert(
+                    divisor_is_nonzero,
+                    PropertyClass::ExactDiv,
+                    "exact_div divisor is nonzero",
+                    loc,
+                ),
+                self.codegen_assert(
                     division_does_not_overflow,
+                    PropertyClass::ExactDiv,
                     "exact_div division does not overflow",
-                    loc.clone(),
+                    loc,
                 ),
                 self.codegen_expr_to_place(p, a.div(b)),
             ],
@@ -775,8 +831,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         Stmt::block(
             vec![
-                Stmt::assert(
+                self.codegen_assert(
                     pointers_to_same_object,
+                    PropertyClass::PointerOffset,
                     "ptr_offset_from: pointers point to same object",
                     loc.clone(),
                 ),
@@ -1034,7 +1091,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let src = fargs.remove(0);
         let typ = instance.substs.type_at(0);
         let align = self.is_aligned(typ, dst.clone());
-        let align_check = Stmt::assert(align, "`dst` is properly aligned", loc.clone());
+        let align_check = self.codegen_assert(
+            align,
+            PropertyClass::DefaultAssertion,
+            "`dst` is properly aligned",
+            loc.clone(),
+        );
         let expr = dst.dereference().assign(src, loc.clone());
         Stmt::block(vec![align_check, expr], loc)
     }
