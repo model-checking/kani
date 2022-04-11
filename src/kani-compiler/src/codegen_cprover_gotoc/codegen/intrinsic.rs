@@ -462,8 +462,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
-            "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
-            "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
+            "nearbyintf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "nearbyintf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "needs_drop" => codegen_intrinsic_const!(),
             "offset" => codegen_op_with_overflow_check!(add_overflow),
             "powf32" => codegen_simple_intrinsic!(Powf),
@@ -475,8 +479,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
-            "rintf32" => codegen_simple_intrinsic!(Rintf),
-            "rintf64" => codegen_simple_intrinsic!(Rint),
+            "rintf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "rintf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
             "roundf32" => codegen_unimplemented_intrinsic!(
@@ -525,8 +533,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "sqrtf64" => codegen_simple_intrinsic!(Sqrt),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
-            "truncf32" => codegen_simple_intrinsic!(Truncf),
-            "truncf64" => codegen_simple_intrinsic!(Trunc),
+            "truncf32" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
+            "truncf64" => codegen_unimplemented_intrinsic!(
+                "https://github.com/model-checking/kani/issues/1025"
+            ),
             "try" => {
                 codegen_unimplemented_intrinsic!(
                     "https://github.com/model-checking/kani/issues/267"
