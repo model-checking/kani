@@ -10,4 +10,3 @@ edition = "2018"
 [workspace]
 
 [package.metadata.kani]
-flags = { unwind = "11" }

@@ -74,9 +74,16 @@ impl KaniSession {
     }
 
     /// "Internal," but also used by call_cbmc_viewer
-    pub fn cbmc_flags(&self, file: &Path, harness: Option<&HarnessMetadata>) -> Result<Vec<OsString>> {
+    pub fn cbmc_flags(
+        &self,
+        file: &Path,
+        harness_metadata: Option<&HarnessMetadata>,
+    ) -> Result<Vec<OsString>> {
         let mut args = self.cbmc_check_flags();
-        let unwind_value = harness.unwrap().unwind_value;
+        let unwind_value = match harness_metadata {
+            Some(harness) => harness.unwind_value,
+            None => None,
+        };
 
         args.push("--object-bits".into());
         args.push(self.args.object_bits.to_string().into());
