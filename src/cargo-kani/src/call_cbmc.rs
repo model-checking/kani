@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
+use kani_metadata::HarnessMetadata;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
@@ -16,7 +17,7 @@ pub enum VerificationStatus {
 
 impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
-    pub fn run_cbmc(&self, file: &Path) -> Result<VerificationStatus> {
+    pub fn run_cbmc(&self, file: &Path, harness: &HarnessMetadata) -> Result<VerificationStatus> {
         let output_filename = crate::util::append_path(file, "cbmc_output");
 
         {
@@ -24,7 +25,7 @@ impl KaniSession {
             temps.push(output_filename.clone());
         }
 
-        let args: Vec<OsString> = self.cbmc_flags(file)?;
+        let args: Vec<OsString> = self.cbmc_flags(file, Some(harness))?;
 
         // TODO get cbmc path from self
         let mut cmd = Command::new("cbmc");
@@ -73,13 +74,14 @@ impl KaniSession {
     }
 
     /// "Internal," but also used by call_cbmc_viewer
-    pub fn cbmc_flags(&self, file: &Path) -> Result<Vec<OsString>> {
+    pub fn cbmc_flags(&self, file: &Path, harness: Option<&HarnessMetadata>) -> Result<Vec<OsString>> {
         let mut args = self.cbmc_check_flags();
+        let unwind_value = harness.unwrap().unwind_value;
 
         args.push("--object-bits".into());
         args.push(self.args.object_bits.to_string().into());
 
-        if let Some(unwind) = self.args.unwind {
+        if let Some(unwind) = unwind_value {
             args.push("--unwind".into());
             args.push(unwind.to_string().into());
         } else if self.args.auto_unwind {

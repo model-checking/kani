@@ -114,7 +114,7 @@ impl KaniSession {
         } else {
             // TODO: one possible future improvement here would be to return some kind of Lazy
             // value, that only computes this metadata if it turns out we need it.
-            let results: Result<Vec<_>, _> = files.iter().map(|x| read_kani_metadata(x)).collect();
+            let results: Result<Vec<_>, _> = files.iter().map(|x| self.read_kani_metadata(x)).collect();
             Ok(merge_kani_metadata(results?))
         }
     }
@@ -137,6 +137,14 @@ impl KaniSession {
         } else {
             Ok(metadata.proof_harnesses.clone())
         }
+    }
+
+    /// Deserialize a *.restrictions.json file
+    fn read_kani_metadata(&self, path: &Path) -> Result<KaniMetadata> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let restrictions = serde_json::from_reader(reader)?;
+        Ok(restrictions)
     }
 }
 

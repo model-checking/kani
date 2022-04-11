@@ -60,7 +60,7 @@ impl KaniSession {
     }
 
     fn cbmc_variant(&self, file: &Path, extra_args: &[&str], output: &Path) -> Result<()> {
-        let mut args = self.cbmc_flags(file)?;
+        let mut args = self.cbmc_flags(file, None)?;
         args.extend(extra_args.iter().map(|x| x.into()));
 
         // TODO fix this hack, abstractions are wrong
