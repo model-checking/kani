@@ -82,7 +82,6 @@ pub(crate) enum HeadingOffset {
     H3,
     H4,
     H5,
-    H6,
 }
 
 /// When `to_string` is called, this struct will emit the HTML corresponding to

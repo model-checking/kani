@@ -20,14 +20,6 @@ use rustc_span::{
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
-crate struct ScrapeExamplesOptions {
-    output_path: PathBuf,
-    target_crates: Vec<String>,
-}
-
-impl ScrapeExamplesOptions {}
-
 #[derive(Encodable, Decodable, Debug, Clone)]
 crate struct SyntaxRange {
     crate byte_span: (u32, u32),

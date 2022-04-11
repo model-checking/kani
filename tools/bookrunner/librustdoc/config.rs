@@ -13,7 +13,7 @@ use rustc_target::spec::TargetTriple;
 use crate::externalfiles::ExternalHtml;
 use crate::html::markdown::IdMap;
 use crate::html::render::StylePath;
-use crate::scrape_examples::{AllCallLocations, ScrapeExamplesOptions};
+use crate::scrape_examples::AllCallLocations;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 crate enum OutputFormat {
@@ -123,10 +123,6 @@ crate struct Options {
     crate json_unused_externs: bool,
     /// Whether to skip capturing stdout and stderr of tests.
     crate nocapture: bool,
-
-    /// Configuration for scraping examples from the current crate. If this option is Some(..) then
-    /// the compiler will scrape examples and not generate documentation.
-    crate scrape_examples_options: Option<ScrapeExamplesOptions>,
 }
 
 impl fmt::Debug for Options {
@@ -168,7 +164,6 @@ impl fmt::Debug for Options {
             .field("run_check", &self.run_check)
             .field("no_run", &self.no_run)
             .field("nocapture", &self.nocapture)
-            .field("scrape_examples_options", &self.scrape_examples_options)
             .finish()
     }
 }
