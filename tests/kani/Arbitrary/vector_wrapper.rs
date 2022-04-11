@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Check that the Invariant implementation for Option respect underlying types invariant.
+// Check that users can implement Invariant and Arbitrary to the same struct.
 #![cfg_attr(kani, feature(min_specialization))]
 
 extern crate kani;
