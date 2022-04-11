@@ -191,7 +191,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
                             if self.vtable_ctx.emit_vtable_restrictions {
                                 self.virtual_call_with_restricted_fn_ptr(
-                                    self_data.typ().clone(),
+                                    trait_fat_ptr.typ().clone(),
                                     VtableCtx::drop_index(),
                                     call,
                                 )

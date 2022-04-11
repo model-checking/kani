@@ -417,8 +417,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Gives the name for a trait.
-    /// In some cases, we have &T, in other cases T, so normalize.
+    /// Gives the name for a trait, i.e., `dyn T`. This does not work for `&dyn T`.
     pub fn normalized_trait_name(&self, t: Ty<'tcx>) -> String {
         assert!(t.is_trait(), "Type {} must be a trait type (a dynamic type)", t);
         self.ty_mangled_name(t).to_string()
