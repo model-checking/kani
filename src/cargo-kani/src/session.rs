@@ -34,10 +34,12 @@ pub struct KaniSession {
 
 /// Represents where we detected Kani, with helper methods for using that information to find critical paths
 enum InstallType {
-    /// We're operating in a a checked out repo that's been built locally
+    /// We're operating in a a checked out repo that's been built locally.
+    /// The path here is to the root of the repo.
     DevRepo(PathBuf),
-    // TODO: Once we have something like an installation method, this should represent where we find the files we installed
-    //Installed,
+    /// We're operating from a release bundle (made with `make-kani-release`).
+    /// The path here to where this release bundle has been unpacked.
+    Release(PathBuf),
 }
 
 impl KaniSession {
@@ -161,6 +163,10 @@ impl InstallType {
             path.pop();
 
             Ok(InstallType::DevRepo(path))
+        } else if path.ends_with("bin") {
+            path.pop();
+
+            Ok(InstallType::Release(path))
         } else {
             bail!(
                 "Unable to determine installation location. {} doesn't look typical",
@@ -172,56 +178,27 @@ impl InstallType {
     pub fn kani_compiler(&self) -> Result<PathBuf> {
         match self {
             Self::DevRepo(_) => {
+                // Use bin_folder to hide debug/release differences.
                 let path = bin_folder()?.join("kani-compiler");
-                if path.as_path().exists() {
-                    Ok(path)
-                } else {
-                    bail!(
-                        "Unable to find kani-compiler at expected location: '{}'",
-                        path.display()
-                    );
-                }
+                expect_path(path)
+            }
+            Self::Release(release) => {
+                let path = release.join("bin/kani-compiler");
+                expect_path(path)
             }
         }
     }
 
     pub fn kani_lib_c(&self) -> Result<PathBuf> {
-        match self {
-            Self::DevRepo(repo) => {
-                let path = repo.join("library/kani/kani_lib.c");
-                if path.as_path().exists() {
-                    Ok(path)
-                } else {
-                    bail!("Unable to find kani_lib.c. Looked for {}", path.display());
-                }
-            }
-        }
+        self.base_path_with("library/kani/kani_lib.c")
     }
 
     pub fn kani_c_stubs(&self) -> Result<PathBuf> {
-        match self {
-            Self::DevRepo(repo) => {
-                let path = repo.join("library/kani/stubs/C");
-                if path.as_path().exists() {
-                    Ok(path)
-                } else {
-                    bail!("Unable to find kani/stubs/C. Looked for {}", path.display());
-                }
-            }
-        }
+        self.base_path_with("library/kani/stubs/C")
     }
 
     pub fn cbmc_json_parser_py(&self) -> Result<PathBuf> {
-        match self {
-            Self::DevRepo(repo) => {
-                let path = repo.join("scripts/cbmc_json_parser.py");
-                if path.as_path().exists() {
-                    Ok(path)
-                } else {
-                    bail!("Unable to find cbmc_json_parser.py. Looked for {}", path.display());
-                }
-            }
-        }
+        self.base_path_with("scripts/cbmc_json_parser.py")
     }
 
     pub fn rust_toolchain(&self) -> Result<PathBuf> {
@@ -246,6 +223,33 @@ impl InstallType {
                 // So we let kani-compiler default to hard-coding them for development builds.
                 Ok(None)
             }
+            Self::Release(release) => {
+                // First-time setup should place these here. Note `lib` not `library` for built artifacts.
+                let path = release.join("lib");
+                Ok(Some(expect_path(path)?))
+            }
         }
+    }
+
+    /// A common case is that our repo and release bundle have the same `subpath`
+    fn base_path_with(&self, subpath: &str) -> Result<PathBuf> {
+        let path = match self {
+            Self::DevRepo(r) => r,
+            Self::Release(r) => r,
+        };
+        expect_path(path.join(subpath))
+    }
+}
+
+/// A quick helper to say "hey, we expected this thing to be here but it's not!"
+fn expect_path(path: PathBuf) -> Result<PathBuf> {
+    if path.exists() {
+        Ok(path)
+    } else {
+        bail!(
+            "Unable to find {}. Looked for {}",
+            path.file_name().unwrap().to_string_lossy(),
+            path.display()
+        );
     }
 }

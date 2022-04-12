@@ -1803,8 +1803,8 @@ fn clean_maybe_renamed_item(
     let mut name = renamed.unwrap_or_else(|| cx.tcx.hir().name(item.hir_id()));
     cx.with_param_env(def_id, |cx| {
         let kind = match item.kind {
-            ItemKind::Static(ty, mutability, body_id) => {
-                StaticItem(Static { type_: ty.clean(cx), mutability, expr: Some(body_id) })
+            ItemKind::Static(ty, mutability, _) => {
+                StaticItem(Static { type_: ty.clean(cx), mutability })
             }
             ItemKind::Const(ty, body_id) => ConstantItem(Constant {
                 type_: ty.clean(cx),
@@ -1912,7 +1912,6 @@ fn clean_impl(impl_: &hir::Impl<'_>, hir_id: hir::HirId, cx: &mut DocContext<'_>
     });
     let mut make_item = |trait_: Option<Path>, for_: Type, items: Vec<Item>| {
         let kind = ImplItem(Impl {
-            unsafety: impl_.unsafety,
             generics: impl_.generics.clean(cx),
             trait_,
             for_,
@@ -2125,7 +2124,7 @@ fn clean_maybe_renamed_foreign_item(
                 })
             }
             hir::ForeignItemKind::Static(ref ty, mutability) => {
-                ForeignStaticItem(Static { type_: ty.clean(cx), mutability, expr: None })
+                ForeignStaticItem(Static { type_: ty.clean(cx), mutability })
             }
             hir::ForeignItemKind::Type => ForeignTypeItem,
         };
