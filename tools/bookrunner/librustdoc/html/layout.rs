@@ -75,17 +75,16 @@ crate fn render<T: Print, S: Print>(
     let rustdoc_version = rustc_interface::util::version_str().unwrap_or("unknown version");
     let content = Buffer::html().to_display(t); // Note: This must happen before making the sidebar.
     let sidebar = Buffer::html().to_display(sidebar);
-    let _page_layout =
-        PageLayout {
-            static_root_path,
-            page,
-            layout,
-            themes,
-            sidebar,
-            content,
-            krate_with_trailing_slash,
-            rustdoc_version,
-        };
+    let _page_layout = PageLayout {
+        static_root_path,
+        page,
+        layout,
+        themes,
+        sidebar,
+        content,
+        krate_with_trailing_slash,
+        rustdoc_version,
+    };
     // .render()
     // .unwrap()
     "".to_string()

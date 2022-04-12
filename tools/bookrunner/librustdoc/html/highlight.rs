@@ -758,6 +758,3 @@ fn string<T: Display>(
     }
     write!(out, "<span class=\"{}\">{}</span>", klass.as_html(), text_s);
 }
-
-#[cfg(test)]
-mod tests;
