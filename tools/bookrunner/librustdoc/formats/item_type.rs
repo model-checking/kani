@@ -88,11 +88,9 @@ impl<'a> From<&'a clean::Item> for ItemType {
             clean::ForeignFunctionItem(..) => ItemType::Function, // no ForeignFunction
             clean::ForeignStaticItem(..) => ItemType::Static,     // no ForeignStatic
             clean::MacroItem(..) => ItemType::Macro,
-            clean::PrimitiveItem(..) => ItemType::Primitive,
             clean::AssocConstItem(..) => ItemType::AssocConst,
             clean::AssocTypeItem(..) => ItemType::AssocType,
             clean::ForeignTypeItem => ItemType::ForeignType,
-            clean::KeywordItem(..) => ItemType::Keyword,
             clean::TraitAliasItem(..) => ItemType::TraitAlias,
             clean::ProcMacroItem(ref mac) => match mac.kind {
                 MacroKind::Bang => ItemType::Macro,
