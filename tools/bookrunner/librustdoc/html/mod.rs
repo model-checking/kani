@@ -14,6 +14,3 @@ crate mod sources;
 crate mod static_files;
 crate mod toc;
 mod url_parts_builder;
-
-#[cfg(test)]
-mod tests;
