@@ -64,6 +64,13 @@ fn prebundle(dir: &Path) -> Result<()> {
     // Before we begin, ensure Kani is built successfully in release mode.
     Command::new("cargo").args(&["build", "--release"]).run()?;
 
+    // TODO: temporarily, until cargo-kani is renamed kani-driver, we need to build this thing not in our workspace.
+    // This isn't actually used by this script, but by the Dockerfile that tests this script
+    Command::new("cargo")
+        .args(&["build", "--release"])
+        .current_dir(Path::new("src/kani-verifier"))
+        .run()?;
+
     Ok(())
 }
 
@@ -83,13 +90,16 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     cp(Path::new("./scripts/cbmc_json_parser.py"), &scripts)?;
 
-    // 3a. Kani libraries
+    // 3. Kani libraries
     let library = dir.join("library");
     std::fs::create_dir(&library)?;
 
     cp_dir(Path::new("./library/kani"), &library)?;
     cp_dir(Path::new("./library/kani_macros"), &library)?;
     cp_dir(Path::new("./library/std"), &library)?;
+
+    // 4. Record the exact toolchain we use
+    std::fs::write(dir.join("rust-toolchain"), env!("RUSTUP_TOOLCHAIN"))?;
 
     Ok(())
 }

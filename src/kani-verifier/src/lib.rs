@@ -1,0 +1,239 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! This crate includes two "proxy binaries": `kani` and `cargo-kani`.
+//! These are conveniences to make it easy to:
+//!
+//! ```
+//! cargo install --locked kani-verifer
+//! ```
+//!
+//! Upon first run, or upon running `cargo-kani setup`, these proxy
+//! binaries will download the appropriate Kani release bundle and invoke
+//! the "real" `kani` and `cargo-kani` binaries.
+
+#![warn(clippy::all, clippy::cargo)]
+
+use std::env;
+use std::ffi::OsString;
+use std::os::unix::prelude::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use anyhow::{bail, Result};
+
+/// Comes from our Cargo.toml manifest file. Must correspond to our release verion.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Set by our `build.rs`, reflects the Rust target triple we're building for
+const TARGET: &str = env!("TARGET");
+
+/// Typically `~/.kani/kani-1.x/`
+fn kani_dir() -> PathBuf {
+    home::home_dir()
+        .expect("Couldn't find home dir?")
+        .join(".kani")
+        .join(format!("kani-{}", VERSION))
+}
+
+/// The filename of the release bundle
+fn download_filename() -> String {
+    format!("kani-{}-{}.tar.gz", VERSION, TARGET)
+}
+
+/// Helper to find the download URL for this version of Kani
+fn download_url() -> String {
+    let tag: &str = &format!("kani-{}", VERSION);
+    let file: &str = &download_filename();
+    format!("https://github.com/model-checking/kani/releases/download/{}/{}", tag, file)
+}
+
+/// Effectively the entry point (i.e. `main` function) for both our proxy binaries.
+pub fn proxy(bin: &str) -> Result<()> {
+    // In an effort to keep our dependencies minimal, we do the bare minimum argument parsing
+    let args: Vec<_> = std::env::args_os().collect();
+    if args.len() >= 2 && args[1] == "setup" {
+        if args.len() >= 4 && args[2] == "--use-local-bundle" {
+            setup(Some(args[3].clone()))
+        } else {
+            setup(None)
+        }
+    } else {
+        if !appears_setup() {
+            setup(None)?;
+        }
+        exec(bin)
+    }
+}
+
+/// Fast check to see if we look setup already
+fn appears_setup() -> bool {
+    kani_dir().exists()
+}
+
+/// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
+fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
+    // e.g. `~/.kani/`
+    let kani_dir = kani_dir();
+    let base_dir = kani_dir.parent().expect("No base directory?");
+
+    println!("Running Kani first-time setup...");
+
+    // 0. Make sure we have a `~/.kani/`
+    std::fs::create_dir_all(&base_dir)?;
+
+    // 1. Download and unpack our release binary
+    if let Some(pathstr) = use_local_bundle {
+        let path = Path::new(&pathstr).canonicalize()?;
+        Command::new("tar").arg("zxf").arg(&path).current_dir(base_dir).run()?;
+
+        // when given a bundle, it's often "-latest" but we expect "-1.0" or something. Hack it up.
+        let file = path.file_name().expect("has filename").to_string_lossy();
+        let components: Vec<_> = file.split("-").collect();
+        let expected_dir = format!("{}-{}", components[0], components[1]);
+
+        std::fs::rename(base_dir.join(expected_dir), &kani_dir)?;
+    } else {
+        let bundle = base_dir.join(download_filename());
+        Command::new("curl").args(&["-sSLf", "-o"]).arg(&bundle).arg(download_url()).run()?;
+
+        Command::new("tar").arg("zxf").arg(&bundle).current_dir(base_dir).run()?;
+
+        std::fs::remove_file(bundle)?;
+    }
+
+    // 2. We need a specific rustup toolchain
+    let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain"))?;
+    Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
+
+    let toolchain = home::rustup_home()?.join("toolchains").join(toolchain_version);
+
+    // 3. Connect to our toolchain
+    Command::new("ln").arg("-s").arg(toolchain).arg(kani_dir.join("toolchain")).run()?;
+
+    // 4. Install our python dependencies
+    let pyroot = kani_dir.join("pyroot");
+
+    // TODO: this is a repetition of versions from elsewhere
+    Command::new("python3")
+        .args(&["-m", "pip", "install", "cbmc-viewer==2.11", "--target"])
+        .arg(&pyroot)
+        .run()?;
+    Command::new("python3")
+        .args(&["-m", "pip", "install", "colorama==0.4.3", "--target"])
+        .arg(&pyroot)
+        .run()?;
+
+    // 5. Build our libraries
+    // We need a workspace to build them in, otherwise repeated builds generate different hashes and `kani` can't find `kani_macros`
+    let contents = "[workspace]\nmembers = [\"kani\",\"kani_macros\",\"std\"]";
+    std::fs::write(kani_dir.join("library").join("Cargo.toml"), contents)?;
+
+    // A little helper for invoking Cargo repeatedly here
+    let cargo = |crate_name: &str| -> Result<()> {
+        let manifest = format!("library/{}/Cargo.toml", crate_name);
+        Command::new("cargo")
+            .args(&[
+                "+nightly-2022-03-23",
+                "build",
+                "-Z",
+                "unstable-options",
+                "--manifest-path",
+                &manifest,
+                "--out-dir",
+                "lib",
+                "--target-dir",
+                "target",
+            ])
+            .current_dir(&kani_dir)
+            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+            .env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani")
+            .run()
+    };
+
+    // We seem to need 3 invocations because of the behavior of the `--out-dir` flag.
+    // It only seems to produce the requested artifact, not its dependencies.
+    cargo("kani")?;
+    cargo("kani_macros")?;
+    cargo("std")?;
+
+    std::fs::remove_dir_all(kani_dir.join("target"))?;
+
+    println!("Completed Kani first-time setup.");
+
+    Ok(())
+}
+
+/// Executes `cargo-kani` in `bin` mode, augmenting environment variables to accomodate our release environment
+fn exec(bin: &str) -> Result<()> {
+    let kani_dir = kani_dir();
+    let program = kani_dir.join("bin").join("cargo-kani");
+    let pyroot = kani_dir.join("pyroot");
+    let bin_kani = kani_dir.join("bin");
+    let bin_pyroot = pyroot.join("bin");
+    let bin_toolchain = kani_dir.join("toolchain").join("bin");
+
+    // Allow python scripts to find dependencies under our pyroot
+    let pythonpath = augment_search(&[pyroot], env::var_os("PYTHONPATH"))?;
+    // Add: kani, cbmc, viewer (pyroot), and our rust toolchain directly to our PATH
+    let path = augment_search(&[bin_kani, bin_pyroot, bin_toolchain], env::var_os("PATH"))?;
+
+    let mut cmd = Command::new(program);
+    cmd.args(std::env::args_os().skip(1)).env("PYTHONPATH", pythonpath).env("PATH", path).arg0(bin);
+
+    std::process::exit(cmd.status()?.code().expect("No exit code?"));
+}
+
+/// Prepend paths to an environment variable
+fn augment_search(paths: &[PathBuf], original: Option<OsString>) -> Result<OsString> {
+    match original {
+        None => Ok(env::join_paths(paths)?),
+        Some(original) => {
+            let orig = env::split_paths(&original);
+            let new_iter = paths.iter().cloned().chain(orig);
+            Ok(env::join_paths(new_iter)?)
+        }
+    }
+}
+
+/// Helper trait to fallibly run commands
+trait AutoRun {
+    fn run(&mut self) -> Result<()>;
+}
+impl AutoRun for Command {
+    fn run(&mut self) -> Result<()> {
+        let status = self.status()?;
+        if !status.success() {
+            bail!("Failed command: {}", render_command(self).to_string_lossy());
+        }
+        Ok(())
+    }
+}
+
+/// Render a Command as a string, to log it
+pub fn render_command(cmd: &Command) -> OsString {
+    let mut str = OsString::new();
+
+    for (k, v) in cmd.get_envs() {
+        if let Some(v) = v {
+            str.push(k);
+            str.push("=\"");
+            str.push(v);
+            str.push("\" ");
+        }
+    }
+
+    str.push(cmd.get_program());
+
+    for a in cmd.get_args() {
+        str.push(" ");
+        if a.to_string_lossy().contains(' ') {
+            str.push("\"");
+            str.push(a);
+            str.push("\"");
+        } else {
+            str.push(a);
+        }
+    }
+
+    str
+}
