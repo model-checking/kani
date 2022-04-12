@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Basic syntax highlighting functionality.
 //!
 //! This module uses librustc_ast's lexer to provide token-based highlighting for
