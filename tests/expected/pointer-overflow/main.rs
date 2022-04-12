@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks that overflow for pointers operations is reported
+// Checks that overflows for pointer arithmetic are reported
 
 #[kani::proof]
 fn main() {
