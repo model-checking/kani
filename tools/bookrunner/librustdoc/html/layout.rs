@@ -7,8 +7,7 @@ use crate::externalfiles::ExternalHtml;
 use crate::html::format::{Buffer, Print};
 use crate::html::render::{ensure_trailing_slash, StylePath};
 
-use askama::Template;
-
+#[allow(dead_code)]
 #[derive(Clone)]
 crate struct Layout {
     crate logo: String,
@@ -23,6 +22,7 @@ crate struct Layout {
     crate scrape_examples_extension: bool,
 }
 
+#[allow(dead_code)]
 crate struct Page<'a> {
     crate title: &'a str,
     crate css_class: &'a str,
@@ -41,8 +41,7 @@ impl<'a> Page<'a> {
     }
 }
 
-#[derive(Template)]
-#[template(path = "page.html")]
+#[allow(dead_code)]
 struct PageLayout<'a> {
     static_root_path: &'a str,
     page: &'a Page<'a>,
@@ -72,18 +71,20 @@ crate fn render<T: Print, S: Print>(
     let rustdoc_version = rustc_interface::util::version_str().unwrap_or("unknown version");
     let content = Buffer::html().to_display(t); // Note: This must happen before making the sidebar.
     let sidebar = Buffer::html().to_display(sidebar);
-    PageLayout {
-        static_root_path,
-        page,
-        layout,
-        themes,
-        sidebar,
-        content,
-        krate_with_trailing_slash,
-        rustdoc_version,
-    }
-    .render()
-    .unwrap()
+    let _page_layout =
+        PageLayout {
+            static_root_path,
+            page,
+            layout,
+            themes,
+            sidebar,
+            content,
+            krate_with_trailing_slash,
+            rustdoc_version,
+        };
+    // .render()
+    // .unwrap()
+    "".to_string()
 }
 
 crate fn redirect(url: &str) -> String {

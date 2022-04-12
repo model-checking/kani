@@ -34,30 +34,28 @@ use crate::html::layout::Page;
 use crate::html::markdown::{HeadingOffset, MarkdownSummaryLine};
 use crate::html::url_parts_builder::UrlPartsBuilder;
 
-use askama::Template;
-
 const ITEM_TABLE_OPEN: &str = "<div class=\"item-table\">";
 const ITEM_TABLE_CLOSE: &str = "</div>";
 const ITEM_TABLE_ROW_OPEN: &str = "<div class=\"item-row\">";
 const ITEM_TABLE_ROW_CLOSE: &str = "</div>";
 
 // A component in a `use` path, like `string` in std::string::ToString
+#[allow(dead_code)]
 struct PathComponent {
-    path: String,
-    name: Symbol,
+    pub path: String,
+    pub name: Symbol,
 }
 
-#[derive(Template)]
-#[template(path = "print_item.html")]
+#[allow(dead_code)]
 struct ItemVars<'a> {
-    page: &'a Page<'a>,
-    static_root_path: &'a str,
-    typ: &'a str,
-    name: &'a str,
-    item_type: &'a str,
-    path_components: Vec<PathComponent>,
-    stability_since_raw: &'a str,
-    src_href: Option<&'a str>,
+    pub page: &'a Page<'a>,
+    pub static_root_path: &'a str,
+    pub typ: &'a str,
+    pub name: &'a str,
+    pub item_type: &'a str,
+    pub path_components: Vec<PathComponent>,
+    pub stability_since_raw: &'a str,
+    pub src_href: Option<&'a str>,
 }
 
 pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer, page: &Page<'_>) {
@@ -126,7 +124,7 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
             .collect()
     };
 
-    let item_vars = ItemVars {
+    let _item_vars = ItemVars {
         page,
         static_root_path: page.get_static_root_path(),
         typ,
@@ -137,8 +135,8 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
         src_href: src_href.as_deref(),
     };
 
-    let heading = item_vars.render().unwrap();
-    buf.write_str(&heading);
+    // let heading = item_vars.render().unwrap();
+    // buf.write_str(&heading);
 
     match *item.kind {
         clean::ModuleItem(ref m) => item_module(buf, cx, item, &m.items),
