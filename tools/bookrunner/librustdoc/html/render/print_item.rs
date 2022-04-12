@@ -46,20 +46,20 @@ const ITEM_TABLE_ROW_CLOSE: &str = "</div>";
 // A component in a `use` path, like `string` in std::string::ToString
 #[allow(dead_code)]
 struct PathComponent {
-    pub path: String,
-    pub name: Symbol,
+    path: String,
+    name: Symbol,
 }
 
 #[allow(dead_code)]
 struct ItemVars<'a> {
-    pub page: &'a Page<'a>,
-    pub static_root_path: &'a str,
-    pub typ: &'a str,
-    pub name: &'a str,
-    pub item_type: &'a str,
-    pub path_components: Vec<PathComponent>,
-    pub stability_since_raw: &'a str,
-    pub src_href: Option<&'a str>,
+    page: &'a Page<'a>,
+    static_root_path: &'a str,
+    typ: &'a str,
+    name: &'a str,
+    item_type: &'a str,
+    path_components: Vec<PathComponent>,
+    stability_since_raw: &'a str,
+    src_href: Option<&'a str>,
 }
 
 pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer, page: &Page<'_>) {
