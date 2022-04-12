@@ -24,29 +24,6 @@ impl UrlPartsBuilder {
         Self { buf: String::with_capacity(count) }
     }
 
-    /// Create a buffer with one URL component.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    ///
-    /// ```ignore (private-type)
-    /// let builder = UrlPartsBuilder::singleton("core");
-    /// assert_eq!(builder.finish(), "core");
-    /// ```
-    ///
-    /// Adding more components afterward.
-    ///
-    /// ```ignore (private-type)
-    /// let mut builder = UrlPartsBuilder::singleton("core");
-    /// builder.push("str");
-    /// builder.push_front("nightly");
-    /// assert_eq!(builder.finish(), "nightly/core/str");
-    /// ```
-    crate fn singleton(part: &str) -> Self {
-        Self { buf: part.to_owned() }
-    }
-
     /// Push a component onto the buffer.
     ///
     /// # Examples
