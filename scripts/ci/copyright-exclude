@@ -15,5 +15,3 @@ Cargo.lock
 .png
 .woff
 scripts/ci/copyright-exclude
-tools/bookrunner/librustdoc
-tools/bookrunner/rust-doc
