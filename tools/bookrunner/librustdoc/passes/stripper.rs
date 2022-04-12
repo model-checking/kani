@@ -77,14 +77,8 @@ impl<'a> DocFolder for Stripper<'a> {
             // Proc-macros are always public
             clean::ProcMacroItem(..) => {}
 
-            // Primitives are never stripped
-            clean::PrimitiveItem(..) => {}
-
             // Associated types are never stripped
             clean::AssocTypeItem(..) => {}
-
-            // Keywords are never stripped
-            clean::KeywordItem(..) => {}
         }
 
         let fastreturn = match *i.kind {
