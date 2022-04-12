@@ -13,14 +13,14 @@ In this tutorial, we will show how to:
 
 ## Safe nondeterministic variables
 
-Let's say you are developing an inventory management tool, and you would like to verify that your API to manage items is correct.
+Let's say you're developing an inventory management tool, and you would like to verify that your API to manage items is correct.
 Here is a simple implementation of this API:
 
 ```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:inventory_lib}}
 ```
 
-Now we would like to verify that, no matter which combination of `id` and `quantity`, a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same `id` returns some value that is equal to the one we inserted:
+Now we would like to verify that, no matter which combination of `id` and `quantity`, a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same `id` returns some value that's equal to the one we inserted:
 
 ```rust,noplaypen
 {{#include tutorial/arbitrary-variables/src/inventory.rs:safe_update}}
@@ -32,7 +32,7 @@ In this harness, we use `kani::any()` to generate the new `id` and `quantity`.
 If we run this example, Kani verification will succeed, including the assertion that shows that the underlying `u32` variable  used to represent `NonZeroU32` cannot be zero, per its type invariant:
 
 You can try it out by running the example under
-[arbitrary-variables directory](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+[`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
 cargo kani --harness safe_update
@@ -57,7 +57,7 @@ The verification will now fail showing that the `inventory.get(&id).unwrap()` me
 This is an interesting issue that emerges from how `rustc` optimizes the memory layout of `Option<NonZeroU32>`.
 The compiler is able to represent `Option<NonZeroU32>` using `32` bits by using the value `0` to represent `None`.
 
-You can try it out by running the example under [arbitrary-variables directory](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+You can try it out by running the example under [`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
 cargo kani --harness unsafe_update
@@ -88,7 +88,7 @@ Now you can use `kani::any()` to create valid nondeterministic variables of the 
 ```
 
 You can try it out by running the example under
-[`docs/src/tutorial/arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+[`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
 
 ```
 cargo kani --harness check_rating

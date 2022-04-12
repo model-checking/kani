@@ -8,7 +8,6 @@ use super::{Expr, Location, Symbol, Type};
 pub enum BuiltinFn {
     Abort,
     Assert,
-    CProverAssert,
     CProverAssume,
     CProverCover,
     Calloc,
@@ -68,7 +67,6 @@ impl ToString for BuiltinFn {
         match self {
             Abort => "abort",
             Assert => "assert",
-            CProverAssert => "__CPROVER_assert",
             CProverAssume => "__CPROVER_assume",
             CProverCover => "__CPROVER_cover",
             Calloc => "calloc",
@@ -132,7 +130,6 @@ impl BuiltinFn {
         match self {
             Abort => vec![],
             Assert => vec![Type::bool()],
-            CProverAssert => vec![Type::bool(), Type::c_char().to_pointer()],
             CProverAssume => vec![Type::bool()],
             CProverCover => vec![Type::bool()],
             Calloc => vec![Type::size_t(), Type::size_t()],
@@ -189,7 +186,6 @@ impl BuiltinFn {
         match self {
             Abort => Type::empty(),
             Assert => Type::empty(),
-            CProverAssert => Type::empty(),
             CProverAssume => Type::empty(),
             CProverCover => Type::empty(),
             Calloc => Type::void_pointer(),
@@ -249,7 +245,6 @@ impl BuiltinFn {
         vec![
             Abort,
             Assert,
-            CProverAssert,
             CProverAssume,
             CProverCover,
             Calloc,

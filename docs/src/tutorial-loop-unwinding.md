@@ -1,6 +1,6 @@
 # Loops, unwinding, and bounds
 
-Consider code like this (from [`src/lib.rs`](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/loops-unwinding/src/lib.rs)):
+Consider code like this (available [here](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/loops-unwinding/src/lib.rs)):
 
 ```rust,noplaypen
 {{#include tutorial/loops-unwinding/src/lib.rs:code}}
@@ -16,7 +16,7 @@ We can try to find this bug with a proof harness like this:
 When we run Kani on this, we run into an unfortunate result: non-termination.
 This non-termination is caused by CBMC trying to unwind the loop an unlimited number of times.
 
-> **NOTE:** Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
+> **NOTE**: Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
 > Kani is supposed to emit some log lines that might give some clue that an infinite loop is occurring.
 > If Kani doesn't terminate, it's almost always the problem that this section covers.
 

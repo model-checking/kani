@@ -12,14 +12,16 @@ jobs:
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
-        with:
-          python-version: '3.9'
 
-      - name: Build Kani
-        uses: ./.github/actions/build
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
         with:
             os: ${{ matrix.os }}
+
+      - name: Build Kani
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -32,10 +34,15 @@ jobs:
       - name: Checkout Kani
         uses: actions/checkout@v2
 
-      - name: Build Kani
-        uses: ./.github/actions/build
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
         with:
             os: ubuntu-20.04
+
+      - name: Build Kani
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build
 
       - name: Install book runner dependencies
         run: ./scripts/setup/install_bookrunner_deps.sh
@@ -62,3 +69,28 @@ jobs:
         with:
           branch: gh-pages
           folder: docs/book/
+
+  releasebundle:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+            os: ubuntu-20.04
+      
+      - name: Build release bundle
+        run: |
+          cargo run -p make-kani-release -- latest
+          rm -rf target
+      
+      - name: Build container test
+        run: |
+          docker build -t kani-latest -f scripts/ci/Dockerfile.release-bundle-test .
+
+      - name: Run installed tests
+        run: |
+          docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
+          docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani

@@ -4,7 +4,7 @@ Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
 With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.
 
-Consider this first program (which can be found under [`docs/src/tutorial/kani-first-steps`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kani-first-steps/)):
+Consider this first program (which can be found under [`kani-first-steps`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kani-first-steps/)):
 
 ```rust,noplaypen
 {{#include tutorial/kani-first-steps/src/lib.rs:code}}
@@ -99,7 +99,7 @@ warning: dereferencing a null pointer
    = note: `#[warn(deref_nullptr)]` on by default
 ```
 
-Still, it is just a warning, and we can run the code without test failures just as before.
+Still, it's just a warning, and we can run the code without test failures just as before.
 But Kani still catches the issue:
 
 ```
@@ -149,7 +149,7 @@ Let's encode this fact about our function by asserting some reasonable bound on 
 {{#include tutorial/kani-first-steps/src/final_form.rs:code}}
 ```
 
-Now we have stated our previously implicit expectation: this function should never be called with inputs that are too big.
+Now we've stated our previously implicit expectation: this function should never be called with inputs that are too big.
 But if we attempt to verify this, we get a problem:
 
 ```

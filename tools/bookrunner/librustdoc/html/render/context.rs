@@ -21,7 +21,7 @@ use super::{
     BASIC_KEYWORDS,
 };
 
-use crate::clean::{self, types::ExternalLocation, ExternalCrate};
+use crate::clean::{self, ExternalCrate};
 use crate::config::RenderOptions;
 use crate::docfs::{DocFS, PathError};
 use crate::error::Error;
@@ -292,7 +292,7 @@ impl<'tcx> Context<'tcx> {
         if span.is_dummy() {
             return None;
         }
-        let mut root = self.root_path();
+        let root = self.root_path();
         let mut path = String::new();
         let cnum = span.cnum(self.sess());
 
@@ -311,17 +311,9 @@ impl<'tcx> Context<'tcx> {
                 return None;
             }
         } else {
-            let (krate, src_root) = match *self.cache().extern_locations.get(&cnum)? {
-                ExternalLocation::Local => {
-                    let e = ExternalCrate { crate_num: cnum };
-                    (e.name(self.tcx()), e.src_root(self.tcx()))
-                }
-                ExternalLocation::Remote(ref s) => {
-                    root = s.to_string();
-                    let e = ExternalCrate { crate_num: cnum };
-                    (e.name(self.tcx()), e.src_root(self.tcx()))
-                }
-                ExternalLocation::Unknown => return None,
+            let (krate, src_root) = {
+                let e = ExternalCrate { crate_num: cnum };
+                (e.name(self.tcx()), e.src_root(self.tcx()))
             };
 
             sources::clean_path(&src_root, file, false, |component| {
