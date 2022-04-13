@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::unwrap_or_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use rustc_ast::ast::Mutability;
@@ -27,7 +28,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Operand::Copy(d) | Operand::Move(d) =>
             // TODO: move shouldn't be the same as copy
             {
-                let projection = self.codegen_place(d);
+                let projection = unwrap_or_codegen_unimplemented!(self, self.codegen_place(d));
                 // If the operand itself is a Dynamic (like when passing a boxed closure),
                 // we need to pull off the fat pointer. In that case, the rustc kind() on
                 // both the operand and the inner type are Dynamic.
