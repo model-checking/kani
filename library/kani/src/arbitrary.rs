@@ -14,7 +14,7 @@ impl<T> Arbitrary for T
 where
     T: Invariant,
 {
-    fn any() -> Self {
+    default fn any() -> Self {
         let value = unsafe { any_raw::<T>() };
         assume(value.is_valid());
         value
