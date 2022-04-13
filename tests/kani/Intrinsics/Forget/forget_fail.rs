@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-codegen-fail
+// kani-check-fail
 
 // Checks that `forget` produces a compilation error if the value is referenced
 // after "forgetting" it
