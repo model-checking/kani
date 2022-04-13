@@ -4,7 +4,7 @@
 //! This crate includes two "proxy binaries": `kani` and `cargo-kani`.
 //! These are conveniences to make it easy to:
 //!
-//! ```
+//! ```bash
 //! cargo install --locked kani-verifer
 //! ```
 //!
@@ -20,7 +20,7 @@ use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 /// Comes from our Cargo.toml manifest file. Must correspond to our release verion.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -72,28 +72,30 @@ fn appears_setup() -> bool {
 
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
 fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
-    // e.g. `~/.kani/`
     let kani_dir = kani_dir();
+    // e.g. `~/.kani/`
     let base_dir = kani_dir.parent().expect("No base directory?");
 
-    println!("Running Kani first-time setup...");
+    println!("[0/6] Running Kani first-time setup...");
 
-    // 0. Make sure we have a `~/.kani/`
+    println!("[1/6] Ensuring the existence of: {}", base_dir.display());
     std::fs::create_dir_all(&base_dir)?;
 
-    // 1. Download and unpack our release binary
     if let Some(pathstr) = use_local_bundle {
         let path = Path::new(&pathstr).canonicalize()?;
+        println!("[2/6] Installing local Kani bundle: {}", path.display());
         Command::new("tar").arg("zxf").arg(&path).current_dir(base_dir).run()?;
 
-        // when given a bundle, it's often "-latest" but we expect "-1.0" or something. Hack it up.
+        // when given a local bundle, it's often "-latest" but we expect "-1.0" or something. Hack it up.
         let file = path.file_name().expect("has filename").to_string_lossy();
-        let components: Vec<_> = file.split("-").collect();
+        let components: Vec<_> = file.split('-').collect();
         let expected_dir = format!("{}-{}", components[0], components[1]);
 
         std::fs::rename(base_dir.join(expected_dir), &kani_dir)?;
     } else {
-        let bundle = base_dir.join(download_filename());
+        let filename = download_filename();
+        println!("[2/6] Downloading Kani release bundle: {}", &filename);
+        let bundle = base_dir.join(filename);
         Command::new("curl").args(&["-sSLf", "-o"]).arg(&bundle).arg(download_url()).run()?;
 
         Command::new("tar").arg("zxf").arg(&bundle).current_dir(base_dir).run()?;
@@ -101,16 +103,16 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
         std::fs::remove_file(bundle)?;
     }
 
-    // 2. We need a specific rustup toolchain
-    let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain"))?;
+    let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain"))
+        .context("Reading release bundle rust-toolchain")?;
+    println!("[3/6] Installing rust toolchain version: {}", &toolchain_version);
     Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
 
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
 
-    // 3. Connect to our toolchain
     Command::new("ln").arg("-s").arg(toolchain).arg(kani_dir.join("toolchain")).run()?;
 
-    // 4. Install our python dependencies
+    println!("[4/6] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from elsewhere
@@ -123,7 +125,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
         .arg(&pyroot)
         .run()?;
 
-    // 5. Build our libraries
+    println!("[5/6] Building Kani library prelude...");
     // We need a workspace to build them in, otherwise repeated builds generate different hashes and `kani` can't find `kani_macros`
     let contents = "[workspace]\nmembers = [\"kani\",\"kani_macros\",\"std\"]";
     std::fs::write(kani_dir.join("library").join("Cargo.toml"), contents)?;
@@ -148,6 +150,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
             // https://doc.rust-lang.org/cargo/reference/environment-variables.html
             .env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani")
             .run()
+            .with_context(|| format!("Failed to build Kani prelude library {}", crate_name))
     };
 
     // We seem to need 3 invocations because of the behavior of the `--out-dir` flag.
@@ -158,7 +161,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     std::fs::remove_dir_all(kani_dir.join("target"))?;
 
-    println!("Completed Kani first-time setup.");
+    println!("[6/6] Successfully completed Kani first-time setup.");
 
     Ok(())
 }
@@ -201,7 +204,11 @@ trait AutoRun {
 }
 impl AutoRun for Command {
     fn run(&mut self) -> Result<()> {
-        let status = self.status()?;
+        // This can sometimes fail during the set-up of the forked process before exec,
+        // for example by setting `current_dir` to a directory that does not exist.
+        let status = self.status().with_context(|| {
+            format!("Internal failure before invoking command: {}", render_command(self).to_string_lossy())
+        })?;
         if !status.success() {
             bail!("Failed command: {}", render_command(self).to_string_lossy());
         }
