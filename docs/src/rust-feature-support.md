@@ -338,7 +338,7 @@ floorf64 | No | |
 fmaf32 | Yes | |
 fmaf64 | Yes | |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
-forget | Partial | Generates `SKIP` statement |
+forget | Yes | |
 frem_fast | No | |
 fsub_fast | Yes | |
 likely | Yes | |
