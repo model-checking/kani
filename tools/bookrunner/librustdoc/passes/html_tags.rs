@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Detects invalid HTML (like an unclosed `<span>`) in doc comments.
 use crate::clean::*;
 use crate::core::DocContext;

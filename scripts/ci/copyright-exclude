@@ -11,9 +11,5 @@ gitmodules
 LICENSE-APACHE
 LICENSE-MIT
 Cargo.lock
-.svg
 .png
-.woff
 scripts/ci/copyright-exclude
-tools/bookrunner/librustdoc
-tools/bookrunner/rust-doc
