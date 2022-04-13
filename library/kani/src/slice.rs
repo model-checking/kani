@@ -1,8 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::{any, any_raw, assume, Arbitrary};
-use core::ops::{Deref, DerefMut};
 use std::alloc::{alloc, dealloc, Layout};
+use std::ops::{Deref, DerefMut};
 
 /// Given an array `arr` of length `LENGTH`, this function returns a **valid**
 /// slice of `arr` with non-deterministic start and end points.  This is useful
@@ -59,10 +59,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
     where
         T: Arbitrary,
     {
-        let slice_len: usize = any();
-        assume(slice_len <= MAX_SLICE_LENGTH);
-        let layout = Layout::array::<T>(slice_len).unwrap();
-        let ptr = unsafe { alloc(layout) };
+        let any_slice = AnySlice::<T, MAX_SLICE_LENGTH>::alloc_slice();
         unsafe {
             let mut i = 0;
             // Note: even though the guard `i < MAX_SLICE_LENGTH` is redundant
@@ -74,42 +71,56 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
             //     for i in 0..slice_len {
             //         *(ptr as *mut T).add(i) = any();
             //     }
-            while i < slice_len && i < MAX_SLICE_LENGTH {
-                *(ptr as *mut T).add(i) = any();
+            while i < any_slice.slice_len && i < MAX_SLICE_LENGTH {
+                *any_slice.ptr.add(i) = any();
                 i += 1;
             }
         }
-        Self { layout, ptr: ptr as *mut T, slice_len }
+        any_slice
     }
 
     fn new_raw() -> Self {
-        let slice_len: usize = any();
-        assume(slice_len <= MAX_SLICE_LENGTH);
-        let layout = Layout::array::<T>(slice_len).unwrap();
-        let ptr = unsafe { alloc(layout) };
+        let any_slice = AnySlice::<T, MAX_SLICE_LENGTH>::alloc_slice();
         unsafe {
             let mut i = 0;
             // See note on `MAX_SLICE_LENGTH` in `new` method above
-            while i < slice_len && i < MAX_SLICE_LENGTH {
-                *(ptr as *mut T).add(i) = any_raw();
+            while i < any_slice.slice_len && i < MAX_SLICE_LENGTH {
+                *any_slice.ptr.add(i) = any_raw();
                 i += 1;
             }
         }
+        any_slice
+    }
+
+    fn alloc_slice() -> Self {
+        let slice_len = any();
+        assume(slice_len <= MAX_SLICE_LENGTH);
+        let layout = Layout::array::<T>(slice_len).unwrap();
+        let ptr = if slice_len == 0 { std::ptr::null() } else { unsafe { alloc(layout) } };
         Self { layout, ptr: ptr as *mut T, slice_len }
     }
 
     pub fn get_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.ptr, self.slice_len) }
+        if self.slice_len == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(self.ptr, self.slice_len) }
+        }
     }
 
     pub fn get_slice_mut(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.slice_len) }
+        if self.slice_len == 0 {
+            &mut []
+        } else {
+            unsafe { std::slice::from_raw_parts_mut(self.ptr, self.slice_len) }
+        }
     }
 }
 
 impl<T, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
     fn drop(&mut self) {
         if self.slice_len > 0 {
+            assert!(!self.ptr.is_null());
             unsafe {
                 dealloc(self.ptr as *mut u8, self.layout);
             }
