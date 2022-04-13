@@ -105,7 +105,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain"))?;
     Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
 
-    let toolchain = home::rustup_home()?.join("toolchains").join(toolchain_version);
+    let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
 
     // 3. Connect to our toolchain
     Command::new("ln").arg("-s").arg(toolchain).arg(kani_dir.join("toolchain")).run()?;
@@ -133,7 +133,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
         let manifest = format!("library/{}/Cargo.toml", crate_name);
         Command::new("cargo")
             .args(&[
-                "+nightly-2022-03-23",
+                &format!("+{}", toolchain_version),
                 "build",
                 "-Z",
                 "unstable-options",
