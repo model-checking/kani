@@ -123,7 +123,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // The thin pointer in the resulting fat pointer is a pointer to the value
         let thin_pointer = if place_goto_expr.typ().is_pointer() {
-            // The value is itself a pointer (eg, a void pointer), just use this pointer
+            // The value is itself a pointer, just use this pointer
             place_goto_expr
         } else if place_goto_expr.typ().is_array_like() {
             // The value is an array (eg, a flexible struct member), point to the first array element
@@ -364,7 +364,8 @@ impl<'tcx> GotocCtx<'tcx> {
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
-            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
+            Rvalue::Ref(_, _, p) => self.codegen_rvalue_ref(p, res_ty),
+            Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             Rvalue::Cast(CastKind::Misc, e, t) => {
                 let t = self.monomorphize(*t);
@@ -750,6 +751,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 );
             }
 
+            tracing::info!(?ty, ?trait_ty, "codegen_drop_in_place");
+            tracing::info!(?drop_instance, ?trait_fn_ty, "codegen_drop_in_place");
+            tracing::info!(drop_sym=?drop_sym.clone().typ, "codegen_drop_in_place");
+
             Expr::symbol_expression(drop_sym_name, drop_sym.clone().typ)
                 .address_of()
                 .cast_to(trait_fn_ty)
@@ -946,7 +951,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Cast the data type.
         let dst_mir_dyn_ty = pointee_type(dst_mir_type).unwrap();
-        let dst_data_type = self.codegen_ty(dst_mir_dyn_ty);
+        let dst_data_type = self.codegen_trait_data_pointer(dst_mir_dyn_ty);
         let data =
             src_goto_expr.to_owned().member("data", &self.symbol_table).cast_to(dst_data_type);
 
@@ -1088,15 +1093,19 @@ impl<'tcx> GotocCtx<'tcx> {
     fn cast_sized_pointer_to_trait_fat_pointer(
         &mut self,
         src_goto_expr: Expr,
-        _src_mir_type: Ty<'tcx>,
+        src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
         src_pointee_type: Ty<'tcx>,
         dst_pointee_type: Ty<'tcx>,
     ) -> Option<Expr> {
+        tracing::trace!(?src_pointee_type, ?dst_pointee_type, "cast_thin_2_fat_ptr");
+        tracing::trace!(?src_mir_type, ?dst_mir_type, "cast_thin_2_fat_ptr");
         if let Some((concrete_type, trait_type)) =
             self.nested_pair_of_concrete_and_trait_types(src_pointee_type, dst_pointee_type)
         {
-            let dst_goto_expr = src_goto_expr.cast_to(self.codegen_trait_data_pointer(trait_type));
+            tracing::trace!(?concrete_type, ?trait_type, "cast_thin_2_fat_ptr");
+            let dst_goto_expr =
+                src_goto_expr.cast_to(self.codegen_ty(dst_pointee_type).to_pointer());
             let dst_goto_type = self.codegen_ty(dst_mir_type);
             let vtable = self.codegen_vtable(concrete_type, trait_type);
             let vtable_expr = vtable.address_of();
