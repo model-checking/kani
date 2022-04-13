@@ -11,9 +11,16 @@
 #![feature(ptr_internals)]
 #![feature(rustc_allow_const_fn_unstable)]
 
+#[cfg(disable_debug_asserts)]
+macro_rules! debug_assert {
+    ( $( $x:expr ),* ) => {};
+}
+
+mod abstract_vecdeque;
 mod cve;
 mod fixed;
 mod raw_vec;
+use abstract_vecdeque::*;
 
 const MAX_CAPACITY: usize = usize::MAX >> 1;
 
@@ -21,6 +28,30 @@ const MAX_CAPACITY: usize = usize::MAX >> 1;
 mod fixed_proofs {
     use crate::fixed::VecDeque;
     use crate::MAX_CAPACITY;
+
+    /// Minimal example that we no longer expect to fail
+    #[kani::proof]
+    pub fn minimal_example_with_cve_fixed() {
+        let mut q = VecDeque::with_capacity(7);
+        q.push_front(0);
+        q.reserve(6);
+        q.push_back(0);
+    }
+
+    /// Symbolic example that causes Kani timeout
+    /// Hidden behind a flag so `cargo kani` won't pick this harness up by
+    /// default
+    #[cfg(enable_symbolic_example_with_cve_fixed)]
+    #[kani::proof]
+    pub fn symbolic_example_with_cve_fixed() {
+        let usable_capacity = kani::any();
+        kani::assume(usable_capacity < MAX_CAPACITY);
+        let mut q = VecDeque::with_capacity(usable_capacity);
+        q.push_front(0);
+        let additional = kani::any();
+        q.reserve(additional);
+        q.push_back(0);
+    }
 
     /// Verify that a request to reserve space that is already available is a no-op.
     #[kani::proof]
@@ -69,8 +100,17 @@ mod cve_proofs {
     use crate::cve::VecDeque;
     use crate::MAX_CAPACITY;
 
+    /// Minimal example that we expect to fail
+    #[kani::proof]
+    pub fn minimal_example_with_cve_should_fail() {
+        let mut q = VecDeque::with_capacity(7);
+        q.push_front(0);
+        q.reserve(6);
+        q.push_back(0);
+    }
+
     /// Verify that a request to reserve space that is already available is a no-op.
-    /// This harness uses a version of VecDeque that includes the CVE fix.
+    /// We expect this to fail
     #[kani::proof]
     pub fn reserve_available_capacity_should_fail() {
         // Start with a default VecDeque object (default capacity: 7).
