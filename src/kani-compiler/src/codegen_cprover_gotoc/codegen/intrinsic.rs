@@ -442,7 +442,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(mul);
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
-            "forget" => Stmt::skip(loc),
             "fsub_fast" => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(sub);
