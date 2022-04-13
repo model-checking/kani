@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use std::mem;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};

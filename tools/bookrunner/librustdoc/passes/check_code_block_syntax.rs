@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Validates syntax inside Rust code blocks (\`\`\`rust).
 use rustc_data_structures::sync::{Lock, Lrc};
 use rustc_errors::{emitter::Emitter, Applicability, Diagnostic, Handler};
