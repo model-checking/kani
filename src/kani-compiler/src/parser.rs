@@ -133,7 +133,7 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
         .arg(
             Arg::with_name(PRETTY_OUTPUT_FILES)
                 .long("--pretty-files")
-                .help("Output json files will be more human friendly (with spaces)."),
+                .help("Output json files in a more human-readable format (with spaces)."),
         )
 }
 
