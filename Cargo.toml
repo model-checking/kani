@@ -16,10 +16,12 @@ members = [
 ]
 
 exclude = [
+  # temporarily exclude `kani-verifier` until we don't have colliding binary names (cargo-kani)
+  "src/kani-verifier",
   "build",
   "target",
   # dependency tests have their own workspace
   "tests/kani-dependency-test/dependency3",
   # cargo kani tests should also have their own workspace
-  "tests/cargo-kani"
+  "tests/cargo-kani",
 ]

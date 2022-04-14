@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! The representation of a `#[doc(cfg(...))]` attribute.
 
 // FIXME: Once the portability lint RFC is implemented (see tracking issue #41619),
