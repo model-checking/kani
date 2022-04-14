@@ -171,10 +171,11 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     Ok(())
 }
 
-/// Executes `cargo-kani` in `bin` mode, augmenting environment variables to accomodate our release environment
+/// Executes `kani-driver` in `bin` mode (kani or cargo-kani)
+/// augmenting environment variables to accomodate our release environment
 fn exec(bin: &str) -> Result<()> {
     let kani_dir = kani_dir();
-    let program = kani_dir.join("bin").join("cargo-kani");
+    let program = kani_dir.join("bin").join("kani-driver");
     let pyroot = kani_dir.join("pyroot");
     let bin_kani = kani_dir.join("bin");
     let bin_pyroot = pyroot.join("bin");
@@ -188,7 +189,9 @@ fn exec(bin: &str) -> Result<()> {
     let mut cmd = Command::new(program);
     cmd.args(std::env::args_os().skip(1)).env("PYTHONPATH", pythonpath).env("PATH", path).arg0(bin);
 
-    std::process::exit(cmd.status()?.code().expect("No exit code?"));
+    let result = cmd.status().context("Failed to invoke kani-driver")?;
+
+    std::process::exit(result.code().expect("No exit code?"));
 }
 
 /// Prepend paths to an environment variable

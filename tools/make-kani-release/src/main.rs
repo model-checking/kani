@@ -81,7 +81,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 1. Kani binaries
     let release = Path::new("./target/release");
-    cp(&release.join("cargo-kani"), &bin)?;
+    cp(&release.join("kani-driver"), &bin)?;
     cp(&release.join("kani-compiler"), &bin)?;
 
     // 2. Kani scripts
