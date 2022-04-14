@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use crate::clean;
 use crate::html::markdown::markdown_links;
 use crate::passes::collect_intra_doc_links::preprocess_link;

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Removes excess indentation on comments in order for the Markdown
 //! to be parsed correctly. This is necessary because the convention for
 //! writing documentation is to provide a space between the /// or //! marker

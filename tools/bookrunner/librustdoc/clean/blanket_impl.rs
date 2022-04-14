@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use crate::rustc_trait_selection::traits::query::evaluate_obligation::InferCtxtExt;
-use rustc_hir as hir;
 use rustc_infer::infer::{InferOk, TyCtxtInferExt};
 use rustc_infer::traits;
 use rustc_middle::ty::subst::Subst;
@@ -107,7 +110,6 @@ impl<'a, 'tcx> BlanketImplFinder<'a, 'tcx> {
                         visibility: Inherited,
                         def_id: ItemId::Blanket { impl_id: impl_def_id, for_: item_def_id },
                         kind: box ImplItem(Impl {
-                            unsafety: hir::Unsafety::Normal,
                             generics: clean_ty_generics(
                                 cx,
                                 cx.tcx.generics_of(impl_def_id),

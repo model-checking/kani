@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! HTML formatting module
 //!
 //! This module contains a large number of `fmt::Display` implementations for
@@ -22,10 +26,7 @@ use rustc_span::def_id::CRATE_DEF_INDEX;
 use rustc_span::{sym, Symbol};
 use rustc_target::spec::abi::Abi;
 
-use crate::clean::{
-    self, types::ExternalLocation, utils::find_nearest_parent_module, ExternalCrate, ItemId,
-    PrimitiveType,
-};
+use crate::clean::{self, utils::find_nearest_parent_module, ItemId, PrimitiveType};
 use crate::formats::item_type::ItemType;
 use crate::html::escape::Escape;
 use crate::html::render::Context;
@@ -496,8 +497,6 @@ impl clean::GenericArgs {
 crate enum HrefError {
     /// This item is known to rustdoc, but from a crate that does not have documentation generated.
     ///
-    /// This can only happen for non-local items.
-    DocumentationNotBuilt,
     /// This can only happen for non-local items when `--document-private-items` is not passed.
     Private,
     // Not in external cache, href link should be in same page
@@ -543,43 +542,25 @@ crate fn href_with_root_path(
         return Err(HrefError::Private);
     }
 
-    let mut is_remote = false;
-    let (fqp, shortty, mut url_parts) = match cache.paths.get(&did) {
-        Some(&(ref fqp, shortty)) => (fqp, shortty, {
-            let module_fqp = to_module_fqp(shortty, fqp.as_slice());
-            debug!(?fqp, ?shortty, ?module_fqp);
-            href_relative_parts(module_fqp, relative_to).collect()
-        }),
-        None => {
-            if let Some(&(ref fqp, shortty)) = cache.external_paths.get(&did) {
-                let module_fqp = to_module_fqp(shortty, fqp);
-                (
-                    fqp,
-                    shortty,
-                    match cache.extern_locations[&did.krate] {
-                        ExternalLocation::Remote(ref s) => {
-                            is_remote = true;
-                            let s = s.trim_end_matches('/');
-                            let mut builder = UrlPartsBuilder::singleton(s);
-                            builder.extend(module_fqp.iter().copied());
-                            builder
-                        }
-                        ExternalLocation::Local => {
-                            href_relative_parts(module_fqp, relative_to).collect()
-                        }
-                        ExternalLocation::Unknown => return Err(HrefError::DocumentationNotBuilt),
-                    },
-                )
-            } else {
-                return Err(HrefError::NotInExternalCache);
+    let (fqp, shortty, mut url_parts): (&Vec<Symbol>, ItemType, UrlPartsBuilder) =
+        match cache.paths.get(&did) {
+            Some(&(ref fqp, shortty)) => (fqp, shortty, {
+                let module_fqp = to_module_fqp(shortty, fqp.as_slice());
+                debug!(?fqp, ?shortty, ?module_fqp);
+                href_relative_parts(module_fqp, relative_to).collect()
+            }),
+            None => {
+                if let Some(&(ref fqp, shortty)) = cache.external_paths.get(&did) {
+                    let module_fqp = to_module_fqp(shortty, fqp);
+                    (fqp, shortty, href_relative_parts(module_fqp, relative_to).collect())
+                } else {
+                    return Err(HrefError::NotInExternalCache);
+                }
             }
-        }
-    };
-    if !is_remote {
-        if let Some(root_path) = root_path {
-            let root = root_path.trim_end_matches('/');
-            url_parts.push_front(root);
-        }
+        };
+    if let Some(root_path) = root_path {
+        let root = root_path.trim_end_matches('/');
+        url_parts.push_front(root);
     }
     debug!(?url_parts);
     match shortty {
@@ -687,35 +668,7 @@ fn primitive_link(
                 )?;
                 needs_termination = true;
             }
-            Some(&def_id) => {
-                let loc = match m.extern_locations[&def_id.krate] {
-                    ExternalLocation::Remote(ref s) => {
-                        let cname_sym = ExternalCrate { crate_num: def_id.krate }.name(cx.tcx());
-                        let builder: UrlPartsBuilder =
-                            [s.as_str().trim_end_matches('/'), cname_sym.as_str()]
-                                .into_iter()
-                                .collect();
-                        Some(builder)
-                    }
-                    ExternalLocation::Local => {
-                        let cname_sym = ExternalCrate { crate_num: def_id.krate }.name(cx.tcx());
-                        Some(if cx.current.first() == Some(&cname_sym) {
-                            iter::repeat(sym::dotdot).take(cx.current.len() - 1).collect()
-                        } else {
-                            iter::repeat(sym::dotdot)
-                                .take(cx.current.len())
-                                .chain(iter::once(cname_sym))
-                                .collect()
-                        })
-                    }
-                    ExternalLocation::Unknown => None,
-                };
-                if let Some(mut loc) = loc {
-                    loc.push_fmt(format_args!("primitive.{}.html", prim.as_sym()));
-                    write!(f, "<a class=\"primitive\" href=\"{}\">", loc.finish())?;
-                    needs_termination = true;
-                }
-            }
+            Some(&_def_id) => {}
             None => {}
         }
     }
