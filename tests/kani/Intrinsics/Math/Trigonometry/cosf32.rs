@@ -9,7 +9,7 @@
 
 fn fp_equals(value: f32, expected: f32) -> bool {
     let abs_diff = (value - expected).abs();
-    return abs_diff <= f32::EPSILON
+    abs_diff <= f32::EPSILON
 }
 
 #[kani::proof]
