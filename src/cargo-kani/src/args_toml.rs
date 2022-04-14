@@ -152,18 +152,18 @@ mod tests {
     #[test]
     fn check_toml_parsing() {
         let a = "[workspace.metadata.kani]
-                      flags = { default-checks = false, unwind = \"2\", cbmc-args = [\"--fake\"] }";
+                      flags = { default-checks = false, default-unwind = \"2\", cbmc-args = [\"--fake\"] }";
         let b = toml_to_args(a).unwrap();
         // default first, then unwind thanks to btree ordering.
         // cbmc-args always last.
-        assert_eq!(b.0, vec!["--no-default-checks", "--unwind", "2"]);
+        assert_eq!(b.0, vec!["--no-default-checks", "--default-unwind", "2"]);
         assert_eq!(b.1, vec!["--cbmc-args", "--fake"]);
     }
 
     #[test]
     fn check_merge_args_with_only_command_line_args() {
         let cmd_args: Vec<OsString> =
-            ["cargo_kani", "--no-default-checks", "--unwind", "2", "--cbmc-args", "--fake"]
+            ["cargo_kani", "--no-default-checks", "--default-unwind", "2", "--cbmc-args", "--fake"]
                 .iter()
                 .map(|&s| s.into())
                 .collect();
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn check_merge_args_with_only_config_kani_args() {
         let cfg_args: Vec<OsString> =
-            ["--no-default-checks", "--unwind", "2"].iter().map(|&s| s.into()).collect();
+            ["--no-default-checks", "--default-unwind", "2"].iter().map(|&s| s.into()).collect();
         let merged = merge_args(vec!["kani".into()], cfg_args.clone(), Vec::new()).unwrap();
         assert_eq!(merged[0], OsString::from("kani"));
         assert_eq!(merged[1..], cfg_args);

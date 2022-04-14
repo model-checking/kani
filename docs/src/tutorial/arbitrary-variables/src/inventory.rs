@@ -28,7 +28,6 @@ mod verification {
 
     // ANCHOR: safe_update
     #[kani::proof]
-    #[kani::unwind(2)]
     pub fn safe_update() {
         // Create inventory variable.
         let mut inventory = Inventory { inner: VecMap::new() };
@@ -46,7 +45,6 @@ mod verification {
 
     // ANCHOR: unsafe_update
     #[kani::proof]
-    #[kani::unwind(2)]
     pub fn unsafe_update() {
         // Create inventory variable.
         let mut inventory = Inventory { inner: VecMap::new() };

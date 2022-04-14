@@ -97,13 +97,9 @@ impl KaniSession {
         if let Some(harness_unwind) = self.args.harness_unwind {
             args.push("--unwind".into());
             args.push(harness_unwind.to_string().into());
-            args.push("--function".into());
-            args.push(harness_name.into());
         } else if let Some(unwind) = unwind_value {
             args.push("--unwind".into());
             args.push(unwind.to_string().into());
-            args.push("--function".into());
-            args.push(harness_name.into());
         } else if let Some(default_unwind) = self.args.default_unwind {
             args.push("--unwind".into());
             args.push(default_unwind.to_string().into());

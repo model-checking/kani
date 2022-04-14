@@ -11,4 +11,4 @@ vector-map = "1.0.1"
 [workspace]
 
 [workspace.metadata.kani]
-flags = { default-checks = false }
+flags = { default-checks = false , default-unwind = "2" }
