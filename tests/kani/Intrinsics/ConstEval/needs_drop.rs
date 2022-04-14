@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that we get the expected results for needs_drop intrinsic
+// Check that we get the expected results for the `needs_drop` intrinsic
 
 use std::mem;
 
