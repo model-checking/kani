@@ -101,6 +101,9 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     // 4. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
 
+    // 5. Include a licensing note
+    cp(Path::new("tools/make-kani-release/license-notes.txt"), dir)?;
+
     Ok(())
 }
 /// Copy CBMC files into `dir`
