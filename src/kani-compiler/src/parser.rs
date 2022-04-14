@@ -32,7 +32,7 @@ pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
 pub const ASSERTION_REACH_CHECKS: &'static str = "assertion-reach-checks";
 
 /// Option name used to use json pretty-print for output files.
-pub const PRETTY_OUTPUT_FILES: &'static str = "pretty-files";
+pub const PRETTY_OUTPUT_FILES: &'static str = "pretty-json-files";
 
 /// Option name used to override the sysroot.
 pub const SYSROOT: &'static str = "sysroot";
@@ -132,7 +132,7 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
         )
         .arg(
             Arg::with_name(PRETTY_OUTPUT_FILES)
-                .long("--pretty-files")
+                .long("--pretty-json-files")
                 .help("Output json files in a more human-readable format (with spaces)."),
         )
 }
