@@ -244,6 +244,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
+        // Intrinsics which encode a value known during compilation (e.g., `size_of`)
         macro_rules! codegen_intrinsic_const {
             () => {{
                 let value = self
