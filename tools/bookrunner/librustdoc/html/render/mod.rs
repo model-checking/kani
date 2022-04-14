@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Rustdoc's HTML rendering module.
 //!
 //! This modules contains the bulk of the logic necessary for rendering a
@@ -70,8 +74,7 @@ use crate::formats::{AssocItemRender, Impl, RenderMode};
 use crate::html::escape::Escape;
 use crate::html::format::{
     href, join_with_double_colon, print_abi_with_space, print_constness_with_space,
-    print_default_space, print_generic_bounds, print_where_clause, Buffer, HrefError,
-    PrintWithSpace,
+    print_default_space, print_generic_bounds, print_where_clause, Buffer, PrintWithSpace,
 };
 use crate::html::highlight;
 use crate::html::markdown::{HeadingOffset, Markdown, MarkdownHtml, MarkdownSummaryLine};
@@ -887,7 +890,6 @@ fn render_assoc_item(
 
                 match (href(did.expect_def_id(), cx), ty) {
                     (Ok(p), ty) => Some(format!("{}#{}.{}", p.0, ty, name)),
-                    (Err(HrefError::DocumentationNotBuilt), ItemType::TyMethod) => None,
                     (Err(_), ty) => Some(format!("#{}.{}", ty, name)),
                 }
             }
@@ -1746,7 +1748,6 @@ fn print_sidebar(cx: &Context<'_>, it: &clean::Item, buffer: &mut Buffer) {
             match *it.kind {
                 clean::StructItem(..) => "Struct ",
                 clean::TraitItem(..) => "Trait ",
-                clean::PrimitiveItem(..) => "Primitive Type ",
                 clean::UnionItem(..) => "Union ",
                 clean::EnumItem(..) => "Enum ",
                 clean::TypedefItem(..) => "Type Definition ",
@@ -1788,7 +1789,6 @@ fn print_sidebar(cx: &Context<'_>, it: &clean::Item, buffer: &mut Buffer) {
     match *it.kind {
         clean::StructItem(ref s) => sidebar_struct(cx, buffer, it, s),
         clean::TraitItem(ref t) => sidebar_trait(cx, buffer, it, t),
-        clean::PrimitiveItem(_) => sidebar_primitive(cx, buffer, it),
         clean::UnionItem(ref u) => sidebar_union(cx, buffer, it, u),
         clean::EnumItem(ref e) => sidebar_enum(cx, buffer, it, e),
         clean::TypedefItem(_, _) => sidebar_typedef(cx, buffer, it),
@@ -2330,15 +2330,6 @@ fn sidebar_trait(cx: &Context<'_>, buf: &mut Buffer, it: &clean::Item, t: &clean
     }
 
     buf.push_str("</div>")
-}
-
-fn sidebar_primitive(cx: &Context<'_>, buf: &mut Buffer, it: &clean::Item) {
-    let mut sidebar = Buffer::new();
-    sidebar_assoc_items(cx, &mut sidebar, it);
-
-    if !sidebar.is_empty() {
-        write!(buf, "<div class=\"block items\">{}</div>", sidebar.into_inner());
-    }
 }
 
 fn sidebar_typedef(cx: &Context<'_>, buf: &mut Buffer, it: &clean::Item) {

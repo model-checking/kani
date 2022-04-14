@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Support for inlining external documentation into the current AST.
 
 use std::iter::once;
@@ -490,7 +494,6 @@ crate fn build_impl(
         did,
         None,
         clean::ImplItem(clean::Impl {
-            unsafety: hir::Unsafety::Normal,
             generics,
             trait_,
             for_,
@@ -579,7 +582,6 @@ fn build_static(cx: &mut DocContext<'_>, did: DefId, mutable: bool) -> clean::St
     clean::Static {
         type_: cx.tcx.type_of(did).clean(cx),
         mutability: if mutable { Mutability::Mut } else { Mutability::Not },
-        expr: None,
     }
 }
 

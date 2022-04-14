@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use rustc_data_structures::fx::FxHashSet;
 use rustc_hir as hir;
 use rustc_hir::lang_items::LangItem;
@@ -118,7 +122,6 @@ impl<'a, 'tcx> AutoTraitFinder<'a, 'tcx> {
             visibility: Inherited,
             def_id: ItemId::Auto { trait_: trait_def_id, for_: item_def_id },
             kind: box ImplItem(Impl {
-                unsafety: hir::Unsafety::Normal,
                 generics: new_generics,
                 trait_: Some(trait_ref.clean(self.cx)),
                 for_: ty.clean(self.cx),

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! A collection of utility functions for the `strip_*` passes.
 use rustc_hir::def_id::DefId;
 use rustc_middle::middle::privacy::AccessLevels;
@@ -77,14 +81,8 @@ impl<'a> DocFolder for Stripper<'a> {
             // Proc-macros are always public
             clean::ProcMacroItem(..) => {}
 
-            // Primitives are never stripped
-            clean::PrimitiveItem(..) => {}
-
             // Associated types are never stripped
             clean::AssocTypeItem(..) => {}
-
-            // Keywords are never stripped
-            clean::KeywordItem(..) => {}
         }
 
         let fastreturn = match *i.kind {

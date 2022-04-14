@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Looks for items missing (or incorrectly having) doctests.
 //!
 //! This pass is overloaded and runs two different lints.
@@ -55,8 +59,6 @@ crate fn should_have_doc_example(cx: &DocContext<'_>, item: &clean::Item) -> boo
                 | clean::ConstantItem(_)
                 | clean::ExternCrateItem { .. }
                 | clean::ImportItem(_)
-                | clean::PrimitiveItem(_)
-                | clean::KeywordItem(_)
                 // check for trait impl
                 | clean::ImplItem(clean::Impl { trait_: Some(_), .. })
         )

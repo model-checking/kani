@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use clean::AttributesExt;
 
 use std::cmp::Ordering;
@@ -34,21 +38,19 @@ use crate::html::layout::Page;
 use crate::html::markdown::{HeadingOffset, MarkdownSummaryLine};
 use crate::html::url_parts_builder::UrlPartsBuilder;
 
-use askama::Template;
-
 const ITEM_TABLE_OPEN: &str = "<div class=\"item-table\">";
 const ITEM_TABLE_CLOSE: &str = "</div>";
 const ITEM_TABLE_ROW_OPEN: &str = "<div class=\"item-row\">";
 const ITEM_TABLE_ROW_CLOSE: &str = "</div>";
 
 // A component in a `use` path, like `string` in std::string::ToString
+#[allow(dead_code)]
 struct PathComponent {
     path: String,
     name: Symbol,
 }
 
-#[derive(Template)]
-#[template(path = "print_item.html")]
+#[allow(dead_code)]
 struct ItemVars<'a> {
     page: &'a Page<'a>,
     static_root_path: &'a str,
@@ -82,11 +84,9 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
             MacroKind::Attr => "Attribute Macro ",
             MacroKind::Derive => "Derive Macro ",
         },
-        clean::PrimitiveItem(..) => "Primitive Type ",
         clean::StaticItem(..) | clean::ForeignStaticItem(..) => "Static ",
         clean::ConstantItem(..) => "Constant ",
         clean::ForeignTypeItem => "Foreign Type ",
-        clean::KeywordItem(..) => "Keyword ",
         clean::OpaqueTyItem(..) => "Opaque Type ",
         clean::TraitAliasItem(..) => "Trait Alias ",
         _ => {
@@ -128,7 +128,7 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
             .collect()
     };
 
-    let item_vars = ItemVars {
+    let _item_vars = ItemVars {
         page,
         static_root_path: page.get_static_root_path(),
         typ,
@@ -139,8 +139,8 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
         src_href: src_href.as_deref(),
     };
 
-    let heading = item_vars.render().unwrap();
-    buf.write_str(&heading);
+    // let heading = item_vars.render().unwrap();
+    // buf.write_str(&heading);
 
     match *item.kind {
         clean::ModuleItem(ref m) => item_module(buf, cx, item, &m.items),
@@ -154,11 +154,9 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
         clean::TypedefItem(ref t, is_associated) => item_typedef(buf, cx, item, t, is_associated),
         clean::MacroItem(ref m) => item_macro(buf, cx, item, m),
         clean::ProcMacroItem(ref m) => item_proc_macro(buf, cx, item, m),
-        clean::PrimitiveItem(_) => item_primitive(buf, cx, item),
         clean::StaticItem(ref i) | clean::ForeignStaticItem(ref i) => item_static(buf, cx, item, i),
         clean::ConstantItem(ref c) => item_constant(buf, cx, item, c),
         clean::ForeignTypeItem => item_foreign_type(buf, cx, item),
-        clean::KeywordItem(_) => item_keyword(buf, cx, item),
         clean::OpaqueTyItem(ref e) => item_opaque_ty(buf, cx, item, e),
         clean::TraitAliasItem(ref ta) => item_trait_alias(buf, cx, item, ta),
         _ => {
@@ -1233,11 +1231,6 @@ fn item_proc_macro(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, m: &clean
     document(w, cx, it, None, HeadingOffset::H2)
 }
 
-fn item_primitive(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item) {
-    document(w, cx, it, None, HeadingOffset::H2);
-    render_assoc_items(w, cx, it, it.def_id.expect_def_id(), AssocItemRender::All)
-}
-
 fn item_constant(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item, c: &clean::Constant) {
     wrap_into_docblock(w, |w| {
         wrap_item(w, "const", |w| {
@@ -1365,10 +1358,6 @@ fn item_foreign_type(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item) {
     document(w, cx, it, None, HeadingOffset::H2);
 
     render_assoc_items(w, cx, it, it.def_id.expect_def_id(), AssocItemRender::All)
-}
-
-fn item_keyword(w: &mut Buffer, cx: &Context<'_>, it: &clean::Item) {
-    document(w, cx, it, None, HeadingOffset::H2)
 }
 
 /// Compare two strings treating multi-digit numbers as single units (i.e. natural sort order).

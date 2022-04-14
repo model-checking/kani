@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Collects trait impls for each item in the crate. For example, if a crate
 //! defines a struct that implements a trait, this pass will note that the
 //! struct implements that trait.
