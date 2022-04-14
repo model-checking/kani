@@ -96,7 +96,12 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
         let filename = download_filename();
         println!("[2/6] Downloading Kani release bundle: {}", &filename);
         let bundle = base_dir.join(filename);
-        Command::new("curl").args(&["-sSLf", "-o"]).arg(&bundle).arg(download_url()).run()?;
+        Command::new("curl")
+            .args(&["-sSLf", "-o"])
+            .arg(&bundle)
+            .arg(download_url())
+            .run()
+            .context("Failed to download Kani release bundle")?;
 
         Command::new("tar").arg("zxf").arg(&bundle).current_dir(base_dir).run()?;
 
@@ -207,7 +212,10 @@ impl AutoRun for Command {
         // This can sometimes fail during the set-up of the forked process before exec,
         // for example by setting `current_dir` to a directory that does not exist.
         let status = self.status().with_context(|| {
-            format!("Internal failure before invoking command: {}", render_command(self).to_string_lossy())
+            format!(
+                "Internal failure before invoking command: {}",
+                render_command(self).to_string_lossy()
+            )
         })?;
         if !status.success() {
             bail!("Failed command: {}", render_command(self).to_string_lossy());
