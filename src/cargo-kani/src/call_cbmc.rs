@@ -80,6 +80,12 @@ impl KaniSession {
         harness_metadata: Option<&HarnessMetadata>,
     ) -> Result<Vec<OsString>> {
         let mut args = self.cbmc_check_flags();
+
+        let harness_name = match harness_metadata {
+            Some(harness) => &harness.pretty_name,
+            None => "",
+        };
+
         let unwind_value = match harness_metadata {
             Some(harness) => harness.unwind_value,
             None => None,
@@ -88,9 +94,19 @@ impl KaniSession {
         args.push("--object-bits".into());
         args.push(self.args.object_bits.to_string().into());
 
-        if let Some(unwind) = unwind_value {
+        if let Some(harness_unwind) = self.args.harness_unwind {
+            args.push("--unwind".into());
+            args.push(harness_unwind.to_string().into());
+            args.push("--function".into());
+            args.push(harness_name.into());
+        } else if let Some(unwind) = unwind_value {
             args.push("--unwind".into());
             args.push(unwind.to_string().into());
+            args.push("--function".into());
+            args.push(harness_name.into());
+        } else if let Some(default_unwind) = self.args.default_unwind {
+            args.push("--unwind".into());
+            args.push(default_unwind.to_string().into());
         } else if self.args.auto_unwind {
             args.push("--auto-unwind".into());
         }

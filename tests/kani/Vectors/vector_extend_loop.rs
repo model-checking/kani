@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --unwind 3
+// kani-flags: --default-unwind 3
 
 #[kani::proof]
 #[kani::unwind(3)]

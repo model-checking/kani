@@ -8,7 +8,6 @@ use kani::any;
 
 #[kani::proof]
 #[kani::unwind(3)]
-
 fn main() {
     let _ = any::<u8>() + any::<u8>();
     let _ = any::<u8>() - any::<u8>();
