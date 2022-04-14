@@ -31,7 +31,7 @@ macro_rules! test_ctpop {
         let var: $ty = kani::any();
         // Check that the result is correct
         assert!($fn_name(var) == ctpop(var));
-        
+
         // Check that the stable version returns the same value
         assert!(ctpop(var) as u32 == var.count_ones());
     };
