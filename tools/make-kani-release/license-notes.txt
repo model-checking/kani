@@ -1,0 +1,36 @@
+
+This file contains an inventory of software (and their licenses) that are included as part of the Kani Rust Verifier.
+
+kani: https://github.com/model-checking/kani
+License: Apache-2.0 OR MIT
+
+rustc: https://github.com/rust-lang/rust
+License: Apache-2.0 OR MIT (plus some BSD)
+More info: https://github.com/rust-lang/rust/blob/master/COPYRIGHT
+
+cbmc: https://github.com/diffblue/cbmc
+License: BSD-4-Clause
+More info: https://github.com/diffblue/cbmc/blob/develop/LICENSE
+Acknowledgement:
+     This product includes software developed by Daniel Kroening,
+     Edmund Clarke,
+     Computer Science Department, University of Oxford
+     Computer Science Department, Carnegie Mellon University
+
+cbmc-viewer: https://github.com/model-checking/cbmc-viewer
+License: Apache-2.0
+
+colorama: https://github.com/tartley/colorama
+License: BSD-3-Clause
+
+voluptuous: https://github.com/alecthomas/voluptuous
+License: BSD-3-Clause
+
+jinja2: https://github.com/pallets/jinja
+License: BSD-3-Clause
+
+setuptools: https://github.com/pypa/setuptools
+License: MIT
+
+MarkupSafe: https://github.com/pallets/markupsafe
+License: BSD-3-Clause
