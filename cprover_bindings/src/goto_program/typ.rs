@@ -313,7 +313,7 @@ impl Type {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).sum()
             }
             StructTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
-            TypeDef { typ, .. } => typ.sizeof_in_bits(st),
+            TypeDef { .. } => unreachable!("Expected concrete type."),
             Union { components, .. } => {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).max().unwrap_or(0)
             }
@@ -441,12 +441,12 @@ impl Type {
     /// (specifically whether they have the same bit-size and signed-ness)
     pub fn is_equal_on_machine(&self, other: &Self, mm: &MachineModel) -> bool {
         let concrete_self = self.unwrap_typedef();
-        let other = other.unwrap_typedef();
-        if concrete_self == other {
+        let concrete_other = other.unwrap_typedef();
+        if concrete_self == concrete_other {
             true
         } else {
-            concrete_self.native_width(mm) == other.native_width(mm)
-                && concrete_self.is_signed(mm) == other.is_signed(mm)
+            concrete_self.native_width(mm) == concrete_other.native_width(mm)
+                && concrete_self.is_signed(mm) == concrete_other.is_signed(mm)
         }
     }
 
@@ -491,7 +491,7 @@ impl Type {
         }
     }
 
-    pub fn is_lvalue(&self) -> bool {
+    pub fn can_be_lvalue(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
             Bool
@@ -752,9 +752,9 @@ impl Type {
         }
     }
 
-    /// Calculates an under-approximation of whether two types are structurally equivilant.
+    /// Calculates an under-approximation of whether two types are structurally equivalent.
     ///
-    /// Two types are structurally equivilent if one can be cast into the other without changing
+    /// Two types are structurally equivalent if one can be cast into the other without changing
     /// any bytes.  For e.g.,
     /// ```
     /// struct foo {
@@ -773,7 +773,7 @@ impl Type {
     ///     struct i b;
     /// }
     /// ```
-    /// But, `struct foo` is not structurally equivilent to:
+    /// But, `struct foo` is not structurally equivalent to:
     /// ```
     /// __attribute__((packed))
     /// struct baz {}
@@ -784,18 +784,23 @@ impl Type {
     /// Since they have different padding.
     /// https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136
     pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
-        let other = other.unwrap_typedef();
-        if self.sizeof_in_bits(st) != other.sizeof_in_bits(st) {
+        let concrete_other = other.unwrap_typedef();
+        let concrete_self = self.unwrap_typedef();
+        if concrete_self.sizeof_in_bits(st) != concrete_other.sizeof_in_bits(st) {
             false
-        } else if self.is_scalar() && other.is_scalar() {
-            self == other
-        } else if self.is_struct_like() && other.is_scalar() {
-            self.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *other)
-        } else if self.is_scalar() && other.is_struct_like() {
-            other.unwrap_transparent_type(st).map_or(false, |wrapped| wrapped == *self)
-        } else if self.is_struct_like() && other.is_struct_like() {
-            let self_components = self.get_non_empty_components(st).unwrap();
-            let other_components = other.get_non_empty_components(st).unwrap();
+        } else if concrete_self.is_scalar() && concrete_other.is_scalar() {
+            concrete_self == concrete_other
+        } else if concrete_self.is_struct_like() && concrete_other.is_scalar() {
+            concrete_self
+                .unwrap_transparent_type(st)
+                .map_or(false, |wrapped| wrapped == *concrete_other)
+        } else if concrete_self.is_scalar() && concrete_other.is_struct_like() {
+            concrete_other
+                .unwrap_transparent_type(st)
+                .map_or(false, |wrapped| wrapped == *concrete_self)
+        } else if concrete_self.is_struct_like() && concrete_other.is_struct_like() {
+            let self_components = concrete_self.get_non_empty_components(st).unwrap();
+            let other_components = concrete_other.get_non_empty_components(st).unwrap();
             if self_components.len() == other_components.len() {
                 self_components.iter().zip(other_components.iter()).all(|(a, b)| {
                     (a.is_padding()
@@ -853,7 +858,7 @@ impl Type {
         base_name: Option<InternedString>,
     ) -> Parameter {
         assert!(
-            self.is_lvalue(),
+            self.can_be_lvalue(),
             "Expected lvalue from {:?} {:?} {:?}",
             self,
             identifier,
@@ -1236,6 +1241,7 @@ impl Type {
 mod type_tests {
     use super::*;
     use crate::goto_program::typ::CIntType::Char;
+    use crate::goto_program::{Location, Symbol};
     use crate::machine_model::test_util::machine_model_test_stub;
 
     // Just a dummy name used for the tests.
@@ -1246,6 +1252,14 @@ mod type_tests {
         let type_def = Bool.to_typedef(NAME);
         assert_eq!(type_def.tag().unwrap().to_string().as_str(), NAME);
         assert_eq!(type_def.type_name().unwrap().to_string(), format!("tag-{}", NAME));
+    }
+
+    #[test]
+    fn check_typedef_identifier() {
+        let type_def = Bool.to_typedef(NAME);
+        let id = type_def.to_identifier();
+        assert!(id.ends_with(NAME));
+        assert!(id.starts_with("type_def"));
     }
 
     #[test]
@@ -1290,6 +1304,15 @@ mod type_tests {
         assert_eq!(type_def.is_float(), src_type.is_float());
         assert_eq!(type_def.is_floating_point(), src_type.is_floating_point());
         assert_eq!(type_def.width(), src_type.width());
+        assert_eq!(type_def.can_be_lvalue(), src_type.can_be_lvalue());
+    }
+
+    /// Check that a typedef is equivalent to its base type.
+    /// Note that not all types can be checked for equivalence.
+    fn check_equivalent(src_type: Type, sym_table: SymbolTable) {
+        let type_def = src_type.clone().to_typedef(NAME);
+        assert!(type_def.is_structurally_equivalent_to(&src_type, &sym_table));
+        assert!(src_type.is_structurally_equivalent_to(&type_def, &sym_table));
     }
 
     #[test]
@@ -1300,6 +1323,31 @@ mod type_tests {
     #[test]
     fn check_typedef_empty_properties() {
         check_properties(Empty);
+        check_equivalent(Empty, SymbolTable::new(machine_model_test_stub()));
+    }
+
+    #[test]
+    fn check_typedef_float_properties() {
+        check_properties(Float);
+        check_equivalent(Float, SymbolTable::new(machine_model_test_stub()));
+    }
+
+    #[test]
+    fn check_typedef_struct_properties() {
+        // Create a struct with a random field.
+        let struct_name: InternedString = "MyStruct".into();
+        let struct_type = Type::struct_type(
+            struct_name,
+            vec![DatatypeComponent::Field { name: "field".into(), typ: Double }],
+        );
+        // Insert a field to the sym table to represent the struct field.
+        let mut sym_table = SymbolTable::new(machine_model_test_stub());
+        sym_table.ensure(struct_type.type_name().unwrap(), |_, name| {
+            return Symbol::variable(name, name, struct_type.clone(), Location::none());
+        });
+
+        check_properties(struct_type.clone());
+        check_equivalent(struct_type, sym_table);
     }
 
     #[test]
@@ -1309,6 +1357,8 @@ mod type_tests {
 
     #[test]
     fn check_typedef_pointer_properties() {
-        check_properties(Pointer { typ: Box::new(Empty) });
+        let ptr_type = Pointer { typ: Box::new(Empty) };
+        check_properties(ptr_type.clone());
+        check_equivalent(ptr_type, SymbolTable::new(machine_model_test_stub()));
     }
 }

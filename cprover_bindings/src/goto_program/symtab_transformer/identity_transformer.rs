@@ -38,7 +38,6 @@ impl Transformer for IdentityTransformer {
 mod tests {
     use super::{
         super::super::{
-            super::{MachineModel, RoundingMode},
             DatatypeComponent, Expr, Location, Stmt, SwitchCase, Symbol, SymbolTable, Type,
         },
         IdentityTransformer,
