@@ -99,7 +99,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     cp_dir(Path::new("./library/std"), &library)?;
 
     // 4. Record the exact toolchain we use
-    std::fs::write(dir.join("rust-toolchain"), env!("RUSTUP_TOOLCHAIN"))?;
+    std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
 
     Ok(())
 }

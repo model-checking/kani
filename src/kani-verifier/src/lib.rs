@@ -103,8 +103,8 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
         std::fs::remove_file(bundle)?;
     }
 
-    let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain"))
-        .context("Reading release bundle rust-toolchain")?;
+    let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain-version"))
+        .context("Reading release bundle rust-toolchain-version")?;
     println!("[3/6] Installing rust toolchain version: {}", &toolchain_version);
     Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
 
