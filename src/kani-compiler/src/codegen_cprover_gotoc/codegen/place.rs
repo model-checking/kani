@@ -416,25 +416,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
-                    ty::Array(ty, len) => {
-                        let len = len.val().try_to_machine_usize(self.tcx).unwrap();
-                        let subarray_len = if from_end {
-                            // `to` counts from the end of the array
-                            len - to - from
-                        } else {
-                            to - from
-                        };
-                        let typ = self.tcx.mk_array(*ty, subarray_len);
-                        let goto_typ = self.codegen_ty(typ);
-                        // unimplemented
-                        Err(UnimplementedData {
-                            operation: "Sub-array binding".to_string(),
-                            bug_url: "https://github.com/model-checking/kani/issues/707"
-                                .to_string(),
-                            goto_type: goto_typ,
-                            loc: *before.goto_expr.location(),
-                        })
-                    }
+                    ty::Array(..) => unimplemented!(),
                     ty::Slice(elemt) => {
                         let len = if from_end {
                             let olen = before
