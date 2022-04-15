@@ -78,7 +78,23 @@ impl<'tcx> ProjectedPlace<'tcx> {
             TypeOrVariant::Type(t) => {
                 let expr_ty = expr.typ().clone();
                 let type_from_mir = ctx.codegen_ty(*t);
-                if expr_ty != type_from_mir { Some((expr_ty, type_from_mir)) } else { None }
+                if expr_ty != type_from_mir {
+                    match t.kind() {
+                        // Slice references (`&[T]`) store raw pointers to the element type `T`
+                        // due to pointer decay. They are fat pointers with the following repr:
+                        // SliceRef { data: *T, len: usize }.
+                        // In those cases, the projection will yield a pointer type.
+                        ty::Slice(..) | ty::Str
+                            if expr_ty.is_pointer()
+                                && expr_ty.base_type() == type_from_mir.base_type() =>
+                        {
+                            None
+                        }
+                        _ => Some((expr_ty, type_from_mir)),
+                    }
+                } else {
+                    None
+                }
             }
             // TODO: handle Variant https://github.com/model-checking/kani/issues/448
             TypeOrVariant::Variant(_) => None,
@@ -320,7 +336,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
                     ty::Adt(..) if self.is_unsized(inner_mir_typ) => {
-                        // in cbmc-reg/Strings/os_str_reduced.rs, we see
+                        // in tests/kani/Strings/os_str_reduced.rs, we see
                         // ```
                         //  p.projection = [
                         //     Deref,
@@ -461,9 +477,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If it passes through a fat pointer along the way, it stores info about it,
     /// which can be useful in reconstructing fat pointer operations.
     pub fn codegen_place(&mut self, p: &Place<'tcx>) -> ProjectedPlace<'tcx> {
-        debug!("codegen_place: {:?}", p);
+        debug!(place=?p, "codegen_place");
         let initial_expr = self.codegen_local(p.local);
         let initial_typ = TypeOrVariant::Type(self.local_ty(p.local));
+        debug!(?initial_typ, ?initial_expr, "codegen_place");
         let initial_projection = ProjectedPlace::new(initial_expr, initial_typ, None, None, self);
         p.projection
             .iter()
