@@ -36,7 +36,8 @@ fn check_my_property() {
 }
 ```
 
-Kani will then prove that all valid inputs produce acceptable outputs, without panicking or executing unexpected behavior.
+Kani will then try to prove that all valid inputs produce acceptable outputs, without panicking or executing unexpected behavior.
+Otherwise Kani will generate a trace that points to the failure.
 We recommend following [the tutorial](https://model-checking.github.io/kani/kani-tutorial.html) to learn more about how to use Kani.
 
 ## Security
