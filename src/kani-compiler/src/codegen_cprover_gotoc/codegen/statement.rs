@@ -509,16 +509,21 @@ impl<'tcx> GotocCtx<'tcx> {
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
-        self.codegen_fatal_error(&msg, span)
+        self.codegen_fatal_error(PropertyClass::DefaultAssertion, &msg, span)
     }
 
     // Generate code for fatal error which should trigger an assertion failure and abort the
     // execution.
-    pub fn codegen_fatal_error(&self, msg: &str, span: Option<Span>) -> Stmt {
+    pub fn codegen_fatal_error(
+        &self,
+        property_class: PropertyClass,
+        msg: &str,
+        span: Option<Span>,
+    ) -> Stmt {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
             vec![
-                self.codegen_assert_false(PropertyClass::SanityCheck, msg, loc),
+                self.codegen_assert_false(property_class, msg, loc),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,
