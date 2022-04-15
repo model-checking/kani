@@ -53,11 +53,16 @@ pub struct KaniArgs {
     /// Output processing stages and commands, along with minor debug information
     #[structopt(long, short)]
     pub verbose: bool,
+    /// Enable usage of unstable options.
+    #[structopt(long, hidden_short_help(true))]
+    pub enable_unstable: bool,
+
     /// Print commands instead of running them
-    #[structopt(long)]
+    #[structopt(long, requires("function"))]
     pub dry_run: bool,
-    /// Generate C file equivalent to inputted program
-    #[structopt(long)]
+    /// Generate C file equivalent to inputted program.
+    /// This feature is unstable and it requires `--enable-unstable` to be used.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub gen_c: bool,
 
     // TODO: currently only cargo-kani pays attention to this.
@@ -81,14 +86,14 @@ pub struct KaniArgs {
     pub harness: Option<String>,
 
     /// Link external C files referenced by Rust code.
-    /// This is an experimental feature.
-    #[structopt(long, parse(from_os_str), hidden = true)]
+    /// This is an experimental feature and requires `--enable-unstable` to be used.
+    #[structopt(long, parse(from_os_str), hidden = true, requires("enable-unstable"))]
     pub c_lib: Vec<PathBuf>,
     /// Enable test function verification. Only use this option when the entry point is a test function.
     #[structopt(long)]
     pub tests: bool,
     /// Do not produce error return code on CBMC verification failure
-    #[structopt(long)]
+    #[structopt(long, hidden_short_help(true))]
     pub allow_cbmc_verification_failure: bool,
     /// Kani will only compile the crate
     #[structopt(long)]
@@ -104,25 +109,30 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub auto_unwind: bool,
     /// Pass through directly to CBMC; must be the last flag
-    #[structopt(long, allow_hyphen_values = true, min_values(0))] // consumes everything
+    /// This feature is unstable and it requires `--enable-unstable` to be used.
+    #[structopt(long, allow_hyphen_values = true, min_values(0), requires("enable-unstable"))]
+    // consumes everything
     pub cbmc_args: Vec<OsString>,
 
     // Hide option till https://github.com/model-checking/kani/issues/697 is
     // fixed
     /// Use abstractions for the standard library
-    #[structopt(long, hidden = true)]
+    /// This is an experimental feature and requires `--enable-unstable` to be used.
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub use_abs: bool,
     // Hide option till https://github.com/model-checking/kani/issues/697 is
     // fixed
     /// Choose abstraction for modules of standard library if available
-    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(), case_insensitive = true, hidden = true)]
+    #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(),
+    case_insensitive = true, hidden = true)]
     pub abs_type: AbstractionType,
 
     /// Restrict the targets of virtual table function pointer calls
-    #[structopt(long)]
+    /// This feature is unstable and it requires `--enable-unstable` to be used.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub restrict_vtable: bool,
     /// Disable restricting the targets of virtual table function pointer calls
-    #[structopt(long)]
+    #[structopt(long, hidden_short_help(true))]
     pub no_restrict_vtable: bool,
     /// Turn off assertion reachability checks
     #[structopt(long)]
@@ -312,19 +322,22 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use clap::ArgMatches;
 
     #[test]
     fn check_arg_parsing() {
         let a = StandaloneArgs::from_iter(vec![
             "kani",
             "file.rs",
+            "--enable-unstable",
             "--cbmc-args",
             "--multiple",
             "args",
             "--here",
         ]);
         assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
-        let _b = StandaloneArgs::from_iter(vec!["kani", "file.rs", "--cbmc-args"]);
+        let _b =
+            StandaloneArgs::from_iter(vec!["kani", "file.rs", "--enable-unstable", "--cbmc-args"]);
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
 
@@ -342,6 +355,47 @@ mod tests {
         let args = vec!["kani", "file.rs", "--dry-run", "--harness", "foo"];
         let app = StandaloneArgs::clap();
         let err = app.get_matches_from_safe(args).unwrap_err();
-        assert!(err.kind == ErrorKind::ArgumentConflict);
+        assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    }
+
+    fn parse_unstable_disabled(args: &str) -> Result<ArgMatches<'_>, Error> {
+        let args = format!("kani file.rs {}", args);
+        let app = StandaloneArgs::clap();
+        app.get_matches_from_safe(args.split(' '))
+    }
+
+    fn parse_unstable_enabled(args: &str) -> Result<ArgMatches<'_>, Error> {
+        let args = format!("kani --enable-unstable file.rs {}", args);
+        let app = StandaloneArgs::clap();
+        app.get_matches_from_safe(args.split(' '))
+    }
+
+    fn check_unstable_flag(args: &str) {
+        // Should fail without --enable-unstable.
+        assert_eq!(
+            parse_unstable_disabled(&args).unwrap_err().kind,
+            ErrorKind::MissingRequiredArgument
+        );
+
+        // Should succeed with --enable-unstable.
+        let result = parse_unstable_enabled(&args);
+        assert!(result.is_ok());
+        let flag = args.split(' ').next().unwrap();
+        assert!(result.unwrap().is_present(&flag[2..]));
+    }
+
+    #[test]
+    fn check_abs_unstable() {
+        check_unstable_flag("--use-abs")
+    }
+
+    #[test]
+    fn check_restrict_vtable_unstable() {
+        check_unstable_flag("--restrict-vtable")
+    }
+
+    #[test]
+    fn check_restrict_cbmc_args() {
+        check_unstable_flag("--cbmc-args --json-ui")
     }
 }
