@@ -2,19 +2,20 @@
 
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 
+Kani is particularly useful for verifying unsafe code in Rust, where many of the language's usual guarantees are no longer checked by the compiler.
 Kani verifies:
- * Memory Safety -- even in unsafe Rust code
- * User-specified assertions
- * Absence of panics
- * Absence of some classes of undefined behavior
+ * Memory safety (e.g., null pointer dereferences)
+ * User-specified assertions (i.e., `assert!(...)`)
+ * The absence of panics (e.g., out-of-bounds accesses)
+ * The absence of some types of unexpected behavior (e.g., arithmetic overflows)
 
 ## Installation
 
 Kani must currently be built from source. See [the installation guide](https://model-checking.github.io/kani/install-guide.html) for more details.
 
-## How does Kani work?
+## How to use Kani
 
-You write a _proof harness_ that looks a lot like a test harness, except that you can check all possible values using `kani::any()`:
+Similar to testing, you write a harness, but with Kani you can check all possible values using `kani::any()`:
 
 ```rust
 use my_crate::{function_under_test, is_valid, meets_specification};
@@ -35,7 +36,8 @@ fn check_my_property() {
 }
 ```
 
-Kani will then prove that all valid inputs produce acceptable outputs, without panicking or executing undefined behavior.
+Kani will then try to prove that all valid inputs produce acceptable outputs, without panicking or executing unexpected behavior.
+Otherwise Kani will generate a trace that points to the failure.
 We recommend following [the tutorial](https://model-checking.github.io/kani/kani-tutorial.html) to learn more about how to use Kani.
 
 ## Security
