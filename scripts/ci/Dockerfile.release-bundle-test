@@ -14,6 +14,6 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /tmp/kani
 COPY ./tests ./tests
 COPY ./kani-latest-x86_64-unknown-linux-gnu.tar.gz ./
-COPY ./src/kani-verifier/target/release/kani /root/.cargo/bin/
-COPY ./src/kani-verifier/target/release/cargo-kani /root/.cargo/bin/
+COPY ./target/release/kani /root/.cargo/bin/
+COPY ./target/release/cargo-kani /root/.cargo/bin/
 RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz

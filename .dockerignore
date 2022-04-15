@@ -1,4 +1,5 @@
 .git
 firecracker
-target
+target/debug
+target/release/deps
 build
