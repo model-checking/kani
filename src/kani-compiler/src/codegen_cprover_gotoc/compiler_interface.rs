@@ -184,6 +184,11 @@ impl CodegenBackend for GotocCodegenBackend {
 }
 
 fn check_options(session: &Session, need_metadata_module: bool) {
+    // The requirement below is needed to build a valid CBMC machine model
+    if session.target.arch != "x86_64" {
+        session.err("Kani requires the target architecture to be x86_64.");
+    }
+
     if !session.overflow_checks() {
         session.err("Kani requires overflow checks in order to provide a sound analysis.");
     }

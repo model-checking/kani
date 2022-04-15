@@ -345,27 +345,35 @@ impl MetadataLoader for GotocMetadataLoader {
     }
 }
 
+// Builds a machine model which is required by CBMC.
 fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // TODO: Hardcoded values from from the ones currently used in env.rs
-    // We may wish to get more of them from the session.
-    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    // The model assumes a x86_64 architecture.
+    // We check the target architecture in function `check_options` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
+    // and error if the architecture is not the assumed one.
     let architecture = &sess.target.arch;
+
+    // The values below are obtained from the session
+    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    let is_big_endian = match sess.target.options.endian {
+        Endian::Little => false,
+        Endian::Big => true,
+    };
+    let pointer_width = sess.target.pointer_width.into();
+
+    // The values cannot be obtained from the session
+    // so they are hardcoded using standard ones
     let bool_width = 8;
     let char_is_unsigned = false;
     let char_width = 8;
     let double_width = 64;
     let float_width = 32;
     let int_width = 32;
-    let is_big_endian = match sess.target.options.endian {
-        Endian::Little => false,
-        Endian::Big => true,
-    };
     let long_double_width = 128;
     let long_int_width = 64;
     let long_long_int_width = 64;
     let memory_operand_size = 4;
     let null_is_zero = true;
-    let pointer_width = sess.target.pointer_width.into();
     let short_int_width = 16;
     let single_width = 32;
     let wchar_t_is_unsigned = false;
