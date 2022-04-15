@@ -518,11 +518,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
             vec![
-                self.codegen_assert_false(
-                    PropertyClass::SanityCheck,
-                    msg,
-                    loc,
-                ),
+                self.codegen_assert_false(PropertyClass::SanityCheck, msg, loc),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,
