@@ -3,7 +3,7 @@
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
 use crate::{InternString, InternedString};
-use std::{any::Any, fmt::Debug};
+use std::fmt::Debug;
 use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
