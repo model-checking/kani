@@ -7,15 +7,16 @@ set -eu
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 REPO_DIR="$(dirname $SCRIPT_DIR)"
 
-KANI_CANDIDATES=("$REPO_DIR"/target/*/cargo-kani)
+shopt -s nullglob
+KANI_CANDIDATES=("$REPO_DIR"/target/*/kani-driver)
 
 if [[ -z ${KANI_CANDIDATES:-""} ]] || [[ ${#KANI_CANDIDATES[@]} -ne 1 ]]
 then
-    echo "ERROR: Could not find cargo-kani binary."
-    echo "Looked for: '$REPO_DIR/target/*/cargo-kani'"
+    echo "ERROR: Could not find kani-driver binary."
+    echo "Looked for: '$REPO_DIR/target/*/kani-driver'"
     echo "Was Kani successfully built first?"
     exit 1
 fi
 KANI_PATH=${KANI_CANDIDATES[0]}
 
-"${KANI_PATH}" "$@"
+exec -a cargo-kani "${KANI_PATH}" "$@"

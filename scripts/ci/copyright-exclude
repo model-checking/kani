@@ -13,3 +13,4 @@ LICENSE-MIT
 Cargo.lock
 .png
 scripts/ci/copyright-exclude
+tools/make-kani-release/license-notes.txt

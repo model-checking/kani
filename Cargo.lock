@@ -131,21 +131,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-kani"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "glob",
- "home",
- "kani_metadata",
- "serde",
- "serde_json",
- "structopt",
- "toml",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -447,6 +432,21 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
+]
+
+[[package]]
+name = "kani-driver"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "glob",
+ "home",
+ "kani_metadata",
+ "serde",
+ "serde_json",
+ "structopt",
+ "toml",
 ]
 
 [[package]]
