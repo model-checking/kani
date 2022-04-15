@@ -100,14 +100,12 @@ impl KaniSession {
         if self.args.checks.memory_safety_on() {
             args.push("--bounds-check".into());
             args.push("--pointer-check".into());
-            args.push("--pointer-primitive-check".into());
         }
         if self.args.checks.overflow_on() {
             args.push("--conversion-check".into());
             args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            args.push("--pointer-overflow-check".into());
             args.push("--undefined-shift-check".into());
             // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
             // --unsigned-overflow-check
@@ -116,6 +114,14 @@ impl KaniSession {
         }
         if self.args.checks.unwinding_on() {
             args.push("--unwinding-assertions".into());
+        }
+
+        if self.args.extra_pointer_checks {
+            // This was adding a lot of false positives with std dangling pointer. We should
+            // still catch any invalid dereference with --pointer-check. Thus, only enabled them
+            // if the user explicitly request them.
+            args.push("--pointer-overflow-check".into());
+            args.push("--pointer-primitive-check".into());
         }
 
         args

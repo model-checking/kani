@@ -127,6 +127,13 @@ pub struct KaniArgs {
     case_insensitive = true, hidden = true)]
     pub abs_type: AbstractionType,
 
+    /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
+    /// arithmetic overflow.
+    /// This feature is unstable and it may yield false counter examples. It requires
+    /// `--enable-unstable` to be used.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub extra_pointer_checks: bool,
+
     /// Restrict the targets of virtual table function pointer calls
     /// This feature is unstable and it requires `--enable-unstable` to be used.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
