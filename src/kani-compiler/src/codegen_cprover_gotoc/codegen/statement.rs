@@ -47,12 +47,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_switch_int(discr, *switch_ty, targets)
             }
             TerminatorKind::Resume => self.codegen_assert_false(
-                PropertyClass::CustomProperty("resume".to_string()),
+                PropertyClass::UnsupportedConstruct,
                 "resume instruction",
                 loc,
             ),
             TerminatorKind::Abort => self.codegen_assert_false(
-                PropertyClass::CustomProperty("abort".to_string()),
+                PropertyClass::UnsupportedConstruct,
                 "abort instruction",
                 loc,
             ),
@@ -372,7 +372,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // No target block means this function doesn't return.
                     // This should have been handled by the Nevers hook.
                     return self.codegen_assert_false(
-                        PropertyClass::CustomProperty("nonterminating".to_string()),
+                        PropertyClass::SanityCheck,
                         &format!("reach some nonterminating function: {:?}", func),
                         loc.clone(),
                     );
@@ -519,7 +519,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(
             vec![
                 self.codegen_assert_false(
-                    PropertyClass::CustomProperty("fatal-error".to_string()),
+                    PropertyClass::SanityCheck,
                     msg,
                     loc,
                 ),

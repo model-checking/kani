@@ -176,7 +176,7 @@ impl Stmt {
                 rhs.typ()
             );
             let assert_stmt = Stmt::assert_false(
-                "unequal-assign",
+                "sanity_check",
                 &format!(
                     "Reached assignment statement with unequal types {:?} {:?}",
                     lhs.typ(),
