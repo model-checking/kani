@@ -1,0 +1,48 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "kani-driver"
+version = "0.1.0"
+edition = "2021"
+description = "Build a project with Kani and run all proof harnesses"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/model-checking/kani"
+repository = "https://github.com/model-checking/kani"
+
+[dependencies]
+kani_metadata = { path = "../kani_metadata" }
+anyhow = "1.0.31"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+structopt = "0.3"
+clap = "2.34"
+glob = "0.3"
+toml = "0.5"
+home = "0.5"
+
+# A good set of suggested dependencies can be found in rustup:
+# https://github.com/rust-lang/rustup/blob/master/Cargo.toml
+# Here are a few notes I'm keeping after looking through these
+
+# string similarity, might be useful in suggesting fixes in 'cargo kani mispeled_harness'
+# strsim = "0.10"
+
+# open a file (or url presumably?) with platform application for that file type
+# opener = "0.5.0"
+
+# threadpool or rayon
+
+# neat: embed git commit/tag info
+# git-testament = "0.1.4"
+
+# Decompress a stream. then parse it as tar file
+# flate2 = "1"
+# tar = "0.4.26"
+# sha2 = "0.9"
+
+# color output on terminal
+# term = "=0.5.1"
+
+# terminal progress indicator
+# https://github.com/console-rs/indicatif
