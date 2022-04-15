@@ -568,10 +568,11 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// A convenience macro that unwraps a `Result<ProjectPlace<'tcx>,
-/// Err<UnimplementedData>` if it is Ok and returns an `codegen_unimplemented`
-/// expression otherwise
+/// Err<UnimplementedData>` if it is `Ok` and returns an `codegen_unimplemented`
+/// expression otherwise.
+/// Note that this macro affects the control flow since it calls `return`
 #[macro_export]
-macro_rules! unwrap_or_codegen_unimplemented {
+macro_rules! unwrap_or_return_codegen_unimplemented {
     ($ctx:expr, $pp_result:expr) => {{
         if let Err(err) = $pp_result {
             return $ctx.codegen_unimplemented(
@@ -587,7 +588,7 @@ macro_rules! unwrap_or_codegen_unimplemented {
 
 /// Same as the above macro, but returns a goto program `Stmt` instead
 #[macro_export]
-macro_rules! unwrap_or_codegen_unimplemented_stmt {
+macro_rules! unwrap_or_return_codegen_unimplemented_stmt {
     ($ctx:expr, $pp_result:expr) => {{
         if let Err(err) = $pp_result {
             return $ctx

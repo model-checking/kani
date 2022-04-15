@@ -11,7 +11,7 @@
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::unwrap_or_codegen_unimplemented_stmt;
+use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use kani_queries::UserInput;
@@ -242,7 +242,8 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         if pt.is_unit() {
             Stmt::goto(tcx.current_fn().find_label(&target), loc)
         } else {
-            let pe = unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p)).goto_expr;
+            let pe =
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p)).goto_expr;
             Stmt::block(
                 vec![
                     pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),
@@ -370,7 +371,7 @@ impl<'tcx> GotocHook<'tcx> for MemReplace {
             let src = fargs.remove(0);
             Stmt::block(
                 vec![
-                    unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                    unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
                         .goto_expr
                         .assign(dest.clone().dereference().with_location(loc.clone()), loc.clone()),
                     dest.dereference().assign(src, loc.clone()),
@@ -473,7 +474,7 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
         let src = fargs.remove(0);
         Stmt::block(
             vec![
-                unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
                     .goto_expr
                     .assign(src.dereference().with_location(loc.clone()), loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
@@ -542,7 +543,7 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
                 let size = fargs.remove(0);
                 Stmt::block(
                     vec![
-                        unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                        unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
                             .goto_expr
                             .assign(
                                 BuiltinFn::Malloc
@@ -622,12 +623,14 @@ impl<'tcx> GotocHook<'tcx> for RustRealloc {
         let size = fargs.remove(0);
         Stmt::block(
             vec![
-                unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p)).goto_expr.assign(
-                    BuiltinFn::Realloc
-                        .call(vec![ptr, size], loc.clone())
-                        .cast_to(Type::unsigned_int(8).to_pointer()),
-                    loc.clone(),
-                ),
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                    .goto_expr
+                    .assign(
+                        BuiltinFn::Realloc
+                            .call(vec![ptr, size], loc.clone())
+                            .cast_to(Type::unsigned_int(8).to_pointer()),
+                        loc.clone(),
+                    ),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
@@ -658,12 +661,14 @@ impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
         let size = fargs.remove(0);
         Stmt::block(
             vec![
-                unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p)).goto_expr.assign(
-                    BuiltinFn::Calloc
-                        .call(vec![Type::size_t().one(), size], loc.clone())
-                        .cast_to(Type::unsigned_int(8).to_pointer()),
-                    loc.clone(),
-                ),
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                    .goto_expr
+                    .assign(
+                        BuiltinFn::Calloc
+                            .call(vec![Type::size_t().one(), size], loc.clone())
+                            .cast_to(Type::unsigned_int(8).to_pointer()),
+                        loc.clone(),
+                    ),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
@@ -697,7 +702,7 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
         let pt = tcx.codegen_ty(tcx.place_ty(&p));
         let data = fargs.remove(0);
         let len = fargs.remove(0);
-        let code = unwrap_or_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+        let code = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
             .goto_expr
             .assign(
                 Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table),
