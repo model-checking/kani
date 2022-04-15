@@ -3,7 +3,7 @@
 use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
 use crate::{InternString, InternedString};
-use std::fmt::Debug;
+use std::{any::Any, fmt::Debug};
 use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -176,6 +176,7 @@ impl Stmt {
                 rhs.typ()
             );
             let assert_stmt = Stmt::assert_false(
+                "unequal-assign",
                 &format!(
                     "Reached assignment statement with unequal types {:?} {:?}",
                     lhs.typ(),
@@ -193,16 +194,21 @@ impl Stmt {
     /// `assert(cond, property_class, commment);`
     pub fn assert(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
+        assert!(!property_name.is_empty() && !message.is_empty());
+
+        // Create a Property Location Variant from any given Location type
+        let loc_with_property =
+            Location::create_location_with_property(message, property_name, loc);
 
         // Chose InternedString to seperate out codegen from the cprover_bindings logic
         let property_class = property_name.to_string().intern();
         let msg = message.into();
 
-        stmt!(Assert { cond, property_class, msg }, loc)
+        stmt!(Assert { cond, property_class, msg }, loc_with_property)
     }
 
-    pub fn assert_false(msg: &str, loc: Location) -> Self {
-        Stmt::assert(Expr::bool_false(), "assert_false", msg, loc)
+    pub fn assert_false(property_name: &str, message: &str, loc: Location) -> Self {
+        Stmt::assert(Expr::bool_false(), property_name, message, loc)
     }
 
     /// A __CPROVER_assert to sanity check expected components of code
