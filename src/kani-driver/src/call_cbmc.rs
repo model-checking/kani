@@ -118,7 +118,7 @@ impl KaniSession {
 
         if self.args.extra_pointer_checks {
             // This was adding a lot of false positives with std dangling pointer. We should
-            // still catch any invalid dereference with --pointer-check. Thus, only enabled them
+            // still catch any invalid dereference with --pointer-check. Thus, only enable them
             // if the user explicitly request them.
             args.push("--pointer-overflow-check".into());
             args.push("--pointer-primitive-check".into());
