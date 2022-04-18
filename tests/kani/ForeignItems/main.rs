@@ -3,7 +3,7 @@
 //! To run this test, do
 //! kani main.rs -- lib.c
 
-// kani-flags: --c-lib tests/kani/ForeignItems/lib.c
+// kani-flags: --enable-unstable --c-lib tests/kani/ForeignItems/lib.c
 
 #[repr(C)]
 pub struct Foo {

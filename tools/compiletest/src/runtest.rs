@@ -328,10 +328,12 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
-        kani.arg(&self.testpaths.file)
-            .args(&self.props.kani_flags)
-            .arg("--cbmc-args")
-            .args(&self.props.cbmc_flags);
+        kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
+
+        if !self.props.cbmc_flags.is_empty() {
+            kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
+        }
+
         self.compose_and_run(kani)
     }
 
