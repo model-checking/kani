@@ -1,8 +1,10 @@
+#!/usr/bin/env python3
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 import unittest
 import os
 import tempfile
+import cbmc_json_parser
 from cbmc_json_parser import SourceLocation
 
 
@@ -17,6 +19,27 @@ def source_json(filename=None, function=None, line=None, column=None):
     if line:
         result["line"] = line
     return result
+
+class IncorrectUsageTest(unittest.TestCase):
+    """ Test to ensure we correctly handle invalid arguments. """
+
+    def parse_with_error(self, args):
+        """ Util function that runs main with given arguments and checks that sys.exit(1) was called """
+        with self.assertRaises(SystemExit) as err:
+            cbmc_json_parser.main(args)
+
+        exception = err.exception
+        self.assertEqual(exception.code, 1)
+
+    def test_missing_arguments(self):
+        self.parse_with_error("cbmc_json_parser.py".split())
+        self.parse_with_error("cbmc_json_parser.py input.json".split())
+
+    def test_invalid_format(self):
+        self.parse_with_error("cbmc_json_parser.py input.json dummy_format".split())
+
+    def test_invalid_flag(self):
+        self.parse_with_error("cbmc_json_parser.py input.json terse --invalid-flag".split())
 
 
 class SourceLocationTest(unittest.TestCase):

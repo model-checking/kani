@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
@@ -53,27 +54,36 @@ class GlobalMessages(str, Enum):
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
 
-def main():
+def usage_error(msg):
+    """ Prints an error message followed by the expected usage. Then exit process. """
+    print(f"Error: {msg} Usage:")
+    print("cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]")
+    sys.exit(1)
+
+
+def main(argv):
     """
     Script main function.
     Usage:
       > cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]
     """
     # Check only one json file as input
-    if len(sys.argv) < 3:
-        print("Error: Missing required arguments. Usage:")
-        print("cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]")
-        sys.exit(1)
+    if len(argv) < 3:
+        usage_error("Missing required arguments.")
 
-    output_style = output_style_switcher[sys.argv[2]]
+    output_style = output_style_switcher.get(argv[2], None)
     if not output_style:
-        print(f"Error: Invalid output format {sys.argv[2]}. Usage:")
-        print("cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]")
+        usage_error(f"Invalid output format '{argv[2]}'.")
 
-    extra_ptr_check = len(sys.argv) == 4 and sys.argv[3] == "--extra-ptr-check"
+    extra_ptr_check = False
+    if len(argv) == 4:
+        if argv[3] == "--extra-ptr-check":
+            extra_ptr_check = True
+        else:
+            usage_error(f"Unexpected argument '{argv[3]}'.")
 
     # parse the input json file
-    with open(sys.argv[1]) as f:
+    with open(argv[1]) as f:
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
@@ -758,4 +768,4 @@ def colored_text(color, text):
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)
