@@ -84,7 +84,6 @@ jobs:
       - name: Build release bundle
         run: |
           cargo run -p make-kani-release -- latest
-          rm -rf target
       
       - name: Build container test
         run: |
