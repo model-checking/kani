@@ -611,6 +611,18 @@ impl<'tcx> GotocCtx<'tcx> {
                         TagEncoding::Direct => {
                             let discr = def.discriminant_for_variant(self.tcx, *variant_index);
                             let discr_t = self.codegen_enum_discr_typ(pt);
+                            // The constant created below may not fit into the type.
+                            // https://github.com/model-checking/kani/issues/996
+                            //
+                            // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
+                            // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
+                            // because when it tries to codegen `std::cmp::Ordering` (which should produce
+                            // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
+                            //
+                            // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
+                            // DISCRIMINANT - val:255 ty:i8
+                            // DISCRIMINANT - val:0 ty:i8
+                            // DISCRIMINANT - val:1 ty:i8
                             let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
                             self.codegen_place(place)
                                 .goto_expr
