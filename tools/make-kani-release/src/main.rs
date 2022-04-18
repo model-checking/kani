@@ -64,13 +64,6 @@ fn prebundle(dir: &Path) -> Result<()> {
     // Before we begin, ensure Kani is built successfully in release mode.
     Command::new("cargo").args(&["build", "--release"]).run()?;
 
-    // TODO: temporarily, until cargo-kani is renamed kani-driver, we need to build this thing not in our workspace.
-    // This isn't actually used by this script, but by the Dockerfile that tests this script
-    Command::new("cargo")
-        .args(&["build", "--release"])
-        .current_dir(Path::new("src/kani-verifier"))
-        .run()?;
-
     Ok(())
 }
 
