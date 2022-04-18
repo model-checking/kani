@@ -87,7 +87,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-            os: ubuntu-20.04
+            os: ${{ matrix.os }}
       
       - name: Build release bundle
         run: |
