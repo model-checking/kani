@@ -84,6 +84,7 @@ jobs:
       - name: Build release bundle
         run: |
           cargo run -p make-kani-release -- latest
+          cargo package -p kani-verifier
       
       - name: Build container test
         run: |
