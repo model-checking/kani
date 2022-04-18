@@ -80,7 +80,8 @@ fn fail_if_in_dev_environment() -> Result<()> {
         if let Some(path) = exe.parent() {
             if path.ends_with("target/debug") || path.ends_with("target/release") {
                 bail!(
-                    "Running the proxies from a development environment? These are just meant for releases."
+                    "Running a release-only executable, {}, from a development environment. This is usually caused by PATH including 'target/release' erroneously.",
+                    exe.file_name().unwrap().to_string_lossy()
                 )
             }
         }
