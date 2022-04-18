@@ -1,6 +1,3 @@
 Status: FAILURE\
 dereference failure: pointer outside object bounds\
 in function check_out_of_bounds
-
-Status: FAILURE\
-pointer arithmetic: pointer outside object bounds

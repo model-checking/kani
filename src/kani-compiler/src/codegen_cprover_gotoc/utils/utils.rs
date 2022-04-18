@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::codegen::TypeExt;
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
@@ -61,6 +62,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
             self.codegen_assert_false(
+                PropertyClass::UnsupportedConstruct,
                 &GotocCtx::unsupported_msg(operation_name, Some(url)),
                 loc.clone(),
             ),

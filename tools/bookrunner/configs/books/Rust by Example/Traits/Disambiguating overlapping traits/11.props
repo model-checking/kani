@@ -1,1 +1,1 @@
-// kani-flags: --cbmc-args --unwind 10
+// kani-flags: --enable-unstable --cbmc-args --unwind 10

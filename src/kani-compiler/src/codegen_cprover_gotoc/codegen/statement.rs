@@ -46,8 +46,16 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
                 self.codegen_switch_int(discr, *switch_ty, targets)
             }
-            TerminatorKind::Resume => self.codegen_assert_false("resume instruction", loc),
-            TerminatorKind::Abort => self.codegen_assert_false("abort instruction", loc),
+            TerminatorKind::Resume => self.codegen_assert_false(
+                PropertyClass::UnsupportedConstruct,
+                "resume instruction",
+                loc,
+            ),
+            TerminatorKind::Abort => self.codegen_assert_false(
+                PropertyClass::UnsupportedConstruct,
+                "abort instruction",
+                loc,
+            ),
             TerminatorKind::Return => {
                 let rty = self.current_fn().sig().unwrap().skip_binder().output();
                 if rty.is_unit() {
@@ -64,7 +72,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    self.codegen_assert_false("unreachable code", loc.clone()),
+                    self.codegen_assert_false(
+                        PropertyClass::Unreachable,
+                        "unreachable code",
+                        loc.clone(),
+                    ),
                     Stmt::assume(Expr::bool_false(), loc.clone()),
                 ],
                 loc,
@@ -111,7 +123,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc,
                         ),
-                        self.codegen_assert_false(&msg_str, loc),
+                        self.codegen_assert_false(PropertyClass::DefaultAssertion, &msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -360,6 +372,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // No target block means this function doesn't return.
                     // This should have been handled by the Nevers hook.
                     return self.codegen_assert_false(
+                        PropertyClass::SanityCheck,
                         &format!("reach some nonterminating function: {:?}", func),
                         loc.clone(),
                     );
@@ -496,16 +509,21 @@ impl<'tcx> GotocCtx<'tcx> {
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
-        self.codegen_fatal_error(&msg, span)
+        self.codegen_fatal_error(PropertyClass::DefaultAssertion, &msg, span)
     }
 
     // Generate code for fatal error which should trigger an assertion failure and abort the
     // execution.
-    pub fn codegen_fatal_error(&self, msg: &str, span: Option<Span>) -> Stmt {
+    pub fn codegen_fatal_error(
+        &self,
+        property_class: PropertyClass,
+        msg: &str,
+        span: Option<Span>,
+    ) -> Stmt {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
             vec![
-                self.codegen_assert_false(msg, loc),
+                self.codegen_assert_false(property_class, msg, loc),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,

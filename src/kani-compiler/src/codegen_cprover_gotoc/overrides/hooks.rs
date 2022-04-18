@@ -297,7 +297,7 @@ impl<'tcx> GotocHook<'tcx> for Nevers {
             "a panicking function {} is invoked",
             with_no_trimmed_paths!(tcx.tcx.def_path_str(instance.def_id()))
         );
-        tcx.codegen_fatal_error(&msg, span)
+        tcx.codegen_fatal_error(PropertyClass::UnsupportedConstruct, &msg, span)
     }
 }
 

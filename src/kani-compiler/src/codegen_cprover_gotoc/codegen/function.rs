@@ -3,6 +3,7 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
@@ -76,6 +77,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else if self.should_skip_current_fn() {
             debug!("Skipping function {}", self.current_fn().readable_name());
             let body = self.codegen_fatal_error(
+                PropertyClass::UnsupportedConstruct,
                 &GotocCtx::unsupported_msg(
                     &(String::from("The function ") + self.current_fn().readable_name()),
                     None,

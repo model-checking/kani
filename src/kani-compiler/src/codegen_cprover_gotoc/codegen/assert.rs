@@ -75,24 +75,18 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Stmt {
         assert!(cond.typ().is_bool());
-
         let property_name = property_class.as_str();
-
-        // Create a Property Location Variant from any given Location type
-        let property_location =
-            Location::create_location_with_property(message, property_name, loc);
-
-        Stmt::assert(cond, property_name, message, property_location)
+        Stmt::assert(cond, property_name, message, loc)
     }
 
-    pub fn codegen_assert_false(&self, message: &str, loc: Location) -> Stmt {
-        // Default assertion class for assert_false
-        let property_name = PropertyClass::DefaultAssertion.as_str();
-
-        // Create a Property Location Variant from any given Location type
-        let property_location =
-            Location::create_location_with_property(message, property_name, loc);
-
-        Stmt::assert_false(message, property_location)
+    pub fn codegen_assert_false(
+        &self,
+        property_class: PropertyClass,
+        message: &str,
+        loc: Location,
+    ) -> Stmt {
+        // Convert Property Class to String
+        let property_name = property_class.as_str();
+        Stmt::assert_false(property_name, message, loc)
     }
 }
