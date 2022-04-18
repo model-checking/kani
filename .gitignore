@@ -86,4 +86,3 @@ tests/kani-multicrate/type-mismatch/mismatch/target
 /docs/book
 /docs/mdbook*
 /kani-*.tar.gz
-/src/kani-verifier/target

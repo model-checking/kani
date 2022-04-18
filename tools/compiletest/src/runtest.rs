@@ -163,21 +163,6 @@ impl<'test> TestCx<'test> {
         proc_res.fatal(None, || ());
     }
 
-    /// Adds kani scripts directory to the `PATH` environment variable.
-    fn add_kani_dir_to_path(&self, command: &mut Command) {
-        // If the PATH environment variable is already defined,
-        if let Some((key, val)) = env::vars().find(|(key, _)| key == "PATH") {
-            // Add the Kani scripts directory to the PATH.
-            command.env(key, format!("{}:{}", self.config.kani_dir_path.to_str().unwrap(), val));
-        } else {
-            // Otherwise, insert PATH as a new environment variable and set its value to the Kani scripts directory.
-            command.env(
-                String::from("PATH"),
-                String::from(self.config.kani_dir_path.to_str().unwrap()),
-            );
-        }
-    }
-
     /// Runs `kani-compiler` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the check result is not expected.
     fn check(&self) {
@@ -187,7 +172,6 @@ impl<'test> TestCx<'test> {
             .args(self.props.compile_flags.clone())
             .args(["-Z", "no-codegen"])
             .arg(&self.testpaths.file);
-        self.add_kani_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run(rustc);
         if self.props.kani_panic_step == Some(KaniFailStep::Check) {
             if proc_res.status.success() {
@@ -211,7 +195,6 @@ impl<'test> TestCx<'test> {
             .args(["--out-dir"])
             .arg(self.output_base_dir())
             .arg(&self.testpaths.file);
-        self.add_kani_dir_to_path(&mut rustc);
         let proc_res = self.compose_and_run(rustc);
         if self.props.kani_panic_step == Some(KaniFailStep::Codegen) {
             if proc_res.status.success() {
@@ -325,7 +308,6 @@ impl<'test> TestCx<'test> {
         if "expected" != self.testpaths.file.file_name().unwrap() {
             cargo.args(["--harness", function_name]);
         }
-        self.add_kani_dir_to_path(&mut cargo);
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
         self.verify_output(&proc_res, &expected);
@@ -352,7 +334,6 @@ impl<'test> TestCx<'test> {
             kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
-        self.add_kani_dir_to_path(&mut kani);
         self.compose_and_run(kani)
     }
 
