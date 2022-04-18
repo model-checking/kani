@@ -106,7 +106,7 @@ macro_rules! evaluate_print_args {
         // Evaluate each of the arguments since they may have side effects
         {
             $(
-                $arg;
+                let _ = &$arg;
             )*
         }
     };

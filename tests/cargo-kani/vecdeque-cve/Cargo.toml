@@ -12,4 +12,5 @@ path = "src/harness.rs"
 [dependencies]
 
 [package.metadata.kani.flags]
+enable-unstable = true
 cbmc-args = ["--no-built-in-assertions"]
