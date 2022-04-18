@@ -71,7 +71,15 @@ jobs:
           folder: docs/book/
 
   releasebundle:
-    runs-on: ubuntu-20.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-10.15, ubuntu-20.04]
+        include:
+          - os: macos-10.15
+            artifact: kani-latest-x86_64-apple-darwin.tar.gz
+          - os: ubuntu-20.04
+            artifact: kani-latest-x86_64-unknown-linux-gnu.tar.gz
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v2
@@ -87,10 +95,27 @@ jobs:
           cargo package -p kani-verifier
       
       - name: Build container test
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: |
           docker build -t kani-latest -f scripts/ci/Dockerfile.release-bundle-test .
 
       - name: Run installed tests
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: |
           docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani
+
+      - name: Local install test
+        if: ${{ matrix.os == 'macos-10.15' }}
+        run: |
+          cargo install --path ./target/package/kani-verifier-*[^e]
+          cargo-kani setup --use-local-bundle ./kani-latest-x86_64-apple-darwin.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          # Aggressively short retention: we don't really need these
+          retention-days: 3
