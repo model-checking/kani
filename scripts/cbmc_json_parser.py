@@ -67,9 +67,13 @@ def main(argv):
     Usage:
       > cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]
     """
-    # Check only one json file as input
+    # We expect [3, 4] arguments.
     if len(argv) < 3:
         usage_error("Missing required arguments.")
+
+    max_args = 4
+    if len(argv) > max_args:
+        usage_error(f"Expected up to {max_args} arguments but found {len(argv)}.")
 
     output_style = output_style_switcher.get(argv[2], None)
     if not output_style:

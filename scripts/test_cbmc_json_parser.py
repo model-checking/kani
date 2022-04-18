@@ -20,6 +20,7 @@ def source_json(filename=None, function=None, line=None, column=None):
         result["line"] = line
     return result
 
+
 class IncorrectUsageTest(unittest.TestCase):
     """ Test to ensure we correctly handle invalid arguments. """
 
@@ -40,6 +41,9 @@ class IncorrectUsageTest(unittest.TestCase):
 
     def test_invalid_flag(self):
         self.parse_with_error("cbmc_json_parser.py input.json terse --invalid-flag".split())
+
+    def test_too_many_args(self):
+        self.parse_with_error("cbmc_json_parser.py input.json terse --extra-ptr-check --extra".split())
 
 
 class SourceLocationTest(unittest.TestCase):
