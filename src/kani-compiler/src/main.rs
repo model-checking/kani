@@ -91,6 +91,7 @@ fn main() -> Result<(), &'static str> {
     }
     queries.set_emit_vtable_restrictions(matches.is_present(parser::RESTRICT_FN_PTRS));
     queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
+    queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
 
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
