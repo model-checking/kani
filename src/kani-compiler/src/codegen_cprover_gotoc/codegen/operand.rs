@@ -157,8 +157,6 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind()};
         match (s, &ty.kind()) {
             (Scalar::Int(_), ty::Int(it)) => match it {
-                // We treat the data as bit vector. Thus, we extract the value as unsigned and set
-                // the type to signed int.
                 IntTy::I8 => Expr::int_constant(s.to_i8().unwrap(), Type::signed_int(8)),
                 IntTy::I16 => Expr::int_constant(s.to_i16().unwrap(), Type::signed_int(16)),
                 IntTy::I32 => Expr::int_constant(s.to_i32().unwrap(), Type::signed_int(32)),
