@@ -347,11 +347,10 @@ impl MetadataLoader for GotocMetadataLoader {
 
 /// Builds a machine model which is required by CBMC
 fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // The model assumes a x86_64 architecture with `pointer_width` equal to 64.
-    // We check the target architecture specification in function
-    // `check_target_arch_spec` from
-    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
-    // and error if the values are not the ones we expect.
+    // The model assumes a `x86_64-unknown-linux-gnu` or `x86_64-apple-darwin`
+    // platform. We check the target platform in function `check_target` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs and
+    // error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
     let pointer_width = sess.target.pointer_width.into();
 
@@ -368,8 +367,8 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
         Endian::Big => true,
     };
 
-    // The values cannot be obtained from the session
-    // so they are hardcoded using standard ones
+    // The values below cannot be obtained from the session so they are
+    // hardcoded using standard ones for the supported platforms
     let bool_width = 8;
     let char_is_unsigned = false;
     let char_width = 8;

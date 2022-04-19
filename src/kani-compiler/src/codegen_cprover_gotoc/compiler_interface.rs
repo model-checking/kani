@@ -58,7 +58,7 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         super::utils::init();
 
-        check_target_arch_spec(&tcx.sess);
+        check_target(&tcx.sess);
         check_options(&tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
@@ -186,20 +186,14 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 }
 
-fn check_target_arch_spec(session: &Session) {
-    // The requirements below are needed to build a valid CBMC machine model
+fn check_target(session: &Session) {
+    // The requirement below is needed to build a valid CBMC machine model
     // in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
-    if session.target.arch != "x86_64" {
-        session.err("Kani requires the target architecture to be x86_64.");
-    }
-
-    if session.target.pointer_width != 64 {
-        let err_msg = format!(
-            "Kani requires the target architecture value `pointer_width` to be 64, but it is {}.",
-            session.target.pointer_width
-        );
-        session.err(&err_msg);
+    if session.target.llvm_target != "x86_64-unknown-linux-gnu"
+        && session.target.llvm_target != "x86_64-apple-darwin"
+    {
+        session.err("Kani requires the target platform to be `x86_64-unknown-linux-gnu` or `x86_64-apple-darwin`.");
     }
 
     session.abort_if_errors();
