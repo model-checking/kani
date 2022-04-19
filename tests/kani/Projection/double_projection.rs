@@ -4,7 +4,8 @@
 // kani-flags: --unwind 3
 
 //! Check that nested fat pointers work. This used to trigger an issue.
-//! The projection should only keep track of the outer most element.
+//! The projection should only keep track of the inner most dereferenced
+//! element.
 //!
 //! See: https://github.com/model-checking/kani/issues/378
 
