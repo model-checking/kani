@@ -7,6 +7,7 @@ use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::utils::BUG_REPORT_URL;
 use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
@@ -336,6 +337,19 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    fn codegen_end_call(&self, target: Option<&BasicBlock>, loc: Location) -> Stmt {
+        if let Some(next_bb) = target {
+            Stmt::goto(self.current_fn().find_label(&next_bb), loc)
+        } else {
+            Stmt::assert_sanity_check(
+                Expr::bool_false(),
+                "Unexpected return from Never function",
+                BUG_REPORT_URL,
+                loc,
+            )
+        }
+    }
+
     fn codegen_funcall(
         &mut self,
         func: &Operand<'tcx>,
@@ -380,22 +394,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     );
                 }
 
-                if destination.is_none() {
-                    // No target block means this function doesn't return.
-                    // This should have been handled by the Nevers hook.
-                    return self.codegen_assert_false(
-                        PropertyClass::SanityCheck,
-                        &format!("reach some nonterminating function: {:?}", func),
-                        loc.clone(),
-                    );
-                }
-
-                let (p, target) = destination.unwrap();
+                let (place, target) =
+                    if let Some((p, t)) = destination { (Some(p), Some(t)) } else { (None, None) };
 
                 let mut stmts: Vec<Stmt> = match instance.def {
                     // Here an empty drop glue is invoked; we just ignore it.
                     InstanceDef::DropGlue(_, None) => {
-                        return Stmt::goto(self.current_fn().find_label(&target), Location::none());
+                        return Stmt::goto(
+                            self.current_fn().find_label(&target.unwrap()),
+                            Location::none(),
+                        );
                     }
                     // Handle a virtual function call via a vtable lookup
                     InstanceDef::Virtual(def_id, idx) => {
@@ -414,7 +422,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             trait_fat_ptr,
                             def_id,
                             idx,
-                            &p,
+                            place,
                             &mut fargs,
                             loc.clone(),
                         )
@@ -429,13 +437,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
                         let func_exp = self.codegen_operand(func);
-                        vec![
-                            self.codegen_expr_to_place(&p, func_exp.call(fargs))
-                                .with_location(loc.clone()),
-                        ]
+                        if let Some(dest_place) = place {
+                            vec![
+                                self.codegen_expr_to_place(&dest_place, func_exp.call(fargs))
+                                    .with_location(loc.clone()),
+                            ]
+                        } else {
+                            vec![func_exp.call(fargs).as_stmt(loc.clone())]
+                        }
                     }
                 };
-                stmts.push(Stmt::goto(self.current_fn().find_label(&target), loc.clone()));
+                stmts.push(self.codegen_end_call(target, loc.clone()));
                 return Stmt::block(stmts, loc);
             }
             // Function call through a pointer
@@ -461,7 +473,7 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_fat_ptr: Expr,
         def_id: DefId,
         idx: usize,
-        place: &Place<'tcx>,
+        place: Option<&Place<'tcx>>,
         fargs: &mut Vec<Expr>,
         loc: Location,
     ) -> Vec<Stmt> {
@@ -493,7 +505,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = self.codegen_expr_to_place(place, call).with_location(loc.clone());
+        let call_stmt = if let Some(place) = place {
+            self.codegen_expr_to_place(place, call).with_location(loc.clone())
+        } else {
+            call.as_stmt(loc.clone())
+        };
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {
@@ -611,6 +627,18 @@ impl<'tcx> GotocCtx<'tcx> {
                         TagEncoding::Direct => {
                             let discr = def.discriminant_for_variant(self.tcx, *variant_index);
                             let discr_t = self.codegen_enum_discr_typ(pt);
+                            // The constant created below may not fit into the type.
+                            // https://github.com/model-checking/kani/issues/996
+                            //
+                            // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
+                            // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
+                            // because when it tries to codegen `std::cmp::Ordering` (which should produce
+                            // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
+                            //
+                            // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
+                            // DISCRIMINANT - val:255 ty:i8
+                            // DISCRIMINANT - val:0 ty:i8
+                            // DISCRIMINANT - val:1 ty:i8
                             let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
                             unwrap_or_return_codegen_unimplemented_stmt!(
                                 self,

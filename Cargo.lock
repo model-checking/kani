@@ -450,6 +450,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kani-verifier"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "home",
+]
+
+[[package]]
 name = "kani_macros"
 version = "0.1.0"
 

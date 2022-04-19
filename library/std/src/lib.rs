@@ -12,6 +12,9 @@
 // re-export all std symbols
 pub use std::*;
 
+// Override process calls with stubs.
+pub mod process;
+
 /// This assert macro calls kani's assert function passing it down the condition
 /// as well as a message that will be used when reporting the assertion result.
 ///
@@ -103,7 +106,7 @@ macro_rules! evaluate_print_args {
         // Evaluate each of the arguments since they may have side effects
         {
             $(
-                $arg;
+                let _ = &$arg;
             )*
         }
     };

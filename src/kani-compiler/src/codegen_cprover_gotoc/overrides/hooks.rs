@@ -18,7 +18,7 @@ use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Instance, InstanceDef, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_span::Span;
 use std::rc::Rc;
 use tracing::{debug, warn};
@@ -36,31 +36,6 @@ pub trait GotocHook<'tcx> {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt;
-}
-
-fn output_of_instance_is_never<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-    let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-    match ty.kind() {
-        ty::Closure(_, substs) => tcx
-            .normalize_erasing_late_bound_regions(
-                ty::ParamEnv::reveal_all(),
-                substs.as_closure().sig(),
-            )
-            .output()
-            .is_never(),
-        ty::FnDef(..) | ty::FnPtr(..) => tcx
-            .normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), ty.fn_sig(tcx))
-            .output()
-            .is_never(),
-        ty::Generator(_, substs, _) => substs.as_generator().return_ty().is_never(),
-        _ => {
-            unreachable!(
-                "Can't take get ouput type of instance:\n{:?}\nType kind:\n{:?}",
-                ty,
-                ty.kind()
-            )
-        }
-    }
 }
 
 fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
@@ -276,30 +251,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         span: Option<Span>,
     ) -> Stmt {
         tcx.codegen_panic(span, fargs)
-    }
-}
-
-struct Nevers;
-
-impl<'tcx> GotocHook<'tcx> for Nevers {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        output_of_instance_is_never(tcx, instance)
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        instance: Instance<'tcx>,
-        _fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
-        _target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let msg = format!(
-            "a panicking function {} is invoked",
-            with_no_trimmed_paths!(tcx.tcx.def_path_str(instance.def_id()))
-        );
-        tcx.codegen_fatal_error(PropertyClass::UnsupportedConstruct, &msg, span)
     }
 }
 
@@ -716,14 +667,13 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
 pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
     GotocHooks {
         hooks: vec![
-            Rc::new(Panic), //Must go first, so it overrides Nevers
+            Rc::new(Panic),
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Intrinsic),
             Rc::new(MemReplace),
             Rc::new(MemSwap),
-            Rc::new(Nevers),
             Rc::new(Nondet),
             Rc::new(PtrRead),
             Rc::new(PtrWrite),

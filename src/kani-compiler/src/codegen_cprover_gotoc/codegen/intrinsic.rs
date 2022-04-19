@@ -57,9 +57,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 "reached intrinsic::abort",
                 span,
             ),
+            // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
-                PropertyClass::UnsupportedConstruct,
-                "transmuting to uninhabited type",
+                PropertyClass::DefaultAssertion,
+                "transmuting to uninhabited type has undefined behavior",
                 span,
             ),
             _ => self.codegen_fatal_error(
