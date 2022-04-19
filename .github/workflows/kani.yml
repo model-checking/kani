@@ -110,6 +110,8 @@ jobs:
         run: |
           cargo install --path ./target/package/kani-verifier-*[^e]
           cargo-kani setup --use-local-bundle ./kani-latest-x86_64-apple-darwin.tar.gz
+          (cd tests/cargo-kani/simple-lib && cargo kani)
+          (cd tests/cargo-kani/simple-visualize && cargo kani)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
