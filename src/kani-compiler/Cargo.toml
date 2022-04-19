@@ -12,18 +12,15 @@ atty = "0.2.14"
 bitflags = { version = "1.0", optional = true }
 cbmc = { path = "../../cprover_bindings", package = "cprover_bindings", optional = true }
 clap = "2.33.0"
-cstr = { version = "0.2", optional = true }
 kani_queries = {path = "kani_queries"}
 kani_metadata = { path = "../kani_metadata", optional = true }
 libc = { version = "0.2", optional = true }
-measureme = { version = "9.1.0", optional = true }
 num = { version = "0.4.0", optional = true }
 rustc-demangle = { version = "0.1.21", optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 shell-words = "1.0.0"
-smallvec = { version = "1.6.1", features = ["union", "may_dangle"], optional = true }
-snap = { version = "1", optional = true }
+#smallvec = { version = "1.6.1", features = ["union", "may_dangle"], optional = true }
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.0"
@@ -31,8 +28,7 @@ tracing-tree = "0.2.0"
 # Future proofing: enable backend dependencies using feature.
 [features]
 default = ['cprover']
-cprover = ['bitflags', 'cbmc', 'cstr', 'kani_metadata', 'libc', 'measureme', 'num', 'rustc-demangle', 'serde',
-    'serde_json', 'smallvec', 'snap']
+cprover = ['bitflags', 'cbmc', 'kani_metadata', 'libc', 'num', 'rustc-demangle', 'serde', 'serde_json']
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

@@ -124,7 +124,7 @@ name = "bookrunner"
 version = "0.1.0"
 dependencies = [
  "Inflector",
- "pulldown-cmark 0.8.0",
+ "pulldown-cmark",
  "rustdoc",
  "serde",
  "serde_json",
@@ -154,34 +154,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "colored"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi",
-]
-
-[[package]]
 name = "compiletest"
 version = "0.0.0"
 dependencies = [
- "colored",
- "diff",
  "getopts",
  "glob",
- "lazy_static",
  "libc",
  "miow",
  "regex",
- "rustfix",
  "serde",
  "serde_json",
  "tracing",
  "tracing-subscriber",
- "unified-diff",
  "walkdir",
  "winapi",
 ]
@@ -201,16 +185,11 @@ dependencies = [
 name = "cprover_bindings"
 version = "0.0.0"
 dependencies = [
- "bitflags",
- "cstr",
  "lazy_static",
- "libc",
- "measureme",
  "num",
  "num-traits",
  "serde",
  "serde_test",
- "snap",
  "string-interner",
  "tracing",
  "vector-map",
@@ -260,22 +239,6 @@ dependencies = [
  "cfg-if",
  "lazy_static",
 ]
-
-[[package]]
-name = "cstr"
-version = "0.2.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a60f0dd132e4b67f20fd764d4835d968f666ff1a2f59e432983d168b98424deb"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "diff"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e25ea47919b1560c4e3b7fe0aaab9becf5b84a10325ddf7db0f0ba5e1026499"
 
 [[package]]
 name = "dissimilar"
@@ -420,18 +383,14 @@ dependencies = [
  "bitflags",
  "clap",
  "cprover_bindings",
- "cstr",
  "kani_metadata",
  "kani_queries",
  "libc",
- "measureme",
  "num",
  "rustc-demangle",
  "serde",
  "serde_json",
  "shell-words",
- "smallvec",
- "snap",
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
@@ -534,33 +493,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "measureme"
-version = "9.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78f7a41bc6f856a2cf0e95094ad5121f82500e2d9a0f3c0171d98f6566d8117d"
-dependencies = [
- "log",
- "memmap2",
- "parking_lot 0.11.2",
- "perf-event-open-sys",
- "rustc-hash",
- "smallvec",
-]
-
-[[package]]
 name = "memchr"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
-
-[[package]]
-name = "memmap2"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "723e3ebdcdc5c023db1df315364573789f8857c11b631a2fdfad7c00f5c046b4"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "memoffset"
@@ -715,37 +651,12 @@ checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
 
 [[package]]
 name = "parking_lot"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
-dependencies = [
- "instant",
- "lock_api",
- "parking_lot_core 0.8.5",
-]
-
-[[package]]
-name = "parking_lot"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87f5ec2493a61ac0506c0f4199f99070cbe83857b0337006a30f3e6719b8ef58"
 dependencies = [
  "lock_api",
- "parking_lot_core 0.9.2",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d76e8e1493bcac0d2766c42737f34458f1c8c50c0d23bcb24ea953affb273216"
-dependencies = [
- "cfg-if",
- "instant",
- "libc",
- "redox_syscall",
- "smallvec",
- "winapi",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -759,15 +670,6 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-sys",
-]
-
-[[package]]
-name = "perf-event-open-sys"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce9bedf5da2c234fdf2391ede2b90fabf585355f33100689bc364a3ea558561a"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -813,17 +715,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec757218438d5fda206afc041538b2f6d889286160d649a86a24d37e1235afd1"
 dependencies = [
  "unicode-xid",
-]
-
-[[package]]
-name = "pulldown-cmark"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffade02495f22453cd593159ea2f59827aae7f53fa8323f756799b670881dcf8"
-dependencies = [
- "bitflags",
- "memchr",
- "unicase",
 ]
 
 [[package]]
@@ -962,12 +853,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342"
 
 [[package]]
-name = "rustc-hash"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
-
-[[package]]
 name = "rustdoc"
 version = "0.0.0"
 dependencies = [
@@ -977,7 +862,7 @@ dependencies = [
  "expect-test",
  "itertools",
  "minifier",
- "pulldown-cmark 0.9.1",
+ "pulldown-cmark",
  "rayon",
  "regex",
  "serde",
@@ -987,18 +872,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
-]
-
-[[package]]
-name = "rustfix"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f0be05fc0675ef4f47119dc39cfc46636bb77d4fc4ef1bd851b9c3f7697f32a"
-dependencies = [
- "anyhow",
- "log",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1082,12 +955,6 @@ name = "smallvec"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
-
-[[package]]
-name = "snap"
-version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45456094d1983e2ee2a18fdfebce3189fa451699d0502cb8e3b49dba5ba41451"
 
 [[package]]
 name = "std"
@@ -1249,7 +1116,7 @@ dependencies = [
  "ansi_term",
  "lazy_static",
  "matchers",
- "parking_lot 0.12.0",
+ "parking_lot",
  "regex",
  "serde",
  "serde_json",
@@ -1301,15 +1168,6 @@ name = "unicode-xid"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
-
-[[package]]
-name = "unified-diff"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "496a3d395ed0c30f411ceace4a91f7d93b148fb5a9b383d5d4cff7850f048d5f"
-dependencies = [
- "diff",
-]
 
 [[package]]
 name = "valuable"
