@@ -20,7 +20,6 @@ rustc-demangle = { version = "0.1.21", optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 shell-words = "1.0.0"
-#smallvec = { version = "1.6.1", features = ["union", "may_dangle"], optional = true }
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.0"
