@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
@@ -53,28 +54,45 @@ class GlobalMessages(str, Enum):
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
 
-def main():
+def usage_error(msg):
+    """ Prints an error message followed by the expected usage. Then exit process. """
+    print(f"Error: {msg} Usage:")
+    print("cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]")
+    sys.exit(1)
+
+
+def main(argv):
     """
     Script main function.
     Usage:
-      > cbmc_json_parser.py <cbmc_output.json> [<format>]
+      > cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]
     """
-    # Check only one json file as input
-    if len(sys.argv) < 2:
-        print("Json File Input Missing")
-        sys.exit(1)
+    # We expect [3, 4] arguments.
+    if len(argv) < 3:
+        usage_error("Missing required arguments.")
 
-    if len(sys.argv) == 3:
-        output_style = output_style_switcher[sys.argv[2]]
-    else:
-        output_style = "regular"
+    max_args = 4
+    if len(argv) > max_args:
+        usage_error(f"Expected up to {max_args} arguments but found {len(argv)}.")
+
+    output_style = output_style_switcher.get(argv[2], None)
+    if not output_style:
+        usage_error(f"Invalid output format '{argv[2]}'.")
+
+    extra_ptr_check = False
+    if len(argv) == 4:
+        if argv[3] == "--extra-ptr-check":
+            extra_ptr_check = True
+        else:
+            usage_error(f"Unexpected argument '{argv[3]}'.")
 
     # parse the input json file
-    with open(sys.argv[1]) as f:
+    with open(argv[1]) as f:
         sample_json_file_parsing = f.read()
 
     # the main function should take a json file as input
-    return_code = transform_cbmc_output(sample_json_file_parsing, output_style=output_style)
+    return_code = transform_cbmc_output(sample_json_file_parsing,
+                                        output_style, extra_ptr_check)
     sys.exit(return_code)
 
 
@@ -136,7 +154,7 @@ class SourceLocation:
         return bool(self.function) or bool(self.filename)
 
 
-def transform_cbmc_output(cbmc_response_string, output_style):
+def transform_cbmc_output(cbmc_response_string, output_style, extra_ptr_check):
     """
     Take Unstructured CBMC Response object, parse the blob and gives structured
     and formatted output depending on User Provided Output Style
@@ -161,7 +179,7 @@ def transform_cbmc_output(cbmc_response_string, output_style):
 
         # Extract property information from the restructured JSON file
         properties, solver_information = extract_solver_information(cbmc_json_array)
-        properties, messages = postprocess_results(properties)
+        properties, messages = postprocess_results(properties, extra_ptr_check)
 
         # Using Case Switching to Toggle between various output styles
         # For now, the two options provided are default and terse
@@ -246,7 +264,8 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
-def postprocess_results(properties):
+
+def postprocess_results(properties, extra_ptr_check):
     """
     Check for certain cases, e.g. a reachable unsupported construct or a failed
     unwinding assertion, and update the results of impacted checks accordingly.
@@ -269,6 +288,9 @@ def postprocess_results(properties):
     properties, reach_checks = filter_reach_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
+
+    if not extra_ptr_check:
+        properties = filter_ptr_checks(properties)
 
     for property in properties:
         property["description"] = get_readable_description(property)
@@ -431,6 +453,22 @@ CBMC_DESCRIPTIONS = {
     # They are added via __CPROVER_precondition.
     # "precondition_instance": [],
 }
+
+
+def filter_ptr_checks(props):
+    """This function will filter out extra pointer checks.
+
+        Our support to primitives and overflow pointer checks is unstable and
+        can result in lots of spurious failures. By default, we filter them out.
+    """
+    def not_extra_check(prop):
+        """ Retrieve class id ([<function>.]<property_class_id>.<counter>)"""
+        prop_class = prop["property"].rsplit(".", 3)
+        class_id = prop_class[-2] if len(prop_class) > 1 else None
+        return class_id not in ["pointer_arithmetic", "pointer_primitives"]
+
+    return list(filter(not_extra_check, props))
+
 
 def get_readable_description(prop):
     """This function will return a user friendly property description.
@@ -734,4 +772,4 @@ def colored_text(color, text):
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)

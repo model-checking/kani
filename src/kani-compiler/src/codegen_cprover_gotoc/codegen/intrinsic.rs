@@ -52,9 +52,22 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic {
-            "abort" => self.codegen_fatal_error("reached intrinsic::abort", span),
-            "transmute" => self.codegen_fatal_error("transmuting to uninhabited type", span),
-            _ => unimplemented!(),
+            "abort" => self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
+                "reached intrinsic::abort",
+                span,
+            ),
+            // Transmuting to an uninhabited type is UB.
+            "transmute" => self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
+                "transmuting to uninhabited type has undefined behavior",
+                span,
+            ),
+            _ => self.codegen_fatal_error(
+                PropertyClass::UnsupportedConstruct,
+                &format!("Unsupported intrinsic {}", intrinsic),
+                span,
+            ),
         }
     }
 
@@ -696,6 +709,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // precise error message
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
                 &format!("attempted to instantiate uninhabited type `{}`", ty),
                 span,
             );
@@ -705,6 +719,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid" && !layout.might_permit_raw_init(self, true) {
             return self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
                 span,
             );
@@ -712,6 +727,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if intrinsic == "assert_uninit_valid" && !layout.might_permit_raw_init(self, false) {
             return self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
                 span,
             );

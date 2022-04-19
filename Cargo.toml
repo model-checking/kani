@@ -8,6 +8,7 @@ members = [
   "tools/bookrunner",
   "tools/compiletest",
   "tools/make-kani-release",
+  "src/kani-verifier",
   "src/kani-driver",
   "src/kani-compiler",
   "src/kani_metadata",
@@ -16,8 +17,6 @@ members = [
 ]
 
 exclude = [
-  # temporarily exclude `kani-verifier` until we don't have colliding binary names (cargo-kani)
-  "src/kani-verifier",
   "build",
   "target",
   # dependency tests have their own workspace

@@ -58,6 +58,7 @@ pub fn proxy(bin: &str) -> Result<()> {
             setup(None)
         }
     } else {
+        fail_if_in_dev_environment()?;
         if !appears_setup() {
             setup(None)?;
         }
@@ -68,6 +69,25 @@ pub fn proxy(bin: &str) -> Result<()> {
 /// Fast check to see if we look setup already
 fn appears_setup() -> bool {
     kani_dir().exists()
+}
+
+/// In dev environments, this proxy shouldn't be used.
+/// But accidentally using it (with the test suite) can fire off
+/// hundreds of HTTP requests trying to download a non-existent release bundle.
+/// So if we positively detect a dev environment, raise an error early.
+fn fail_if_in_dev_environment() -> Result<()> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(path) = exe.parent() {
+            if path.ends_with("target/debug") || path.ends_with("target/release") {
+                bail!(
+                    "Running a release-only executable, {}, from a development environment. This is usually caused by PATH including 'target/release' erroneously.",
+                    exe.file_name().unwrap().to_string_lossy()
+                )
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`

@@ -538,9 +538,12 @@ impl<'tcx> GotocCtx<'tcx> {
             //TODO: Ensure that this is correct
             ty::Dynamic(..) => self.codegen_fat_ptr(ty),
             // As per zulip, a raw slice/str is a variable length array
-            // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
+            // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Memory.20layout.20of.20DST
+            // &[T] -> { data: *const T, len: usize }
+            // [T] -> memory location (flexible array)
+            // Note: This is not valid C but CBMC seems to be ok with it.
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
-            ty::Str => Type::c_char().array_of(0),
+            ty::Str => Type::c_char().flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
             ty::FnDef(_, _) => {
                 let sig = self.monomorphize(ty.fn_sig(self.tcx));
@@ -754,7 +757,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.use_slice_fat_pointer(mir_type) {
             let pointer_name = match mir_type.kind() {
                 ty::Slice(..) => self.ty_mangled_name(mir_type),
-                ty::Str => "str".intern(),
+                ty::Str => "refstr".intern(),
                 ty::Adt(..) => format!("&{}", self.ty_mangled_name(mir_type)).intern(),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
