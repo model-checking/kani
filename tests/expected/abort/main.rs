@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Test that the abort() function is respected and nothing beyond it will execute.
+//! Test that the abort() function is respected and nothing beyond it will execute.
 
 use std::process;
 
@@ -14,7 +14,7 @@ fn main() {
         }
         if i == 2 {
             // This should never happen.
-            process::abort();
+            process::exit(1);
         }
     }
     assert!(false, "This is unreachable");

@@ -140,12 +140,13 @@ impl CodegenBackend for GotocCodegenBackend {
         if !tcx.sess.opts.debugging_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
-            write_file(&base_filename, "symtab.json", &symtab);
-            write_file(&base_filename, "type_map.json", &type_map);
-            write_file(&base_filename, "kani-metadata.json", &metadata);
+            let pretty = self.queries.get_output_pretty_json();
+            write_file(&base_filename, "symtab.json", &symtab, pretty);
+            write_file(&base_filename, "type_map.json", &type_map, pretty);
+            write_file(&base_filename, "kani-metadata.json", &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
-                write_file(&base_filename, "restrictions.json", &restrictions);
+                write_file(&base_filename, "restrictions.json", &restrictions, pretty);
             }
         }
 
@@ -202,7 +203,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
     session.abort_if_errors();
 }
 
-fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T)
+fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T, pretty: bool)
 where
     T: serde::Serialize,
 {
@@ -210,5 +211,9 @@ where
     debug!("output to {:?}", filename);
     let out_file = ::std::fs::File::create(&filename).unwrap();
     let writer = BufWriter::new(out_file);
-    serde_json::to_writer(writer, &source).unwrap();
+    if pretty {
+        serde_json::to_writer_pretty(writer, &source).unwrap();
+    } else {
+        serde_json::to_writer(writer, &source).unwrap();
+    }
 }

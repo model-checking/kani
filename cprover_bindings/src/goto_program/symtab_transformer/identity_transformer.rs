@@ -38,39 +38,14 @@ impl Transformer for IdentityTransformer {
 mod tests {
     use super::{
         super::super::{
-            super::{MachineModel, RoundingMode},
             DatatypeComponent, Expr, Location, Stmt, SwitchCase, Symbol, SymbolTable, Type,
         },
         IdentityTransformer,
     };
-    fn default_machine_model() -> MachineModel {
-        MachineModel::new(
-            1,
-            "x86_64",
-            8,
-            false,
-            8,
-            64,
-            32,
-            32,
-            false,
-            128,
-            64,
-            64,
-            4,
-            true,
-            64,
-            RoundingMode::ToNearest,
-            16,
-            32,
-            false,
-            32,
-            32,
-        )
-    }
+    use crate::machine_model::test_util::machine_model_test_stub;
 
     fn empty_symtab() -> SymbolTable {
-        SymbolTable::new(default_machine_model())
+        SymbolTable::new(machine_model_test_stub())
     }
 
     fn assert_transform_eq(original: SymbolTable) {

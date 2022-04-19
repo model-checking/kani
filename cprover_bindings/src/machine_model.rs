@@ -195,3 +195,35 @@ impl From<RoundingMode> for i128 {
         rm as Self
     }
 }
+
+#[cfg(test)]
+pub mod test_util {
+    use super::MachineModel;
+    use super::RoundingMode;
+
+    pub fn machine_model_test_stub() -> MachineModel {
+        MachineModel::new(
+            1,
+            "x86_64",
+            8,
+            false,
+            8,
+            64,
+            32,
+            32,
+            false,
+            128,
+            64,
+            64,
+            4,
+            true,
+            64,
+            RoundingMode::ToNearest,
+            16,
+            32,
+            false,
+            32,
+            32,
+        )
+    }
+}
