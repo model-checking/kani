@@ -12,6 +12,9 @@ pub trait UserInput {
 
     fn set_check_assertion_reachability(&mut self, reachability: bool);
     fn get_check_assertion_reachability(&self) -> bool;
+
+    fn set_output_pretty_json(&mut self, pretty_json: bool);
+    fn get_output_pretty_json(&self) -> bool;
 }
 
 #[derive(Debug, Default)]
@@ -19,6 +22,7 @@ pub struct QueryDb {
     check_assertion_reachability: AtomicBool,
     emit_vtable_restrictions: AtomicBool,
     symbol_table_passes: Vec<String>,
+    json_pretty_print: AtomicBool,
 }
 
 impl UserInput for QueryDb {
@@ -44,5 +48,13 @@ impl UserInput for QueryDb {
 
     fn get_check_assertion_reachability(&self) -> bool {
         self.check_assertion_reachability.load(Ordering::Relaxed)
+    }
+
+    fn set_output_pretty_json(&mut self, pretty_json: bool) {
+        self.json_pretty_print.store(pretty_json, Ordering::Relaxed);
+    }
+
+    fn get_output_pretty_json(&self) -> bool {
+        self.json_pretty_print.load(Ordering::Relaxed)
     }
 }
