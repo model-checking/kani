@@ -27,7 +27,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::iter;
 use std::iter::FromIterator;
-use tracing::debug;
+use tracing::{debug, trace};
 use ty::layout::HasParamEnv;
 
 /// Map the unit type to an empty struct
@@ -320,9 +320,8 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// This will codegen the trait data type. Since this is unsized,
-    /// we just create a typedef  to `void`.
-    /// This should only be used via pointer or reference, so the rvalue would be `void*`.
+    /// This will codegen the trait data type. Since this is unsized, we just create a typedef.
+    ///
     /// This is relevant when generating the layout of unsized types like `RcBox`.
     /// ```
     /// struct RcBox<T: ?Sized> {
@@ -331,16 +330,17 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     value: T,
     /// }
     /// ```
+    ///
     /// This behaviour is similar to slices, and `value` is not a pointer.
     /// `value` is the concrete object in memory which was casted to an unsized type.
-    /// Note: We cannot use void because this generates an expression &void.
-    /// TODO: Test this with impl Trait for () {}
-    /// I believe we should be OK though since this will generate a pointer that is one element
-    /// past the object allocation. So as long as the pointer doesn't get deref, there is no UB.
+    ///
+    /// In practice, this should only be used via pointer or reference. But we may encounter a &*T,
+    /// which generates an lvalue to *T in our goto-program rep. Thus, we cannot use `void*`
+    /// here (it would try to create a lvalue with type `void`), and we use `bool*`.
     pub fn codegen_trait_data(&mut self, t: ty::Ty<'tcx>) -> Type {
         let name = self.normalized_trait_name(t);
         let inner_name = name.clone() + "Inner";
-        tracing::debug!(typ=?t, kind=?t.kind(), %name, %inner_name,
+        debug!(typ=?t, kind=?t.kind(), %name, %inner_name,
                 "codegen_trait_data_type");
         self.ensure(inner_name.clone(), |_ctx, _| {
             Symbol::typedef(
@@ -354,7 +354,6 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// This will codegen the raw pointer to the trait data.
-    /// This is just an alias to void*.
     pub fn codegen_trait_data_pointer(&mut self, typ: ty::Ty<'tcx>) -> Type {
         assert!(typ.is_trait());
         self.codegen_ty(typ).to_pointer()
@@ -365,14 +364,14 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     Struct<dyn T>* data;
     ///     Metadata<dyn T>* vtable;
     /// }
-    /// Note: T is `typedef void` but data represents the space in memory occupied by
+    /// Note: T is a `typedef` but data represents the space in memory occupied by
     /// the concrete type. We just don't know its size during compilation time.
     fn codegen_trait_fat_ptr_type(
         &mut self,
         pointee_type: ty::Ty<'tcx>,
         trait_type: ty::Ty<'tcx>,
     ) -> Type {
-        tracing::trace!(?pointee_type, ?trait_type, "codegen_trait_fat_ptr_type");
+        trace!(?pointee_type, ?trait_type, "codegen_trait_fat_ptr_type");
         let name = self.ty_mangled_name(pointee_type).to_string() + "::FatPtr";
         let data_type = self.codegen_ty(pointee_type).to_pointer();
         self.ensure_struct(&name, NO_PRETTY_NAME, |ctx, _| {
@@ -448,6 +447,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Gives the name for a trait, i.e., `dyn T`. This does not work for `&dyn T`.
     pub fn normalized_trait_name(&self, t: Ty<'tcx>) -> String {
+        assert!(t.is_trait(), "Type {} must be a trait type (a dynamic type)", t);
         self.ty_mangled_name(t).to_string()
     }
 
@@ -547,7 +547,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {
-        tracing::trace!(typ=?ty, "codegen_ty");
+        trace!(typ=?ty, "codegen_ty");
         match ty.kind() {
             ty::Int(k) => self.codegen_iint(*k),
             ty::Bool => Type::c_bool(),
@@ -814,7 +814,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 2. references to trait objects (`matches!(pointee_type.kind(), ty::Dynamic)`).
     /// 3. references to structs whose last field is a unsized object (slice / trait)
     ///    - `matches!(pointee_type.kind(), ty::Adt(..) if self.is_unsized(t))
-    ///   
+    ///
     pub fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
         assert!(
             !self.use_thin_pointer(pointee_type),
@@ -844,17 +844,6 @@ impl<'tcx> GotocCtx<'tcx> {
         } else if self.use_vtable_fat_pointer(pointee_type) {
             // Pointee type can either be `dyn T` or `Struct<dyn T>`.
             // The vtable for both cases is the vtable of `dyn T`.
-            /* Plan B: Abort when see these constructs that we cannot handle.
-            if pointee_type.is_adt() {
-                self.tcx.sess.err(&format!(
-                    concat!(
-                        "Kani currently does not handle Struct<dyn T>\n",
-                        "Error found while trying to generate {:?}"
-                    ),
-                    pointee_type
-                ));
-            }
-             */
             let trait_type = self.extract_trait_type(pointee_type).unwrap();
             self.codegen_trait_vtable_type(trait_type);
             self.codegen_trait_fat_ptr_type(pointee_type, trait_type)
@@ -867,7 +856,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_ty_ref(&mut self, pointee_type: Ty<'tcx>) -> Type {
         // Normalize pointee_type to remove projection and opaque types
-        tracing::trace!(?pointee_type, "codegen_ty_ref");
+        trace!(?pointee_type, "codegen_ty_ref");
         let pointee_type =
             self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), pointee_type);
 

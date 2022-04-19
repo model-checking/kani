@@ -364,8 +364,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
-            Rvalue::Ref(_, _, p) => self.codegen_rvalue_ref(p, res_ty),
-            Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             Rvalue::Cast(CastKind::Misc, e, t) => {
                 let t = self.monomorphize(*t);
@@ -751,9 +750,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 );
             }
 
-            tracing::info!(?ty, ?trait_ty, "codegen_drop_in_place");
-            tracing::info!(?drop_instance, ?trait_fn_ty, "codegen_drop_in_place");
-            tracing::info!(drop_sym=?drop_sym.clone().typ, "codegen_drop_in_place");
+            debug!(?ty, ?trait_ty, "codegen_drop_in_place");
+            debug!(?drop_instance, ?trait_fn_ty, "codegen_drop_in_place");
+            debug!(drop_sym=?drop_sym.clone().typ, "codegen_drop_in_place");
 
             Expr::symbol_expression(drop_sym_name, drop_sym.clone().typ)
                 .address_of()
