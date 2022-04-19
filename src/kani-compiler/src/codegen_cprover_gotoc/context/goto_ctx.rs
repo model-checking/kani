@@ -345,21 +345,28 @@ impl MetadataLoader for GotocMetadataLoader {
     }
 }
 
-// Builds a machine model which is required by CBMC.
+/// Builds a machine model which is required by CBMC
 fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // The model assumes a x86_64 architecture.
-    // We check the target architecture in function `check_options` from
+    // The model assumes a x86_64 architecture with `pointer_width` equal to 64.
+    // We check the target architecture specification in function
+    // `check_target_arch_spec` from
     // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
-    // and error if the architecture is not the assumed one.
+    // and error if the values are not the ones we expect.
     let architecture = &sess.target.arch;
+    let pointer_width = sess.target.pointer_width.into();
 
-    // The values below are obtained from the session
+    // The model assumes the following values for session options:
+    //   * `min_global_align`: 1
+    //   * `endian`: `Endian::Little`
+    //
+    // We check these options in function `check_options` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
+    // and error if their values are not the ones we expect.
     let alignment = sess.target.options.min_global_align.unwrap_or(1);
     let is_big_endian = match sess.target.options.endian {
         Endian::Little => false,
         Endian::Big => true,
     };
-    let pointer_width = sess.target.pointer_width.into();
 
     // The values cannot be obtained from the session
     // so they are hardcoded using standard ones

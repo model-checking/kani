@@ -21,6 +21,7 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
+use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
@@ -57,6 +58,7 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         super::utils::init();
 
+        check_target_arch_spec(&tcx.sess);
         check_options(&tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
@@ -183,10 +185,43 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 }
 
-fn check_options(session: &Session, need_metadata_module: bool) {
-    // The requirement below is needed to build a valid CBMC machine model
+fn check_target_arch_spec(session: &Session) {
+    // The requirements below are needed to build a valid CBMC machine model
+    // in function `machine_model_from_session` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
     if session.target.arch != "x86_64" {
         session.err("Kani requires the target architecture to be x86_64.");
+    }
+
+    if session.target.pointer_width != 64 {
+        let err_msg = format!(
+            "Kani requires the target architecture value `pointer_width` to be 64, but it is {}.",
+            session.target.pointer_width
+        );
+        session.err(&err_msg);
+    }
+
+    session.abort_if_errors();
+}
+
+fn check_options(session: &Session, need_metadata_module: bool) {
+    // The requirements for `min_global_align` and `endian` are needed to build
+    // a valid CBMC machine model in function `machine_model_from_session` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
+    match session.target.options.min_global_align {
+        Some(1) => (),
+        Some(align) => {
+            let err_msg = format!(
+                "Kani requires the target architecture option `min_global_align` to be 1, but it is {}.",
+                align
+            );
+            session.err(&err_msg);
+        }
+        _ => (),
+    }
+
+    if session.target.options.endian != Endian::Little {
+        session.err("Kani requires the target architecture option `endian` to be `little`.");
     }
 
     if !session.overflow_checks() {
