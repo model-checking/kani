@@ -157,15 +157,13 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind()};
         match (s, &ty.kind()) {
             (Scalar::Int(_), ty::Int(it)) => match it {
-                // We treat the data as bit vector. Thus, we extract the value as unsigned and set
-                // the type to signed int.
-                IntTy::I8 => Expr::int_constant(s.to_u8().unwrap(), Type::signed_int(8)),
-                IntTy::I16 => Expr::int_constant(s.to_u16().unwrap(), Type::signed_int(16)),
-                IntTy::I32 => Expr::int_constant(s.to_u32().unwrap(), Type::signed_int(32)),
-                IntTy::I64 => Expr::int_constant(s.to_u64().unwrap(), Type::signed_int(64)),
-                IntTy::I128 => Expr::int_constant(s.to_u128().unwrap(), Type::signed_int(128)),
+                IntTy::I8 => Expr::int_constant(s.to_i8().unwrap(), Type::signed_int(8)),
+                IntTy::I16 => Expr::int_constant(s.to_i16().unwrap(), Type::signed_int(16)),
+                IntTy::I32 => Expr::int_constant(s.to_i32().unwrap(), Type::signed_int(32)),
+                IntTy::I64 => Expr::int_constant(s.to_i64().unwrap(), Type::signed_int(64)),
+                IntTy::I128 => Expr::int_constant(s.to_i128().unwrap(), Type::signed_int(128)),
                 IntTy::Isize => {
-                    Expr::int_constant(s.to_machine_usize(self).unwrap(), Type::ssize_t())
+                    Expr::int_constant(s.to_machine_isize(self).unwrap(), Type::ssize_t())
                 }
             },
             (Scalar::Int(_), ty::Uint(it)) => match it {
