@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use std::cell::RefCell;
 use std::default::Default;
 use std::hash::Hash;
@@ -119,14 +123,13 @@ impl From<DefId> for ItemId {
 #[derive(Clone, Debug)]
 crate struct Crate {
     crate module: Item,
-    crate primitives: ThinVec<(DefId, PrimitiveType)>,
     /// Only here so that they can be filtered through the rustdoc passes.
     crate external_traits: Rc<RefCell<FxHashMap<DefId, TraitWithExtraInfo>>>,
 }
 
 // `Crate` is frequently moved by-value. Make sure it doesn't unintentionally get bigger.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Crate, 72);
+rustc_data_structures::static_assert_size!(Crate, 64);
 
 impl Crate {
     crate fn name(&self, tcx: TyCtxt<'_>) -> Symbol {
@@ -244,16 +247,6 @@ impl ExternalCrate {
             tcx.module_children(root).iter().map(|item| item.res).filter_map(as_primitive).collect()
         }
     }
-}
-
-/// Indicates where an external crate can be found.
-crate enum ExternalLocation {
-    /// Remote URL root of the external crate
-    Remote(String),
-    /// This external crate can be found in the local doc/ folder
-    Local,
-    /// The external crate could not be found.
-    Unknown,
 }
 
 /// Anything with a source location and set of attributes and, optionally, a
@@ -582,7 +575,6 @@ crate enum ItemKind {
     ForeignTypeItem,
     MacroItem(Macro),
     ProcMacroItem(ProcMacro),
-    PrimitiveItem(PrimitiveType),
     AssocConstItem(Type, Option<ConstantKind>),
     /// An associated item in a trait or trait impl.
     ///
@@ -591,7 +583,6 @@ crate enum ItemKind {
     AssocTypeItem(Vec<GenericBound>, Option<Type>),
     /// An item that has been stripped by a rustdoc pass
     StrippedItem(Box<ItemKind>),
-    KeywordItem(Symbol),
 }
 
 impl ItemKind {}
@@ -1977,7 +1968,6 @@ crate struct BareFunctionDecl {
 crate struct Static {
     crate type_: Type,
     crate mutability: Mutability,
-    crate expr: Option<BodyId>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -2071,7 +2061,6 @@ impl ConstantKind {
 
 #[derive(Clone, Debug)]
 crate struct Impl {
-    crate unsafety: hir::Unsafety,
     crate generics: Generics,
     crate trait_: Option<Path>,
     crate for_: Type,

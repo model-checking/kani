@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use std::mem;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
@@ -6,7 +10,7 @@ use rustc_middle::middle::privacy::AccessLevels;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::{sym, Symbol};
 
-use crate::clean::{self, types::ExternalLocation, ItemId};
+use crate::clean::{self, ItemId};
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
 use crate::formats::Impl;
@@ -67,9 +71,6 @@ crate struct Cache {
     /// implementors of the trait, and this mapping is exactly, that: a mapping
     /// of trait ids to the list of known implementors of the trait
     crate implementors: FxHashMap<DefId, Vec<Impl>>,
-
-    /// Cache of where external crate documentation can be found.
-    crate extern_locations: FxHashMap<CrateNum, ExternalLocation>,
 
     /// Cache of where documentation for primitives can be found.
     crate primitive_locations: FxHashMap<clean::PrimitiveType, DefId>,
@@ -307,11 +308,6 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
                     }
                 }
             }
-            clean::PrimitiveItem(..) => {
-                self.cache
-                    .paths
-                    .insert(item.def_id.expect_def_id(), (self.cache.stack.clone(), item.type_()));
-            }
 
             clean::ExternCrateItem { .. }
             | clean::ImportItem(..)
@@ -322,8 +318,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
             | clean::StructFieldItem(..)
             | clean::AssocConstItem(..)
             | clean::AssocTypeItem(..)
-            | clean::StrippedItem(..)
-            | clean::KeywordItem(..) => {
+            | clean::StrippedItem(..) => {
                 // FIXME: Do these need handling?
                 // The person writing this comment doesn't know.
                 // So would rather leave them to an expert,

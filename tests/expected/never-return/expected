@@ -1,0 +1,18 @@
+Status: FAILURE\
+Description: "Found one"\
+in function found_one
+
+Status: FAILURE\
+Description: "Found zero"\
+in function found_zero
+
+Status: SUCCESS\
+Description: "unwinding assertion loop 0"\
+in function check_never_return
+
+Failed Checks: Found one
+Failed Checks: Found zero
+
+VERIFICATION:- FAILED
+
+

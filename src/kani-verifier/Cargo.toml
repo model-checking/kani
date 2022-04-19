@@ -1,0 +1,31 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "kani-verifier"
+version = "0.1.0"
+edition = "2021"
+description = "A bit-precise model checker for Rust."
+# TODO: figure out how we can use our repo's root readme?
+#readme = ""
+keywords = ["model-checking", "verification"]
+categories = ["development-tools"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/model-checking/kani"
+documentation = "https://model-checking.github.io/kani/"
+homepage = "https://github.com/model-checking/kani"
+
+[dependencies]
+anyhow = "1"
+home = "0.5"
+
+[[bin]]
+name = "kani"
+path = "src/bin/kani.rs"
+
+[[bin]]
+name = "cargo-kani"
+path = "src/bin/cargo_kani.rs"
+
+[profile.release]
+strip = "debuginfo"

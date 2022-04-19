@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 //! Markdown formatting for rustdoc.
 //!
 //! This module implements markdown formatting through the pulldown-cmark library.
@@ -82,7 +86,6 @@ pub(crate) enum HeadingOffset {
     H3,
     H4,
     H5,
-    H6,
 }
 
 /// When `to_string` is called, this struct will emit the HTML corresponding to

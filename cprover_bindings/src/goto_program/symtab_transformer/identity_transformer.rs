@@ -341,13 +341,16 @@ mod tests {
                 Expr::bool_true(),
                 Location::none(),
             ));
-            add_sym(Stmt::assert(Expr::bool_true(), "", "", Location::none()));
+            add_sym(Stmt::assert(Expr::bool_true(), "a", "a", Location::none()));
             add_sym(Stmt::assume(Expr::bool_false(), Location::none()));
             add_sym(Stmt::atomic_block(
-                vec![Stmt::assert_false("", Location::none())],
+                vec![Stmt::assert_false("a", "a", Location::none())],
                 Location::none(),
             ));
-            add_sym(Stmt::block(vec![Stmt::assert_false("", Location::none())], Location::none()));
+            add_sym(Stmt::block(
+                vec![Stmt::assert_false("a", "a", Location::none())],
+                Location::none(),
+            ));
             add_sym(Stmt::break_stmt(Location::none()));
             add_sym(Stmt::continue_stmt(Location::none()));
             add_sym(Stmt::decl(
@@ -417,7 +420,9 @@ mod tests {
                 Stmt::skip(Location::none()),
                 Location::none(),
             ));
-            add_sym(Stmt::assert_false("", Location::none()).with_label("tag1".to_string()));
+            add_sym(
+                Stmt::assert_false("tag1", "tag1", Location::none()).with_label("tag1".to_string()),
+            );
         }
 
         assert_transform_eq(original);

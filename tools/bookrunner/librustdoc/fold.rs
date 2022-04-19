@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use crate::clean::*;
 
 crate fn strip_item(mut item: Item) -> Item {
@@ -84,10 +88,8 @@ crate trait DocFolder: Sized {
             | ForeignTypeItem
             | MacroItem(_)
             | ProcMacroItem(_)
-            | PrimitiveItem(_)
             | AssocConstItem(_, _)
-            | AssocTypeItem(_, _)
-            | KeywordItem(_) => kind,
+            | AssocTypeItem(_, _) => kind,
         }
     }
 

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use rustc_ast as ast;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync::Lrc;
@@ -408,7 +412,7 @@ pub fn make_test(
     });
     let (already_has_main, already_has_extern_crate, found_macro) = match result {
         Ok(result) => result,
-        Err(ErrorGuaranteed) => {
+        Err(_) => {
             // If the parser panicked due to a fatal error, pass the test code through unchanged.
             // The error will be reported during compilation.
             return (s.to_owned(), 0, false);

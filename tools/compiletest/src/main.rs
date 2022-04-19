@@ -40,7 +40,19 @@ fn main() {
     let config = parse_config(env::args().collect());
 
     log_config(&config);
+    add_kani_to_path();
     run_tests(config);
+}
+
+/// Adds Kani to the current `PATH` environment variable.
+fn add_kani_to_path() {
+    let cwd = env::current_dir().unwrap();
+    let kani_bin = cwd.join("target").join("debug");
+    let kani_scripts = cwd.join("scripts");
+    env::set_var(
+        "PATH",
+        format!("{}:{}:{}", kani_scripts.display(), kani_bin.display(), env::var("PATH").unwrap()),
+    );
 }
 
 pub fn parse_config(args: Vec<String>) -> Config {

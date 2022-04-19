@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use crate::clean::*;
 
 crate trait DocVisitor: Sized {
@@ -39,10 +43,8 @@ crate trait DocVisitor: Sized {
             | ForeignTypeItem
             | MacroItem(_)
             | ProcMacroItem(_)
-            | PrimitiveItem(_)
             | AssocConstItem(_, _)
-            | AssocTypeItem(_, _)
-            | KeywordItem(_) => {}
+            | AssocTypeItem(_, _) => {}
         }
     }
 
