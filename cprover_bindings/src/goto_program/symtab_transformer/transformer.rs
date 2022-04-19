@@ -58,6 +58,7 @@ pub trait Transformer: Sized {
             Type::Signedbv { width } => self.transform_type_signedbv(width),
             Type::Struct { tag, components } => self.transform_type_struct(*tag, components),
             Type::StructTag(tag) => self.transform_type_struct_tag(*tag),
+            Type::TypeDef { name: tag, typ } => self.transform_type_def(*tag, typ),
             Type::Union { tag, components } => self.transform_type_union(*tag, components),
             Type::UnionTag(tag) => self.transform_type_union_tag(*tag),
             Type::Unsignedbv { width } => self.transform_type_unsignedbv(width),
@@ -230,6 +231,12 @@ pub trait Transformer: Sized {
     fn transform_type_vector(&mut self, typ: &Box<Type>, size: &u64) -> Type {
         let transformed_typ = self.transform_type(typ.as_ref());
         Type::vector(transformed_typ, *size)
+    }
+
+    /// Transforms a type def (`typedef typ tag`)
+    fn transform_type_def(&mut self, tag: InternedString, typ: &Box<Type>) -> Type {
+        let transformed_typ = self.transform_type(typ.as_ref());
+        transformed_typ.to_typedef(tag)
     }
 
     /// Perform recursive descent on a `Expr` data structure.

@@ -1693,7 +1693,6 @@ impl ToString for IrepId {
 #[cfg(test)]
 mod tests {
     use crate::irep::IrepId;
-    use num::BigInt;
     // #[test]
     // #[should_panic]
     // fn test_hex_id_panic1() {
