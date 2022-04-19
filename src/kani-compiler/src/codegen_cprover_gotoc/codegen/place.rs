@@ -304,11 +304,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
                 let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
                     Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
                 } else if self.is_ref_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     Some(before.mir_typ_or_variant.expect_type())
                 } else {
                     before.fat_ptr_mir_typ
@@ -316,7 +314,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let fat_ptr_goto_expr =
                     if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
-                        assert!(before.fat_ptr_goto_expr.is_none());
                         Some(inner_goto_expr.clone())
                     } else {
                         before.fat_ptr_goto_expr
