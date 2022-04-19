@@ -190,6 +190,7 @@ fn check_target(session: &Session) {
     // The requirement below is needed to build a valid CBMC machine model
     // in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
+    debug!("{}", session.target.llvm_target);
     if session.target.llvm_target != "x86_64-unknown-linux-gnu"
         && session.target.llvm_target != "x86_64-apple-darwin"
     {
