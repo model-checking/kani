@@ -8,6 +8,7 @@
 #[kani::proof]
 fn main() {
     let a: i8 = kani::any();
-    let b: i8 = 0;
+    let b: i8 = kani::any();
+    kani::assume(b == 0);
     let _ = a / b;
 }

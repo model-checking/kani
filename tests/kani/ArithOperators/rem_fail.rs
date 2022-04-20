@@ -3,7 +3,7 @@
 // kani-verify-fail
 
 // Check that remainder triggers overflow checks.
-// Covers the case where `x == T::MIN && y == -1`.
+// Covers the case where `a == T::MIN && b == -1`.
 
 #[kani::proof]
 fn main() {
