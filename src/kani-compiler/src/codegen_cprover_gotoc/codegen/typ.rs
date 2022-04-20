@@ -896,7 +896,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
-            // For soundess, hold off on generating them till we have test-cases.
+            // For soundness, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Generator(_, _, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
