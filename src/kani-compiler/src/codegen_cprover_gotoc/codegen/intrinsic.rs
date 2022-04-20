@@ -189,6 +189,24 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
+        // Intrinsics which encode a division operation with overflow check
+        macro_rules! codegen_op_with_div_overflow_check {
+            ($f:ident) => {{
+                let a = fargs.remove(0);
+                let b = fargs.remove(0);
+                let div_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
+                let div_overflow_check = self.codegen_assert(
+                    div_does_not_overflow,
+                    PropertyClass::ArithmeticOverflow,
+                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+                    loc,
+                );
+                let res = a.$f(b);
+                let expr_place = self.codegen_expr_to_place(p, res);
+                Stmt::block(vec![div_overflow_check, expr_place], loc)
+            }};
+        }
+
         // Intrinsics which encode a SIMD arithmetic operation with overflow check.
         // We expand the overflow check because CBMC overflow operations don't accept array as
         // argument.
@@ -564,9 +582,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place(p, fargs.remove(0).dereference())
             }
             "unchecked_add" => codegen_op_with_overflow_check!(add_overflow),
-            "unchecked_div" => codegen_intrinsic_binop!(div),
+            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
             "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow),
-            "unchecked_rem" => codegen_intrinsic_binop!(rem),
+            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
             "unchecked_shl" => codegen_intrinsic_binop!(shl),
             "unchecked_shr" => {
                 if fargs[0].typ().is_signed(self.symbol_table.machine_model()) {
@@ -643,16 +661,10 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
-    fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
-        // Check for undefined behavior conditions defined in
-        // https://doc.rust-lang.org/std/intrinsics/fn.exact_div.html
+    fn div_does_not_overflow(&self, a: Expr, b: Expr) -> Expr {
         let mm = self.symbol_table.machine_model();
-        let a = fargs.remove(0);
-        let b = fargs.remove(0);
         let atyp = a.typ();
         let btyp = b.typ();
-        let division_is_exact = a.clone().rem(b.clone()).eq(atyp.zero());
-        let divisor_is_nonzero = b.clone().neq(btyp.zero());
         let dividend_is_int_min = if atyp.is_signed(&mm) {
             a.clone().eq(atyp.min_int_expr(mm))
         } else {
@@ -660,7 +672,19 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
-        let division_does_not_overflow = dividend_is_int_min.and(divisor_is_minus_one).not();
+        dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
+        // Check for undefined behavior conditions defined in
+        // https://doc.rust-lang.org/std/intrinsics/fn.exact_div.html
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+        let atyp = a.typ();
+        let btyp = b.typ();
+        let division_is_exact = a.clone().rem(b.clone()).eq(atyp.zero());
+        let divisor_is_nonzero = b.clone().neq(btyp.zero());
+        let division_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
         Stmt::block(
             vec![
                 self.codegen_assert(
