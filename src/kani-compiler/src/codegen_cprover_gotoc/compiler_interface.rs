@@ -93,30 +93,36 @@ impl CodegenBackend for GotocCodegenBackend {
             }
         }
 
-        // then we move on to codegen
-        for cgu in codegen_units {
-            let items = cgu.items_in_deterministic_order(tcx);
-            for (item, _) in items {
-                match item {
-                    MonoItem::Fn(instance) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.codegen_function(instance),
-                            format!(
-                                "codegen_function: {}\n{}",
-                                c.readable_instance_name(instance),
-                                c.symbol_name(instance)
-                            ),
-                            instance.def_id(),
-                        );
+        // We currently don't model global ASM:
+        // https://github.com/model-checking/kani/issues/316
+        // so if crate has global ASM, leave all functions in this crate
+        // undefined so that calling any of them would hit an assert false
+        if !crate_has_global_asm(codegen_units, tcx) {
+            // then we move on to codegen
+            for cgu in codegen_units {
+                let items = cgu.items_in_deterministic_order(tcx);
+                for (item, _) in items {
+                    match item {
+                        MonoItem::Fn(instance) => {
+                            c.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_function(instance),
+                                format!(
+                                    "codegen_function: {}\n{}",
+                                    c.readable_instance_name(instance),
+                                    c.symbol_name(instance)
+                                ),
+                                instance.def_id(),
+                            );
+                        }
+                        MonoItem::Static(def_id) => {
+                            c.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_static(def_id, item),
+                                format!("codegen_static: {:?}", def_id),
+                                def_id,
+                            );
+                        }
+                        MonoItem::GlobalAsm(_) => {} // We have already warned above
                     }
-                    MonoItem::Static(def_id) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.codegen_static(def_id, item),
-                            format!("codegen_static: {:?}", def_id),
-                            def_id,
-                        );
-                    }
-                    MonoItem::GlobalAsm(_) => {} // We have already warned above
                 }
             }
         }
@@ -242,6 +248,18 @@ fn check_options(session: &Session, need_metadata_module: bool) {
     }
 
     session.abort_if_errors();
+}
+
+fn crate_has_global_asm<'tcx>(codegen_units: &'tcx [CodegenUnit<'tcx>], tcx: TyCtxt<'tcx>) -> bool {
+    for cgu in codegen_units {
+        let items = cgu.items_in_deterministic_order(tcx);
+        for (item, _) in items {
+            if matches!(item, MonoItem::GlobalAsm(_)) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T, pretty: bool)
