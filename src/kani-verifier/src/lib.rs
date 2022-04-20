@@ -90,6 +90,15 @@ fn fail_if_in_dev_environment() -> Result<()> {
     Ok(())
 }
 
+/// Give users a better error message than "404" if we're on an unsupported platform.
+fn fail_if_unsupported_target() -> Result<()> {
+    // This is basically going to be reduced to a compile-time constant
+    match TARGET {
+        "x86_64-unknown-linux-gnu" | "x86_64-apple-darwin" => Ok(()),
+        _ => bail!("Kani does not support this platform (Rust target {})", TARGET),
+    }
+}
+
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
 fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     let kani_dir = kani_dir();
@@ -115,6 +124,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     } else {
         let filename = download_filename();
         println!("[2/6] Downloading Kani release bundle: {}", &filename);
+        fail_if_unsupported_target()?;
         let bundle = base_dir.join(filename);
         Command::new("curl")
             .args(&["-sSLf", "-o"])
