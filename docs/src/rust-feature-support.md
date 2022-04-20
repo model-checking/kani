@@ -373,7 +373,7 @@ prefetch_write_instruction | No | |
 ptr_guaranteed_eq | Partial | |
 ptr_guaranteed_ne | Partial | |
 ptr_offset_from | Partial | Missing undefined behavior checks |
-raw_eq | No | |
+raw_eq | Partial | Missing undefined behavior checks |
 rintf32 | No | |
 rintf64 | No | |
 rotate_left | Yes | |
