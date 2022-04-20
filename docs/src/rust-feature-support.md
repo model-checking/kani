@@ -52,7 +52,7 @@ Reference | Feature | Support | Notes |
 8.2.16 | Match expressions | Yes | |
 8.2.17 | Return expressions | Yes | |
 8.2.18 | Await expressions | No | See [Notes - Concurrency](#concurrency) |
-9 | Patterns | Partial | Needs more testing |
+9 | Patterns | Partial | [#707](https://github.com/model-checking/kani/issues/707) |
 10.1.1 | Boolean type | Yes | |
 10.1.2 | Numeric types | Yes | |
 10.1.3 | Textual types | Yes | |
