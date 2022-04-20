@@ -105,6 +105,8 @@ jobs:
           docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani
 
+      # We can't run macos in a container, so we can only test locally.
+      # Hopefully any dependency issues won't be unique to macos.
       - name: Local install test
         if: ${{ matrix.os == 'macos-10.15' }}
         run: |
