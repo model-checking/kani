@@ -39,6 +39,17 @@ pub struct UnimplementedData {
     pub loc: Location,
 }
 
+impl UnimplementedData {
+    pub fn new(operation: &str, bug_url: &str, goto_type: Type, loc: Location) -> Self {
+        UnimplementedData {
+            operation: operation.to_string(),
+            bug_url: bug_url.to_string(),
+            goto_type,
+            loc,
+        }
+    }
+}
+
 /// Relevent information about a projected place (i.e. an lvalue).
 #[derive(Debug)]
 pub struct ProjectedPlace<'tcx> {
@@ -193,7 +204,12 @@ impl<'tcx> TypeOrVariant<'tcx> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    fn codegen_field(&mut self, res: Expr, t: TypeOrVariant<'tcx>, f: &Field) -> Expr {
+    fn codegen_field(
+        &mut self,
+        res: Expr,
+        t: TypeOrVariant<'tcx>,
+        f: &Field,
+    ) -> Result<Expr, UnimplementedData> {
         match t {
             TypeOrVariant::Type(t) => {
                 match t.kind() {
@@ -216,7 +232,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {:?} does not have a field", t),
                     ty::Tuple(_) => {
-                        res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table)
+                        Ok(res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table))
                     }
                     ty::Adt(def, _) if def.repr().simd() => {
                         // this is a SIMD vector - the index represents one
@@ -229,27 +245,27 @@ impl<'tcx> GotocCtx<'tcx> {
                         //   assert!(v.1 == 2);
                         // }
                         let size_index = Expr::int_constant(f.index(), Type::size_t());
-                        res.index_array(size_index)
+                        Ok(res.index_array(size_index))
                     }
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
                         let field = &def.variants().raw[0].fields[f.index()];
-                        res.member(&field.name.to_string(), &self.symbol_table)
+                        Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
-                    ty::Closure(..) => res.member(&f.index().to_string(), &self.symbol_table),
-                    ty::Generator(..) => self.codegen_unimplemented(
+                    ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
+                    ty::Generator(..) => Err(UnimplementedData::new(
                         "ty::Generator",
-                        Type::code(vec![], Type::empty()),
-                        res.location().clone(),
                         "https://github.com/model-checking/kani/issues/416",
-                    ),
+                        Type::code(vec![], Type::empty()),
+                        *res.location(),
+                    )),
                     _ => unimplemented!(),
                 }
             }
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(v) => {
                 let field = &v.fields[f.index()];
-                res.member(&field.name.to_string(), &self.symbol_table)
+                Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
         }
     }
@@ -375,7 +391,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ProjectionElem::Field(f, t) => {
                 let typ = TypeOrVariant::Type(t);
-                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f);
+                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f)?;
                 Ok(ProjectedPlace::new(
                     expr,
                     typ,
@@ -424,13 +440,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         let typ = self.tcx.mk_array(*ty, subarray_len);
                         let goto_typ = self.codegen_ty(typ);
                         // unimplemented
-                        Err(UnimplementedData {
-                            operation: "Sub-array binding".to_string(),
-                            bug_url: "https://github.com/model-checking/kani/issues/707"
-                                .to_string(),
-                            goto_type: goto_typ,
-                            loc: *before.goto_expr.location(),
-                        })
+                        Err(UnimplementedData::new(
+                            "Sub-array binding",
+                            "https://github.com/model-checking/kani/issues/707",
+                            goto_typ,
+                            *before.goto_expr.location(),
+                        ))
                     }
                     ty::Slice(elemt) => {
                         let len = if from_end {
