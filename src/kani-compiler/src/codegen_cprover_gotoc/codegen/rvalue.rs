@@ -3,6 +3,7 @@
 use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
+use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
@@ -81,7 +82,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Given a mir object denoted by a mir place, codegen a pointer to this object.
     pub fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
         let place_mir_type = self.place_ty(place);
-        let projection = self.codegen_place(place);
+        let projection = unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place));
 
         debug!("codegen_rvalue_ref: place: {:?}", place);
         debug!("codegen_rvalue_ref: place type: {:?}", place_mir_type);
@@ -203,9 +204,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let pt = self.place_ty(p);
         match pt.kind() {
             ty::Array(_, sz) => self.codegen_const(*sz, None),
-            ty::Slice(_) => {
-                self.codegen_place(p).fat_ptr_goto_expr.unwrap().member("len", &self.symbol_table)
-            }
+            ty::Slice(_) => unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(p))
+                .fat_ptr_goto_expr
+                .unwrap()
+                .member("len", &self.symbol_table),
             _ => unreachable!("Len(_) called on type that has no length: {:?}", pt),
         }
     }
@@ -411,7 +413,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 UnOp::Neg => self.codegen_operand(e).neg(),
             },
             Rvalue::Discriminant(p) => {
-                let place = self.codegen_place(p).goto_expr;
+                let place =
+                    unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(p)).goto_expr;
                 let pt = self.place_ty(p);
                 self.codegen_get_discriminant(place, pt, res_ty)
             }

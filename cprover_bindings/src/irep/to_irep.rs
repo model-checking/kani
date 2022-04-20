@@ -671,6 +671,10 @@ impl ToIrep for Type {
                     Irep::just_string_id(name.to_string()),
                 )],
             },
+            Type::TypeDef { name, typ } => typ
+                .to_irep(mm)
+                .with_named_sub(IrepId::CTypedef, Irep::just_string_id(name.to_string())),
+
             Type::Union { tag, components } => Irep {
                 id: IrepId::Union,
                 sub: vec![],
