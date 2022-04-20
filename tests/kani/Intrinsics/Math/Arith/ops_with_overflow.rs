@@ -1,15 +1,17 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Check that none of these operations trigger spurious overflow checks.
+// Checks that `<op>_with_overflow` returns the expected result in all cases.
 #![feature(core_intrinsics)]
-#![feature(unchecked_math)]
-use std::intrinsics::add_with_overflow;
+use std::intrinsics::{add_with_overflow, mul_with_overflow, sub_with_overflow};
 
-// `checked_shr` and `checked_shl` require `u32` for their argument. We use
-// `u32` in those cases and `u8` for the rest because they perform better.
+// The value of the overflow flag should match the option value returned by the
+// corresponding checked operation. In other words, if `checked.is_some()` is
+// assumed then `<op>_with_overflow` should not have overflown and `overflow`
+// should be false. The same can be done to verify overflows with
+// `checked.is_none()`.
 macro_rules! verify_no_overflow {
-    ($ty:ty, $cf: ident, $uf: ident, $fwo: ident) => {{
+    ($ty:ty, $cf: ident, $fwo: ident) => {{
         let a: $ty = kani::any();
         let b: $ty = kani::any();
         let checked = a.$cf(b);
@@ -20,22 +22,31 @@ macro_rules! verify_no_overflow {
     }};
 }
 
-// macro_rules! verify_overflow {
-//     ($ty:ty, $cf: ident, $uf: ident) => {{
-//         let a: $ty = kani::any();
-//         let b: $ty = kani::any();
-//         let checked = a.$cf(b);
-//         let unchecked = a.$
-//         kani::assume(checked.is_none());
-//         let (res, overflow) = $op_with_overflow(a, b);
-//         assert!(overflow);
-//         assert!
-//     }};
-// }
+macro_rules! verify_overflow {
+    ($ty:ty, $cf: ident, $fwo: ident) => {{
+        let a: $ty = kani::any();
+        let b: $ty = kani::any();
+        let checked = a.$cf(b);
+        kani::assume(checked.is_none());
+        let (_res, overflow) = $fwo(a, b);
+        assert!(overflow);
+    }};
+}
 
 #[kani::proof]
 fn test_add_with_overflow() {
-    verify_no_overflow!(u8, checked_add, unchecked_add, add_with_overflow);
-    let unchecked = unsafe { 1u32.unchecked_add(1) };
-    assert!(unchecked == 2);
+    verify_no_overflow!(u8, checked_add, add_with_overflow);
+    verify_overflow!(u8, checked_add, add_with_overflow);
+}
+
+#[kani::proof]
+fn test_sub_with_overflow() {
+    verify_no_overflow!(u8, checked_sub, sub_with_overflow);
+    verify_overflow!(u8, checked_sub, sub_with_overflow);
+}
+
+#[kani::proof]
+fn test_mul_with_overflow() {
+    verify_no_overflow!(u8, checked_mul, mul_with_overflow);
+    verify_overflow!(u8, checked_mul, mul_with_overflow);
 }
