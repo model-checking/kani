@@ -192,7 +192,7 @@ fn check_target(session: &Session) {
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
 
     // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
-    // target may become `x86_64-apple-macosx10.7.0` and fail (seen in CI)
+    // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
     if session.target.llvm_target != "x86_64-unknown-linux-gnu"
         && !session.target.llvm_target.starts_with("x86_64-apple-")
     {
