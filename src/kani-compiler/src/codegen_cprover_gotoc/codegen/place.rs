@@ -318,11 +318,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
                 let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
                     Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
                 } else if self.is_ref_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     Some(before.mir_typ_or_variant.expect_type())
                 } else {
                     before.fat_ptr_mir_typ
@@ -330,7 +328,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let fat_ptr_goto_expr =
                     if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
-                        assert!(before.fat_ptr_goto_expr.is_none());
                         Some(inner_goto_expr.clone())
                     } else {
                         before.fat_ptr_goto_expr
@@ -416,7 +413,25 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
-                    ty::Array(..) => unimplemented!(),
+                    ty::Array(ty, len) => {
+                        let len = len.val().try_to_machine_usize(self.tcx).unwrap();
+                        let subarray_len = if from_end {
+                            // `to` counts from the end of the array
+                            len - to - from
+                        } else {
+                            to - from
+                        };
+                        let typ = self.tcx.mk_array(*ty, subarray_len);
+                        let goto_typ = self.codegen_ty(typ);
+                        // unimplemented
+                        Err(UnimplementedData {
+                            operation: "Sub-array binding".to_string(),
+                            bug_url: "https://github.com/model-checking/kani/issues/707"
+                                .to_string(),
+                            goto_type: goto_typ,
+                            loc: *before.goto_expr.location(),
+                        })
+                    }
                     ty::Slice(elemt) => {
                         let len = if from_end {
                             let olen = before
