@@ -52,9 +52,22 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic {
-            "abort" => self.codegen_fatal_error("reached intrinsic::abort", span),
-            "transmute" => self.codegen_fatal_error("transmuting to uninhabited type", span),
-            _ => unimplemented!(),
+            "abort" => self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
+                "reached intrinsic::abort",
+                span,
+            ),
+            // Transmuting to an uninhabited type is UB.
+            "transmute" => self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
+                "transmuting to uninhabited type has undefined behavior",
+                span,
+            ),
+            _ => self.codegen_fatal_error(
+                PropertyClass::UnsupportedConstruct,
+                &format!("Unsupported intrinsic {}", intrinsic),
+                span,
+            ),
         }
     }
 
@@ -173,6 +186,24 @@ impl<'tcx> GotocCtx<'tcx> {
                 );
                 let expr_place = self.codegen_expr_to_place(p, res.result);
                 Stmt::block(vec![expr_place, check], loc)
+            }};
+        }
+
+        // Intrinsics which encode a division operation with overflow check
+        macro_rules! codegen_op_with_div_overflow_check {
+            ($f:ident) => {{
+                let a = fargs.remove(0);
+                let b = fargs.remove(0);
+                let div_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
+                let div_overflow_check = self.codegen_assert(
+                    div_does_not_overflow,
+                    PropertyClass::ArithmeticOverflow,
+                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+                    loc,
+                );
+                let res = a.$f(b);
+                let expr_place = self.codegen_expr_to_place(p, res);
+                Stmt::block(vec![div_overflow_check, expr_place], loc)
             }};
         }
 
@@ -551,9 +582,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place(p, fargs.remove(0).dereference())
             }
             "unchecked_add" => codegen_op_with_overflow_check!(add_overflow),
-            "unchecked_div" => codegen_intrinsic_binop!(div),
+            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
             "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow),
-            "unchecked_rem" => codegen_intrinsic_binop!(rem),
+            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
             "unchecked_shl" => codegen_intrinsic_binop!(shl),
             "unchecked_shr" => {
                 if fargs[0].typ().is_signed(self.symbol_table.machine_model()) {
@@ -630,16 +661,10 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
-    fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
-        // Check for undefined behavior conditions defined in
-        // https://doc.rust-lang.org/std/intrinsics/fn.exact_div.html
+    fn div_does_not_overflow(&self, a: Expr, b: Expr) -> Expr {
         let mm = self.symbol_table.machine_model();
-        let a = fargs.remove(0);
-        let b = fargs.remove(0);
         let atyp = a.typ();
         let btyp = b.typ();
-        let division_is_exact = a.clone().rem(b.clone()).eq(atyp.zero());
-        let divisor_is_nonzero = b.clone().neq(btyp.zero());
         let dividend_is_int_min = if atyp.is_signed(&mm) {
             a.clone().eq(atyp.min_int_expr(mm))
         } else {
@@ -647,7 +672,19 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
-        let division_does_not_overflow = dividend_is_int_min.and(divisor_is_minus_one).not();
+        dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
+        // Check for undefined behavior conditions defined in
+        // https://doc.rust-lang.org/std/intrinsics/fn.exact_div.html
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+        let atyp = a.typ();
+        let btyp = b.typ();
+        let division_is_exact = a.clone().rem(b.clone()).eq(atyp.zero());
+        let divisor_is_nonzero = b.clone().neq(btyp.zero());
+        let division_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
         Stmt::block(
             vec![
                 self.codegen_assert(
@@ -696,6 +733,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // precise error message
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
                 &format!("attempted to instantiate uninhabited type `{}`", ty),
                 span,
             );
@@ -705,6 +743,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid" && !layout.might_permit_raw_init(self, true) {
             return self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
                 span,
             );
@@ -712,6 +751,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if intrinsic == "assert_uninit_valid" && !layout.might_permit_raw_init(self, false) {
             return self.codegen_fatal_error(
+                PropertyClass::DefaultAssertion,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
                 span,
             );

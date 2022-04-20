@@ -345,27 +345,41 @@ impl MetadataLoader for GotocMetadataLoader {
     }
 }
 
+/// Builds a machine model which is required by CBMC
 fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // TODO: Hardcoded values from from the ones currently used in env.rs
-    // We may wish to get more of them from the session.
-    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    // The model assumes a `x86_64-unknown-linux-gnu` or `x86_64-apple-darwin`
+    // platform. We check the target platform in function `check_target` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs and
+    // error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
+    let pointer_width = sess.target.pointer_width.into();
+
+    // The model assumes the following values for session options:
+    //   * `min_global_align`: 1
+    //   * `endian`: `Endian::Little`
+    //
+    // We check these options in function `check_options` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
+    // and error if their values are not the ones we expect.
+    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    let is_big_endian = match sess.target.options.endian {
+        Endian::Little => false,
+        Endian::Big => true,
+    };
+
+    // The values below cannot be obtained from the session so they are
+    // hardcoded using standard ones for the supported platforms
     let bool_width = 8;
     let char_is_unsigned = false;
     let char_width = 8;
     let double_width = 64;
     let float_width = 32;
     let int_width = 32;
-    let is_big_endian = match sess.target.options.endian {
-        Endian::Little => false,
-        Endian::Big => true,
-    };
     let long_double_width = 128;
     let long_int_width = 64;
     let long_long_int_width = 64;
     let memory_operand_size = 4;
     let null_is_zero = true;
-    let pointer_width = sess.target.pointer_width.into();
     let short_int_width = 16;
     let single_width = 32;
     let wchar_t_is_unsigned = false;

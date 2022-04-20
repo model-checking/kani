@@ -11,13 +11,14 @@
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Instance, InstanceDef, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_span::Span;
 use std::rc::Rc;
 use tracing::{debug, warn};
@@ -35,31 +36,6 @@ pub trait GotocHook<'tcx> {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt;
-}
-
-fn output_of_instance_is_never<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-    let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-    match ty.kind() {
-        ty::Closure(_, substs) => tcx
-            .normalize_erasing_late_bound_regions(
-                ty::ParamEnv::reveal_all(),
-                substs.as_closure().sig(),
-            )
-            .output()
-            .is_never(),
-        ty::FnDef(..) | ty::FnPtr(..) => tcx
-            .normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), ty.fn_sig(tcx))
-            .output()
-            .is_never(),
-        ty::Generator(_, substs, _) => substs.as_generator().return_ty().is_never(),
-        _ => {
-            unreachable!(
-                "Can't take get ouput type of instance:\n{:?}\nType kind:\n{:?}",
-                ty,
-                ty.kind()
-            )
-        }
-    }
 }
 
 fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
@@ -241,7 +217,8 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         if pt.is_unit() {
             Stmt::goto(tcx.current_fn().find_label(&target), loc)
         } else {
-            let pe = tcx.codegen_place(&p).goto_expr;
+            let pe =
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p)).goto_expr;
             Stmt::block(
                 vec![
                     pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),
@@ -274,30 +251,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         span: Option<Span>,
     ) -> Stmt {
         tcx.codegen_panic(span, fargs)
-    }
-}
-
-struct Nevers;
-
-impl<'tcx> GotocHook<'tcx> for Nevers {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        output_of_instance_is_never(tcx, instance)
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        instance: Instance<'tcx>,
-        _fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
-        _target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let msg = format!(
-            "a panicking function {} is invoked",
-            with_no_trimmed_paths!(tcx.tcx.def_path_str(instance.def_id()))
-        );
-        tcx.codegen_fatal_error(&msg, span)
     }
 }
 
@@ -369,7 +322,7 @@ impl<'tcx> GotocHook<'tcx> for MemReplace {
             let src = fargs.remove(0);
             Stmt::block(
                 vec![
-                    tcx.codegen_place(&p)
+                    unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
                         .goto_expr
                         .assign(dest.clone().dereference().with_location(loc.clone()), loc.clone()),
                     dest.dereference().assign(src, loc.clone()),
@@ -472,7 +425,7 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
         let src = fargs.remove(0);
         Stmt::block(
             vec![
-                tcx.codegen_place(&p)
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
                     .goto_expr
                     .assign(src.dereference().with_location(loc.clone()), loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
@@ -541,12 +494,14 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
                 let size = fargs.remove(0);
                 Stmt::block(
                     vec![
-                        tcx.codegen_place(&p).goto_expr.assign(
-                            BuiltinFn::Malloc
-                                .call(vec![size], loc.clone())
-                                .cast_to(Type::unsigned_int(8).to_pointer()),
-                            loc,
-                        ),
+                        unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                            .goto_expr
+                            .assign(
+                                BuiltinFn::Malloc
+                                    .call(vec![size], loc.clone())
+                                    .cast_to(Type::unsigned_int(8).to_pointer()),
+                                loc,
+                            ),
                         Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
                     ],
                     Location::none(),
@@ -619,12 +574,14 @@ impl<'tcx> GotocHook<'tcx> for RustRealloc {
         let size = fargs.remove(0);
         Stmt::block(
             vec![
-                tcx.codegen_place(&p).goto_expr.assign(
-                    BuiltinFn::Realloc
-                        .call(vec![ptr, size], loc.clone())
-                        .cast_to(Type::unsigned_int(8).to_pointer()),
-                    loc.clone(),
-                ),
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                    .goto_expr
+                    .assign(
+                        BuiltinFn::Realloc
+                            .call(vec![ptr, size], loc.clone())
+                            .cast_to(Type::unsigned_int(8).to_pointer()),
+                        loc.clone(),
+                    ),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
@@ -655,12 +612,14 @@ impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
         let size = fargs.remove(0);
         Stmt::block(
             vec![
-                tcx.codegen_place(&p).goto_expr.assign(
-                    BuiltinFn::Calloc
-                        .call(vec![Type::size_t().one(), size], loc.clone())
-                        .cast_to(Type::unsigned_int(8).to_pointer()),
-                    loc.clone(),
-                ),
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                    .goto_expr
+                    .assign(
+                        BuiltinFn::Calloc
+                            .call(vec![Type::size_t().one(), size], loc.clone())
+                            .cast_to(Type::unsigned_int(8).to_pointer()),
+                        loc.clone(),
+                    ),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
             ],
             loc,
@@ -694,8 +653,7 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
         let pt = tcx.codegen_ty(tcx.place_ty(&p));
         let data = fargs.remove(0);
         let len = fargs.remove(0);
-        let code = tcx
-            .codegen_place(&p)
+        let code = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
             .goto_expr
             .assign(
                 Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table),
@@ -709,14 +667,13 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
 pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
     GotocHooks {
         hooks: vec![
-            Rc::new(Panic), //Must go first, so it overrides Nevers
+            Rc::new(Panic),
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Intrinsic),
             Rc::new(MemReplace),
             Rc::new(MemSwap),
-            Rc::new(Nevers),
             Rc::new(Nondet),
             Rc::new(PtrRead),
             Rc::new(PtrWrite),
