@@ -5,7 +5,7 @@
 // There is an implicit self-recursive call to drop_in_place, so we
 // need to set an unwind bound.
 
-// cbmc-flags: --unwind 2 --unwinding-assertions
+// cbmc-flags: --unwinding-assertions
 
 static mut CELL: i32 = 0;
 
@@ -20,6 +20,7 @@ impl Drop for Concrete {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     // Check normal box
     {

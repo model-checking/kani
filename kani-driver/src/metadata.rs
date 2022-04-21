@@ -123,7 +123,7 @@ impl KaniSession {
     pub fn determine_targets(&self, metadata: &KaniMetadata) -> Result<Vec<HarnessMetadata>> {
         if let Some(name) = &self.args.function {
             // --function is untranslated, create a mock harness
-            return Ok(vec![mock_proof_harness(name)]);
+            return Ok(vec![mock_proof_harness(name, None)]);
         }
         if let Some(name) = &self.args.harness {
             // Linear search, since this is only ever called once
@@ -140,13 +140,13 @@ impl KaniSession {
     }
 }
 
-fn mock_proof_harness(name: &str) -> HarnessMetadata {
+pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: name.into(),
         mangled_name: name.into(),
         original_file: "<unknown>".into(),
         original_line: "<unknown>".into(),
-        unwind_value: None,
+        unwind_value: unwind_value,
     }
 }
 
@@ -196,9 +196,9 @@ mod tests {
     #[test]
     fn check_find_proof_harness() {
         let harnesses = vec![
-            mock_proof_harness("check_one"),
-            mock_proof_harness("module::check_two"),
-            mock_proof_harness("module::not_check_three"),
+            mock_proof_harness("check_one", None),
+            mock_proof_harness("module::check_two", None),
+            mock_proof_harness("module::not_check_three", None),
         ];
         assert!(find_proof_harness("check_three", &harnesses).is_err());
         assert!(
