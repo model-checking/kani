@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// cbmc-flags: --unwind 5
-
 fn fac(n: u64) -> u64 {
     match n {
         0 => 1,
@@ -12,6 +10,7 @@ fn fac(n: u64) -> u64 {
 }
 
 #[kani::proof]
+#[kani::unwind(5)]
 fn main() {
     let mut a = 1;
     let n = kani::any();

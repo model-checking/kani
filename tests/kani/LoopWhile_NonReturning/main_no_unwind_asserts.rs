@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: --no-default-checks
-// cbmc-flags: --unwind 10
 
 // This example tests the Kani flag `--no-default-checks`
 //
@@ -23,6 +22,7 @@
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
 #[kani::proof]
+#[kani::unwind(10)]
 fn main() {
     let mut a: u32 = kani::any();
 

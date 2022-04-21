@@ -4,7 +4,7 @@
 // This test checks that values returned by `kani::slice::any_raw_slice` do
 // *not* necessarily satisfy the type invariant
 
-// kani-flags: --unwind 4
+// kani-flags: --default-unwind 4
 
 extern crate kani;
 use kani::slice::{any_raw_slice, AnySlice};
