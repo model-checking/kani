@@ -311,6 +311,7 @@ bswap | Yes | |
 caller_location | No | |
 ceilf32 | No | |
 ceilf64 | No | |
+copy | No | |
 copy_nonoverlapping | No | |
 copysignf32 | No | |
 copysignf64 | No | |
