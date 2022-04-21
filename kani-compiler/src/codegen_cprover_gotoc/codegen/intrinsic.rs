@@ -246,9 +246,18 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
         }
 
-        // Intrinsics which encode a simple binary operation
-        macro_rules! codegen_intrinsic_boolean_binop {
-            ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
+        // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
+        // This implementation is an over-approximation: It returns a nondet. value
+        // even if the result of the comparison is true. Otherwise it returns false.
+        macro_rules! codegen_ptr_guaranteed_cmp {
+            ($f:ident) => {{
+                warn!("Found unstable intrinsic {}, please check notes in https://model-checking.github.io/kani/rust-feature-support.html", intrinsic);
+                let arg1 = fargs.remove(0);
+                let arg2 = fargs.remove(0);
+                let op = arg1.$f(arg2).cast_to(Type::c_bool());
+                let e = op.clone().ternary(cbmc_ret_ty.nondet(), op);
+                self.codegen_expr_to_place(p, e)
+            }};
         }
 
         // Intrinsics which encode a simple binary operation
@@ -519,8 +528,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
             "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_eq" => codegen_intrinsic_boolean_binop!(eq),
-            "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
+            "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
+            "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
             "rintf32" => codegen_unimplemented_intrinsic!(
