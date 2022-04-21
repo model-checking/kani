@@ -83,7 +83,7 @@ Kani is now sure we've unwound the loop enough to verify our proof harness, and 
 
 Kani allows three options to specify the unwind value for a particular harness:
 
-1. Unwind annotation. This sets the unwind value for the harness above which the annotation is added. Example -
+1. The unwind annotation `#[kani::unwind(<num>)]`. This sets the unwind value for the harness with the annotation. Example -
 ``` rust,noplaypen
 #[kani::proof]
 #[kani::unwind(3)]
