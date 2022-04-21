@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // compile-flags: --edition 2018
-// kani-flags: --unwind 4
+// kani-flags: --default-unwind 4
 //
 // Testcase based on https://doc.rust-lang.org/rust-by-example/generics/phantom/testcase_units.html
 // which reproduces issue https://github.com/model-checking/kani/issues/560

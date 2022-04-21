@@ -6,7 +6,7 @@
 // outter 2 dynamic trait objects have fat pointers as their backing data.
 // In this failing tests, assertions are inverted to use !=.
 
-// cbmc-flags: --unwind 2 --unwinding-assertions
+// cbmc-flags: --unwinding-assertions
 
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
@@ -23,6 +23,7 @@ struct Foo {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     let dyn_trait1: Box<dyn Send> = Box::new(Foo { _a: 1, _b: 2 });
     let dyn_trait2: Box<dyn Send> = Box::new(dyn_trait1);

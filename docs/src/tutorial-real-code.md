@@ -77,7 +77,7 @@ Running Kani on this simple starting point will help figure out:
 2. Whether you're over-constrained. Check the coverage report using `--visualize`. Ideally you'd see 100% coverage, and if not, it's usually because now you've over-constrained the inputs.
 3. Whether Kani will support all the Rust features involved.
 4. Whether you've started with a tractable problem.
-(If the problem is initially intractable, try `--unwind 1` and see if you can follow the techniques in the previous section to put a bound on the problem.)
+(If the problem is initially intractable, try `--default-unwind 1` and see if you can follow the techniques in the previous section to put a bound on the problem.)
 
 Once you've got something working, the next step is to prove more interesting properties than what Kani covers by default.
 You accomplish this by adding new assertions (not just in your harness, but also to the code being run).

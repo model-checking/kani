@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --unwind 11
+// kani-flags: --default-unwind 11
 
 //! Check that we can verify code inside functions that never return.
 //! See https://github.com/model-checking/kani/issues/648 for more detail.
