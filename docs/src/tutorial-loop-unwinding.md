@@ -84,32 +84,21 @@ Kani is now sure we've unwound the loop enough to verify our proof harness, and 
 Kani allows three ways of specifying the unwind value for a purticular harness. They can be set through the below ways-
 
 1. Unwind annotation. This sets the unwind value for the harness above which the annotation is added. Example -
-``` rust
+``` rust,noplaypen
 #[kani::proof]
 #[kani::unwind(3)]
 fn proof_harness() {
     ...
 }
 ```
-2. `--unwind` flag. This sets the unwind value for the entire file/crate on which kani or cargo-kani is called. Example -
+2. `--default-unwind` flag. This sets the global or default unwind value for the entire file/crate on which kani or cargo-kani is called. Example -
 ```
-kani file.rs --unwind 3
+kani file.rs --default-unwind 3
 ```
-3. `--harness-unwind` flag. This needs to be used alongside `--harness` and sets the unwind value for the harness specified. Example -
+3. `--unwind` flag. This overrides any annotation and forces the harness to use the specified value. This needs to be used alongside `--harness` and sets the unwind value for the harness specified. Example -
 ```
-kani file.rs --harness-unwind 2 --harness proof_harness
+kani file.rs --unwind 2 --harness proof_harness
 ```
-
-### Order of precedence among unwind values
-
-There is an order of precedence among the ways one can set the unwind values for a harness. The more specific the way of setting the unwind value, the higher it's order of precedence. Based on this priciple, when there's 2 or more unwind values provided for a purticular harness, the following is the order in which preference is given.
-
-1. `--harness-unwind x`
-2. `#[kani::unwind(x)]`
-3. `--unwind x`
-
-So, if a user sets the unwind value using all 3 ways of setting, the value given with `--harness-unwind` will be chosen as the intended value and so on.
-
 
 ### Exercises -
 
