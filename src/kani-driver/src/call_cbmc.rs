@@ -134,15 +134,15 @@ impl KaniSession {
     }
 }
 
-/// Solve Unwind Value from conflicting inputs of unwind values. (--unwind, annotation-unwind, --harness-unwind)
+/// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
 pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    if let Some(harness_unwind) = args.harness_unwind {
+    if let Some(harness_unwind) = args.unwind {
         Some(harness_unwind)
     } else if let Some(annotation_unwind) = harness_metadata.unwind_value {
         Some(annotation_unwind)
-    } else if let Some(default_unwind) = args.unwind {
+    } else if let Some(default_unwind) = args.default_unwind {
         Some(default_unwind)
     } else {
         None
@@ -152,173 +152,57 @@ pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata)
 #[cfg(test)]
 mod tests {
     use crate::args;
-    use crate::metadata::{find_proof_harness, mock_proof_harness};
+    use crate::metadata::mock_proof_harness;
     use structopt::StructOpt;
 
     use super::*;
 
     #[test]
-    fn check_default_annotation_unwind_resolve() {
-        // Annotation value for unwind takes precedence over unwind value
-        // except when there is no #[kani::unwind()] provided.
-        let args: Vec<OsString> =
-            ["kani", "--no-default-checks", "--unwind", "2"].iter().map(|&s| s.into()).collect();
-        let unwind_args = args::KaniArgs::from_iter(args);
-
-        let harnesses = vec![
-            mock_proof_harness("check_one", Some(1)),
-            mock_proof_harness("module::check_two", Some(3)),
-            mock_proof_harness("module::not_check_three", None),
-        ];
-
-        let merged_1 = resolve_unwind_value(
-            &unwind_args,
-            find_proof_harness("check_one", &harnesses).unwrap(),
-        );
-        let merged_2 = resolve_unwind_value(
-            &unwind_args,
-            find_proof_harness("check_two", &harnesses).unwrap(),
-        );
-        let merged_3 = resolve_unwind_value(
-            &unwind_args,
-            find_proof_harness("not_check_three", &harnesses).unwrap(),
-        );
-
-        assert!(merged_1 == Some(1));
-        assert!(merged_2 == Some(3));
-        assert!(merged_3 == Some(2));
-    }
-
-    #[test]
-    fn check_harness_annotation_unwind_resolve() {
-        // Command line unwind value for specific harnesses take precedence over unwind annotation value
-        let args_1: Vec<OsString> =
-            ["kani", "--no-default-checks", "--harness-unwind", "2", "--harness", "check_one"]
-                .iter()
-                .map(|&s| s.into())
-                .collect();
-        let args_2: Vec<OsString> =
-            ["kani", "--no-default-checks", "--harness-unwind", "2", "--harness", "check_two"]
-                .iter()
-                .map(|&s| s.into())
-                .collect();
-        let args_3: Vec<OsString> = [
-            "kani",
-            "--no-default-checks",
-            "--harness-unwind",
-            "2",
-            "--harness",
-            "not_check_three",
-        ]
-        .iter()
-        .map(|&s| s.into())
-        .collect();
-
-        let unwind_args_1 = args::KaniArgs::from_iter(args_1);
-        let unwind_args_2 = args::KaniArgs::from_iter(args_2);
-        let unwind_args_3 = args::KaniArgs::from_iter(args_3);
-
-        let harnesses = vec![
-            mock_proof_harness("check_one", Some(1)),
-            mock_proof_harness("module::check_two", Some(3)),
-            mock_proof_harness("module::not_check_three", None),
-        ];
-
-        let merged_1 = resolve_unwind_value(
-            &unwind_args_1,
-            find_proof_harness("check_one", &harnesses).unwrap(),
-        );
-        let merged_2 = resolve_unwind_value(
-            &unwind_args_2,
-            find_proof_harness("check_two", &harnesses).unwrap(),
-        );
-        let merged_3 = resolve_unwind_value(
-            &unwind_args_3,
-            find_proof_harness("not_check_three", &harnesses).unwrap(),
-        );
-
-        assert!(merged_1 == Some(2));
-        assert!(merged_2 == Some(2));
-        assert!(merged_3 == Some(2));
-    }
-
-    #[test]
-    fn check_default_harness_unwind_resolve() {
+    fn check_resolve_unwind_value() {
         // Command line unwind value for specific harnesses take precedence over default annotation value
-        let args_1: Vec<OsString> = [
-            "kani",
-            "--no-default-checks",
-            "--unwind",
-            "2",
-            "--harness-unwind",
-            "1",
-            "--harness",
-            "check_one",
-        ]
-        .iter()
-        .map(|&s| s.into())
-        .collect();
-        let args_2: Vec<OsString> = [
-            "kani",
-            "--no-default-checks",
-            "--unwind",
-            "2",
-            "--harness-unwind",
-            "3",
-            "--harness",
-            "check_two",
-        ]
-        .iter()
-        .map(|&s| s.into())
-        .collect();
-        let args_3: Vec<OsString> = [
-            "kani",
-            "--no-default-checks",
-            "--unwind",
-            "2",
-            "--harness-unwind",
-            "4",
-            "--harness",
-            "check_three",
-        ]
-        .iter()
-        .map(|&s| s.into())
-        .collect();
-        let args_4: Vec<OsString> =
-            ["kani", "--no-default-checks", "--unwind", "2"].iter().map(|&s| s.into()).collect();
+        let args_empty = ["kani"];
+        let args_only_default = ["kani", "--default-unwind", "2"];
+        let args_only_harness = ["kani", "--unwind", "1", "--harness", "check_one"];
+        let args_both =
+            ["kani", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
-        let unwind_args_1 = args::KaniArgs::from_iter(args_1);
-        let unwind_args_2 = args::KaniArgs::from_iter(args_2);
-        let unwind_args_3 = args::KaniArgs::from_iter(args_3);
-        let unwind_args_4 = args::KaniArgs::from_iter(args_4);
+        let harness_none = mock_proof_harness("check_one", None);
+        let harness_some = mock_proof_harness("check_one", Some(3));
 
-        let harnesses = vec![
-            mock_proof_harness("check_one", None),
-            mock_proof_harness("module::check_two", None),
-            mock_proof_harness("module::check_three", None),
-            mock_proof_harness("module::not_check_four", None),
-        ];
-
-        let merged_1 = resolve_unwind_value(
-            &unwind_args_1,
-            find_proof_harness("check_one", &harnesses).unwrap(),
+        // test against no unwind annotation
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_empty), &harness_none),
+            None
         );
-        let merged_2 = resolve_unwind_value(
-            &unwind_args_2,
-            find_proof_harness("check_two", &harnesses).unwrap(),
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_default), &harness_none),
+            Some(2)
         );
-        let merged_3 = resolve_unwind_value(
-            &unwind_args_3,
-            find_proof_harness("check_three", &harnesses).unwrap(),
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_harness), &harness_none),
+            Some(1)
         );
-        let merged_4 = resolve_unwind_value(
-            &unwind_args_4,
-            find_proof_harness("not_check_four", &harnesses).unwrap(),
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_both), &harness_none),
+            Some(1)
         );
 
-        assert!(merged_1 == Some(1));
-        assert!(merged_2 == Some(3));
-        assert!(merged_3 == Some(4));
-        assert!(merged_4 == Some(2));
+        // test against unwind annotation
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_empty), &harness_some),
+            Some(3)
+        );
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_default), &harness_some),
+            Some(3)
+        );
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_harness), &harness_some),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_unwind_value(&args::KaniArgs::from_iter(args_both), &harness_some),
+            Some(1)
+        );
     }
 }

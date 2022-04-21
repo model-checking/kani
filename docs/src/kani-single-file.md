@@ -24,7 +24,7 @@ The most common `kani` arguments are the following:
  * `--harness <name>`: By default, Kani checks all proof harnesses it finds. You
    can switch to checking a single harness using this flag.
 
- * `--unwind <n>`: Set a global upper [loop
+ * `--default-unwind <n>`: Set a global upper [loop
    unwinding](./tutorial-loop-unwinding.md) bound on all loops. This can force
    termination when CBMC tries to unwind loops indefinitely.
 

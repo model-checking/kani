@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-verify-fail
-// cbmc-flags: --unwind 2 --unwinding-assertions
+// cbmc-flags: --unwinding-assertions
 
 static mut CELL: i32 = 0;
 
@@ -17,6 +17,7 @@ impl Drop for Concrete {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     // Check normal box
     {

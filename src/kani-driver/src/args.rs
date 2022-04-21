@@ -104,10 +104,10 @@ pub struct KaniArgs {
     pub object_bits: u32,
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]
-    pub unwind: Option<u32>,
+    pub default_unwind: Option<u32>,
     /// Specify the value used for loop unwinding for the specified harness in CBMC
-    #[structopt(long)]
-    pub harness_unwind: Option<u32>,
+    #[structopt(long, requires("harness"))]
+    pub unwind: Option<u32>,
     /// Turn on automatic loop unwinding
     #[structopt(long)]
     pub auto_unwind: bool,
@@ -283,18 +283,18 @@ impl CargoKaniArgs {
 }
 impl KaniArgs {
     pub fn validate(&self) {
-        let extra_unwind = self.cbmc_args.contains(&OsString::from("--unwind"));
+        let extra_unwind = self.cbmc_args.contains(&OsString::from("--default-unwind"));
         let extra_auto_unwind = self.cbmc_args.contains(&OsString::from("--auto-unwind"));
         let extras = extra_auto_unwind || extra_unwind;
-        let natives = self.auto_unwind || self.unwind.is_some();
+        let natives = self.auto_unwind || self.default_unwind.is_some();
         let any_auto_unwind = extra_auto_unwind || self.auto_unwind;
-        let any_unwind = self.unwind.is_some() || extra_unwind;
+        let any_unwind = self.default_unwind.is_some() || extra_unwind;
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
         if any_auto_unwind && any_unwind {
             Error::with_description(
-                "Conflicting flags: `--auto-unwind` is not compatible with other `--unwind` flags.",
+                "Conflicting flags: `--auto-unwind` is not compatible with other `--default-unwind` flags.",
                 ErrorKind::ArgumentConflict,
             )
             .exit();
@@ -320,14 +320,6 @@ impl KaniArgs {
         if self.cbmc_args.contains(&OsString::from("--function")) {
             Error::with_description(
                 "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
-                ErrorKind::ArgumentConflict,
-            )
-            .exit();
-        }
-
-        if self.harness_unwind.is_some() && self.harness.is_none() {
-            Error::with_description(
-                "Missing flag: --harness_unwind does not work without specifying harness. Please specify harness with --harness.",
                 ErrorKind::ArgumentConflict,
             )
             .exit();
@@ -374,6 +366,15 @@ mod tests {
         let app = StandaloneArgs::clap();
         let err = app.get_matches_from_safe(args).unwrap_err();
         assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn check_unwind_conflicts() {
+        // harness needs metadata which we don't have with dry-run
+        let args = vec!["kani", "file.rs", "--unwind", "3"];
+        let app = StandaloneArgs::clap();
+        let err = app.get_matches_from_safe(args).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
     }
 
     fn parse_unstable_disabled(args: &str) -> Result<ArgMatches<'_>, Error> {
