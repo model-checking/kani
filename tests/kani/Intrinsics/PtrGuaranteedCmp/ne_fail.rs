@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-verify-fail
 
-// Checks that `ptr_guaranteed_ne` returns false when the pointers are
-// equal, which causes the test to pass in the `else` branch. The `if`
-// branch is unreachable.
+// Checks that `ptr_guaranteed_ne` returns a nondet. value false when the
+// pointers are different, which causes the test to fail in the `else` branch.
 #![feature(core_intrinsics)]
 use std::intrinsics::ptr_guaranteed_ne;
 
