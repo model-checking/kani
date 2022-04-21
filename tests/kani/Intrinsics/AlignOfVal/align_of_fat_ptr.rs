@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --unwind 3
 
 //! This test case checks the behavior of align_of_val for traits.
 #![allow(dead_code)]

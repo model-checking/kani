@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --default-unwind 3
 
 //! This test case checks the behavior of size_of_val for traits.
 #![allow(dead_code)]
