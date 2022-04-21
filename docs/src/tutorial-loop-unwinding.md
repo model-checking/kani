@@ -79,16 +79,16 @@ Failed Checks: dereference failure: pointer outside object bounds
 
 Kani is now sure we've unwound the loop enough to verify our proof harness, and now we're seeing just the bound checking failures from the off-by-one error.
 
-## Ways to specify unwinding value
+## Unwinding value specification
 
-Kani allows three ways of specifying the unwind value for a purticular harness. They can be set through the below ways-
+Kani allows three options to specify the unwind value for a particular harness:
 
 1. Unwind annotation. This sets the unwind value for the harness above which the annotation is added. Example -
 ``` rust,noplaypen
 #[kani::proof]
 #[kani::unwind(3)]
 fn proof_harness() {
-    ...
+[...]
 }
 ```
 2. `--default-unwind` flag. This sets the global or default unwind value for the entire file/crate on which kani or cargo-kani is called. Example -
