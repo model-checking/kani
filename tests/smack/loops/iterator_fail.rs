@@ -3,7 +3,6 @@
 // @flag --no-memory-splitting --unroll=10
 // @expect error
 // kani-verify-fail
-// cbmc-flags: --unwind 5
 
 fn fac(n: u64) -> u64 {
     match n {
@@ -13,6 +12,8 @@ fn fac(n: u64) -> u64 {
     }
 }
 
+#[kani::proof]
+#[kani::unwind(5)]
 pub fn main() {
     let mut a = 1;
     let n = kani::any();

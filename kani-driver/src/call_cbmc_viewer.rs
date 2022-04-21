@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use kani_metadata::HarnessMetadata;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
@@ -12,7 +13,12 @@ use crate::util::alter_extension;
 impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
     /// Viewer doesn't give different error codes depending on verification failure, so as long as it works, we report success.
-    pub fn run_visualize(&self, file: &Path, report_dir: &Path) -> Result<()> {
+    pub fn run_visualize(
+        &self,
+        file: &Path,
+        report_dir: &Path,
+        harness_metadata: &HarnessMetadata,
+    ) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
         let coverage_filename = alter_extension(file, "coverage.xml");
         let property_filename = alter_extension(file, "property.xml");
@@ -24,9 +30,19 @@ impl KaniSession {
             temps.push(property_filename.clone());
         }
 
-        self.cbmc_variant(file, &["--xml-ui", "--trace"], &results_filename)?;
-        self.cbmc_variant(file, &["--xml-ui", "--cover", "location"], &coverage_filename)?;
-        self.cbmc_variant(file, &["--xml-ui", "--show-properties"], &property_filename)?;
+        self.cbmc_variant(file, &["--xml-ui", "--trace"], &results_filename, harness_metadata)?;
+        self.cbmc_variant(
+            file,
+            &["--xml-ui", "--cover", "location"],
+            &coverage_filename,
+            harness_metadata,
+        )?;
+        self.cbmc_variant(
+            file,
+            &["--xml-ui", "--show-properties"],
+            &property_filename,
+            harness_metadata,
+        )?;
 
         let args: Vec<OsString> = vec![
             "--result".into(),
@@ -59,8 +75,14 @@ impl KaniSession {
         Ok(())
     }
 
-    fn cbmc_variant(&self, file: &Path, extra_args: &[&str], output: &Path) -> Result<()> {
-        let mut args = self.cbmc_flags(file)?;
+    fn cbmc_variant(
+        &self,
+        file: &Path,
+        extra_args: &[&str],
+        output: &Path,
+        harness: &HarnessMetadata,
+    ) -> Result<()> {
+        let mut args = self.cbmc_flags(file, harness)?;
         args.extend(extra_args.iter().map(|x| x.into()));
 
         // TODO fix this hack, abstractions are wrong

@@ -21,7 +21,7 @@ jobs:
       - name: Build Kani
         run: |
           export RUST_BACKTRACE=1
-          cargo build
+          cargo build --workspace
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -42,7 +42,7 @@ jobs:
       - name: Build Kani
         run: |
           export RUST_BACKTRACE=1
-          cargo build
+          cargo build --workspace
 
       - name: Install book runner dependencies
         run: ./scripts/setup/install_bookrunner_deps.sh

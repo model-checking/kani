@@ -4,7 +4,7 @@
 // TODO: When unwind is hooked up, `harness.expected` should now see success
 #[kani::proof]
 #[kani::unwind(9)]
-fn harness() {
+fn harness_1() {
     let mut counter = 0;
     loop {
         counter += 1;
