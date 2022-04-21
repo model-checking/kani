@@ -283,7 +283,7 @@ impl CargoKaniArgs {
 }
 impl KaniArgs {
     pub fn validate(&self) {
-        let extra_unwind = self.cbmc_args.contains(&OsString::from("--default-unwind"));
+        let extra_unwind = self.cbmc_args.contains(&OsString::from("--unwind"));
         let extra_auto_unwind = self.cbmc_args.contains(&OsString::from("--auto-unwind"));
         let extras = extra_auto_unwind || extra_unwind;
         let natives = self.auto_unwind || self.default_unwind.is_some();
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn check_unwind_conflicts() {
-        // harness needs metadata which we don't have with dry-run
+        // --unwind cannot be called without --harness
         let args = vec!["kani", "file.rs", "--unwind", "3"];
         let app = StandaloneArgs::clap();
         let err = app.get_matches_from_safe(args).unwrap_err();

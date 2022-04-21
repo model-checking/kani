@@ -87,6 +87,14 @@ fn read_restrictions(path: &Path) -> Result<VtableCtxResults> {
     Ok(restrictions)
 }
 
+/// Deserialize a *.restrictions.json file
+fn read_kani_metadata(path: &Path) -> Result<KaniMetadata> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let restrictions = serde_json::from_reader(reader)?;
+    Ok(restrictions)
+}
+
 /// Consumes a vector of parsed metadata, and produces a combined structure
 fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
     let mut result = KaniMetadata { proof_harnesses: Vec::new() };
@@ -142,18 +150,10 @@ pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetad
     }
 }
 
-/// Deserialize a *.restrictions.json file
-fn read_kani_metadata(path: &Path) -> Result<KaniMetadata> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let restrictions = serde_json::from_reader(reader)?;
-    Ok(restrictions)
-}
-
 /// Search for a proof harness with a particular name.
 /// At the present time, we use `no_mangle` so collisions shouldn't happen,
 /// but this function is written to be robust against that changing in the future.
-pub fn find_proof_harness<'a>(
+fn find_proof_harness<'a>(
     name: &str,
     harnesses: &'a [HarnessMetadata],
 ) -> Result<&'a HarnessMetadata> {
