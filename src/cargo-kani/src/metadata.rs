@@ -87,14 +87,6 @@ fn read_restrictions(path: &Path) -> Result<VtableCtxResults> {
     Ok(restrictions)
 }
 
-/// Deserialize a *.restrictions.json file
-fn read_kani_metadata(path: &Path) -> Result<KaniMetadata> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let restrictions = serde_json::from_reader(reader)?;
-    Ok(restrictions)
-}
-
 /// Consumes a vector of parsed metadata, and produces a combined structure
 fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
     let mut result = KaniMetadata { proof_harnesses: Vec::new() };
@@ -124,7 +116,7 @@ impl KaniSession {
     pub fn determine_targets(&self, metadata: &KaniMetadata) -> Result<Vec<HarnessMetadata>> {
         if let Some(name) = &self.args.function {
             // --function is untranslated, create a mock harness
-            return Ok(vec![mock_proof_harness(name)]);
+            return Ok(vec![mock_proof_harness(name, None)]);
         }
         if let Some(name) = &self.args.harness {
             // Linear search, since this is only ever called once
@@ -149,20 +141,20 @@ impl KaniSession {
     }
 }
 
-fn mock_proof_harness(name: &str) -> HarnessMetadata {
+pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: name.into(),
         mangled_name: name.into(),
         original_file: "<unknown>".into(),
         original_line: "<unknown>".into(),
-        unwind_value: None,
+        unwind_value: unwind_value,
     }
 }
 
 /// Search for a proof harness with a particular name.
 /// At the present time, we use `no_mangle` so collisions shouldn't happen,
 /// but this function is written to be robust against that changing in the future.
-fn find_proof_harness<'a>(
+pub fn find_proof_harness<'a>(
     name: &str,
     harnesses: &'a [HarnessMetadata],
 ) -> Result<&'a HarnessMetadata> {
@@ -205,9 +197,9 @@ mod tests {
     #[test]
     fn check_find_proof_harness() {
         let harnesses = vec![
-            mock_proof_harness("check_one"),
-            mock_proof_harness("module::check_two"),
-            mock_proof_harness("module::not_check_three"),
+            mock_proof_harness("check_one", None),
+            mock_proof_harness("module::check_two", None),
+            mock_proof_harness("module::not_check_three", None),
         ];
         assert!(find_proof_harness("check_three", &harnesses).is_err());
         assert!(

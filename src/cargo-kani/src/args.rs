@@ -271,8 +271,7 @@ impl KaniArgs {
         let extras = extra_auto_unwind || extra_unwind;
         let natives = self.auto_unwind || self.default_unwind.is_some();
         let any_auto_unwind = extra_auto_unwind || self.auto_unwind;
-        let harness_unwind = self.harness_unwind.is_some() || self.harness.is_some();
-        let any_unwind = self.default_unwind.is_some() || extra_unwind || harness_unwind;
+        let any_unwind = self.default_unwind.is_some() || extra_unwind;
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.

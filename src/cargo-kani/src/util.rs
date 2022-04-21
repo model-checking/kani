@@ -19,34 +19,6 @@ pub fn append_path(path: &Path, ext: &str) -> PathBuf {
     str.into()
 }
 
-/// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --harness-unwind)
-pub fn append_path(&self,
-    file: &Path,
-    harness_metadata: Option<&HarnessMetadata>) -> u32 {
-
-        // TODO: Clean up to return one unwind value and return one harness name from another util question.
-        let harness_name = match harness_metadata {
-            Some(harness) => &harness.pretty_name,
-            None => "",
-        };
-
-        let unwind_value = match harness_metadata {
-            Some(harness) => harness.unwind_value,
-            None => None,
-        };
-
-        if let Some(harness_unwind) = self.args.harness_unwind {
-            args.push("--unwind".into());
-            args.push(harness_unwind.to_string().into());
-        } else if let Some(unwind) = unwind_value {
-            args.push("--unwind".into());
-            args.push(unwind.to_string().into());
-        } else if let Some(default_unwind) = self.args.default_unwind {
-            args.push("--unwind".into());
-            args.push(default_unwind.to_string().into());
-        }
-}
-
 /// Given a path of some sort (usually from argv0), this attempts to extract the basename / stem
 /// of the executable. e.g. "/path/foo -> foo" "./foo.exe -> foo" "foo -> foo"
 pub fn executable_basename(argv0: &Option<&OsString>) -> Option<OsString> {
