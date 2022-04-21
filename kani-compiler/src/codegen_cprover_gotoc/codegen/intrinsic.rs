@@ -513,7 +513,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => codegen_op_with_overflow_check!(add_overflow),
+            "offset" => self.codegen_offset(intrinsic, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -872,6 +872,31 @@ impl<'tcx> GotocCtx<'tcx> {
         emit_concurrency_warning!(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc.clone());
         Stmt::atomic_block(vec![skip_stmt], loc)
+    }
+
+    // Computes the offset from a pointer
+    // https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    fn codegen_offset(
+        &mut self,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let src_ptr = fargs.remove(0);
+        let offset = fargs.remove(0);
+        // Check that the computation would not overflow an `isize`
+        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset.clone());
+        let overflow_check = self.codegen_assert(
+            dst_ptr_of.overflowed.not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+            loc.clone(),
+        );
+        // Re-compute `dst_ptr` with standard addition to avoid conversion
+        let dst_ptr = src_ptr.plus(offset);
+        let expr_place = self.codegen_expr_to_place(p, dst_ptr);
+        Stmt::block(vec![overflow_check, expr_place], loc)
     }
 
     /// ptr_offset_from returns the offset between two pointers
