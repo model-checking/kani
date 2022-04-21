@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --default-unwind 3
+// kani-flags: --unwind 3
 // Check that any_raw for arrays do not respect the elements invariants.
 
 extern crate kani;

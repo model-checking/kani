@@ -134,7 +134,7 @@ impl KaniSession {
     }
 }
 
-/// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --harness-unwind)
+/// Solve Unwind Value from conflicting inputs of unwind values. (--unwind, annotation-unwind, --harness-unwind)
 pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
@@ -142,7 +142,7 @@ pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata)
         Some(harness_unwind)
     } else if let Some(annotation_unwind) = harness_metadata.unwind_value {
         Some(annotation_unwind)
-    } else if let Some(default_unwind) = args.default_unwind {
+    } else if let Some(default_unwind) = args.unwind {
         Some(default_unwind)
     } else {
         None
@@ -159,12 +159,10 @@ mod tests {
 
     #[test]
     fn check_default_annotation_unwind_resolve() {
-        // Annotation value for unwind takes precedence over default-unwind value
+        // Annotation value for unwind takes precedence over unwind value
         // except when there is no #[kani::unwind()] provided.
-        let args: Vec<OsString> = ["kani", "--no-default-checks", "--default-unwind", "2"]
-            .iter()
-            .map(|&s| s.into())
-            .collect();
+        let args: Vec<OsString> =
+            ["kani", "--no-default-checks", "--unwind", "2"].iter().map(|&s| s.into()).collect();
         let unwind_args = args::KaniArgs::from_iter(args);
 
         let harnesses = vec![
@@ -250,7 +248,7 @@ mod tests {
         let args_1: Vec<OsString> = [
             "kani",
             "--no-default-checks",
-            "--default-unwind",
+            "--unwind",
             "2",
             "--harness-unwind",
             "1",
@@ -263,7 +261,7 @@ mod tests {
         let args_2: Vec<OsString> = [
             "kani",
             "--no-default-checks",
-            "--default-unwind",
+            "--unwind",
             "2",
             "--harness-unwind",
             "3",
@@ -276,7 +274,7 @@ mod tests {
         let args_3: Vec<OsString> = [
             "kani",
             "--no-default-checks",
-            "--default-unwind",
+            "--unwind",
             "2",
             "--harness-unwind",
             "4",
@@ -286,10 +284,8 @@ mod tests {
         .iter()
         .map(|&s| s.into())
         .collect();
-        let args_4: Vec<OsString> = ["kani", "--no-default-checks", "--default-unwind", "2"]
-            .iter()
-            .map(|&s| s.into())
-            .collect();
+        let args_4: Vec<OsString> =
+            ["kani", "--no-default-checks", "--unwind", "2"].iter().map(|&s| s.into()).collect();
 
         let unwind_args_1 = args::KaniArgs::from_iter(args_1);
         let unwind_args_2 = args::KaniArgs::from_iter(args_2);
