@@ -29,7 +29,7 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_cbmc_json_parser.py
 
 # Build all packages in the workspace
-cargo build
+cargo build --workspace
 
 # Unit tests
 cargo test -p cprover_bindings

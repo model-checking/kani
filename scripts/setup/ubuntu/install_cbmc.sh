@@ -15,3 +15,6 @@ wget -O "$FILE" "$URL"
 sudo dpkg -i "$FILE"
 
 cbmc --version
+
+# Clean up on success
+rm $FILE
