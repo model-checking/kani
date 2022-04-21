@@ -1,0 +1,25 @@
+Checking harness check_size_simple...
+
+std::mem::size_of_val.unsupported_construct\
+Status: FAILURE\
+Description: "'size_of_val' for dynamic types is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/1074"\
+in function std::mem::size_of_val
+
+check_size_simple.assertion\
+Status: UNDETERMINED\
+Description: "assertion failed: size_of_val(t) == 16"\
+in function check_size_simple
+
+
+Checking harness check_align_simple...
+
+check_align_simple.assertion\
+Status: UNDETERMINED\
+Description: "assertion failed: align_of_val(t) == 8"\
+in function check_align_simple
+
+std::mem::align_of_val.unsupported_construct\
+Status: FAILURE\
+Description: "'min_align_of_val' for dynamic types is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/1074"\
+in function std::mem::align_of_val
+
