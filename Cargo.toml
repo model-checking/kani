@@ -8,7 +8,8 @@ members = [
   "tools/bookrunner",
   "tools/compiletest",
   "tools/make-kani-release",
-  "src/cargo-kani",
+  "src/kani-verifier",
+  "src/kani-driver",
   "src/kani-compiler",
   "src/kani_metadata",
   # `librustdoc` is still needed by bookrunner.
@@ -21,5 +22,5 @@ exclude = [
   # dependency tests have their own workspace
   "tests/kani-dependency-test/dependency3",
   # cargo kani tests should also have their own workspace
-  "tests/cargo-kani"
+  "tests/cargo-kani",
 ]

@@ -38,39 +38,14 @@ impl Transformer for IdentityTransformer {
 mod tests {
     use super::{
         super::super::{
-            super::{MachineModel, RoundingMode},
             DatatypeComponent, Expr, Location, Stmt, SwitchCase, Symbol, SymbolTable, Type,
         },
         IdentityTransformer,
     };
-    fn default_machine_model() -> MachineModel {
-        MachineModel::new(
-            1,
-            "x86_64",
-            8,
-            false,
-            8,
-            64,
-            32,
-            32,
-            false,
-            128,
-            64,
-            64,
-            4,
-            true,
-            64,
-            RoundingMode::ToNearest,
-            16,
-            32,
-            false,
-            32,
-            32,
-        )
-    }
+    use crate::machine_model::test_util::machine_model_test_stub;
 
     fn empty_symtab() -> SymbolTable {
-        SymbolTable::new(default_machine_model())
+        SymbolTable::new(machine_model_test_stub())
     }
 
     fn assert_transform_eq(original: SymbolTable) {
@@ -366,13 +341,16 @@ mod tests {
                 Expr::bool_true(),
                 Location::none(),
             ));
-            add_sym(Stmt::assert(Expr::bool_true(), "", "", Location::none()));
+            add_sym(Stmt::assert(Expr::bool_true(), "a", "a", Location::none()));
             add_sym(Stmt::assume(Expr::bool_false(), Location::none()));
             add_sym(Stmt::atomic_block(
-                vec![Stmt::assert_false("", Location::none())],
+                vec![Stmt::assert_false("a", "a", Location::none())],
                 Location::none(),
             ));
-            add_sym(Stmt::block(vec![Stmt::assert_false("", Location::none())], Location::none()));
+            add_sym(Stmt::block(
+                vec![Stmt::assert_false("a", "a", Location::none())],
+                Location::none(),
+            ));
             add_sym(Stmt::break_stmt(Location::none()));
             add_sym(Stmt::continue_stmt(Location::none()));
             add_sym(Stmt::decl(
@@ -442,7 +420,9 @@ mod tests {
                 Stmt::skip(Location::none()),
                 Location::none(),
             ));
-            add_sym(Stmt::assert_false("", Location::none()).with_label("tag1".to_string()));
+            add_sym(
+                Stmt::assert_false("tag1", "tag1", Location::none()).with_label("tag1".to_string()),
+            );
         }
 
         assert_transform_eq(original);

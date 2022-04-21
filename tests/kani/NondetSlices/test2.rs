@@ -10,6 +10,6 @@ fn check(s: &[u8]) {
 #[kani::proof]
 fn main() {
     // returns a slice of length between 0 and 5 with non-det content
-    let slice: kani::slice::NonDetSlice<u8, 5> = kani::slice::any_slice();
+    let slice: kani::slice::AnySlice<u8, 5> = kani::slice::any_slice();
     check(&slice);
 }

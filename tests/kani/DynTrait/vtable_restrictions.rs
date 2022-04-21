@@ -5,7 +5,7 @@
 
 // FIXME until the corresponding CBMC path lands:
 
-// kani-flags: --restrict-vtable
+// kani-flags: --enable-unstable --restrict-vtable
 
 struct Sheep {}
 struct Cow {}

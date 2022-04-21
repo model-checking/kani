@@ -8,7 +8,7 @@
 use super::typ::TypeExt;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, Type};
+use cbmc::goto_program::{Expr, Location, Type};
 use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::{
@@ -24,6 +24,30 @@ use tracing::{debug, warn};
 pub enum TypeOrVariant<'tcx> {
     Type(Ty<'tcx>),
     Variant(&'tcx VariantDef),
+}
+
+/// A struct for storing the data for passing to `codegen_unimplemented`
+#[derive(Debug)]
+pub struct UnimplementedData {
+    /// The specific operation that is not supported
+    pub operation: String,
+    /// URL for issue on Kani github page
+    pub bug_url: String,
+    /// The resulting goto type of the operation
+    pub goto_type: Type,
+    /// Location of operation
+    pub loc: Location,
+}
+
+impl UnimplementedData {
+    pub fn new(operation: &str, bug_url: &str, goto_type: Type, loc: Location) -> Self {
+        UnimplementedData {
+            operation: operation.to_string(),
+            bug_url: bug_url.to_string(),
+            goto_type,
+            loc,
+        }
+    }
 }
 
 /// Relevent information about a projected place (i.e. an lvalue).
@@ -78,7 +102,23 @@ impl<'tcx> ProjectedPlace<'tcx> {
             TypeOrVariant::Type(t) => {
                 let expr_ty = expr.typ().clone();
                 let type_from_mir = ctx.codegen_ty(*t);
-                if expr_ty != type_from_mir { Some((expr_ty, type_from_mir)) } else { None }
+                if expr_ty != type_from_mir {
+                    match t.kind() {
+                        // Slice references (`&[T]`) store raw pointers to the element type `T`
+                        // due to pointer decay. They are fat pointers with the following repr:
+                        // SliceRef { data: *T, len: usize }.
+                        // In those cases, the projection will yield a pointer type.
+                        ty::Slice(..) | ty::Str
+                            if expr_ty.is_pointer()
+                                && expr_ty.base_type() == type_from_mir.base_type() =>
+                        {
+                            None
+                        }
+                        _ => Some((expr_ty, type_from_mir)),
+                    }
+                } else {
+                    None
+                }
             }
             // TODO: handle Variant https://github.com/model-checking/kani/issues/448
             TypeOrVariant::Variant(_) => None,
@@ -164,7 +204,12 @@ impl<'tcx> TypeOrVariant<'tcx> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    fn codegen_field(&mut self, res: Expr, t: TypeOrVariant<'tcx>, f: &Field) -> Expr {
+    fn codegen_field(
+        &mut self,
+        res: Expr,
+        t: TypeOrVariant<'tcx>,
+        f: &Field,
+    ) -> Result<Expr, UnimplementedData> {
         match t {
             TypeOrVariant::Type(t) => {
                 match t.kind() {
@@ -187,7 +232,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {:?} does not have a field", t),
                     ty::Tuple(_) => {
-                        res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table)
+                        Ok(res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table))
                     }
                     ty::Adt(def, _) if def.repr().simd() => {
                         // this is a SIMD vector - the index represents one
@@ -200,27 +245,27 @@ impl<'tcx> GotocCtx<'tcx> {
                         //   assert!(v.1 == 2);
                         // }
                         let size_index = Expr::int_constant(f.index(), Type::size_t());
-                        res.index_array(size_index)
+                        Ok(res.index_array(size_index))
                     }
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
                         let field = &def.variants().raw[0].fields[f.index()];
-                        res.member(&field.name.to_string(), &self.symbol_table)
+                        Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
-                    ty::Closure(..) => res.member(&f.index().to_string(), &self.symbol_table),
-                    ty::Generator(..) => self.codegen_unimplemented(
+                    ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
+                    ty::Generator(..) => Err(UnimplementedData::new(
                         "ty::Generator",
-                        Type::code(vec![], Type::empty()),
-                        res.location().clone(),
                         "https://github.com/model-checking/kani/issues/416",
-                    ),
+                        Type::code(vec![], Type::empty()),
+                        *res.location(),
+                    )),
                     _ => unimplemented!(),
                 }
             }
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(v) => {
                 let field = &v.fields[f.index()];
-                res.member(&field.name.to_string(), &self.symbol_table)
+                Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
         }
     }
@@ -274,9 +319,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the return value is the expression after.
     fn codegen_projection(
         &mut self,
-        before: ProjectedPlace<'tcx>,
+        before: Result<ProjectedPlace<'tcx>, UnimplementedData>,
         proj: ProjectionElem<Local, Ty<'tcx>>,
-    ) -> ProjectedPlace<'tcx> {
+    ) -> Result<ProjectedPlace<'tcx>, UnimplementedData> {
+        let before = before?;
         match proj {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
@@ -288,11 +334,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
                 let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
                     Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
                 } else if self.is_ref_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     Some(before.mir_typ_or_variant.expect_type())
                 } else {
                     before.fat_ptr_mir_typ
@@ -300,7 +344,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let fat_ptr_goto_expr =
                     if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
-                        assert!(before.fat_ptr_goto_expr.is_none());
                         Some(inner_goto_expr.clone())
                     } else {
                         before.fat_ptr_goto_expr
@@ -320,7 +363,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
                     ty::Adt(..) if self.is_unsized(inner_mir_typ) => {
-                        // in cbmc-reg/Strings/os_str_reduced.rs, we see
+                        // in tests/kani/Strings/os_str_reduced.rs, we see
                         // ```
                         //  p.projection = [
                         //     Deref,
@@ -344,18 +387,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => inner_goto_expr.dereference(),
                 };
                 let typ = TypeOrVariant::Type(inner_mir_typ);
-                ProjectedPlace::new(expr, typ, fat_ptr_goto_expr, fat_ptr_mir_typ, self)
+                Ok(ProjectedPlace::new(expr, typ, fat_ptr_goto_expr, fat_ptr_mir_typ, self))
             }
             ProjectionElem::Field(f, t) => {
                 let typ = TypeOrVariant::Type(t);
-                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f);
-                ProjectedPlace::new(
+                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f)?;
+                Ok(ProjectedPlace::new(
                     expr,
                     typ,
                     before.fat_ptr_goto_expr,
                     before.fat_ptr_mir_typ,
                     self,
-                )
+                ))
             }
             ProjectionElem::Index(i) => {
                 let base_type = before.mir_typ();
@@ -369,25 +412,41 @@ impl<'tcx> GotocCtx<'tcx> {
                     ty::Slice(..) => before.goto_expr.index(idxe),
                     _ => unreachable!("must index an array"),
                 };
-                ProjectedPlace::new(
+                Ok(ProjectedPlace::new(
                     expr,
                     typ,
                     before.fat_ptr_goto_expr,
                     before.fat_ptr_mir_typ,
                     self,
-                )
+                ))
             }
             ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
-                self.codegen_constant_index(before, offset, min_length, from_end)
+                Ok(self.codegen_constant_index(before, offset, min_length, from_end))
             }
             // Best effort to codegen subslice projection.
-            // This is known to fail with a CBMC invariant violation
-            // in some cases. Full support to be added in
-            // https://github.com/model-checking/kani/issues/357
+            // Full support to be added in
+            // https://github.com/model-checking/kani/issues/707
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
-                    ty::Array(..) => unimplemented!(),
+                    ty::Array(ty, len) => {
+                        let len = len.val().try_to_machine_usize(self.tcx).unwrap();
+                        let subarray_len = if from_end {
+                            // `to` counts from the end of the array
+                            len - to - from
+                        } else {
+                            to - from
+                        };
+                        let typ = self.tcx.mk_array(*ty, subarray_len);
+                        let goto_typ = self.codegen_ty(typ);
+                        // unimplemented
+                        Err(UnimplementedData::new(
+                            "Sub-array binding",
+                            "https://github.com/model-checking/kani/issues/707",
+                            goto_typ,
+                            *before.goto_expr.location(),
+                        ))
+                    }
                     ty::Slice(elemt) => {
                         let len = if from_end {
                             let olen = before
@@ -409,13 +468,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
                         let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
-                        ProjectedPlace::new(
+                        Ok(ProjectedPlace::new(
                             fat_ptr.clone(),
                             TypeOrVariant::Type(ptr_typ),
                             Some(fat_ptr),
                             Some(ptr_typ),
                             self,
-                        )
+                        ))
                     }
                     _ => unreachable!("must be array or slice"),
                 }
@@ -440,13 +499,13 @@ impl<'tcx> GotocCtx<'tcx> {
                                 TagEncoding::Niche { .. } => before.goto_expr,
                             },
                         };
-                        ProjectedPlace::new(
+                        Ok(ProjectedPlace::new(
                             expr,
                             typ,
                             before.fat_ptr_goto_expr,
                             before.fat_ptr_mir_typ,
                             self,
-                        )
+                        ))
                     }
                     _ => unreachable!("it's a bug to reach here!"),
                 }
@@ -460,14 +519,18 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function follows the MIR projection to get the final useable lvalue.
     /// If it passes through a fat pointer along the way, it stores info about it,
     /// which can be useful in reconstructing fat pointer operations.
-    pub fn codegen_place(&mut self, p: &Place<'tcx>) -> ProjectedPlace<'tcx> {
-        debug!("codegen_place: {:?}", p);
+    pub fn codegen_place(
+        &mut self,
+        p: &Place<'tcx>,
+    ) -> Result<ProjectedPlace<'tcx>, UnimplementedData> {
+        debug!(place=?p, "codegen_place");
         let initial_expr = self.codegen_local(p.local);
         let initial_typ = TypeOrVariant::Type(self.local_ty(p.local));
+        debug!(?initial_typ, ?initial_expr, "codegen_place");
         let initial_projection = ProjectedPlace::new(initial_expr, initial_typ, None, None, self);
         p.projection
             .iter()
-            .fold(initial_projection, |accum, proj| self.codegen_projection(accum, proj))
+            .fold(Ok(initial_projection), |accum, proj| self.codegen_projection(accum, proj))
     }
 
     // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html
@@ -532,4 +595,41 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_idx_array(&mut self, arr: Expr, idx: Expr) -> Expr {
         arr.member("0", &self.symbol_table).index_array(idx)
     }
+}
+
+/// A convenience macro that unwraps a `Result<ProjectPlace<'tcx>,
+/// Err<UnimplementedData>` if it is `Ok` and returns an `codegen_unimplemented`
+/// expression otherwise.
+/// Note that this macro affects the control flow since it calls `return`
+#[macro_export]
+macro_rules! unwrap_or_return_codegen_unimplemented {
+    ($ctx:expr, $pp_result:expr) => {{
+        if let Err(err) = $pp_result {
+            return $ctx.codegen_unimplemented(
+                err.operation.as_str(),
+                err.goto_type,
+                err.loc,
+                err.bug_url.as_str(),
+            );
+        }
+        $pp_result.unwrap()
+    }};
+}
+
+/// Same as the above macro, but returns a goto program `Stmt` instead
+#[macro_export]
+macro_rules! unwrap_or_return_codegen_unimplemented_stmt {
+    ($ctx:expr, $pp_result:expr) => {{
+        if let Err(err) = $pp_result {
+            return $ctx
+                .codegen_unimplemented(
+                    err.operation.as_str(),
+                    err.goto_type,
+                    err.loc,
+                    err.bug_url.as_str(),
+                )
+                .as_stmt(err.loc);
+        }
+        $pp_result.unwrap()
+    }};
 }

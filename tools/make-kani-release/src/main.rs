@@ -74,7 +74,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 1. Kani binaries
     let release = Path::new("./target/release");
-    cp(&release.join("cargo-kani"), &bin)?;
+    cp(&release.join("kani-driver"), &bin)?;
     cp(&release.join("kani-compiler"), &bin)?;
 
     // 2. Kani scripts
@@ -83,13 +83,19 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     cp(Path::new("./scripts/cbmc_json_parser.py"), &scripts)?;
 
-    // 3a. Kani libraries
+    // 3. Kani libraries
     let library = dir.join("library");
     std::fs::create_dir(&library)?;
 
     cp_dir(Path::new("./library/kani"), &library)?;
     cp_dir(Path::new("./library/kani_macros"), &library)?;
     cp_dir(Path::new("./library/std"), &library)?;
+
+    // 4. Record the exact toolchain we use
+    std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
+
+    // 5. Include a licensing note
+    cp(Path::new("tools/make-kani-release/license-notes.txt"), dir)?;
 
     Ok(())
 }

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "cargo-kani"
+name = "kani-driver"
 version = "0.1.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
@@ -12,7 +12,7 @@ repository = "https://github.com/model-checking/kani"
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
-anyhow = "1.0.31"
+anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 structopt = "0.3"

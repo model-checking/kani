@@ -5,7 +5,9 @@ use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
+use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::utils::BUG_REPORT_URL;
 use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
@@ -46,15 +48,25 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
                 self.codegen_switch_int(discr, *switch_ty, targets)
             }
-            TerminatorKind::Resume => self.codegen_assert_false("resume instruction", loc),
-            TerminatorKind::Abort => self.codegen_assert_false("abort instruction", loc),
+            TerminatorKind::Resume => self.codegen_assert_false(
+                PropertyClass::UnsupportedConstruct,
+                "resume instruction",
+                loc,
+            ),
+            TerminatorKind::Abort => self.codegen_assert_false(
+                PropertyClass::UnsupportedConstruct,
+                "abort instruction",
+                loc,
+            ),
             TerminatorKind::Return => {
                 let rty = self.current_fn().sig().unwrap().skip_binder().output();
                 if rty.is_unit() {
                     self.codegen_ret_unit()
                 } else {
                     let p = Place::from(mir::RETURN_PLACE);
-                    let v = self.codegen_place(&p).goto_expr;
+                    let v =
+                        unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(&p))
+                            .goto_expr;
                     if self.place_ty(&p).is_bool() {
                         v.cast_to(Type::c_bool()).ret(loc)
                     } else {
@@ -64,7 +76,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    self.codegen_assert_false("unreachable code", loc.clone()),
+                    self.codegen_assert_false(
+                        PropertyClass::Unreachable,
+                        "unreachable code",
+                        loc.clone(),
+                    ),
                     Stmt::assume(Expr::bool_false(), loc.clone()),
                 ],
                 loc,
@@ -111,7 +127,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc,
                         ),
-                        self.codegen_assert_false(&msg_str, loc),
+                        self.codegen_assert_false(PropertyClass::DefaultAssertion, &msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -138,7 +154,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc_ty = self.place_ty(location);
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
         if let Some(hk) = self.hooks.hook_applies(self.tcx, drop_instance) {
-            let le = self.codegen_place(location).goto_expr;
+            let le =
+                unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(location))
+                    .goto_expr;
             hk.handle(self, drop_instance, vec![le], None, Some(*target), None)
         } else {
             let drop_implementation = match drop_instance.def {
@@ -150,8 +168,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     match loc_ty.kind() {
                         ty::Dynamic(..) => {
                             // Virtual drop via a vtable lookup
-                            let trait_fat_ptr =
-                                self.codegen_place(location).fat_ptr_goto_expr.unwrap();
+                            let trait_fat_ptr = unwrap_or_return_codegen_unimplemented_stmt!(
+                                self,
+                                self.codegen_place(location)
+                            )
+                            .fat_ptr_goto_expr
+                            .unwrap();
 
                             // Pull the function off of the fat pointer's vtable pointer
                             let vtable_ref =
@@ -182,7 +204,10 @@ impl<'tcx> GotocCtx<'tcx> {
                             assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
 
                             let func = self.codegen_func_expr(drop_instance, None);
-                            let place = self.codegen_place(location);
+                            let place = unwrap_or_return_codegen_unimplemented_stmt!(
+                                self,
+                                self.codegen_place(location)
+                            );
                             let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
                                 // Drop takes the fat pointer if it exists
                                 fat_ptr
@@ -312,6 +337,19 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    fn codegen_end_call(&self, target: Option<&BasicBlock>, loc: Location) -> Stmt {
+        if let Some(next_bb) = target {
+            Stmt::goto(self.current_fn().find_label(&next_bb), loc)
+        } else {
+            Stmt::assert_sanity_check(
+                Expr::bool_false(),
+                "Unexpected return from Never function",
+                BUG_REPORT_URL,
+                loc,
+            )
+        }
+    }
+
     fn codegen_funcall(
         &mut self,
         func: &Operand<'tcx>,
@@ -356,21 +394,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     );
                 }
 
-                if destination.is_none() {
-                    // No target block means this function doesn't return.
-                    // This should have been handled by the Nevers hook.
-                    return self.codegen_assert_false(
-                        &format!("reach some nonterminating function: {:?}", func),
-                        loc.clone(),
-                    );
-                }
-
-                let (p, target) = destination.unwrap();
+                let (place, target) =
+                    if let Some((p, t)) = destination { (Some(p), Some(t)) } else { (None, None) };
 
                 let mut stmts: Vec<Stmt> = match instance.def {
                     // Here an empty drop glue is invoked; we just ignore it.
                     InstanceDef::DropGlue(_, None) => {
-                        return Stmt::goto(self.current_fn().find_label(&target), Location::none());
+                        return Stmt::goto(
+                            self.current_fn().find_label(&target.unwrap()),
+                            Location::none(),
+                        );
                     }
                     // Handle a virtual function call via a vtable lookup
                     InstanceDef::Virtual(def_id, idx) => {
@@ -389,7 +422,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             trait_fat_ptr,
                             def_id,
                             idx,
-                            &p,
+                            place,
                             &mut fargs,
                             loc.clone(),
                         )
@@ -404,13 +437,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
                         let func_exp = self.codegen_operand(func);
-                        vec![
-                            self.codegen_expr_to_place(&p, func_exp.call(fargs))
-                                .with_location(loc.clone()),
-                        ]
+                        if let Some(dest_place) = place {
+                            vec![
+                                self.codegen_expr_to_place(&dest_place, func_exp.call(fargs))
+                                    .with_location(loc.clone()),
+                            ]
+                        } else {
+                            vec![func_exp.call(fargs).as_stmt(loc.clone())]
+                        }
                     }
                 };
-                stmts.push(Stmt::goto(self.current_fn().find_label(&target), loc.clone()));
+                stmts.push(self.codegen_end_call(target, loc.clone()));
                 return Stmt::block(stmts, loc);
             }
             // Function call through a pointer
@@ -436,7 +473,7 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_fat_ptr: Expr,
         def_id: DefId,
         idx: usize,
-        place: &Place<'tcx>,
+        place: Option<&Place<'tcx>>,
         fargs: &mut Vec<Expr>,
         loc: Location,
     ) -> Vec<Stmt> {
@@ -468,7 +505,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = self.codegen_expr_to_place(place, call).with_location(loc.clone());
+        let call_stmt = if let Some(place) = place {
+            self.codegen_expr_to_place(place, call).with_location(loc.clone())
+        } else {
+            call.as_stmt(loc.clone())
+        };
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {
@@ -484,7 +525,9 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.place_ty(p).is_unit() {
             e.as_stmt(Location::none())
         } else {
-            self.codegen_place(&p).goto_expr.assign(e, Location::none())
+            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(&p))
+                .goto_expr
+                .assign(e, Location::none())
         }
     }
 
@@ -496,16 +539,21 @@ impl<'tcx> GotocCtx<'tcx> {
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
-        self.codegen_fatal_error(&msg, span)
+        self.codegen_fatal_error(PropertyClass::DefaultAssertion, &msg, span)
     }
 
     // Generate code for fatal error which should trigger an assertion failure and abort the
     // execution.
-    pub fn codegen_fatal_error(&self, msg: &str, span: Option<Span>) -> Stmt {
+    pub fn codegen_fatal_error(
+        &self,
+        property_class: PropertyClass,
+        msg: &str,
+        span: Option<Span>,
+    ) -> Stmt {
         let loc = self.codegen_caller_span(&span);
         Stmt::block(
             vec![
-                self.codegen_assert_false(msg, loc),
+                self.codegen_assert_false(property_class, msg, loc),
                 BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
             ],
             loc,
@@ -542,15 +590,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     // implicit address of a function pointer, e.g.
                     // let fp: fn() -> i32 = foo;
                     // where the reference is implicit.
-                    self.codegen_place(l)
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
                         .assign(self.codegen_rvalue(r).address_of(), Location::none())
                 } else if rty.is_bool() {
-                    self.codegen_place(l)
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
                         .assign(self.codegen_rvalue(r).cast_to(Type::c_bool()), Location::none())
                 } else {
-                    self.codegen_place(l).goto_expr.assign(self.codegen_rvalue(r), Location::none())
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
+                        .goto_expr
+                        .assign(self.codegen_rvalue(r), Location::none())
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
@@ -577,11 +627,26 @@ impl<'tcx> GotocCtx<'tcx> {
                         TagEncoding::Direct => {
                             let discr = def.discriminant_for_variant(self.tcx, *variant_index);
                             let discr_t = self.codegen_enum_discr_typ(pt);
+                            // The constant created below may not fit into the type.
+                            // https://github.com/model-checking/kani/issues/996
+                            //
+                            // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
+                            // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
+                            // because when it tries to codegen `std::cmp::Ordering` (which should produce
+                            // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
+                            //
+                            // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
+                            // DISCRIMINANT - val:255 ty:i8
+                            // DISCRIMINANT - val:0 ty:i8
+                            // DISCRIMINANT - val:1 ty:i8
                             let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
-                            self.codegen_place(place)
-                                .goto_expr
-                                .member("case", &self.symbol_table)
-                                .assign(discr, Location::none())
+                            unwrap_or_return_codegen_unimplemented_stmt!(
+                                self,
+                                self.codegen_place(place)
+                            )
+                            .goto_expr
+                            .member("case", &self.symbol_table)
+                            .assign(discr, Location::none())
                         }
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                             if dataful_variant != variant_index {
@@ -601,7 +666,11 @@ impl<'tcx> GotocCtx<'tcx> {
                                 } else {
                                     Expr::int_constant(niche_value, discr_ty.clone())
                                 };
-                                let place = self.codegen_place(place).goto_expr;
+                                let place = unwrap_or_return_codegen_unimplemented_stmt!(
+                                    self,
+                                    self.codegen_place(place)
+                                )
+                                .goto_expr;
                                 self.codegen_get_niche(place, offset, discr_ty)
                                     .assign(value, Location::none())
                             } else {
