@@ -294,17 +294,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let tp_ty = instance.substs.type_at(0);
                 let arg = fargs.remove(0);
                 let size_align = self.size_and_align_of_dst(tp_ty, arg);
-                if size_align.is_some() {
-                    self.codegen_expr_to_place(p, size_align.unwrap().$which)
-                } else {
-                    let e = self.codegen_unimplemented(
-                        &format!("'{}' for dynamic types", intrinsic),
-                        cbmc_ret_ty,
-                        loc,
-                        "https://github.com/model-checking/kani/issues/1074",
-                    );
-                    self.codegen_expr_to_place(p, e)
-                }
+                self.codegen_expr_to_place(p, size_align.$which)
             }};
         }
 
@@ -956,24 +946,22 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function computes the size and alignment of a dynamically-sized type.
     /// The implementations follows closely the SSA implementation found in
     /// rustc_codegen_ssa::glue::size_and_align_of_dst.
-    ///
-    /// This returns an option because of issue with codegen dynamic T.
-    /// See https://github.com/model-checking/kani/issues/1074 for more details.
-    fn size_and_align_of_dst(&self, t: Ty<'tcx>, arg: Expr) -> Option<SizeAlign> {
+    fn size_and_align_of_dst(&self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
         let layout = self.layout_of(t);
         let usizet = Type::size_t();
         if !layout.is_unsized() {
             let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t());
             let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
-            return Some(SizeAlign { size, align });
+            return SizeAlign { size, align };
         }
         match t.kind() {
             ty::Dynamic(..) => {
-                // TODO: We don't support size of dynamic yet.
-                // https://github.com/model-checking/kani/issues/1074
-                // The size of dyn T is only known at runtime. Thus, we need to retrieve that
-                // information from the object vtable.
-                None
+                // For traits, we need to retrieve the size and alignment from the vtable.
+                let vtable = arg.member("vtable", &self.symbol_table).dereference();
+                SizeAlign {
+                    size: vtable.clone().member("size", &self.symbol_table),
+                    align: vtable.member("align", &self.symbol_table),
+                }
             }
             ty::Slice(_) | ty::Str => {
                 let unit_t = match t.kind() {
@@ -987,7 +975,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
                     .mul(arg.member("len", &self.symbol_table));
                 let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
-                Some(SizeAlign { size, align })
+                SizeAlign { size, align }
             }
             _ => {
                 // This arm handles the case where the dynamically-sized type is nested within the type.
@@ -1013,7 +1001,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Call this function recursively to compute the size and align for the last field.
                 let field_ty = layout.field(self, n).ty;
                 let SizeAlign { size: unsized_size, align: mut unsized_align } =
-                    self.size_and_align_of_dst(field_ty, arg.clone())?;
+                    self.size_and_align_of_dst(field_ty, arg);
 
                 // The size of the object is the sum of the sized and unsized portions.
                 // FIXME: We should add padding between the sized and unsized portions,
@@ -1045,7 +1033,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let neg = align.clone().neg();
                 let size = add.bitand(neg);
 
-                Some(SizeAlign { size, align })
+                SizeAlign { size, align }
             }
         }
     }
