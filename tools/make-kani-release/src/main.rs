@@ -46,8 +46,8 @@ fn parse_args() -> Result<String> {
 /// Ensures everything is good to go before we begin to build the release bundle.
 /// Notably, builds Kani in release mode.
 fn prebundle(dir: &Path) -> Result<()> {
-    if !Path::new("src/kani-compiler").exists() {
-        bail!("Run from project root directory. Couldn't find 'src/kani-compiler'.");
+    if !Path::new("kani-compiler").exists() {
+        bail!("Run from project root directory. Couldn't find 'kani-compiler'.");
     }
 
     if dir.exists() {
@@ -62,7 +62,7 @@ fn prebundle(dir: &Path) -> Result<()> {
     }
 
     // Before we begin, ensure Kani is built successfully in release mode.
-    Command::new("cargo").args(&["build", "--release"]).run()?;
+    Command::new("cargo").args(&["build", "--release", "--workspace"]).run()?;
 
     Ok(())
 }
