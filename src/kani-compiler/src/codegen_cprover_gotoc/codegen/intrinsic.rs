@@ -343,7 +343,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     &format!("'{}' intrinsic", intrinsic),
                     cbmc_ret_ty,
                     loc,
-                    "https://github.com/model-checking/kani/dummy",
+                    "https://github.com/model-checking/kani/issues/new/choose",
                 );
                 self.codegen_expr_to_place(p, e)
             }};
