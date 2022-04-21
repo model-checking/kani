@@ -79,5 +79,39 @@ Failed Checks: dereference failure: pointer outside object bounds
 
 Kani is now sure we've unwound the loop enough to verify our proof harness, and now we're seeing just the bound checking failures from the off-by-one error.
 
+## Ways to specify unwinding value
+
+Kani allows three ways of specifying the unwind value for a purticular harness. They can be set through the below ways-
+
+1. Unwind annotation. This sets the unwind value for the harness above which the annotation is added. Example -
+``` rust
+#[kani::proof]
+#[kani::unwind(3)]
+fn proof_harness() {
+    ...
+}
+```
+2. `--unwind` flag. This sets the unwind value for the entire file/crate on which kani or cargo-kani is called. Example -
+```
+kani file.rs --unwind 3
+```
+3. `--harness-unwind` flag. This needs to be used alongside `--harness` and sets the unwind value for the harness specified. Example -
+```
+kani file.rs --harness-unwind 2 --harness proof_harness
+```
+
+### Order of precedence among unwind values
+
+There is an order of precedence among the ways one can set the unwind values for a harness. The more specific the way of setting the unwind value, the higher it's order of precedence. Based on this priciple, when there's 2 or more unwind values provided for a purticular harness, the following is the order in which preference is given.
+
+1. `--harness-unwind x`
+2. `#[kani::unwind(x)]`
+3. `--unwind x`
+
+So, if a user sets the unwind value using all 3 ways of setting, the value given with `--harness-unwind` will be chosen as the intended value and so on.
+
+
+### Exercises -
+
 1. Exercise: Fix the off-by-one bounds error and get Kani to verify successfully.
 2. Exercise: After fixing the error, `--unwind 11` works. Why?
