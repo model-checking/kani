@@ -96,7 +96,7 @@ impl<'tcx> GotocCtx<'tcx> {
         /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
         /// https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
         /// An intrinsic that translates directly into either memmove (for copy) or memcpy (copy_nonoverlapping)
-        macro_rules! codegen_intrinsic_copy {
+        macro_rules! _codegen_intrinsic_copy {
             ($f:ident) => {{
                 let src = fargs.remove(0).cast_to(Type::void_pointer());
                 let dst = fargs.remove(0).cast_to(Type::void_pointer());
@@ -337,6 +337,18 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
+        macro_rules! unstable_codegen {
+            ($($tt:tt)*) => {{
+                let e = self.codegen_unimplemented(
+                    &format!("'{}' intrinsic", intrinsic),
+                    cbmc_ret_ty,
+                    loc,
+                    "https://github.com/model-checking/kani/dummy",
+                );
+                self.codegen_expr_to_place(p, e)
+            }};
+        }
+
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
             let n: u64 = stripped.parse().unwrap();
             return self.codegen_intrinsic_simd_shuffle(fargs, p, cbmc_ret_ty, n);
@@ -344,6 +356,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match intrinsic {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
+            "arith_offset" => unstable_codegen!(codegen_wrapping_op!(plus)),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
@@ -427,7 +440,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "ceilf64" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
-            "copy" => codegen_intrinsic_copy!(Memmove),
+            "copy" => unstable_codegen!(_codegen_intrinsic_copy!(Memmove)),
+            "copy_nonoverlapping" => unstable_codegen!(_codegen_intrinsic_copy!(Memcpy)),
+            "copysignf32" => unstable_codegen!(codegen_simple_intrinsic!(Copysignf)),
+            "copysignf64" => unstable_codegen!(codegen_simple_intrinsic!(Copysign)),
             "cosf32" => codegen_simple_intrinsic!(Cosf),
             "cosf64" => codegen_simple_intrinsic!(Cos),
             "ctlz" => codegen_count_intrinsic!(ctlz, true),
@@ -441,6 +457,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place(p, e)
             }
             "exact_div" => self.codegen_exact_div(fargs, p, loc),
+            "exp2f32" => unstable_codegen!(codegen_simple_intrinsic!(Exp2f)),
+            "exp2f64" => unstable_codegen!(codegen_simple_intrinsic!(Exp2)),
+            "expf32" => unstable_codegen!(codegen_simple_intrinsic!(Expf)),
+            "expf64" => unstable_codegen!(codegen_simple_intrinsic!(Exp)),
             "fabsf32" => codegen_simple_intrinsic!(Fabsf),
             "fabsf64" => codegen_simple_intrinsic!(Fabs),
             "fadd_fast" => {
@@ -459,6 +479,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "floorf64" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
+            "fmaf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaf)),
+            "fmaf64" => unstable_codegen!(codegen_simple_intrinsic!(Fma)),
             "fmul_fast" => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
@@ -471,8 +493,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
             "likely" => self.codegen_expr_to_place(p, fargs.remove(0)),
+            "log10f32" => unstable_codegen!(codegen_simple_intrinsic!(Log10f)),
+            "log10f64" => unstable_codegen!(codegen_simple_intrinsic!(Log10)),
+            "log2f32" => unstable_codegen!(codegen_simple_intrinsic!(Log2f)),
+            "log2f64" => unstable_codegen!(codegen_simple_intrinsic!(Log2)),
+            "logf32" => unstable_codegen!(codegen_simple_intrinsic!(Logf)),
+            "logf64" => unstable_codegen!(codegen_simple_intrinsic!(Log)),
+            "maxnumf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaxf)),
+            "maxnumf64" => unstable_codegen!(codegen_simple_intrinsic!(Fmax)),
             "min_align_of" => codegen_intrinsic_const!(),
             "min_align_of_val" => codegen_size_align!(align),
+            "minnumf32" => unstable_codegen!(codegen_simple_intrinsic!(Fminf)),
+            "minnumf64" => unstable_codegen!(codegen_simple_intrinsic!(Fmin)),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
             "nearbyintf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
@@ -482,6 +514,10 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "needs_drop" => codegen_intrinsic_const!(),
             "offset" => codegen_op_with_overflow_check!(add_overflow),
+            "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
+            "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
+            "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
+            "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
             "ptr_guaranteed_eq" => codegen_intrinsic_boolean_binop!(eq),
             "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
@@ -537,6 +573,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
+            "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
+            "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_unimplemented_intrinsic!(
@@ -552,6 +590,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
+            "unaligned_volatile_load" => {
+                unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
+            }
             "unchecked_add" => codegen_op_with_overflow_check!(add_overflow),
             "unchecked_div" => codegen_op_with_div_overflow_check!(div),
             "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow),
@@ -572,6 +613,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 "unreachable",
                 loc,
             ),
+            "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
+            "volatile_copy_nonoverlapping_memory" => {
+                unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
+            }
+            "volatile_load" => {
+                unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
+            }
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
                 self.codegen_volatile_store(instance, intrinsic, fargs, loc)
