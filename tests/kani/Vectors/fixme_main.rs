@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --unwind 0
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct GuestAddress(pub u64);
 
@@ -11,6 +10,7 @@ pub struct GuestRegionMmap {
 
 // TODO: running this with --unwrap 2 causes CBMC to hang in propositional reduction.
 #[kani::proof]
+#[kani::unwind(0)]
 fn main() {
     let r = GuestRegionMmap { guest_base: GuestAddress(0) };
     let mut regions: Vec<GuestRegionMmap> = vec![];
