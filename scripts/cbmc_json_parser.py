@@ -50,6 +50,7 @@ class GlobalMessages(str, Enum):
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
     REACH_CHECK_KEY = "reachCheckResult"
     CHECK_ID = "KANI_CHECK_ID"
+    CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -519,7 +520,7 @@ def annotate_properties_with_reach_results(properties, reach_checks):
     for reach_check in reach_checks:
         description = reach_check["description"]
         # Extract the ID of the assert from the description
-        match_obj = re.search(GlobalMessages.CHECK_ID + r"_.*_([0-9])*", description)
+        match_obj = re.search(GlobalMessages.CHECK_ID_RE, description)
         if not match_obj:
             raise Exception("Error: failed to extract check ID for reachability check \"" + description + "\"")
         check_id = match_obj.group(0)
@@ -534,7 +535,7 @@ def get_matching_property(properties, check_id):
     """
     for property in properties:
         description = property["description"]
-        match_obj = re.search("\\[" + GlobalMessages.CHECK_ID + r"_.*_([0-9])*" + "\\]", description)
+        match_obj = re.search("\\[" + GlobalMessages.CHECK_ID_RE + "\\]", description)
         # Currently, not all properties have a check ID
         if match_obj:
             prop_check_id = match_obj.group(0)
@@ -558,7 +559,7 @@ def remove_check_ids_from_description(properties):
     they're not shown to the user. The removal of the IDs should only be done
     after all ID-based post-processing is done.
     """
-    check_id_pattern = re.compile(r"\[" + GlobalMessages.CHECK_ID + r"_.*_[0-9]*\] ")
+    check_id_pattern = re.compile(r"\[" + GlobalMessages.CHECK_ID_RE + r"\] ")
     for property in properties:
         property["description"] = re.sub(check_id_pattern, "", property["description"])
 
