@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 atty = "0.2.14"
 bitflags = { version = "1.0", optional = true }
-cbmc = { path = "../../cprover_bindings", package = "cprover_bindings", optional = true }
+cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
 clap = "2.33.0"
 kani_queries = {path = "kani_queries"}
 kani_metadata = { path = "../kani_metadata", optional = true }

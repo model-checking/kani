@@ -6,7 +6,7 @@ issues in the Kani project.
 ## CBMC arguments
 
 Kani is able to handle common CBMC arguments as if they were its own (e.g.,
-`--unwind <n>`), but sometimes it may be necessary to use CBMC arguments which
+`--default-unwind <n>`), but sometimes it may be necessary to use CBMC arguments which
 are not handled by Kani.
 
 To pass additional arguments for CBMC, you pass `--cbmc-args` to Kani. Note that
@@ -26,7 +26,7 @@ cargo kani [<kani-args>]* --cbmc-args [<cbmc-args>]*
 
 ### Individual loop bounds
 
-Setting `--unwind <n>` affects every loop in a harness.
+Setting `--default-unwind <n>` affects every loop in a harness.
 Once you know a particular loop is causing trouble, sometimes it can be helpful to provide a specific bound for it.
 
 In the general case, specifying just the highest bound globally for all loops

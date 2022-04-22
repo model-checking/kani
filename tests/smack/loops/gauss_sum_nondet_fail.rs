@@ -3,8 +3,9 @@
 // @flag --no-memory-splitting --unroll=10
 // @expect error
 // kani-verify-fail
-// cbmc-flags: --unwind 5
 
+#[kani::proof]
+#[kani::unwind(5)]
 pub fn main() {
     let mut sum = 0;
     let b: u64 = kani::any();

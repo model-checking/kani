@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// cbmc-flags: --unwind 2
-
 fn doswitch_int() -> i32 {
     for i in [99].iter() {
         if *i == 99 {
@@ -31,6 +29,7 @@ fn doswitch_bytes() -> i32 {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     let v = doswitch_int();
     assert!(v == 1);

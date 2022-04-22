@@ -3,7 +3,7 @@
 
 // This test uses kani::slice::any_slice of i32
 
-// kani-flags: --unwind 6
+// kani-flags: --default-unwind 6
 
 #[kani::proof]
 fn check_any_slice_i32() {

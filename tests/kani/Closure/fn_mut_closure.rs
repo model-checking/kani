@@ -4,8 +4,6 @@
 // Check that we can pass a FnMut closure to a stand alone
 // function definition.
 
-// kani-flags: --unwind 6
-
 fn each<T, F>(x: &[T], mut f: F)
 where
     F: FnMut(&T),
@@ -16,6 +14,7 @@ where
 }
 
 #[kani::proof]
+#[kani::unwind(6)]
 fn main() {
     let mut sum = 0_usize;
     let elems = [1_usize, 2, 3, 4, 5];
