@@ -107,7 +107,7 @@ be specified in single Rust files by adding a comment at the top of the file:
 For example, to use an unwinding value of 4 in a test, we can write:
 
 ```rust,noplaypen
-// kani-flags: --unwind 4
+// kani-flags: --default-unwind 4
 ```
 
 For `cargo-kani` tests, the preferred way to pass command-line options is adding
