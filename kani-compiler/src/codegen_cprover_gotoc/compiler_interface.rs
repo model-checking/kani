@@ -273,10 +273,11 @@ fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
             .map(|(key, val)| (key.map(|s| String::from(s)), val))
             .collect();
         let mut msg =
-            String::from("Compilation unit included the following unsupported constructs:");
+            String::from("Compilation unit included the following unsupported constructs:\n");
         unsupported.iter().for_each(|(construct, locations)| {
-            msg += &format!("\n    - {} ({})", construct, locations.len())
+            msg += &format!("    - {} ({})\n", construct, locations.len())
         });
+        msg += "\nVerification will fail if one or more of these constructs is reachable.";
         tcx.sess.warn(&msg);
     }
 }
