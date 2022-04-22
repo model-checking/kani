@@ -77,11 +77,12 @@ impl<'tcx> GotocCtx<'tcx> {
         } else if self.should_skip_current_fn() || crate_has_global_asm {
             debug!("Skipping function {}", self.current_fn().readable_name());
             let unsupported_operation = if crate_has_global_asm {
-                "Calling function \"".to_owned()
-                    + self.current_fn().readable_name()
-                    + "\" defined in a crate with global_asm"
+                format!(
+                    "Calling function '{}' defined in a crate with global_asm",
+                    self.current_fn().readable_name()
+                )
             } else {
-                "The function ".to_owned() + self.current_fn().readable_name()
+                format!("The function '{}'", self.current_fn().readable_name())
             };
             let body = self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
