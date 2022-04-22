@@ -300,7 +300,9 @@ def postprocess_results(properties, extra_ptr_check):
                 property["status"] = "UNDETERMINED"
         elif GlobalMessages.REACH_CHECK_KEY in property and property[GlobalMessages.REACH_CHECK_KEY] == "SUCCESS":
             # Change SUCCESS to UNREACHABLE
-            assert property["status"] == "SUCCESS", "** ERROR: Expecting an unreachable property to have a status of \"SUCCESS\""
+            description = property["description"]
+            assert property[
+                "status"] == "SUCCESS", f"** ERROR: Expecting the unreachable property \"{description}\" to have a status of \"SUCCESS\""
             property["status"] = "UNREACHABLE"
 
     messages = ""
@@ -531,8 +533,13 @@ def get_matching_property(properties, check_id):
     Find the property with the given ID
     """
     for property in properties:
-        if check_id in property["description"]:
-            return property
+        description = property["description"]
+        match_obj = re.search("\\[" + GlobalMessages.CHECK_ID + r"_.*_([0-9])*" + "\\]", description)
+        # Currently, not all properties have a check ID
+        if match_obj:
+            prop_check_id = match_obj.group(0)
+            if prop_check_id == "[" + check_id + "]":
+                return property
     raise Exception("Error: failed to find a property with ID \"" + check_id + "\"")
 
 
