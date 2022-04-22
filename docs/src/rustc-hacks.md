@@ -14,7 +14,6 @@ In order to get these features working for `rustc` crates, you can do the follow
 
 Add the following to the `rust-analyzer` extension settings in `settings.json`:
 ```json
-    "rust-analyzer.updates.channel": "nightly",
     "rust-analyzer.rustcSource": "discover",
     "rust-analyzer.workspace.symbol.search.scope": "workspace_and_dependencies",
 ```
