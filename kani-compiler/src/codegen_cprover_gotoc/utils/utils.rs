@@ -3,8 +3,8 @@
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
+use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Ty;
 use tracing::debug;
@@ -56,8 +56,13 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         url: &str,
     ) -> Expr {
-        // We should possibly upgrade this to a warning in the future, but for now emit at least something
+        // Save this occurrence so we can emit in the compilation report.
         debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
+        let key: InternedString = operation_name.into();
+        if !self.unsupported_constructs.contains_key(&key) {
+            self.unsupported_constructs.insert(key.clone(), Vec::new());
+        }
+        self.unsupported_constructs.get_mut(&key).unwrap().push(loc.clone());
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
