@@ -46,8 +46,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
     /// If it is not used, we the assertion will pass.
     /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
-    ///
-    /// TODO: https://github.com/model-checking/kani/issues/8 assume the required validity constraints for the nondet return
     pub fn codegen_unimplemented(
         &mut self,
         operation_name: &str,
