@@ -11,7 +11,8 @@
 //     fn __rust_realloc(ptr: *mut u8, old_size: usize, align: usize, new_size: usize) -> *mut u8;
 // This low-level function is called by std::alloc:realloc, and its
 // implementation is provided by the compiler backend, so we need to provide an
-// implementation for it.
+// implementation for it to prevent verification failure due to missing function
+// definition.
 // For safety, refer to the documentation of GlobalAlloc::realloc:
 // https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#method.realloc
 uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_size)
