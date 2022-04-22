@@ -21,7 +21,7 @@ uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_
     __CPROVER_assume(ptr != 0);
 
     // Passing a new_size of 0 is undefined behavior
-    __CPROVER_assert(new_size > 0, "realloc called with a new_size of 0");
+    __CPROVER_assert(new_size > 0, "realloc called with a size of 0");
     __CPROVER_assume(new_size > 0);
 
     uint8_t *result = malloc(new_size);
