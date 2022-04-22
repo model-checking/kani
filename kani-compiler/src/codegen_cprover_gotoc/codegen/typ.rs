@@ -903,8 +903,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    //Dynamic function calls have a first paramater which is the fat-pointer representing a dynamic trait
-    //However, the actual call should take a *self. Since we don't know what this is, use `void*` instead.
+    /// Generate code for a trait function declaration.
+    ///
+    /// Dynamic function calls first parameter is the fat-pointer representing self.
+    /// For closures, the type of the first argument is dyn T not &dyn T.
     pub fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
@@ -913,19 +915,20 @@ impl<'tcx> GotocCtx<'tcx> {
         let params = sig
             .inputs()
             .iter()
-            .filter_map(|t| {
+            .filter_map(|arg_type| {
                 if is_first {
-                    // This should either be a &dyn T or a dyn T.
+                    // This should &dyn T or dyn T (for closures).
                     is_first = false;
-                    let first_ty = pointee_type(*t).unwrap_or(*t);
-                    debug!(?first_ty, "The first element in a dynamic function signature");
+                    let first_ty = pointee_type(*arg_type).unwrap_or(*arg_type);
+                    debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
+                    assert!(first_ty.is_trait(), "Expected self type to be a trait");
                     Some(self.codegen_trait_data_pointer(first_ty))
-                } else if self.ignore_var_ty(*t) {
-                    debug!("Ignoring type {:?} in function signature", t);
+                } else if self.ignore_var_ty(*arg_type) {
+                    debug!("Ignoring type {:?} in function signature", arg_type);
                     None
                 } else {
-                    debug!("Using type {:?} in function signature", t);
-                    Some(self.codegen_ty(*t))
+                    debug!("Using type {:?} in function signature", arg_type);
+                    Some(self.codegen_ty(*arg_type))
                 }
             })
             .collect();
