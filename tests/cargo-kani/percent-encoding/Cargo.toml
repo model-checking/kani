@@ -1,0 +1,13 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "check_percent_encode"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+percent-encoding = "2.1.0"
+
+[package.metadata.kani.flags]
+only-codegen = true
