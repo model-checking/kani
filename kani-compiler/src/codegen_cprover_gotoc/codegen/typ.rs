@@ -27,7 +27,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::iter;
 use std::iter::FromIterator;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use ty::layout::HasParamEnv;
 
 /// Map the unit type to an empty struct
@@ -1341,6 +1341,11 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note that `T` must be the last element of the struct.
     /// This also handles nested cases: `Struct<Struct<dyn T>>` returns `dyn T`
     pub fn extract_trait_type(&self, struct_type: Ty<'tcx>) -> Option<Ty<'tcx>> {
+        if !self.use_vtable_fat_pointer(struct_type) {
+            warn!(got=?struct_type, "Expected trait type or a DST struct with a trait element.");
+            return None;
+        }
+
         let mut typ = struct_type;
         while let ty::Adt(adt_def, adt_substs) = typ.kind() {
             assert_eq!(

@@ -115,6 +115,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
                             None
                         }
                         // TODO: Do we really need this?
+                        // https://github.com/model-checking/kani/issues/1092
                         ty::Dynamic(..)
                             if expr_ty.is_pointer()
                                 && *expr_ty.base_type().unwrap() == type_from_mir =>
@@ -172,7 +173,6 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 "Unexpected type mismatch in projection:\n{:?}\nExpr type\n{:?}\nType from MIR\n{:?}",
                 goto_expr, expr_ty, ty_from_mir
             );
-            //assert!(false);
         }
 
         assert!(

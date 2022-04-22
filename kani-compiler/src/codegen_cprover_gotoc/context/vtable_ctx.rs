@@ -120,12 +120,12 @@ impl<'tcx> GotocCtx<'tcx> {
         // We only have the Gotoc type, we need to normalize to match the MIR type.
         // Retrieve the MIR for `&dyn T` and normalize the name.
         assert!(trait_ref.is_struct_tag());
-        let mir_type = self.type_map.get(&trait_ref.tag().unwrap()).unwrap();
-        let mir_name = self.normalized_trait_name(pointee_type(*mir_type).unwrap());
+        let trait_ref_mir_type = self.type_map.get(&trait_ref.tag().unwrap()).unwrap();
+        let trait_name = self.normalized_trait_name(pointee_type(*trait_ref_mir_type).unwrap());
 
         // Label
         self.vtable_ctx.add_call_site(
-            mir_name.into(),
+            trait_name.into(),
             vtable_idx,
             self.current_fn().name().into(),
             label,
