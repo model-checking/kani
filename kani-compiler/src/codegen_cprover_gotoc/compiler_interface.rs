@@ -95,8 +95,9 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // We currently don't model global ASM:
         // https://github.com/model-checking/kani/issues/316
-        // so if crate has global ASM, leave all functions in this crate
-        // undefined so that calling any of them would hit an assert false
+        // so if crate has global ASM, codegen all functions in it as
+        // unimplemented, and skip the codegen of statics so that their values
+        // are non-deterministic
         let has_global_asm = crate_has_global_asm(codegen_units, tcx);
         // then we move on to codegen
         for cgu in codegen_units {
@@ -115,11 +116,13 @@ impl CodegenBackend for GotocCodegenBackend {
                         );
                     }
                     MonoItem::Static(def_id) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.codegen_static(def_id, item),
-                            format!("codegen_static: {:?}", def_id),
-                            def_id,
-                        );
+                        if !has_global_asm {
+                            c.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_static(def_id, item),
+                                format!("codegen_static: {:?}", def_id),
+                                def_id,
+                            );
+                        }
                     }
                     MonoItem::GlobalAsm(_) => {} // We have already warned above
                 }

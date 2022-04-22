@@ -6,6 +6,8 @@
 // defines a function `foo`
 std::arch::global_asm!(".global foo", "foo:", "nop",);
 
+pub static mut STATIC_VAR: u16 = 98;
+
 // exports the fn `foo`
 extern "C" {
     pub fn foo();
