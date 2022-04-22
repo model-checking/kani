@@ -1,21 +1,24 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --default-unwind 3
 
 //! This test case checks the behavior of size_of_val for traits.
+#![allow(dead_code)]
+
 use std::mem::size_of_val;
 
 trait T {}
 
-struct A {}
+struct A {
+    id: u128,
+}
 
 impl T for A {}
 
 #[cfg_attr(kani, kani::proof)]
 fn check_size_simple() {
-    let a = A {};
+    let a = A { id: 0 };
     let t: &dyn T = &a;
-    assert_eq!(size_of_val(t), 0);
+    assert_eq!(size_of_val(t), 16);
     assert_eq!(size_of_val(&t), 16);
 }
 
