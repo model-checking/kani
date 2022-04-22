@@ -132,11 +132,11 @@ impl KaniSession {
         }
 
         if self.args.visualize {
-            self.run_visualize(binary, report_dir)?;
+            self.run_visualize(binary, report_dir, harness)?;
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationStatus::Success)
         } else {
-            self.run_cbmc(binary)
+            self.run_cbmc(binary, harness)
         }
     }
 

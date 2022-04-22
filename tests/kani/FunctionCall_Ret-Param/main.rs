@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: --no-unwinding-checks
-// cbmc-flags: --unwind 10
 
 // We use `--no-unwinding-checks` in this test to avoid getting
 // a verification failure (the loop being unwound depends on
 // a nondet. variable)
 
 #[kani::proof]
+#[kani::unwind(10)]
 fn main() {
     let x: u32 = kani::any();
     let pi = 3.14159265359;

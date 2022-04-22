@@ -19,7 +19,7 @@ macro_rules! path_str {
 
 /// Build the target library, and setup cargo to rerun them if the source has changed.
 fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
-    let kani_lib = vec!["..", "..", "library", lib];
+    let kani_lib = vec!["..", "library", lib];
     println!("cargo:rerun-if-changed={}", path_str!(kani_lib));
 
     let mut kani_lib_toml = kani_lib;
@@ -35,7 +35,14 @@ fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
         "--target-dir",
         &out_dir,
     ];
-    Command::new("cargo").env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani").args(args).status().unwrap();
+    let result = Command::new("cargo")
+        .env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani")
+        .args(args)
+        .status()
+        .unwrap();
+    if !result.success() {
+        std::process::exit(1);
+    }
 }
 
 /// Configure the compiler to build kani-compiler binary. We currently support building

@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --unwind 5
+// kani-flags: --default-unwind 5
 
 //! This test case checks the usage of slices of slices (&[&[T]]).
 use std::mem::size_of_val;

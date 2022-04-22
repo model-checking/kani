@@ -10,7 +10,7 @@ development purposes.
 
 ```bash
 # Build all packages in the repository
-cargo build
+cargo build --workspace
 ```
 
 ```bash
@@ -116,7 +116,7 @@ git switch main
 git pull origin
 git submodule update --init
 cd src/kani-compiler
-cargo build
+cargo build --workspace
 ```
 
 ```bash

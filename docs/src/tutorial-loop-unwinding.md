@@ -30,13 +30,13 @@ Bounding proofs like this means we may no longer be proving as much as we origin
 Who's to say, if we prove everything works up to size 10, that there isn't a novel bug lurking, expressible only with problems of size 11+?
 But, let's get back to the issue at hand.
 
-We can "make progress" in our work by giving Kani a global bound on the problem size using the `--unwind <bound>` flag.
+We can "make progress" in our work by giving Kani a global bound on the problem size using the `--default-unwind <bound>` flag.
 This flag puts a fixed upper bound on loop unwinding.
 Kani will automatically generate verification conditions that help us understand if that bound isn't enough.
 Let's start with a small unwinding value:
 
 ```
-# kani src/lib.rs --unwind 1
+# kani src/lib.rs --default-unwind 1
 Check 69: .unwind.0
          - Status: FAILURE
          - Description: "unwinding assertion loop 0"
@@ -50,19 +50,19 @@ This output is showing us two things:
 2. We aren't seeing other failures if we only unwind the loop once.
 The execution can't progress far enough to reveal the bug we're interested in (which actually only happens in the last iteration of the loop).
 
-Doing an initial `--unwind 1` is generally enough to force termination, but often too little for verification.
+Doing an initial `--default-unwind 1` is generally enough to force termination, but often too little for verification.
 
 We were clearly aiming at a size limit of 10 in our proof harness, so let's try a few things:
 
 ```
-# kani src/lib.rs --unwind 10 | grep Failed
+# kani src/lib.rs --default-unwind 10 | grep Failed
 Failed Checks: unwinding assertion loop 0
 ```
 
 A bound of 10 still isn't enough because we generally need to unwind one greater than the number of executed loop iterations:
 
 ```
-# kani src/lib.rs --unwind 11 | grep Failed
+# kani src/lib.rs --default-unwind 11 | grep Failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
 Failed Checks: dereference failure: pointer outside object bounds
 Failed Checks: unwinding assertion loop 0
@@ -72,12 +72,35 @@ We're still not seeing the unwinding assertion failure go away!
 This is because our error is really an off-by-one problem, we loop one too many times, so let's add one more:
 
 ```
-# kani src/lib.rs --unwind 12 | grep Failed
+# kani src/lib.rs --default-unwind 12 | grep Failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
 Failed Checks: dereference failure: pointer outside object bounds
 ```
 
 Kani is now sure we've unwound the loop enough to verify our proof harness, and now we're seeing just the bound checking failures from the off-by-one error.
 
+## Unwinding value specification
+
+Kani allows three options to specify the unwind value for a particular harness:
+
+1. The unwind annotation `#[kani::unwind(<num>)]`. This sets the unwind value for the harness with the annotation. Example -
+``` rust,noplaypen
+#[kani::proof]
+#[kani::unwind(3)]
+fn proof_harness() {
+[...]
+}
+```
+2. `--default-unwind` flag. This sets the global or default unwind value for the entire file/crate on which kani or cargo-kani is called. Example -
+```
+kani file.rs --default-unwind 3
+```
+3. `--unwind` flag. This overrides any annotation and forces the harness to use the specified value. This needs to be used alongside `--harness` and sets the unwind value for the harness specified. Example -
+```
+kani file.rs --unwind 2 --harness proof_harness
+```
+
+### Exercises -
+
 1. Exercise: Fix the off-by-one bounds error and get Kani to verify successfully.
-2. Exercise: After fixing the error, `--unwind 11` works. Why?
+2. Exercise: After fixing the error, `--default-unwind 11` works. Why?
