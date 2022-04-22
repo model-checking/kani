@@ -1,8 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(core_intrinsics)]
-#![feature(const_intrinsic_raw_eq)]
-#![deny(const_err)]
 
 #[kani::proof]
 fn main() {
@@ -24,6 +22,6 @@ fn main() {
     let raw_eq_array_true: bool = unsafe { raw_eq(&[13_u8, 42], &[13, 42]) };
     assert!(raw_eq_array_true);
 
-    const raw_eq_array_false: bool = unsafe { raw_eq(&[13_u8, 42], &[42, 13]) };
+    let raw_eq_array_false: bool = unsafe { raw_eq(&[13_u8, 42], &[42, 13]) };
     assert!(!raw_eq_array_false);
 }
