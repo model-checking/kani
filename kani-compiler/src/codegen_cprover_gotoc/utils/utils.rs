@@ -48,7 +48,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
     ///
     /// TODO: https://github.com/model-checking/kani/issues/8 assume the required validity constraints for the nondet return
-    /// TODO: https://github.com/model-checking/kani/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
     pub fn codegen_unimplemented(
         &mut self,
         operation_name: &str,
@@ -56,7 +55,7 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         url: &str,
     ) -> Expr {
-        // Save this occurrence so we can emit in the compilation report.
+        // Save this occurrence so we can emit a warning in the compilation report.
         debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
         let key: InternedString = operation_name.into();
         if !self.unsupported_constructs.contains_key(&key) {
