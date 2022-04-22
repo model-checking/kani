@@ -333,10 +333,6 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// This behaviour is similar to slices, and `value` is not a pointer.
     /// `value` is the concrete object in memory which was casted to an unsized type.
-    ///
-    /// In practice, this should only be used via pointer or reference. But we may encounter a &*T,
-    /// which generates an lvalue to *T in our goto-program rep. Thus, we cannot use `void*`
-    /// here (it would try to create a lvalue with type `void`), and we use `bool*`.
     pub fn codegen_trait_data(&mut self, t: ty::Ty<'tcx>) -> Type {
         let name = self.normalized_trait_name(t);
         let inner_name = name.clone() + "Inner";
@@ -346,11 +342,11 @@ impl<'tcx> GotocCtx<'tcx> {
             Symbol::typedef(
                 &inner_name,
                 &inner_name,
-                Type::bool().to_typedef(inner_name.clone()),
+                Type::unit().to_typedef(inner_name.clone()),
                 Location::None,
             )
         });
-        Type::bool().to_typedef(inner_name)
+        Type::unit().to_typedef(inner_name)
     }
 
     /// This will codegen the raw pointer to the trait data.
