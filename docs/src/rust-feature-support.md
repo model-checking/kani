@@ -197,8 +197,8 @@ stack unwinding support.
 Reading uninitialized memory is
 [considered undefined behavior](https://doc.rust-lang.org/reference/behavior-considered-undefined.html#behavior-considered-undefined) in Rust.
 At the moment, Kani cannot detect if memory is uninitialized, but in practice
-this is mitigated by the fact that all memory is initialized with nondet.
-values.
+this is mitigated by the fact that all memory is initialized with
+nondeterministic values.
 Therefore, any code that depends on uninitialized data will exhibit nondeterministic behavior.
 See [this issue](https://github.com/model-checking/kani/issues/920) for more details.
 
