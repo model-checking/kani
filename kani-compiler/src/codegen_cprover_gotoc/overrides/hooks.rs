@@ -548,47 +548,6 @@ impl<'tcx> GotocHook<'tcx> for RustDealloc {
     }
 }
 
-struct RustRealloc;
-
-impl<'tcx> GotocHook<'tcx> for RustRealloc {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = tcx.symbol_name(instance).name.to_string();
-        name == "__rust_realloc"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let p = assign_to.unwrap();
-        let target = target.unwrap();
-        let ptr = fargs.remove(0).cast_to(Type::void_pointer());
-        fargs.remove(0); // old_size
-        fargs.remove(0); // align
-        let size = fargs.remove(0);
-        Stmt::block(
-            vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
-                    .goto_expr
-                    .assign(
-                        BuiltinFn::Realloc
-                            .call(vec![ptr, size], loc.clone())
-                            .cast_to(Type::unsigned_int(8).to_pointer()),
-                        loc.clone(),
-                    ),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-            ],
-            loc,
-        )
-    }
-}
-
 struct RustAllocZeroed;
 
 impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
@@ -680,7 +639,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(RustAlloc),
             Rc::new(RustAllocZeroed),
             Rc::new(RustDealloc),
-            Rc::new(RustRealloc),
             Rc::new(SliceFromRawPart),
         ],
     }
