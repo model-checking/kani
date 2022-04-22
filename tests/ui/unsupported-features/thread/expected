@@ -1,1 +1,4 @@
+warning: Compilation unit included the following unsupported constructs:\
+Rvalue::ThreadLocalRef
+
 Failed Checks: Rvalue::ThreadLocalRef is not currently supported by Kani.
