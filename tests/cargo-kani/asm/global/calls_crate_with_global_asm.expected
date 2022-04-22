@@ -1,5 +1,5 @@
 Status: UNDETERMINED\
-Description: "assertion failed: 3 * y == 33"
+Description: "assertion failed: x * y == 33"
 
 Status: FAILURE\
 Description: "Calling function "eleven" defined in a crate with global_asm is not currently supported by Kani"
