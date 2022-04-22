@@ -39,6 +39,17 @@ pub struct UnimplementedData {
     pub loc: Location,
 }
 
+impl UnimplementedData {
+    pub fn new(operation: &str, bug_url: &str, goto_type: Type, loc: Location) -> Self {
+        UnimplementedData {
+            operation: operation.to_string(),
+            bug_url: bug_url.to_string(),
+            goto_type,
+            loc,
+        }
+    }
+}
+
 /// Relevent information about a projected place (i.e. an lvalue).
 #[derive(Debug)]
 pub struct ProjectedPlace<'tcx> {
@@ -201,7 +212,12 @@ impl<'tcx> TypeOrVariant<'tcx> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    fn codegen_field(&mut self, res: Expr, t: TypeOrVariant<'tcx>, f: &Field) -> Expr {
+    fn codegen_field(
+        &mut self,
+        res: Expr,
+        t: TypeOrVariant<'tcx>,
+        f: &Field,
+    ) -> Result<Expr, UnimplementedData> {
         match t {
             TypeOrVariant::Type(t) => {
                 match t.kind() {
@@ -224,7 +240,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {:?} does not have a field", t),
                     ty::Tuple(_) => {
-                        res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table)
+                        Ok(res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table))
                     }
                     ty::Adt(def, _) if def.repr().simd() => {
                         // this is a SIMD vector - the index represents one
@@ -237,27 +253,27 @@ impl<'tcx> GotocCtx<'tcx> {
                         //   assert!(v.1 == 2);
                         // }
                         let size_index = Expr::int_constant(f.index(), Type::size_t());
-                        res.index_array(size_index)
+                        Ok(res.index_array(size_index))
                     }
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
                         let field = &def.variants().raw[0].fields[f.index()];
-                        res.member(&field.name.to_string(), &self.symbol_table)
+                        Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
-                    ty::Closure(..) => res.member(&f.index().to_string(), &self.symbol_table),
-                    ty::Generator(..) => self.codegen_unimplemented(
+                    ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
+                    ty::Generator(..) => Err(UnimplementedData::new(
                         "ty::Generator",
-                        Type::code(vec![], Type::empty()),
-                        res.location().clone(),
                         "https://github.com/model-checking/kani/issues/416",
-                    ),
+                        Type::code(vec![], Type::empty()),
+                        *res.location(),
+                    )),
                     _ => unimplemented!(),
                 }
             }
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(v) => {
                 let field = &v.fields[f.index()];
-                res.member(&field.name.to_string(), &self.symbol_table)
+                Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
         }
     }
@@ -327,18 +343,15 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
                 let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
                     Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
                 } else if self.is_ref_of_unsized(base_type) {
-                    assert!(before.fat_ptr_mir_typ.is_none());
                     Some(before.mir_typ_or_variant.expect_type())
                 } else {
                     before.fat_ptr_mir_typ
                 };
                 let fat_ptr_goto_expr =
                     if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
-                        assert!(before.fat_ptr_goto_expr.is_none());
                         Some(inner_goto_expr.clone())
                     } else {
                         before.fat_ptr_goto_expr
@@ -386,7 +399,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ProjectionElem::Field(f, t) => {
                 let typ = TypeOrVariant::Type(t);
-                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f);
+                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f)?;
                 Ok(ProjectedPlace::new(
                     expr,
                     typ,
@@ -424,7 +437,24 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
-                    ty::Array(..) => unimplemented!(),
+                    ty::Array(ty, len) => {
+                        let len = len.val().try_to_machine_usize(self.tcx).unwrap();
+                        let subarray_len = if from_end {
+                            // `to` counts from the end of the array
+                            len - to - from
+                        } else {
+                            to - from
+                        };
+                        let typ = self.tcx.mk_array(*ty, subarray_len);
+                        let goto_typ = self.codegen_ty(typ);
+                        // unimplemented
+                        Err(UnimplementedData::new(
+                            "Sub-array binding",
+                            "https://github.com/model-checking/kani/issues/707",
+                            goto_typ,
+                            *before.goto_expr.location(),
+                        ))
+                    }
                     ty::Slice(elemt) => {
                         let len = if from_end {
                             let olen = before

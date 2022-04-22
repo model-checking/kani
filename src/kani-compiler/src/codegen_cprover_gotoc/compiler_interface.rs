@@ -21,6 +21,7 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
+use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
@@ -57,6 +58,7 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         super::utils::init();
 
+        check_target(&tcx.sess);
         check_options(&tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
@@ -184,7 +186,46 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 }
 
+fn check_target(session: &Session) {
+    // The requirement below is needed to build a valid CBMC machine model
+    // in function `machine_model_from_session` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
+    let is_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
+    // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
+    // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
+    let is_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
+
+    if !is_linux_target && !is_darwin_target {
+        let err_msg = format!(
+            "Kani requires the target platform to be `x86_64-unknown-linux-gnu` or `x86_64-apple-darwin`, but it is {}",
+            &session.target.llvm_target
+        );
+        session.err(&err_msg);
+    }
+
+    session.abort_if_errors();
+}
+
 fn check_options(session: &Session, need_metadata_module: bool) {
+    // The requirements for `min_global_align` and `endian` are needed to build
+    // a valid CBMC machine model in function `machine_model_from_session` from
+    // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
+    match session.target.options.min_global_align {
+        Some(1) => (),
+        Some(align) => {
+            let err_msg = format!(
+                "Kani requires the target architecture option `min_global_align` to be 1, but it is {}.",
+                align
+            );
+            session.err(&err_msg);
+        }
+        _ => (),
+    }
+
+    if session.target.options.endian != Endian::Little {
+        session.err("Kani requires the target architecture option `endian` to be `little`.");
+    }
+
     if !session.overflow_checks() {
         session.err("Kani requires overflow checks in order to provide a sound analysis.");
     }
