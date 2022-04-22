@@ -84,10 +84,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let intrinsic = self.symbol_name(instance);
         let intrinsic = intrinsic.as_str();
         let loc = self.codegen_span_option(span);
-        debug!(
-            "codegen_intrinsic:\n\tinstance {:?}\n\tfargs {:?}\n\tp {:?}\n\tspan {:?}",
-            instance, fargs, p, span
-        );
+        debug!(?instance, "codegen_intrinsic");
+        debug!(?fargs, "codegen_intrinsic");
+        debug!(?p, "codegen_intrinsic");
+        debug!(?span, "codegen_intrinsic");
         let sig = instance.ty(self.tcx, ty::ParamEnv::reveal_all()).fn_sig(self.tcx);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         let ret_ty = self.monomorphize(sig.output());
@@ -972,15 +972,12 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         match t.kind() {
             ty::Dynamic(..) => {
-                //TODO figure out if this needs to be done, or if the result we want here is for the fat pointer.
-                //We need to get the actual value from the vtable like in codegen_ssa/glue.rs
-                // let vs = self.layout_of(self.tcx.vtable_methods(binder.principal().unwrap().with_self_ty(self.tcx, t)));
-                // https://rust-lang.github.io/unsafe-code-guidelines/layout/pointers.html
-                // The size of &dyn Trait is two words.
-                let size = Expr::int_constant((layout.size.bytes_usize()) * 2, Type::size_t());
-                // The alignment of &dyn Trait is the word size.
-                let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
-                SizeAlign { size, align }
+                // For traits, we need to retrieve the size and alignment from the vtable.
+                let vtable = arg.member("vtable", &self.symbol_table).dereference();
+                SizeAlign {
+                    size: vtable.clone().member("size", &self.symbol_table),
+                    align: vtable.member("align", &self.symbol_table),
+                }
             }
             ty::Slice(_) | ty::Str => {
                 let unit_t = match t.kind() {

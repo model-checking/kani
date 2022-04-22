@@ -42,6 +42,23 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// This function codegen comparison for fat pointers.
+    /// We currently don't support this. See issue #327 for more information.
+    fn codegen_comparison_fat_ptr(
+        &mut self,
+        op: &BinOp,
+        left: &Operand<'tcx>,
+        right: &Operand<'tcx>,
+    ) -> Expr {
+        debug!(?op, ?left, ?right, "codegen_comparison_fat_ptr");
+        self.codegen_unimplemented(
+            &format!("Fat pointer comparison '{:?}'", op),
+            Type::Bool,
+            Location::None,
+            "https://github.com/model-checking/kani/issues/327",
+        )
+    }
+
     fn codegen_unchecked_scalar_binop(
         &mut self,
         op: &BinOp,
@@ -306,7 +323,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_unchecked_scalar_binop(op, e1, e2)
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
-                self.codegen_comparison(op, e1, e2)
+                if self.is_ref_of_unsized(self.operand_ty(e1)) {
+                    self.codegen_comparison_fat_ptr(op, e1, e2)
+                } else {
+                    self.codegen_comparison(op, e1, e2)
+                }
             }
             // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
             BinOp::Offset => {
