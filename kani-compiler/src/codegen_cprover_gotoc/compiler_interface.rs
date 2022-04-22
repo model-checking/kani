@@ -97,32 +97,31 @@ impl CodegenBackend for GotocCodegenBackend {
         // https://github.com/model-checking/kani/issues/316
         // so if crate has global ASM, leave all functions in this crate
         // undefined so that calling any of them would hit an assert false
-        if !crate_has_global_asm(codegen_units, tcx) {
-            // then we move on to codegen
-            for cgu in codegen_units {
-                let items = cgu.items_in_deterministic_order(tcx);
-                for (item, _) in items {
-                    match item {
-                        MonoItem::Fn(instance) => {
-                            c.call_with_panic_debug_info(
-                                |ctx| ctx.codegen_function(instance),
-                                format!(
-                                    "codegen_function: {}\n{}",
-                                    c.readable_instance_name(instance),
-                                    c.symbol_name(instance)
-                                ),
-                                instance.def_id(),
-                            );
-                        }
-                        MonoItem::Static(def_id) => {
-                            c.call_with_panic_debug_info(
-                                |ctx| ctx.codegen_static(def_id, item),
-                                format!("codegen_static: {:?}", def_id),
-                                def_id,
-                            );
-                        }
-                        MonoItem::GlobalAsm(_) => {} // We have already warned above
+        let has_global_asm = crate_has_global_asm(codegen_units, tcx);
+        // then we move on to codegen
+        for cgu in codegen_units {
+            let items = cgu.items_in_deterministic_order(tcx);
+            for (item, _) in items {
+                match item {
+                    MonoItem::Fn(instance) => {
+                        c.call_with_panic_debug_info(
+                            |ctx| ctx.codegen_function(instance, has_global_asm),
+                            format!(
+                                "codegen_function: {}\n{}",
+                                c.readable_instance_name(instance),
+                                c.symbol_name(instance)
+                            ),
+                            instance.def_id(),
+                        );
                     }
+                    MonoItem::Static(def_id) => {
+                        c.call_with_panic_debug_info(
+                            |ctx| ctx.codegen_static(def_id, item),
+                            format!("codegen_static: {:?}", def_id),
+                            def_id,
+                        );
+                    }
+                    MonoItem::GlobalAsm(_) => {} // We have already warned above
                 }
             }
         }

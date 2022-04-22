@@ -65,7 +65,7 @@ impl<'tcx> GotocCtx<'tcx> {
         });
     }
 
-    pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
+    pub fn codegen_function(&mut self, instance: Instance<'tcx>, crate_has_global_asm: bool) {
         self.set_current_fn(instance);
         let name = self.current_fn().name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
@@ -74,14 +74,18 @@ impl<'tcx> GotocCtx<'tcx> {
             info_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
             warn!("Double codegen of {:?}", old_sym);
-        } else if self.should_skip_current_fn() {
+        } else if self.should_skip_current_fn() || crate_has_global_asm {
             debug!("Skipping function {}", self.current_fn().readable_name());
+            let unsupported_operation = if crate_has_global_asm {
+                "Calling function \"".to_owned()
+                    + self.current_fn().readable_name()
+                    + "\" defined in a crate with global_asm"
+            } else {
+                "The function ".to_owned() + self.current_fn().readable_name()
+            };
             let body = self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
-                &GotocCtx::unsupported_msg(
-                    &(String::from("The function ") + self.current_fn().readable_name()),
-                    None,
-                ),
+                &GotocCtx::unsupported_msg(unsupported_operation.as_str(), None),
                 Some(self.current_fn().mir().span),
             );
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
