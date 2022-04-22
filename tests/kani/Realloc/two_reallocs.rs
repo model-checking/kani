@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Perform a sequence of two reallocs and make sure the data is properly copied
+// Perform two reallocs in a row and make sure the data is properly copied
 
 use std::alloc::{alloc, dealloc, realloc, Layout};
 
