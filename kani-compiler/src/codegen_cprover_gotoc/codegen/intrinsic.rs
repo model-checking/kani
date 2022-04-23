@@ -913,23 +913,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst_ptr = fargs.remove(0);
         let src_ptr = fargs.remove(0);
 
-        // Check that both `dst_ptr` and `src_ptr` are within bounds.
-        let dst_r_ok = dst_ptr.clone().r_ok(Type::size_t().one());
-        let dst_r_ok_check = self.codegen_assert(
-            dst_r_ok,
-            PropertyClass::PointerOffset,
-            "ptr_offset_from: first argument is within bounds of an object",
-            loc.clone(),
-        );
-
-        let src_r_ok = src_ptr.clone().r_ok(Type::size_t().one());
-        let src_r_ok_check = self.codegen_assert(
-            src_r_ok,
-            PropertyClass::PointerOffset,
-            "ptr_offset_from: second argument is within bounds of an object",
-            loc.clone(),
-        );
-
         // Check that the computation would not overflow an `isize`
         let cast_dst_ptr = dst_ptr.clone().cast_to(Type::ssize_t());
         let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
@@ -943,7 +926,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Re-compute the offset with standard substraction to avoid conversion
         let offset_expr = self.codegen_expr_to_place(p, dst_ptr.sub(src_ptr));
-        Stmt::block(vec![dst_r_ok_check, src_r_ok_check, overflow_check, offset_expr], loc)
+        Stmt::block(vec![overflow_check, offset_expr], loc)
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
