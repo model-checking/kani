@@ -140,7 +140,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // The thin pointer in the resulting fat pointer is a pointer to the value
         let thin_pointer = if place_goto_expr.typ().is_pointer() {
-            // The value is itself a pointer (eg, a void pointer), just use this pointer
+            // The value is itself a pointer, just use this pointer
             place_goto_expr
         } else if place_goto_expr.typ().is_array_like() {
             // The value is an array (eg, a flexible struct member), point to the first array element
@@ -162,12 +162,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.use_slice_fat_pointer(place_mir_type) {
             slice_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
         } else if self.use_vtable_fat_pointer(place_mir_type) {
-            dynamic_fat_ptr(
-                result_goto_type,
-                thin_pointer.cast_to(Type::void_pointer()),
-                metadata,
-                &self.symbol_table,
-            )
+            dynamic_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
         } else {
             unreachable!();
         }
@@ -720,10 +715,12 @@ impl<'tcx> GotocCtx<'tcx> {
         t: Ty<'tcx>,
         idx: usize,
     ) -> Expr {
+        debug!(?instance, typ=?t, %idx, "codegen_vtable_method_field");
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
         let vtable_type = Type::struct_tag(self.vtable_name(t));
         let field_type =
             vtable_type.lookup_field_type(vtable_field_name, &self.symbol_table).unwrap();
+        debug!(?vtable_field_name, ?vtable_type, "codegen_vtable_method_field");
 
         // Lookup in the symbol table using the full symbol table name/key
         let fn_name = self.symbol_name(instance);
@@ -741,6 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Create a pointer to the method
             // Note that the method takes a self* as the first argument, but the vtable field type has a void* as the first arg.
             // So we need to cast it at the end.
+            debug!(?fn_symbol, fn_typ=?fn_symbol.typ, ?field_type, "codegen_vtable_method_field");
             Expr::symbol_expression(fn_symbol.name, fn_symbol.typ.clone())
                 .address_of()
                 .cast_to(field_type)
@@ -772,6 +770,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     drop_sym_name,
                 );
             }
+
+            debug!(?ty, ?trait_ty, "codegen_drop_in_place");
+            debug!(?drop_instance, ?trait_fn_ty, "codegen_drop_in_place");
+            debug!(drop_sym=?drop_sym.clone().typ, "codegen_drop_in_place");
 
             Expr::symbol_expression(drop_sym_name, drop_sym.clone().typ)
                 .address_of()
@@ -959,20 +961,23 @@ impl<'tcx> GotocCtx<'tcx> {
         if src_mir_type.kind() == dst_mir_type.kind() {
             return None; // no cast required, nothing to do
         }
+        debug!(?src_goto_expr, ?src_mir_type, ?dst_mir_type, "cast_unsized_dyn_trait");
 
         // The source destination must be a fat pointers to a dyn trait object
         assert!(self.is_vtable_fat_pointer(src_mir_type));
         assert!(self.is_vtable_fat_pointer(dst_mir_type));
 
-        let dst_mir_dyn_ty = pointee_type(dst_mir_type).unwrap();
-
-        // Get the fat pointer data and vtable fields, and cast the type of
-        // the vtable.
         let dst_goto_type = self.codegen_ty(dst_mir_type);
-        let data = src_goto_expr.to_owned().member("data", &self.symbol_table);
+
+        // Cast the data type.
+        let dst_mir_dyn_ty = pointee_type(dst_mir_type).unwrap();
+        let dst_data_type = self.codegen_trait_data_pointer(dst_mir_dyn_ty);
+        let data =
+            src_goto_expr.to_owned().member("data", &self.symbol_table).cast_to(dst_data_type);
+
+        // Retrieve the vtable and cast the vtable type.
         let vtable_name = self.vtable_name(dst_mir_dyn_ty);
         let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
-
         let vtable = src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_ty);
 
         // Construct a fat pointer with the same (casted) fields and new type
@@ -1108,15 +1113,19 @@ impl<'tcx> GotocCtx<'tcx> {
     fn cast_sized_pointer_to_trait_fat_pointer(
         &mut self,
         src_goto_expr: Expr,
-        _src_mir_type: Ty<'tcx>,
+        src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
         src_pointee_type: Ty<'tcx>,
         dst_pointee_type: Ty<'tcx>,
     ) -> Option<Expr> {
+        tracing::trace!(?src_pointee_type, ?dst_pointee_type, "cast_thin_2_fat_ptr");
+        tracing::trace!(?src_mir_type, ?dst_mir_type, "cast_thin_2_fat_ptr");
         if let Some((concrete_type, trait_type)) =
             self.nested_pair_of_concrete_and_trait_types(src_pointee_type, dst_pointee_type)
         {
-            let dst_goto_expr = src_goto_expr.cast_to(Type::void_pointer());
+            tracing::trace!(?concrete_type, ?trait_type, "cast_thin_2_fat_ptr");
+            let dst_goto_expr =
+                src_goto_expr.cast_to(self.codegen_ty(dst_pointee_type).to_pointer());
             let dst_goto_type = self.codegen_ty(dst_mir_type);
             let vtable = self.codegen_vtable(concrete_type, trait_type);
             let vtable_expr = vtable.address_of();
