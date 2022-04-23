@@ -874,7 +874,7 @@ impl Expr {
                 (lhs.typ == rhs.typ && lhs.typ.is_integer())
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
-            ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t()
+            ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),
         }
     }
 
@@ -916,7 +916,7 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => Type::bool(),
             // Overflow flags
             OverflowMinus | OverflowMult | OverflowPlus => Type::bool(),
-            ROk => Type::bool()
+            ROk => Type::bool(),
         }
     }
     /// self op right;
