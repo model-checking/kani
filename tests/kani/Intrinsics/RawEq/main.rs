@@ -1,14 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Check that we get the expected results for the `raw_eq` intrinsic
 #![feature(core_intrinsics)]
-#![feature(const_intrinsic_raw_eq)]
-#![deny(const_err)]
+use std::intrinsics::raw_eq;
 
 #[kani::proof]
 fn main() {
-    // Check that we get the expected results for the `raw_eq` intrinsic
-    use std::intrinsics::raw_eq;
-
     let raw_eq_i32_true: bool = unsafe { raw_eq(&42_i32, &42) };
     assert!(raw_eq_i32_true);
 
@@ -24,6 +22,6 @@ fn main() {
     let raw_eq_array_true: bool = unsafe { raw_eq(&[13_u8, 42], &[13, 42]) };
     assert!(raw_eq_array_true);
 
-    const raw_eq_array_false: bool = unsafe { raw_eq(&[13_u8, 42], &[42, 13]) };
+    let raw_eq_array_false: bool = unsafe { raw_eq(&[13_u8, 42], &[42, 13]) };
     assert!(!raw_eq_array_false);
 }
