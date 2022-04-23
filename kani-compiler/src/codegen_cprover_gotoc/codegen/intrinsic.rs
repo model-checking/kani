@@ -1154,7 +1154,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
     ///
     /// Undefined behavior if any of these conditions are violated:
-    ///  * `dst` must be valid for writes (done by `--pointer-check`)
+    ///  * `dst` must be valid for writes (done by memset writable check)
     ///  * `dst` must be properly aligned (done by `align_check` below)
     fn codegen_write_bytes(
         &mut self,
