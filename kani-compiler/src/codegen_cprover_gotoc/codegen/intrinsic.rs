@@ -911,14 +911,16 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let a = fargs.remove(0);
         let b = fargs.remove(0);
-        let pointers_to_same_object = a.clone().same_object(b.clone());
+        // let pointers_to_same_object = a.clone().same_object(b.clone());
+
+        let a_ok = a.clone().r_ok(Type::size_t().one());
 
         Stmt::block(
             vec![
                 self.codegen_assert(
-                    pointers_to_same_object,
+                    a_ok,
                     PropertyClass::PointerOffset,
-                    "ptr_offset_from: pointers point to same object",
+                    "ptr_offset_from: read_ok(a) is okay",
                     loc.clone(),
                 ),
                 self.codegen_expr_to_place(p, a.sub(b)),
