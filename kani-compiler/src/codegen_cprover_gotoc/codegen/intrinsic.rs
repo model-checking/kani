@@ -628,16 +628,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
             "write_bytes" => {
-                let dst = fargs.remove(0).cast_to(Type::void_pointer());
-                let val = fargs.remove(0).cast_to(Type::c_int());
-                let count = fargs.remove(0);
-                let ty = self.monomorphize(instance.substs.type_at(0));
-                let layout = self.layout_of(ty);
-                let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
-                let e = BuiltinFn::Memset.call(vec![dst, val, count.mul(sz)], loc);
-                self.codegen_expr_to_place(p, e)
+                assert!(self.place_ty(p).is_unit());
+                self.codegen_write_bytes(instance, intrinsic, fargs, loc)
             }
-
             // Unimplemented
             _ => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/new/choose"
@@ -1155,5 +1148,35 @@ impl<'tcx> GotocCtx<'tcx> {
         );
         let expr = dst.dereference().assign(src, loc.clone());
         Stmt::block(vec![align_check, expr], loc)
+    }
+
+    /// Sets `count * size_of::<T>()` bytes of memory starting at `dst` to `val`
+    /// https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `dst` must be valid for writes (done by `--pointer-check`)
+    ///  * `dst` must be properly aligned (done by `align_check` below)
+    fn codegen_write_bytes(
+        &mut self,
+        instance: Instance<'tcx>,
+        _intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        loc: Location,
+    ) -> Stmt {
+        let dst = fargs.remove(0).cast_to(Type::void_pointer());
+        let val = fargs.remove(0).cast_to(Type::c_int());
+        let count = fargs.remove(0);
+        let ty = self.monomorphize(instance.substs.type_at(0));
+        let align = self.is_aligned(ty, dst.clone());
+        let align_check = self.codegen_assert(
+            align,
+            PropertyClass::DefaultAssertion,
+            "`dst` is properly aligned",
+            loc.clone(),
+        );
+        let layout = self.layout_of(ty);
+        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
+        let memset_call = BuiltinFn::Memset.call(vec![dst, val, count.mul(sz)], loc);
+        Stmt::block(vec![align_check, memset_call.as_stmt(loc)], loc)
     }
 }
