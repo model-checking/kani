@@ -7,7 +7,7 @@ use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Ty;
-use tracing::debug;
+use tracing::warn;
 
 // Should move into rvalue
 //make this a member function
@@ -56,8 +56,8 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         url: &str,
     ) -> Expr {
-        // We should possibly upgrade this to a warning in the future, but for now emit at least something
-        debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
+        // TODO: This should print a more user friendly warning format.
+        warn!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
