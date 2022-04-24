@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// See GitHub history for details.
 use clean::AttributesExt;
 
 use std::cmp::Ordering;
@@ -34,21 +38,19 @@ use crate::html::layout::Page;
 use crate::html::markdown::{HeadingOffset, MarkdownSummaryLine};
 use crate::html::url_parts_builder::UrlPartsBuilder;
 
-use askama::Template;
-
 const ITEM_TABLE_OPEN: &str = "<div class=\"item-table\">";
 const ITEM_TABLE_CLOSE: &str = "</div>";
 const ITEM_TABLE_ROW_OPEN: &str = "<div class=\"item-row\">";
 const ITEM_TABLE_ROW_CLOSE: &str = "</div>";
 
 // A component in a `use` path, like `string` in std::string::ToString
+#[allow(dead_code)]
 struct PathComponent {
     path: String,
     name: Symbol,
 }
 
-#[derive(Template)]
-#[template(path = "print_item.html")]
+#[allow(dead_code)]
 struct ItemVars<'a> {
     page: &'a Page<'a>,
     static_root_path: &'a str,
@@ -126,7 +128,7 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
             .collect()
     };
 
-    let item_vars = ItemVars {
+    let _item_vars = ItemVars {
         page,
         static_root_path: page.get_static_root_path(),
         typ,
@@ -137,8 +139,8 @@ pub(super) fn print_item(cx: &Context<'_>, item: &clean::Item, buf: &mut Buffer,
         src_href: src_href.as_deref(),
     };
 
-    let heading = item_vars.render().unwrap();
-    buf.write_str(&heading);
+    // let heading = item_vars.render().unwrap();
+    // buf.write_str(&heading);
 
     match *item.kind {
         clean::ModuleItem(ref m) => item_module(buf, cx, item, &m.items),

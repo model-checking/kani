@@ -1,0 +1,73 @@
+Checking harness check_non_empty_raw...
+
+Status: SUCCESS\
+Description: "assertion failed: mem::size_of_val(raw) == 4"\
+in function check_non_empty_raw
+
+Status: SUCCESS\
+Description: "assertion failed: raw.inner.len() == 4"\
+in function check_non_empty_raw
+
+Status: SUCCESS\
+Description: "assertion failed: raw.inner[0] == 1"\
+in function check_non_empty_raw
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_empty_raw...
+
+Status: SUCCESS\
+Description: "assertion failed: mem::size_of_val(raw) == 0"\
+in function check_empty_raw
+
+Status: SUCCESS\
+Description: "assertion failed: raw.inner.len() == 0"\
+in function check_empty_raw
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_non_empty_slice...
+
+Status: SUCCESS\
+Description: "assertion failed: mem::size_of_val(slice) == 2"\
+in function check_non_empty_slice
+
+Status: SUCCESS\
+Description: "assertion failed: slice.others.len() == 1"\
+in function check_non_empty_slice
+
+Status: SUCCESS\
+Description: "assertion failed: slice.first == 1"\
+in function check_non_empty_slice
+
+Status: SUCCESS\
+Description: "assertion failed: slice.others[0] == 5"\
+in function check_non_empty_slice
+
+VERIFICATION:- SUCCESSFUL
+
+
+Checking harness check_naive_iterator_should_fail...
+
+Status: SUCCESS\
+Description: ""Naive new should have the wrong slice len""\
+in function check_naive_iterator_should_fail
+
+Status: SUCCESS\
+Description: "assertion failed: slice.first == first"\
+in function check_naive_iterator_should_fail
+
+Status: SUCCESS\
+Description: "assertion failed: slice.others[0] == second"\
+in function check_naive_iterator_should_fail
+
+Status: FAILURE\
+Description: "dereference failure: pointer outside object bounds"\
+in function check_naive_iterator_should_fail
+
+VERIFICATION:- FAILED
+
+
+Summary:\
+Verification failed for - check_naive_iterator_should_fail\
+Complete - 3 successfully verified harnesses, 1 failures, 4 total.

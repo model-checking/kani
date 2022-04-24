@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// cbmc-flags: --unwind 2 --unwinding-assertions
+// cbmc-flags: --unwinding-assertions
 
 use std::io::{self, Read, Write};
 
@@ -24,6 +24,7 @@ impl MemoryMapping {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     let mm = MemoryMapping::new(2);
     if mm.is_ok() {

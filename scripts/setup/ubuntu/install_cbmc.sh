@@ -5,7 +5,7 @@
 set -eu
 
 UBUNTU_VERSION=$(lsb_release -rs)
-CBMC_VERSION=5.54.0
+CBMC_VERSION=5.55.0
 FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
 URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
 
@@ -15,3 +15,6 @@ wget -O "$FILE" "$URL"
 sudo dpkg -i "$FILE"
 
 cbmc --version
+
+# Clean up on success
+rm $FILE

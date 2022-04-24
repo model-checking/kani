@@ -303,6 +303,8 @@ impl Expr {
     /// that don't appear in the standard, like `bool`
     /// https://docs.microsoft.com/en-us/cpp/c-language/type-cast-conversions?view=msvc-160
     pub fn can_cast_from(source: &Type, target: &Type) -> bool {
+        let source = source.unwrap_typedef();
+        let target = target.unwrap_typedef();
         if source == target {
             true
         } else if target.is_bool() {

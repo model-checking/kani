@@ -40,7 +40,19 @@ fn main() {
     let config = parse_config(env::args().collect());
 
     log_config(&config);
+    add_kani_to_path();
     run_tests(config);
+}
+
+/// Adds Kani to the current `PATH` environment variable.
+fn add_kani_to_path() {
+    let cwd = env::current_dir().unwrap();
+    let kani_bin = cwd.join("target").join("debug");
+    let kani_scripts = cwd.join("scripts");
+    env::set_var(
+        "PATH",
+        format!("{}:{}:{}", kani_scripts.display(), kani_bin.display(), env::var("PATH").unwrap()),
+    );
 }
 
 pub fn parse_config(args: Vec<String>) -> Config {
@@ -341,6 +353,10 @@ fn common_inputs_stamp() -> Stamp {
 
     // Add source, library and script directories
     stamp.add_dir(&rust_src_dir.join("src/"));
+    stamp.add_dir(&rust_src_dir.join("kani-compiler/"));
+    stamp.add_dir(&rust_src_dir.join("kani-driver/"));
+    stamp.add_dir(&rust_src_dir.join("kani_metadata/"));
+    stamp.add_dir(&rust_src_dir.join("cprover_bindings/"));
     stamp.add_dir(&rust_src_dir.join("library/"));
     stamp.add_dir(&rust_src_dir.join("scripts/"));
 
