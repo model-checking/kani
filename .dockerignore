@@ -1,2 +1,5 @@
 .git
 firecracker
+target/debug
+target/release
+build

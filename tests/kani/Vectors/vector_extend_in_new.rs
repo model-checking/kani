@@ -5,9 +5,10 @@
 // the vec![i; j] constructor.
 
 // There is an implicit loop, so we need an explicit unwind
-// cbmc-flags: --unwind 3 --unwinding-assertions
+// cbmc-flags: --unwinding-assertions
 
 #[kani::proof]
+#[kani::unwind(3)]
 fn main() {
     let a: Vec<Vec<i32>> = vec![vec![0; 2]; 1];
     assert!(a.len() == 1);

@@ -24,5 +24,5 @@ You can achieve this by adding the following lines to the package's `Cargo.toml`
 
 ```toml
 [package.metadata.kani]
-flags = { unwind = "5" }
+flags = { default-unwind = "5" }
 ```
