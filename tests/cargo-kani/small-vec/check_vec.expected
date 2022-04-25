@@ -1,0 +1,5 @@
+Status: SUCCESS\
+Description: "assertion failed: c.is_valid()"\
+in function check_vec
+
+VERIFICATION:- SUCCESSFUL

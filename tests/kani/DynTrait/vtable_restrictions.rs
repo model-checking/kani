@@ -47,7 +47,7 @@ fn random_animal(random_number: i64) -> Box<dyn Animal> {
 
 #[kani::proof]
 fn main() {
-    let random_number = kani::nondet();
+    let random_number = kani::any();
     let animal = random_animal(random_number);
     let s = animal.noise();
     if random_number < 5 {

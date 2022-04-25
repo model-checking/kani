@@ -192,6 +192,16 @@ ensure there is no resource leak or persistent data inconsistency. Check out
 [this issue](https://github.com/model-checking/kani/issues/692) for updates on
 stack unwinding support.
 
+### Uninitialized memory
+
+Reading uninitialized memory is
+[considered undefined behavior](https://doc.rust-lang.org/reference/behavior-considered-undefined.html#behavior-considered-undefined) in Rust.
+At the moment, Kani cannot detect if memory is uninitialized, but in practice
+this is mitigated by the fact that all memory is initialized with
+nondeterministic values.
+Therefore, any code that depends on uninitialized data will exhibit nondeterministic behavior.
+See [this issue](https://github.com/model-checking/kani/issues/920) for more details.
+
 ### Destructors
 
 At present, we are aware of some issues with destructors, in particular those
@@ -210,7 +220,7 @@ Name | Support | Notes |
 --- | --- | --- |
 abort | Yes | |
 add_with_overflow | Yes | |
-arith_offset | Yes | |
+arith_offset | No | |
 assert_inhabited | Partial | [#751](https://github.com/model-checking/kani/issues/751) |
 assert_uninit_valid | Yes | |
 assert_zero_valid | Yes | |
@@ -311,9 +321,10 @@ bswap | Yes | |
 caller_location | No | |
 ceilf32 | No | |
 ceilf64 | No | |
-copy_nonoverlapping | Yes | |
-copysignf32 | Yes | |
-copysignf64 | Yes | |
+copy | No | |
+copy_nonoverlapping | No | |
+copysignf32 | No | |
+copysignf64 | No | |
 cosf32 | Yes | |
 cosf64 | Yes | |
 ctlz | Yes | |
@@ -324,10 +335,10 @@ cttz_nonzero | Yes | |
 discriminant_value | Yes | |
 drop_in_place | No | |
 exact_div | Yes | |
-exp2f32 | Yes | |
-exp2f64 | Yes | |
-expf32 | Yes | |
-expf64 | Yes | |
+exp2f32 | No | |
+exp2f64 | No | |
+expf32 | No | |
+expf64 | No | |
 fabsf32 | Yes | |
 fabsf64 | Yes | |
 fadd_fast | Yes | |
@@ -335,25 +346,25 @@ fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) 
 float_to_int_unchecked | No | |
 floorf32 | No | |
 floorf64 | No | |
-fmaf32 | Yes | |
-fmaf64 | Yes | |
+fmaf32 | No | |
+fmaf64 | No | |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 forget | Yes | |
 frem_fast | No | |
 fsub_fast | Yes | |
 likely | Yes | |
-log2f32 | Yes | |
-log2f64 | Yes | |
-log10f32 | Yes | |
-log10f64 | Yes | |
-logf32 | Yes | |
-logf64 | Yes | |
-maxnumf32 | Yes | |
-maxnumf64 | Yes | |
+log10f32 | No | |
+log10f64 | No | |
+log2f32 | No | |
+log2f64 | No | |
+logf32 | No | |
+logf64 | No | |
+maxnumf32 | No | |
+maxnumf64 | No | |
 min_align_of | Yes | |
 min_align_of_val | Yes | |
-minnumf32 | Yes | |
-minnumf64 | Yes | |
+minnumf32 | No | |
+minnumf64 | No | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
 nearbyintf32 | No | |
@@ -361,10 +372,10 @@ nearbyintf64 | No | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Missing undefined behavior checks |
-powf32 | Yes | |
-powf64 | Yes | |
-powif32 | Yes | |
-powif64 | Yes | |
+powf32 | No | |
+powf64 | No | |
+powif32 | No | |
+powif64 | No | |
 pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
@@ -373,7 +384,7 @@ prefetch_write_instruction | No | |
 ptr_guaranteed_eq | Partial | |
 ptr_guaranteed_ne | Partial | |
 ptr_offset_from | Partial | Missing undefined behavior checks |
-raw_eq | Partial | Missing undefined behavior checks |
+raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
 rintf32 | No | |
 rintf64 | No | |
 rotate_left | Yes | |
@@ -387,8 +398,8 @@ sinf32 | Yes | |
 sinf64 | Yes | |
 size_of | Yes | |
 size_of_val | Yes | |
-sqrtf32 | Yes | |
-sqrtf64 | Yes | |
+sqrtf32 | No | |
+sqrtf64 | No | |
 sub_with_overflow | Yes | |
 transmute | Yes | |
 truncf32 | No | |
@@ -396,7 +407,7 @@ truncf64 | No | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
-unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
 unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |
 unchecked_div | Yes | |
@@ -408,11 +419,11 @@ unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
 variant_count | No | |
-volatile_copy_memory | Partial | See [Notes - Concurrency](#concurrency) |
-volatile_copy_nonoverlapping_memory | Partial | See [Notes - Concurrency](#concurrency) |
-volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_load | No | See [Notes - Concurrency](#concurrency) |
 volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
-volatile_store | No | See [Notes - Concurrency](#concurrency) |
+volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
 wrapping_mul | Yes | |
 wrapping_sub | Yes | |
