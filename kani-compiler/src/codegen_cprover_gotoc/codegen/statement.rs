@@ -3,6 +3,7 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
+use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
@@ -20,7 +21,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use tracing::{debug, info_span};
+use tracing::{debug, info_span, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self) -> Stmt {
@@ -152,6 +153,7 @@ impl<'tcx> GotocCtx<'tcx> {
     // https://github.com/model-checking/kani/issues/221
     fn codegen_drop(&mut self, location: &Place<'tcx>, target: &BasicBlock) -> Stmt {
         let loc_ty = self.place_ty(location);
+        debug!(?loc_ty, "codegen_drop");
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
         if let Some(hk) = self.hooks.hook_applies(self.tcx, drop_instance) {
             let le =
@@ -174,18 +176,34 @@ impl<'tcx> GotocCtx<'tcx> {
                             )
                             .fat_ptr_goto_expr
                             .unwrap();
+                            debug!(?trait_fat_ptr, "codegen_drop: ");
 
                             // Pull the function off of the fat pointer's vtable pointer
                             let vtable_ref =
                                 trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
+
                             let vtable = vtable_ref.dereference();
                             let fn_ptr = vtable.member("drop", &self.symbol_table);
 
                             // Pull the self argument off of the fat pointer's data pointer
-                            let self_ref =
+                            if let Some(typ) = pointee_type(self.local_ty(location.local)) {
+                                if !(typ.is_trait() || typ.is_box()) {
+                                    warn!(self_type=?typ, "Unsupported drop of unsized");
+                                    return self
+                                        .codegen_unimplemented(
+                                            format!("Unsupported drop unsized struct: {:?}", typ)
+                                                .as_str(),
+                                            Type::Empty,
+                                            Location::None,
+                                            "https://github.com/model-checking/kani/issues/1072",
+                                        )
+                                        .as_stmt(Location::None);
+                                }
+                            }
+                            let self_data =
                                 trait_fat_ptr.to_owned().member("data", &self.symbol_table);
                             let self_ref =
-                                self_ref.cast_to(trait_fat_ptr.typ().clone().to_pointer());
+                                self_data.clone().cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
                             let call =
                                 fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
