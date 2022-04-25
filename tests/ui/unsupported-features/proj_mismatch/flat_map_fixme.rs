@@ -1,7 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
-// kani-flags: --unwind 3
 
 //! This test checks the result of using Iterator::flat_map. Note that the same test exists inside
 //! kani suite. This test is just to ensure we error when there is a projection issue.
