@@ -576,7 +576,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
-            "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
+            "transmute" => self.codegen_intrinsic_transmute(instance, fargs, ret_ty, p, span),
             "truncf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
@@ -916,14 +916,41 @@ impl<'tcx> GotocCtx<'tcx> {
     /// }
     fn codegen_intrinsic_transmute(
         &mut self,
+        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         ret_ty: Ty<'tcx>,
         p: &Place<'tcx>,
+        span: Option<Span>,
     ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
+        let loc = self.codegen_span_option(span);
+
+        // Check that the argument type is properly aligned
         let arg = fargs.remove(0);
-        let expr = arg.transmute_to(self.codegen_ty(ret_ty), &self.symbol_table);
-        self.codegen_expr_to_place(p, expr)
+        let arg_typ = self.monomorphize(instance.substs.type_at(0));
+        let arg_align = self.is_aligned(arg_typ, arg.clone());
+        let arg_align_check = self.codegen_assert(
+            arg_align,
+            PropertyClass::DefaultAssertion,
+            "transmute: argument type is properly aligned",
+            loc.clone(),
+        );
+
+        // Check that the result type is properly aligned
+        let ret_expr = self.codegen_place(&p).unwrap().goto_expr;
+        let ret_align = self.is_aligned(ret_ty, ret_expr);
+        let ret_align_check = self.codegen_assert(
+            ret_align,
+            PropertyClass::DefaultAssertion,
+            "transmute: result type is properly aligned",
+            loc.clone(),
+        );
+
+        // Encode the actual transmute expression
+        let cbmc_ret_ty = self.codegen_ty(ret_ty);
+        let transmute_expr = arg.transmute_to(cbmc_ret_ty.clone(), &self.symbol_table);
+        let expr = self.codegen_expr_to_place(p, transmute_expr);
+        Stmt::block(vec![arg_align_check, ret_align_check, expr], loc)
     }
 
     // `raw_eq` determines whether the raw bytes of two values are equal.
