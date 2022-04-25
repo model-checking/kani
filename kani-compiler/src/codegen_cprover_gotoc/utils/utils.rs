@@ -7,7 +7,7 @@ use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Ty;
-use tracing::warn;
+use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -57,7 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
         let key: InternedString = operation_name.into();
         if !self.unsupported_constructs.contains_key(&key) {
-            self.unsupported_constructs.insert(key.clone(), Vec::new());
+            self.unsupported_constructs.insert(key, Vec::new());
         }
         self.unsupported_constructs.get_mut(&key).unwrap().push(loc.clone());
 
