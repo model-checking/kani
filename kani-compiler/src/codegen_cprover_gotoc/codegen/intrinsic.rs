@@ -607,12 +607,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
-            "unreachable" => self.codegen_assert(
-                Expr::bool_false(),
-                PropertyClass::DefaultAssertion,
-                "unreachable",
-                loc,
-            ),
             "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
