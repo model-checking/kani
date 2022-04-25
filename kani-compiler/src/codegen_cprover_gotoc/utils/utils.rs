@@ -7,7 +7,7 @@ use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Ty;
-use tracing::debug;
+use tracing::warn;
 
 // Should move into rvalue
 //make this a member function

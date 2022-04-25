@@ -16,7 +16,7 @@ use rustc_middle::{
     ty::{self, Ty, TypeAndMut, VariantDef},
 };
 use rustc_target::abi::{TagEncoding, Variants};
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// A projection in Kani can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
@@ -111,6 +111,14 @@ impl<'tcx> ProjectedPlace<'tcx> {
                         ty::Slice(..) | ty::Str
                             if expr_ty.is_pointer()
                                 && expr_ty.base_type() == type_from_mir.base_type() =>
+                        {
+                            None
+                        }
+                        // TODO: Do we really need this?
+                        // https://github.com/model-checking/kani/issues/1092
+                        ty::Dynamic(..)
+                            if expr_ty.is_pointer()
+                                && *expr_ty.base_type().unwrap() == type_from_mir =>
                         {
                             None
                         }
@@ -325,6 +333,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let before = before?;
         match proj {
             ProjectionElem::Deref => {
+                trace!(?before, ?proj, "codegen_projection");
                 let base_type = before.mir_typ();
                 let inner_goto_expr = if base_type.is_box() {
                     self.deref_box(before.goto_expr)
@@ -341,7 +350,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     before.fat_ptr_mir_typ
                 };
-
                 let fat_ptr_goto_expr =
                     if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
                         Some(inner_goto_expr.clone())
