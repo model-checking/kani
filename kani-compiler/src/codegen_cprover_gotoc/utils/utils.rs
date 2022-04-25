@@ -3,11 +3,11 @@
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::btree_string_map;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
+use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::Ty;
-use tracing::warn;
+use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -46,9 +46,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
     /// If it is not used, we the assertion will pass.
     /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
-    ///
-    /// TODO: https://github.com/model-checking/kani/issues/8 assume the required validity constraints for the nondet return
-    /// TODO: https://github.com/model-checking/kani/issues/9 Have a parameter that decides whether to `assume(0)` to block further traces or not
     pub fn codegen_unimplemented(
         &mut self,
         operation_name: &str,
@@ -56,8 +53,13 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         url: &str,
     ) -> Expr {
-        // TODO: This should print a more user friendly warning format.
-        warn!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
+        // Save this occurrence so we can emit a warning in the compilation report.
+        debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
+        let key: InternedString = operation_name.into();
+        if !self.unsupported_constructs.contains_key(&key) {
+            self.unsupported_constructs.insert(key, Vec::new());
+        }
+        self.unsupported_constructs.get_mut(&key).unwrap().push(loc.clone());
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
