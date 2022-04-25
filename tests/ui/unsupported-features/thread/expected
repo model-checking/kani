@@ -1,4 +1,4 @@
-warning: Compilation unit included the following unsupported constructs:\
+warning: Found the following unsupported constructs:\
 Rvalue::ThreadLocalRef\
 \
 Verification will fail if one or more of these constructs is reachable.\
