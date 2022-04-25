@@ -889,8 +889,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let ty = self.monomorphize(instance.substs.type_at(0));
         let layout = self.layout_of(ty);
         let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
+        let offset_bytes = offset.clone().mul(size);
+
         // Check that the computation would not overflow an `isize`
-        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset.clone());
+        let dst_ptr_of =
+            src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes.clone());
         let overflow_check = self.codegen_assert(
             dst_ptr_of.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
