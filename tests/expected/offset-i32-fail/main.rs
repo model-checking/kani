@@ -1,6 +1,5 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-verify-fail
 
 // Checks that the pointer computed with `offset` causes a failure if it's
 // dereferenced outside the object bounds
