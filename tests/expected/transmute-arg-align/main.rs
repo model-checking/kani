@@ -9,7 +9,7 @@ struct Packed {
 
 #[kani::proof]
 fn main() {
-    let mut packed: Packed = unsafe { std::mem::zeroed() };
+    let packed: Packed = unsafe { std::mem::zeroed() };
     unsafe {
         let x = std::mem::transmute::<u32, u32>(packed.unaligned);
         assert_eq!(x, 0);
