@@ -607,12 +607,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
-            "unreachable" => self.codegen_assert(
-                Expr::bool_false(),
-                PropertyClass::DefaultAssertion,
-                "unreachable",
-                loc,
-            ),
             "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
@@ -965,13 +959,15 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     // `raw_eq` determines whether the raw bytes of two values are equal.
-    // https://stdrs.dev/nightly/x86_64-pc-windows-gnu/std/intrinsics/fn.raw_eq.html
+    // https://doc.rust-lang.org/core/intrinsics/fn.raw_eq.html
     //
     // The implementation below calls `memcmp` and returns equal if the result is zero.
     //
-    // TODO: Handle more cases in this intrinsic by looking into the parameters' layouts.
-    // TODO: Fix soundness issues in this intrinsic. It's UB to call `raw_eq` if any of
-    // the bytes in the first or second arguments are uninitialized.
+    // TODO: It's UB to call `raw_eq` if any of the bytes in the first or second
+    // arguments are uninitialized. At present, we cannot detect if there is
+    // uninitialized memory, but `raw_eq` would basically return a nondet. value
+    // when one of the arguments is uninitialized.
+    // https://github.com/model-checking/kani/issues/920
     fn codegen_intrinsic_raw_eq(
         &mut self,
         instance: Instance<'tcx>,
