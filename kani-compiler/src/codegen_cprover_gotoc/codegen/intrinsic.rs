@@ -1172,7 +1172,7 @@ impl<'tcx> GotocCtx<'tcx> {
             align,
             PropertyClass::DefaultAssertion,
             "`dst` is properly aligned",
-            loc.clone(),
+            loc,
         );
         let layout = self.layout_of(ty);
         let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
