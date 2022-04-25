@@ -513,7 +513,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(intrinsic, fargs, p, loc),
+            "offset" => self.codegen_offset(instance, intrinsic, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -878,6 +878,7 @@ impl<'tcx> GotocCtx<'tcx> {
     // https://doc.rust-lang.org/std/intrinsics/fn.offset.html
     fn codegen_offset(
         &mut self,
+        instance: Instance<'tcx>,
         intrinsic: &str,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
@@ -885,6 +886,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
+        let ty = self.monomorphize(instance.substs.type_at(0));
+        let layout = self.layout_of(ty);
+        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
         // Check that the computation would not overflow an `isize`
         let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset.clone());
         let overflow_check = self.codegen_assert(
