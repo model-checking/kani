@@ -92,9 +92,6 @@ pub struct KaniArgs {
     /// Enable test function verification. Only use this option when the entry point is a test function.
     #[structopt(long)]
     pub tests: bool,
-    /// Do not produce error return code on CBMC verification failure
-    #[structopt(long, hidden_short_help(true))]
-    pub allow_cbmc_verification_failure: bool,
     /// Kani will only compile the crate
     #[structopt(long)]
     pub only_codegen: bool,
