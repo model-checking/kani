@@ -948,7 +948,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Encode the actual transmute expression
         let cbmc_ret_ty = self.codegen_ty(ret_ty);
-        let transmute_expr = arg.transmute_to(cbmc_ret_ty.clone(), &self.symbol_table);
+        let transmute_expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
         let expr = self.codegen_expr_to_place(p, transmute_expr);
         Stmt::block(vec![arg_align_check, ret_align_check, expr], loc)
     }
