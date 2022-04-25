@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # We're explicitly checking output rather than failing if the test fails

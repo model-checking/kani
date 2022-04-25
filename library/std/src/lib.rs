@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! The purpose of this crate is to allow kani to selectively override

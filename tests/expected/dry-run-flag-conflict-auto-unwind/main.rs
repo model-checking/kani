@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: --dry-run --auto-unwind --default-unwind 2 --enable-unstable --function main

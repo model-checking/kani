@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Converts a typed goto-program into the `Irep` serilization format of CBMC
 // TODO: consider making a macro to replace `vector_map![])` for initilizing btrees.
