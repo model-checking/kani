@@ -1,11 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// kani-flags: --enable-unstable --dry-run --function main
+// cbmc-flags: --function main
 
-// kani-flags: --dry-run --object-bits 10 --enable-unstable --function main
-// cbmc-flags: --object-bits 8
+//! This testcase is to ensure that user cannot pass --function as cbmc-flags
+//! with our driver logic.
 
-// `--dry-run` causes Kani to print out commands instead of running them
-// In `expected` you will find substrings of these commands because the
-// concrete paths depend on your working directory.
+/// This shouldn't run.
 #[kani::proof]
 fn main() {}
