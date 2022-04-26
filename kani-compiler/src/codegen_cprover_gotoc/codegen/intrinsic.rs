@@ -945,6 +945,10 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     bitpattern = *((unsigned int *)&temp_0);
     ///     assert(bitpattern == 0x3F800000);
     /// }
+    ///
+    /// Note(std): An earlier attempt to add alignment checks for both the argument and result types
+    /// had catastrophic results in the regression. Hence, we don't perform any additional checks
+    /// and only encode the transmute operation here.
     fn codegen_intrinsic_transmute(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -953,7 +957,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
         let arg = fargs.remove(0);
-        let expr = arg.transmute_to(self.codegen_ty(ret_ty), &self.symbol_table);
+        let cbmc_ret_ty = self.codegen_ty(ret_ty);
+        let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
         self.codegen_expr_to_place(p, expr)
     }
 
