@@ -146,13 +146,13 @@ impl<'tcx> ProjectedPlace<'tcx> {
         }
     }
 
-    pub fn new(
+    pub fn try_new(
         goto_expr: Expr,
         mir_typ_or_variant: TypeOrVariant<'tcx>,
         fat_ptr_goto_expr: Option<Expr>,
         fat_ptr_mir_typ: Option<Ty<'tcx>>,
         ctx: &mut GotocCtx<'tcx>,
-    ) -> Self {
+    ) -> Result<Self, UnimplementedData> {
         let mir_typ_or_variant = mir_typ_or_variant.monomorphize(ctx);
         let fat_ptr_mir_typ = fat_ptr_mir_typ.map(|t| ctx.monomorphize(t));
         if let Some(fat_ptr) = &fat_ptr_goto_expr {
@@ -173,6 +173,12 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 "Unexpected type mismatch in projection:\n{:?}\nExpr type\n{:?}\nType from MIR\n{:?}",
                 goto_expr, expr_ty, ty_from_mir
             );
+            return Err(UnimplementedData::new(
+                "Projection mismatch",
+                "https://github.com/model-checking/kani/issues/277",
+                ty_from_mir,
+                *goto_expr.location(),
+            ));
         }
 
         assert!(
@@ -181,7 +187,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
             &fat_ptr_goto_expr,
             &fat_ptr_mir_typ
         );
-        ProjectedPlace { goto_expr, mir_typ_or_variant, fat_ptr_goto_expr, fat_ptr_mir_typ }
+        Ok(ProjectedPlace { goto_expr, mir_typ_or_variant, fat_ptr_goto_expr, fat_ptr_mir_typ })
     }
 }
 
@@ -395,18 +401,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => inner_goto_expr.dereference(),
                 };
                 let typ = TypeOrVariant::Type(inner_mir_typ);
-                Ok(ProjectedPlace::new(expr, typ, fat_ptr_goto_expr, fat_ptr_mir_typ, self))
+                ProjectedPlace::try_new(expr, typ, fat_ptr_goto_expr, fat_ptr_mir_typ, self)
             }
             ProjectionElem::Field(f, t) => {
                 let typ = TypeOrVariant::Type(t);
                 let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f)?;
-                Ok(ProjectedPlace::new(
+                ProjectedPlace::try_new(
                     expr,
                     typ,
                     before.fat_ptr_goto_expr,
                     before.fat_ptr_mir_typ,
                     self,
-                ))
+                )
             }
             ProjectionElem::Index(i) => {
                 let base_type = before.mir_typ();
@@ -420,16 +426,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     ty::Slice(..) => before.goto_expr.index(idxe),
                     _ => unreachable!("must index an array"),
                 };
-                Ok(ProjectedPlace::new(
+                ProjectedPlace::try_new(
                     expr,
                     typ,
                     before.fat_ptr_goto_expr,
                     before.fat_ptr_mir_typ,
                     self,
-                ))
+                )
             }
             ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
-                Ok(self.codegen_constant_index(before, offset, min_length, from_end))
+                self.codegen_constant_index(before, offset, min_length, from_end)
             }
             // Best effort to codegen subslice projection.
             // Full support to be added in
@@ -476,13 +482,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
                         let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
-                        Ok(ProjectedPlace::new(
+                        ProjectedPlace::try_new(
                             fat_ptr.clone(),
                             TypeOrVariant::Type(ptr_typ),
                             Some(fat_ptr),
                             Some(ptr_typ),
                             self,
-                        ))
+                        )
                     }
                     _ => unreachable!("must be array or slice"),
                 }
@@ -507,13 +513,13 @@ impl<'tcx> GotocCtx<'tcx> {
                                 TagEncoding::Niche { .. } => before.goto_expr,
                             },
                         };
-                        Ok(ProjectedPlace::new(
+                        ProjectedPlace::try_new(
                             expr,
                             typ,
                             before.fat_ptr_goto_expr,
                             before.fat_ptr_mir_typ,
                             self,
-                        ))
+                        )
                     }
                     _ => unreachable!("it's a bug to reach here!"),
                 }
@@ -535,10 +541,21 @@ impl<'tcx> GotocCtx<'tcx> {
         let initial_expr = self.codegen_local(p.local);
         let initial_typ = TypeOrVariant::Type(self.local_ty(p.local));
         debug!(?initial_typ, ?initial_expr, "codegen_place");
-        let initial_projection = ProjectedPlace::new(initial_expr, initial_typ, None, None, self);
-        p.projection
+        let initial_projection =
+            ProjectedPlace::try_new(initial_expr, initial_typ, None, None, self);
+        let result = p
+            .projection
             .iter()
-            .fold(Ok(initial_projection), |accum, proj| self.codegen_projection(accum, proj))
+            .fold(initial_projection, |accum, proj| self.codegen_projection(accum, proj));
+        match result {
+            Err(data) => Err(UnimplementedData::new(
+                &data.operation,
+                &data.bug_url,
+                self.codegen_ty(self.place_ty(p)),
+                data.loc,
+            )),
+            _ => result,
+        }
     }
 
     // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html
@@ -555,7 +572,7 @@ impl<'tcx> GotocCtx<'tcx> {
         offset: u64,
         min_length: u64,
         from_end: bool,
-    ) -> ProjectedPlace<'tcx> {
+    ) -> Result<ProjectedPlace<'tcx>, UnimplementedData> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             ty::Array(elemt, length) => {
@@ -565,7 +582,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
                 let expr = self.codegen_idx_array(before.goto_expr, idxe);
                 let typ = TypeOrVariant::Type(*elemt);
-                ProjectedPlace::new(
+                ProjectedPlace::try_new(
                     expr,
                     typ,
                     before.fat_ptr_goto_expr,
@@ -585,7 +602,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
                 let expr = before.goto_expr.plus(idxe).dereference();
                 let typ = TypeOrVariant::Type(*elemt);
-                ProjectedPlace::new(
+                ProjectedPlace::try_new(
                     expr,
                     typ,
                     before.fat_ptr_goto_expr,

@@ -513,7 +513,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => codegen_op_with_overflow_check!(add_overflow),
+            "offset" => self.codegen_offset(instance, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -607,12 +607,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
-            "unreachable" => self.codegen_assert(
-                Expr::bool_false(),
-                PropertyClass::DefaultAssertion,
-                "unreachable",
-                loc,
-            ),
             "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
@@ -865,6 +859,44 @@ impl<'tcx> GotocCtx<'tcx> {
         emit_concurrency_warning!(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc.clone());
         Stmt::atomic_block(vec![skip_stmt], loc)
+    }
+
+    /// Computes the offset from a pointer
+    /// https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    fn codegen_offset(
+        &mut self,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let src_ptr = fargs.remove(0);
+        let offset = fargs.remove(0);
+
+        // Check that computing `bytes` would not overflow
+        let ty = self.monomorphize(instance.substs.type_at(0));
+        let layout = self.layout_of(ty);
+        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
+        let bytes = offset.clone().mul_overflow(size);
+        let bytes_overflow_check = self.codegen_assert(
+            bytes.overflowed.not(),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to compute offset in bytes which would overflow",
+            loc,
+        );
+
+        // Check that the computation would not overflow an `isize`
+        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
+        let overflow_check = self.codegen_assert(
+            dst_ptr_of.overflowed.not(),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to compute offset which would overflow",
+            loc,
+        );
+        // Re-compute `dst_ptr` with standard addition to avoid conversion
+        let dst_ptr = src_ptr.plus(offset);
+        let expr_place = self.codegen_expr_to_place(p, dst_ptr);
+        Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
     }
 
     /// ptr_offset_from returns the offset between two pointers

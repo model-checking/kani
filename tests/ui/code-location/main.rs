@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --function harness
+// kani-flags: --harness harness
 //
 //! This test is to check how file names are displayed in the Kani output.
 
