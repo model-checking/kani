@@ -247,16 +247,15 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
-        // This implementation is an over-approximation: It returns a nondet. value
-        // even if the result of the comparison is true. Otherwise it returns false.
+        //
+        // Note(std): These intrinsics cannot be over-approximated because they
+        // are used for regular comparison in `std` when they shouldn't. An earlier
+        // version that returned nondet. values when the result of the comparison
+        // was true had to be discarded since `ptr::is_null()` would become nondet.
         macro_rules! codegen_ptr_guaranteed_cmp {
             ($f:ident) => {{
                 warn!("Found unstable intrinsic {}, please check notes in https://model-checking.github.io/kani/rust-feature-support.html", intrinsic);
-                let arg1 = fargs.remove(0);
-                let arg2 = fargs.remove(0);
-                let op = arg1.$f(arg2).cast_to(Type::c_bool());
-                let e = op.clone().ternary(cbmc_ret_ty.nondet(), op);
-                self.codegen_expr_to_place(p, e)
+                self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool()))
             }};
         }
 
