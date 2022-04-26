@@ -45,6 +45,7 @@ class GlobalMessages(str, Enum):
     PROGRAM = 'program'
     RESULT = 'result'
     MESSAGE_TEXT = 'messageText'
+    MESSAGE_TYPE = 'messageType'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
@@ -180,6 +181,13 @@ def transform_cbmc_output(cbmc_response_string, output_style, extra_ptr_check):
 
         # Extract property information from the restructured JSON file
         properties, solver_information = extract_solver_information(cbmc_json_array)
+
+        # Check if there were any errors
+        errors = extract_errors(solver_information)
+        if errors:
+            print('\n'.join(errors))
+            return 1
+
         properties, messages = postprocess_results(properties, extra_ptr_check)
 
         # Using Case Switching to Toggle between various output styles
@@ -265,6 +273,21 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
+def extract_errors(solver_information):
+    """
+    Extract errors from the CBMC output, which are messages that have the
+    message type 'ERROR'
+    """
+    errors = []
+    for message in solver_information:
+        if GlobalMessages.MESSAGE_TYPE in message and message[GlobalMessages.MESSAGE_TYPE] == 'ERROR':
+            error_message = message[GlobalMessages.MESSAGE_TEXT]
+            # Replace "--object bits n" with "--enable-unstable --cbmc-args
+            # --object bits n" in the message
+            if 'use the `--object-bits n` option' in error_message:
+                error_message = error_message.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits ")
+            errors.append(error_message)
+    return errors
 
 def postprocess_results(properties, extra_ptr_check):
     """
