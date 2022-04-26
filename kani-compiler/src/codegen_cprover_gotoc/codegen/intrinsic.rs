@@ -894,8 +894,7 @@ impl<'tcx> GotocCtx<'tcx> {
         );
 
         // Check that the computation would not overflow an `isize`
-        let dst_ptr_of =
-            src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
+        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
         let overflow_check = self.codegen_assert(
             dst_ptr_of.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
