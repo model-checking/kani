@@ -146,7 +146,7 @@ pub struct KaniArgs {
 
     /// Do not error out for crates containing `global_asm!`.
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
-    #[structopt(long)]
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
