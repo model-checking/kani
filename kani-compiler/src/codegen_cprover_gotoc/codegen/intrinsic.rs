@@ -523,7 +523,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "pref_align_of" => codegen_intrinsic_const!(),
             "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
             "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
-            "ptr_offset_from" => self.codegen_ptr_offset_from(intrinsic, fargs, p, loc),
+            "ptr_offset_from" => self.codegen_ptr_offset_from(intrinsic, fargs, p),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
             "rintf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
@@ -905,7 +905,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html
     fn codegen_ptr_offset_from(
         &mut self,
-        intrinsic: &str,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         loc: Location,
@@ -920,8 +919,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let overflow_check = self.codegen_assert(
             offset.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
-            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-            loc.clone(),
+            "attempt to compute ptr_offset_from which would overflow",
+            loc,
         );
 
         // Re-compute the offset with standard substraction to avoid conversion
