@@ -117,6 +117,9 @@ impl KaniSession {
         if self.args.assertion_reach_checks() {
             flags.push("--assertion-reach-checks".into());
         }
+        if self.args.ignore_global_asm {
+            flags.push("--ignore-global-asm".into());
+        }
 
         // Stratification point!
         // Above are arguments that should be parsed by kani-compiler

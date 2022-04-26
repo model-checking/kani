@@ -28,11 +28,14 @@ pub const COLOR_OUTPUT: &'static str = "color-output";
 /// Option name used to dump function pointer restrictions.
 pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
 
-/// Option name used to enable assertion reachability checks
+/// Option name used to enable assertion reachability checks.
 pub const ASSERTION_REACH_CHECKS: &'static str = "assertion-reach-checks";
 
 /// Option name used to use json pretty-print for output files.
 pub const PRETTY_OUTPUT_FILES: &'static str = "pretty-json-files";
+
+/// Option used for suppressing global ASM error.
+pub const IGNORE_GLOBAL_ASM: &'static str = "ignore-global-asm";
 
 /// Option name used to override the sysroot.
 pub const SYSROOT: &'static str = "sysroot";
@@ -134,6 +137,11 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(PRETTY_OUTPUT_FILES)
                 .long("--pretty-json-files")
                 .help("Output json files in a more human-readable format (with spaces)."),
+        )
+        .arg(
+            Arg::with_name(IGNORE_GLOBAL_ASM)
+                .long("--ignore-global-asm")
+                .help("Suppress error due to the existence of global_asm in a crate"),
         )
 }
 
