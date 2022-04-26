@@ -1187,7 +1187,7 @@ impl<'tcx> GotocCtx<'tcx> {
             bytes.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             format!("{}: attempt to compute `bytes` which would overflow", intrinsic).as_str(),
-            loc.clone(),
+            loc,
         );
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, bytes.result], loc);
