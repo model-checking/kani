@@ -87,8 +87,6 @@ impl KaniSession {
         if let Some(unwind_value) = resolve_unwind_value(&self.args, harness_metadata) {
             args.push("--unwind".into());
             args.push(unwind_value.to_string().into());
-        } else if self.args.auto_unwind {
-            args.push("--auto-unwind".into());
         }
 
         args.extend(self.args.cbmc_args.iter().cloned());
