@@ -81,8 +81,10 @@ impl KaniSession {
     ) -> Result<Vec<OsString>> {
         let mut args = self.cbmc_check_flags();
 
-        args.push("--object-bits".into());
-        args.push(self.args.object_bits.to_string().into());
+        if let Some(object_bits) = self.args.cbmc_object_bits() {
+            args.push("--object-bits".into());
+            args.push(object_bits.to_string().into());
+        }
 
         if let Some(unwind_value) = resolve_unwind_value(&self.args, harness_metadata) {
             args.push("--unwind".into());
