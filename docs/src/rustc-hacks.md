@@ -1,9 +1,9 @@
 # Working with `rustc`
-Kani is developed on the top of the rust compiler, which is not distributed on crates.io and it depends on
+Kani is developed on the top of the rust compiler, which is not distributed on [crates.io](https://crates.io/) and it depends on
 bootstrapping mechanisms to properly build its components.
 Thus, our dependency on `rustc` crates are not declared in our `Cargo.toml`.
 
-Bellow are a few hacks that will make it easier to develop on the top of `rustc`.
+Below are a few hacks that will make it easier to develop on the top of `rustc`.
 
 ## Code analysis for `rustc` definitions
 
