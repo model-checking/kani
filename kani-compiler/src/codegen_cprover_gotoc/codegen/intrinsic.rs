@@ -576,7 +576,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
-            "transmute" => self.codegen_intrinsic_transmute(instance, fargs, ret_ty, p, span),
+            "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
@@ -920,13 +920,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// and only encode the transmute operation here.
     fn codegen_intrinsic_transmute(
         &mut self,
-        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         ret_ty: Ty<'tcx>,
         p: &Place<'tcx>,
-        span: Option<Span>,
     ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
+        let arg = fargs.remove(0);
         let cbmc_ret_ty = self.codegen_ty(ret_ty);
         let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
         self.codegen_expr_to_place(p, expr)
