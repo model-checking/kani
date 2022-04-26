@@ -7,6 +7,9 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+// By default we configure CBMC to use 16 bits to represent the object bits in pointers.
+const DEFAULT_OBJECT_BITS: u32 = 16;
+
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "kani",
@@ -98,9 +101,6 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
 
-    /// Specify the number of bits used for representing object IDs in CBMC
-    #[structopt(long, default_value = "16")]
-    pub object_bits: u32,
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]
     pub default_unwind: Option<u32>,
@@ -162,6 +162,14 @@ impl KaniArgs {
     pub fn assertion_reach_checks(&self) -> bool {
         // Turn them off when visualizing an error trace.
         !self.no_assertion_reach_checks && !self.visualize
+    }
+
+    pub fn cbmc_object_bits(&self) -> Option<u32> {
+        if self.cbmc_args.contains(&OsString::from("--object-bits")) {
+            None
+        } else {
+            Some(DEFAULT_OBJECT_BITS)
+        }
     }
 }
 
@@ -288,16 +296,6 @@ impl KaniArgs {
         if natives_unwind && extra_unwind {
             Error::with_description(
                 "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
-                ErrorKind::ArgumentConflict,
-            )
-            .exit();
-        }
-
-        let extra_object_bits = self.cbmc_args.contains(&OsString::from("--object-bits"));
-
-        if self.object_bits != 16 && extra_object_bits {
-            Error::with_description(
-                "Conflicting flags: `--object-bits` was specified twice.",
                 ErrorKind::ArgumentConflict,
             )
             .exit();
