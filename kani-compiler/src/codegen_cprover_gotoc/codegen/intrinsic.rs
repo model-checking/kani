@@ -513,7 +513,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(instance, intrinsic, fargs, p, loc),
+            "offset" => self.codegen_offset(instance, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -868,12 +868,11 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
 
-    // Computes the offset from a pointer
-    // https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    /// Computes the offset from a pointer
+    /// https://doc.rust-lang.org/std/intrinsics/fn.offset.html
     fn codegen_offset(
         &mut self,
         instance: Instance<'tcx>,
-        intrinsic: &str,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         loc: Location,
@@ -889,7 +888,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let bytes_overflow_check = self.codegen_assert(
             bytes.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
-            format!("{}: attempt to compute `bytes` which would overflow", intrinsic).as_str(),
+            "attempt to compute offset in bytes which would overflow",
             loc,
         );
 
@@ -898,7 +897,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let overflow_check = self.codegen_assert(
             dst_ptr_of.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
-            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+            "attempt to compute offset which would overflow",
             loc,
         );
         // Re-compute `dst_ptr` with standard addition to avoid conversion
