@@ -3,7 +3,7 @@
 
 // Checks for error message with an --object-bits value that is too small
 
-// kani-flags: --object-bits 5 --default-unwind 30
+// kani-flags: --default-unwind 30 --enable-unstable --cbmc-args --object-bits 5
 
 #[kani::proof]
 fn main() {
