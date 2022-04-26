@@ -84,10 +84,18 @@ impl CodegenBackend for GotocCodegenBackend {
                         );
                     }
                     MonoItem::GlobalAsm(_) => {
-                        warn!(
-                            "Crate {} contains global ASM, which is not handled by Kani",
-                            c.short_crate_name()
-                        );
+                        if !self.queries.get_ignore_global_asm() {
+                            let error_msg = format!(
+                                "Crate {} contains global ASM, which is not supported by Kani. Rerun with `--ignore-global-asm` to suppress this error (**Verification results may be impacted**).",
+                                c.short_crate_name()
+                            );
+                            tcx.sess.err(&error_msg);
+                        } else {
+                            warn!(
+                                "Ignoring global ASM in crate {}. Verification results may be impacted.",
+                                c.short_crate_name()
+                            );
+                        }
                     }
                 }
             }
