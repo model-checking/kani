@@ -523,7 +523,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "pref_align_of" => codegen_intrinsic_const!(),
             "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
             "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
-            "ptr_offset_from" => self.codegen_ptr_offset_from(intrinsic, fargs, p),
+            "ptr_offset_from" => self.codegen_ptr_offset_from(instance, intrinsic, fargs, p),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
             "rintf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
@@ -905,6 +905,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html
     fn codegen_ptr_offset_from(
         &mut self,
+        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         loc: Location,
@@ -912,18 +913,24 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst_ptr = fargs.remove(0);
         let src_ptr = fargs.remove(0);
 
-        // Check that the computation would not overflow an `isize`
+        // Compute the offset with standard substraction using `isize`
         let cast_dst_ptr = dst_ptr.clone().cast_to(Type::ssize_t());
         let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
-        let offset = cast_dst_ptr.sub_overflow(cast_src_ptr);
+        let offset = cast_dst_ptr.sub(cast_src_ptr);
+
+        // Check that computing `offset_bytes` would not overflow an `isize`
+        let ty = self.monomorphize(instance.substs.type_at(0));
+        let layout = self.layout_of(ty);
+        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
+        let offset_bytes = offset.clone().mul_overflow(size);
         let overflow_check = self.codegen_assert(
-            offset.overflowed.not(),
+            offset_bytes.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
-            "attempt to compute ptr_offset_from which would overflow",
+            "attempt to compute offset in bytes which would overflow",
             loc,
         );
 
-        // Re-compute the offset with standard substraction to avoid conversion
+        // Re-compute the offset with standard substraction (no casts this time)
         let offset_expr = self.codegen_expr_to_place(p, dst_ptr.sub(src_ptr));
         Stmt::block(vec![overflow_check, offset_expr], loc)
     }
