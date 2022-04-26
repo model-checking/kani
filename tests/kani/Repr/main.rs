@@ -17,8 +17,5 @@ fn mmap() -> *mut MyCVoid {
 fn main() {
     let v = mmap();
     assert!(v != MAP_FAILED);
-    // The assertion below fails because it must be using `ptr_guaranteed_eq` or
-    // `ptr_guaranteed_eq`, which now returns a nondet. value if the result of
-    // the comparison is true
     assert!(v.is_null());
 }
