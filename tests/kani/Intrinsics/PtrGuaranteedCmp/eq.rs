@@ -11,5 +11,5 @@ use std::intrinsics::ptr_guaranteed_eq;
 fn test_ptr_eq(ptr1: *const u8, ptr2: *const u8) {
     kani::assume(ptr1 == ptr2);
     assert!(ptr_guaranteed_eq(ptr1, ptr2));
-    kani::expect_fail(ptr1 != ptr2, "Pointers are equal!");
+    kani::expect_fail(ptr1 != ptr2, "Pointers aren't different");
 }
