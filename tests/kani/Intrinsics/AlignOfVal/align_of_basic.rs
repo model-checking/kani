@@ -10,6 +10,12 @@ struct MyStruct {
     val: u32,
 }
 
+#[repr(C)]
+struct CStruct {
+    a: u8,
+    b: i32,
+}
+
 enum MyEnum {
     Variant,
 }
@@ -40,5 +46,6 @@ fn main() {
         // Custom data types (struct and enum)
         assert!(min_align_of_val(&MyStruct { val: 0u32 }) == 4);
         assert!(min_align_of_val(&MyEnum::Variant) == 1);
+        assert!(min_align_of_val(&CStruct { a: 0u8, b: 0i32 }) == 4);
     }
 }
