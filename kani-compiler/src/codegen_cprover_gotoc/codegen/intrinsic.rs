@@ -880,24 +880,32 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
+
+        // Check that computing `bytes` would not overflow
         let ty = self.monomorphize(instance.substs.type_at(0));
         let layout = self.layout_of(ty);
         let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
-        let offset_bytes = offset.clone().mul(size);
+        let bytes = offset.clone().mul_overflow(size);
+        let bytes_overflow_check = self.codegen_assert(
+            bytes.overflowed.not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("{}: attempt to compute `bytes` which would overflow", intrinsic).as_str(),
+            loc,
+        );
 
         // Check that the computation would not overflow an `isize`
         let dst_ptr_of =
-            src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes.clone());
+            src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
         let overflow_check = self.codegen_assert(
             dst_ptr_of.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-            loc.clone(),
+            loc,
         );
         // Re-compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
         let expr_place = self.codegen_expr_to_place(p, dst_ptr);
-        Stmt::block(vec![overflow_check, expr_place], loc)
+        Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
     }
 
     /// ptr_offset_from returns the offset between two pointers
