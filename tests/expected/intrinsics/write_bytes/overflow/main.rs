@@ -1,0 +1,20 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Checks that `write_bytes` triggers the overflow check.
+
+// This test is a modified version of the example in
+// https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
+#![feature(core_intrinsics)]
+use std::intrinsics::write_bytes;
+
+#[kani::proof]
+fn main() {
+    let mut vec = vec![0u32; 4];
+    unsafe {
+        let vec_ptr = vec.as_mut_ptr();
+        // Passing `usize::MAX + 1` is guaranteed to
+        // overflow when computing the number of bytes
+        write_bytes(vec_ptr, 0xfe, usize::MAX / 4 + 1);
+    }
+}
