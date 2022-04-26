@@ -80,7 +80,7 @@ pub struct KaniArgs {
 
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
-    #[structopt(long, hidden = true, requires("enable_unstable"))]
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub function: Option<String>,
     /// Entry point for verification (proof harness)
     // In a dry-run, we don't have kani-metadata.json to read, so we can't use this flag
@@ -279,7 +279,8 @@ impl CargoKaniArgs {
 }
 impl KaniArgs {
     pub fn validate(&self) {
-        let extra_unwind = self.cbmc_args.contains(&OsString::from("--unwind"));
+        let extra_unwind =
+            self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
