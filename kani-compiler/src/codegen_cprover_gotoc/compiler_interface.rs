@@ -5,7 +5,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use bitflags::_core::any::Any;
-use cbmc::goto_program::symtab_transformer;
+use cbmc::goto_program::{symtab_transformer, Location};
 use cbmc::InternedString;
 use kani_metadata::KaniMetadata;
 use kani_queries::{QueryDb, UserInput};
@@ -84,10 +84,18 @@ impl CodegenBackend for GotocCodegenBackend {
                         );
                     }
                     MonoItem::GlobalAsm(_) => {
-                        warn!(
-                            "Crate {} contains global ASM, which is not handled by Kani",
-                            c.short_crate_name()
-                        );
+                        if !self.queries.get_ignore_global_asm() {
+                            let error_msg = format!(
+                                "Crate {} contains global ASM, which is not supported by Kani. Rerun with `--enable-unstable --ignore-global-asm` to suppress this error (**Verification results may be impacted**).",
+                                c.short_crate_name()
+                            );
+                            tcx.sess.err(&error_msg);
+                        } else {
+                            warn!(
+                                "Ignoring global ASM in crate {}. Verification results may be impacted.",
+                                c.short_crate_name()
+                            );
+                        }
                     }
                 }
             }
@@ -120,6 +128,9 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
             }
         }
+
+        // Print compilation report.
+        print_report(&c, tcx);
 
         // perform post-processing symbol table passes
         let passes = self.queries.get_symbol_table_passes();
@@ -256,5 +267,26 @@ where
         serde_json::to_writer_pretty(writer, &source).unwrap();
     } else {
         serde_json::to_writer(writer, &source).unwrap();
+    }
+}
+
+/// Prints a report at the end of the compilation.
+fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
+    // Print all unsupported constructs.
+    if !ctx.unsupported_constructs.is_empty() {
+        // Sort alphabetically.
+        let unsupported: BTreeMap<String, &Vec<Location>> = ctx
+            .unsupported_constructs
+            .iter()
+            .map(|(key, val)| (key.map(|s| String::from(s)), val))
+            .collect();
+        let mut msg = String::from("Found the following unsupported constructs:\n");
+        unsupported.iter().for_each(|(construct, locations)| {
+            msg += &format!("    - {} ({})\n", construct, locations.len())
+        });
+        msg += "\nVerification will fail if one or more of these constructs is reachable.";
+        msg += "\nSee https://model-checking.github.io/kani/rust-feature-support.html for more \
+        details.";
+        tcx.sess.warn(&msg);
     }
 }

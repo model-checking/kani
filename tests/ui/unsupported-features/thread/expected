@@ -1,1 +1,7 @@
+warning: Found the following unsupported constructs:\
+Rvalue::ThreadLocalRef\
+\
+Verification will fail if one or more of these constructs is reachable.\
+See https://model-checking.github.io/kani/rust-feature-support.html for more details.
+
 Failed Checks: Rvalue::ThreadLocalRef is not currently supported by Kani.
