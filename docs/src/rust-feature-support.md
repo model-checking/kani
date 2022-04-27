@@ -371,7 +371,7 @@ nearbyintf32 | No | |
 nearbyintf64 | No | |
 needs_drop | Yes | |
 nontemporal_store | No | |
-offset | Partial | Missing undefined behavior checks |
+offset | Yes | |
 powf32 | No | |
 powf64 | No | |
 powif32 | No | |
