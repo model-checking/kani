@@ -609,6 +609,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
+            "unreachable" => unreachable!(
+                "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
+            ),
             "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
