@@ -1,8 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that we get the expected results for the `size_of_val` intrinsic
-// with common data types
+// Check that we get the expected results for the `size_of_val` intrinsic with
+// common data types. Note that these tests assume an x86_64 architecture, which
+// is the only architecture supported by Kani at the moment.
 #![feature(core_intrinsics)]
 use std::intrinsics::size_of_val;
 

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that we get the expected results for the `min_align_of_val` intrinsic
-// with common data types
+// with common data types. Note that these tests assume an x86_64 architecture,
+// which is the only architecture supported by Kani at the moment.
 #![feature(core_intrinsics)]
 use std::intrinsics::min_align_of_val;
 
