@@ -1189,9 +1189,9 @@ impl<'tcx> GotocCtx<'tcx> {
             align,
             PropertyClass::DefaultAssertion,
             "`dst` is properly aligned",
-            loc.clone(),
+            loc,
         );
-        let expr = dst.dereference().assign(src, loc.clone());
+        let expr = dst.dereference().assign(src, loc);
         Stmt::block(vec![align_check, expr], loc)
     }
 
