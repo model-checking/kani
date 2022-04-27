@@ -247,11 +247,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
-        //
-        // Note(std): These intrinsics cannot be over-approximated because they
-        // are used for regular comparison in `std` when they shouldn't. An earlier
-        // version that returned nondet. values when the result of the comparison
-        // was true had to be discarded since `ptr::is_null()` would become nondet.
+        // These behave as regular pointer comparison at runtime:
+        // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
         macro_rules! codegen_ptr_guaranteed_cmp {
             ($f:ident) => {{
                 warn!("Found unstable intrinsic {}, please check notes in https://model-checking.github.io/kani/rust-feature-support.html", intrinsic);
