@@ -251,7 +251,6 @@ impl<'tcx> GotocCtx<'tcx> {
         // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
         macro_rules! codegen_ptr_guaranteed_cmp {
             ($f:ident) => {{
-                warn!("Found unstable intrinsic {}, please check notes in https://model-checking.github.io/kani/rust-feature-support.html", intrinsic);
                 self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool()))
             }};
         }
