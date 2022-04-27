@@ -1,0 +1,490 @@
+// This test case tests the incremental compilation hash (ICH) implementation
+// for let expressions.
+
+// The general pattern followed here is: Change one thing between rev1 and rev2
+// and make sure that the hash has changed, then change nothing between rev2 and
+// rev3 and make sure that the hash has not changed.
+
+// build-pass (FIXME(62277): could be check-pass?)
+// revisions: cfail1 cfail2 cfail3
+// compile-flags: -Z query-dep-graph -Zincremental-ignore-spans
+
+
+#![allow(warnings)]
+#![feature(rustc_attrs)]
+#![feature(specialization)]
+#![crate_type="rlib"]
+
+struct Foo;
+
+// Change Method Name -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait ChangeMethodNameTrait {
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl ChangeMethodNameTrait for Foo {
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,associated_item_def_ids", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+pub trait ChangeMethodNameTrait {
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name2();
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,associated_item_def_ids", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeMethodNameTrait for Foo {
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name2() { }
+}
+
+// Change Method Body -----------------------------------------------------------
+//
+// This should affect the method itself, but not the impl.
+
+pub trait ChangeMethodBodyTrait {
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl ChangeMethodBodyTrait for Foo {
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeMethodBodyTrait for Foo {
+    #[rustc_clean(except="hir_owner_nodes,typeck", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name() {
+        ()
+    }
+}
+
+// Change Method Body (inlined fn) ---------------------------------------------
+//
+// This should affect the method itself, but not the impl.
+
+pub trait ChangeMethodBodyTraitInlined {
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl ChangeMethodBodyTraitInlined for Foo {
+    #[inline]
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeMethodBodyTraitInlined for Foo {
+    #[rustc_clean(except="hir_owner_nodes,typeck,optimized_mir", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    #[inline]
+    fn method_name() {
+        panic!()
+    }
+}
+
+// Change Method Selfness ------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait ChangeMethodSelfnessTrait {
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl ChangeMethodSelfnessTrait for Foo {
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+pub trait ChangeMethodSelfnessTrait {
+    fn method_name(&self);
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeMethodSelfnessTrait for Foo {
+    #[rustc_clean(
+        except="hir_owner,hir_owner_nodes,associated_item,generics_of,fn_sig,typeck,optimized_mir",
+        cfg="cfail2",
+    )]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name(&self) {
+        ()
+    }
+}
+
+// Change Method Selfness -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait RemoveMethodSelfnessTrait {
+    fn method_name(&self);
+}
+
+#[cfg(cfail1)]
+impl RemoveMethodSelfnessTrait for Foo {
+    fn method_name(&self) { }
+}
+
+#[cfg(not(cfail1))]
+pub trait RemoveMethodSelfnessTrait {
+    fn method_name();
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl RemoveMethodSelfnessTrait for Foo {
+    #[rustc_clean(
+        except="hir_owner,hir_owner_nodes,associated_item,generics_of,fn_sig,typeck,optimized_mir",
+        cfg="cfail2",
+    )]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name() {}
+}
+
+// Change Method Selfmutness -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait ChangeMethodSelfmutnessTrait {
+    fn method_name(&self);
+}
+
+#[cfg(cfail1)]
+impl ChangeMethodSelfmutnessTrait for Foo {
+    fn method_name(&self) { }
+}
+
+#[cfg(not(cfail1))]
+pub trait ChangeMethodSelfmutnessTrait {
+    fn method_name(&mut self);
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeMethodSelfmutnessTrait for Foo {
+    #[rustc_clean(except="hir_owner,hir_owner_nodes,fn_sig,typeck,optimized_mir", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name(&mut self) {}
+}
+
+// Change item kind -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait ChangeItemKindTrait {
+    fn name();
+}
+
+#[cfg(cfail1)]
+impl ChangeItemKindTrait for Foo {
+    fn name() { }
+}
+
+#[cfg(not(cfail1))]
+pub trait ChangeItemKindTrait {
+    type name;
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,associated_item_def_ids", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeItemKindTrait for Foo {
+    type name = ();
+}
+
+// Remove item -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait RemoveItemTrait {
+    type TypeName;
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl RemoveItemTrait for Foo {
+    type TypeName = ();
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+pub trait RemoveItemTrait {
+    type TypeName;
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,associated_item_def_ids", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl RemoveItemTrait for Foo {
+    type TypeName = ();
+}
+
+// Add item -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait AddItemTrait {
+    type TypeName;
+}
+
+#[cfg(cfail1)]
+impl AddItemTrait for Foo {
+    type TypeName = ();
+}
+
+#[cfg(not(cfail1))]
+pub trait AddItemTrait {
+    type TypeName;
+    fn method_name();
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,associated_item_def_ids", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl AddItemTrait for Foo {
+    type TypeName = ();
+    fn method_name() { }
+}
+
+// Change has-value -----------------------------------------------------------
+
+#[cfg(cfail1)]
+pub trait ChangeHasValueTrait {
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl ChangeHasValueTrait for Foo {
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+pub trait ChangeHasValueTrait {
+    #[rustc_clean(except="hir_owner,associated_item", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeHasValueTrait for Foo {
+    fn method_name() { }
+}
+
+// Add default
+
+pub trait AddDefaultTrait {
+    fn method_name();
+}
+
+#[cfg(cfail1)]
+impl AddDefaultTrait for Foo {
+    fn method_name() { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl AddDefaultTrait for Foo {
+    #[rustc_clean(except="hir_owner,hir_owner_nodes,associated_item", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    default fn method_name() { }
+}
+
+// Add arguments
+
+#[cfg(cfail1)]
+pub trait AddArgumentTrait {
+    fn method_name(&self);
+}
+
+#[cfg(cfail1)]
+impl AddArgumentTrait for Foo {
+    fn method_name(&self) { }
+}
+
+#[cfg(not(cfail1))]
+pub trait AddArgumentTrait {
+    fn method_name(&self, x: u32);
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl AddArgumentTrait for Foo {
+    #[rustc_clean(except="hir_owner,hir_owner_nodes,fn_sig,typeck,optimized_mir", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name(&self, _x: u32) { }
+}
+
+// Change argument type
+
+#[cfg(cfail1)]
+pub trait ChangeArgumentTypeTrait {
+    fn method_name(&self, x: u32);
+}
+
+#[cfg(cfail1)]
+impl ChangeArgumentTypeTrait for Foo {
+    fn method_name(&self, _x: u32) { }
+}
+
+#[cfg(not(cfail1))]
+pub trait ChangeArgumentTypeTrait {
+    fn method_name(&self, x: char);
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeArgumentTypeTrait for Foo {
+    #[rustc_clean(except="hir_owner,hir_owner_nodes,fn_sig,typeck,optimized_mir", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn method_name(&self, _x: char) { }
+}
+
+
+
+struct Bar<T>(T);
+
+// Add Type Parameter To Impl --------------------------------------------------
+trait AddTypeParameterToImpl<T> {
+    fn id(t: T) -> T;
+}
+
+#[cfg(cfail1)]
+impl AddTypeParameterToImpl<u32> for Bar<u32> {
+    fn id(t: u32) -> u32 { t }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,generics_of,impl_trait_ref", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl<T> AddTypeParameterToImpl<T> for Bar<T> {
+    #[rustc_clean(
+        except="hir_owner,hir_owner_nodes,generics_of,fn_sig,type_of,typeck,optimized_mir",
+        cfg="cfail2",
+    )]
+    #[rustc_clean(cfg="cfail3")]
+    fn id(t: T) -> T { t }
+}
+
+
+
+// Change Self Type of Impl ----------------------------------------------------
+trait ChangeSelfTypeOfImpl {
+    fn id(self) -> Self;
+}
+
+#[cfg(cfail1)]
+impl ChangeSelfTypeOfImpl for u32 {
+    fn id(self) -> Self { self }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,impl_trait_ref", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl ChangeSelfTypeOfImpl for u64 {
+    #[rustc_clean(except="fn_sig,typeck,optimized_mir", cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn id(self) -> Self { self }
+}
+
+
+
+// Add Lifetime Bound to Impl --------------------------------------------------
+trait AddLifetimeBoundToImplParameter {
+    fn id(self) -> Self;
+}
+
+#[cfg(cfail1)]
+impl<T> AddLifetimeBoundToImplParameter for T {
+    fn id(self) -> Self { self }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,hir_owner_nodes", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl<T: 'static> AddLifetimeBoundToImplParameter for T {
+    #[rustc_clean(cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn id(self) -> Self { self }
+}
+
+
+
+// Add Trait Bound to Impl Parameter -------------------------------------------
+trait AddTraitBoundToImplParameter {
+    fn id(self) -> Self;
+}
+
+#[cfg(cfail1)]
+impl<T> AddTraitBoundToImplParameter for T {
+    fn id(self) -> Self { self }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(except="hir_owner,hir_owner_nodes", cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl<T: Clone> AddTraitBoundToImplParameter for T {
+    #[rustc_clean(cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    fn id(self) -> Self { self }
+}
+
+
+
+// Add #[no_mangle] to Method --------------------------------------------------
+trait AddNoMangleToMethod {
+    fn add_no_mangle_to_method(&self) { }
+}
+
+#[cfg(cfail1)]
+impl AddNoMangleToMethod for Foo {
+    fn add_no_mangle_to_method(&self) { }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl AddNoMangleToMethod for Foo {
+    #[rustc_clean(cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    #[no_mangle]
+    fn add_no_mangle_to_method(&self) { }
+}
+
+
+// Make Method #[inline] -------------------------------------------------------
+trait MakeMethodInline {
+    fn make_method_inline(&self) -> u8 { 0 }
+}
+
+#[cfg(cfail1)]
+impl MakeMethodInline for Foo {
+    fn make_method_inline(&self) -> u8 { 0 }
+}
+
+#[cfg(not(cfail1))]
+#[rustc_clean(cfg="cfail2")]
+#[rustc_clean(cfg="cfail3")]
+impl MakeMethodInline for Foo {
+    #[rustc_clean(cfg="cfail2")]
+    #[rustc_clean(cfg="cfail3")]
+    #[inline]
+    fn make_method_inline(&self) -> u8 { 0 }
+}

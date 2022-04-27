@@ -1,0 +1,16 @@
+A lifetime was declared more than once in the same scope.
+
+Erroneous code example:
+
+```compile_fail,E0263
+fn foo<'a, 'b, 'a>(x: &'a str, y: &'b str, z: &'a str) { // error!
+}
+```
+
+Two lifetimes cannot have the same name. To fix this example, change
+the second `'a` lifetime into something else (`'c` for example):
+
+```
+fn foo<'a, 'b, 'c>(x: &'a str, y: &'b str, z: &'c str) { // ok!
+}
+```

@@ -1,0 +1,21 @@
+Linking with `kind=framework` is only supported when targeting macOS,
+as frameworks are specific to that operating system.
+
+Erroneous code example:
+
+```ignore (should-compile_fail-but-cannot-doctest-conditionally-without-macos)
+#[link(name = "FooCoreServices", kind = "framework")] extern "C" {}
+// OS used to compile is Linux for example
+```
+
+To solve this error you can use conditional compilation:
+
+```
+#[cfg_attr(target="macos", link(name = "FooCoreServices", kind = "framework"))]
+extern "C" {}
+```
+
+Learn more in the [Conditional Compilation][conditional-compilation] section
+of the Reference.
+
+[conditional-compilation]: https://doc.rust-lang.org/reference/attributes.html#conditional-compilation

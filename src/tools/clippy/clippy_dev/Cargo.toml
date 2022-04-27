@@ -1,0 +1,16 @@
+[package]
+name = "clippy_dev"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+bytecount = "0.6"
+clap = "2.33"
+itertools = "0.9"
+opener = "0.5"
+regex = "1"
+shell-escape = "0.1"
+walkdir = "2"
+
+[features]
+deny-warnings = []

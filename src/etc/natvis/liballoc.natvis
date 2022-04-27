@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="alloc::vec::Vec&lt;*&gt;">
+    <DisplayString>{{ len={len} }}</DisplayString>
+    <Expand>
+      <Item Name="[len]" ExcludeView="simple">len</Item>
+      <Item Name="[capacity]" ExcludeView="simple">buf.cap</Item>
+      <ArrayItems>
+        <Size>len</Size>
+        <ValuePointer>buf.ptr.pointer</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="alloc::collections::vec_deque::VecDeque&lt;*&gt;">
+    <DisplayString>{{ len={tail &lt;= head ? head - tail : buf.cap - tail + head} }}</DisplayString>
+    <Expand>
+      <Item Name="[len]" ExcludeView="simple">tail &lt;= head ? head - tail : buf.cap - tail + head</Item>
+      <Item Name="[capacity]" ExcludeView="simple">buf.cap</Item>
+      <CustomListItems>
+        <Variable Name="i" InitialValue="tail" />
+
+        <Size>tail &lt;= head ? head - tail : buf.cap - tail + head</Size>
+        <Loop>
+          <If Condition="i == head">
+            <Break/>
+          </If>
+          <Item>buf.ptr.pointer[i]</Item>
+          <Exec>i = (i + 1 == buf.cap ? 0 : i + 1)</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+  <Type Name="alloc::collections::linked_list::LinkedList&lt;*&gt;">
+    <DisplayString>{{ len={len} }}</DisplayString>
+    <Expand>
+      <LinkedListItems>
+        <Size>len</Size>
+        <HeadPointer>*(alloc::collections::linked_list::Node&lt;$T1&gt; **)&amp;head</HeadPointer>
+        <NextPointer>*(alloc::collections::linked_list::Node&lt;$T1&gt; **)&amp;next</NextPointer>
+        <ValueNode>element</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
+  <Type Name="alloc::string::String">
+    <DisplayString>{(char*)vec.buf.ptr.pointer,[vec.len]s8}</DisplayString>
+    <StringView>(char*)vec.buf.ptr.pointer,[vec.len]s8</StringView>
+    <Expand>
+      <Item Name="[len]" ExcludeView="simple">vec.len</Item>
+      <Item Name="[capacity]" ExcludeView="simple">vec.buf.cap</Item>
+      <Synthetic Name="[chars]">
+        <DisplayString>{(char*)vec.buf.ptr.pointer,[vec.len]s8}</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>vec.len</Size>
+            <ValuePointer>(char*)vec.buf.ptr.pointer</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+    </Expand>
+  </Type>
+
+  <Type Name="alloc::rc::Rc&lt;*&gt;">
+    <DisplayString>{ptr.pointer->value}</DisplayString>
+    <Expand>
+      <ExpandedItem>ptr.pointer->value</ExpandedItem>
+      <Item Name="[Reference count]">ptr.pointer->strong</Item>
+      <Item Name="[Weak reference count]">ptr.pointer->weak</Item>
+    </Expand>
+  </Type>
+  <Type Name="alloc::rc::Weak&lt;*&gt;">
+    <DisplayString>{ptr.pointer->value}</DisplayString>
+    <Expand>
+      <ExpandedItem>ptr.pointer->value</ExpandedItem>
+      <Item Name="[Reference count]">ptr.pointer->strong</Item>
+      <Item Name="[Weak reference count]">ptr.pointer->weak</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="alloc::sync::Arc&lt;*&gt;">
+    <DisplayString>{ptr.pointer->data}</DisplayString>
+    <Expand>
+      <ExpandedItem>ptr.pointer->data</ExpandedItem>
+      <Item Name="[Reference count]">ptr.pointer->strong</Item>
+      <Item Name="[Weak reference count]">ptr.pointer->weak</Item>
+    </Expand>
+  </Type>
+  <Type Name="alloc::sync::Weak&lt;*&gt;">
+    <DisplayString>{ptr.pointer->data}</DisplayString>
+    <Expand>
+      <ExpandedItem>ptr.pointer->data</ExpandedItem>
+      <Item Name="[Reference count]">ptr.pointer->strong</Item>
+      <Item Name="[Weak reference count]">ptr.pointer->weak</Item>
+    </Expand>
+  </Type>
+  <Type Name="alloc::borrow::Cow&lt;*&gt;">
+    <DisplayString Condition="RUST$ENUM$DISR == 0x0">Borrowed({__0})</DisplayString>
+    <DisplayString Condition="RUST$ENUM$DISR == 0x1">Owned({__0})</DisplayString>
+    <Expand>
+      <Item Name="[value]" ExcludeView="simple">__0</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>

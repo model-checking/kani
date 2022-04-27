@@ -1,0 +1,16 @@
+error: this expression borrows a reference (`&i32`) that is immediately dereferenced by the compiler
+  --> $DIR/needless_borrow.rs:14:15
+   |
+LL |     let c = x(&&a);
+   |               ^^^ help: change this to: `&a`
+   |
+   = note: `-D clippy::needless-borrow` implied by `-D warnings`
+
+error: this expression borrows a reference (`&i32`) that is immediately dereferenced by the compiler
+  --> $DIR/needless_borrow.rs:27:15
+   |
+LL |         46 => &&a,
+   |               ^^^ help: change this to: `&a`
+
+error: aborting due to 2 previous errors
+
