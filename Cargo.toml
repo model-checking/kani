@@ -13,6 +13,8 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/model-checking/kani"
 documentation = "https://model-checking.github.io/kani/"
 homepage = "https://github.com/model-checking/kani"
+# N.B. Cargo.* is included automatically:
+include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md"]
 
 [dependencies]
 anyhow = "1"
@@ -29,8 +31,7 @@ path = "src/bin/cargo_kani.rs"
 [profile.release]
 strip = "debuginfo"
 
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Below is the workspace (vs above is "kani-verifier" crate) config:
 
 [workspace]
 members = [
