@@ -44,7 +44,7 @@ cp ${KANI_DIR}/rust-toolchain.toml .
 
 echo "Starting cargo build with Kani"
 export RUSTC_LOG=error
-export KANIFLAGS="--goto-c --ignore-global-asm"
+export KANIFLAGS="--goto-c"
 export RUSTFLAGS="--kani-flags"
 export RUSTC="$KANI_DIR/target/debug/kani-compiler"
 $WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET

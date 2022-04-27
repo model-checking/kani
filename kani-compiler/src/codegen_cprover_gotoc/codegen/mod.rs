@@ -14,9 +14,7 @@ mod rvalue;
 mod span;
 mod statement;
 mod static_var;
-
-// Visible for all codegen module.
-pub(super) mod typ;
+mod typ;
 
 pub use assert::PropertyClass;
 pub use typ::TypeExt;

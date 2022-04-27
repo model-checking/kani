@@ -15,7 +15,6 @@
 ///
 /// For the current CBMC implementation of function restrictions, see:
 ///     http://cprover.diffblue.com/md__home_travis_build_diffblue_cbmc_doc_architectural_restrict-function-pointer.html
-use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Stmt, Type};
 use cbmc::InternedString;
@@ -108,7 +107,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Create a label to the virtual call site
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,
-        trait_ref: Type,
+        trait_ty: Type,
         vtable_idx: usize,
         body: Stmt,
     ) -> Stmt {
@@ -118,14 +117,13 @@ impl<'tcx> GotocCtx<'tcx> {
             format!("restricted_call_label_{}", self.vtable_ctx.get_call_site_global_idx()).into();
 
         // We only have the Gotoc type, we need to normalize to match the MIR type.
-        // Retrieve the MIR for `&dyn T` and normalize the name.
-        assert!(trait_ref.is_struct_tag());
-        let trait_ref_mir_type = self.type_map.get(&trait_ref.tag().unwrap()).unwrap();
-        let trait_name = self.normalized_trait_name(pointee_type(*trait_ref_mir_type).unwrap());
+        assert!(trait_ty.is_struct_tag());
+        let mir_name =
+            self.normalized_trait_name(*self.type_map.get(&trait_ty.tag().unwrap()).unwrap());
 
         // Label
         self.vtable_ctx.add_call_site(
-            trait_name.into(),
+            mir_name.into(),
             vtable_idx,
             self.current_fn().name().into(),
             label,

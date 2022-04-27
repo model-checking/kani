@@ -1,4 +1,0 @@
-Status: FAILURE\
-Description: "realloc called with a size of 0"
-
-VERIFICATION:- FAILED

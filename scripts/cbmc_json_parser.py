@@ -45,13 +45,11 @@ class GlobalMessages(str, Enum):
     PROGRAM = 'program'
     RESULT = 'result'
     MESSAGE_TEXT = 'messageText'
-    MESSAGE_TYPE = 'messageType'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
     REACH_CHECK_KEY = "reachCheckResult"
     CHECK_ID = "KANI_CHECK_ID"
-    CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -181,13 +179,6 @@ def transform_cbmc_output(cbmc_response_string, output_style, extra_ptr_check):
 
         # Extract property information from the restructured JSON file
         properties, solver_information = extract_solver_information(cbmc_json_array)
-
-        # Check if there were any errors
-        errors = extract_errors(solver_information)
-        if errors:
-            print('\n'.join(errors))
-            return 1
-
         properties, messages = postprocess_results(properties, extra_ptr_check)
 
         # Using Case Switching to Toggle between various output styles
@@ -273,21 +264,6 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
-def extract_errors(solver_information):
-    """
-    Extract errors from the CBMC output, which are messages that have the
-    message type 'ERROR'
-    """
-    errors = []
-    for message in solver_information:
-        if GlobalMessages.MESSAGE_TYPE in message and message[GlobalMessages.MESSAGE_TYPE] == 'ERROR':
-            error_message = message[GlobalMessages.MESSAGE_TEXT]
-            # Replace "--object bits n" with "--enable-unstable --cbmc-args
-            # --object bits n" in the message
-            if 'use the `--object-bits n` option' in error_message:
-                error_message = error_message.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits ")
-            errors.append(error_message)
-    return errors
 
 def postprocess_results(properties, extra_ptr_check):
     """
@@ -324,9 +300,7 @@ def postprocess_results(properties, extra_ptr_check):
                 property["status"] = "UNDETERMINED"
         elif GlobalMessages.REACH_CHECK_KEY in property and property[GlobalMessages.REACH_CHECK_KEY] == "SUCCESS":
             # Change SUCCESS to UNREACHABLE
-            description = property["description"]
-            assert property[
-                "status"] == "SUCCESS", f"** ERROR: Expecting the unreachable property \"{description}\" to have a status of \"SUCCESS\""
+            assert property["status"] == "SUCCESS", "** ERROR: Expecting an unreachable property to have a status of \"SUCCESS\""
             property["status"] = "UNREACHABLE"
 
     messages = ""
@@ -543,7 +517,7 @@ def annotate_properties_with_reach_results(properties, reach_checks):
     for reach_check in reach_checks:
         description = reach_check["description"]
         # Extract the ID of the assert from the description
-        match_obj = re.search(GlobalMessages.CHECK_ID_RE, description)
+        match_obj = re.search(GlobalMessages.CHECK_ID + r"_.*_([0-9])*", description)
         if not match_obj:
             raise Exception("Error: failed to extract check ID for reachability check \"" + description + "\"")
         check_id = match_obj.group(0)
@@ -557,13 +531,8 @@ def get_matching_property(properties, check_id):
     Find the property with the given ID
     """
     for property in properties:
-        description = property["description"]
-        match_obj = re.search("\\[" + GlobalMessages.CHECK_ID_RE + "\\]", description)
-        # Currently, not all properties have a check ID
-        if match_obj:
-            prop_check_id = match_obj.group(0)
-            if prop_check_id == "[" + check_id + "]":
-                return property
+        if check_id in property["description"]:
+            return property
     raise Exception("Error: failed to find a property with ID \"" + check_id + "\"")
 
 
@@ -582,7 +551,7 @@ def remove_check_ids_from_description(properties):
     they're not shown to the user. The removal of the IDs should only be done
     after all ID-based post-processing is done.
     """
-    check_id_pattern = re.compile(r"\[" + GlobalMessages.CHECK_ID_RE + r"\] ")
+    check_id_pattern = re.compile(r"\[" + GlobalMessages.CHECK_ID + r"_.*_[0-9]*\] ")
     for property in properties:
         property["description"] = re.sub(check_id_pattern, "", property["description"])
 

@@ -15,9 +15,6 @@ pub trait UserInput {
 
     fn set_output_pretty_json(&mut self, pretty_json: bool);
     fn get_output_pretty_json(&self) -> bool;
-
-    fn set_ignore_global_asm(&mut self, global_asm: bool);
-    fn get_ignore_global_asm(&self) -> bool;
 }
 
 #[derive(Debug, Default)]
@@ -26,7 +23,6 @@ pub struct QueryDb {
     emit_vtable_restrictions: AtomicBool,
     symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
-    ignore_global_asm: AtomicBool,
 }
 
 impl UserInput for QueryDb {
@@ -60,13 +56,5 @@ impl UserInput for QueryDb {
 
     fn get_output_pretty_json(&self) -> bool {
         self.json_pretty_print.load(Ordering::Relaxed)
-    }
-
-    fn set_ignore_global_asm(&mut self, global_asm: bool) {
-        self.ignore_global_asm.store(global_asm, Ordering::Relaxed);
-    }
-
-    fn get_ignore_global_asm(&self) -> bool {
-        self.ignore_global_asm.load(Ordering::Relaxed)
     }
 }

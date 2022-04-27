@@ -1,4 +1,0 @@
-Status: FAILURE\
-Description: "realloc called with a null pointer"
-
-VERIFICATION:- FAILED

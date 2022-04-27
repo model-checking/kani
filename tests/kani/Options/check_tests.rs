@@ -20,7 +20,7 @@ mod test {
     #[test]
     #[kani::proof]
     fn test_harness() {
-        let input: i32 = kani::any();
+        let input: i32 = kani::nondet();
         kani::assume(input > 1);
         fn_under_verification(input);
     }

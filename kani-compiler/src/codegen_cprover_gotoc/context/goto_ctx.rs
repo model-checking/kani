@@ -61,8 +61,6 @@ pub struct GotocCtx<'tcx> {
     pub proof_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
-    /// A map of unsupported constructs that were found while codegen
-    pub unsupported_constructs: FxHashMap<InternedString, Vec<Location>>,
 }
 
 /// Constructor
@@ -85,7 +83,6 @@ impl<'tcx> GotocCtx<'tcx> {
             type_map: FxHashMap::default(),
             proof_harnesses: vec![],
             global_checks_count: 0,
-            unsupported_constructs: FxHashMap::default(),
         }
     }
 }

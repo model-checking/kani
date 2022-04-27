@@ -7,9 +7,6 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-// By default we configure CBMC to use 16 bits to represent the object bits in pointers.
-const DEFAULT_OBJECT_BITS: u32 = 16;
-
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "kani",
@@ -44,7 +41,7 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub visualize: bool,
     /// Keep temporary files generated throughout Kani process
-    #[structopt(long, hidden_short_help(true))]
+    #[structopt(long)]
     pub keep_temps: bool,
 
     /// Produce full debug information
@@ -56,21 +53,20 @@ pub struct KaniArgs {
     /// Output processing stages and commands, along with minor debug information
     #[structopt(long, short)]
     pub verbose: bool,
-    /// Enable usage of unstable options
+    /// Enable usage of unstable options.
     #[structopt(long, hidden_short_help(true))]
     pub enable_unstable: bool,
 
-    // Hide this since it depends on function that is a hidden option.
     /// Print commands instead of running them
-    #[structopt(long, requires("function"), hidden(true))]
+    #[structopt(long, requires("function"))]
     pub dry_run: bool,
     /// Generate C file equivalent to inputted program.
-    /// This feature is unstable and it requires `--enable-unstable` to be used
+    /// This feature is unstable and it requires `--enable-unstable` to be used.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub gen_c: bool,
 
     // TODO: currently only cargo-kani pays attention to this.
-    /// Directory for all generated artifacts. Only effective when running Kani with cargo
+    /// Directory for all generated artifacts
     #[structopt(long, parse(from_os_str))]
     pub target_dir: Option<PathBuf>,
 
@@ -81,9 +77,8 @@ pub struct KaniArgs {
     #[structopt(flatten)]
     pub checks: CheckArgs,
 
-    /// Entry point for verification (symbol name).
-    /// This is an unstable feature. Consider using --harness instead
-    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    /// Entry point for verification (symbol name)
+    #[structopt(long, hidden = true)]
     pub function: Option<String>,
     /// Entry point for verification (proof harness)
     // In a dry-run, we don't have kani-metadata.json to read, so we can't use this flag
@@ -91,36 +86,45 @@ pub struct KaniArgs {
     pub harness: Option<String>,
 
     /// Link external C files referenced by Rust code.
-    /// This is an experimental feature and requires `--enable-unstable` to be used
+    /// This is an experimental feature and requires `--enable-unstable` to be used.
     #[structopt(long, parse(from_os_str), hidden = true, requires("enable-unstable"))]
     pub c_lib: Vec<PathBuf>,
-    /// Enable test function verification. Only use this option when the entry point is a test function
+    /// Enable test function verification. Only use this option when the entry point is a test function.
     #[structopt(long)]
     pub tests: bool,
-    /// Kani will only compile the crate. No verification will be performed
+    /// Do not produce error return code on CBMC verification failure
     #[structopt(long, hidden_short_help(true))]
+    pub allow_cbmc_verification_failure: bool,
+    /// Kani will only compile the crate
+    #[structopt(long)]
     pub only_codegen: bool,
 
+    /// Specify the number of bits used for representing object IDs in CBMC
+    #[structopt(long, default_value = "16")]
+    pub object_bits: u32,
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]
     pub default_unwind: Option<u32>,
     /// Specify the value used for loop unwinding for the specified harness in CBMC
     #[structopt(long, requires("harness"))]
     pub unwind: Option<u32>,
-    /// Pass through directly to CBMC; must be the last flag.
-    /// This feature is unstable and it requires `--enable-unstable` to be used
+    /// Turn on automatic loop unwinding
+    #[structopt(long)]
+    pub auto_unwind: bool,
+    /// Pass through directly to CBMC; must be the last flag
+    /// This feature is unstable and it requires `--enable-unstable` to be used.
     #[structopt(long, allow_hyphen_values = true, min_values(0), requires("enable-unstable"))]
     // consumes everything
     pub cbmc_args: Vec<OsString>,
 
     // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
-    /// Use abstractions for the standard library.
-    /// This is an experimental feature and requires `--enable-unstable` to be used
+    // fixed
+    /// Use abstractions for the standard library
+    /// This is an experimental feature and requires `--enable-unstable` to be used.
     #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub use_abs: bool,
     // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
+    // fixed
     /// Choose abstraction for modules of standard library if available
     #[structopt(long, default_value = "std", possible_values = &AbstractionType::variants(),
     case_insensitive = true, hidden = true)]
@@ -129,12 +133,12 @@ pub struct KaniArgs {
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
     /// arithmetic overflow.
     /// This feature is unstable and it may yield false counter examples. It requires
-    /// `--enable-unstable` to be used
+    /// `--enable-unstable` to be used.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub extra_pointer_checks: bool,
 
-    /// Restrict the targets of virtual table function pointer calls.
-    /// This feature is unstable and it requires `--enable-unstable` to be used
+    /// Restrict the targets of virtual table function pointer calls
+    /// This feature is unstable and it requires `--enable-unstable` to be used.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub restrict_vtable: bool,
     /// Disable restricting the targets of virtual table function pointer calls
@@ -143,11 +147,6 @@ pub struct KaniArgs {
     /// Turn off assertion reachability checks
     #[structopt(long)]
     pub no_assertion_reach_checks: bool,
-
-    /// Do not error out for crates containing `global_asm!`.
-    /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
-    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
-    pub ignore_global_asm: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -167,14 +166,6 @@ impl KaniArgs {
     pub fn assertion_reach_checks(&self) -> bool {
         // Turn them off when visualizing an error trace.
         !self.no_assertion_reach_checks && !self.visualize
-    }
-
-    pub fn cbmc_object_bits(&self) -> Option<u32> {
-        if self.cbmc_args.contains(&OsString::from("--object-bits")) {
-            None
-        } else {
-            Some(DEFAULT_OBJECT_BITS)
-        }
     }
 }
 
@@ -292,15 +283,35 @@ impl CargoKaniArgs {
 }
 impl KaniArgs {
     pub fn validate(&self) {
-        let extra_unwind =
-            self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
-        let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
+        let extra_unwind = self.cbmc_args.contains(&OsString::from("--unwind"));
+        let extra_auto_unwind = self.cbmc_args.contains(&OsString::from("--auto-unwind"));
+        let extras = extra_auto_unwind || extra_unwind;
+        let natives = self.auto_unwind || self.default_unwind.is_some();
+        let any_auto_unwind = extra_auto_unwind || self.auto_unwind;
+        let any_unwind = self.default_unwind.is_some() || extra_unwind;
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
-        if natives_unwind && extra_unwind {
+        if any_auto_unwind && any_unwind {
+            Error::with_description(
+                "Conflicting flags: `--auto-unwind` is not compatible with other `--default-unwind` flags.",
+                ErrorKind::ArgumentConflict,
+            )
+            .exit();
+        }
+        if natives && extras {
             Error::with_description(
                 "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
+                ErrorKind::ArgumentConflict,
+            )
+            .exit();
+        }
+
+        let extra_object_bits = self.cbmc_args.contains(&OsString::from("--object-bits"));
+
+        if self.object_bits != 16 && extra_object_bits {
+            Error::with_description(
+                "Conflicting flags: `--object-bits` was specified twice.",
                 ErrorKind::ArgumentConflict,
             )
             .exit();

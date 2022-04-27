@@ -33,7 +33,8 @@ impl KaniSession {
         cmd.args(args);
 
         if self.args.output_format == crate::args::OutputFormat::Old {
-            if self.run_terminal(cmd).is_err() {
+            let result = self.run_terminal(cmd);
+            if !self.args.allow_cbmc_verification_failure && result.is_err() {
                 return Ok(VerificationStatus::Failure);
             }
         } else {
@@ -43,7 +44,7 @@ impl KaniSession {
             let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
             let format_result = self.format_cbmc_output(&output_filename);
 
-            if format_result.is_err() {
+            if !self.args.allow_cbmc_verification_failure && format_result.is_err() {
                 // Because of things like --assertion-reach-checks and other future features,
                 // we now decide if we fail or not based solely on the output of the formatter.
                 return Ok(VerificationStatus::Failure);
@@ -81,14 +82,14 @@ impl KaniSession {
     ) -> Result<Vec<OsString>> {
         let mut args = self.cbmc_check_flags();
 
-        if let Some(object_bits) = self.args.cbmc_object_bits() {
-            args.push("--object-bits".into());
-            args.push(object_bits.to_string().into());
-        }
+        args.push("--object-bits".into());
+        args.push(self.args.object_bits.to_string().into());
 
         if let Some(unwind_value) = resolve_unwind_value(&self.args, harness_metadata) {
             args.push("--unwind".into());
             args.push(unwind_value.to_string().into());
+        } else if self.args.auto_unwind {
+            args.push("--auto-unwind".into());
         }
 
         args.extend(self.args.cbmc_args.iter().cloned());

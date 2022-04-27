@@ -192,16 +192,6 @@ ensure there is no resource leak or persistent data inconsistency. Check out
 [this issue](https://github.com/model-checking/kani/issues/692) for updates on
 stack unwinding support.
 
-### Uninitialized memory
-
-Reading uninitialized memory is
-[considered undefined behavior](https://doc.rust-lang.org/reference/behavior-considered-undefined.html#behavior-considered-undefined) in Rust.
-At the moment, Kani cannot detect if memory is uninitialized, but in practice
-this is mitigated by the fact that all memory is initialized with
-nondeterministic values.
-Therefore, any code that depends on uninitialized data will exhibit nondeterministic behavior.
-See [this issue](https://github.com/model-checking/kani/issues/920) for more details.
-
 ### Destructors
 
 At present, we are aware of some issues with destructors, in particular those
@@ -371,7 +361,7 @@ nearbyintf32 | No | |
 nearbyintf64 | No | |
 needs_drop | Yes | |
 nontemporal_store | No | |
-offset | Yes | |
+offset | Partial | Missing undefined behavior checks |
 powf32 | No | |
 powf64 | No | |
 powif32 | No | |
@@ -381,10 +371,10 @@ prefetch_read_data | No | |
 prefetch_read_instruction | No | |
 prefetch_write_data | No | |
 prefetch_write_instruction | No | |
-ptr_guaranteed_eq | Yes | |
-ptr_guaranteed_ne | Yes | |
+ptr_guaranteed_eq | Partial | |
+ptr_guaranteed_ne | Partial | |
 ptr_offset_from | Partial | Missing undefined behavior checks |
-raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
+raw_eq | Partial | Missing undefined behavior checks |
 rintf32 | No | |
 rintf64 | No | |
 rotate_left | Yes | |

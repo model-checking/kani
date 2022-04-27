@@ -84,10 +84,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let intrinsic = self.symbol_name(instance);
         let intrinsic = intrinsic.as_str();
         let loc = self.codegen_span_option(span);
-        debug!(?instance, "codegen_intrinsic");
-        debug!(?fargs, "codegen_intrinsic");
-        debug!(?p, "codegen_intrinsic");
-        debug!(?span, "codegen_intrinsic");
+        debug!(
+            "codegen_intrinsic:\n\tinstance {:?}\n\tfargs {:?}\n\tp {:?}\n\tspan {:?}",
+            instance, fargs, p, span
+        );
         let sig = instance.ty(self.tcx, ty::ParamEnv::reveal_all()).fn_sig(self.tcx);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         let ret_ty = self.monomorphize(sig.output());
@@ -246,10 +246,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
         }
 
-        // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
-        // These behave as regular pointer comparison at runtime:
-        // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
-        macro_rules! codegen_ptr_guaranteed_cmp {
+        // Intrinsics which encode a simple binary operation
+        macro_rules! codegen_intrinsic_boolean_binop {
             ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
         }
 
@@ -515,15 +513,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(instance, fargs, p, loc),
+            "offset" => codegen_op_with_overflow_check!(add_overflow),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
             "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
-            "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
-            "ptr_offset_from" => self.codegen_ptr_offset_from(instance, fargs, p, loc),
+            "ptr_guaranteed_eq" => codegen_intrinsic_boolean_binop!(eq),
+            "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
+            "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
             "rintf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
@@ -609,8 +607,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
-            "unreachable" => unreachable!(
-                "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
+            "unreachable" => self.codegen_assert(
+                Expr::bool_false(),
+                PropertyClass::DefaultAssertion,
+                "unreachable",
+                loc,
             ),
             "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
             "volatile_copy_nonoverlapping_memory" => {
@@ -627,9 +628,16 @@ impl<'tcx> GotocCtx<'tcx> {
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
             "write_bytes" => {
-                assert!(self.place_ty(p).is_unit());
-                self.codegen_write_bytes(instance, intrinsic, fargs, loc)
+                let dst = fargs.remove(0).cast_to(Type::void_pointer());
+                let val = fargs.remove(0).cast_to(Type::c_int());
+                let count = fargs.remove(0);
+                let ty = self.monomorphize(instance.substs.type_at(0));
+                let layout = self.layout_of(ty);
+                let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
+                let e = BuiltinFn::Memset.call(vec![dst, val, count.mul(sz)], loc);
+                self.codegen_expr_to_place(p, e)
             }
+
             // Unimplemented
             _ => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/new/choose"
@@ -866,76 +874,30 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
 
-    /// Computes the offset from a pointer
-    /// https://doc.rust-lang.org/std/intrinsics/fn.offset.html
-    fn codegen_offset(
-        &mut self,
-        instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        p: &Place<'tcx>,
-        loc: Location,
-    ) -> Stmt {
-        let src_ptr = fargs.remove(0);
-        let offset = fargs.remove(0);
-
-        // Check that computing `bytes` would not overflow
-        let ty = self.monomorphize(instance.substs.type_at(0));
-        let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
-        let bytes = offset.clone().mul_overflow(size);
-        let bytes_overflow_check = self.codegen_assert(
-            bytes.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow",
-            loc,
-        );
-
-        // Check that the computation would not overflow an `isize`
-        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
-        let overflow_check = self.codegen_assert(
-            dst_ptr_of.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset which would overflow",
-            loc,
-        );
-        // Re-compute `dst_ptr` with standard addition to avoid conversion
-        let dst_ptr = src_ptr.plus(offset);
-        let expr_place = self.codegen_expr_to_place(p, dst_ptr);
-        Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
-    }
-
     /// ptr_offset_from returns the offset between two pointers
     /// https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html
     fn codegen_ptr_offset_from(
         &mut self,
-        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        let dst_ptr = fargs.remove(0);
-        let src_ptr = fargs.remove(0);
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+        let pointers_to_same_object = a.clone().same_object(b.clone());
 
-        // Compute the offset with standard substraction using `isize`
-        let cast_dst_ptr = dst_ptr.clone().cast_to(Type::ssize_t());
-        let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
-        let offset = cast_dst_ptr.sub(cast_src_ptr);
-
-        // Check that computing `offset_bytes` would not overflow an `isize`
-        let ty = self.monomorphize(instance.substs.type_at(0));
-        let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
-        let offset_bytes = offset.clone().mul_overflow(size);
-        let overflow_check = self.codegen_assert(
-            offset_bytes.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow",
+        Stmt::block(
+            vec![
+                self.codegen_assert(
+                    pointers_to_same_object,
+                    PropertyClass::PointerOffset,
+                    "ptr_offset_from: pointers point to same object",
+                    loc.clone(),
+                ),
+                self.codegen_expr_to_place(p, a.sub(b)),
+            ],
             loc,
-        );
-
-        // Re-compute the offset with standard substraction (no casts this time)
-        let offset_expr = self.codegen_expr_to_place(p, dst_ptr.sub(src_ptr));
-        Stmt::block(vec![overflow_check, offset_expr], loc)
+        )
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
@@ -958,10 +920,6 @@ impl<'tcx> GotocCtx<'tcx> {
     ///     bitpattern = *((unsigned int *)&temp_0);
     ///     assert(bitpattern == 0x3F800000);
     /// }
-    ///
-    /// Note(std): An earlier attempt to add alignment checks for both the argument and result types
-    /// had catastrophic results in the regression. Hence, we don't perform any additional checks
-    /// and only encode the transmute operation here.
     fn codegen_intrinsic_transmute(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -970,21 +928,18 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
         let arg = fargs.remove(0);
-        let cbmc_ret_ty = self.codegen_ty(ret_ty);
-        let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
+        let expr = arg.transmute_to(self.codegen_ty(ret_ty), &self.symbol_table);
         self.codegen_expr_to_place(p, expr)
     }
 
     // `raw_eq` determines whether the raw bytes of two values are equal.
-    // https://doc.rust-lang.org/core/intrinsics/fn.raw_eq.html
+    // https://stdrs.dev/nightly/x86_64-pc-windows-gnu/std/intrinsics/fn.raw_eq.html
     //
     // The implementation below calls `memcmp` and returns equal if the result is zero.
     //
-    // TODO: It's UB to call `raw_eq` if any of the bytes in the first or second
-    // arguments are uninitialized. At present, we cannot detect if there is
-    // uninitialized memory, but `raw_eq` would basically return a nondet. value
-    // when one of the arguments is uninitialized.
-    // https://github.com/model-checking/kani/issues/920
+    // TODO: Handle more cases in this intrinsic by looking into the parameters' layouts.
+    // TODO: Fix soundness issues in this intrinsic. It's UB to call `raw_eq` if any of
+    // the bytes in the first or second arguments are uninitialized.
     fn codegen_intrinsic_raw_eq(
         &mut self,
         instance: Instance<'tcx>,
@@ -1017,12 +972,15 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         match t.kind() {
             ty::Dynamic(..) => {
-                // For traits, we need to retrieve the size and alignment from the vtable.
-                let vtable = arg.member("vtable", &self.symbol_table).dereference();
-                SizeAlign {
-                    size: vtable.clone().member("size", &self.symbol_table),
-                    align: vtable.member("align", &self.symbol_table),
-                }
+                //TODO figure out if this needs to be done, or if the result we want here is for the fat pointer.
+                //We need to get the actual value from the vtable like in codegen_ssa/glue.rs
+                // let vs = self.layout_of(self.tcx.vtable_methods(binder.principal().unwrap().with_self_ty(self.tcx, t)));
+                // https://rust-lang.github.io/unsafe-code-guidelines/layout/pointers.html
+                // The size of &dyn Trait is two words.
+                let size = Expr::int_constant((layout.size.bytes_usize()) * 2, Type::size_t());
+                // The alignment of &dyn Trait is the word size.
+                let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+                SizeAlign { size, align }
             }
             ty::Slice(_) | ty::Str => {
                 let unit_t = match t.kind() {
@@ -1198,49 +1156,5 @@ impl<'tcx> GotocCtx<'tcx> {
         );
         let expr = dst.dereference().assign(src, loc.clone());
         Stmt::block(vec![align_check, expr], loc)
-    }
-
-    /// Sets `count * size_of::<T>()` bytes of memory starting at `dst` to `val`
-    /// https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
-    ///
-    /// Undefined behavior if any of these conditions are violated:
-    ///  * `dst` must be valid for writes (done by memset writable check)
-    ///  * `dst` must be properly aligned (done by `align_check` below)
-    /// In addition, we check that computing `bytes` (i.e., the third argument
-    /// for the `memset` call) would not overflow
-    fn codegen_write_bytes(
-        &mut self,
-        instance: Instance<'tcx>,
-        intrinsic: &str,
-        mut fargs: Vec<Expr>,
-        loc: Location,
-    ) -> Stmt {
-        let dst = fargs.remove(0).cast_to(Type::void_pointer());
-        let val = fargs.remove(0).cast_to(Type::c_int());
-        let count = fargs.remove(0);
-
-        // Check that `dst` is properly aligned
-        let ty = self.monomorphize(instance.substs.type_at(0));
-        let align = self.is_aligned(ty, dst.clone());
-        let align_check = self.codegen_assert(
-            align,
-            PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
-            loc,
-        );
-
-        // Check that computing `bytes` would not overflow
-        let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), Type::size_t());
-        let bytes = count.mul_overflow(size);
-        let overflow_check = self.codegen_assert(
-            bytes.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            format!("{}: attempt to compute `bytes` which would overflow", intrinsic).as_str(),
-            loc,
-        );
-
-        let memset_call = BuiltinFn::Memset.call(vec![dst, val, bytes.result], loc);
-        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
     }
 }

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Try with: kani ignore-main.rs --default-unwind 3 --enable-unstable --cbmc-args --object-bits 11
+// Try with: kani ignore-main.rs -- --default-unwind 3 --unwinding-assertions --pointer-check --object-bits 11
 // With kissat as the solver (--external-sat-solver /path/to/kissat) this takes ~5mins
 
 pub const MAX_PAGE_COMPACT_BUFFER: usize = 2048;

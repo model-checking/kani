@@ -1,1 +1,1 @@
-error: Invalid flag: --function should be provided to Kani directly, not via
+Conflicting flags: `--object-bits` was specified twice.

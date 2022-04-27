@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --harness empty_harness
+// kani-flags: --function empty_harness
 
 // This file is to be used as a module on a different test, but the compiletest will still run
 // kani on this file. Use an empty harness instead.
