@@ -250,9 +250,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // These behave as regular pointer comparison at runtime:
         // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
         macro_rules! codegen_ptr_guaranteed_cmp {
-            ($f:ident) => {{
-                self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool()))
-            }};
+            ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
         }
 
         // Intrinsics which encode a simple binary operation
