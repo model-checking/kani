@@ -618,7 +618,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
-                self.codegen_volatile_store(instance, intrinsic, fargs, loc)
+                self.codegen_volatile_store(instance, fargs, loc)
             }
             "wrapping_add" => codegen_wrapping_op!(plus),
             "wrapping_mul" => codegen_wrapping_op!(mul),
@@ -1178,11 +1178,9 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_volatile_store(
         &mut self,
         instance: Instance<'tcx>,
-        intrinsic: &str,
         mut fargs: Vec<Expr>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
         let dst = fargs.remove(0);
         let src = fargs.remove(0);
         let typ = instance.substs.type_at(0);
