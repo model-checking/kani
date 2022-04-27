@@ -6,9 +6,9 @@ use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
 use crate::cbmc_string::InternedString;
+use linear_map::LinearMap;
 use num::BigInt;
 use std::fmt::Debug;
-use vector_map::VecMap;
 
 /// The CBMC serialization format for goto-programs.
 /// CBMC implementation code is at:
@@ -17,7 +17,7 @@ use vector_map::VecMap;
 pub struct Irep {
     pub id: IrepId,
     pub sub: Vec<Irep>,
-    pub named_sub: VecMap<IrepId, Irep>,
+    pub named_sub: LinearMap<IrepId, Irep>,
 }
 
 /// Getters
@@ -102,7 +102,7 @@ impl Irep {
     }
 
     pub fn just_id(id: IrepId) -> Irep {
-        Irep { id: id, sub: Vec::new(), named_sub: VecMap::new() }
+        Irep { id: id, sub: Vec::new(), named_sub: LinearMap::new() }
     }
 
     pub fn just_int_id<T>(i: T) -> Irep
@@ -111,7 +111,7 @@ impl Irep {
     {
         Irep::just_id(IrepId::from_int(i))
     }
-    pub fn just_named_sub(named_sub: VecMap<IrepId, Irep>) -> Irep {
+    pub fn just_named_sub(named_sub: LinearMap<IrepId, Irep>) -> Irep {
         Irep { id: IrepId::EmptyString, sub: vec![], named_sub: named_sub }
     }
 
@@ -120,7 +120,7 @@ impl Irep {
     }
 
     pub fn just_sub(sub: Vec<Irep>) -> Irep {
-        Irep { id: IrepId::EmptyString, sub: sub, named_sub: VecMap::new() }
+        Irep { id: IrepId::EmptyString, sub: sub, named_sub: LinearMap::new() }
     }
 
     pub fn nil() -> Irep {
