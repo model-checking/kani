@@ -246,8 +246,10 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
         }
 
-        // Intrinsics which encode a simple binary operation
-        macro_rules! codegen_intrinsic_boolean_binop {
+        // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
+        // These behave as regular pointer comparison at runtime:
+        // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
+        macro_rules! codegen_ptr_guaranteed_cmp {
             ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
         }
 
@@ -519,8 +521,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
             "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_eq" => codegen_intrinsic_boolean_binop!(eq),
-            "ptr_guaranteed_ne" => codegen_intrinsic_boolean_binop!(neq),
+            "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
+            "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
             "rintf32" => codegen_unimplemented_intrinsic!(

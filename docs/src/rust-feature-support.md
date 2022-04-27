@@ -381,8 +381,8 @@ prefetch_read_data | No | |
 prefetch_read_instruction | No | |
 prefetch_write_data | No | |
 prefetch_write_instruction | No | |
-ptr_guaranteed_eq | Partial | |
-ptr_guaranteed_ne | Partial | |
+ptr_guaranteed_eq | Yes | |
+ptr_guaranteed_ne | Yes | |
 ptr_offset_from | Partial | Missing undefined behavior checks |
 raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
 rintf32 | No | |
