@@ -1,0 +1,3 @@
+_ZN4core3num60_$LT$impl$u20$core..str..traits..FromStr$u20$for$u20$i32$GT$8from_str17h7d4996898b7d2729E.assertion.1\
+Status: FAILURE
+Description: "Function with missing definition is unreachable"
