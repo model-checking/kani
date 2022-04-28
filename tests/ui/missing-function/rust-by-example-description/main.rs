@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: --enable-unstable --cbmc-args --unwind 4 --object-bits 9
+// This test is to check if the description for undefined functions has been updated to "Function with missing definition is unreachable"
 
 #![allow(unused)]
 #[kani::proof]

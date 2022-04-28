@@ -275,13 +275,15 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
-def resolve_unknown_location_checks(properties):
+def modify_undefined_function_checks(properties):
     """
     1. Searches for any check which has unknown file location or missing defition and replaces description
-    2. If any of these checks has a failure status, then we turn all the sucesses into undetermined.
+    2. If a function with missing defition is reachable, then we turn all SUCCESS status to UNDETERMINED.
+    If there are no reachable functions with missing definitions, then the verification is not affected, so we retain all of the SUCCESS status.
     """
     has_unknown_location_checks = False
     for property in properties:
+        # Specifically trying to capture assertions that CBMC generates for functions with missing definitions
         if GlobalMessages.ASSERTION_FALSE in property["description"] and extract_property_class(
                 property) == GlobalMessages.DEFAULT_ASSERTION and not hasattr(property["sourceLocation"], "file"):
             property["description"] = "Function with missing definition is unreachable"
@@ -325,7 +327,7 @@ def postprocess_results(properties, extra_ptr_check):
 
     has_reachable_unsupported_constructs = has_check_failure(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
     has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
-    has_unknown_location_asserts = resolve_unknown_location_checks(properties)
+    has_reachable_undefined_functions = modify_undefined_function_checks(properties)
     properties, reach_checks = filter_reach_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
@@ -335,7 +337,7 @@ def postprocess_results(properties, extra_ptr_check):
 
     for property in properties:
         property["description"] = get_readable_description(property)
-        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_unknown_location_asserts:
+        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_reachable_undefined_functions:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
