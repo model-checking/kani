@@ -12,6 +12,6 @@ fn main() {
     let max_offset = usize::MAX / std::mem::size_of::<u128>();
     unsafe {
         let v_wrap: *const u128 = v_100.add((max_offset + 1).try_into().unwrap());
-        let _ = v_wrap.offset_from(v_100) == 2;
+        let _ = v_wrap.offset_from(v_100);
     }
 }

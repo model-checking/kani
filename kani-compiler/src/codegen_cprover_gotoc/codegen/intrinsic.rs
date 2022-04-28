@@ -628,7 +628,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "wrapping_sub" => codegen_wrapping_op!(sub),
             "write_bytes" => {
                 assert!(self.place_ty(p).is_unit());
-                self.codegen_write_bytes(instance, intrinsic, fargs, loc)
+                self.codegen_write_bytes(instance, fargs, loc)
             }
             // Unimplemented
             _ => codegen_unimplemented_intrinsic!(
@@ -878,17 +878,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
 
-        // Check that computing `bytes` would not overflow
+        // Check that computing `offset` in bytes would not overflow
         let ty = self.monomorphize(instance.substs.type_at(0));
-        let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
-        let bytes = offset.clone().mul_overflow(size);
-        let bytes_overflow_check = self.codegen_assert(
-            bytes.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow",
-            loc,
-        );
+        let (offset_bytes, bytes_overflow_check) =
+            self.number_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
 
         // Check that the computation would not overflow an `isize`
         let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
@@ -898,6 +891,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "attempt to compute offset which would overflow",
             loc,
         );
+
         // Re-compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
         let expr_place = self.codegen_expr_to_place(p, dst_ptr);
@@ -921,17 +915,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
         let offset = cast_dst_ptr.sub(cast_src_ptr);
 
-        // Check that computing `offset_bytes` would not overflow an `isize`
+        // Check that computing `offset` in bytes would not overflow an `isize`
         let ty = self.monomorphize(instance.substs.type_at(0));
-        let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), Type::ssize_t());
-        let offset_bytes = offset.clone().mul_overflow(size);
-        let overflow_check = self.codegen_assert(
-            offset_bytes.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow",
-            loc,
-        );
+        let (_offset_bytes, overflow_check) =
+            self.number_in_bytes(offset.clone(), ty, Type::ssize_t(), "ptr_offset_from", loc);
 
         // Re-compute the offset with standard substraction (no casts this time)
         let offset_expr = self.codegen_expr_to_place(p, dst_ptr.sub(src_ptr));
@@ -1209,7 +1196,6 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_write_bytes(
         &mut self,
         instance: Instance<'tcx>,
-        intrinsic: &str,
         mut fargs: Vec<Expr>,
         loc: Location,
     ) -> Stmt {
@@ -1227,18 +1213,40 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        // Check that computing `bytes` would not overflow
+        // Check that computing `count` in bytes would not overflow
+        let (count_bytes, overflow_check) =
+            self.number_in_bytes(count, ty, Type::size_t(), "write_bytes", loc);
+
+        let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
+        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
+    }
+
+    /// Computes (multiplies) the equivalent of a memory-related number (e.g., an offset) in bytes.
+    /// Because this operation may result in an arithmetic overflow, it includes an overflow check.
+    /// Returns a tuple with:
+    ///  * The result expression of the computation.
+    ///  * An assertion statement to ensure the operation has not overflowed.
+    fn number_in_bytes(
+        &self,
+        num: Expr,
+        ty: Ty<'tcx>,
+        cbmc_ty: Type,
+        intrinsic: &str,
+        loc: Location,
+    ) -> (Expr, Stmt) {
         let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), Type::size_t());
-        let bytes = count.mul_overflow(size);
-        let overflow_check = self.codegen_assert(
-            bytes.overflowed.not(),
+        let size = Expr::int_constant(layout.size.bytes(), cbmc_ty);
+        let num_bytes = num.mul_overflow(size);
+        let message = format!(
+            "{}: attempt to compute number in bytes which would overflow",
+            intrinsic.to_string()
+        );
+        let assert_stmt = self.codegen_assert(
+            num_bytes.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
-            format!("{}: attempt to compute `bytes` which would overflow", intrinsic).as_str(),
+            message.as_str(),
             loc,
         );
-
-        let memset_call = BuiltinFn::Memset.call(vec![dst, val, bytes.result], loc);
-        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
+        (num_bytes.result, assert_stmt)
     }
 }
