@@ -282,7 +282,8 @@ def resolve_unknown_location_checks(properties):
     """
     has_unknown_location_checks = False
     for property in properties:
-        if GlobalMessages.ASSERTION_FALSE in property["description"] and extract_property_class(property) == GlobalMessages.DEFAULT_ASSERTION and not hasattr(property["sourceLocation"], "file"):
+        if GlobalMessages.ASSERTION_FALSE in property["description"] and extract_property_class(
+                property) == GlobalMessages.DEFAULT_ASSERTION and not hasattr(property["sourceLocation"], "file"):
             property["description"] = "Function with missing definition is unreachable"
             if property["status"] == "FAILURE":
                 has_unknown_location_checks = True
