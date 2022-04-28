@@ -884,7 +884,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.number_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
 
         // Check that the computation would not overflow an `isize`
-        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(bytes.result);
+        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
         let overflow_check = self.codegen_assert(
             dst_ptr_of.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
@@ -1228,25 +1228,26 @@ impl<'tcx> GotocCtx<'tcx> {
     ///  * An assertion statement to ensure the operation has not overflowed.
     fn number_in_bytes(
         &self,
-        num: Expr,
+        count: Expr,
         ty: Ty<'tcx>,
-        cbmc_ty: Type,
+        res_ty: Type,
         intrinsic: &str,
         loc: Location,
     ) -> (Expr, Stmt) {
+        assert!(res_ty.is_integer());
         let layout = self.layout_of(ty);
-        let size = Expr::int_constant(layout.size.bytes(), cbmc_ty);
-        let num_bytes = num.mul_overflow(size);
+        let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty);
+        let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message = format!(
             "{}: attempt to compute number in bytes which would overflow",
             intrinsic.to_string()
         );
         let assert_stmt = self.codegen_assert(
-            num_bytes.overflowed.not(),
+            size_of_count_elems.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             message.as_str(),
             loc,
         );
-        (num_bytes.result, assert_stmt)
+        (size_of_count_elems.result, assert_stmt)
     }
 }
