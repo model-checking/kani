@@ -278,7 +278,7 @@ def extract_solver_information(cbmc_response_json_array):
 def modify_undefined_function_checks(properties):
     """
     1. Searches for any check which has unknown file location or missing defition and replaces description
-    2. If a function with missing defition is reachable, then we turn all SUCCESS status to UNDETERMINED.
+    2. If a function with missing definition is reachable, then we turn all SUCCESS status to UNDETERMINED.
     If there are no reachable functions with missing definitions, then the verification is not affected, so we retain all of the SUCCESS status.
     """
     has_unknown_location_checks = False
