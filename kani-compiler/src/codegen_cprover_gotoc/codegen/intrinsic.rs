@@ -881,7 +881,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that computing `offset` in bytes would not overflow
         let ty = self.monomorphize(instance.substs.type_at(0));
         let (offset_bytes, bytes_overflow_check) =
-            self.number_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
+            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
 
         // Check that the computation would not overflow an `isize`
         let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
@@ -918,7 +918,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that computing `offset` in bytes would not overflow an `isize`
         let ty = self.monomorphize(instance.substs.type_at(0));
         let (_offset_bytes, overflow_check) =
-            self.number_in_bytes(offset.clone(), ty, Type::ssize_t(), "ptr_offset_from", loc);
+            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), "ptr_offset_from", loc);
 
         // Re-compute the offset with standard substraction (no casts this time)
         let offset_expr = self.codegen_expr_to_place(p, dst_ptr.sub(src_ptr));
@@ -1215,7 +1215,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Check that computing `count` in bytes would not overflow
         let (count_bytes, overflow_check) =
-            self.number_in_bytes(count, ty, Type::size_t(), "write_bytes", loc);
+            self.count_in_bytes(count, ty, Type::size_t(), "write_bytes", loc);
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
         Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
@@ -1226,7 +1226,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Returns a tuple with:
     ///  * The result expression of the computation.
     ///  * An assertion statement to ensure the operation has not overflowed.
-    fn number_in_bytes(
+    fn count_in_bytes(
         &self,
         count: Expr,
         ty: Ty<'tcx>,
