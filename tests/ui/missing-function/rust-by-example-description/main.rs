@@ -1,4 +1,6 @@
-// compile-flags: --edition 2018
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 // kani-flags: --enable-unstable --cbmc-args --unwind 4 --object-bits 9
 
 #![allow(unused)]
