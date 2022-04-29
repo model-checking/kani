@@ -1,0 +1,3 @@
+.assertion.1\
+Status: FAILURE\
+Description: "Function with missing definition is unreachable"
