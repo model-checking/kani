@@ -6,7 +6,7 @@ Kani is particularly useful for verifying unsafe code in Rust, where many of the
 Kani verifies:
  * Memory safety (e.g., null pointer dereferences)
  * User-specified assertions (i.e., `assert!(...)`)
- * The absence of panics (e.g., out-of-bounds accesses)
+ * The absence of panics (e.g., `unwrap()` on `None` values)
  * The absence of some types of unexpected behavior (e.g., arithmetic overflows)
 
 ## Installation
