@@ -19,8 +19,8 @@
 
 - [Developer documentation](dev-documentation.md)
   - [Working with CBMC](./cbmc-hacks.md)
-  - [Command cheat sheets](./cheat-sheets.md)
   - [Working with `rustc`](./rustc-hacks.md)
+  - [Command cheat sheets](./cheat-sheets.md)
   - [Testing](./testing.md)
     - [Regression testing](./regression-testing.md)
     - [Book runner](./bookrunner.md)
