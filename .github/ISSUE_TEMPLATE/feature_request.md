@@ -4,8 +4,8 @@ about: Create a feature request for Kani
 labels: 
 ---
 <!--
-Please report security concerns to us on the
-[AWS vulnerability reporting](http://aws.amazon.com/security/vulnerability-reporting/) page.
+If this is a security issue, please report it following the
+[security reporting procedure](https://github.com/model-checking/kani/security/policy).
 -->
 
 <!--
