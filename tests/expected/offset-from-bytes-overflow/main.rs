@@ -21,6 +21,15 @@ fn main() {
     //  * Trigger failures in `offset_from` after it
     let high_offset = usize::MAX / (std::mem::size_of::<u128>() * 4);
     unsafe {
+        // Adding `high offset` to `v_0` is undefined behavior, but Kani's
+        // default behavior does not report it. This kind of operations
+        // are quite common in the standard library, and we disabled such
+        // checks in order to avoid spurious verification failures.
+        //
+        // Note that this instance of undefined behavior will be reported
+        // by `miri` and also by Kani with `--extra-pointer-checks`.
+        // Also, dereferencing the pointer will also be reported by Kani's
+        // default behavior.
         let v_wrap: *const u128 = v_0.add(high_offset.try_into().unwrap());
         let _ = v_wrap.offset_from(v_0);
     }
