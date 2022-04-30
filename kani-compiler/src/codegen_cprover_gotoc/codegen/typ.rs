@@ -1324,6 +1324,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
             ty::FnDef(_, _) => true,
+            // Ignore variables of the generator type until we add support for
+            // them:
+            // https://github.com/model-checking/kani/issues/416
+            ty::Generator(..) => true,
             _ => false,
         }
     }
