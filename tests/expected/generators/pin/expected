@@ -1,2 +1,2 @@
-error: Crate `main` uses generators which is currently not supported by Kani
+The `generators` feature is not currently supported by Kani
 exited with status exit status: 101

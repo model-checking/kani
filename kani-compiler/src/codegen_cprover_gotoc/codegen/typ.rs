@@ -213,9 +213,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 Some(sig)
             }
             ty::Generator(_def_id, _substs, _movability) => {
-                let error_msg = format!(
-                    "Crate `{}` uses generators which is currently not supported by Kani",
-                    self.short_crate_name()
+                let error_msg = GotocCtx::unsupported_msg(
+                    "The `generators` feature",
+                    Some("https://github.com/model-checking/kani/issues/416"),
                 );
                 self.tcx.sess.err(&error_msg);
                 FatalError.raise()
