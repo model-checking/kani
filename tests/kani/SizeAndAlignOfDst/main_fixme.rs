@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // This is a regression test for size_and_align_of_dst computing the
 // size and alignment of a dynamically-sized type like

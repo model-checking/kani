@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! When a closure is put inside a `Fn` trait, the Rustc backend injects a shim that converts
 //! between calling conventions.  This test ensures that the shim works correctly.
