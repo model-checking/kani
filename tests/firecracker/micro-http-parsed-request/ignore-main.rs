@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Example from Firecracker micro_http request handling
 // https://github.com/firecracker-microvm/firecracker/commit/22908c9fb0cd5fb20febc5d18ff1284caa5f3a53

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Modifications Copyright Kani Contributors
 // See GitHub history for details.
 //! Detects links that are not linkified, e.g., in Markdown such as `Go to https://example.com/.`
 //! Suggests wrapping the link with angle brackets: `Go to <https://example.com/>.` to linkify it.
