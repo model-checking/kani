@@ -19,27 +19,10 @@ use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
-        match op {
-            BinOp::Eq => {
-                if self.operand_ty(e1).is_floating_point() {
-                    self.codegen_operand(e1).feq(self.codegen_operand(e2))
-                } else {
-                    self.codegen_operand(e1).eq(self.codegen_operand(e2))
-                }
-            }
-            BinOp::Lt => self.codegen_operand(e1).lt(self.codegen_operand(e2)),
-            BinOp::Le => self.codegen_operand(e1).le(self.codegen_operand(e2)),
-            BinOp::Ne => {
-                if self.operand_ty(e1).is_floating_point() {
-                    self.codegen_operand(e1).fneq(self.codegen_operand(e2))
-                } else {
-                    self.codegen_operand(e1).neq(self.codegen_operand(e2))
-                }
-            }
-            BinOp::Ge => self.codegen_operand(e1).ge(self.codegen_operand(e2)),
-            BinOp::Gt => self.codegen_operand(e1).gt(self.codegen_operand(e2)),
-            _ => unreachable!(),
-        }
+        let left = self.codegen_operand(e1);
+        let right = self.codegen_operand(e2);
+        let is_float = self.operand_ty(e1).is_floating_point();
+        comparison_expr(op, left, right, is_float)
     }
 
     /// This function codegen comparison for fat pointers.
@@ -51,12 +34,46 @@ impl<'tcx> GotocCtx<'tcx> {
         right: &Operand<'tcx>,
     ) -> Expr {
         debug!(?op, ?left, ?right, "codegen_comparison_fat_ptr");
-        self.codegen_unimplemented(
-            &format!("Fat pointer comparison '{:?}'", op),
-            Type::Bool,
-            Location::None,
-            "https://github.com/model-checking/kani/issues/327",
-        )
+        let left_typ = self.operand_ty(left);
+        let right_typ = self.operand_ty(left);
+        assert_eq!(left_typ, right_typ, "Cannot compare pointers of different type");
+        assert!(self.is_ref_of_unsized(left_typ));
+
+        // Compare data pointer.
+        let left_ptr = self.codegen_operand(left);
+        let left_data = left_ptr.clone().member("data", &self.symbol_table);
+        let right_ptr = self.codegen_operand(right);
+        let right_data = right_ptr.clone().member("data", &self.symbol_table);
+        let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
+
+        // Compare the metadata.
+        let metadata_cmp = if self.is_vtable_fat_pointer(left_typ) {
+            let left_vtable = left_ptr.member("vtable", &self.symbol_table);
+            let right_vtable = right_ptr.member("vtable", &self.symbol_table);
+            comparison_expr(op, left_vtable, right_vtable, false)
+        } else {
+            let left_len = left_ptr.member("len", &self.symbol_table);
+            let right_len = right_ptr.member("len", &self.symbol_table);
+            comparison_expr(op, left_len, right_len, false)
+        };
+
+        // Join the results.
+        match op {
+            // Only equal if both parts are equal.
+            BinOp::Eq => data_cmp.and(metadata_cmp),
+            // It is different if any is different.
+            BinOp::Ne => data_cmp.or(metadata_cmp),
+            // If data is different, only compare data.
+            // If data is equal, apply operator to metadata.
+            BinOp::Lt | BinOp::Le | BinOp::Ge | BinOp::Gt => {
+                let data_eq =
+                    comparison_expr(&BinOp::Eq, left_data.clone(), right_data.clone(), false);
+                let data_strict_comp =
+                    comparison_expr(&get_strict_operator(op), left_data, right_data, false);
+                data_strict_comp.or(data_eq.and(metadata_cmp))
+            }
+            _ => unreachable!("Unexpected operator {:?}", op),
+        }
     }
 
     fn codegen_unchecked_scalar_binop(
@@ -1276,5 +1293,38 @@ fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
         let unsigned = expr.typ().to_unsigned().unwrap();
         let constant = Expr::int_constant(constant, unsigned.clone());
         expr.clone().cast_to(unsigned).sub(constant)
+    }
+}
+
+fn comparison_expr(op: &BinOp, left: Expr, right: Expr, is_float: bool) -> Expr {
+    match op {
+        BinOp::Eq => {
+            if is_float {
+                left.feq(right)
+            } else {
+                left.eq(right)
+            }
+        }
+        BinOp::Lt => left.lt(right),
+        BinOp::Le => left.le(right),
+        BinOp::Ne => {
+            if is_float {
+                left.fneq(right)
+            } else {
+                left.neq(right)
+            }
+        }
+        BinOp::Ge => left.ge(right),
+        BinOp::Gt => left.gt(right),
+        _ => unreachable!(),
+    }
+}
+
+/// Remove the equality from an operator. Translates `<=` to `<` and `>=` to `>`
+fn get_strict_operator(op: &BinOp) -> BinOp {
+    match op {
+        BinOp::Le => BinOp::Lt,
+        BinOp::Ge => BinOp::Gt,
+        _ => *op,
     }
 }

@@ -98,7 +98,7 @@ fn check_dyn_ptr() {
     check_clamp::<dyn Dummy>(&array[5], &array[0], &array[9]);
 }
 
-// Allow us to run usign rustc.
+// Allow us to run using rustc.
 fn main() {
     check_thin_ptr();
     check_slice_ptr();
