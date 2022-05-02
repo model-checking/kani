@@ -121,6 +121,9 @@ affected if the statement is not reachable from the code under verification, so
 users can still verify components of their code that do not use unsupported
 features.
 
+In a few cases, Kani aborts execution if the analysis could be affected in
+some way because of an unsupported feature (e.g., global ASM).
+
 ### Assembly
 
 Kani does not support assembly code for now. We may add it in the future but at
@@ -168,10 +171,8 @@ In particular, there are some outstanding issues to note here:
    in projections type in
    [#448](https://github.com/model-checking/kani/issues/448).
  * Unexpected fat pointer results in
-   [#82](https://github.com/model-checking/kani/issues/82),
    [#277](https://github.com/model-checking/kani/issues/277),
-   [#327](https://github.com/model-checking/kani/issues/327),
-   [#378](https://github.com/model-checking/kani/issues/378) and
+   [#327](https://github.com/model-checking/kani/issues/327) and
    [#676](https://github.com/model-checking/kani/issues/676).
 
 We are particularly interested in bug reports concerning
