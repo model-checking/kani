@@ -5,8 +5,8 @@ with some simplifications (search for "Kani change" in the source).
 
 This example is based on code from Firecracker. In particular,
 
-  - https://github.com/firecracker-microvm/firecracker/tree/main/src/devices/src/virtio/block
-  - https://github.com/firecracker-microvm/firecracker/blob/main/src/devices/src/virtio/queue.rs
+  - <https://github.com/firecracker-microvm/firecracker/tree/main/src/devices/src/virtio/block>
+  - <https://github.com/firecracker-microvm/firecracker/blob/main/src/devices/src/virtio/queue.rs>
 
 ## Virtio requirement
 
