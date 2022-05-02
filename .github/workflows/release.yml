@@ -10,6 +10,8 @@ jobs:
   Release:
     name: Release
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -45,6 +47,8 @@ jobs:
     name: Upload
     needs: Release
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         os: [macos-10.15, ubuntu-20.04]
