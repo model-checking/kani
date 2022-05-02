@@ -16,7 +16,7 @@ jobs:
 
       - name: Get version
         run: |
-          # pkgid is something like file:///home/ubuntu/rmc#kani-verifier:0.1.0
+          # pkgid is something like file:///home/ubuntu/kani#kani-verifier:0.1.0
           echo "CRATE_VERSION=$(cargo pkgid | cut -d: -f3)" >> $GITHUB_ENV
           # GITHUB_REF is refs/tags/kani-0.1.0
           echo "TAG_VERSION=$(echo ${{ github.ref }} | cut -d "-" -f 2)" >> $GITHUB_ENV
