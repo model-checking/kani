@@ -50,12 +50,9 @@ class GlobalMessages(str, Enum):
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
     REACH_CHECK_KEY = "reachCheckResult"
     CHECK_ID = "KANI_CHECK_ID"
-<<<<<<< HEAD
-=======
     ASSERTION_FALSE = "assertion false"
     DEFAULT_ASSERTION = "assertion"
     CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
->>>>>>> 17f64b21c8a1ac759be6b9008886fb83edfb1840
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -270,8 +267,6 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
-<<<<<<< HEAD
-=======
 def modify_undefined_function_checks(properties):
     """
     1. Searches for any check which has unknown file location or missing defition and replaces description
@@ -303,7 +298,6 @@ def extract_errors(solver_information):
                 error_message = error_message.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits ")
             errors.append(error_message)
     return errors
->>>>>>> 17f64b21c8a1ac759be6b9008886fb83edfb1840
 
 def postprocess_results(properties, extra_ptr_check):
     """
