@@ -15,4 +15,4 @@ Please see [Limitations - Rust feature support](./rust-feature-support.md) for a
 
 Kani usually synchronizes with the nightly release of Rust every two weeks, and so is generally up-to-date with the latest Rust language features.
 
-If you encounter issues when using Kani we encourage you to report them to us (https://github.com/model-checking/kani/issues/new/choose).
+If you encounter issues when using Kani, we encourage you to [report them to us](https://github.com/model-checking/kani/issues/new/choose).
