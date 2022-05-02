@@ -15,7 +15,6 @@ Please include the following information if it applies to your case:
 Requested feature:
 Use case:
 Link to relevant documentation (Rust reference, Nomicon, RFC):
-Is this a breaking change?
 
 Test case:
 <!--
