@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-20.04
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.versioning.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -22,16 +25,20 @@ jobs:
           echo "CRATE_VERSION=$(cargo pkgid | cut -d: -f3)" >> $GITHUB_ENV
           # GITHUB_REF is refs/tags/kani-0.1.0
           echo "TAG_VERSION=$(echo ${{ github.ref }} | cut -d "-" -f 2)" >> $GITHUB_ENV
-          # Output for upload scripts to see
-          echo ::set-output name=version::$TAG_VERSION
+          # Note that the above env vars get set for future steps, not this one
       - name: Version Check
+        id: versioning
         run: |
+          # Output for upload scripts to see
+          echo ::set-output name=version::${{ env.TAG_VERSION }}
+          # Validate git tag & Cargo.toml are in sync on version number
           if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
           fi
 
       - name: Create release
+        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,4 +86,3 @@ jobs:
           asset_path: kani-${{ needs.Release.outputs.version }}-${{ matrix.target }}.tar.gz
           asset_name: kani-${{ needs.Release.outputs.version }}-${{ matrix.target }}.tar.gz
           asset_content_type: application/gzip
-
