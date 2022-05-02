@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // running with a unwind of 1 passes; running with unwind of two gets stuck in post-processing
 // from arg_parser.rs in firecracker/src/utils/src

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Modifications Copyright Kani Contributors
 // See GitHub history for details.
 //! Looks for items missing (or incorrectly having) doctests.
 //!
