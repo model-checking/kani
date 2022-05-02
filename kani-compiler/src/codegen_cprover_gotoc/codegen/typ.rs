@@ -481,10 +481,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
     ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
-        let goto_typ = self.codegen_ty_inner(ty);
+        let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
+        let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
             if !self.type_map.contains_key(&tag) {
-                self.type_map.insert(tag, ty);
+                debug!(mir_type=?normalized, gotoc_name=?tag, ?goto_typ,  "codegen_ty: new type");
+                self.type_map.insert(tag, normalized);
             }
         }
         goto_typ
@@ -569,9 +571,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             ty::Projection(_) | ty::Opaque(_, _) => {
-                // hidden types that can be revealed by the compiler via normalization
-                let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
-                self.codegen_ty(normalized)
+                unreachable!("Type should've been normalized already")
             }
 
             // shouldn't come to here after mormomorphization
@@ -1245,6 +1245,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
             ty::FnDef(_, _) => true,
+            // Ignore variables of the generator type until we add support for
+            // them:
+            // https://github.com/model-checking/kani/issues/416
+            ty::Generator(..) => true,
             _ => false,
         }
     }

@@ -50,6 +50,12 @@ class GlobalMessages(str, Enum):
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
     REACH_CHECK_KEY = "reachCheckResult"
     CHECK_ID = "KANI_CHECK_ID"
+<<<<<<< HEAD
+=======
+    ASSERTION_FALSE = "assertion false"
+    DEFAULT_ASSERTION = "assertion"
+    CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
+>>>>>>> 17f64b21c8a1ac759be6b9008886fb83edfb1840
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
 
@@ -264,6 +270,40 @@ def extract_solver_information(cbmc_response_json_array):
 
     return properties, solver_information
 
+<<<<<<< HEAD
+=======
+def modify_undefined_function_checks(properties):
+    """
+    1. Searches for any check which has unknown file location or missing defition and replaces description
+    2. If a function with missing definition is reachable, then we turn all SUCCESS status to UNDETERMINED.
+    If there are no reachable functions with missing definitions, then the verification is not affected, so we retain all of the SUCCESS status.
+    """
+    has_unknown_location_checks = False
+    for property in properties:
+        # Specifically trying to capture assertions that CBMC generates for functions with missing definitions
+        if GlobalMessages.ASSERTION_FALSE in property["description"] and extract_property_class(
+                property) == GlobalMessages.DEFAULT_ASSERTION and not hasattr(property["sourceLocation"], "file"):
+            property["description"] = "Function with missing definition is unreachable"
+            if property["status"] == "FAILURE":
+                has_unknown_location_checks = True
+    return has_unknown_location_checks
+
+def extract_errors(solver_information):
+    """
+    Extract errors from the CBMC output, which are messages that have the
+    message type 'ERROR'
+    """
+    errors = []
+    for message in solver_information:
+        if GlobalMessages.MESSAGE_TYPE in message and message[GlobalMessages.MESSAGE_TYPE] == 'ERROR':
+            error_message = message[GlobalMessages.MESSAGE_TEXT]
+            # Replace "--object bits n" with "--enable-unstable --cbmc-args
+            # --object bits n" in the message
+            if 'use the `--object-bits n` option' in error_message:
+                error_message = error_message.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits ")
+            errors.append(error_message)
+    return errors
+>>>>>>> 17f64b21c8a1ac759be6b9008886fb83edfb1840
 
 def postprocess_results(properties, extra_ptr_check):
     """
@@ -285,6 +325,7 @@ def postprocess_results(properties, extra_ptr_check):
 
     has_reachable_unsupported_constructs = has_check_failure(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
     has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
+    has_reachable_undefined_functions = modify_undefined_function_checks(properties)
     properties, reach_checks = filter_reach_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
@@ -294,7 +335,7 @@ def postprocess_results(properties, extra_ptr_check):
 
     for property in properties:
         property["description"] = get_readable_description(property)
-        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts:
+        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_reachable_undefined_functions:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
@@ -455,6 +496,17 @@ CBMC_DESCRIPTIONS = {
 }
 
 
+def extract_property_class(prop):
+    """
+    This function extracts the property class from the property string.
+    Property strings have the format of -([<function>.]<property_class_id>.<counter>)
+    """
+    prop_class = prop["property"].rsplit(".", 3)
+    # Do nothing if prop_class is diff than cbmc's convention
+    class_id = prop_class[-2] if len(prop_class) > 1 else None
+    return class_id
+
+
 def filter_ptr_checks(props):
     """This function will filter out extra pointer checks.
 
@@ -462,10 +514,7 @@ def filter_ptr_checks(props):
         can result in lots of spurious failures. By default, we filter them out.
     """
     def not_extra_check(prop):
-        """ Retrieve class id ([<function>.]<property_class_id>.<counter>)"""
-        prop_class = prop["property"].rsplit(".", 3)
-        class_id = prop_class[-2] if len(prop_class) > 1 else None
-        return class_id not in ["pointer_arithmetic", "pointer_primitives"]
+        return extract_property_class(prop) not in ["pointer_arithmetic", "pointer_primitives"]
 
     return list(filter(not_extra_check, props))
 
@@ -477,10 +526,7 @@ def get_readable_description(prop):
        temporary variable.
     """
     original = prop["description"]
-    # Id is structured as [<function>.]<property_class>.<counter>
-    prop_class = prop["property"].rsplit(".", 3)
-    # Do nothing if prop_class is diff than cbmc's convention
-    class_id = prop_class[-2] if len(prop_class) > 1 else None
+    class_id = extract_property_class(prop)
     if class_id in CBMC_DESCRIPTIONS:
         # Contains a list for potential message translation [String].
         prop_type = [check.replace(original) for check in CBMC_DESCRIPTIONS[class_id] if check.matches(original)]

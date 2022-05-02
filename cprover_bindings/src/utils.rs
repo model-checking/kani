@@ -52,16 +52,16 @@ macro_rules! btree_map {
 
 /// Provides a useful shortcut for making BTreeMaps.
 #[macro_export]
-macro_rules! vector_map {
+macro_rules! linear_map {
     ($($x:expr),*) => {{
-        use vector_map::VecMap;
+        use linear_map::LinearMap;
         use std::iter::FromIterator;
-        (VecMap::from_iter(vec![$($x),*]))
+        (LinearMap::from_iter(vec![$($x),*]))
     }};
     ($($x:expr,)*) => {{
-        use vector_map::VecMap;
+        use linear_map::LinearMap;
         use std::iter::FromIterator;
-        (VecMap::from_iter(vec![$($x),*]))
+        (LinearMap::from_iter(vec![$($x),*]))
     }}
 }
 
