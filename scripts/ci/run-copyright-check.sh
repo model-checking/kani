@@ -13,4 +13,6 @@ KANI_DIR=$CI_SCRIPT_DIR/../..
 # Filter the files for copyright check based on the patterns in `copyright-exclude`
 # Exclude rustdoc to reduce conflicts for now:
 # https://github.com/model-checking/kani/issues/974
-git ls-files $KANI_DIR | grep -v -E -f $CI_SCRIPT_DIR/copyright-exclude | xargs ./scripts/ci/copyright_check.py
+git ls-files $KANI_DIR |\
+    grep -v -E -f $CI_SCRIPT_DIR/copyright-exclude |\
+    xargs -d "\n" ./scripts/ci/copyright_check.py
