@@ -12,11 +12,15 @@ jobs:
     runs-on: ubuntu-20.04
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.versioning.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Get version
+        id: versioning
         run: |
           # pkgid is something like file:///home/ubuntu/kani#kani-verifier:0.1.0
           echo "CRATE_VERSION=$(cargo pkgid | cut -d: -f3)" >> $GITHUB_ENV
@@ -32,6 +36,7 @@ jobs:
           fi
 
       - name: Create release
+        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
