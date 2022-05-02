@@ -377,7 +377,7 @@ def filter_reach_checks(properties):
 def filter_sanity_checks(properties):
     return filter_properties(properties, None, "sanity_check")
 
-def filter_properties(properties, message = None, property_class = None):
+def filter_properties(properties, message=None, property_class=None):
     """
     Move properties that have "message" in description or "property_class" as property class or both, out of "properties"
     into "removed_properties"
