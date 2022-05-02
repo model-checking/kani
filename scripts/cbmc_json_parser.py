@@ -321,6 +321,7 @@ def postprocess_results(properties, extra_ptr_check):
     has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
     has_reachable_undefined_functions = modify_undefined_function_checks(properties)
     properties, reach_checks = filter_reach_checks(properties)
+    properties, sanity_checks = filter_sanity_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
 
@@ -363,19 +364,27 @@ def has_check_failure(properties, message):
 def filter_reach_checks(properties):
     return filter_properties(properties, GlobalMessages.REACH_CHECK_DESC)
 
+def filter_sanity_checks(properties):
+    return filter_properties(properties, None, "sanity_check")
 
-def filter_properties(properties, message):
+def filter_properties(properties, message = None, property_class = None):
     """
-    Move properties that have "message" in their description out of "properties"
+    Move properties that have "message" in description or "property_class" as property class or both, out of "properties"
     into "removed_properties"
     """
     filtered_properties = []
     removed_properties = []
     for property in properties:
-        if message in property["description"]:
+        if message and property_class:
+            if message in property["description"] and property_class in extract_property_class(property):
+                removed_properties.append(property)
+        elif message and message in property["description"]:
+            removed_properties.append(property)
+        elif property_class and property_class in extract_property_class(property):
             removed_properties.append(property)
         else:
             filtered_properties.append(property)
+
     return filtered_properties, removed_properties
 
 class CProverCheck:
