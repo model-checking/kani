@@ -4,8 +4,8 @@ about: Create a feature request for Kani
 labels: 
 ---
 <!--
-Please report security concerns to us on the
-[AWS vulnerability reporting](http://aws.amazon.com/security/vulnerability-reporting/) page.
+If this is a security issue, please report it following the
+[security reporting procedure](https://github.com/model-checking/kani/security/policy).
 -->
 
 <!--
@@ -15,7 +15,6 @@ Please include the following information if it applies to your case:
 Requested feature:
 Use case:
 Link to relevant documentation (Rust reference, Nomicon, RFC):
-Is this a breaking change?
 
 Test case:
 <!--

@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
 use super::PropertyClass;
@@ -210,7 +210,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Intrinsics which encode a SIMD arithmetic operation with overflow check.
         // We expand the overflow check because CBMC overflow operations don't accept array as
         // argument.
-        macro_rules! codegen_simd_with_overflow_check {
+        macro_rules! _codegen_simd_with_overflow_check {
             ($op:ident, $overflow:ident) => {{
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
@@ -352,8 +352,13 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            let n: u64 = stripped.parse().unwrap();
-            return self.codegen_intrinsic_simd_shuffle(fargs, p, cbmc_ret_ty, n);
+            let _n: u64 = stripped.parse().unwrap();
+            return unstable_codegen!(self.codegen_intrinsic_simd_shuffle(
+                fargs,
+                p,
+                cbmc_ret_ty,
+                n
+            ));
         }
 
         match intrinsic {
@@ -543,36 +548,40 @@ impl<'tcx> GotocCtx<'tcx> {
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
             "sinf64" => codegen_simple_intrinsic!(Sin),
-            "simd_add" => codegen_simd_with_overflow_check!(plus, add_overflow_p),
-            "simd_and" => codegen_intrinsic_binop!(bitand),
-            "simd_div" => codegen_intrinsic_binop!(div),
-            "simd_eq" => codegen_intrinsic_binop!(eq),
-            "simd_extract" => {
-                let vec = fargs.remove(0);
-                let index = fargs.remove(0);
-                self.codegen_expr_to_place(p, vec.index_array(index))
+            "simd_add" => {
+                unstable_codegen!(codegen_simd_with_overflow_check!(plus, add_overflow_p))
             }
-            "simd_ge" => codegen_intrinsic_binop!(ge),
-            "simd_gt" => codegen_intrinsic_binop!(gt),
-            "simd_insert" => self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc),
-            "simd_le" => codegen_intrinsic_binop!(le),
-            "simd_lt" => codegen_intrinsic_binop!(lt),
-            "simd_mul" => codegen_simd_with_overflow_check!(mul, mul_overflow_p),
-            "simd_ne" => codegen_intrinsic_binop!(neq),
-            "simd_or" => codegen_intrinsic_binop!(bitor),
-            "simd_rem" => codegen_intrinsic_binop!(rem),
-            "simd_shl" => codegen_intrinsic_binop!(shl),
+            "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
+            "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
+            "simd_eq" => unstable_codegen!(codegen_intrinsic_binop!(eq)),
+            "simd_extract" => {
+                let _vec = fargs.remove(0);
+                let _index = fargs.remove(0);
+                unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
+            }
+            "simd_ge" => unstable_codegen!(codegen_intrinsic_binop!(ge)),
+            "simd_gt" => unstable_codegen!(codegen_intrinsic_binop!(gt)),
+            "simd_insert" => {
+                unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
+            }
+            "simd_le" => unstable_codegen!(codegen_intrinsic_binop!(le)),
+            "simd_lt" => unstable_codegen!(codegen_intrinsic_binop!(lt)),
+            "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
+            "simd_ne" => unstable_codegen!(codegen_intrinsic_binop!(neq)),
+            "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
+            "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
+            "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
             "simd_shr" => {
                 if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
                 {
-                    codegen_intrinsic_binop!(ashr)
+                    unstable_codegen!(codegen_intrinsic_binop!(ashr))
                 } else {
-                    codegen_intrinsic_binop!(lshr)
+                    unstable_codegen!(codegen_intrinsic_binop!(lshr))
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => codegen_simd_with_overflow_check!(sub, sub_overflow_p),
-            "simd_xor" => codegen_intrinsic_binop!(bitxor),
+            "simd_sub" => unstable_codegen!(codegen_simd_with_overflow_check!(sub, sub_overflow_p)),
+            "simd_xor" => unstable_codegen!(codegen_intrinsic_binop!(bitxor)),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
@@ -1105,7 +1114,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// CBMC does not currently seem to implement intrinsics like insert e.g.:
     /// `**** WARNING: no body for function __builtin_ia32_vec_set_v4si`
-    pub fn codegen_intrinsic_simd_insert(
+    pub fn _codegen_intrinsic_simd_insert(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
@@ -1138,7 +1147,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
     /// it's immediately lowered by the C frontend.
     /// Issue: https://github.com/diffblue/cbmc/issues/6297
-    pub fn codegen_intrinsic_simd_shuffle(
+    pub fn _codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
