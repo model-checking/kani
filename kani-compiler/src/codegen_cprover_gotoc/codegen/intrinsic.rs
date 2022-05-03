@@ -884,6 +884,8 @@ impl<'tcx> GotocCtx<'tcx> {
             self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
 
         // Check that the computation would not overflow an `isize`
+        // These checks may allow a wrapping-around behavior in CBMC:
+        // https://github.com/model-checking/kani/issues/1150
         let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
         let overflow_check = self.codegen_assert(
             dst_ptr_of.overflowed.not(),
@@ -913,12 +915,17 @@ impl<'tcx> GotocCtx<'tcx> {
         // Compute the offset with standard substraction using `isize`
         let cast_dst_ptr = dst_ptr.clone().cast_to(Type::ssize_t());
         let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
-        let offset = cast_dst_ptr.sub(cast_src_ptr);
+        let offset = cast_dst_ptr.sub_overflow(cast_src_ptr);
 
         // Check that computing `offset` in bytes would not overflow an `isize`
-        let ty = self.monomorphize(instance.substs.type_at(0));
-        let (_offset_bytes, overflow_check) =
-            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), "ptr_offset_from", loc);
+        // These checks may allow a wrapping-around behavior in CBMC:
+        // https://github.com/model-checking/kani/issues/1150
+        let overflow_check = self.codegen_assert(
+            offset.overflowed.not(),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to compute offset in bytes which would overflow an `isize`",
+            loc,
+        );
 
         // Re-compute the offset with standard substraction (no casts this time)
         let offset_expr = self.codegen_expr_to_place(p, dst_ptr.sub(src_ptr));
