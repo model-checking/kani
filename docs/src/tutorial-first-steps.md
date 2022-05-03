@@ -4,10 +4,10 @@ Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
 With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.
 
-Consider this first program (which can be found under [`first-steps-original`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-original/)):
+Consider this first program (which can be found under [`first-steps-v1`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v1/)):
 
 ```rust,noplaypen
-{{#include tutorial/first-steps-original/src/main.rs:code}}
+{{#include tutorial/first-steps-v1/src/main.rs:code}}
 ```
 
 Think about the test harness you would need to write to test this function.
@@ -18,7 +18,7 @@ And if this function was more complicated—for example, if some of the branches
 We can try to property test a function like this, but if we're naive about it (and consider all possible `u32` inputs), then it's unlikely we'll ever find the bug.
 
 ```rust,noplaypen
-{{#include tutorial/first-steps-original/src/main.rs:proptest}}
+{{#include tutorial/first-steps-v1/src/main.rs:proptest}}
 ```
 
 ```
@@ -32,7 +32,7 @@ There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the p
 With Kani, however, we can use `kani::any()` to represent all possible `u32` values:
 
 ```rust,noplaypen
-{{#include tutorial/first-steps-original/src/main.rs:kani}}
+{{#include tutorial/first-steps-v1/src/main.rs:kani}}
 ```
 
 ```
@@ -144,10 +144,10 @@ VERIFICATION:- FAILED
 
 It seems a bit odd that we can take billions of inputs when our function only handles up to a few thousand.
 Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug (code available under
-[`first-steps-final`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-final/)):
+[`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
 
 ```rust,noplaypen
-{{#include tutorial/first-steps-final/src/main.rs:code}}
+{{#include tutorial/first-steps-v2/src/main.rs:code}}
 ```
 
 Now we've stated our previously implicit expectation: this function should never be called with inputs that are too big.
@@ -173,7 +173,7 @@ Much like property testing (which would also fail in this assertion), we need to
 Here's a revised example of the proof harness, one that now succeeds:
 
 ```rust,noplaypen
-{{#include tutorial/first-steps-final/src/main.rs:kani}}
+{{#include tutorial/first-steps-v2/src/main.rs:kani}}
 ```
 
 But now we must wonder if we've really fully tested our function.
