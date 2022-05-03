@@ -329,7 +329,7 @@ def postprocess_results(properties, extra_ptr_check):
     has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
     has_reachable_undefined_functions = modify_undefined_function_checks(properties)
     properties, reach_checks = filter_reach_checks(properties)
-    properties = filter_sanity_checks(properties)[0]
+    properties = filter_sanity_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
 
@@ -370,12 +370,22 @@ def has_check_failure(properties, message):
             return True
     return False
 
-
 def filter_reach_checks(properties):
     return filter_properties(properties, GlobalMessages.REACH_CHECK_DESC)
 
 def filter_sanity_checks(properties):
-    return filter_properties(properties, None, "sanity_check")
+    """
+    Specific filter for sanity_check checks that removed checks with SUCCESS status
+    """
+    filtered_properties = []
+    property_class = "sanity_check"
+    for property in properties:
+        if property_class in extract_property_class(property) and property["status"] == "SUCCESS":
+            pass
+        else:
+            filtered_properties.append(property)
+
+    return filtered_properties
 
 def filter_properties(properties, message=None, property_class=None):
     """
