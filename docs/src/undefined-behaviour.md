@@ -43,8 +43,7 @@ Kani makes a best-effort attempt to detect some cases of UB:
 * Evaluating a dereference expression (`*expr`) on a raw pointer that is dangling or unaligned.
     * Kani can detect invalid dereferences, but may not detect them in [place expression context](https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions).
 * Invoking undefined behavior via compiler intrinsics.
-    * See [current support for Rust features](./rust-feature-support.md)
+    * See [current support for compiler intrinsics](./rust-feature-support/intrinsics.md).
 * Producing an invalid value, even in private fields and locals. 
-    * Kani provides a mechanism is_valid() which users can use to check validity of objects, but it does not currently apply to all types.
-
+    * Kani provides a [mechanism](./tutorial-nondeterministic-variables.md#safe-nondeterministic-variables-for-custom-types) `is_valid()` which users can use to check validity of objects, but it does not currently apply to all types.
 
