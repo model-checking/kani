@@ -1,17 +1,17 @@
 #!/usr/bin/python3
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 import re
 import sys
 import os.path as path
 from enum import Enum
 
-STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.'
+STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Kani Contributors'
 STANDARD_HEADER_PATTERN_2 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
 
 MODIFIED_HEADER_PATTERN_1 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
 MODIFIED_HEADER_PATTERN_2 = '(//|#)'
-MODIFIED_HEADER_PATTERN_3 = '(//|#) Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.'
+MODIFIED_HEADER_PATTERN_3 = '(//|#) Modifications Copyright Kani Contributors'
 MODIFIED_HEADER_PATTERN_4 = '(//|#) See GitHub history for details.'
 
 class CheckResult(Enum):

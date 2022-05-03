@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Minimized from vmm-sys-util/src/linux/aio.rs new()
 #![feature(c_variadic)]

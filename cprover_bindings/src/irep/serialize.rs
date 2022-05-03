@@ -1,27 +1,10 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This crate implements irep serialization using serde Serializer.
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::InternedString;
 use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
-use vector_map::VecMap;
-
-// Wrapper type to allow impl of trait (otherwise impossible when both trait and type are external).
-struct MapWrapper<'a, K, V>(&'a VecMap<K, V>);
-
-impl<K: serde::Serialize, V: serde::Serialize> Serialize for MapWrapper<'_, K, V> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut obj = serializer.serialize_map(None)?;
-        for (k, v) in self.0 {
-            obj.serialize_entry(k, v)?;
-        }
-        obj.end()
-    }
-}
 
 impl Serialize for Irep {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -34,7 +17,7 @@ impl Serialize for Irep {
             obj.serialize_entry("sub", &self.sub)?;
         }
         if !self.named_sub.is_empty() {
-            obj.serialize_entry("namedSub", &MapWrapper(&self.named_sub))?;
+            obj.serialize_entry("namedSub", &self.named_sub)?;
         }
         obj.end()
     }

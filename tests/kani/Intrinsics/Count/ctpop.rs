@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that `ctpop` is supported and returns the expected results
@@ -20,11 +20,6 @@ macro_rules! test_ctpop {
                 if bit != 0 {
                     count += 1;
                 }
-                // The assertion below mitigates a low performance issue in this
-                // test due to the loop having a conditional jump at the end,
-                // see https://github.com/model-checking/kani/issues/1046 for
-                // more details.
-                assert!(count >= 0);
             }
             count
         }
