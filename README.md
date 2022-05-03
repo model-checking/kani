@@ -11,7 +11,14 @@ Kani verifies:
 
 ## Installation
 
-Kani must currently be built from source. See [the installation guide](https://model-checking.github.io/kani/install-guide.html) for more details.
+To install the latest version of Kani, run:
+
+```bash
+cargo install --locked kani-verifier
+cargo-kani setup
+```
+
+See [the installation guide](https://model-checking.github.io/kani/install-guide.html) for more details.
 
 ## How to use Kani
 
