@@ -17,7 +17,7 @@ Name | Support | Notes |
 abort | Yes | |
 add_with_overflow | Yes | |
 arith_offset | No | |
-assert_inhabited | | |
+assert_inhabited | Yes | |
 assert_uninit_valid | Yes | |
 assert_zero_valid | Yes | |
 assume | Yes | |
@@ -167,7 +167,7 @@ nearbyintf32 | No | |
 nearbyintf64 | No | |
 needs_drop | Yes | |
 nontemporal_store | No | |
-offset | Yes | |
+offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
 powf32 | No | |
 powf64 | No | |
 powif32 | No | |
@@ -179,7 +179,7 @@ prefetch_write_data | No | |
 prefetch_write_instruction | No | |
 ptr_guaranteed_eq | Yes | |
 ptr_guaranteed_ne | Yes | |
-ptr_offset_from | Partial | Missing undefined behavior checks |
+ptr_offset_from | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-4) |
 raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
 rintf32 | No | |
 rintf64 | No | |
@@ -197,7 +197,7 @@ size_of_val | Yes | |
 sqrtf32 | No | |
 sqrtf64 | No | |
 sub_with_overflow | Yes | |
-transmute | Yes | |
+transmute | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/nomicon/transmutes.html) |
 truncf32 | No | |
 truncf64 | No | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
