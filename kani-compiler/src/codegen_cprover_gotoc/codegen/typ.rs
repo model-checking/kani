@@ -901,7 +901,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // temporary workaround to allow codegen to continue to a point
             // where it either:
             // 1. codegens unimplemented for the generator OR
-            // 2. erros out
+            // 2. errors out
             // Adding full support for generators is tracked by:
             // https://github.com/model-checking/kani/issues/416
             ty::Generator(_, _, _) => self.codegen_ty(pointee_type).to_pointer(),

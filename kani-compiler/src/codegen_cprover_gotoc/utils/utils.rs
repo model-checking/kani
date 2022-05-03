@@ -97,7 +97,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn emit_error_and_exit(&self, error_msg: &str) -> ! {
-        self.tcx.sess.err(&error_msg);
+        self.tcx.sess.err(error_msg);
         FatalError.raise()
     }
 }
