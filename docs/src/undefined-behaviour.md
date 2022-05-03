@@ -5,7 +5,7 @@ Rust had a broad definition of [undefined behaviour](https://doc.rust-lang.org/r
 The [Rust documentation warns](https://doc.rust-lang.org/reference/behavior-considered-undefined.html) that UB can have unexpected, non-local effects:
 
 
-> Note: Undefined behavior affects the entire program. For example, calling a function in C that exhibits undefined behavior of C means your entire program contains undefined behaviour that can also affect the Rust code. And vice versa, undefined behavior in Rust can cause adverse affects on code executed by any FFI calls to other languages.
+> **Note**: Undefined behavior affects the entire program. For example, calling a function in C that exhibits undefined behavior of C means your entire program contains undefined behaviour that can also affect the Rust code. And vice versa, undefined behavior in Rust can cause adverse affects on code executed by any FFI calls to other languages.
 
 If a program has UB, the semantics of the rest of the program are **undefined**.
 If the program under verification contains UB then, in principle, the program (including its representation in MIR analyzed by Kani) **has no semantics** and hence could do anything, including violating the guarantees checked by Kani. 
