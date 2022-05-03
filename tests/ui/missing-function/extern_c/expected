@@ -1,5 +1,4 @@
-Status: UNREACHABLE\
+Status: UNDETERMINED\
 Description: "assertion failed: x == 5"
 
 VERIFICATION:- FAILED
-

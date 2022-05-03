@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 if [[ -z $KANI_REGRESSION_KEEP_GOING ]]; then
@@ -19,7 +19,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 55
+check-cbmc-version.py --major 5 --minor 56
 check-cbmc-viewer-version.py --major 2 --minor 10
 
 # Formatting check

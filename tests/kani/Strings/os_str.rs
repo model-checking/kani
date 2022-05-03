@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // From rust/library/std/src/sys_common/os_str_bytes.rs
 //      rust/library/std/src/ffi/os_str.rs

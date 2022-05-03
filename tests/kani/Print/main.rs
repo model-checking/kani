@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // This test checks that the print macros do not result in verification failure

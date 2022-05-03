@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 fn iadd_test(a: i32, b: i32, correct: i32, wrong: i32) {
