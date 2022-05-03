@@ -211,7 +211,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 Some(sig)
             }
-            ty::Generator(_def_id, _substs, _movability) => None,
+            ty::Generator(_def_id, _substs, _movability) => {
+                let error_msg = GotocCtx::unsupported_msg(
+                    "The `generators` feature",
+                    Some("https://github.com/model-checking/kani/issues/416"),
+                );
+                self.emit_error_and_exit(&error_msg)
+            }
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -891,11 +897,19 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://github.com/model-checking/kani/issues/214
             ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
 
+            // Use the default for a reference to a generator. This is a
+            // temporary workaround to allow codegen to continue to a point
+            // where it either:
+            // 1. codegens unimplemented for the generator OR
+            // 2. errors out
+            // Adding full support for generators is tracked by:
+            // https://github.com/model-checking/kani/issues/416
+            ty::Generator(_, _, _) => self.codegen_ty(pointee_type).to_pointer(),
+
             // These types have no regression tests for them.
             // For soundness, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::Generator(_, _, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
