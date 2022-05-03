@@ -387,24 +387,18 @@ def filter_sanity_checks(properties):
 
     return filtered_properties
 
-def filter_properties(properties, message=None, property_class=None):
+def filter_properties(properties, message):
     """
-    Move properties that have "message" in description or "property_class" as property class or both, out of "properties"
+    Move properties that have "message" in their description out of "properties"
     into "removed_properties"
     """
     filtered_properties = []
     removed_properties = []
     for property in properties:
-        if message and property_class:
-            if message in property["description"] and property_class in extract_property_class(property):
-                removed_properties.append(property)
-        elif message and message in property["description"]:
-            removed_properties.append(property)
-        elif property_class and property_class in extract_property_class(property):
+        if message in property["description"]:
             removed_properties.append(property)
         else:
             filtered_properties.append(property)
-
     return filtered_properties, removed_properties
 
 class CProverCheck:
