@@ -1,11 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-verify-fail
-
-pub mod final_form;
 
 // ANCHOR: code
 fn estimate_size(x: u32) -> u32 {
+    assert!(x < 4096);
+
     if x < 256 {
         if x < 128 {
             return 1;
@@ -14,7 +13,7 @@ fn estimate_size(x: u32) -> u32 {
         }
     } else if x < 1024 {
         if x > 1022 {
-            panic!("Oh no, a failing corner case!");
+            return 4;
         } else {
             return 5;
         }
@@ -42,7 +41,7 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(10000))]
         #[test]
-        fn doesnt_crash(x: u32) {
+        fn doesnt_crash(x in 0..4095u32) {
             estimate_size(x);
         }
     }
@@ -52,8 +51,17 @@ mod tests {
 // ANCHOR: kani
 #[cfg(kani)]
 #[kani::proof]
-fn main() {
+fn verify_success() {
     let x: u32 = kani::any();
-    estimate_size(x);
+    kani::assume(x < 4096);
+    let y = estimate_size(x);
+    assert!(y < 10);
 }
 // ANCHOR_END: kani
+
+#[cfg(kani)]
+#[kani::proof]
+fn main() {
+    let x: u32 = kani::any();
+    let y = estimate_size(x);
+}
