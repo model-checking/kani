@@ -28,4 +28,6 @@
 - [Limitations](./limitations.md)
   - [Undefined behaviour](./undefined-behaviour.md)
   - [Rust feature support](./rust-feature-support.md)
+    - [Intrinsics](./rust-feature-support/intrinsics.md)
+    - [Unstable features](./rust-feature-support/unstable.md)
   - [Overrides](./overrides.md)

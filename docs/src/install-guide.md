@@ -1,6 +1,34 @@
 # Installation
 
-Kani must currently be built from source.
+To install the latest version of Kani, run:
+
+```bash
+cargo install --locked kani-verifier
+cargo-kani setup
+```
+
+This will build and place in `~/.cargo/bin` (in a typical environment) the `kani` and `cargo-kani` binaries.
+The second step (`cargo-kani setup`) will download the Kani compiler and other necessary dependencies (and place them under `~/.kani/`).
+
+Currently, only two platforms are supported:
+
+* `x86_64-unknown-linux-gnu`
+* `x86_64-apple-darwin`
+
+The following must already be installed:
+
+* **Python version 3.6 or greater.**
+* Rust installed via `rustup`
+* `ctags` is required for Kani's `--visualize` option to work correctly.
+
+# Installing an older version of Kani
+
+```bash
+cargo install --lock kani-verifier --version <VERSION>
+cargo-kani setup
+```
+
+# Building from source
 
 In general, the following dependencies are required.
 
@@ -29,6 +57,7 @@ git submodule update --init
 ./scripts/setup/ubuntu/install_cbmc.sh
 ./scripts/setup/install_viewer.sh 2.11
 ./scripts/setup/install_rustup.sh
+# If you haven't already:
 source $HOME/.cargo/env
 ```
 
@@ -45,6 +74,7 @@ git submodule update --init
 ./scripts/setup/macos-10.15/install_cbmc.sh
 ./scripts/setup/install_viewer.sh 2.11
 ./scripts/setup/install_rustup.sh
+# If you haven't already:
 source $HOME/.cargo/env
 ```
 
@@ -53,7 +83,7 @@ source $HOME/.cargo/env
 Build the Kani package:
 
 ```
-cargo build
+cargo build --workspace
 ```
 
 Then, optionally, run the regression tests:
@@ -70,7 +100,7 @@ All Kani regression tests completed successfully.
 
 ## Try running Kani
 
-Add the Kani script to your path:
+Add the Kani scripts to your path:
 
 ```bash
 export PATH=$(pwd)/scripts:$PATH
@@ -110,3 +140,7 @@ Fix the test and you should see a result like this one:
 [...]
 VERIFICATION:- SUCCESSFUL
 ```
+
+## Next steps
+
+If you're learning Kani for the first time, you may be interested in our [tutorial](kani-tutorial.md).
