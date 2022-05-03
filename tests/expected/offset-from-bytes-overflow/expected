@@ -1,2 +1,4 @@
 FAILURE\
-attempt to compute offset in bytes which would overflow
+attempt to compute offset which would overflow
+FAILURE\
+attempt to compute offset in bytes which would overflow an `isize`
