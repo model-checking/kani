@@ -8,7 +8,7 @@ The [Rust documentation warns](https://doc.rust-lang.org/reference/behavior-cons
 > Note: Undefined behavior affects the entire program. For example, calling a function in C that exhibits undefined behavior of C means your entire program contains undefined behaviour that can also affect the Rust code. And vice versa, undefined behavior in Rust can cause adverse affects on code executed by any FFI calls to other languages.
 
 If a program has UB, the semantics of the rest of the program are **undefined**.
-If the program under verification does contain UB, then in theory the MIR evaluated by the verifier **has no semantics**, and hence could do anything, including violating the guarantees checked be a verifier. 
+If the program under verification contains UB then, in principle, the program (including its representation in MIR analyzed by Kani) **has no semantics** and hence could do anything, including violating the guarantees checked by Kani. 
 This means that verification results are subject to the proviso that the program under verification does not contain UB.
 
 ## What forms of Undefined Behaviour can Rust Exhibit
