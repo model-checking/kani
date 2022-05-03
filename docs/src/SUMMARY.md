@@ -26,6 +26,6 @@
     - [Book runner](./bookrunner.md)
 
 - [Limitations](./limitations.md)
-  - [Guarantees]()
+  - [Undefined behaviour](./undefined-behaviour.md)
   - [Rust feature support](./rust-feature-support.md)
   - [Overrides](./overrides.md)
