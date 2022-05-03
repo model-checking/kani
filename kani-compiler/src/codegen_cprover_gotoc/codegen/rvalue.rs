@@ -48,8 +48,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Compare the metadata.
         let metadata_cmp = if self.is_vtable_fat_pointer(left_typ) {
-            let left_vtable = left_ptr.member("vtable", &self.symbol_table);
-            let right_vtable = right_ptr.member("vtable", &self.symbol_table);
+            let left_vtable = left_ptr.member("vtable", &self.symbol_table).cast_to(Type::size_t());
+            let right_vtable =
+                right_ptr.member("vtable", &self.symbol_table).cast_to(Type::size_t());
             comparison_expr(op, left_vtable, right_vtable, false)
         } else {
             let left_len = left_ptr.member("len", &self.symbol_table);
