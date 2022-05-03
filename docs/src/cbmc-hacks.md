@@ -1,7 +1,6 @@
-# Workarounds
+# Working with CBMC
 
-This section describes a few workarounds that may help overcome tooling
-issues in the Kani project.
+This section describes how to access more advanced CBMC options from Kani.
 
 ## CBMC arguments
 
