@@ -348,14 +348,14 @@ checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
 name = "kani"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "atty",
  "bitflags",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "clap",
@@ -391,7 +391,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "home",
@@ -399,11 +399,11 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
-version = "0.1.0"
+version = "0.2.0-dev"
 
 [[package]]
 name = "kani_metadata"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "cprover_bindings",
  "serde",
@@ -411,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "kani_queries"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "tracing",
 ]
@@ -899,7 +899,7 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "std"
-version = "0.1.0"
+version = "0.2.0-dev"
 
 [[package]]
 name = "string-interner"
