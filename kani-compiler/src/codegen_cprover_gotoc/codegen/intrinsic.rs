@@ -4,10 +4,10 @@
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
-use rustc_middle::mir::Place;
+use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::Instance;
 use rustc_middle::ty::{self, Ty};
+use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
 use tracing::{debug, warn};
 
@@ -37,6 +37,52 @@ impl<'tcx> GotocCtx<'tcx> {
         let arg2 = fargs.remove(0);
         let e = f(arg1, arg2);
         self.codegen_expr_to_place(p, e)
+    }
+
+    pub fn codegen_intrinsic(
+        &mut self,
+        func: &Operand<'tcx>,
+        fargs: Vec<Expr>,
+        destination: &Option<(Place<'tcx>, BasicBlock)>,
+        span: Span,
+    ) -> Stmt {
+        let instance = self.get_intrinsic_instance(func).unwrap();
+
+        if let Some((assign_to, target)) = destination {
+            let loc = self.codegen_span(&span);
+            Stmt::block(
+                vec![
+                    self.codegen_regular_intrinsic(instance, fargs, &assign_to, Some(span)),
+                    Stmt::goto(self.current_fn().find_label(&target), loc),
+                ],
+                loc,
+            )
+        } else {
+            self.codegen_never_return_intrinsic(instance, Some(span))
+        }
+    }
+
+    /// Returns `Some(instance)` if the function is an intrinsic; `None` otherwise
+    pub fn get_intrinsic_instance(&self, func: &Operand<'tcx>) -> Option<Instance<'tcx>> {
+        let funct = self.operand_ty(func);
+        match &funct.kind() {
+            ty::FnDef(defid, subst) => {
+                let instance =
+                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *defid, subst)
+                        .unwrap()
+                        .unwrap();
+                if matches!(instance.def, InstanceDef::Intrinsic(_)) {
+                    Some(instance)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn is_intrinsic(&self, func: &Operand<'tcx>) -> bool {
+        self.get_intrinsic_instance(func).is_some()
     }
 
     /// Handles codegen for non returning intrinsics
@@ -74,7 +120,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// c.f. rustc_codegen_llvm::intrinsic impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>
     /// fn codegen_intrinsic_call
     /// c.f. https://doc.rust-lang.org/std/intrinsics/index.html
-    pub fn codegen_intrinsic(
+    pub fn codegen_regular_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,

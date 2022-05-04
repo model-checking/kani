@@ -390,6 +390,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             })
             .collect();
+
+        if self.is_intrinsic(func) {
+            return self.codegen_intrinsic(func, fargs, destination, span);
+        }
+
         match &funct.kind() {
             ty::FnDef(defid, subst) => {
                 let instance =
