@@ -25,12 +25,15 @@ See [the installation guide](https://model-checking.github.io/kani/install-guide
 Similar to testing, you write a harness, but with Kani you can check all possible values using `kani::any()`:
 
 ```rust
-use my_crate::{function_under_test, meets_specification};
+use my_crate::{function_under_test, meets_specification, precondition};
 
 #[kani::proof]
 fn check_my_property() {
    // Create a nondeterministic input
    let input = kani::any();
+
+   // Constrain it according to precondition
+   kani::assume(precondition(input));
 
    // Call the function under verification
    let output = function_under_test(input);
