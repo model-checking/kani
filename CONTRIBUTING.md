@@ -43,16 +43,14 @@ GitHub provides additional document on [forking a repository](https://help.githu
 ## Finding contributions to work on
 Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
 
-
 ## Code of Conduct
-This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
-For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq) or contact
-opensource-codeofconduct@amazon.com with any additional questions or comments.
-
+This project has adopted the [Rust Code Of Conduct](https://www.rust-lang.org/policies/code-of-conduct).
+See [here](./CODE_OF_CONDUCT.md) for more details.
 
 ## Security issue notifications
-If you discover a potential security issue in this project we ask that you notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public github issue.
-
+If you think you have discovered a security issue please write to us at kani-verifier-security@amazon.com; do **NOT** open a public issue.
+Sensitive information can be encrypted using our [PGP key](https://github.com/model-checking/kani/blob/main/kani-verifier-security.public.key).
+See our [security disclosure instructions](.github/SECURITY.md) for more details.
 
 ## Licensing
 
