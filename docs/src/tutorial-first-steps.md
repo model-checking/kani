@@ -4,10 +4,10 @@ Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
 With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.
 
-Consider this first program (which can be found under [`kani-first-steps`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/kani-first-steps/)):
+Consider this first program (which can be found under [`first-steps-v1`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v1/)):
 
 ```rust,noplaypen
-{{#include tutorial/kani-first-steps/src/lib.rs:code}}
+{{#include tutorial/first-steps-v1/src/main.rs:code}}
 ```
 
 Think about the test harness you would need to write to test this function.
@@ -18,7 +18,7 @@ And if this function was more complicated—for example, if some of the branches
 We can try to property test a function like this, but if we're naive about it (and consider all possible `u32` inputs), then it's unlikely we'll ever find the bug.
 
 ```rust,noplaypen
-{{#include tutorial/kani-first-steps/src/lib.rs:proptest}}
+{{#include tutorial/first-steps-v1/src/main.rs:proptest}}
 ```
 
 ```
@@ -32,7 +32,7 @@ There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the p
 With Kani, however, we can use `kani::any()` to represent all possible `u32` values:
 
 ```rust,noplaypen
-{{#include tutorial/kani-first-steps/src/lib.rs:kani}}
+{{#include tutorial/first-steps-v1/src/main.rs:kani}}
 ```
 
 ```
@@ -60,10 +60,10 @@ Here, we've just got some nondeterministic inputs up front, but that's something
 To see traces, run:
 
 ```
-kani --visualize src/lib.rs
+kani --visualize src/main.rs
 ```
 
-This command runs Kani and generates the HTML report in `report/html/index.html`.
+This command runs Kani and generates the HTML report in `report-main/html/index.html`.
 Open the report with your preferred browser.
 From this report, we can find the trace of the failure and filter through it to find the relevant line (at present time, an unfortunate amount of generated code is present in the trace):
 
@@ -143,10 +143,11 @@ VERIFICATION:- FAILED
 ## Assertions, Assumptions, and Harnesses
 
 It seems a bit odd that we can take billions of inputs when our function only handles up to a few thousand.
-Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug:
+Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug (code available under
+[`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
 
 ```rust,noplaypen
-{{#include tutorial/kani-first-steps/src/final_form.rs:code}}
+{{#include tutorial/first-steps-v2/src/main.rs:code}}
 ```
 
 Now we've stated our previously implicit expectation: this function should never be called with inputs that are too big.
@@ -172,7 +173,7 @@ Much like property testing (which would also fail in this assertion), we need to
 Here's a revised example of the proof harness, one that now succeeds:
 
 ```rust,noplaypen
-{{#include tutorial/kani-first-steps/src/final_form.rs:kani}}
+{{#include tutorial/first-steps-v2/src/main.rs:kani}}
 ```
 
 But now we must wonder if we've really fully tested our function.
@@ -182,8 +183,8 @@ Fortunately, Kani is able to report a coverage metric for each proof harness.
 Try running:
 
 ```
-kani --visualize src/final_form.rs --harness verify_success
-open report/html/index.html
+kani --visualize src/main.rs --harness verify_success
+open report-verify_success/html/index.html
 ```
 
 The beginning of the report includes coverage information.
