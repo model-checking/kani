@@ -32,7 +32,7 @@ fn check_my_property() {
    // Create a nondeterministic input
    let input = kani::any();
 
-   // Constrain it according to precondition
+   // Constrain it according to the function's precondition
    kani::assume(precondition(input));
 
    // Call the function under verification
