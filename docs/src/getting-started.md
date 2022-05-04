@@ -9,7 +9,7 @@ Kani uses proof harnesses to analyze programs. Proof harnesses are similar to te
 
 ## Project Status
 
-Kani is currently under active development and has not made an official release yet.
+Kani is currently under active development. Releases are published [here](https://github.com/model-checking/kani/releases).
 There is support for a fair amount of Rust language features, but not all (e.g., concurrency).
 Please see [Limitations - Rust feature support](./rust-feature-support.md) for a detailed list of supported features.
 
