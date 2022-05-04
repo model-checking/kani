@@ -1,4 +1,4 @@
-# Kani Rust Verifier
+![](./kani-logo.png)
 
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 
