@@ -10,3 +10,7 @@
 [submodule "firecracker"]
 	path = firecracker
 	url = https://github.com/firecracker-microvm/firecracker.git
+[submodule "tests/cargo-kani/bytes"]
+	path = tests/cargo-kani/bytes
+	url = https://github.com/nchong-at-aws/bytes.git
+	branch = kani-bytes-mut
