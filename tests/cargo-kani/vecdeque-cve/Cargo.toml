@@ -8,9 +8,3 @@ description = "Reproduces CVE-2018-1000657"
 
 [lib]
 path = "src/harness.rs"
-
-[dependencies]
-
-[package.metadata.kani.flags]
-enable-unstable = true
-cbmc-args = ["--no-built-in-assertions"]
