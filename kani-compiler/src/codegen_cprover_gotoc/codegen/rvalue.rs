@@ -482,7 +482,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
                     let relative_max =
                         niche_variants.end().as_u32() - niche_variants.start().as_u32();
-                    let is_niche = if tag.value == Primitive::Pointer {
+                    let is_niche = if tag.primitive() == Primitive::Pointer {
                         discr_ty.null().eq(relative_discr.clone())
                     } else {
                         relative_discr
