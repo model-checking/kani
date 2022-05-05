@@ -434,12 +434,12 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
 }
 
 struct RustAlloc;
-
+// Removing this hook causes regression failures.
+// https://github.com/model-checking/kani/issues/1170
 impl<'tcx> GotocHook<'tcx> for RustAlloc {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = tcx.symbol_name(instance).name.to_string();
         let full_name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "__rust_alloc" || full_name == "alloc::alloc::exchange_malloc"
+        full_name == "alloc::alloc::exchange_malloc"
     }
 
     fn handle(
@@ -473,80 +473,6 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
             }
             _ => unreachable!(),
         }
-    }
-}
-
-struct RustDealloc;
-
-impl<'tcx> GotocHook<'tcx> for RustDealloc {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = tcx.symbol_name(instance).name.to_string();
-        name == "__rust_dealloc"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        match target {
-            Some(target) => {
-                let ptr = fargs.remove(0);
-                Stmt::block(
-                    vec![
-                        BuiltinFn::Free
-                            .call(vec![ptr.cast_to(Type::void_pointer())], loc.clone())
-                            .as_stmt(loc.clone()),
-                        Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
-                    ],
-                    loc,
-                )
-            }
-            _ => unreachable!(),
-        }
-    }
-}
-
-struct RustAllocZeroed;
-
-impl<'tcx> GotocHook<'tcx> for RustAllocZeroed {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = tcx.symbol_name(instance).name.to_string();
-        name == "__rust_alloc_zeroed"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let p = assign_to.unwrap();
-        let target = target.unwrap();
-        let size = fargs.remove(0);
-        Stmt::block(
-            vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
-                    .goto_expr
-                    .assign(
-                        BuiltinFn::Calloc
-                            .call(vec![Type::size_t().one(), size], loc.clone())
-                            .cast_to(Type::unsigned_int(8).to_pointer()),
-                        loc.clone(),
-                    ),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-            ],
-            loc,
-        )
     }
 }
 
@@ -600,8 +526,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(PtrRead),
             Rc::new(PtrWrite),
             Rc::new(RustAlloc),
-            Rc::new(RustAllocZeroed),
-            Rc::new(RustDealloc),
             Rc::new(SliceFromRawPart),
         ],
     }
