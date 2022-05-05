@@ -368,17 +368,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_funcall(
-        &mut self,
-        func: &Operand<'tcx>,
-        args: &[Operand<'tcx>],
-        destination: &Option<(Place<'tcx>, BasicBlock)>,
-        span: Span,
-    ) -> Stmt {
-        let loc = self.codegen_span(&span);
-        let funct = self.operand_ty(func);
-        let mut fargs: Vec<_> = args
-            .iter()
+    pub fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
+        args.iter()
             .filter_map(|o| {
                 let ot = self.operand_ty(o);
                 if self.ignore_var_ty(ot) {
@@ -389,7 +380,23 @@ impl<'tcx> GotocCtx<'tcx> {
                     Some(self.codegen_operand(o))
                 }
             })
-            .collect();
+            .collect()
+    }
+
+    fn codegen_funcall(
+        &mut self,
+        func: &Operand<'tcx>,
+        args: &[Operand<'tcx>],
+        destination: &Option<(Place<'tcx>, BasicBlock)>,
+        span: Span,
+    ) -> Stmt {
+        if self.is_intrinsic(func) {
+            return self.codegen_funcall_of_intrinsic(func, args, destination, span);
+        }
+
+        let loc = self.codegen_span(&span);
+        let funct = self.operand_ty(func);
+        let mut fargs = self.codegen_funcall_args(args);
         match &funct.kind() {
             ty::FnDef(defid, subst) => {
                 let instance =

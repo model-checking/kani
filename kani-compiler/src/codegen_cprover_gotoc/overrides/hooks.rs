@@ -18,7 +18,7 @@ use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
+use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
 use std::rc::Rc;
 use tracing::{debug, warn};
@@ -251,42 +251,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         span: Option<Span>,
     ) -> Stmt {
         tcx.codegen_panic(span, fargs)
-    }
-}
-
-struct Intrinsic;
-
-impl<'tcx> GotocHook<'tcx> for Intrinsic {
-    fn hook_applies(&self, _tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        match instance.def {
-            InstanceDef::Intrinsic(_) => true,
-            _ => false,
-        }
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        instance: Instance<'tcx>,
-        fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        match assign_to {
-            None => tcx.codegen_never_return_intrinsic(instance, span),
-            Some(assign_to) => {
-                let target = target.unwrap();
-                let loc = tcx.codegen_span_option(span);
-                Stmt::block(
-                    vec![
-                        tcx.codegen_intrinsic(instance, fargs, &assign_to, span),
-                        Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-                    ],
-                    loc,
-                )
-            }
-        }
     }
 }
 
@@ -630,7 +594,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(ExpectFail),
-            Rc::new(Intrinsic),
             Rc::new(MemReplace),
             Rc::new(MemSwap),
             Rc::new(Nondet),
