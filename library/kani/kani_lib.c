@@ -2,10 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+// `assert` then `assume`
+#define __KANI_assert(cond, msg)     \
+    do {                             \
+        bool temp = (cond);          \
+        __CPROVER_assert(temp, msg); \
+        __CPROVER_assume(temp);      \
+    } while (0)
 
 // This is a C implementation of the __rust_alloc function.
 // https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/alloc/alloc/fn.__rust_alloc.html
@@ -19,8 +28,7 @@
 // https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#tymethod.alloc
 uint8_t *__rust_alloc(size_t size, size_t align)
 {
-    __CPROVER_assert(size > 0, "__rust_alloc must be called with a size greater than 0");
-    __CPROVER_assume(size > 0);
+    __KANI_assert(size > 0, "__rust_alloc must be called with a size greater than 0");
     // Note: we appear to do nothing with `align`
     // TODO: https://github.com/model-checking/kani/issues/1168
     return malloc(size);
@@ -38,8 +46,7 @@ uint8_t *__rust_alloc(size_t size, size_t align)
 // hhttps://doc.rust-lang.org/std/alloc/fn.alloc_zeroed.html
 uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
 {
-    __CPROVER_assert(size > 0, "__rust_alloc_zeroed must be called with a size greater than 0");
-    __CPROVER_assume(size > 0);
+    __KANI_assert(size > 0, "__rust_alloc_zeroed must be called with a size greater than 0");
     // Note: we appear to do nothing with `align`
     // TODO: https://github.com/model-checking/kani/issues/1168
     return calloc(1, size);
@@ -59,9 +66,8 @@ void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
 {
     // Note: we appear to do nothing with `align`
     // TODO: https://github.com/model-checking/kani/issues/1168
-    __CPROVER_assert(__CPROVER_OBJECT_SIZE(ptr) == size,
-                     "rust_dealloc must be called on an object whose allocated size matches its layout");
-    __CPROVER_assume(__CPROVER_OBJECT_SIZE(ptr) == size);
+    __KANI_assert(__CPROVER_OBJECT_SIZE(ptr) == size,
+                  "rust_dealloc must be called on an object whose allocated size matches its layout");
     free(ptr);
 }
 
@@ -76,12 +82,10 @@ void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
 uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_size)
 {
     // Passing a NULL pointer is undefined behavior
-    __CPROVER_assert(ptr != 0, "rust_realloc must be called with a non-null pointer");
-    __CPROVER_assume(ptr != 0);
+    __KANI_assert(ptr != 0, "rust_realloc must be called with a non-null pointer");
 
     // Passing a new_size of 0 is undefined behavior
-    __CPROVER_assert(new_size > 0, "rust_realloc must be called with a size greater than 0");
-    __CPROVER_assume(new_size > 0);
+    __KANI_assert(new_size > 0, "rust_realloc must be called with a size greater than 0");
 
     uint8_t *result = malloc(new_size);
     if (result) {
