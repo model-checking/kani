@@ -39,10 +39,13 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
-    pub fn codegen_intrinsic(
+    /// Given a call to an compiler intrinsic, generate the call and the `goto` terminator
+    /// Note that in some cases, the intrinsic might never return (e.g. `panic`) in which case
+    /// there is no terminator.
+    pub fn codegen_funcall_of_intrinsic(
         &mut self,
         func: &Operand<'tcx>,
-        fargs: Vec<Expr>,
+        args: &[Operand<'tcx>],
         destination: &Option<(Place<'tcx>, BasicBlock)>,
         span: Span,
     ) -> Stmt {
@@ -50,9 +53,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if let Some((assign_to, target)) = destination {
             let loc = self.codegen_span(&span);
+            let fargs = self.codegen_funcall_args(args);
             Stmt::block(
                 vec![
-                    self.codegen_regular_intrinsic(instance, fargs, &assign_to, Some(span)),
+                    self.codegen_intrinsic(instance, fargs, &assign_to, Some(span)),
                     Stmt::goto(self.current_fn().find_label(&target), loc),
                 ],
                 loc,
@@ -63,7 +67,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Returns `Some(instance)` if the function is an intrinsic; `None` otherwise
-    pub fn get_intrinsic_instance(&self, func: &Operand<'tcx>) -> Option<Instance<'tcx>> {
+    fn get_intrinsic_instance(&self, func: &Operand<'tcx>) -> Option<Instance<'tcx>> {
         let funct = self.operand_ty(func);
         match &funct.kind() {
             ty::FnDef(defid, subst) => {
@@ -81,6 +85,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Returns true if the `func` is a call to a compiler intrinsic; false otherwise.
     pub fn is_intrinsic(&self, func: &Operand<'tcx>) -> bool {
         self.get_intrinsic_instance(func).is_some()
     }
@@ -120,7 +125,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// c.f. rustc_codegen_llvm::intrinsic impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>
     /// fn codegen_intrinsic_call
     /// c.f. https://doc.rust-lang.org/std/intrinsics/index.html
-    pub fn codegen_regular_intrinsic(
+    fn codegen_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
@@ -1153,7 +1158,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// CBMC does not currently seem to implement intrinsics like insert e.g.:
     /// `**** WARNING: no body for function __builtin_ia32_vec_set_v4si`
-    pub fn _codegen_intrinsic_simd_insert(
+    fn _codegen_intrinsic_simd_insert(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
@@ -1186,7 +1191,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
     /// it's immediately lowered by the C frontend.
     /// Issue: https://github.com/diffblue/cbmc/issues/6297
-    pub fn _codegen_intrinsic_simd_shuffle(
+    fn _codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
