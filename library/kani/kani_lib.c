@@ -16,6 +16,9 @@
         __CPROVER_assume(temp);      \
     } while (0)
 
+// Check that the input is either a power of 2, or 0. Algorithm from Hackers Delight.
+bool __KANI_is_power_of_two(size_t i) { return (i & (i - 1)) == 0; }
+
 // This is a C implementation of the __rust_alloc function.
 // https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/alloc/alloc/fn.__rust_alloc.html
 // It has the following Rust signature:
@@ -29,8 +32,9 @@
 uint8_t *__rust_alloc(size_t size, size_t align)
 {
     __KANI_assert(size > 0, "__rust_alloc must be called with a size greater than 0");
-    // Note: we appear to do nothing with `align`
-    // TODO: https://github.com/model-checking/kani/issues/1168
+    // TODO: Ensure we are doing the right thing with align
+    // https://github.com/model-checking/kani/issues/1168
+    __KANI_assert(__KANI_is_power_of_two(align), "Alignment is power of two");
     return malloc(size);
 }
 
@@ -47,8 +51,9 @@ uint8_t *__rust_alloc(size_t size, size_t align)
 uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
 {
     __KANI_assert(size > 0, "__rust_alloc_zeroed must be called with a size greater than 0");
-    // Note: we appear to do nothing with `align`
-    // TODO: https://github.com/model-checking/kani/issues/1168
+    // TODO: Ensure we are doing the right thing with align
+    // https://github.com/model-checking/kani/issues/1168
+    __KANI_assert(__KANI_is_power_of_two(align), "Alignment is power of two");
     return calloc(1, size);
 }
 
@@ -64,8 +69,10 @@ uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
 // https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#tymethod.dealloc
 void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
 {
-    // Note: we appear to do nothing with `align`
-    // TODO: https://github.com/model-checking/kani/issues/1168
+    // TODO: Ensure we are doing the right thing with align
+    // https://github.com/model-checking/kani/issues/1168
+    __KANI_assert(__KANI_is_power_of_two(align), "Alignment is power of two");
+
     __KANI_assert(__CPROVER_OBJECT_SIZE(ptr) == size,
                   "rust_dealloc must be called on an object whose allocated size matches its layout");
     free(ptr);
@@ -86,6 +93,10 @@ uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_
 
     // Passing a new_size of 0 is undefined behavior
     __KANI_assert(new_size > 0, "rust_realloc must be called with a size greater than 0");
+
+    // TODO: Ensure we are doing the right thing with align
+    // https://github.com/model-checking/kani/issues/1168
+    __KANI_assert(__KANI_is_power_of_two(align), "Alignment is power of two");
 
     uint8_t *result = malloc(new_size);
     if (result) {
