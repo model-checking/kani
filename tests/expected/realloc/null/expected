@@ -1,4 +1,4 @@
 Status: FAILURE\
-Description: "realloc called with a null pointer"
+Description: "rust_realloc must be called with a non-null pointer"
 
 VERIFICATION:- FAILED
