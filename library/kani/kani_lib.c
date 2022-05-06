@@ -9,11 +9,11 @@
 #include <string.h>
 
 // `assert` then `assume`
-#define __KANI_assert(cond, msg)     \
-    do {                             \
-        bool temp = (cond);          \
-        __CPROVER_assert(temp, msg); \
-        __CPROVER_assume(temp);      \
+#define __KANI_assert(cond, msg)            \
+    do {                                    \
+        bool __KANI_temp = (cond);          \
+        __CPROVER_assert(__KANI_temp, msg); \
+        __CPROVER_assume(__KANI_temp);      \
     } while (0)
 
 // Check that the input is either a power of 2, or 0. Algorithm from Hackers Delight.
