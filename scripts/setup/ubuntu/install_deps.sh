@@ -8,7 +8,6 @@ set -eu
 DEPS=(
   bison
   cmake
-  ctags
   curl
   flex
   g++
@@ -31,8 +30,8 @@ DEPS=(
 
 # Version specific dependencies.
 declare -A VERSION_DEPS
-VERSION_DEPS["20.04"]="python-is-python3"
-VERSION_DEPS["18.04"]=""
+VERSION_DEPS["20.04"]="universal-ctags python-is-python3"
+VERSION_DEPS["18.04"]="exuberant-ctags"
 
 UBUNTU_VERSION=$(lsb_release -rs)
 OTHER_DEPS="${VERSION_DEPS[${UBUNTU_VERSION}]:-""}"
@@ -45,12 +44,11 @@ set -x
 # https://docs.github.com/en/actions/using-github-hosted-runners/customizing-github-hosted-runners#installing-software-on-ubuntu-runners
 sudo apt-get --yes update
 
-sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}" "${OTHER_DEPS[@]}"
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}" ${OTHER_DEPS[@]}
 
 # Add Python package dependencies
 PYTHON_DEPS=(
   autopep8
-  toml # Used for parsing `cargo-kani` config toml
   colorama # Used for introducing colors into terminal output
 )
 

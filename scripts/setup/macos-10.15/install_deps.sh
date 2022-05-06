@@ -10,12 +10,11 @@ set -eux
 brew update
 
 # Install dependencies via `brew`
-brew install ctags wget
+brew install universal-ctags wget
 
 # Add Python package dependencies
 PYTHON_DEPS=(
   autopep8
-  toml # Used for parsing `cargo-kani` config toml
   colorama # Used for introducing colors into terminal output
 )
 
