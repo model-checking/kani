@@ -23,6 +23,7 @@ functions:
 import json
 import os
 import re
+from sre_constants import FAILURE
 import sys
 
 from colorama import Fore, Style
@@ -46,13 +47,15 @@ class GlobalMessages(str, Enum):
     RESULT = 'result'
     MESSAGE_TEXT = 'messageText'
     MESSAGE_TYPE = 'messageType'
-    SUCCESS = 'SUCCESS'
+    STATUS_SUCCESS = 'SUCCESS'
+    STATUS_FAILURE = 'FAILURE'
     FAILED = 'FAILED'
     REACH_CHECK_DESC = "[KANI_REACHABILITY_CHECK]"
     REACH_CHECK_KEY = "reachCheckResult"
     CHECK_ID = "KANI_CHECK_ID"
     ASSERTION_FALSE = "assertion false"
     DEFAULT_ASSERTION = "assertion"
+    EXPECT_FAIL = "expect_fail"
     CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
@@ -291,6 +294,20 @@ def modify_undefined_function_checks(properties):
                 has_unknown_location_checks = True
     return has_unknown_location_checks
 
+def modify_expect_fail_checks(properties):
+    """
+    Invert status for Checks with the property_class "expect_fail" from FAILURE TO SUCCESS and vice versa.
+    """
+    for property in properties:
+        if extract_property_class(property) == GlobalMessages.EXPECT_FAIL:
+            if property["status"] == GlobalMessages.STATUS_FAILURE:
+                property["status"] = GlobalMessages.STATUS_SUCCESS
+            elif property["status"] == GlobalMessages.STATUS_FAILURE:
+                property["status"] = GlobalMessages.STATUS_SUCCESS
+            else:
+                pass
+    return
+
 def extract_errors(solver_information):
     """
     Extract errors from the CBMC output, which are messages that have the
@@ -330,6 +347,7 @@ def postprocess_results(properties, extra_ptr_check):
     has_reachable_undefined_functions = modify_undefined_function_checks(properties)
     properties, reach_checks = filter_reach_checks(properties)
     properties = filter_sanity_checks(properties)
+    modify_expect_fail_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
 
