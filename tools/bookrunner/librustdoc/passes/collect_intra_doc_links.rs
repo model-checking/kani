@@ -40,8 +40,6 @@ use crate::lint::{BROKEN_INTRA_DOC_LINKS, PRIVATE_INTRA_DOC_LINKS};
 use crate::visit::DocVisitor;
 use rustc_data_structures::intern::Interned;
 
-mod early;
-
 /// Top-level errors emitted by this pass.
 enum ErrorKind<'a> {
     Resolve(Box<ResolutionFailure<'a>>),

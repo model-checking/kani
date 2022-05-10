@@ -8,8 +8,6 @@ use rustc_data_structures::fx::FxHashMap;
 
 use crate::error::Error;
 use crate::externalfiles::ExternalHtml;
-use crate::html::format::{Buffer, Print};
-use crate::html::render::{ensure_trailing_slash, StylePath};
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -55,55 +53,4 @@ struct PageLayout<'a> {
     content: String,
     krate_with_trailing_slash: String,
     crate rustdoc_version: &'a str,
-}
-
-crate fn render<T: Print, S: Print>(
-    layout: &Layout,
-    page: &Page<'_>,
-    sidebar: S,
-    t: T,
-    style_files: &[StylePath],
-) -> String {
-    let static_root_path = page.get_static_root_path();
-    let krate_with_trailing_slash = ensure_trailing_slash(&layout.krate).to_string();
-    let mut themes: Vec<String> = style_files
-        .iter()
-        .map(StylePath::basename)
-        .collect::<Result<_, Error>>()
-        .unwrap_or_default();
-    themes.sort();
-    let rustdoc_version = rustc_interface::util::version_str().unwrap_or("unknown version");
-    let content = Buffer::html().to_display(t); // Note: This must happen before making the sidebar.
-    let sidebar = Buffer::html().to_display(sidebar);
-    let _page_layout = PageLayout {
-        static_root_path,
-        page,
-        layout,
-        themes,
-        sidebar,
-        content,
-        krate_with_trailing_slash,
-        rustdoc_version,
-    };
-    // .render()
-    // .unwrap()
-    "".to_string()
-}
-
-crate fn redirect(url: &str) -> String {
-    // <script> triggers a redirect before refresh, so this is fine.
-    format!(
-        r##"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta http-equiv="refresh" content="0;URL={url}">
-    <title>Redirection</title>
-</head>
-<body>
-    <p>Redirecting to <a href="{url}">{url}</a>...</p>
-    <script>location.replace("{url}" + location.search + location.hash);</script>
-</body>
-</html>"##,
-        url = url,
-    )
 }

@@ -500,33 +500,11 @@ fn snippet_equal_to_token(tcx: TyCtxt<'_>, matcher: &TokenTree) -> Option<String
 }
 
 pub(super) fn display_macro_source(
-    cx: &mut DocContext<'_>,
-    name: Symbol,
-    def: &ast::MacroDef,
-    def_id: DefId,
-    vis: Visibility,
+    _cx: &mut DocContext<'_>,
+    _name: Symbol,
+    _def: &ast::MacroDef,
+    _def_id: DefId,
+    _vis: Visibility,
 ) -> String {
-    let tts: Vec<_> = def.body.inner_tokens().into_trees().collect();
-    // Extract the spans of all matchers. They represent the "interface" of the macro.
-    let matchers = tts.chunks(4).map(|arm| &arm[0]);
-
-    if def.macro_rules {
-        format!("macro_rules! {} {{\n{}}}", name, render_macro_arms(cx.tcx, matchers, ";"))
-    } else {
-        if matchers.len() <= 1 {
-            format!(
-                "{}macro {}{} {{\n    ...\n}}",
-                vis.to_src_with_space(cx.tcx, def_id),
-                name,
-                matchers.map(|matcher| render_macro_matcher(cx.tcx, matcher)).collect::<String>(),
-            )
-        } else {
-            format!(
-                "{}macro {} {{\n{}}}",
-                vis.to_src_with_space(cx.tcx, def_id),
-                name,
-                render_macro_arms(cx.tcx, matchers, ","),
-            )
-        }
-    }
+    unimplemented!("no rendering supported")
 }

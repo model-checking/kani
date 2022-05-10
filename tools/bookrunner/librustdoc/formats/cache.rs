@@ -14,10 +14,7 @@ use crate::clean::{self, ItemId};
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
 use crate::formats::Impl;
-use crate::html::format::join_with_double_colon;
 use crate::html::markdown::short_markdown_summary;
-use crate::html::render::search_index::get_function_type_for_search;
-use crate::html::render::IndexItem;
 
 /// This cache is used to store information about the [`clean::Crate`] being
 /// rendered in order to provide more useful documentation. This contains
@@ -97,8 +94,6 @@ crate struct Cache {
     parent_stack: Vec<DefId>,
     parent_is_trait_impl: bool,
     stripped_mod: bool,
-
-    crate search_index: Vec<IndexItem>,
 
     // In rare case where a structure is defined in one module but implemented
     // in another, if the implementing module is parsed before defining module,
@@ -241,19 +236,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
                     // which should not be indexed. The crate-item itself is
                     // inserted later on when serializing the search-index.
                     if item.def_id.index().map_or(false, |idx| idx != CRATE_DEF_INDEX) {
-                        let desc = item.doc_value().map_or_else(String::new, |x| {
-                            short_markdown_summary(x.as_str(), &item.link_names(self.cache))
-                        });
-                        self.cache.search_index.push(IndexItem {
-                            ty: item.type_(),
-                            name: s.to_string(),
-                            path: join_with_double_colon(path),
-                            desc,
-                            parent,
-                            parent_idx: None,
-                            search_type: get_function_type_for_search(&item, self.tcx),
-                            aliases: item.attrs.get_doc_aliases(),
-                        });
+                        unimplemented!("No rendering support");
                     }
                 }
                 (Some(parent), None) if is_inherent_impl_item => {

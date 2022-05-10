@@ -42,7 +42,6 @@ use crate::clean::Clean;
 use crate::core::DocContext;
 use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
-use crate::html::render::Context;
 use crate::passes::collect_intra_doc_links::UrlFragment;
 
 crate use self::FnRetTy::*;
@@ -382,33 +381,6 @@ impl Item {
     /// with newlines.
     crate fn collapsed_doc_value(&self) -> Option<String> {
         self.attrs.collapsed_doc_value()
-    }
-
-    crate fn links(&self, cx: &Context<'_>) -> Vec<RenderedLink> {
-        use crate::html::format::href;
-
-        cx.cache()
-            .intra_doc_links
-            .get(&self.def_id)
-            .map_or(&[][..], |v| v.as_slice())
-            .iter()
-            .filter_map(|ItemLink { link: s, link_text, did, ref fragment }| {
-                debug!(?did);
-                if let Ok((mut href, ..)) = href(*did, cx) {
-                    debug!(?href);
-                    if let Some(ref fragment) = *fragment {
-                        fragment.render(&mut href, cx.tcx()).unwrap()
-                    }
-                    Some(RenderedLink {
-                        original_text: s.clone(),
-                        new_text: link_text.clone(),
-                        href,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect()
     }
 
     /// Find a list of all link names, without finding their href.

@@ -16,7 +16,6 @@ use rustc_target::spec::TargetTriple;
 
 use crate::externalfiles::ExternalHtml;
 use crate::html::markdown::IdMap;
-use crate::html::render::StylePath;
 use crate::scrape_examples::AllCallLocations;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -192,9 +191,6 @@ crate struct RenderOptions {
     // FIXME(misdreavus): the flag name is `--sort-modules-by-appearance` but the meaning is
     // inverted once read.
     crate sort_modules_alphabetically: bool,
-    /// List of themes to extend the docs with. Original argument name is included to assist in
-    /// displaying errors if it fails a theme check.
-    crate themes: Vec<StylePath>,
     /// If present, CSS file that contains rules to add to the default CSS.
     crate extension_css: Option<PathBuf>,
     /// A map of the default settings (values are as for DOM storage API). Keys should lack the

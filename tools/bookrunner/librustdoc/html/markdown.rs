@@ -47,8 +47,6 @@ use std::str;
 use crate::clean::RenderedLink;
 use crate::doctest;
 use crate::html::escape::Escape;
-use crate::html::format::Buffer;
-use crate::html::highlight;
 use crate::html::length_limit::HtmlWithLimit;
 use crate::html::toc::TocBuilder;
 
@@ -234,138 +232,7 @@ impl<'a, I: Iterator<Item = Event<'a>>> Iterator for CodeBlocks<'_, 'a, I> {
     type Item = Event<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let event = self.inner.next();
-        let compile_fail;
-        let should_panic;
-        let ignore;
-        let edition;
-        let kind = if let Some(Event::Start(Tag::CodeBlock(kind))) = event {
-            kind
-        } else {
-            return event;
-        };
-
-        let mut origtext = String::new();
-        for event in &mut self.inner {
-            match event {
-                Event::End(Tag::CodeBlock(..)) => break,
-                Event::Text(ref s) => {
-                    origtext.push_str(s);
-                }
-                _ => {}
-            }
-        }
-        let lines = origtext.lines().filter_map(|l| map_line(l).for_html());
-        let text = lines.collect::<Vec<Cow<'_, str>>>().join("\n");
-
-        let parse_result = match kind {
-            CodeBlockKind::Fenced(ref lang) => {
-                let parse_result =
-                    LangString::parse_without_check(lang, self.check_error_codes, false);
-                if !parse_result.rust {
-                    return Some(Event::Html(
-                        format!(
-                            "<div class=\"example-wrap\">\
-                                 <pre class=\"language-{}\"><code>{}</code></pre>\
-                             </div>",
-                            lang,
-                            Escape(&text),
-                        )
-                        .into(),
-                    ));
-                }
-                parse_result
-            }
-            CodeBlockKind::Indented => Default::default(),
-        };
-
-        compile_fail = parse_result.compile_fail;
-        should_panic = parse_result.should_panic;
-        ignore = parse_result.ignore;
-        edition = parse_result.edition;
-
-        let explicit_edition = edition.is_some();
-        let edition = edition.unwrap_or(self.edition);
-
-        let playground_button = self.playground.as_ref().and_then(|playground| {
-            let krate = &playground.crate_name;
-            let url = &playground.url;
-            if url.is_empty() {
-                return None;
-            }
-            let test = origtext
-                .lines()
-                .map(|l| map_line(l).for_code())
-                .collect::<Vec<Cow<'_, str>>>()
-                .join("\n");
-            let krate = krate.as_ref().map(|s| &**s);
-            let (test, _, _) =
-                doctest::make_test(&test, krate, false, &Default::default(), edition, None);
-            let channel = if test.contains("#![feature(") { "&amp;version=nightly" } else { "" };
-
-            let edition_string = format!("&amp;edition={}", edition);
-
-            // These characters don't need to be escaped in a URI.
-            // FIXME: use a library function for percent encoding.
-            fn dont_escape(c: u8) -> bool {
-                (b'a' <= c && c <= b'z')
-                    || (b'A' <= c && c <= b'Z')
-                    || (b'0' <= c && c <= b'9')
-                    || c == b'-'
-                    || c == b'_'
-                    || c == b'.'
-                    || c == b'~'
-                    || c == b'!'
-                    || c == b'\''
-                    || c == b'('
-                    || c == b')'
-                    || c == b'*'
-            }
-            let mut test_escaped = String::new();
-            for b in test.bytes() {
-                if dont_escape(b) {
-                    test_escaped.push(char::from(b));
-                } else {
-                    write!(test_escaped, "%{:02X}", b).unwrap();
-                }
-            }
-            Some(format!(
-                r#"<a class="test-arrow" target="_blank" href="{}?code={}{}{}">Run</a>"#,
-                url, test_escaped, channel, edition_string
-            ))
-        });
-
-        let tooltip = if ignore != Ignore::None {
-            Some((None, "ignore"))
-        } else if compile_fail {
-            Some((None, "compile_fail"))
-        } else if should_panic {
-            Some((None, "should_panic"))
-        } else if explicit_edition {
-            Some((Some(edition), "edition"))
-        } else {
-            None
-        };
-
-        // insert newline to clearly separate it from the
-        // previous block so we can shorten the html output
-        let mut s = Buffer::new();
-        s.push_str("\n");
-        highlight::render_with_highlighting(
-            &text,
-            &mut s,
-            Some(&format!(
-                "rust-example-rendered{}",
-                if let Some((_, class)) = tooltip { format!(" {}", class) } else { String::new() }
-            )),
-            playground_button.as_deref(),
-            tooltip,
-            edition,
-            None,
-            None,
-            None,
-        );
-        Some(Event::Html(s.into_inner().into()))
+        unimplemented!("No rendering")
     }
 }
 
