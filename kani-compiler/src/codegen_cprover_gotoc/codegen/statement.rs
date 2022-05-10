@@ -628,6 +628,23 @@ impl<'tcx> GotocCtx<'tcx> {
                         .assign(self.codegen_rvalue(r), Location::none())
                 }
             }
+            StatementKind::Deinit(place) => {
+                // From rustc doc: "This writes `uninit` bytes to the entire place."
+                // Thus, we assign nondet() value to the entire place.
+                let dst_mir_ty = self.place_ty(place);
+                let dst_type = self.codegen_ty(dst_mir_ty);
+                let layout = self.layout_of(dst_mir_ty);
+                if layout.is_zst() || self.ignore_var_ty(dst_mir_ty) {
+                    // We ignore assignment for all zero size types
+                    // Ignore generators too for now:
+                    // https://github.com/model-checking/kani/issues/416
+                    Stmt::skip(Location::none())
+                } else {
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
+                        .goto_expr
+                        .assign(dst_type.nondet(), Location::none())
+                }
+            }
             StatementKind::SetDiscriminant { place, variant_index } => {
                 // this requires place points to an enum type.
                 let pt = self.place_ty(place);
@@ -740,7 +757,6 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::AscribeUserType(_, _)
             | StatementKind::Nop
             | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
-            StatementKind::Deinit(_) => todo!("Unimplemented statement. See: "),
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
     }
