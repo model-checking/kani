@@ -410,7 +410,7 @@ def has_check_failure_message(properties, message):
 
 def has_check_failure_property_class(properties, property_class):
     """
-    Search in properties for a failed property with the given message
+    Search in properties for a failed property with the given property class
     """
     for property in properties:
         if property_class in extract_property_class(property) and property["status"] == "FAILURE":
