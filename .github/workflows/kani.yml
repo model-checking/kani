@@ -105,6 +105,7 @@ jobs:
         run: |
           docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani
+          docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  kani-latest  cargo kani
 
       # We can't run macos in a container, so we can only test locally.
       # Hopefully any dependency issues won't be unique to macos.
@@ -115,6 +116,7 @@ jobs:
           cargo-kani setup --use-local-bundle ./kani-latest-x86_64-apple-darwin.tar.gz
           (cd tests/cargo-kani/simple-lib && cargo kani)
           (cd tests/cargo-kani/simple-visualize && cargo kani)
+          (cd tests/cargo-kani/build-rs-works && cargo kani)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
