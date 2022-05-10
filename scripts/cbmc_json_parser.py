@@ -55,6 +55,7 @@ class GlobalMessages(str, Enum):
     ASSERTION_FALSE = "assertion false"
     DEFAULT_ASSERTION = "assertion"
     EXPECT_FAIL = "expect_fail"
+    SANITY_CHECK = "sanity_check"
     UNWIND = "unwind"
     CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
@@ -294,36 +295,27 @@ def modify_undefined_function_checks(properties):
                 has_undefined_function_checks = True
     return has_undefined_function_checks
 
-def check_unwind_failed(properties):
-    """
-    Check if any unwind check has failed verification status
-    """
-    for property in properties:
-        if extract_property_class(property) == GlobalMessages.UNWIND:
-            if property["status"] == GlobalMessages.STATUS_FAILURE:
-                return True
-    return False
-
-def modify_expect_fail_checks(properties):
+def modify_expect_fail_checks(properties, has_failed_sanity_check, has_reachable_undefined_functions, has_failed_unwinding_asserts):
     """
     Invert status for Checks with the property_class "expect_fail" from FAILURE TO SUCCESS and vice versa.
     Modify further depending on unwind/undefined function check statuses.
     """
-    # undefined_unwind_fail (bool) is true if there is at least one
-    # unwind/undefined function check which has a failed status
-    undefined_unwind_fail = modify_undefined_function_checks(properties) or check_unwind_failed(properties)
     for property in properties:
         if extract_property_class(property) == GlobalMessages.EXPECT_FAIL:
-            if property["status"] == GlobalMessages.STATUS_FAILURE:
-                property["status"] = GlobalMessages.STATUS_SUCCESS
-            elif property["status"] == GlobalMessages.STATUS_SUCCESS:
-                # There is at least one failed unwind and undefined check
-                if undefined_unwind_fail:
-                    property["status"] = "UNDETERMINED"
-                else:
-                    property["status"] = GlobalMessages.STATUS_FAILURE
+            # If there's at least one failed sanity_check , then change property to undetermined
+            if has_failed_sanity_check:
+                property["status"] = "UNDETERMINED"
             else:
-                pass
+                if property["status"] == GlobalMessages.STATUS_FAILURE:
+                    property["status"] = GlobalMessages.STATUS_SUCCESS
+                elif property["status"] == GlobalMessages.STATUS_SUCCESS:
+                    # There is at least one failed unwind and undefined check
+                    if has_reachable_undefined_functions or has_failed_unwinding_asserts:
+                        property["status"] = "UNDETERMINED"
+                    else:
+                        property["status"] = GlobalMessages.STATUS_FAILURE
+                else:
+                    pass
     return
 
 def extract_errors(solver_information):
@@ -360,12 +352,13 @@ def postprocess_results(properties, extra_ptr_check):
     of the special cases above was hit.
     """
 
-    has_reachable_unsupported_constructs = has_check_failure(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
-    has_failed_unwinding_asserts = has_check_failure(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
+    has_reachable_unsupported_constructs = has_check_failure_message(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
+    has_failed_unwinding_asserts = has_check_failure_message(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
     has_reachable_undefined_functions = modify_undefined_function_checks(properties)
+    has_failed_sanity_check = has_check_failure_property_class(properties, GlobalMessages.SANITY_CHECK)
     properties, reach_checks = filter_reach_checks(properties)
     properties = filter_sanity_checks(properties)
-    modify_expect_fail_checks(properties)
+    modify_expect_fail_checks(properties, has_failed_sanity_check, has_reachable_undefined_functions, has_failed_unwinding_asserts)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
 
@@ -397,12 +390,21 @@ def postprocess_results(properties, extra_ptr_check):
     return properties, messages
 
 
-def has_check_failure(properties, message):
+def has_check_failure_message(properties, message):
     """
     Search in properties for a failed property with the given message
     """
     for property in properties:
         if message in property["description"] and property["status"] == "FAILURE":
+            return True
+    return False
+
+def has_check_failure_property_class(properties, property_class):
+    """
+    Search in properties for a failed property with the given message
+    """
+    for property in properties:
+        if property_class in extract_property_class(property) and property["status"] == "FAILURE":
             return True
     return False
 
