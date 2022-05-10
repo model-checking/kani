@@ -114,32 +114,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If either of those change, this will almost certainly stop working.
     pub fn deref_box(&self, box_expr: Expr) -> Expr {
         // Internally, a Boxed type is stored as a chain of structs.
-        // In particular:
-        // `Box<T>` is an owning reference to an allocation of type T on the heap.
-        // It has a pointer of type `ptr::Unique<T>` and an allocator of type `alloc::Global`
-        // Unique<T> is an owning raw pointer to a location in memory.
-        // So given a Box<T>, we can follow the chain to get the desired pointer.
-        // If either rustc or Kani changes how boxed types are represented, this will need to be
-        // updated.
         //
-        // The following C code is the result of running `kani --gen-c` on rust with boxed types:
-        // Given a boxed type (note that Rust can reorder fields to improve struct packing):
-        // ```
-        // struct std::boxed::Box<[u8]>
-        // {
-        //   struct std::alloc::Global 1;
-        //   struct std::ptr::Unique<[u8]> 0;
-        // };
-        // ```
-        // We follow the Unique pointer:
-        // ```
-        // struct std::ptr::Unique<[u8]>
-        // {
-        //   struct std::marker::PhantomData<[u8]> _marker;
-        //   struct &[u8] pointer;
-        // };
-        // ```
-        // And notice that its `.pointer` field is exactly what we want.
+        // This code has to match the exact structure from the std library version that is
+        // supported to access the raw pointer. If either rustc or Kani changes how boxed types are
+        // represented, this will need to be updated.
         self.assert_is_rust_box_like(box_expr.typ());
         RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
     }

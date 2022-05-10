@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Check niche optimization for mix of option, tuple and nonnull.
+// Check niche optimization for an object that is 128 bits long.
 
 use std::mem::{discriminant, size_of_val};
 use std::num::NonZeroU128;

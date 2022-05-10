@@ -475,9 +475,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     // Compute relative discriminant value (`niche_val - niche_start`).
                     //
-                    // We remap `niche_start..=niche_start + n` (which may wrap around) to (non-wrap-around)
-                    // `0..=n`, to be able to check whether the discriminant corresponds to a niche variant with
-                    // one comparison.
+                    // "We remap `niche_start..=niche_start + n` (which may wrap around) to
+                    // (non-wrap-around) `0..=n`, to be able to check whether the discriminant
+                    // corresponds to a niche variant with one comparison."
+                    // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
+                    //
                     // Note: niche_variants can only represent values that fit in a u32.
                     let discr_mir_ty = self.codegen_enum_discr_typ(ty);
                     let discr_type = self.codegen_ty(discr_mir_ty);
@@ -1271,8 +1273,8 @@ fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
         // No need to subtract.
         expr.clone()
     } else {
-        let unsigned = Type::unsigned_int(expr.typ().width().unwrap());
-        let constant = Expr::int_constant(constant as i64, unsigned.clone());
+        let unsigned = expr.typ().to_unsigned().unwrap();
+        let constant = Expr::int_constant(constant, unsigned.clone());
         expr.clone().cast_to(unsigned).sub(constant)
     }
 }

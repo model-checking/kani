@@ -973,6 +973,19 @@ impl Type {
         Pointer { typ: Box::new(self) }
     }
 
+    /// Convert type to its unsigned counterpart if possible.
+    /// For types that are already unsigned, this will return self.
+    /// Note: This will expand any typedef.
+    pub fn to_unsigned(&self) -> Option<Self> {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            CInteger(CIntType::SSizeT) => Some(CInteger(CIntType::SizeT)),
+            Signedbv { ref width } => Some(Unsignedbv { width: *width }),
+            Unsignedbv { .. } => Some(self.clone()),
+            _ => None,
+        }
+    }
+
     pub fn signed_int<T>(w: T) -> Self
     where
         T: TryInto<u64>,
