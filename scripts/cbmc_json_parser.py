@@ -295,7 +295,11 @@ def modify_undefined_function_checks(properties):
                 has_undefined_function_checks = True
     return has_undefined_function_checks
 
-def modify_expect_fail_checks(properties, has_failed_sanity_check, has_reachable_undefined_functions, has_failed_unwinding_asserts):
+def modify_expect_fail_checks(
+        properties,
+        has_failed_sanity_check,
+        has_reachable_undefined_functions,
+        has_failed_unwinding_asserts):
     """
     Invert status for Checks with the property_class "expect_fail" from FAILURE TO SUCCESS and vice versa.
     Modify further depending on unwind/undefined function check statuses.
@@ -352,13 +356,18 @@ def postprocess_results(properties, extra_ptr_check):
     of the special cases above was hit.
     """
 
-    has_reachable_unsupported_constructs = has_check_failure_message(properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
+    has_reachable_unsupported_constructs = has_check_failure_message(
+        properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
     has_failed_unwinding_asserts = has_check_failure_message(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
     has_reachable_undefined_functions = modify_undefined_function_checks(properties)
     has_failed_sanity_check = has_check_failure_property_class(properties, GlobalMessages.SANITY_CHECK)
     properties, reach_checks = filter_reach_checks(properties)
     properties = filter_sanity_checks(properties)
-    modify_expect_fail_checks(properties, has_failed_sanity_check, has_reachable_undefined_functions, has_failed_unwinding_asserts)
+    modify_expect_fail_checks(
+        properties,
+        has_failed_sanity_check,
+        has_reachable_undefined_functions,
+        has_failed_unwinding_asserts)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
 
