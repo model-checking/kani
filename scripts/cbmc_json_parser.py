@@ -23,7 +23,6 @@ functions:
 import json
 import os
 import re
-from sre_constants import FAILURE
 import sys
 
 from colorama import Fore, Style
@@ -56,6 +55,7 @@ class GlobalMessages(str, Enum):
     ASSERTION_FALSE = "assertion false"
     DEFAULT_ASSERTION = "assertion"
     EXPECT_FAIL = "expect_fail"
+    UNWIND = "unwind"
     CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
@@ -284,26 +284,44 @@ def modify_undefined_function_checks(properties):
     2. If a function with missing definition is reachable, then we turn all SUCCESS status to UNDETERMINED.
     If there are no reachable functions with missing definitions, then the verification is not affected, so we retain all of the SUCCESS status.
     """
-    has_unknown_location_checks = False
+    has_undefined_function_checks = False
     for property in properties:
         # Specifically trying to capture assertions that CBMC generates for functions with missing definitions
         if GlobalMessages.ASSERTION_FALSE in property["description"] and extract_property_class(
                 property) == GlobalMessages.DEFAULT_ASSERTION and not hasattr(property["sourceLocation"], "file"):
             property["description"] = "Function with missing definition is unreachable"
             if property["status"] == "FAILURE":
-                has_unknown_location_checks = True
-    return has_unknown_location_checks
+                has_undefined_function_checks = True
+    return has_undefined_function_checks
+
+def check_unwind_failed(properties):
+    """
+    Check if any unwind check has failed verification status
+    """
+    for property in properties:
+        if extract_property_class(property) == GlobalMessages.UNWIND:
+            if property["status"] == GlobalMessages.STATUS_FAILURE:
+                return True
+    return False
 
 def modify_expect_fail_checks(properties):
     """
     Invert status for Checks with the property_class "expect_fail" from FAILURE TO SUCCESS and vice versa.
+    Modify further depending on unwind/undefined function check statuses.
     """
+    # undefined_unwind_fail (bool) is true if there is at least one
+    # unwind/undefined function check which has a failed status
+    undefined_unwind_fail = modify_undefined_function_checks(properties) or check_unwind_failed(properties)
     for property in properties:
         if extract_property_class(property) == GlobalMessages.EXPECT_FAIL:
             if property["status"] == GlobalMessages.STATUS_FAILURE:
                 property["status"] = GlobalMessages.STATUS_SUCCESS
-            elif property["status"] == GlobalMessages.STATUS_FAILURE:
-                property["status"] = GlobalMessages.STATUS_SUCCESS
+            elif property["status"] == GlobalMessages.STATUS_SUCCESS:
+                # There is at least one failed unwind and undefined check
+                if undefined_unwind_fail:
+                    property["status"] = "UNDETERMINED"
+                else:
+                    property["status"] = GlobalMessages.STATUS_FAILURE
             else:
                 pass
     return
