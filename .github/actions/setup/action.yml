@@ -13,7 +13,7 @@ runs:
         shell: bash
 
       - name: Install CBMC
-        run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh 5.56.0
+        run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh cbmc-version
         shell: bash
 
       - name: Install cbmc-viewer
