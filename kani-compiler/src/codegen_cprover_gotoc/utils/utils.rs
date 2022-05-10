@@ -102,6 +102,9 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
+/// Members traverse path to get to the raw pointer of a box (b.0.pointer.pointer).
+const RAW_PTR_FROM_BOX: [&str; 3] = ["0", "pointer", "pointer"];
+
 impl<'tcx> GotocCtx<'tcx> {
     /// Dereference a boxed type `std::boxed::Box<T>` to get a `*T`.
     ///
@@ -109,7 +112,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// a) implemented by the rust standard library
     /// b) codegenned by Kani.
     /// If either of those change, this will almost certainly stop working.
-    pub fn deref_box(&self, e: Expr) -> Expr {
+    pub fn deref_box(&self, box_expr: Expr) -> Expr {
         // Internally, a Boxed type is stored as a chain of structs.
         // In particular:
         // `Box<T>` is an owning reference to an allocation of type T on the heap.
@@ -137,35 +140,39 @@ impl<'tcx> GotocCtx<'tcx> {
         // };
         // ```
         // And notice that its `.pointer` field is exactly what we want.
-        self.assert_is_rust_box_like(e.typ());
-        e.member("0", &self.symbol_table).member("pointer", &self.symbol_table)
+        self.assert_is_rust_box_like(box_expr.typ());
+        RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
     }
 
     /// Box<T> initializer
-    /// `boxed_type the_box = >>> { .0=nondet(), .1={ ._marker=nondet(), .pointer=boxed_value } } <<<`
+    ///
+    /// Traverse over the Box representation and only initialize the raw_ptr field. All other
+    /// members are left uninitialized.
     /// `boxed_type` is the type of the resulting expression
     pub fn box_value(&self, boxed_value: Expr, boxed_type: Type) -> Expr {
         self.assert_is_rust_box_like(&boxed_type);
-        let unique_ptr_typ = boxed_type.lookup_field_type("0", &self.symbol_table).unwrap();
-        self.assert_is_rust_unique_pointer_like(&unique_ptr_typ);
-        let unique_ptr_pointer_typ =
-            unique_ptr_typ.lookup_field_type("pointer", &self.symbol_table).unwrap();
-        assert_eq!(&unique_ptr_pointer_typ, boxed_value.typ());
-        let unique_ptr_val = Expr::struct_expr_with_nondet_fields(
-            unique_ptr_typ,
-            btree_string_map![("pointer", boxed_value),],
-            &self.symbol_table,
-        );
-        let boxed_val = Expr::struct_expr_with_nondet_fields(
-            boxed_type,
-            btree_string_map![("0", unique_ptr_val),],
-            &self.symbol_table,
-        );
-        boxed_val
+        tracing::debug!(?boxed_type, ?boxed_value, "box_value");
+        let mut inner_type = boxed_type;
+        let type_members = RAW_PTR_FROM_BOX
+            .iter()
+            .map(|name| {
+                let outer_type = inner_type.clone();
+                inner_type = outer_type.lookup_field_type(name, &self.symbol_table).unwrap();
+                (*name, outer_type)
+            })
+            .collect::<Vec<_>>();
+
+        type_members.iter().rev().fold(boxed_value, |value, (name, typ)| {
+            Expr::struct_expr_with_nondet_fields(
+                typ.clone(),
+                btree_string_map![(*name, value),],
+                &self.symbol_table,
+            )
+        })
     }
 
     /// Best effort check if the struct represents a rust "std::alloc::Global".
-    pub fn assert_is_rust_global_alloc_like(&self, t: &Type) {
+    fn assert_is_rust_global_alloc_like(&self, t: &Type) {
         // TODO: A std::alloc::Global appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
@@ -174,7 +181,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a rust "std::marker::PhantomData".
-    pub fn assert_is_rust_phantom_data_like(&self, t: &Type) {
+    fn assert_is_rust_phantom_data_like(&self, t: &Type) {
         // TODO: A std::marker::PhantomData appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
@@ -183,7 +190,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a Rust "Box". May return false positives.
-    pub fn assert_is_rust_box_like(&self, t: &Type) {
+    fn assert_is_rust_box_like(&self, t: &Type) {
         // struct std::boxed::Box<[u8; 8]>::15334369982748499855
         // {
         //   // 1
@@ -204,13 +211,13 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Checks if the struct represents a Rust "std::ptr::Unique"
-    pub fn assert_is_rust_unique_pointer_like(&self, t: &Type) {
+    fn assert_is_rust_unique_pointer_like(&self, t: &Type) {
         // struct std::ptr::Unique<[u8; 8]>::14713681870393313245
         // {
         //   // _marker
         //   struct std::marker::PhantomData<[u8; 8]>::18073278521438838603 _marker;
         //   // pointer
-        //   struct [u8::16712579856250238426; 8] *pointer;
+        //   NonNull<T> pointer;
         // };
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
@@ -218,11 +225,26 @@ impl<'tcx> GotocCtx<'tcx> {
         for c in components {
             match c.name().to_string().as_str() {
                 "_marker" => self.assert_is_rust_phantom_data_like(&c.typ()),
-                "pointer" => {
-                    assert!(c.typ().is_pointer() || c.typ().is_rust_fat_ptr(&self.symbol_table))
-                }
+                "pointer" => self.assert_is_non_null_like(&c.typ()),
                 _ => panic!("Unexpected component {} in {:?}", c.name(), t),
             }
         }
+    }
+
+    /// Best effort check if the struct represents a std::ptr::NonNull<T>.
+    ///
+    /// This assumes the following structure. Any changes to this will break this code.
+    /// ```
+    /// pub struct NonNull<T: ?Sized> {
+    ///    pointer: *const T,
+    /// }
+    /// ```
+    fn assert_is_non_null_like(&self, t: &Type) {
+        assert!(t.is_struct_like());
+        let components = t.lookup_components(&self.symbol_table).unwrap();
+        assert_eq!(components.len(), 1);
+        let component = components.first().unwrap();
+        assert_eq!(component.name().to_string().as_str(), "pointer");
+        assert!(component.typ().is_pointer() || component.typ().is_rust_fat_ptr(&self.symbol_table))
     }
 }
