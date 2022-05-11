@@ -13,7 +13,6 @@ use rustc_span::edition::Edition;
 use rustc_span::Span;
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::default::Default;
 use std::fmt::Write;
@@ -24,9 +23,7 @@ use crate::clean::RenderedLink;
 use crate::doctest;
 use crate::html::toc::TocBuilder;
 
-use pulldown_cmark::{
-    html, BrokenLink, CodeBlockKind, CowStr, Event, LinkType, Options, Parser, Tag,
-};
+use pulldown_cmark::{html, CodeBlockKind, CowStr, Event, LinkType, Options, Parser, Tag};
 
 const MAX_HEADER_LEVEL: u32 = 6;
 

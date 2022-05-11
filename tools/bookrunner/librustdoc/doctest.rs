@@ -893,7 +893,9 @@ impl<'a, 'hir, 'tcx> HirCollector<'a, 'hir, 'tcx> {
             self.collector.names.push(name);
         }
 
-        attrs.unindent_doc_comments();
+        // Bookrunner doesn't care about the spaces in the documentation
+        // attrs.unindent_doc_comments();
+
         // The collapse-docs pass won't combine sugared/raw doc attributes, or included files with
         // anything else, this will combine them for us.
         if let Some(doc) = attrs.collapsed_doc_value() {

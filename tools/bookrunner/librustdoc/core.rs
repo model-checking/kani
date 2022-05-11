@@ -10,7 +10,6 @@ use rustc_hir::{HirId, Path};
 use rustc_interface::interface;
 use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
-use rustc_resolve as resolve;
 use rustc_session::Session;
 
 use std::cell::RefCell;

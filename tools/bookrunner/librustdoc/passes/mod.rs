@@ -5,13 +5,9 @@
 //! Contains information about "passes", used to modify crate information during the documentation
 //! process.
 
-use rustc_middle::ty::TyCtxt;
-use rustc_span::{InnerSpan, Span, DUMMY_SP};
-use std::ops::Range;
+use rustc_span::{Span, DUMMY_SP};
 
-use crate::clean::{self, DocFragmentKind};
-
-mod unindent_comments;
+use crate::clean::{self};
 
 mod check_doc_test_visibility;
 
