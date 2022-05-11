@@ -11,27 +11,11 @@ use std::ops::Range;
 
 use crate::clean::{self, DocFragmentKind};
 
-mod stripper;
-
-mod bare_urls;
-
-mod strip_hidden;
-
 mod unindent_comments;
-
-mod propagate_doc_cfg;
 
 crate mod collect_intra_doc_links;
 
 mod check_doc_test_visibility;
-
-mod collect_trait_impls;
-
-mod check_code_block_syntax;
-
-mod calculate_doc_coverage;
-
-mod html_tags;
 
 /// Returns a span encompassing all the given attributes.
 crate fn span_of_attrs(attrs: &clean::Attributes) -> Option<Span> {

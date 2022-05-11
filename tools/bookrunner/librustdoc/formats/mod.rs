@@ -4,7 +4,6 @@
 // See GitHub history for details.
 crate mod cache;
 crate mod item_type;
-crate mod renderer;
 
 use rustc_hir::def_id::DefId;
 
