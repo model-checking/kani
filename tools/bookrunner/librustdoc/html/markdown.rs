@@ -30,15 +30,6 @@ use pulldown_cmark::{
 
 const MAX_HEADER_LEVEL: u32 = 6;
 
-/// Options for rendering Markdown in the main body of documentation.
-pub(crate) fn main_body_opts() -> Options {
-    Options::ENABLE_TABLES
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_SMART_PUNCTUATION
-}
-
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum HeadingOffset {
     H1 = 0,
@@ -247,16 +238,7 @@ struct HeadingLinks<'a, 'b, 'ids, I> {
     heading_offset: HeadingOffset,
 }
 
-impl<'a, 'b, 'ids, I> HeadingLinks<'a, 'b, 'ids, I> {
-    fn new(
-        iter: I,
-        toc: Option<&'b mut TocBuilder>,
-        ids: &'ids mut IdMap,
-        heading_offset: HeadingOffset,
-    ) -> Self {
-        HeadingLinks { inner: iter, toc, buf: VecDeque::new(), id_map: ids, heading_offset }
-    }
-}
+impl<'a, 'b, 'ids, I> HeadingLinks<'a, 'b, 'ids, I> {}
 
 impl<'a, 'b, 'ids, I: Iterator<Item = SpannedEvent<'a>>> Iterator
     for HeadingLinks<'a, 'b, 'ids, I>
@@ -377,10 +359,6 @@ struct Footnotes<'a, I> {
 }
 
 impl<'a, I> Footnotes<'a, I> {
-    fn new(iter: I) -> Self {
-        Footnotes { inner: iter, footnotes: FxHashMap::default() }
-    }
-
     fn get_entry(&mut self, key: &str) -> &mut (Vec<Event<'a>>, u16) {
         let new_id = self.footnotes.len() + 1;
         let key = key.to_owned();
@@ -753,72 +731,6 @@ crate struct MarkdownLink {
     pub(crate) range: Range<usize>,
 }
 
-crate fn markdown_links(md: &str) -> Vec<MarkdownLink> {
-    if md.is_empty() {
-        return vec![];
-    }
-
-    let links = RefCell::new(vec![]);
-
-    // FIXME: remove this function once pulldown_cmark can provide spans for link definitions.
-    let locate = |s: &str, fallback: Range<usize>| unsafe {
-        let s_start = s.as_ptr();
-        let s_end = s_start.add(s.len());
-        let md_start = md.as_ptr();
-        let md_end = md_start.add(md.len());
-        if md_start <= s_start && s_end <= md_end {
-            let start = s_start.offset_from(md_start) as usize;
-            let end = s_end.offset_from(md_start) as usize;
-            start..end
-        } else {
-            fallback
-        }
-    };
-
-    let span_for_link = |link: &CowStr<'_>, span: Range<usize>| {
-        // For diagnostics, we want to underline the link's definition but `span` will point at
-        // where the link is used. This is a problem for reference-style links, where the definition
-        // is separate from the usage.
-        match link {
-            // `Borrowed` variant means the string (the link's destination) may come directly from
-            // the markdown text and we can locate the original link destination.
-            // NOTE: LinkReplacer also provides `Borrowed` but possibly from other sources,
-            // so `locate()` can fall back to use `span`.
-            CowStr::Borrowed(s) => locate(s, span),
-
-            // For anything else, we can only use the provided range.
-            CowStr::Boxed(_) | CowStr::Inlined(_) => span,
-        }
-    };
-
-    let mut push = |link: BrokenLink<'_>| {
-        let span = span_for_link(&link.reference, link.span);
-        links.borrow_mut().push(MarkdownLink {
-            kind: LinkType::ShortcutUnknown,
-            link: link.reference.to_string(),
-            range: span,
-        });
-        None
-    };
-    let p = Parser::new_with_broken_link_callback(md, main_body_opts(), Some(&mut push))
-        .into_offset_iter();
-
-    // There's no need to thread an IdMap through to here because
-    // the IDs generated aren't going to be emitted anywhere.
-    let mut ids = IdMap::new();
-    let iter = Footnotes::new(HeadingLinks::new(p, None, &mut ids, HeadingOffset::H1));
-
-    for ev in iter {
-        if let Event::Start(Tag::Link(kind, dest, _)) = ev.0 {
-            debug!("found link: {}", dest);
-            let span = span_for_link(&dest, ev.1);
-            links.borrow_mut().push(MarkdownLink { kind, link: dest.into_string(), range: span });
-        }
-    }
-
-    links.into_inner()
-}
-
 #[derive(Debug)]
 crate struct RustCodeBlock {
     /// The range in the markdown that the code block occupies. Note that this includes the fences
@@ -835,58 +747,7 @@ pub(crate) struct IdMap {
     map: FxHashMap<String, usize>,
 }
 
-fn init_id_map() -> FxHashMap<String, usize> {
-    let mut map = FxHashMap::default();
-    // This is the list of IDs used in Javascript.
-    map.insert("help".to_owned(), 1);
-    // This is the list of IDs used in HTML generated in Rust (including the ones
-    // used in tera template files).
-    map.insert("mainThemeStyle".to_owned(), 1);
-    map.insert("themeStyle".to_owned(), 1);
-    map.insert("theme-picker".to_owned(), 1);
-    map.insert("theme-choices".to_owned(), 1);
-    map.insert("settings-menu".to_owned(), 1);
-    map.insert("help-button".to_owned(), 1);
-    map.insert("main-content".to_owned(), 1);
-    map.insert("search".to_owned(), 1);
-    map.insert("crate-search".to_owned(), 1);
-    map.insert("render-detail".to_owned(), 1);
-    map.insert("toggle-all-docs".to_owned(), 1);
-    map.insert("all-types".to_owned(), 1);
-    map.insert("default-settings".to_owned(), 1);
-    map.insert("rustdoc-vars".to_owned(), 1);
-    map.insert("sidebar-vars".to_owned(), 1);
-    map.insert("copy-path".to_owned(), 1);
-    map.insert("TOC".to_owned(), 1);
-    // This is the list of IDs used by rustdoc sections (but still generated by
-    // rustdoc).
-    map.insert("fields".to_owned(), 1);
-    map.insert("variants".to_owned(), 1);
-    map.insert("implementors-list".to_owned(), 1);
-    map.insert("synthetic-implementors-list".to_owned(), 1);
-    map.insert("foreign-impls".to_owned(), 1);
-    map.insert("implementations".to_owned(), 1);
-    map.insert("trait-implementations".to_owned(), 1);
-    map.insert("synthetic-implementations".to_owned(), 1);
-    map.insert("blanket-implementations".to_owned(), 1);
-    map.insert("associated-types".to_owned(), 1);
-    map.insert("associated-const".to_owned(), 1);
-    map.insert("required-methods".to_owned(), 1);
-    map.insert("provided-methods".to_owned(), 1);
-    map.insert("implementors".to_owned(), 1);
-    map.insert("synthetic-implementors".to_owned(), 1);
-    map.insert("trait-implementations-list".to_owned(), 1);
-    map.insert("synthetic-implementations-list".to_owned(), 1);
-    map.insert("blanket-implementations-list".to_owned(), 1);
-    map.insert("deref-methods".to_owned(), 1);
-    map
-}
-
 impl IdMap {
-    pub(crate) fn new() -> Self {
-        IdMap { map: init_id_map() }
-    }
-
     crate fn derive<S: AsRef<str> + ToString>(&mut self, candidate: S) -> String {
         let id = match self.map.get_mut(candidate.as_ref()) {
             None => candidate.to_string(),

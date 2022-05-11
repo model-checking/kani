@@ -278,25 +278,6 @@ where
     r
 }
 
-/// Find the nearest parent module of a [`DefId`].
-crate fn find_nearest_parent_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<DefId> {
-    if def_id.is_top_level_module() {
-        // The crate root has no parent. Use it as the root instead.
-        Some(def_id)
-    } else {
-        let mut current = def_id;
-        // The immediate parent might not always be a module.
-        // Find the first parent which is.
-        while let Some(parent) = tcx.parent(current) {
-            if tcx.def_kind(parent) == DefKind::Mod {
-                return Some(parent);
-            }
-            current = parent;
-        }
-        None
-    }
-}
-
 /// Checks for the existence of `hidden` in the attribute below if `flag` is `sym::hidden`:
 ///
 /// ```
@@ -312,12 +293,6 @@ crate fn has_doc_flag(attrs: ty::Attributes<'_>, flag: Symbol) -> bool {
             && attr.meta_item_list().map_or(false, |l| rustc_attr::list_contains_name(&l, flag))
     })
 }
-
-/// A link to `doc.rust-lang.org` that includes the channel name. Use this instead of manual links
-/// so that the channel is consistent.
-///
-/// Set by `bootstrap::Builder::doc_rust_lang_org_channel` in order to keep tests passing on beta/stable.
-crate const DOC_RUST_LANG_ORG_CHANNEL: &str = env!("DOC_RUST_LANG_ORG_CHANNEL");
 
 pub(super) fn display_macro_source(
     _cx: &mut DocContext<'_>,

@@ -78,13 +78,6 @@ impl<'tcx> DocContext<'tcx> {
         ret
     }
 
-    crate fn enter_resolver<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut resolve::Resolver<'_>) -> R,
-    {
-        self.resolver.borrow_mut().access(f)
-    }
-
     /// Call the closure with the given parameters set as
     /// the substitutions for a type alias' RHS.
     crate fn enter_alias<F, R>(&mut self, substs: FxHashMap<DefId, clean::SubstParam>, f: F) -> R

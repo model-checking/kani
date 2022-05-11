@@ -67,8 +67,6 @@ extern crate rustc_trait_selection;
 extern crate rustc_typeck;
 extern crate test;
 
-use crate::clean::utils::DOC_RUST_LANG_ORG_CHANNEL;
-
 /// A macro to create a FxHashMap.
 ///
 /// Example:

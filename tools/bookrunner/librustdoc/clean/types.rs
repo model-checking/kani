@@ -38,7 +38,6 @@ use crate::clean::Clean;
 use crate::core::DocContext;
 use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
-use crate::passes::collect_intra_doc_links::UrlFragment;
 
 crate use self::FnRetTy::*;
 crate use self::ItemKind::*;
@@ -47,8 +46,6 @@ crate use self::Type::{
     RawPointer, Slice, Tuple,
 };
 crate use self::Visibility::{Inherited, Public};
-
-crate type ItemIdSet = FxHashSet<ItemId>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 crate enum ItemId {
@@ -137,84 +134,7 @@ crate struct ExternalCrate {
     crate crate_num: CrateNum,
 }
 
-impl ExternalCrate {
-    #[inline]
-    crate fn def_id(&self) -> DefId {
-        DefId { krate: self.crate_num, index: CRATE_DEF_INDEX }
-    }
-
-    crate fn name(&self, tcx: TyCtxt<'_>) -> Symbol {
-        tcx.crate_name(self.crate_num)
-    }
-
-    crate fn primitives(&self, tcx: TyCtxt<'_>) -> ThinVec<(DefId, PrimitiveType)> {
-        let root = self.def_id();
-
-        // Collect all inner modules which are tagged as implementations of
-        // primitives.
-        //
-        // Note that this loop only searches the top-level items of the crate,
-        // and this is intentional. If we were to search the entire crate for an
-        // item tagged with `#[doc(primitive)]` then we would also have to
-        // search the entirety of external modules for items tagged
-        // `#[doc(primitive)]`, which is a pretty inefficient process (decoding
-        // all that metadata unconditionally).
-        //
-        // In order to keep the metadata load under control, the
-        // `#[doc(primitive)]` feature is explicitly designed to only allow the
-        // primitive tags to show up as the top level items in a crate.
-        //
-        // Also note that this does not attempt to deal with modules tagged
-        // duplicately for the same primitive. This is handled later on when
-        // rendering by delegating everything to a hash map.
-        let as_primitive = |res: Res<!>| {
-            if let Res::Def(DefKind::Mod, def_id) = res {
-                let attrs = tcx.get_attrs(def_id);
-                let mut prim = None;
-                for attr in attrs.lists(sym::doc) {
-                    if let Some(v) = attr.value_str() {
-                        if attr.has_name(sym::primitive) {
-                            prim = PrimitiveType::from_symbol(v);
-                            if prim.is_some() {
-                                break;
-                            }
-                            // FIXME: should warn on unknown primitives?
-                        }
-                    }
-                }
-                return prim.map(|p| (def_id, p));
-            }
-            None
-        };
-
-        if root.is_local() {
-            tcx.hir()
-                .root_module()
-                .item_ids
-                .iter()
-                .filter_map(|&id| {
-                    let item = tcx.hir().item(id);
-                    match item.kind {
-                        hir::ItemKind::Mod(_) => {
-                            as_primitive(Res::Def(DefKind::Mod, id.def_id.to_def_id()))
-                        }
-                        hir::ItemKind::Use(path, hir::UseKind::Single)
-                            if tcx.visibility(id.def_id).is_public() =>
-                        {
-                            as_primitive(path.res.expect_non_local()).map(|(_, prim)| {
-                                // Pretend the primitive is local.
-                                (id.def_id.to_def_id(), prim)
-                            })
-                        }
-                        _ => None,
-                    }
-                })
-                .collect()
-        } else {
-            tcx.module_children(root).iter().map(|item| item.res).filter_map(as_primitive).collect()
-        }
-    }
-}
+impl ExternalCrate {}
 
 /// Anything with a source location and set of attributes and, optionally, a
 /// name. That is, anything that can be documented. This doesn't correspond
@@ -249,10 +169,6 @@ crate fn rustc_span(def_id: DefId, tcx: TyCtxt<'_>) -> Span {
 }
 
 impl Item {
-    crate fn inner_docs(&self, tcx: TyCtxt<'_>) -> bool {
-        self.def_id.as_def_id().map(|did| tcx.get_attrs(did).inner_docs()).unwrap_or(false)
-    }
-
     crate fn span(&self, tcx: TyCtxt<'_>) -> Span {
         let kind = match &*self.kind {
             ItemKind::StrippedItem(k) => k,
@@ -327,9 +243,6 @@ impl Item {
         }
     }
 
-    crate fn is_mod(&self) -> bool {
-        self.type_() == ItemType::Module
-    }
     crate fn is_stripped(&self) -> bool {
         match *self.kind {
             StrippedItem(..) => true,
@@ -655,8 +568,6 @@ crate struct ItemLink {
     /// in an intra-doc link (e.g. \[`fn@f`\])
     pub(crate) link_text: String,
     pub(crate) did: DefId,
-    /// The url fragment to append to the link
-    pub(crate) fragment: Option<UrlFragment>,
 }
 
 pub(crate) struct RenderedLink {
@@ -732,27 +643,6 @@ impl Attributes {
 
         Attributes { doc_strings, other_attrs }
     }
-
-    /// Return the doc-comments on this item, grouped by the module they came from.
-    ///
-    /// The module can be different if this is a re-export with added documentation.
-    crate fn collapsed_doc_value_by_module_level(&self) -> FxHashMap<Option<DefId>, String> {
-        let mut ret = FxHashMap::default();
-        if self.doc_strings.len() == 0 {
-            return ret;
-        }
-        let last_index = self.doc_strings.len() - 1;
-
-        for (i, new_frag) in self.doc_strings.iter().enumerate() {
-            let out = ret.entry(new_frag.parent_module).or_default();
-            add_doc_fragment(out, new_frag);
-            if i == last_index {
-                out.pop();
-            }
-        }
-        ret
-    }
-
     /// Finds all `doc` attributes as NameValues and returns their corresponding values, joined
     /// with newlines.
     crate fn collapsed_doc_value(&self) -> Option<String> {
@@ -1071,60 +961,6 @@ crate enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    crate fn from_hir(prim: hir::PrimTy) -> PrimitiveType {
-        use ast::{FloatTy, IntTy, UintTy};
-        match prim {
-            hir::PrimTy::Int(IntTy::Isize) => PrimitiveType::Isize,
-            hir::PrimTy::Int(IntTy::I8) => PrimitiveType::I8,
-            hir::PrimTy::Int(IntTy::I16) => PrimitiveType::I16,
-            hir::PrimTy::Int(IntTy::I32) => PrimitiveType::I32,
-            hir::PrimTy::Int(IntTy::I64) => PrimitiveType::I64,
-            hir::PrimTy::Int(IntTy::I128) => PrimitiveType::I128,
-            hir::PrimTy::Uint(UintTy::Usize) => PrimitiveType::Usize,
-            hir::PrimTy::Uint(UintTy::U8) => PrimitiveType::U8,
-            hir::PrimTy::Uint(UintTy::U16) => PrimitiveType::U16,
-            hir::PrimTy::Uint(UintTy::U32) => PrimitiveType::U32,
-            hir::PrimTy::Uint(UintTy::U64) => PrimitiveType::U64,
-            hir::PrimTy::Uint(UintTy::U128) => PrimitiveType::U128,
-            hir::PrimTy::Float(FloatTy::F32) => PrimitiveType::F32,
-            hir::PrimTy::Float(FloatTy::F64) => PrimitiveType::F64,
-            hir::PrimTy::Str => PrimitiveType::Str,
-            hir::PrimTy::Bool => PrimitiveType::Bool,
-            hir::PrimTy::Char => PrimitiveType::Char,
-        }
-    }
-
-    crate fn from_symbol(s: Symbol) -> Option<PrimitiveType> {
-        match s {
-            sym::isize => Some(PrimitiveType::Isize),
-            sym::i8 => Some(PrimitiveType::I8),
-            sym::i16 => Some(PrimitiveType::I16),
-            sym::i32 => Some(PrimitiveType::I32),
-            sym::i64 => Some(PrimitiveType::I64),
-            sym::i128 => Some(PrimitiveType::I128),
-            sym::usize => Some(PrimitiveType::Usize),
-            sym::u8 => Some(PrimitiveType::U8),
-            sym::u16 => Some(PrimitiveType::U16),
-            sym::u32 => Some(PrimitiveType::U32),
-            sym::u64 => Some(PrimitiveType::U64),
-            sym::u128 => Some(PrimitiveType::U128),
-            sym::bool => Some(PrimitiveType::Bool),
-            sym::char => Some(PrimitiveType::Char),
-            sym::str => Some(PrimitiveType::Str),
-            sym::f32 => Some(PrimitiveType::F32),
-            sym::f64 => Some(PrimitiveType::F64),
-            sym::array => Some(PrimitiveType::Array),
-            sym::slice => Some(PrimitiveType::Slice),
-            sym::tuple => Some(PrimitiveType::Tuple),
-            sym::unit => Some(PrimitiveType::Unit),
-            sym::pointer => Some(PrimitiveType::RawPointer),
-            sym::reference => Some(PrimitiveType::Reference),
-            kw::Fn => Some(PrimitiveType::Fn),
-            sym::never => Some(PrimitiveType::Never),
-            _ => None,
-        }
-    }
-
     crate fn impls(&self, tcx: TyCtxt<'_>) -> &'static ArrayVec<DefId, 4> {
         Self::all_impls(tcx).get(self).expect("missing impl for primitive type")
     }
@@ -1216,39 +1052,6 @@ impl PrimitiveType {
             Fn => kw::Fn,
             Never => sym::never,
         }
-    }
-
-    /// Returns the DefId of the module with `doc(primitive)` for this primitive type.
-    /// Panics if there is no such module.
-    ///
-    /// This gives precedence to primitives defined in the current crate, and deprioritizes primitives defined in `core`,
-    /// but otherwise, if multiple crates define the same primitive, there is no guarantee of which will be picked.
-    /// In particular, if a crate depends on both `std` and another crate that also defines `doc(primitive)`, then
-    /// it's entirely random whether `std` or the other crate is picked. (no_std crates are usually fine unless multiple dependencies define a primitive.)
-    crate fn primitive_locations(tcx: TyCtxt<'_>) -> &FxHashMap<PrimitiveType, DefId> {
-        static PRIMITIVE_LOCATIONS: OnceCell<FxHashMap<PrimitiveType, DefId>> = OnceCell::new();
-        PRIMITIVE_LOCATIONS.get_or_init(|| {
-            let mut primitive_locations = FxHashMap::default();
-            // NOTE: technically this misses crates that are only passed with `--extern` and not loaded when checking the crate.
-            // This is a degenerate case that I don't plan to support.
-            for &crate_num in tcx.crates(()) {
-                let e = ExternalCrate { crate_num };
-                let crate_name = e.name(tcx);
-                debug!(?crate_num, ?crate_name);
-                for &(def_id, prim) in &e.primitives(tcx) {
-                    // HACK: try to link to std instead where possible
-                    if crate_name == sym::core && primitive_locations.contains_key(&prim) {
-                        continue;
-                    }
-                    primitive_locations.insert(prim, def_id);
-                }
-            }
-            let local_primitives = ExternalCrate { crate_num: LOCAL_CRATE }.primitives(tcx);
-            for (def_id, prim) in local_primitives {
-                primitive_locations.insert(prim, def_id);
-            }
-            primitive_locations
-        })
     }
 }
 
