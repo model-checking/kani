@@ -4,8 +4,6 @@
 // See GitHub history for details.
 //! This module contains the "cleaned" pieces of the AST, and the functions
 //! that clean them.
-mod auto_trait;
-mod blanket_impl;
 crate mod cfg;
 crate mod inline;
 mod simplify;
@@ -19,9 +17,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, DefKind, Res};
 use rustc_hir::def_id::{DefId, CRATE_DEF_INDEX, LOCAL_CRATE};
-use rustc_infer::infer::region_constraints::{Constraint, RegionConstraintData};
 use rustc_middle::middle::resolve_lifetime as rl;
-use rustc_middle::ty::fold::TypeFolder;
 use rustc_middle::ty::subst::{InternalSubsts, Subst};
 use rustc_middle::ty::{self, AdtKind, DefIdTree, Lift, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug};
@@ -33,13 +29,11 @@ use rustc_typeck::check::intrinsic::intrinsic_operation_unsafety;
 use rustc_typeck::hir_ty_to_ty;
 
 use std::assert_matches::assert_matches;
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::default::Default;
-use std::hash::Hash;
 use std::{mem, vec};
 
-use crate::core::{self, DocContext, ImplTraitParam};
+use crate::core::{DocContext, ImplTraitParam};
 use crate::formats::item_type::ItemType;
 use crate::visit_ast::Module as DocModule;
 

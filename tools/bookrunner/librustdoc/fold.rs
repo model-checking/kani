@@ -4,13 +4,6 @@
 // See GitHub history for details.
 use crate::clean::*;
 
-crate fn strip_item(mut item: Item) -> Item {
-    if !matches!(*item.kind, StrippedItem(..)) {
-        item.kind = box StrippedItem(item.kind);
-    }
-    item
-}
-
 crate trait DocFolder: Sized {
     fn fold_item(&mut self, item: Item) -> Option<Item> {
         Some(self.fold_item_recur(item))

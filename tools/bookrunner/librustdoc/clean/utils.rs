@@ -2,8 +2,6 @@
 //
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
-use crate::clean::auto_trait::AutoTraitFinder;
-use crate::clean::blanket_impl::BlanketImplFinder;
 use crate::clean::{
     inline, Clean, Generic, GenericArg, GenericArgs, ImportSource, Item, ItemKind, Lifetime, Path,
     PathSegment, Primitive, PrimitiveType, Type, TypeBinding, Visibility,
@@ -12,7 +10,6 @@ use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
 
 use rustc_ast as ast;
-use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
@@ -84,15 +81,6 @@ pub(super) fn external_path(
             args: external_generic_args(cx, did, has_self, bindings, substs),
         }],
     }
-}
-
-/// Remove the generic arguments from a path.
-crate fn strip_path_generics(mut path: Path) -> Path {
-    for ps in path.segments.iter_mut() {
-        ps.args = GenericArgs::AngleBracketed { args: vec![], bindings: ThinVec::new() }
-    }
-
-    path
 }
 
 crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
@@ -226,23 +214,6 @@ crate fn resolve_type(cx: &mut DocContext<'_>, path: Path) -> Type {
             Type::Path { path }
         }
     }
-}
-
-crate fn get_auto_trait_and_blanket_impls(
-    cx: &mut DocContext<'_>,
-    item_def_id: DefId,
-) -> impl Iterator<Item = Item> {
-    let auto_impls = cx
-        .sess()
-        .prof
-        .generic_activity("get_auto_trait_impls")
-        .run(|| AutoTraitFinder::new(cx).get_auto_trait_impls(item_def_id));
-    let blanket_impls = cx
-        .sess()
-        .prof
-        .generic_activity("get_blanket_impls")
-        .run(|| BlanketImplFinder { cx }.get_blanket_impls(item_def_id));
-    auto_impls.into_iter().chain(blanket_impls)
 }
 
 /// If `res` has a documentation page associated, store it in the cache.

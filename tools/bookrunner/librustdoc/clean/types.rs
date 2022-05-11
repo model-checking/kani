@@ -24,11 +24,10 @@ use rustc_hir::lang_items::LangItem;
 use rustc_hir::{BodyId, Mutability};
 use rustc_index::vec::IndexVec;
 use rustc_middle::ty::{self, TyCtxt};
-use rustc_session::Session;
 use rustc_span::hygiene::MacroKind;
 use rustc_span::source_map::DUMMY_SP;
 use rustc_span::symbol::{kw, sym, Ident, Symbol};
-use rustc_span::{self, FileName, Loc};
+use rustc_span::{self};
 use rustc_target::abi::VariantIdx;
 use rustc_target::spec::abi::Abi;
 
@@ -330,15 +329,6 @@ impl Item {
 
     crate fn is_mod(&self) -> bool {
         self.type_() == ItemType::Module
-    }
-    crate fn is_struct(&self) -> bool {
-        self.type_() == ItemType::Struct
-    }
-    crate fn is_enum(&self) -> bool {
-        self.type_() == ItemType::Enum
-    }
-    crate fn is_union(&self) -> bool {
-        self.type_() == ItemType::Union
     }
     crate fn is_stripped(&self) -> bool {
         match *self.kind {
@@ -689,10 +679,6 @@ crate struct Attributes {
 }
 
 impl Attributes {
-    crate fn lists(&self, name: Symbol) -> ListAttributesIter<'_> {
-        self.other_attrs.lists(name)
-    }
-
     crate fn has_doc_flag(&self, flag: Symbol) -> bool {
         for attr in &self.other_attrs {
             if !attr.has_name(sym::doc) {
@@ -817,21 +803,6 @@ impl GenericBound {
             }
         }
         false
-    }
-
-    crate fn get_poly_trait(&self) -> Option<PolyTrait> {
-        if let GenericBound::TraitBound(ref p, _) = *self {
-            return Some(p.clone());
-        }
-        None
-    }
-
-    crate fn get_trait_path(&self) -> Option<Path> {
-        if let GenericBound::TraitBound(PolyTrait { ref trait_, .. }, _) = *self {
-            Some(trait_.clone())
-        } else {
-            None
-        }
     }
 }
 
@@ -1015,14 +986,6 @@ impl Type {
         }
     }
 
-    /// Checks if this is a `T::Name` path for an associated type.
-    crate fn is_assoc_ty(&self) -> bool {
-        match self {
-            Type::Path { path, .. } => path.is_assoc_ty(),
-            _ => false,
-        }
-    }
-
     crate fn generics(&self) -> Option<Vec<&Type>> {
         match self {
             Type::Path { path, .. } => path.generics(),
@@ -1069,17 +1032,6 @@ impl Type {
     /// [clean]: crate::clean
     crate fn def_id(&self, cache: &Cache) -> Option<DefId> {
         self.inner_def_id(Some(cache))
-    }
-
-    /// Use this method to get the [`DefId`] of a [`clean`] AST node.
-    /// This will return [`None`] when called on a primitive [`clean::Type`].
-    /// Use [`Self::def_id`] if you want to include primitives.
-    ///
-    /// [`clean`]: crate::clean
-    /// [`clean::Type`]: crate::clean::Type
-    // FIXME: get rid of this function and always use `def_id`
-    crate fn def_id_no_primitives(&self) -> Option<DefId> {
-        self.inner_def_id(None)
     }
 }
 
@@ -1395,12 +1347,6 @@ crate enum Visibility {
     Restricted(DefId),
 }
 
-impl Visibility {
-    crate fn is_public(&self) -> bool {
-        matches!(self, Visibility::Public)
-    }
-}
-
 #[derive(Clone, Debug)]
 crate struct Struct {
     crate struct_type: CtorKind,
@@ -1461,19 +1407,6 @@ impl Span {
     crate fn dummy() -> Self {
         Self(rustc_span::DUMMY_SP)
     }
-
-    crate fn filename(&self, sess: &Session) -> FileName {
-        sess.source_map().span_to_filename(self.0)
-    }
-
-    crate fn lo(&self, sess: &Session) -> Loc {
-        sess.source_map().lookup_char_pos(self.0.lo())
-    }
-
-    crate fn cnum(&self, sess: &Session) -> CrateNum {
-        // FIXME: is there a time when the lo and hi crate would be different?
-        self.lo(sess).file.cnum
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -1485,16 +1418,6 @@ crate struct Path {
 impl Path {
     crate fn def_id(&self) -> DefId {
         self.res.def_id()
-    }
-
-    /// Checks if this is a `T::Name` path for an associated type.
-    crate fn is_assoc_ty(&self) -> bool {
-        match self.res {
-            Res::SelfTy { .. } if self.segments.len() != 1 => true,
-            Res::Def(DefKind::TyParam, _) if self.segments.len() != 1 => true,
-            Res::Def(DefKind::AssocTy, _) => true,
-            _ => false,
-        }
     }
 
     crate fn generics(&self) -> Option<Vec<&Type>> {

@@ -108,12 +108,6 @@ impl<'tcx> DocContext<'tcx> {
             _ => None,
         }
     }
-
-    crate fn with_all_traits(&mut self, f: impl FnOnce(&mut Self, &[DefId])) {
-        let all_traits = self.resolver_caches.all_traits.take();
-        f(self, all_traits.as_ref().expect("`all_traits` are already borrowed"));
-        self.resolver_caches.all_traits = all_traits;
-    }
 }
 
 /// Due to <https://github.com/rust-lang/rust/pull/73566>,

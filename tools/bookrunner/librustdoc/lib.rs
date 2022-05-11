@@ -90,9 +90,7 @@ macro_rules! map {
 mod clean;
 mod config;
 mod core;
-mod docfs;
 pub mod doctest;
-mod error;
 mod externalfiles;
 mod fold;
 mod formats;

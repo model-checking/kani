@@ -532,10 +532,6 @@ impl<'tcx> ExtraInfo<'tcx> {
         ExtraInfo { id: ExtraInfoId::Hir(hir_id), sp, tcx }
     }
 
-    crate fn new_did(tcx: TyCtxt<'tcx>, did: DefId, sp: Span) -> ExtraInfo<'tcx> {
-        ExtraInfo { id: ExtraInfoId::Def(did), sp, tcx }
-    }
-
     fn error_invalid_codeblock_attr(&self, msg: &str, help: &str) {
         let hir_id = match self.id {
             ExtraInfoId::Hir(hir_id) => hir_id,
@@ -832,87 +828,6 @@ crate struct RustCodeBlock {
     crate code: Range<usize>,
     crate is_fenced: bool,
     crate lang_string: LangString,
-}
-
-/// Returns a range of bytes for each code block in the markdown that is tagged as `rust` or
-/// untagged (and assumed to be rust).
-crate fn rust_code_blocks(md: &str, extra_info: &ExtraInfo<'_>) -> Vec<RustCodeBlock> {
-    let mut code_blocks = vec![];
-
-    if md.is_empty() {
-        return code_blocks;
-    }
-
-    let mut p = Parser::new_ext(md, main_body_opts()).into_offset_iter();
-
-    while let Some((event, offset)) = p.next() {
-        if let Event::Start(Tag::CodeBlock(syntax)) = event {
-            let (lang_string, code_start, code_end, range, is_fenced) = match syntax {
-                CodeBlockKind::Fenced(syntax) => {
-                    let syntax = syntax.as_ref();
-                    let lang_string = if syntax.is_empty() {
-                        Default::default()
-                    } else {
-                        LangString::parse(&*syntax, ErrorCodes::Yes, false, Some(extra_info))
-                    };
-                    if !lang_string.rust {
-                        continue;
-                    }
-                    let (code_start, mut code_end) = match p.next() {
-                        Some((Event::Text(_), offset)) => (offset.start, offset.end),
-                        Some((_, sub_offset)) => {
-                            let code = Range { start: sub_offset.start, end: sub_offset.start };
-                            code_blocks.push(RustCodeBlock {
-                                is_fenced: true,
-                                range: offset,
-                                code,
-                                lang_string,
-                            });
-                            continue;
-                        }
-                        None => {
-                            let code = Range { start: offset.end, end: offset.end };
-                            code_blocks.push(RustCodeBlock {
-                                is_fenced: true,
-                                range: offset,
-                                code,
-                                lang_string,
-                            });
-                            continue;
-                        }
-                    };
-                    while let Some((Event::Text(_), offset)) = p.next() {
-                        code_end = offset.end;
-                    }
-                    (lang_string, code_start, code_end, offset, true)
-                }
-                CodeBlockKind::Indented => {
-                    // The ending of the offset goes too far sometime so we reduce it by one in
-                    // these cases.
-                    if offset.end > offset.start && md.get(offset.end..=offset.end) == Some("\n") {
-                        (
-                            LangString::default(),
-                            offset.start,
-                            offset.end,
-                            Range { start: offset.start, end: offset.end - 1 },
-                            false,
-                        )
-                    } else {
-                        (LangString::default(), offset.start, offset.end, offset, false)
-                    }
-                }
-            };
-
-            code_blocks.push(RustCodeBlock {
-                is_fenced,
-                range,
-                code: Range { start: code_start, end: code_end },
-                lang_string,
-            });
-        }
-    }
-
-    code_blocks
 }
 
 #[derive(Clone, Default, Debug)]
