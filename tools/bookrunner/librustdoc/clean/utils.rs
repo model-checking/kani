@@ -21,9 +21,6 @@ use rustc_middle::ty::{self, DefIdTree, TyCtxt};
 use rustc_span::symbol::{kw, sym, Symbol};
 use std::mem;
 
-#[cfg(test)]
-mod tests;
-
 fn external_generic_args(
     cx: &mut DocContext<'_>,
     did: DefId,

@@ -7,7 +7,6 @@ use std::mem;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::{CrateNum, DefId, CRATE_DEF_INDEX};
 use rustc_middle::middle::privacy::AccessLevels;
-use rustc_middle::ty::TyCtxt;
 use rustc_span::{sym, Symbol};
 
 use crate::clean::{self, ItemId};
@@ -76,13 +75,6 @@ crate struct Cache {
     // the access levels from the privacy check pass.
     crate access_levels: AccessLevels<DefId>,
 
-    /// The version of the crate being documented, if given from the `--crate-version` flag.
-    crate crate_version: Option<String>,
-
-    /// Whether to document private items.
-    /// This is stored in `Cache` so it doesn't need to be passed through all rustdoc functions.
-    crate document_private: bool,
-
     /// Crates marked with [`#[doc(masked)]`][doc_masked].
     ///
     /// [doc_masked]: https://doc.rust-lang.org/nightly/unstable-book/language-features/doc-masked.html
@@ -119,14 +111,13 @@ crate struct Cache {
 }
 
 /// This struct is used to wrap the `cache` and `tcx` in order to run `DocFolder`.
-struct CacheBuilder<'a, 'tcx> {
+struct CacheBuilder<'a> {
     cache: &'a mut Cache,
-    tcx: TyCtxt<'tcx>,
 }
 
 impl Cache {}
 
-impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
+impl<'a> DocFolder for CacheBuilder<'a> {
     fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {
         if item.def_id.is_local() {
             debug!("folding {} \"{:?}\", id {:?}", item.type_(), item.name, item.def_id);
@@ -181,7 +172,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
         }
 
         // Index this method for searching later on.
-        if let Some(ref s) = item.name {
+        if let Some(..) = item.name {
             let (parent, is_inherent_impl_item) = match *item.kind {
                 clean::StrippedItem(..) => ((None, None), false),
                 clean::AssocConstItem(..) | clean::TypedefItem(_, true)
@@ -228,7 +219,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
             };
 
             match parent {
-                (parent, Some(path)) if is_inherent_impl_item || !self.cache.stripped_mod => {
+                (.., Some(..)) if is_inherent_impl_item || !self.cache.stripped_mod => {
                     debug_assert!(!item.is_stripped());
 
                     // A crate has a module at its root, containing all items,

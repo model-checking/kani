@@ -917,13 +917,6 @@ crate struct Argument {
     crate is_const: bool,
 }
 
-#[derive(Clone, PartialEq, Debug)]
-crate enum SelfTy {
-    SelfValue,
-    SelfBorrowed(Option<Lifetime>, Mutability),
-    SelfExplicit(Type),
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate enum FnRetTy {
     Return(Type),

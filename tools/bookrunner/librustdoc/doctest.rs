@@ -989,6 +989,3 @@ impl<'a, 'hir, 'tcx> intravisit::Visitor<'hir> for HirCollector<'a, 'hir, 'tcx> 
         });
     }
 }
-
-#[cfg(test)]
-mod tests;

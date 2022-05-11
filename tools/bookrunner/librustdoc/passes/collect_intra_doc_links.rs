@@ -29,7 +29,6 @@ use pulldown_cmark::LinkType;
 
 use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Write;
 use std::mem;
 use std::ops::Range;
 

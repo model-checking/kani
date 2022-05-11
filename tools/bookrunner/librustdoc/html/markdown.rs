@@ -4,30 +4,6 @@
 // See GitHub history for details.
 //! Markdown formatting for rustdoc.
 //!
-//! This module implements markdown formatting through the pulldown-cmark library.
-//!
-//! ```
-//! #![feature(rustc_private)]
-//!
-//! extern crate rustc_span;
-//!
-//! use rustc_span::edition::Edition;
-//! use rustdoc::html::markdown::{HeadingOffset, IdMap, Markdown, ErrorCodes};
-//!
-//! let s = "My *markdown* _text_";
-//! let mut id_map = IdMap::new();
-//! let md = Markdown {
-//!     content: s,
-//!     links: &[],
-//!     ids: &mut id_map,
-//!     error_codes: ErrorCodes::Yes,
-//!     edition: Edition::Edition2015,
-//!     playground: &None,
-//!     heading_offset: HeadingOffset::H2,
-//! };
-//! let html = md.into_string();
-//! // ... something using html
-//! ```
 
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def_id::DefId;
@@ -52,9 +28,6 @@ use pulldown_cmark::{
     html, BrokenLink, CodeBlockKind, CowStr, Event, LinkType, Options, Parser, Tag,
 };
 
-#[cfg(test)]
-mod tests;
-
 const MAX_HEADER_LEVEL: u32 = 6;
 
 /// Options for rendering Markdown in the main body of documentation.
@@ -69,47 +42,7 @@ pub(crate) fn main_body_opts() -> Options {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum HeadingOffset {
     H1 = 0,
-    H2,
-    H3,
-    H4,
-    H5,
 }
-
-/// When `to_string` is called, this struct will emit the HTML corresponding to
-/// the rendered version of the contained markdown string.
-pub(crate) struct Markdown<'a> {
-    pub(crate) content: &'a str,
-    /// A list of link replacements.
-    pub(crate) links: &'a [RenderedLink],
-    /// The current list of used header IDs.
-    pub(crate) ids: &'a mut IdMap,
-    /// Whether to allow the use of explicit error codes in doctest lang strings.
-    pub(crate) error_codes: ErrorCodes,
-    /// Default edition to use when parsing doctests (to add a `fn main`).
-    pub(crate) edition: Edition,
-    pub(crate) playground: &'a Option<Playground>,
-    /// Offset at which we render headings.
-    /// E.g. if `heading_offset: HeadingOffset::H2`, then `# something` renders an `<h2>`.
-    pub(crate) heading_offset: HeadingOffset,
-}
-/// A tuple struct like `Markdown` that renders the markdown with a table of contents.
-crate struct MarkdownWithToc<'a>(
-    crate &'a str,
-    crate &'a mut IdMap,
-    crate ErrorCodes,
-    crate Edition,
-    crate &'a Option<Playground>,
-);
-/// A tuple struct like `Markdown` that renders the markdown escaping HTML tags.
-crate struct MarkdownHtml<'a>(
-    crate &'a str,
-    crate &'a mut IdMap,
-    crate ErrorCodes,
-    crate Edition,
-    crate &'a Option<Playground>,
-);
-/// A tuple struct like `Markdown` that renders only the first paragraph.
-crate struct MarkdownSummaryLine<'a>(pub(crate) &'a str, pub(crate) &'a [RenderedLink]);
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum ErrorCodes {
@@ -173,30 +106,6 @@ fn slugify(c: char) -> Option<char> {
         Some('-')
     } else {
         None
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct Playground {
-    pub(crate) crate_name: Option<String>,
-    pub(crate) url: String,
-}
-
-/// Adds syntax highlighting and playground Run buttons to Rust code blocks.
-struct CodeBlocks<'p, 'a, I: Iterator<Item = Event<'a>>> {
-    inner: I,
-    check_error_codes: ErrorCodes,
-    edition: Edition,
-    // Information about the playground if a URL has been specified, containing an
-    // optional crate name and the URL.
-    playground: &'p Option<Playground>,
-}
-
-impl<'a, I: Iterator<Item = Event<'a>>> Iterator for CodeBlocks<'_, 'a, I> {
-    type Item = Event<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!("No rendering")
     }
 }
 

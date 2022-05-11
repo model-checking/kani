@@ -22,9 +22,6 @@ use rustc_span::symbol::kw;
 use crate::clean::{self, DocFragment, DocFragmentKind, Item};
 use crate::fold;
 
-#[cfg(test)]
-mod tests;
-
 struct CommentCleaner;
 
 impl fold::DocFolder for CommentCleaner {

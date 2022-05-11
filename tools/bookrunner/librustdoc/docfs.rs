@@ -15,15 +15,9 @@
 
 use std::path::Path;
 use std::string::ToString;
-use std::sync::mpsc::Sender;
 
 crate trait PathError {
     fn new<S, P: AsRef<Path>>(e: S, path: P) -> Self
     where
         S: ToString + Sized;
-}
-
-crate struct DocFS {
-    sync_only: bool,
-    errors: Option<Sender<String>>,
 }

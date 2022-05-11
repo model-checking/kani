@@ -153,6 +153,3 @@ impl TocBuilder {
         &just_inserted.sec_number
     }
 }
-
-#[cfg(test)]
-mod tests;

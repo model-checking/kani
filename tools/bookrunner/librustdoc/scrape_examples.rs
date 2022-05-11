@@ -5,10 +5,8 @@
 //! This module analyzes crates to find call sites that can serve as examples in the documentation.
 
 use rustc_data_structures::fx::FxHashMap;
-use rustc_hir::intravisit::{self, Visitor};
 use rustc_macros::{Decodable, Encodable};
-use rustc_middle::ty::TyCtxt;
-use rustc_span::{def_id::DefPathHash, edition::Edition, BytePos, FileName, SourceFile};
+use rustc_span::{def_id::DefPathHash, edition::Edition};
 
 use std::path::PathBuf;
 

@@ -10,14 +10,6 @@ use rustc_hir::def_id::DefId;
 
 use crate::clean;
 
-/// For different handling of associated items from the Deref target of a type rather than the type
-/// itself.
-#[derive(Copy, Clone, PartialEq)]
-crate enum RenderMode {
-    Normal,
-    ForDeref { mut_: bool },
-}
-
 /// Metadata about implementations for a type or trait.
 #[derive(Clone, Debug)]
 crate struct Impl {
