@@ -880,7 +880,7 @@ impl<'a, 'hir, 'tcx> HirCollector<'a, 'hir, 'tcx> {
         nested: F,
     ) {
         let ast_attrs = self.tcx.hir().attrs(hir_id);
-        let mut attrs = Attributes::from_ast(ast_attrs, None);
+        let attrs = Attributes::from_ast(ast_attrs, None);
 
         if let Some(ref cfg) = ast_attrs.cfg(self.tcx, &FxHashSet::default()) {
             if !cfg.matches(&self.sess.parse_sess, Some(self.sess.features_untracked())) {
@@ -893,7 +893,9 @@ impl<'a, 'hir, 'tcx> HirCollector<'a, 'hir, 'tcx> {
             self.collector.names.push(name);
         }
 
-        attrs.unindent_doc_comments();
+        // Bookrunner doesn't care about the spaces in the documentation
+        // attrs.unindent_doc_comments();
+
         // The collapse-docs pass won't combine sugared/raw doc attributes, or included files with
         // anything else, this will combine them for us.
         if let Some(doc) = attrs.collapsed_doc_value() {
@@ -989,6 +991,3 @@ impl<'a, 'hir, 'tcx> intravisit::Visitor<'hir> for HirCollector<'a, 'hir, 'tcx> 
         });
     }
 }
-
-#[cfg(test)]
-mod tests;

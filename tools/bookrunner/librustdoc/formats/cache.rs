@@ -7,17 +7,12 @@ use std::mem;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::{CrateNum, DefId, CRATE_DEF_INDEX};
 use rustc_middle::middle::privacy::AccessLevels;
-use rustc_middle::ty::TyCtxt;
 use rustc_span::{sym, Symbol};
 
-use crate::clean::{self, ItemId};
+use crate::clean::{self};
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
 use crate::formats::Impl;
-use crate::html::format::join_with_double_colon;
-use crate::html::markdown::short_markdown_summary;
-use crate::html::render::search_index::get_function_type_for_search;
-use crate::html::render::IndexItem;
 
 /// This cache is used to store information about the [`clean::Crate`] being
 /// rendered in order to provide more useful documentation. This contains
@@ -80,13 +75,6 @@ crate struct Cache {
     // the access levels from the privacy check pass.
     crate access_levels: AccessLevels<DefId>,
 
-    /// The version of the crate being documented, if given from the `--crate-version` flag.
-    crate crate_version: Option<String>,
-
-    /// Whether to document private items.
-    /// This is stored in `Cache` so it doesn't need to be passed through all rustdoc functions.
-    crate document_private: bool,
-
     /// Crates marked with [`#[doc(masked)]`][doc_masked].
     ///
     /// [doc_masked]: https://doc.rust-lang.org/nightly/unstable-book/language-features/doc-masked.html
@@ -97,8 +85,6 @@ crate struct Cache {
     parent_stack: Vec<DefId>,
     parent_is_trait_impl: bool,
     stripped_mod: bool,
-
-    crate search_index: Vec<IndexItem>,
 
     // In rare case where a structure is defined in one module but implemented
     // in another, if the implementing module is parsed before defining module,
@@ -116,23 +102,18 @@ crate struct Cache {
     // folding and add them to the cache later on if we find the trait.
     orphan_trait_impls: Vec<(DefId, FxHashSet<DefId>, Impl)>,
 
-    /// All intra-doc links resolved so far.
-    ///
-    /// Links are indexed by the DefId of the item they document.
-    crate intra_doc_links: FxHashMap<ItemId, Vec<clean::ItemLink>>,
     /// Cfg that have been hidden via #![doc(cfg_hide(...))]
     crate hidden_cfg: FxHashSet<clean::cfg::Cfg>,
 }
 
 /// This struct is used to wrap the `cache` and `tcx` in order to run `DocFolder`.
-struct CacheBuilder<'a, 'tcx> {
+struct CacheBuilder<'a> {
     cache: &'a mut Cache,
-    tcx: TyCtxt<'tcx>,
 }
 
 impl Cache {}
 
-impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
+impl<'a> DocFolder for CacheBuilder<'a> {
     fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {
         if item.def_id.is_local() {
             debug!("folding {} \"{:?}\", id {:?}", item.type_(), item.name, item.def_id);
@@ -187,7 +168,7 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
         }
 
         // Index this method for searching later on.
-        if let Some(ref s) = item.name {
+        if let Some(..) = item.name {
             let (parent, is_inherent_impl_item) = match *item.kind {
                 clean::StrippedItem(..) => ((None, None), false),
                 clean::AssocConstItem(..) | clean::TypedefItem(_, true)
@@ -234,26 +215,14 @@ impl<'a, 'tcx> DocFolder for CacheBuilder<'a, 'tcx> {
             };
 
             match parent {
-                (parent, Some(path)) if is_inherent_impl_item || !self.cache.stripped_mod => {
+                (.., Some(..)) if is_inherent_impl_item || !self.cache.stripped_mod => {
                     debug_assert!(!item.is_stripped());
 
                     // A crate has a module at its root, containing all items,
                     // which should not be indexed. The crate-item itself is
                     // inserted later on when serializing the search-index.
                     if item.def_id.index().map_or(false, |idx| idx != CRATE_DEF_INDEX) {
-                        let desc = item.doc_value().map_or_else(String::new, |x| {
-                            short_markdown_summary(x.as_str(), &item.link_names(self.cache))
-                        });
-                        self.cache.search_index.push(IndexItem {
-                            ty: item.type_(),
-                            name: s.to_string(),
-                            path: join_with_double_colon(path),
-                            desc,
-                            parent,
-                            parent_idx: None,
-                            search_type: get_function_type_for_search(&item, self.tcx),
-                            aliases: item.attrs.get_doc_aliases(),
-                        });
+                        unimplemented!("No rendering support");
                     }
                 }
                 (Some(parent), None) if is_inherent_impl_item => {
