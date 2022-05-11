@@ -113,14 +113,13 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     if let Some(pathstr) = use_local_bundle {
         let path = Path::new(&pathstr).canonicalize()?;
         println!("[2/6] Installing local Kani bundle: {}", path.display());
-        Command::new("tar").arg("zxf").arg(&path).current_dir(base_dir).run()?;
-
-        // when given a local bundle, it's often "-latest" but we expect "-1.0" or something. Hack it up.
-        let file = path.file_name().expect("has filename").to_string_lossy();
-        let components: Vec<_> = file.split('-').collect();
-        let expected_dir = format!("{}-{}", components[0], components[1]);
-
-        std::fs::rename(base_dir.join(expected_dir), &kani_dir)?;
+        // When given a local bundle, it's often "-latest" but we expect "-1.0" or something.
+        // tar supports "stripping" the first directory from the bundle, so do that and
+        // extract it directly into the expected (kani_dir) directory (instead of base_dir).
+        if !kani_dir.exists() {
+            std::fs::create_dir(&kani_dir)?;
+        }
+        Command::new("tar").arg("--strip-components=1").arg("-zxf").arg(&path).current_dir(&kani_dir).run()?;
     } else {
         let filename = download_filename();
         println!("[2/6] Downloading Kani release bundle: {}", &filename);
@@ -145,7 +144,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
 
-    Command::new("ln").arg("-s").arg(toolchain).arg(kani_dir.join("toolchain")).run()?;
+    symlink_rust_toolchain(&toolchain, &kani_dir)?;
 
     println!("[4/6] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
@@ -198,6 +197,17 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     println!("[6/6] Successfully completed Kani first-time setup.");
 
+    Ok(())
+}
+
+/// Creates a `kani_dir/toolchain` symlink pointing to `toolchain`.
+fn symlink_rust_toolchain(toolchain: &Path, kani_dir: &Path) -> Result<()> {
+    let path = kani_dir.join("toolchain");
+    // We want to be idempotent, so if the symlink already exists, delete it first
+    if path.exists() && path.is_symlink() {
+        std::fs::remove_file(&path)?;
+    }
+    std::os::unix::fs::symlink(toolchain, path)?;
     Ok(())
 }
 
