@@ -103,6 +103,7 @@ jobs:
       - name: Run installed tests
         if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: |
+          docker run kani-latest  cargo kani --version
           docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  kani-latest  cargo kani
