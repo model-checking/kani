@@ -4,4 +4,3 @@
 // See GitHub history for details.
 // used by the error-index generator, so it needs to be public
 pub mod markdown;
-crate mod toc;

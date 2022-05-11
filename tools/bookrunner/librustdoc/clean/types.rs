@@ -2,11 +2,9 @@
 //
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
-use std::cell::RefCell;
 use std::default::Default;
 use std::hash::Hash;
 use std::lazy::SyncOnceCell as OnceCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::{slice, vec};
 
@@ -109,18 +107,6 @@ impl From<DefId> for ItemId {
         Self::DefId(id)
     }
 }
-
-/// The crate currently being documented.
-#[derive(Clone, Debug)]
-crate struct Crate {
-    crate module: Item,
-    /// Only here so that they can be filtered through the rustdoc passes.
-    crate external_traits: Rc<RefCell<FxHashMap<DefId, TraitWithExtraInfo>>>,
-}
-
-// `Crate` is frequently moved by-value. Make sure it doesn't unintentionally get bigger.
-#[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Crate, 64);
 
 /// This struct is used to wrap additional information added by rustdoc on a `trait` item.
 #[derive(Clone, Debug)]

@@ -15,7 +15,6 @@ use rustc_span::edition::Edition;
 use rustc_target::spec::TargetTriple;
 
 use crate::externalfiles::ExternalHtml;
-use crate::html::markdown::IdMap;
 use crate::scrape_examples::AllCallLocations;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -178,9 +177,6 @@ crate struct RenderOptions {
     crate output: PathBuf,
     /// External files to insert into generated pages.
     crate external_html: ExternalHtml,
-    /// A pre-populated `IdMap` with the default headings and any headings added by Markdown files
-    /// processed by `external_html`.
-    crate id_map: IdMap,
     /// If present, playground URL to use in the "Run" button added to code samples.
     ///
     /// Be aware: This option can come both from the CLI and from crate attributes!

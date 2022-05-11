@@ -5,7 +5,6 @@
 //! Markdown formatting for rustdoc.
 //!
 
-use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use rustc_middle::ty::TyCtxt;
@@ -13,19 +12,13 @@ use rustc_span::edition::Edition;
 use rustc_span::Span;
 
 use std::borrow::Cow;
-use std::collections::VecDeque;
 use std::default::Default;
-use std::fmt::Write;
-use std::ops::Range;
 use std::str;
 
 use crate::clean::RenderedLink;
 use crate::doctest;
-use crate::html::toc::TocBuilder;
 
-use pulldown_cmark::{html, CodeBlockKind, CowStr, Event, LinkType, Options, Parser, Tag};
-
-const MAX_HEADER_LEVEL: u32 = 6;
+use pulldown_cmark::{CodeBlockKind, CowStr, Event, LinkType, Parser, Tag};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum HeadingOffset {
@@ -81,19 +74,6 @@ fn map_line(s: &str) -> Line<'_> {
         Line::Hidden("")
     } else {
         Line::Shown(Cow::Borrowed(s))
-    }
-}
-
-/// Convert chars from a title for an id.
-///
-/// "Hello, world!" -> "hello-world"
-fn slugify(c: char) -> Option<char> {
-    if c.is_alphanumeric() || c == '-' || c == '_' {
-        if c.is_ascii() { Some(c.to_ascii_lowercase()) } else { Some(c) }
-    } else if c.is_whitespace() && c.is_ascii() {
-        Some('-')
-    } else {
-        None
     }
 }
 
@@ -191,231 +171,6 @@ impl<'a, I: Iterator<Item = Event<'a>>> Iterator for LinkReplacer<'a, I> {
 
         // Yield the modified event
         event
-    }
-}
-
-/// Wrap HTML tables into `<div>` to prevent having the doc blocks width being too big.
-struct TableWrapper<'a, I: Iterator<Item = Event<'a>>> {
-    inner: I,
-    stored_events: VecDeque<Event<'a>>,
-}
-
-impl<'a, I: Iterator<Item = Event<'a>>> Iterator for TableWrapper<'a, I> {
-    type Item = Event<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(first) = self.stored_events.pop_front() {
-            return Some(first);
-        }
-
-        let event = self.inner.next()?;
-
-        Some(match event {
-            Event::Start(Tag::Table(t)) => {
-                self.stored_events.push_back(Event::Start(Tag::Table(t)));
-                Event::Html(CowStr::Borrowed("<div>"))
-            }
-            Event::End(Tag::Table(t)) => {
-                self.stored_events.push_back(Event::Html(CowStr::Borrowed("</div>")));
-                Event::End(Tag::Table(t))
-            }
-            e => e,
-        })
-    }
-}
-
-type SpannedEvent<'a> = (Event<'a>, Range<usize>);
-
-/// Make headings links with anchor IDs and build up TOC.
-struct HeadingLinks<'a, 'b, 'ids, I> {
-    inner: I,
-    toc: Option<&'b mut TocBuilder>,
-    buf: VecDeque<SpannedEvent<'a>>,
-    id_map: &'ids mut IdMap,
-    heading_offset: HeadingOffset,
-}
-
-impl<'a, 'b, 'ids, I> HeadingLinks<'a, 'b, 'ids, I> {}
-
-impl<'a, 'b, 'ids, I: Iterator<Item = SpannedEvent<'a>>> Iterator
-    for HeadingLinks<'a, 'b, 'ids, I>
-{
-    type Item = SpannedEvent<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(e) = self.buf.pop_front() {
-            return Some(e);
-        }
-
-        let event = self.inner.next();
-        if let Some((Event::Start(Tag::Heading(level, _, _)), _)) = event {
-            let mut id = String::new();
-            for event in &mut self.inner {
-                match &event.0 {
-                    Event::End(Tag::Heading(..)) => break,
-                    Event::Start(Tag::Link(_, _, _)) | Event::End(Tag::Link(..)) => {}
-                    Event::Text(text) | Event::Code(text) => {
-                        id.extend(text.chars().filter_map(slugify));
-                        self.buf.push_back(event);
-                    }
-                    _ => self.buf.push_back(event),
-                }
-            }
-            let id = self.id_map.derive(id);
-
-            if let Some(ref mut builder) = self.toc {
-                let mut html_header = String::new();
-                html::push_html(&mut html_header, self.buf.iter().map(|(ev, _)| ev.clone()));
-                let sec = builder.push(level as u32, html_header, id.clone());
-                self.buf.push_front((Event::Html(format!("{} ", sec).into()), 0..0));
-            }
-
-            let level =
-                std::cmp::min(level as u32 + (self.heading_offset as u32), MAX_HEADER_LEVEL);
-            self.buf.push_back((Event::Html(format!("</a></h{}>", level).into()), 0..0));
-
-            let start_tags = format!(
-                "<h{level} id=\"{id}\" class=\"section-header\">\
-                    <a href=\"#{id}\">",
-                id = id,
-                level = level
-            );
-            return Some((Event::Html(start_tags.into()), 0..0));
-        }
-        event
-    }
-}
-
-/// Extracts just the first paragraph.
-struct SummaryLine<'a, I: Iterator<Item = Event<'a>>> {
-    inner: I,
-    started: bool,
-    depth: u32,
-}
-
-fn check_if_allowed_tag(t: &Tag<'_>) -> bool {
-    matches!(
-        t,
-        Tag::Paragraph | Tag::Item | Tag::Emphasis | Tag::Strong | Tag::Link(..) | Tag::BlockQuote
-    )
-}
-
-fn is_forbidden_tag(t: &Tag<'_>) -> bool {
-    matches!(t, Tag::CodeBlock(_) | Tag::Table(_) | Tag::TableHead | Tag::TableRow | Tag::TableCell)
-}
-
-impl<'a, I: Iterator<Item = Event<'a>>> Iterator for SummaryLine<'a, I> {
-    type Item = Event<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.started && self.depth == 0 {
-            return None;
-        }
-        if !self.started {
-            self.started = true;
-        }
-        if let Some(event) = self.inner.next() {
-            let mut is_start = true;
-            let is_allowed_tag = match event {
-                Event::Start(ref c) => {
-                    if is_forbidden_tag(c) {
-                        return None;
-                    }
-                    self.depth += 1;
-                    check_if_allowed_tag(c)
-                }
-                Event::End(ref c) => {
-                    if is_forbidden_tag(c) {
-                        return None;
-                    }
-                    self.depth -= 1;
-                    is_start = false;
-                    check_if_allowed_tag(c)
-                }
-                _ => true,
-            };
-            return if !is_allowed_tag {
-                if is_start {
-                    Some(Event::Start(Tag::Paragraph))
-                } else {
-                    Some(Event::End(Tag::Paragraph))
-                }
-            } else {
-                Some(event)
-            };
-        }
-        None
-    }
-}
-
-/// Moves all footnote definitions to the end and add back links to the
-/// references.
-struct Footnotes<'a, I> {
-    inner: I,
-    footnotes: FxHashMap<String, (Vec<Event<'a>>, u16)>,
-}
-
-impl<'a, I> Footnotes<'a, I> {
-    fn get_entry(&mut self, key: &str) -> &mut (Vec<Event<'a>>, u16) {
-        let new_id = self.footnotes.len() + 1;
-        let key = key.to_owned();
-        self.footnotes.entry(key).or_insert((Vec::new(), new_id as u16))
-    }
-}
-
-impl<'a, I: Iterator<Item = SpannedEvent<'a>>> Iterator for Footnotes<'a, I> {
-    type Item = SpannedEvent<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.inner.next() {
-                Some((Event::FootnoteReference(ref reference), range)) => {
-                    let entry = self.get_entry(reference);
-                    let reference = format!(
-                        "<sup id=\"fnref{0}\"><a href=\"#fn{0}\">{0}</a></sup>",
-                        (*entry).1
-                    );
-                    return Some((Event::Html(reference.into()), range));
-                }
-                Some((Event::Start(Tag::FootnoteDefinition(def)), _)) => {
-                    let mut content = Vec::new();
-                    for (event, _) in &mut self.inner {
-                        if let Event::End(Tag::FootnoteDefinition(..)) = event {
-                            break;
-                        }
-                        content.push(event);
-                    }
-                    let entry = self.get_entry(&def);
-                    (*entry).0 = content;
-                }
-                Some(e) => return Some(e),
-                None => {
-                    if !self.footnotes.is_empty() {
-                        let mut v: Vec<_> = self.footnotes.drain().map(|(_, x)| x).collect();
-                        v.sort_by(|a, b| a.1.cmp(&b.1));
-                        let mut ret = String::from("<div class=\"footnotes\"><hr><ol>");
-                        for (mut content, id) in v {
-                            write!(ret, "<li id=\"fn{}\">", id).unwrap();
-                            let mut is_paragraph = false;
-                            if let Some(&Event::End(Tag::Paragraph)) = content.last() {
-                                content.pop();
-                                is_paragraph = true;
-                            }
-                            html::push_html(&mut ret, content.into_iter());
-                            write!(ret, "&nbsp;<a href=\"#fnref{}\">↩</a>", id).unwrap();
-                            if is_paragraph {
-                                ret.push_str("</p>");
-                            }
-                            ret.push_str("</li>");
-                        }
-                        ret.push_str("</ol></div>");
-                        return Some((Event::Html(ret.into()), 0..0));
-                    } else {
-                        return None;
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -718,44 +473,5 @@ impl LangString {
         data.rust &= !seen_other_tags || seen_rust_tags;
 
         data
-    }
-}
-
-#[derive(Debug)]
-crate struct MarkdownLink {
-    pub(crate) kind: LinkType,
-    pub(crate) link: String,
-    pub(crate) range: Range<usize>,
-}
-
-#[derive(Debug)]
-crate struct RustCodeBlock {
-    /// The range in the markdown that the code block occupies. Note that this includes the fences
-    /// for fenced code blocks.
-    crate range: Range<usize>,
-    /// The range in the markdown that the code within the code block occupies.
-    crate code: Range<usize>,
-    crate is_fenced: bool,
-    crate lang_string: LangString,
-}
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct IdMap {
-    map: FxHashMap<String, usize>,
-}
-
-impl IdMap {
-    crate fn derive<S: AsRef<str> + ToString>(&mut self, candidate: S) -> String {
-        let id = match self.map.get_mut(candidate.as_ref()) {
-            None => candidate.to_string(),
-            Some(a) => {
-                let id = format!("{}-{}", candidate.as_ref(), *a);
-                *a += 1;
-                id
-            }
-        };
-
-        self.map.insert(id.clone(), 1);
-        id
     }
 }

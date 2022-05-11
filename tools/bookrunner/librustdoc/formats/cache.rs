@@ -9,7 +9,7 @@ use rustc_hir::def_id::{CrateNum, DefId, CRATE_DEF_INDEX};
 use rustc_middle::middle::privacy::AccessLevels;
 use rustc_span::{sym, Symbol};
 
-use crate::clean::{self, ItemId};
+use crate::clean::{self};
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
 use crate::formats::Impl;
@@ -102,10 +102,6 @@ crate struct Cache {
     // folding and add them to the cache later on if we find the trait.
     orphan_trait_impls: Vec<(DefId, FxHashSet<DefId>, Impl)>,
 
-    /// All intra-doc links resolved so far.
-    ///
-    /// Links are indexed by the DefId of the item they document.
-    crate intra_doc_links: FxHashMap<ItemId, Vec<clean::ItemLink>>,
     /// Cfg that have been hidden via #![doc(cfg_hide(...))]
     crate hidden_cfg: FxHashSet<clean::cfg::Cfg>,
 }
