@@ -20,11 +20,6 @@ use crate::doctest;
 
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, LinkType, Parser, Tag};
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum HeadingOffset {
-    H1 = 0,
-}
-
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum ErrorCodes {
     Yes,

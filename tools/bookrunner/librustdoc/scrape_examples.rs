@@ -4,11 +4,8 @@
 // See GitHub history for details.
 //! This module analyzes crates to find call sites that can serve as examples in the documentation.
 
-use rustc_data_structures::fx::FxHashMap;
 use rustc_macros::{Decodable, Encodable};
-use rustc_span::{def_id::DefPathHash, edition::Edition};
-
-use std::path::PathBuf;
+use rustc_span::edition::Edition;
 
 #[derive(Encodable, Decodable, Debug, Clone)]
 crate struct SyntaxRange {
@@ -29,6 +26,3 @@ crate struct CallData {
     crate display_name: String,
     crate edition: Edition,
 }
-
-crate type FnCallLocations = FxHashMap<PathBuf, CallData>;
-crate type AllCallLocations = FxHashMap<DefPathHash, FnCallLocations>;

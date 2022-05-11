@@ -7,15 +7,11 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use rustc_data_structures::fx::FxHashMap;
 use rustc_session::config::{ErrorOutputType, Externs};
 use rustc_session::lint::Level;
 use rustc_session::search_paths::SearchPath;
 use rustc_span::edition::Edition;
 use rustc_target::spec::TargetTriple;
-
-use crate::externalfiles::ExternalHtml;
-use crate::scrape_examples::AllCallLocations;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 crate enum OutputFormat {
@@ -173,68 +169,10 @@ impl fmt::Debug for Options {
 /// Configuration options for the HTML page-creation process.
 #[derive(Clone, Debug)]
 crate struct RenderOptions {
-    /// Output directory to generate docs into. Defaults to `doc`.
-    crate output: PathBuf,
-    /// External files to insert into generated pages.
-    crate external_html: ExternalHtml,
-    /// If present, playground URL to use in the "Run" button added to code samples.
-    ///
-    /// Be aware: This option can come both from the CLI and from crate attributes!
-    crate playground_url: Option<String>,
-    /// Whether to sort modules alphabetically on a module page instead of using declaration order.
-    /// `true` by default.
-    //
-    // FIXME(misdreavus): the flag name is `--sort-modules-by-appearance` but the meaning is
-    // inverted once read.
-    crate sort_modules_alphabetically: bool,
-    /// If present, CSS file that contains rules to add to the default CSS.
-    crate extension_css: Option<PathBuf>,
-    /// A map of the default settings (values are as for DOM storage API). Keys should lack the
-    /// `rustdoc-` prefix.
-    crate default_settings: FxHashMap<String, String>,
-    /// If present, suffix added to CSS/JavaScript files when referencing them in generated pages.
-    crate resource_suffix: String,
-    /// Whether to run the static CSS/JavaScript through a minifier when outputting them. `true` by
-    /// default.
-    //
-    // FIXME(misdreavus): the flag name is `--disable-minification` but the meaning is inverted
-    // once read.
-    crate enable_minification: bool,
-    /// Whether to create an index page in the root of the output directory. If this is true but
-    /// `enable_index_page` is None, generate a static listing of crates instead.
-    crate enable_index_page: bool,
-    /// A file to use as the index page at the root of the output directory. Overrides
-    /// `enable_index_page` to be true if set.
-    crate index_page: Option<PathBuf>,
-    /// An optional path to use as the location of static files. If not set, uses combinations of
-    /// `../` to reach the documentation root.
-    crate static_root_path: Option<String>,
-
-    // Options specific to reading standalone Markdown files
-    /// Whether to generate a table of contents on the output file when reading a standalone
-    /// Markdown file.
-    crate markdown_no_toc: bool,
-    /// Additional CSS files to link in pages generated from standalone Markdown files.
-    crate markdown_css: Vec<String>,
-    /// If present, playground URL to use in the "Run" button added to code samples generated from
-    /// standalone Markdown files. If not present, `playground_url` is used.
-    crate markdown_playground_url: Option<String>,
     /// Document items that have lower than `pub` visibility.
     crate document_private: bool,
     /// Document items that have `doc(hidden)`.
     crate document_hidden: bool,
-    /// If `true`, generate a JSON file in the crate folder instead of HTML redirection files.
-    crate generate_redirect_map: bool,
-    /// Show the memory layout of types in the docs.
-    crate show_type_layout: bool,
-    crate unstable_features: rustc_feature::UnstableFeatures,
-    crate emit: Vec<EmitType>,
-    /// If `true`, HTML source pages will generate links for items to their definition.
-    crate generate_link_to_definition: bool,
-    /// Set of function-call locations to include as examples
-    crate call_locations: AllCallLocations,
-    /// If `true`, Context::init will not emit shared files.
-    crate no_emit_shared: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

@@ -7,9 +7,8 @@ use rustc_hir::def::Res;
 use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{HirId, Path};
-use rustc_interface::interface;
 use rustc_middle::hir::nested_filter;
-use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
+use rustc_middle::ty::{ParamEnv, TyCtxt};
 use rustc_session::Session;
 
 use std::cell::RefCell;
@@ -20,19 +19,8 @@ use crate::clean::{self, ItemId};
 use crate::config::RenderOptions;
 use crate::formats::cache::Cache;
 
-crate struct ResolverCaches {
-    pub(crate) all_traits: Option<Vec<DefId>>,
-}
-
 crate struct DocContext<'tcx> {
     crate tcx: TyCtxt<'tcx>,
-    /// Name resolver. Used for intra-doc links.
-    ///
-    /// The `Rc<RefCell<...>>` wrapping is needed because that is what's returned by
-    /// [`rustc_interface::Queries::expansion()`].
-    // FIXME: see if we can get rid of this RefCell somehow
-    crate resolver: Rc<RefCell<interface::BoxedResolver>>,
-    crate resolver_caches: ResolverCaches,
     /// Used for normalization.
     ///
     /// Most of this logic is copied from rustc_lint::late.
@@ -48,17 +36,8 @@ crate struct DocContext<'tcx> {
     crate substs: FxHashMap<DefId, clean::SubstParam>,
     /// Table synthetic type parameter for `impl Trait` in argument position -> bounds
     crate impl_trait_bounds: FxHashMap<ImplTraitParam, Vec<clean::GenericBound>>,
-    /// Auto-trait or blanket impls processed so far, as `(self_ty, trait_def_id)`.
-    // FIXME(eddyb) make this a `ty::TraitRef<'tcx>` set.
-    crate generated_synthetics: FxHashSet<(Ty<'tcx>, DefId)>,
-    crate auto_traits: Vec<DefId>,
     /// The options given to rustdoc that could be relevant to a pass.
     crate render_options: RenderOptions,
-    /// The traits in scope for a given module.
-    ///
-    /// See `collect_intra_doc_links::traits_implemented_by` for more details.
-    /// `map<module, set<trait>>`
-    crate module_trait_cache: FxHashMap<DefId, FxHashSet<DefId>>,
     /// This same cache is used throughout rustdoc, including in [`crate::html::render`].
     crate cache: Cache,
     /// Used by [`clean::inline`] to tell if an item has already been inlined.

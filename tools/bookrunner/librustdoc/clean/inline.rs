@@ -126,10 +126,10 @@ crate fn try_inline(
         _ => return None,
     };
 
-    let (attrs, cfg) = merge_attrs(cx, Some(parent_module), load_attrs(cx, did), attrs_clone);
+    let (attrs, _cfg) = merge_attrs(cx, Some(parent_module), load_attrs(cx, did), attrs_clone);
     cx.inlined.insert(did.into());
     let mut item =
-        clean::Item::from_def_id_and_attrs_and_parts(did, Some(name), kind, box attrs, cx, cfg);
+        clean::Item::from_def_id_and_attrs_and_parts(did, Some(name), kind, box attrs, cx);
     if let Some(import_def_id) = import_def_id {
         // The visibility needs to reflect the one from the reexport and not from the "source" DefId.
         item.visibility = cx.tcx.visibility(import_def_id).clean(cx);
@@ -158,7 +158,7 @@ crate fn try_inline_glob(
     }
 }
 
-crate fn load_attrs<'hir>(cx: &DocContext<'hir>, did: DefId) -> Attrs<'hir> {
+fn load_attrs<'hir>(cx: &DocContext<'hir>, did: DefId) -> Attrs<'hir> {
     cx.tcx.get_attrs(did)
 }
 
@@ -194,7 +194,7 @@ crate fn record_extern_fqn(cx: &mut DocContext<'_>, did: DefId, kind: ItemType) 
     }
 }
 
-crate fn build_external_trait(cx: &mut DocContext<'_>, did: DefId) -> clean::Trait {
+fn build_external_trait(cx: &mut DocContext<'_>, did: DefId) -> clean::Trait {
     let trait_items = cx
         .tcx
         .associated_items(did)
@@ -482,7 +482,7 @@ crate fn build_impl(
         record_extern_trait(cx, did);
     }
 
-    let (merged_attrs, cfg) = merge_attrs(cx, parent_module.into(), load_attrs(cx, did), attrs);
+    let (merged_attrs, _cfg) = merge_attrs(cx, parent_module.into(), load_attrs(cx, did), attrs);
     trace!("merged_attrs={:?}", merged_attrs);
 
     trace!(
@@ -503,7 +503,6 @@ crate fn build_impl(
         }),
         box merged_attrs,
         cx,
-        cfg,
     ));
 }
 
@@ -550,7 +549,6 @@ fn build_module(
                         },
                         true,
                     )),
-                    cfg: None,
                 });
             } else if let Some(i) = try_inline(cx, did, None, res, item.ident.name, None, visited) {
                 items.extend(i)

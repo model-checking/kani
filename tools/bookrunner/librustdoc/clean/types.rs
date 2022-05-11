@@ -136,13 +136,11 @@ crate struct Item {
     /// E.g., struct vs enum vs function.
     crate kind: Box<ItemKind>,
     crate def_id: ItemId,
-
-    crate cfg: Option<Arc<Cfg>>,
 }
 
 // `Item` is used a lot. Make sure it doesn't unintentionally get bigger.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Item, 56);
+rustc_data_structures::static_assert_size!(Item, 48);
 
 crate fn rustc_span(def_id: DefId, tcx: TyCtxt<'_>) -> Span {
     Span::new(def_id.as_local().map_or_else(
@@ -199,14 +197,7 @@ impl Item {
     ) -> Item {
         let ast_attrs = cx.tcx.get_attrs(def_id);
 
-        Self::from_def_id_and_attrs_and_parts(
-            def_id,
-            name,
-            kind,
-            box ast_attrs.clean(cx),
-            cx,
-            ast_attrs.cfg(cx.tcx, &cx.cache.hidden_cfg),
-        )
+        Self::from_def_id_and_attrs_and_parts(def_id, name, kind, box ast_attrs.clean(cx), cx)
     }
 
     pub(crate) fn from_def_id_and_attrs_and_parts(
@@ -215,7 +206,6 @@ impl Item {
         kind: ItemKind,
         attrs: Box<Attributes>,
         cx: &mut DocContext<'_>,
-        cfg: Option<Arc<Cfg>>,
     ) -> Item {
         trace!("name={:?}, def_id={:?}", name, def_id);
 
@@ -225,7 +215,6 @@ impl Item {
             name,
             attrs,
             visibility: cx.tcx.visibility(def_id).clean(cx),
-            cfg,
         }
     }
 
