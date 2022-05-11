@@ -111,8 +111,8 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     std::fs::create_dir_all(&base_dir)?;
 
     if let Some(pathstr) = use_local_bundle {
+        println!("[2/6] Installing local Kani bundle: {}", pathstr.to_string_lossy());
         let path = Path::new(&pathstr).canonicalize()?;
-        println!("[2/6] Installing local Kani bundle: {}", path.display());
         // When given a local bundle, it's often "-latest" but we expect "-1.0" or something.
         // tar supports "stripping" the first directory from the bundle, so do that and
         // extract it directly into the expected (kani_dir) directory (instead of base_dir).

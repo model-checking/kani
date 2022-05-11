@@ -107,6 +107,7 @@ jobs:
           docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani
           docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  kani-latest  cargo kani
+          docker run kani-latest  cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
 
       # We can't run macos in a container, so we can only test locally.
       # Hopefully any dependency issues won't be unique to macos.
