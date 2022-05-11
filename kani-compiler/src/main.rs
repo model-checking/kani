@@ -139,23 +139,11 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     if let Some(extra_flags) = args.values_of_os(parser::RUSTC_OPTIONS) {
         extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
     }
-    let sysroot = sysroot_path(args.value_of(parser::SYSROOT)).expect(
-        "[Error] Invalid sysroot. Rebuild Kani or provide the path to rust sysroot using --sysroot option",
-    );
+    let sysroot = sysroot_path(args.value_of(parser::SYSROOT));
     rustc_args.push(String::from("--sysroot"));
     rustc_args.push(convert_arg(sysroot.as_os_str()));
     tracing::debug!(?rustc_args, "Compile");
     rustc_args
-}
-
-/// Try to generate the rustup toolchain path.
-fn toolchain_path(home: Option<String>, toolchain: Option<String>) -> Option<PathBuf> {
-    match (home, toolchain) {
-        (Some(home), Some(toolchain)) => {
-            Some([home, String::from("toolchains"), toolchain].iter().collect::<PathBuf>())
-        }
-        _ => None,
-    }
 }
 
 /// Convert an argument from OsStr to String.
@@ -166,28 +154,42 @@ fn convert_arg(arg: &OsStr) -> String {
         .to_string()
 }
 
-/// Get the sysroot, following the order bellow:
-/// - "--sysroot" command line argument
-/// - compile-time environment
-///    - $SYSROOT
-///    - $RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN
+/// Get the sysroot, for our specific version of Rust nightly.
 ///
-/// We currently don't support:
-/// - runtime environment
-///    - $SYSROOT
-///    - $RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN
-/// - rustc --sysroot
+/// Rust normally finds its sysroot by looking at where itself (the `rustc`
+/// executable) is located. This will fail for us because we're `kani-compiler`
+/// and not located under the rust sysroot.
 ///
-/// since we rely on specific nightly version of rustc which may not be compatible with the workspace rustc.
-fn sysroot_path(sysroot_arg: Option<&str>) -> Option<PathBuf> {
-    let path = sysroot_arg
-        .map(PathBuf::from)
-        .or_else(|| std::option_env!("SYSROOT").map(PathBuf::from))
-        .or_else(|| {
-            let home = std::option_env!("RUSTUP_HOME");
-            let toolchain = std::option_env!("RUSTUP_TOOLCHAIN");
-            toolchain_path(home.map(String::from), toolchain.map(String::from))
-        });
+/// We do know the actual name of the toolchain we need, however.
+/// So if we don't have `--sysroot`, then we look for our toolchain
+/// in the usual place for rustup.
+///
+/// We previously used to pass `--sysroot` in `KANIFLAGS` from `kani-driver`,
+/// but this failed to have effect when building a `build.rs` file.
+/// This wasn't used anywhere but passing down here, so we've just migrated
+/// the code to find the sysroot path directly into this function.
+fn sysroot_path(sysroot_arg: Option<&str>) -> PathBuf {
+    // rustup sets some environment variables during build, but this is not clearly documented.
+    // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
+    // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
+    // This is a *compile-time* constant, not a dynamic lookup at runtime, so this is reliable.
+    let toolchain = env!("RUSTUP_TOOLCHAIN");
+
+    let path = if let Some(s) = sysroot_arg {
+        PathBuf::from(s)
+    } else {
+        // We use the home crate to do a *runtime* determination of where rustup toolchains live
+        let rustup = home::rustup_home().expect("Couldn't find RUSTUP_HOME");
+        rustup.join("toolchains").join(toolchain)
+    };
+    // If we ever have a problem with the above not being good enough, we can consider a third heuristic
+    // for finding our sysroot: readlink() on `../toolchain` from the location of our executable.
+    // At time of writing this would only work for release, not development, however, so I'm not going
+    // with this option yet. It would eliminate the need for the `home` crate however.
+
+    if !path.exists() {
+        panic!("Couldn't find Kani Rust toolchain {}. Tried: {}", toolchain, path.display());
+    }
     tracing::debug!(?path, ?sysroot_arg, "Sysroot path.");
     path
 }
