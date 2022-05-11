@@ -14,7 +14,6 @@ fi
 
 UBUNTU_VERSION=$(lsb_release -rs)
 FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
-echo ${FILE}
 URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
 
 set -x

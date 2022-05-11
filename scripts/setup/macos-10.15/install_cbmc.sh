@@ -4,13 +4,13 @@
 
 set -eux
 
-if [[ $# -ne 1 ]]; then
-  echo "$0: Error: Specify the CBMC version file"
+# Source kani-dependencies to get the CBMC version
+source kani-dependencies
+
+if [ -z "${CBMC_VERSION:-}" ]; then
+  echo "$0: Error: CBMC_VERSION is not specified"
   exit 1
 fi
-
-CBMC_VERSION_FILE=$1
-CBMC_VERSION=$(cat ${CBMC_VERSION_FILE})
 
 # Install CBMC for macOS 10.15 from CBMC tap
 # https://github.com/diffblue/cbmc/blob/develop/doc/ADR/homebrew_tap.md
