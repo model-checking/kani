@@ -152,7 +152,7 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     // TODO: this is a repetition of versions from elsewhere
     Command::new("python3")
-        .args(&["-m", "pip", "install", "cbmc-viewer==2.11", "--target"])
+        .args(&["-m", "pip", "install", "cbmc-viewer==3.2", "--target"])
         .arg(&pyroot)
         .run()?;
     Command::new("python3")
