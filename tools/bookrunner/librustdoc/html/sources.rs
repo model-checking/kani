@@ -3,29 +3,14 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 use crate::clean;
-use crate::docfs::PathError;
-use crate::error::Error;
-use crate::html::layout;
 use crate::visit::DocVisitor;
-use rustc_data_structures::fx::{FxHashMap, FxHashSet};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::Session;
-use rustc_span::edition::Edition;
 use rustc_span::source_map::FileName;
 use std::ffi::OsStr;
-use std::fs;
 use std::path::{Component, Path, PathBuf};
-
-crate fn collect_local_sources<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    src_root: &Path,
-    krate: &clean::Crate,
-) -> FxHashMap<PathBuf, String> {
-    let mut lsc = LocalSourcesCollector { tcx, local_sources: FxHashMap::default(), src_root };
-    lsc.visit_crate(krate);
-    lsc.local_sources
-}
 
 struct LocalSourcesCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
@@ -105,9 +90,4 @@ where
             _ => continue,
         }
     }
-}
-
-crate enum SourceContext {
-    Standalone,
-    Embedded { offset: usize },
 }

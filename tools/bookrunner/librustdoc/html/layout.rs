@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use rustc_data_structures::fx::FxHashMap;
 
-use crate::error::Error;
 use crate::externalfiles::ExternalHtml;
 
 #[allow(dead_code)]
@@ -35,12 +34,6 @@ crate struct Page<'a> {
     crate resource_suffix: &'a str,
     crate extra_scripts: &'a [&'a str],
     crate static_extra_scripts: &'a [&'a str],
-}
-
-impl<'a> Page<'a> {
-    crate fn get_static_root_path(&self) -> &str {
-        self.static_root_path.unwrap_or(self.root_path)
-    }
 }
 
 #[allow(dead_code)]

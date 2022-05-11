@@ -41,13 +41,11 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::default::Default;
 use std::fmt::Write;
-use std::ops::{ControlFlow, Range};
+use std::ops::Range;
 use std::str;
 
 use crate::clean::RenderedLink;
 use crate::doctest;
-use crate::html::escape::Escape;
-use crate::html::length_limit::HtmlWithLimit;
 use crate::html::toc::TocBuilder;
 
 use pulldown_cmark::{
@@ -61,15 +59,6 @@ const MAX_HEADER_LEVEL: u32 = 6;
 
 /// Options for rendering Markdown in the main body of documentation.
 pub(crate) fn main_body_opts() -> Options {
-    Options::ENABLE_TABLES
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_SMART_PUNCTUATION
-}
-
-/// Options for rendering Markdown in summaries (e.g., in search results).
-pub(crate) fn summary_opts() -> Options {
     Options::ENABLE_TABLES
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_STRIKETHROUGH
@@ -129,13 +118,6 @@ pub enum ErrorCodes {
 }
 
 impl ErrorCodes {
-    crate fn from(b: bool) -> Self {
-        match b {
-            true => ErrorCodes::Yes,
-            false => ErrorCodes::No,
-        }
-    }
-
     crate fn as_bool(self) -> bool {
         match self {
             ErrorCodes::Yes => true,
@@ -153,13 +135,6 @@ enum Line<'a> {
 }
 
 impl<'a> Line<'a> {
-    fn for_html(self) -> Option<Cow<'a, str>> {
-        match self {
-            Line::Shown(l) => Some(l),
-            Line::Hidden(_) => None,
-        }
-    }
-
     fn for_code(self) -> Cow<'a, str> {
         match self {
             Line::Shown(l) => l,
@@ -217,17 +192,6 @@ struct CodeBlocks<'p, 'a, I: Iterator<Item = Event<'a>>> {
     playground: &'p Option<Playground>,
 }
 
-impl<'p, 'a, I: Iterator<Item = Event<'a>>> CodeBlocks<'p, 'a, I> {
-    fn new(
-        iter: I,
-        error_codes: ErrorCodes,
-        edition: Edition,
-        playground: &'p Option<Playground>,
-    ) -> Self {
-        CodeBlocks { inner: iter, check_error_codes: error_codes, edition, playground }
-    }
-}
-
 impl<'a, I: Iterator<Item = Event<'a>>> Iterator for CodeBlocks<'_, 'a, I> {
     type Item = Event<'a>;
 
@@ -241,12 +205,6 @@ struct LinkReplacer<'a, I: Iterator<Item = Event<'a>>> {
     inner: I,
     links: &'a [RenderedLink],
     shortcut_link: Option<&'a RenderedLink>,
-}
-
-impl<'a, I: Iterator<Item = Event<'a>>> LinkReplacer<'a, I> {
-    fn new(iter: I, links: &'a [RenderedLink]) -> Self {
-        LinkReplacer { inner: iter, links, shortcut_link: None }
-    }
 }
 
 impl<'a, I: Iterator<Item = Event<'a>>> Iterator for LinkReplacer<'a, I> {
@@ -343,12 +301,6 @@ impl<'a, I: Iterator<Item = Event<'a>>> Iterator for LinkReplacer<'a, I> {
 struct TableWrapper<'a, I: Iterator<Item = Event<'a>>> {
     inner: I,
     stored_events: VecDeque<Event<'a>>,
-}
-
-impl<'a, I: Iterator<Item = Event<'a>>> TableWrapper<'a, I> {
-    fn new(iter: I) -> Self {
-        Self { inner: iter, stored_events: VecDeque::new() }
-    }
 }
 
 impl<'a, I: Iterator<Item = Event<'a>>> Iterator for TableWrapper<'a, I> {
@@ -451,12 +403,6 @@ struct SummaryLine<'a, I: Iterator<Item = Event<'a>>> {
     inner: I,
     started: bool,
     depth: u32,
-}
-
-impl<'a, I: Iterator<Item = Event<'a>>> SummaryLine<'a, I> {
-    fn new(iter: I) -> Self {
-        SummaryLine { inner: iter, started: false, depth: 0 }
-    }
 }
 
 fn check_if_allowed_tag(t: &Tag<'_>) -> bool {
@@ -746,14 +692,6 @@ impl Default for LangString {
 }
 
 impl LangString {
-    fn parse_without_check(
-        string: &str,
-        allow_error_code_check: ErrorCodes,
-        enable_per_target_ignores: bool,
-    ) -> LangString {
-        Self::parse(string, allow_error_code_check, enable_per_target_ignores, None)
-    }
-
     fn tokens(string: &str) -> impl Iterator<Item = &str> {
         // Pandoc, which Rust once used for generating documentation,
         // expects lang strings to be surrounded by `{}` and for each token
@@ -901,237 +839,6 @@ impl LangString {
 
         data
     }
-}
-
-impl Markdown<'_> {
-    pub(crate) fn into_string(self) -> String {
-        let Markdown {
-            content: md,
-            links,
-            mut ids,
-            error_codes: codes,
-            edition,
-            playground,
-            heading_offset,
-        } = self;
-
-        // This is actually common enough to special-case
-        if md.is_empty() {
-            return String::new();
-        }
-        let mut replacer = |broken_link: BrokenLink<'_>| {
-            links
-                .iter()
-                .find(|link| link.original_text.as_str() == &*broken_link.reference)
-                .map(|link| (link.href.as_str().into(), link.new_text.as_str().into()))
-        };
-
-        let p = Parser::new_with_broken_link_callback(md, main_body_opts(), Some(&mut replacer));
-        let p = p.into_offset_iter();
-
-        let mut s = String::with_capacity(md.len() * 3 / 2);
-
-        let p = HeadingLinks::new(p, None, &mut ids, heading_offset);
-        let p = Footnotes::new(p);
-        let p = LinkReplacer::new(p.map(|(ev, _)| ev), links);
-        let p = TableWrapper::new(p);
-        let p = CodeBlocks::new(p, codes, edition, playground);
-        html::push_html(&mut s, p);
-
-        s
-    }
-}
-
-impl MarkdownWithToc<'_> {
-    crate fn into_string(self) -> String {
-        let MarkdownWithToc(md, mut ids, codes, edition, playground) = self;
-
-        let p = Parser::new_ext(md, main_body_opts()).into_offset_iter();
-
-        let mut s = String::with_capacity(md.len() * 3 / 2);
-
-        let mut toc = TocBuilder::new();
-
-        {
-            let p = HeadingLinks::new(p, Some(&mut toc), &mut ids, HeadingOffset::H1);
-            let p = Footnotes::new(p);
-            let p = TableWrapper::new(p.map(|(ev, _)| ev));
-            let p = CodeBlocks::new(p, codes, edition, playground);
-            html::push_html(&mut s, p);
-        }
-
-        format!("<nav id=\"TOC\">{}</nav>{}", toc.into_toc().print(), s)
-    }
-}
-
-impl MarkdownHtml<'_> {
-    crate fn into_string(self) -> String {
-        let MarkdownHtml(md, mut ids, codes, edition, playground) = self;
-
-        // This is actually common enough to special-case
-        if md.is_empty() {
-            return String::new();
-        }
-        let p = Parser::new_ext(md, main_body_opts()).into_offset_iter();
-
-        // Treat inline HTML as plain text.
-        let p = p.map(|event| match event.0 {
-            Event::Html(text) => (Event::Text(text), event.1),
-            _ => event,
-        });
-
-        let mut s = String::with_capacity(md.len() * 3 / 2);
-
-        let p = HeadingLinks::new(p, None, &mut ids, HeadingOffset::H1);
-        let p = Footnotes::new(p);
-        let p = TableWrapper::new(p.map(|(ev, _)| ev));
-        let p = CodeBlocks::new(p, codes, edition, playground);
-        html::push_html(&mut s, p);
-
-        s
-    }
-}
-
-impl MarkdownSummaryLine<'_> {
-    crate fn into_string(self) -> String {
-        let MarkdownSummaryLine(md, links) = self;
-        // This is actually common enough to special-case
-        if md.is_empty() {
-            return String::new();
-        }
-
-        let mut replacer = |broken_link: BrokenLink<'_>| {
-            links
-                .iter()
-                .find(|link| link.original_text.as_str() == &*broken_link.reference)
-                .map(|link| (link.href.as_str().into(), link.new_text.as_str().into()))
-        };
-
-        let p = Parser::new_with_broken_link_callback(md, summary_opts(), Some(&mut replacer));
-
-        let mut s = String::new();
-
-        html::push_html(&mut s, LinkReplacer::new(SummaryLine::new(p), links));
-
-        s
-    }
-}
-
-/// Renders a subset of Markdown in the first paragraph of the provided Markdown.
-///
-/// - *Italics*, **bold**, and `inline code` styles **are** rendered.
-/// - Headings and links are stripped (though the text *is* rendered).
-/// - HTML, code blocks, and everything else are ignored.
-///
-/// Returns a tuple of the rendered HTML string and whether the output was shortened
-/// due to the provided `length_limit`.
-fn markdown_summary_with_limit(
-    md: &str,
-    link_names: &[RenderedLink],
-    length_limit: usize,
-) -> (String, bool) {
-    if md.is_empty() {
-        return (String::new(), false);
-    }
-
-    let mut replacer = |broken_link: BrokenLink<'_>| {
-        link_names
-            .iter()
-            .find(|link| link.original_text.as_str() == &*broken_link.reference)
-            .map(|link| (link.href.as_str().into(), link.new_text.as_str().into()))
-    };
-
-    let p = Parser::new_with_broken_link_callback(md, summary_opts(), Some(&mut replacer));
-    let mut p = LinkReplacer::new(p, link_names);
-
-    let mut buf = HtmlWithLimit::new(length_limit);
-    let mut stopped_early = false;
-    p.try_for_each(|event| {
-        match &event {
-            Event::Text(text) => {
-                let r =
-                    text.split_inclusive(char::is_whitespace).try_for_each(|word| buf.push(word));
-                if r.is_break() {
-                    stopped_early = true;
-                }
-                return r;
-            }
-            Event::Code(code) => {
-                buf.open_tag("code");
-                let r = buf.push(code);
-                if r.is_break() {
-                    stopped_early = true;
-                } else {
-                    buf.close_tag();
-                }
-                return r;
-            }
-            Event::Start(tag) => match tag {
-                Tag::Emphasis => buf.open_tag("em"),
-                Tag::Strong => buf.open_tag("strong"),
-                Tag::CodeBlock(..) => return ControlFlow::BREAK,
-                _ => {}
-            },
-            Event::End(tag) => match tag {
-                Tag::Emphasis | Tag::Strong => buf.close_tag(),
-                Tag::Paragraph | Tag::Heading(..) => return ControlFlow::BREAK,
-                _ => {}
-            },
-            Event::HardBreak | Event::SoftBreak => buf.push(" ")?,
-            _ => {}
-        };
-        ControlFlow::CONTINUE
-    });
-
-    (buf.finish(), stopped_early)
-}
-
-/// Renders a shortened first paragraph of the given Markdown as a subset of Markdown,
-/// making it suitable for contexts like the search index.
-///
-/// Will shorten to 59 or 60 characters, including an ellipsis (…) if it was shortened.
-///
-/// See [`markdown_summary_with_limit`] for details about what is rendered and what is not.
-crate fn short_markdown_summary(markdown: &str, link_names: &[RenderedLink]) -> String {
-    let (mut s, was_shortened) = markdown_summary_with_limit(markdown, link_names, 59);
-
-    if was_shortened {
-        s.push('…');
-    }
-
-    s
-}
-
-/// Renders the first paragraph of the provided markdown as plain text.
-/// Useful for alt-text.
-///
-/// - Headings, links, and formatting are stripped.
-/// - Inline code is rendered as-is, surrounded by backticks.
-/// - HTML and code blocks are ignored.
-crate fn plain_text_summary(md: &str) -> String {
-    if md.is_empty() {
-        return String::new();
-    }
-
-    let mut s = String::with_capacity(md.len() * 3 / 2);
-
-    for event in Parser::new_ext(md, summary_opts()) {
-        match &event {
-            Event::Text(text) => s.push_str(text),
-            Event::Code(code) => {
-                s.push('`');
-                s.push_str(code);
-                s.push('`');
-            }
-            Event::HardBreak | Event::SoftBreak => s.push(' '),
-            Event::Start(Tag::CodeBlock(..)) => break,
-            Event::End(Tag::Paragraph) => break,
-            Event::End(Tag::Heading(..)) => break,
-            _ => (),
-        }
-    }
-
-    s
 }
 
 #[derive(Debug)]

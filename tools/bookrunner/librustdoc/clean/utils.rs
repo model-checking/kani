@@ -12,18 +12,13 @@ use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
 
 use rustc_ast as ast;
-use rustc_ast::tokenstream::TokenTree;
 use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
-use rustc_middle::mir::interpret::ConstValue;
 use rustc_middle::ty::subst::{GenericArgKind, SubstsRef};
 use rustc_middle::ty::{self, DefIdTree, TyCtxt};
-use rustc_session::parse::ParseSess;
-use rustc_span::source_map::FilePathMapping;
 use rustc_span::symbol::{kw, sym, Symbol};
-use std::fmt::Write as _;
 use std::mem;
 
 #[cfg(test)]
@@ -208,86 +203,6 @@ crate fn print_const(cx: &DocContext<'_>, n: &ty::Const<'_>) -> String {
     }
 }
 
-crate fn print_evaluated_const(tcx: TyCtxt<'_>, def_id: DefId) -> Option<String> {
-    tcx.const_eval_poly(def_id).ok().and_then(|val| {
-        let ty = tcx.type_of(def_id);
-        match (val, ty.kind()) {
-            (_, &ty::Ref(..)) => None,
-            (ConstValue::Scalar(_), &ty::Adt(_, _)) => None,
-            (ConstValue::Scalar(_), _) => {
-                let const_ = ty::Const::from_value(tcx, val, ty);
-                Some(print_const_with_custom_print_scalar(tcx, &const_))
-            }
-            _ => None,
-        }
-    })
-}
-
-fn format_integer_with_underscore_sep(num: &str) -> String {
-    let num_chars: Vec<_> = num.chars().collect();
-    let mut num_start_index = if num_chars.get(0) == Some(&'-') { 1 } else { 0 };
-    let chunk_size = match num[num_start_index..].as_bytes() {
-        [b'0', b'b' | b'x', ..] => {
-            num_start_index += 2;
-            4
-        }
-        [b'0', b'o', ..] => {
-            num_start_index += 2;
-            let remaining_chars = num_chars.len() - num_start_index;
-            if remaining_chars <= 6 {
-                // don't add underscores to Unix permissions like 0755 or 100755
-                return num.to_string();
-            }
-            3
-        }
-        _ => 3,
-    };
-
-    num_chars[..num_start_index]
-        .iter()
-        .chain(num_chars[num_start_index..].rchunks(chunk_size).rev().intersperse(&['_']).flatten())
-        .collect()
-}
-
-fn print_const_with_custom_print_scalar(tcx: TyCtxt<'_>, ct: &ty::Const<'_>) -> String {
-    // Use a slightly different format for integer types which always shows the actual value.
-    // For all other types, fallback to the original `pretty_print_const`.
-    match (ct.val(), ct.ty().kind()) {
-        (ty::ConstKind::Value(ConstValue::Scalar(int)), ty::Uint(ui)) => {
-            format!("{}{}", format_integer_with_underscore_sep(&int.to_string()), ui.name_str())
-        }
-        (ty::ConstKind::Value(ConstValue::Scalar(int)), ty::Int(i)) => {
-            let ty = tcx.lift(ct.ty()).unwrap();
-            let size = tcx.layout_of(ty::ParamEnv::empty().and(ty)).unwrap().size;
-            let data = int.assert_bits(size);
-            let sign_extended_data = size.sign_extend(data) as i128;
-
-            format!(
-                "{}{}",
-                format_integer_with_underscore_sep(&sign_extended_data.to_string()),
-                i.name_str()
-            )
-        }
-        _ => ct.to_string(),
-    }
-}
-
-crate fn is_literal_expr(tcx: TyCtxt<'_>, hir_id: hir::HirId) -> bool {
-    if let hir::Node::Expr(expr) = tcx.hir().get(hir_id) {
-        if let hir::ExprKind::Lit(_) = &expr.kind {
-            return true;
-        }
-
-        if let hir::ExprKind::Unary(hir::UnOp::Neg, expr) = &expr.kind {
-            if let hir::ExprKind::Lit(_) = &expr.kind {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
 crate fn print_const_expr(tcx: TyCtxt<'_>, body: hir::BodyId) -> String {
     let hir = tcx.hir();
     let value = &hir.body(body).value;
@@ -435,69 +350,6 @@ crate fn has_doc_flag(attrs: ty::Attributes<'_>, flag: Symbol) -> bool {
 ///
 /// Set by `bootstrap::Builder::doc_rust_lang_org_channel` in order to keep tests passing on beta/stable.
 crate const DOC_RUST_LANG_ORG_CHANNEL: &str = env!("DOC_RUST_LANG_ORG_CHANNEL");
-
-/// Render a sequence of macro arms in a format suitable for displaying to the user
-/// as part of an item declaration.
-pub(super) fn render_macro_arms<'a>(
-    tcx: TyCtxt<'_>,
-    matchers: impl Iterator<Item = &'a TokenTree>,
-    arm_delim: &str,
-) -> String {
-    let mut out = String::new();
-    for matcher in matchers {
-        writeln!(out, "    {} => {{ ... }}{}", render_macro_matcher(tcx, matcher), arm_delim)
-            .unwrap();
-    }
-    out
-}
-
-/// Render a macro matcher in a format suitable for displaying to the user
-/// as part of an item declaration.
-pub(super) fn render_macro_matcher(tcx: TyCtxt<'_>, matcher: &TokenTree) -> String {
-    if let Some(snippet) = snippet_equal_to_token(tcx, matcher) {
-        snippet
-    } else {
-        rustc_ast_pretty::pprust::tt_to_string(matcher)
-    }
-}
-
-/// Find the source snippet for this token's Span, reparse it, and return the
-/// snippet if the reparsed TokenTree matches the argument TokenTree.
-fn snippet_equal_to_token(tcx: TyCtxt<'_>, matcher: &TokenTree) -> Option<String> {
-    // Find what rustc thinks is the source snippet.
-    // This may not actually be anything meaningful if this matcher was itself
-    // generated by a macro.
-    let source_map = tcx.sess.source_map();
-    let span = matcher.span();
-    let snippet = source_map.span_to_snippet(span).ok()?;
-
-    // Create a Parser.
-    let sess = ParseSess::new(FilePathMapping::empty());
-    let file_name = source_map.span_to_filename(span);
-    let mut parser =
-        match rustc_parse::maybe_new_parser_from_source_str(&sess, file_name, snippet.clone()) {
-            Ok(parser) => parser,
-            Err(_diagnostics) => {
-                return None;
-            }
-        };
-
-    // Reparse a single token tree.
-    let mut reparsed_trees = match parser.parse_all_token_trees() {
-        Ok(reparsed_trees) => reparsed_trees,
-        Err(diagnostic) => {
-            diagnostic.cancel();
-            return None;
-        }
-    };
-    if reparsed_trees.len() != 1 {
-        return None;
-    }
-    let reparsed_tree = reparsed_trees.pop().unwrap();
-
-    // Compare against the original tree.
-    if reparsed_tree.eq_unspanned(matcher) { Some(snippet) } else { None }
-}
 
 pub(super) fn display_macro_source(
     _cx: &mut DocContext<'_>,

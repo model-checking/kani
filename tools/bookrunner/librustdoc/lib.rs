@@ -99,7 +99,6 @@ mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
 crate mod lint;
-mod markdown;
 mod passes;
 mod scrape_examples;
 mod visit;

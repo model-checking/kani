@@ -262,10 +262,4 @@ impl FromStr for EmitType {
     }
 }
 
-impl RenderOptions {
-    crate fn should_emit_crate(&self) -> bool {
-        self.emit.is_empty() || self.emit.contains(&EmitType::InvocationSpecific)
-    }
-}
-
 impl Options {}

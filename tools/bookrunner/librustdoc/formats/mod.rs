@@ -8,16 +8,7 @@ crate mod renderer;
 
 use rustc_hir::def_id::DefId;
 
-crate use renderer::FormatRenderer;
-
 use crate::clean;
-
-/// Specifies whether rendering directly implemented trait items or ones from a certain Deref
-/// impl.
-crate enum AssocItemRender<'a> {
-    All,
-    DerefFor { trait_: &'a clean::Path, type_: &'a clean::Type, deref_mut_: bool },
-}
 
 /// For different handling of associated items from the Deref target of a type rather than the type
 /// itself.

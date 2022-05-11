@@ -266,16 +266,6 @@ crate enum UrlFragment {
     UserWritten(String),
 }
 
-impl UrlFragment {
-    /// Render the fragment, including the leading `#`.
-    crate fn render(&self, s: &mut String, tcx: TyCtxt<'_>) -> std::fmt::Result {
-        match self {
-            UrlFragment::Item(frag) => frag.render(s, tcx),
-            UrlFragment::UserWritten(raw) => write!(s, "#{}", raw),
-        }
-    }
-}
-
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 crate struct ItemFragment(FragmentKind, DefId);
 
@@ -307,28 +297,6 @@ impl ItemFragment {
             }
             ty::AssocKind::Const => ItemFragment(FragmentKind::AssociatedConstant, def_id),
             ty::AssocKind::Type => ItemFragment(FragmentKind::AssociatedType, def_id),
-        }
-    }
-
-    /// Render the fragment, including the leading `#`.
-    crate fn render(&self, s: &mut String, tcx: TyCtxt<'_>) -> std::fmt::Result {
-        write!(s, "#")?;
-        match *self {
-            ItemFragment(kind, def_id) => {
-                let name = tcx.item_name(def_id);
-                match kind {
-                    FragmentKind::Method => write!(s, "method.{}", name),
-                    FragmentKind::TyMethod => write!(s, "tymethod.{}", name),
-                    FragmentKind::AssociatedConstant => write!(s, "associatedconstant.{}", name),
-                    FragmentKind::AssociatedType => write!(s, "associatedtype.{}", name),
-                    FragmentKind::StructField => write!(s, "structfield.{}", name),
-                    FragmentKind::Variant => write!(s, "variant.{}", name),
-                    FragmentKind::VariantField => {
-                        let variant = tcx.item_name(tcx.parent(def_id).unwrap());
-                        write!(s, "variant.{}.field.{}", variant, name)
-                    }
-                }
-            }
         }
     }
 }

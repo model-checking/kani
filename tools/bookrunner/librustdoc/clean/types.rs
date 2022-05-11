@@ -6,7 +6,6 @@ use std::cell::RefCell;
 use std::default::Default;
 use std::hash::Hash;
 use std::lazy::SyncOnceCell as OnceCell;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{slice, vec};
@@ -16,7 +15,6 @@ use arrayvec::ArrayVec;
 use rustc_ast::attr;
 use rustc_ast::util::comments::beautify_doc_string;
 use rustc_ast::{self as ast, AttrStyle};
-use rustc_attr::{ConstStability, Deprecation, Stability, StabilityLevel};
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir as hir;
@@ -36,8 +34,7 @@ use rustc_target::spec::abi::Abi;
 
 use crate::clean::cfg::Cfg;
 use crate::clean::external_path;
-use crate::clean::inline::{self, print_inlined_const};
-use crate::clean::utils::{is_literal_expr, print_const_expr, print_evaluated_const};
+use crate::clean::inline;
 use crate::clean::Clean;
 use crate::core::DocContext;
 use crate::formats::cache::Cache;
@@ -46,7 +43,6 @@ use crate::passes::collect_intra_doc_links::UrlFragment;
 
 crate use self::FnRetTy::*;
 crate use self::ItemKind::*;
-crate use self::SelfTy::*;
 crate use self::Type::{
     Array, BareFunction, BorrowedRef, DynTrait, Generic, ImplTrait, Infer, Primitive, QPath,
     RawPointer, Slice, Tuple,
@@ -130,16 +126,6 @@ crate struct Crate {
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
 rustc_data_structures::static_assert_size!(Crate, 64);
 
-impl Crate {
-    crate fn name(&self, tcx: TyCtxt<'_>) -> Symbol {
-        ExternalCrate::LOCAL.name(tcx)
-    }
-
-    crate fn src(&self, tcx: TyCtxt<'_>) -> FileName {
-        ExternalCrate::LOCAL.src(tcx)
-    }
-}
-
 /// This struct is used to wrap additional information added by rustdoc on a `trait` item.
 #[derive(Clone, Debug)]
 crate struct TraitWithExtraInfo {
@@ -153,30 +139,13 @@ crate struct ExternalCrate {
 }
 
 impl ExternalCrate {
-    const LOCAL: Self = Self { crate_num: LOCAL_CRATE };
-
     #[inline]
     crate fn def_id(&self) -> DefId {
         DefId { krate: self.crate_num, index: CRATE_DEF_INDEX }
     }
 
-    crate fn src(&self, tcx: TyCtxt<'_>) -> FileName {
-        let krate_span = tcx.def_span(self.def_id());
-        tcx.sess.source_map().span_to_filename(krate_span)
-    }
-
     crate fn name(&self, tcx: TyCtxt<'_>) -> Symbol {
         tcx.crate_name(self.crate_num)
-    }
-
-    crate fn src_root(&self, tcx: TyCtxt<'_>) -> PathBuf {
-        match self.src(tcx) {
-            FileName::Real(ref p) => match p.local_path_if_available().parent() {
-                Some(p) => p.to_path_buf(),
-                None => PathBuf::new(),
-            },
-            _ => PathBuf::new(),
-        }
     }
 
     crate fn primitives(&self, tcx: TyCtxt<'_>) -> ThinVec<(DefId, PrimitiveType)> {
@@ -281,18 +250,6 @@ crate fn rustc_span(def_id: DefId, tcx: TyCtxt<'_>) -> Span {
 }
 
 impl Item {
-    crate fn stability<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Option<Stability> {
-        self.def_id.as_def_id().and_then(|did| tcx.lookup_stability(did))
-    }
-
-    crate fn const_stability<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Option<ConstStability> {
-        self.def_id.as_def_id().and_then(|did| tcx.lookup_const_stability(did)).map(|cs| cs)
-    }
-
-    crate fn deprecation(&self, tcx: TyCtxt<'_>) -> Option<Deprecation> {
-        self.def_id.as_def_id().and_then(|did| tcx.lookup_deprecation(did))
-    }
-
     crate fn inner_docs(&self, tcx: TyCtxt<'_>) -> bool {
         self.def_id.as_def_id().map(|did| tcx.get_attrs(did).inner_docs()).unwrap_or(false)
     }
@@ -320,12 +277,6 @@ impl Item {
 
     crate fn attr_span(&self, tcx: TyCtxt<'_>) -> rustc_span::Span {
         crate::passes::span_of_attrs(&self.attrs).unwrap_or_else(|| self.span(tcx).inner())
-    }
-
-    /// Finds the `doc` attribute as a NameValue and returns the corresponding
-    /// value found.
-    crate fn doc_value(&self) -> Option<String> {
-        self.attrs.doc_value()
     }
 
     /// Convenience wrapper around [`Self::from_def_id_and_parts`] which converts
@@ -377,39 +328,8 @@ impl Item {
         }
     }
 
-    /// Finds all `doc` attributes as NameValues and returns their corresponding values, joined
-    /// with newlines.
-    crate fn collapsed_doc_value(&self) -> Option<String> {
-        self.attrs.collapsed_doc_value()
-    }
-
-    /// Find a list of all link names, without finding their href.
-    ///
-    /// This is used for generating summary text, which does not include
-    /// the link text, but does need to know which `[]`-bracketed names
-    /// are actually links.
-    crate fn link_names(&self, cache: &Cache) -> Vec<RenderedLink> {
-        cache
-            .intra_doc_links
-            .get(&self.def_id)
-            .map_or(&[][..], |v| v.as_slice())
-            .iter()
-            .map(|ItemLink { link: s, link_text, .. }| RenderedLink {
-                original_text: s.clone(),
-                new_text: link_text.clone(),
-                href: String::new(),
-            })
-            .collect()
-    }
-
-    crate fn is_crate(&self) -> bool {
-        self.is_mod() && self.def_id.as_def_id().map_or(false, |did| did.index == CRATE_DEF_INDEX)
-    }
     crate fn is_mod(&self) -> bool {
         self.type_() == ItemType::Module
-    }
-    crate fn is_trait(&self) -> bool {
-        self.type_() == ItemType::Trait
     }
     crate fn is_struct(&self) -> bool {
         self.type_() == ItemType::Struct
@@ -417,35 +337,8 @@ impl Item {
     crate fn is_enum(&self) -> bool {
         self.type_() == ItemType::Enum
     }
-    crate fn is_variant(&self) -> bool {
-        self.type_() == ItemType::Variant
-    }
-    crate fn is_associated_type(&self) -> bool {
-        self.type_() == ItemType::AssocType
-    }
-    crate fn is_associated_const(&self) -> bool {
-        self.type_() == ItemType::AssocConst
-    }
-    crate fn is_method(&self) -> bool {
-        self.type_() == ItemType::Method
-    }
-    crate fn is_ty_method(&self) -> bool {
-        self.type_() == ItemType::TyMethod
-    }
-    crate fn is_typedef(&self) -> bool {
-        self.type_() == ItemType::Typedef
-    }
-    crate fn is_primitive(&self) -> bool {
-        self.type_() == ItemType::Primitive
-    }
     crate fn is_union(&self) -> bool {
         self.type_() == ItemType::Union
-    }
-    crate fn is_import(&self) -> bool {
-        self.type_() == ItemType::Import
-    }
-    crate fn is_keyword(&self) -> bool {
-        self.type_() == ItemType::Keyword
     }
     crate fn is_stripped(&self) -> bool {
         match *self.kind {
@@ -454,62 +347,10 @@ impl Item {
             _ => false,
         }
     }
-    crate fn has_stripped_fields(&self) -> Option<bool> {
-        match *self.kind {
-            StructItem(ref _struct) => Some(_struct.fields_stripped),
-            UnionItem(ref union) => Some(union.fields_stripped),
-            VariantItem(Variant::Struct(ref vstruct)) => Some(vstruct.fields_stripped),
-            _ => None,
-        }
-    }
-
-    crate fn stability_class(&self, tcx: TyCtxt<'_>) -> Option<String> {
-        self.stability(tcx).as_ref().and_then(|s| {
-            let mut classes = Vec::with_capacity(2);
-
-            if s.level.is_unstable() {
-                classes.push("unstable");
-            }
-
-            // FIXME: what about non-staged API items that are deprecated?
-            if self.deprecation(tcx).is_some() {
-                classes.push("deprecated");
-            }
-
-            if !classes.is_empty() { Some(classes.join(" ")) } else { None }
-        })
-    }
-
-    crate fn stable_since(&self, tcx: TyCtxt<'_>) -> Option<Symbol> {
-        match self.stability(tcx)?.level {
-            StabilityLevel::Stable { since, .. } => Some(since),
-            StabilityLevel::Unstable { .. } => None,
-        }
-    }
-
-    crate fn const_stable_since(&self, tcx: TyCtxt<'_>) -> Option<Symbol> {
-        match self.const_stability(tcx)?.level {
-            StabilityLevel::Stable { since, .. } => Some(since),
-            StabilityLevel::Unstable { .. } => None,
-        }
-    }
-
-    crate fn is_non_exhaustive(&self) -> bool {
-        self.attrs.other_attrs.iter().any(|a| a.has_name(sym::non_exhaustive))
-    }
 
     /// Returns a documentation-level item type from the item.
     crate fn type_(&self) -> ItemType {
         ItemType::from(self)
-    }
-
-    crate fn is_default(&self) -> bool {
-        match *self.kind {
-            ItemKind::MethodItem(_, Some(defaultness)) => {
-                defaultness.has_value() && !defaultness.is_final()
-            }
-            _ => false,
-        }
     }
 }
 
@@ -906,21 +747,6 @@ impl Attributes {
         Attributes { doc_strings, other_attrs }
     }
 
-    /// Finds the `doc` attribute as a NameValue and returns the corresponding
-    /// value found.
-    crate fn doc_value(&self) -> Option<String> {
-        let mut iter = self.doc_strings.iter();
-
-        let ori = iter.next()?;
-        let mut out = String::new();
-        add_doc_fragment(&mut out, ori);
-        for new_frag in iter {
-            add_doc_fragment(&mut out, new_frag);
-        }
-        out.pop();
-        if out.is_empty() { None } else { Some(out) }
-    }
-
     /// Return the doc-comments on this item, grouped by the module they came from.
     ///
     /// The module can be different if this is a re-export with added documentation.
@@ -949,26 +775,6 @@ impl Attributes {
         } else {
             Some(collapse_doc_fragments(&self.doc_strings))
         }
-    }
-
-    crate fn get_doc_aliases(&self) -> Box<[Symbol]> {
-        let mut aliases = FxHashSet::default();
-
-        for attr in self.other_attrs.lists(sym::doc).filter(|a| a.has_name(sym::alias)) {
-            if let Some(values) = attr.meta_item_list() {
-                for l in values {
-                    match l.literal().unwrap().kind {
-                        ast::LitKind::Str(s, _) => {
-                            aliases.insert(s);
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-            } else {
-                aliases.insert(attr.value_str().unwrap());
-            }
-        }
-        aliases.into_iter().collect::<Vec<_>>().into()
     }
 }
 
@@ -1066,12 +872,6 @@ crate enum GenericParamDefKind {
     Const { did: DefId, ty: Box<Type>, default: Option<Box<String>> },
 }
 
-impl GenericParamDefKind {
-    crate fn is_type(&self) -> bool {
-        matches!(self, GenericParamDefKind::Type { .. })
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate struct GenericParamDef {
     crate name: Symbol,
@@ -1081,26 +881,6 @@ crate struct GenericParamDef {
 // `GenericParamDef` is used in many places. Make sure it doesn't unintentionally get bigger.
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
 rustc_data_structures::static_assert_size!(GenericParamDef, 56);
-
-impl GenericParamDef {
-    crate fn is_synthetic_type_param(&self) -> bool {
-        match self.kind {
-            GenericParamDefKind::Lifetime { .. } | GenericParamDefKind::Const { .. } => false,
-            GenericParamDefKind::Type { synthetic, .. } => synthetic,
-        }
-    }
-
-    crate fn is_type(&self) -> bool {
-        self.kind.is_type()
-    }
-
-    crate fn get_bounds(&self) -> Option<&[GenericBound]> {
-        match self.kind {
-            GenericParamDefKind::Type { ref bounds, .. } => Some(bounds),
-            _ => None,
-        }
-    }
-}
 
 // maybe use a Generic enum and use Vec<Generic>?
 #[derive(Clone, Debug, Default)]
@@ -1121,36 +901,6 @@ crate struct FnDecl {
     crate inputs: Arguments,
     crate output: FnRetTy,
     crate c_variadic: bool,
-}
-
-impl FnDecl {
-    crate fn self_type(&self) -> Option<SelfTy> {
-        self.inputs.values.get(0).and_then(|v| v.to_self())
-    }
-
-    /// Returns the sugared return type for an async function.
-    ///
-    /// For example, if the return type is `impl std::future::Future<Output = i32>`, this function
-    /// will return `i32`.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if the return type does not match the expected sugaring for async
-    /// functions.
-    crate fn sugared_async_return_type(&self) -> FnRetTy {
-        match &self.output {
-            FnRetTy::Return(Type::ImplTrait(bounds)) => match &bounds[0] {
-                GenericBound::TraitBound(PolyTrait { trait_, .. }, ..) => {
-                    let bindings = trait_.bindings().unwrap();
-                    let ret_ty = bindings[0].term();
-                    let ty = ret_ty.ty().expect("Unexpected constant return term");
-                    FnRetTy::Return(ty.clone())
-                }
-                _ => panic!("unexpected desugaring of async function"),
-            },
-            _ => panic!("unexpected desugaring of async function"),
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -1174,36 +924,10 @@ crate enum SelfTy {
     SelfExplicit(Type),
 }
 
-impl Argument {
-    crate fn to_self(&self) -> Option<SelfTy> {
-        if self.name != kw::SelfLower {
-            return None;
-        }
-        if self.type_.is_self_type() {
-            return Some(SelfValue);
-        }
-        match self.type_ {
-            BorrowedRef { ref lifetime, mutability, ref type_ } if type_.is_self_type() => {
-                Some(SelfBorrowed(lifetime.clone(), mutability))
-            }
-            _ => Some(SelfExplicit(self.type_.clone())),
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 crate enum FnRetTy {
     Return(Type),
     DefaultReturn,
-}
-
-impl FnRetTy {
-    crate fn as_return(&self) -> Option<&Type> {
-        match self {
-            Return(ret) => Some(ret),
-            DefaultReturn => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -1280,45 +1004,6 @@ crate enum Type {
 rustc_data_structures::static_assert_size!(Type, 72);
 
 impl Type {
-    /// When comparing types for equality, it can help to ignore `&` wrapping.
-    crate fn without_borrowed_ref(&self) -> &Type {
-        let mut result = self;
-        while let Type::BorrowedRef { type_, .. } = result {
-            result = &*type_;
-        }
-        result
-    }
-
-    /// Check if two types are "potentially the same".
-    /// This is different from `Eq`, because it knows that things like
-    /// `Placeholder` are possible matches for everything.
-    crate fn is_same(&self, other: &Self, cache: &Cache) -> bool {
-        match (self, other) {
-            // Recursive cases.
-            (Type::Tuple(a), Type::Tuple(b)) => {
-                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.is_same(&b, cache))
-            }
-            (Type::Slice(a), Type::Slice(b)) => a.is_same(&b, cache),
-            (Type::Array(a, al), Type::Array(b, bl)) => al == bl && a.is_same(&b, cache),
-            (Type::RawPointer(mutability, type_), Type::RawPointer(b_mutability, b_type_)) => {
-                mutability == b_mutability && type_.is_same(&b_type_, cache)
-            }
-            (
-                Type::BorrowedRef { mutability, type_, .. },
-                Type::BorrowedRef { mutability: b_mutability, type_: b_type_, .. },
-            ) => mutability == b_mutability && type_.is_same(&b_type_, cache),
-            // Placeholders and generics are equal to all other types.
-            (Type::Infer, _) | (_, Type::Infer) => true,
-            (Type::Generic(_), _) | (_, Type::Generic(_)) => true,
-            // Other cases, such as primitives, just use recursion.
-            (a, b) => a
-                .def_id(cache)
-                .and_then(|a| Some((a, b.def_id(cache)?)))
-                .map(|(a, b)| a == b)
-                .unwrap_or(false),
-        }
-    }
-
     crate fn primitive_type(&self) -> Option<PrimitiveType> {
         match *self {
             Primitive(p) | BorrowedRef { type_: box Primitive(p), .. } => Some(p),
@@ -1345,26 +1030,11 @@ impl Type {
         }
     }
 
-    crate fn is_self_type(&self) -> bool {
-        match *self {
-            Generic(name) => name == kw::SelfUpper,
-            _ => false,
-        }
-    }
-
     crate fn generics(&self) -> Option<Vec<&Type>> {
         match self {
             Type::Path { path, .. } => path.generics(),
             _ => None,
         }
-    }
-
-    crate fn is_full_generic(&self) -> bool {
-        matches!(self, Type::Generic(_))
-    }
-
-    crate fn is_primitive(&self) -> bool {
-        self.primitive_type().is_some()
     }
 
     crate fn projection(&self) -> Option<(&Type, DefId, Symbol)> {
@@ -1799,20 +1469,12 @@ impl Span {
         Self(rustc_span::DUMMY_SP)
     }
 
-    crate fn is_dummy(&self) -> bool {
-        self.0.is_dummy()
-    }
-
     crate fn filename(&self, sess: &Session) -> FileName {
         sess.source_map().span_to_filename(self.0)
     }
 
     crate fn lo(&self, sess: &Session) -> Loc {
         sess.source_map().lookup_char_pos(self.0.lo())
-    }
-
-    crate fn hi(&self, sess: &Session) -> Loc {
-        sess.source_map().lookup_char_pos(self.0.hi())
     }
 
     crate fn cnum(&self, sess: &Session) -> CrateNum {
@@ -1830,10 +1492,6 @@ crate struct Path {
 impl Path {
     crate fn def_id(&self) -> DefId {
         self.res.def_id()
-    }
-
-    crate fn last(&self) -> Symbol {
-        self.segments.last().expect("segments were empty").name
     }
 
     /// Checks if this is a `T::Name` path for an associated type.
@@ -1857,16 +1515,6 @@ impl Path {
                         })
                         .collect(),
                 )
-            } else {
-                None
-            }
-        })
-    }
-
-    crate fn bindings(&self) -> Option<&[TypeBinding]> {
-        self.segments.last().and_then(|seg| {
-            if let GenericArgs::AngleBracketed { ref bindings, .. } = seg.args {
-                Some(&**bindings)
             } else {
                 None
             }
@@ -1984,53 +1632,6 @@ crate enum ConstantKind {
     Local { def_id: DefId, body: BodyId },
 }
 
-impl Constant {
-    crate fn expr(&self, tcx: TyCtxt<'_>) -> String {
-        self.kind.expr(tcx)
-    }
-
-    crate fn value(&self, tcx: TyCtxt<'_>) -> Option<String> {
-        self.kind.value(tcx)
-    }
-
-    crate fn is_literal(&self, tcx: TyCtxt<'_>) -> bool {
-        self.kind.is_literal(tcx)
-    }
-}
-
-impl ConstantKind {
-    crate fn expr(&self, tcx: TyCtxt<'_>) -> String {
-        match *self {
-            ConstantKind::TyConst { ref expr } => expr.clone(),
-            ConstantKind::Extern { def_id } => print_inlined_const(tcx, def_id),
-            ConstantKind::Local { body, .. } | ConstantKind::Anonymous { body } => {
-                print_const_expr(tcx, body)
-            }
-        }
-    }
-
-    crate fn value(&self, tcx: TyCtxt<'_>) -> Option<String> {
-        match *self {
-            ConstantKind::TyConst { .. } | ConstantKind::Anonymous { .. } => None,
-            ConstantKind::Extern { def_id } | ConstantKind::Local { def_id, .. } => {
-                print_evaluated_const(tcx, def_id)
-            }
-        }
-    }
-
-    crate fn is_literal(&self, tcx: TyCtxt<'_>) -> bool {
-        match *self {
-            ConstantKind::TyConst { .. } => false,
-            ConstantKind::Extern { def_id } => def_id.as_local().map_or(false, |def_id| {
-                is_literal_expr(tcx, tcx.hir().local_def_id_to_hir_id(def_id))
-            }),
-            ConstantKind::Local { body, .. } | ConstantKind::Anonymous { body } => {
-                is_literal_expr(tcx, body.hir_id)
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 crate struct Impl {
     crate generics: Generics,
@@ -2041,16 +1642,6 @@ crate struct Impl {
     crate kind: ImplKind,
 }
 
-impl Impl {
-    crate fn provided_trait_methods(&self, tcx: TyCtxt<'_>) -> FxHashSet<Symbol> {
-        self.trait_
-            .as_ref()
-            .map(|t| t.def_id())
-            .map(|did| tcx.provided_trait_methods(did).map(|meth| meth.ident(tcx).name).collect())
-            .unwrap_or_default()
-    }
-}
-
 #[derive(Clone, Debug)]
 crate enum ImplKind {
     Normal,
@@ -2059,19 +1650,8 @@ crate enum ImplKind {
 }
 
 impl ImplKind {
-    crate fn is_auto(&self) -> bool {
-        matches!(self, ImplKind::Auto)
-    }
-
     crate fn is_blanket(&self) -> bool {
         matches!(self, ImplKind::Blanket(_))
-    }
-
-    crate fn as_blanket_ty(&self) -> Option<&Type> {
-        match self {
-            ImplKind::Blanket(ty) => Some(ty),
-            _ => None,
-        }
     }
 }
 
@@ -2129,15 +1709,6 @@ crate struct TypeBinding {
 crate enum TypeBindingKind {
     Equality { term: Term },
     Constraint { bounds: Vec<GenericBound> },
-}
-
-impl TypeBinding {
-    crate fn term(&self) -> &Term {
-        match self.kind {
-            TypeBindingKind::Equality { ref term } => term,
-            _ => panic!("expected equality type binding for parenthesized generic args"),
-        }
-    }
 }
 
 /// The type, lifetime, or constant that a private type alias's parameter should be

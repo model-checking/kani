@@ -54,17 +54,6 @@ crate struct TocBuilder {
 }
 
 impl TocBuilder {
-    crate fn new() -> TocBuilder {
-        TocBuilder { top_level: Toc { entries: Vec::new() }, chain: Vec::new() }
-    }
-
-    /// Converts into a true `Toc` struct.
-    crate fn into_toc(mut self) -> Toc {
-        // we know all levels are >= 1.
-        self.fold_until(0);
-        self.top_level
-    }
-
     /// Collapse the chain until the first heading more important than
     /// `level` (i.e., lower level)
     ///
@@ -162,29 +151,6 @@ impl TocBuilder {
         // out of it with the right lifetime
         let just_inserted = self.chain.last_mut().unwrap();
         &just_inserted.sec_number
-    }
-}
-
-impl Toc {
-    fn print_inner(&self, v: &mut String) {
-        v.push_str("<ul>");
-        for entry in &self.entries {
-            // recursively format this table of contents
-            v.push_str(&format!(
-                "\n<li><a href=\"#{id}\">{num} {name}</a>",
-                id = entry.id,
-                num = entry.sec_number,
-                name = entry.name
-            ));
-            entry.children.print_inner(&mut *v);
-            v.push_str("</li>");
-        }
-        v.push_str("</ul>");
-    }
-    crate fn print(&self) -> String {
-        let mut v = String::new();
-        self.print_inner(&mut v);
-        v
     }
 }
 

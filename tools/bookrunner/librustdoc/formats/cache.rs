@@ -14,7 +14,6 @@ use crate::clean::{self, ItemId};
 use crate::fold::DocFolder;
 use crate::formats::item_type::ItemType;
 use crate::formats::Impl;
-use crate::html::markdown::short_markdown_summary;
 
 /// This cache is used to store information about the [`clean::Crate`] being
 /// rendered in order to provide more useful documentation. This contains
