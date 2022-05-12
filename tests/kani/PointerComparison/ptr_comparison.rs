@@ -88,28 +88,25 @@ fn check_slice_data_ptr() {
     check_clamp::<[u8]>(&array[5], &array[0], &array[9]);
 }
 
-trait Dummy {}
-impl Dummy for u8 {}
-
-/// Check comparisons when vtable is the same but data pointer is different.
+/// Check comparisons when slice size is different but the pointer is the same.
 #[cfg_attr(kani, kani::proof)]
-fn check_dyn_data_ptr() {
+fn check_slice_len() {
     let array = [0u8; 10];
-    let first_ptr: *const dyn Dummy = &array[0];
-    let second_ptr: *const dyn Dummy = &array[5];
+    let first_ptr: *const [u8] = &array[0..2];
+    let second_ptr: *const [u8] = &array[0..4];
 
     compare_diff(first_ptr, second_ptr);
     compare_equal(first_ptr, first_ptr);
-    check_clamp::<dyn Dummy>(&array[5], &array[0], &array[9]);
+    check_clamp::<[u8]>(&array[4..6], &array[4..5], &array[4..]);
 }
 
 // Check comparison of box.
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::unwind(4))]
 fn check_box_comparison() {
-    let obj = Box::new(10u8);
-    let first: *const dyn Dummy = &*obj;
-    let second: *const dyn Dummy = &*obj;
+    let obj = Box::new([0u16, 10]);
+    let first: *const [u16] = &obj[1..2];
+    let second: *const [u16] = &obj[1..2];
 
     // Data address should be the same.
     assert_eq!(second as *const (), first as *const (), "Expected same data address");
@@ -121,6 +118,5 @@ fn check_box_comparison() {
 fn main() {
     check_thin_ptr();
     check_slice_data_ptr();
-    check_dyn_data_ptr();
     check_box_comparison();
 }

@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::{is_pointer, pointee_type, TypeExt};
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented;
@@ -26,7 +27,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// This function codegen comparison for fat pointers.
-    /// We currently don't support this. See issue #327 for more information.
+    /// Fat pointer comparison must compare the raw data pointer as well as its metadata portion.
+    ///
+    /// Since vtable pointer comparison is not well defined and it has many nuances, we decided to
+    /// fail the user code performs such comparison.
+    ///
+    /// See https://github.com/model-checking/kani/issues/327 for more details.
     fn codegen_comparison_fat_ptr(
         &mut self,
         op: &BinOp,
@@ -39,41 +45,51 @@ impl<'tcx> GotocCtx<'tcx> {
         assert_eq!(left_typ, right_typ, "Cannot compare pointers of different type");
         assert!(self.is_ref_of_unsized(left_typ));
 
-        // Compare data pointer.
-        let left_ptr = self.codegen_operand(left);
-        let left_data = left_ptr.clone().member("data", &self.symbol_table);
-        let right_ptr = self.codegen_operand(right);
-        let right_data = right_ptr.clone().member("data", &self.symbol_table);
-        let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
+        if self.is_vtable_fat_pointer(left_typ) {
+            // Codegen an assertion failure since vtable comparison is not stable.
+            let ret_type = Type::Bool;
+            let body = vec![
+                self.codegen_assert_false(
+                    PropertyClass::KaniCheck,
+                    format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
+                    Location::None,
+                ),
+                // Assume false to block any further exploration of this path.
+                Stmt::assume(Expr::bool_false(), Location::None),
+                ret_type.nondet().as_stmt(Location::None).with_location(Location::None),
+            ];
 
-        // Compare the metadata.
-        let metadata_cmp = if self.is_vtable_fat_pointer(left_typ) {
-            let left_vtable = left_ptr.member("vtable", &self.symbol_table).cast_to(Type::size_t());
-            let right_vtable =
-                right_ptr.member("vtable", &self.symbol_table).cast_to(Type::size_t());
-            comparison_expr(op, left_vtable, right_vtable, false)
+            Expr::statement_expression(body, ret_type).with_location(Location::None)
         } else {
+            // Compare data pointer.
+            let left_ptr = self.codegen_operand(left);
+            let left_data = left_ptr.clone().member("data", &self.symbol_table);
+            let right_ptr = self.codegen_operand(right);
+            let right_data = right_ptr.clone().member("data", &self.symbol_table);
+            let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
+
+            // Compare the slice metadata (this logic could be adapted to compare vtable if needed).
             let left_len = left_ptr.member("len", &self.symbol_table);
             let right_len = right_ptr.member("len", &self.symbol_table);
-            comparison_expr(op, left_len, right_len, false)
-        };
+            let metadata_cmp = comparison_expr(op, left_len, right_len, false);
 
-        // Join the results.
-        match op {
-            // Only equal if both parts are equal.
-            BinOp::Eq => data_cmp.and(metadata_cmp),
-            // It is different if any is different.
-            BinOp::Ne => data_cmp.or(metadata_cmp),
-            // If data is different, only compare data.
-            // If data is equal, apply operator to metadata.
-            BinOp::Lt | BinOp::Le | BinOp::Ge | BinOp::Gt => {
-                let data_eq =
-                    comparison_expr(&BinOp::Eq, left_data.clone(), right_data.clone(), false);
-                let data_strict_comp =
-                    comparison_expr(&get_strict_operator(op), left_data, right_data, false);
-                data_strict_comp.or(data_eq.and(metadata_cmp))
+            // Join the results.
+            match op {
+                // Only equal if both parts are equal.
+                BinOp::Eq => data_cmp.and(metadata_cmp),
+                // It is different if any is different.
+                BinOp::Ne => data_cmp.or(metadata_cmp),
+                // If data is different, only compare data.
+                // If data is equal, apply operator to metadata.
+                BinOp::Lt | BinOp::Le | BinOp::Ge | BinOp::Gt => {
+                    let data_eq =
+                        comparison_expr(&BinOp::Eq, left_data.clone(), right_data.clone(), false);
+                    let data_strict_comp =
+                        comparison_expr(&get_strict_operator(op), left_data, right_data, false);
+                    data_strict_comp.or(data_eq.and(metadata_cmp))
+                }
+                _ => unreachable!("Unexpected operator {:?}", op),
             }
-            _ => unreachable!("Unexpected operator {:?}", op),
         }
     }
 
