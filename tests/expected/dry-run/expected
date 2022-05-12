@@ -3,4 +3,4 @@ symtab2gb
 goto-cc
 --function main
 goto-instrument
-cbmc --bounds-check --pointer-check --conversion-check --div-by-zero-check --float-overflow-check --nan-check --undefined-shift-check --unwinding-assertions --object-bits 16
+cbmc --bounds-check --pointer-check --div-by-zero-check --float-overflow-check --nan-check --undefined-shift-check --unwinding-assertions --object-bits 16

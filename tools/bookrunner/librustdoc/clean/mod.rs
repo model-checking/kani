@@ -248,11 +248,7 @@ impl Clean<WherePredicate> for hir::WherePredicate<'_> {
                         // Higher-ranked lifetimes can't have bounds.
                         assert_matches!(
                             param,
-                            hir::GenericParam {
-                                kind: hir::GenericParamKind::Lifetime { .. },
-                                bounds: [],
-                                ..
-                            }
+                            hir::GenericParam { kind: hir::GenericParamKind::Lifetime { .. }, .. }
                         );
                         Lifetime(param.name.ident().name)
                     })
@@ -414,7 +410,7 @@ impl Clean<GenericParamDef> for ty::GenericParamDef {
                     // `self_def_id` set, we override it here.
                     // See https://github.com/rust-lang/rust/issues/85454
                     if let QPath { ref mut self_def_id, .. } = default {
-                        *self_def_id = cx.tcx.parent(self.def_id);
+                        *self_def_id = Some(cx.tcx.parent(self.def_id));
                     }
 
                     Some(default)
@@ -452,27 +448,19 @@ impl Clean<GenericParamDef> for hir::GenericParam<'_> {
     fn clean(&self, cx: &mut DocContext<'_>) -> GenericParamDef {
         let (name, kind) = match self.kind {
             hir::GenericParamKind::Lifetime { .. } => {
-                let outlives = self
-                    .bounds
-                    .iter()
-                    .map(|bound| match bound {
-                        hir::GenericBound::Outlives(lt) => lt.clean(cx),
-                        _ => panic!(),
-                    })
-                    .collect();
-                (self.name.ident().name, GenericParamDefKind::Lifetime { outlives })
+                (self.name, GenericParamDefKind::Lifetime { outlives: vec![] })
             }
-            hir::GenericParamKind::Type { ref default, synthetic } => (
-                self.name.ident().name,
+            hir::GenericParamKind::Type { ref default, synthetic, .. } => (
+                self.name,
                 GenericParamDefKind::Type {
                     did: cx.tcx.hir().local_def_id(self.hir_id).to_def_id(),
-                    bounds: self.bounds.iter().filter_map(|x| x.clean(cx)).collect(),
+                    bounds: vec![],
                     default: default.map(|t| t.clean(cx)).map(Box::new),
                     synthetic,
                 },
             ),
             hir::GenericParamKind::Const { ref ty, default } => (
-                self.name.ident().name,
+                self.name,
                 GenericParamDefKind::Const {
                     did: cx.tcx.hir().local_def_id(self.hir_id).to_def_id(),
                     ty: Box::new(ty.clean(cx)),
@@ -484,7 +472,7 @@ impl Clean<GenericParamDef> for hir::GenericParam<'_> {
             ),
         };
 
-        GenericParamDef { name, kind }
+        GenericParamDef { name: name.ident().name, kind }
     }
 }
 
@@ -537,7 +525,7 @@ impl Clean<Generics> for hir::Generics<'_> {
 
         let mut generics = Generics {
             params,
-            where_predicates: self.where_clause.predicates.iter().map(|x| x.clean(cx)).collect(),
+            where_predicates: self.predicates.iter().map(|x| x.clean(cx)).collect(),
         };
 
         // Some duplicates are generated for ?Sized bounds between type params and where
@@ -1666,9 +1654,7 @@ fn clean_field(def_id: DefId, name: Symbol, ty: Type, cx: &mut DocContext<'_>) -
 }
 
 fn is_field_vis_inherited(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    let parent = tcx
-        .parent(def_id)
-        .expect("is_field_vis_inherited can only be called on struct or variant fields");
+    let parent = tcx.parent(def_id);
     match tcx.def_kind(parent) {
         DefKind::Struct | DefKind::Union => false,
         DefKind::Variant => true,

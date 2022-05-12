@@ -1206,7 +1206,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_enum_discr_typ(&self, ty: Ty<'tcx>) -> Ty<'tcx> {
         let layout = self.layout_of(ty);
         match &layout.variants {
-            Variants::Multiple { tag, .. } => self.codegen_prim_typ(tag.value),
+            Variants::Multiple { tag, .. } => self.codegen_prim_typ(tag.primitive()),
             _ => unreachable!("only enum has discriminant"),
         }
     }
@@ -1263,7 +1263,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => unreachable!(),
         };
 
-        let rustc_target::abi::Scalar { value: prim_type, .. } = element;
+        let prim_type = element.primitive();
         let rust_type = self.codegen_prim_typ(prim_type);
         let cbmc_type = self.codegen_ty(rust_type);
 
