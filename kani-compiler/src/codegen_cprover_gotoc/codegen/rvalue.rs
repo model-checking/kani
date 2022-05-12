@@ -472,19 +472,27 @@ impl<'tcx> GotocCtx<'tcx> {
                         FieldsShape::Arbitrary { offsets, .. } => offsets[0].bytes_usize(),
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
-                    let discr_ty = self.codegen_enum_discr_typ(ty);
-                    let discr_ty = self.codegen_ty(discr_ty);
-                    let niche_val = self.codegen_get_niche(e, offset, discr_ty.clone());
-                    let relative_discr = if *niche_start == 0 {
-                        niche_val
-                    } else {
-                        wrapping_sub(&niche_val, *niche_start)
-                    };
+
+                    // Compute relative discriminant value (`niche_val - niche_start`).
+                    //
+                    // "We remap `niche_start..=niche_start + n` (which may wrap around) to
+                    // (non-wrap-around) `0..=n`, to be able to check whether the discriminant
+                    // corresponds to a niche variant with one comparison."
+                    // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
+                    //
+                    // Note: niche_variants can only represent values that fit in a u32.
+                    let discr_mir_ty = self.codegen_enum_discr_typ(ty);
+                    let discr_type = self.codegen_ty(discr_mir_ty);
+                    let niche_val = self.codegen_get_niche(e, offset, discr_type.clone());
+                    let relative_discr =
+                        wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
                     let relative_max =
                         niche_variants.end().as_u32() - niche_variants.start().as_u32();
-                    let is_niche = if tag.value == Primitive::Pointer {
-                        discr_ty.null().eq(relative_discr.clone())
+                    let is_niche = if tag.primitive() == Primitive::Pointer {
+                        tracing::trace!(?tag, "Primitive::Pointer");
+                        discr_type.null().eq(relative_discr.clone())
                     } else {
+                        tracing::trace!(?tag, "Not Primitive::Pointer");
                         relative_discr
                             .clone()
                             .le(Expr::int_constant(relative_max, relative_discr.typ().clone()))
@@ -1260,26 +1268,13 @@ impl<'tcx> GotocCtx<'tcx> {
 /// Perform a wrapping subtraction of an Expr with a constant "expr - constant"
 /// where "-" is wrapping subtraction, i.e., the result should be interpreted as
 /// an unsigned value (2's complement).
-fn wrapping_sub(expr: &Expr, constant: u128) -> Expr {
-    // While the wrapping subtraction can be done through a regular subtraction
-    // and then casting the result to an unsigned, doing so may result in CBMC
-    // flagging the operation with a signed to unsigned overflow failure (see
-    // https://github.com/model-checking/kani/issues/356).
-    // To avoid those overflow failures, the wrapping subtraction operation is
-    // computed as:
-    //   if expr >= constant {
-    //       // result is positive, so overflow may not occur
-    //       expr - constant
-    //   } else {
-    //       // compute the 2's complement to avoid overflow
-    //       expr - constant + 2^32
-    //   }
-    let s64 = Type::signed_int(64);
-    let expr = expr.clone().cast_to(s64.clone());
-    let twos_complement: i64 = u32::MAX as i64 + 1 - i64::try_from(constant).unwrap();
-    let constant = Expr::int_constant(constant, s64.clone());
-    expr.clone().ge(constant.clone()).ternary(
-        expr.clone().sub(constant),
-        expr.plus(Expr::int_constant(twos_complement, s64.clone())),
-    )
+fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
+    if constant == 0 {
+        // No need to subtract.
+        expr.clone()
+    } else {
+        let unsigned = expr.typ().to_unsigned().unwrap();
+        let constant = Expr::int_constant(constant, unsigned.clone());
+        expr.clone().cast_to(unsigned).sub(constant)
+    }
 }
