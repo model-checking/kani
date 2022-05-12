@@ -119,7 +119,12 @@ fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
         if !kani_dir.exists() {
             std::fs::create_dir(&kani_dir)?;
         }
-        Command::new("tar").arg("--strip-components=1").arg("-zxf").arg(&path).current_dir(&kani_dir).run()?;
+        Command::new("tar")
+            .arg("--strip-components=1")
+            .arg("-zxf")
+            .arg(&path)
+            .current_dir(&kani_dir)
+            .run()?;
     } else {
         let filename = download_filename();
         println!("[2/6] Downloading Kani release bundle: {}", &filename);
