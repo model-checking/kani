@@ -20,6 +20,7 @@ functions:
     * main - the main function of the script
 """
 
+from ast import Global
 import json
 import os
 import re
@@ -295,31 +296,22 @@ def modify_undefined_function_checks(properties):
                 has_undefined_function_checks = True
     return has_undefined_function_checks
 
-def modify_expect_fail_checks(
-        properties,
-        has_failed_sanity_check,
-        has_reachable_undefined_functions,
-        has_failed_unwinding_asserts):
+def modify_expect_fail_checks(properties):
     """
     Invert status for Checks with the property_class "expect_fail" from FAILURE TO SUCCESS and vice versa.
     Modify further depending on unwind/undefined function check statuses.
     """
+    expected_fail_string = "Failed as expected."
+    unexpected_success_string = "Unexpectedly passed."
     for property in properties:
         if extract_property_class(property) == GlobalMessages.EXPECT_FAIL:
-            # If there's at least one failed sanity_check , then change property to undetermined
-            if has_failed_sanity_check:
-                property["status"] = "UNDETERMINED"
-            else:
-                if property["status"] == GlobalMessages.STATUS_FAILURE:
-                    property["status"] = GlobalMessages.STATUS_SUCCESS
-                elif property["status"] == GlobalMessages.STATUS_SUCCESS:
-                    # There is at least one failed unwind and undefined check
-                    if has_reachable_undefined_functions or has_failed_unwinding_asserts:
-                        property["status"] = "UNDETERMINED"
-                    else:
-                        property["status"] = GlobalMessages.STATUS_FAILURE
-                else:
-                    pass
+            if property["status"] == GlobalMessages.STATUS_SUCCESS:
+                property["status"] = GlobalMessages.STATUS_FAILURE
+                property["description"] += ', ' + unexpected_success_string
+            elif property["status"] == GlobalMessages.STATUS_FAILURE:
+                property["status"] = GlobalMessages.STATUS_SUCCESS
+                property["description"] += ', ' + expected_fail_string
+
     return
 
 def extract_errors(solver_information):
@@ -363,11 +355,6 @@ def postprocess_results(properties, extra_ptr_check):
     has_failed_sanity_check = has_check_failure_property_class(properties, GlobalMessages.SANITY_CHECK)
     properties, reach_checks = filter_reach_checks(properties)
     properties = filter_sanity_checks(properties)
-    modify_expect_fail_checks(
-        properties,
-        has_failed_sanity_check,
-        has_reachable_undefined_functions,
-        has_failed_unwinding_asserts)
     annotate_properties_with_reach_results(properties, reach_checks)
     remove_check_ids_from_description(properties)
 
@@ -376,7 +363,7 @@ def postprocess_results(properties, extra_ptr_check):
 
     for property in properties:
         property["description"] = get_readable_description(property)
-        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_reachable_undefined_functions:
+        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_reachable_undefined_functions or has_failed_sanity_check:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
@@ -387,6 +374,7 @@ def postprocess_results(properties, extra_ptr_check):
                 "status"] == "SUCCESS", f"** ERROR: Expecting the unreachable property \"{description}\" to have a status of \"SUCCESS\""
             property["status"] = "UNREACHABLE"
 
+    modify_expect_fail_checks(properties)
     messages = ""
     if has_reachable_unsupported_constructs:
         messages += "** WARNING: A Rust construct that is not currently supported " \
